@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
@@ -12,6 +12,7 @@ using SharpGLTF.Materials;
 using CP77.CR2W;
 using System.Text;
 using CommonDataStructs;
+using System.Diagnostics;
 
 namespace Parsing_Morphs
 {
@@ -29,37 +30,24 @@ namespace Parsing_Morphs
         {
             ServiceLocator.Default.RegisterType<ILoggerService, LoggerService>();
 
-            string filename = Console.ReadLine();
-            if (filename.Contains("\""))
-                filename = filename.Replace("\"", string.Empty);
-
-            FileStream fs = new FileStream(filename, FileMode.Open, FileAccess.Read);
-
-            BinaryReader br = new BinaryReader(fs);
-            CR2WFile cr2w = new CR2WFile();
-            br.BaseStream.Seek(0, SeekOrigin.Begin);
-            cr2w.Read(br);
-            List<byte[]> buffers = new List<byte[]>();
-
-            foreach (var b in cr2w.Buffers.Select(_ => _.Buffer))
+            while(true)
             {
-                br.BaseStream.Seek(b.offset, SeekOrigin.Begin);
-
-                var zbuffer = br.ReadBytes((int)b.diskSize);
-
-                using var input = new MemoryStream(zbuffer);
-                using var output = new MemoryStream();
-                using var reader = new BinaryReader(input);
-                using var writer = new BinaryWriter(output);
-                reader.DecompressBuffer(writer, (uint)zbuffer.Length, b.memSize);
-
-                buffers.Add(Catel.IO.StreamExtensions.ToByteArray(output));
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.Write("Enter Filepath: ");
+                Console.ResetColor();
+                string filename = Console.ReadLine();
+                if (filename.Contains("\""))
+                    filename = filename.Replace("\"", string.Empty);
+                Dealer(filename);
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("morphed mesh and textures exported to dir: " + filename.Replace(".morphtarget", "\\"));
             }
-            FileInfo fi = new FileInfo(filename);
-            ParseMesh(cr2w, buffers, fi);
+
         }
         public static void ParseMesh(CR2WFile cr2w, List<byte[]> buffers, FileInfo outfile)
         {
+            Directory.CreateDirectory(Path.GetDirectoryName(outfile.FullName) + "\\" + Path.GetFileNameWithoutExtension(outfile.FullName));
+
             int meshbufferindex = Getmeshbufferindex(buffers);
             MeshesInfo meshesInfo = GetMeshesinfo(cr2w);
             List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
@@ -67,6 +55,7 @@ namespace Parsing_Morphs
 
             MemoryStream diffsbuffer = new MemoryStream(buffers[0]);
             MemoryStream mappingbuffer = new MemoryStream(buffers[1]);
+            MemoryStream texbuffer = new MemoryStream(buffers[2]);
 
             for (int i = 0; i < meshesInfo.meshC; i++)
             {
@@ -95,7 +84,7 @@ namespace Parsing_Morphs
                 //ExportASCII(expMeshes, outfile, expTargets[i], targetsInfo.Names[i]);
             }
             ContainedMeshToGLTF(expMeshes, outfile, expTargets, targetsInfo.Names);
-
+            ExportTextures(cr2w, texbuffer,outfile);
         }
 
         private static int Getmeshbufferindex(List<byte[]> buffers)
@@ -269,51 +258,13 @@ namespace Parsing_Morphs
                 Names = Names,
                 RegionNames = RegionNames,
                 NumTargets = NumTargets,
+                BaseMesh = BaseMesh,
                 BaseTexture = BaseTexture,
             };
+            Console.WriteLine("Base Mesh: " + BaseMesh);
+            Console.WriteLine("Base Texture: " + BaseTexture);
             return targetsInfo;
         }
-        /*
-        private static RawMeshContainer ContainRawMesh(MemoryStream gfs, UInt32 vertCount, UInt32 indCount, UInt32 vertOffset, UInt32 tx0Offset, UInt32 normalOffset, UInt32 colorOffset, UInt32 tx1Offset, UInt32 indOffset, UInt32 vpStride, Vector4 qScale, Vector4 qTrans, MemoryStream mms, MemoryStream ims)
-        {
-            Converters converter = new Converters(); // contains methods for halffloats
-            int numdiffs = 2791;
-            UInt16[] morphIndices = new UInt16[numdiffs];
-            BinaryReader ibr = new BinaryReader(ims);
-            ims.Position = 0;
-            BinaryReader mbr = new BinaryReader(mms);
-            mms.Position = 0;
-            for (int i = 0; i < numdiffs; i++)
-            {
-                morphIndices[i] = ibr.ReadUInt16();
-            }
-            Vec3[] vertexDelta = new Vec3[numdiffs];
-            Vec3[] normalDelta = new Vec3[numdiffs];
-            Vec3[] tangentDelta = new Vec3[numdiffs];
-            for (int i = 0; i < numdiffs; i++)
-            {
-                Vec4 v = converter.TenBitUnsigned(mbr.ReadUInt32());
-                vertexDelta[i] = new Vec3(v.X, v.Y, v.Z);
-                Vec4 n = converter.TenBitShifted(mbr.ReadUInt32());
-                normalDelta[i] = new Vec3(n.X, n.Y, n.Z);
-                Vec4 t = converter.TenBitShifted(mbr.ReadUInt32());
-                tangentDelta[i] = new Vec3(t.X, t.Y, t.Z);
-            }
-
-            for (int i = 0; i < numdiffs; i++)
-            {
-                index = morphIndices[i];
-                vertices[index].X += (float)(vertexDelta[i].X * 0.006889195 + -0.00353031);
-                vertices[index].Y += (float)(vertexDelta[i].Y * 0.0047274334 + -0.0005970103);
-                vertices[index].Z += (float)(vertexDelta[i].Z * 0.0049985982 + -0.004314909);
-                normals[index].X += normalDelta[i].X;
-                normals[index].Y += normalDelta[i].Y;
-                normals[index].Z += normalDelta[i].Z;
-                tangents[index].X += tangentDelta[i].X;
-                tangents[index].Y += tangentDelta[i].Y;
-                tangents[index].Z += tangentDelta[i].Z;
-            }
-        }*/
         private static RawMeshContainer ContainRawMesh(MemoryStream gfs, UInt32 vertCount, UInt32 indCount, UInt32 vertOffset, UInt32 tx0Offset, UInt32 normalOffset, UInt32 colorOffset, UInt32 unknownOffset, UInt32 indOffset, UInt32 vpStride, Vector4 qScale, Vector4 qTrans, UInt32 weightcount)
         {
             BinaryReader gbr = new BinaryReader(gfs);
@@ -589,9 +540,8 @@ namespace Parsing_Morphs
                 }
                 scene.AddRigidMesh(expmesh, System.Numerics.Matrix4x4.Identity);
             }
-
             var model = scene.ToGltf2();
-            model.SaveGLB(Path.GetFullPath(outfile.FullName).Replace(".morphtarget", ".glb"));
+            model.SaveGLB(Path.GetDirectoryName(outfile.FullName) + "\\" + Path.GetFileNameWithoutExtension(outfile.FullName) + "\\" + Path.GetFileNameWithoutExtension(outfile.FullName) + ".glb");
         }
 
         static void ExportASCII(List<RawMeshContainer> meshes, FileInfo outfile, RawTargetContainer[] Targets,string name)
@@ -677,6 +627,93 @@ namespace Parsing_Morphs
             }
             // done printing mesh
             File.WriteAllText(Path.GetDirectoryName(outfile.FullName) + "\\" + name + ".ascii", objS.ToString());
+        }
+        static void ExportTextures(CR2WFile cr2w, MemoryStream texbuffer,FileInfo outfile)
+        {
+            int Index = int.MaxValue;
+            for (int i = 0; i < cr2w.Chunks.Count; i++)
+            {
+                if (cr2w.Chunks[i].REDType == "rendRenderMorphTargetMeshBlob")
+                {
+                    Index = i;
+                }
+            }
+            int Count = (cr2w.Chunks[Index].data as rendRenderMorphTargetMeshBlob).Header.TargetTextureDiffsData.Count;
+            int texCount = 0;
+            List<UInt32> TargetDiffsDataOffset = new List<UInt32>();
+            List<UInt32> TargetDiffsDataSize = new List<UInt32>();
+            List<UInt32> TargetDiffsMipLevelCounts = new List<UInt32>();
+            List<UInt32> TargetDiffsWidth = new List<UInt32>();
+
+            for(int i = 0; i < Count; i++)
+            {
+                if ((cr2w.Chunks[Index].data as rendRenderMorphTargetMeshBlob).Header.TargetTextureDiffsData[i].TargetDiffsDataSize == null)
+                    break;
+                TargetDiffsDataOffset.Add((cr2w.Chunks[Index].data as rendRenderMorphTargetMeshBlob).Header.TargetTextureDiffsData[i].TargetDiffsDataOffset[0].val);
+                TargetDiffsDataSize.Add((cr2w.Chunks[Index].data as rendRenderMorphTargetMeshBlob).Header.TargetTextureDiffsData[i].TargetDiffsDataSize[0].val);
+                TargetDiffsMipLevelCounts.Add((cr2w.Chunks[Index].data as rendRenderMorphTargetMeshBlob).Header.TargetTextureDiffsData[i].TargetDiffsMipLevelCounts[0].val);
+                TargetDiffsWidth.Add((cr2w.Chunks[Index].data as rendRenderMorphTargetMeshBlob).Header.TargetTextureDiffsData[i].TargetDiffsWidth[0].val);
+                texCount++;
+            }
+
+            BinaryReader texbr = new BinaryReader(texbuffer);
+            Directory.CreateDirectory(Path.GetDirectoryName(outfile.FullName) + "\\" + Path.GetFileNameWithoutExtension(outfile.FullName) + "\\textures");
+            for (int i = 0; i < texCount; i++)
+            {
+                texbuffer.Position = TargetDiffsDataOffset[i];
+                byte[] bytes = texbr.ReadBytes((int)TargetDiffsDataSize[i]);
+                string filename = Path.GetDirectoryName(outfile.FullName) + "\\" + Path.GetFileNameWithoutExtension(outfile.FullName) + "\\textures\\tex_" + i + ".dds";
+
+                byte[] bytes1 = File.ReadAllBytes("header");
+
+                MemoryStream ms = new MemoryStream();
+                BinaryWriter bw = new BinaryWriter(ms);
+                bw.Write(bytes1, 0, 12);
+                bw.Write(TargetDiffsWidth[i]);
+                bw.Write(TargetDiffsWidth[i]);
+                bw.Write(bytes1, 20, 8);
+                bw.Write(TargetDiffsMipLevelCounts[i]);
+                bw.Write(bytes1, 32, 116);
+                bw.Write(bytes);
+
+
+                File.WriteAllBytes(filename, ms.ToArray());
+
+                ProcessStartInfo _processStartInfo = new ProcessStartInfo();
+                _processStartInfo.FileName = @"texconv.exe";
+                _processStartInfo.Arguments = "\"" + filename + "\" -ft png -o \"" + Path.GetDirectoryName(outfile.FullName) + "\\" + Path.GetFileNameWithoutExtension(outfile.FullName) + "\\textures";
+                _processStartInfo.CreateNoWindow = true;
+                Process myProcess = Process.Start(_processStartInfo);
+                myProcess.CloseMainWindow();
+                myProcess.Close();
+            }
+        }
+        static void Dealer(string filename)
+        {
+            FileStream fs = new FileStream(filename, FileMode.Open, FileAccess.Read);
+
+            BinaryReader br = new BinaryReader(fs);
+            CR2WFile cr2w = new CR2WFile();
+            br.BaseStream.Seek(0, SeekOrigin.Begin);
+            cr2w.Read(br);
+            List<byte[]> buffers = new List<byte[]>();
+
+            foreach (var b in cr2w.Buffers.Select(_ => _.Buffer))
+            {
+                br.BaseStream.Seek(b.offset, SeekOrigin.Begin);
+
+                var zbuffer = br.ReadBytes((int)b.diskSize);
+
+                using var input = new MemoryStream(zbuffer);
+                using var output = new MemoryStream();
+                using var reader = new BinaryReader(input);
+                using var writer = new BinaryWriter(output);
+                reader.DecompressBuffer(writer, (uint)zbuffer.Length, b.memSize);
+
+                buffers.Add(Catel.IO.StreamExtensions.ToByteArray(output));
+            }
+            FileInfo fi = new FileInfo(filename);
+            ParseMesh(cr2w, buffers, fi);
         }
         class RawMeshContainer
         {
