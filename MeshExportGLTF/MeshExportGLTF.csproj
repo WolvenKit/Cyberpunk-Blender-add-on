@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net5.0-windows</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Catel.Core" Version="5.12.12" />
+    <PackageReference Include="SharpGLTF.Core" Version="1.0.0-alpha0021" />
+    <PackageReference Include="SharpGLTF.Toolkit" Version="1.0.0-alpha0021" />
+    <PackageReference Include="WolvenKit.Common" Version="1.0.3" />
+    <PackageReference Include="WolvenKit.Cyberformats" Version="1.0.5" />
+  </ItemGroup>
+
+</Project>
