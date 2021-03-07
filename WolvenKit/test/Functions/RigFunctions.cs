@@ -131,13 +131,18 @@ namespace CP77Rigs
                     matrix4X4s[i] = (Rot * Tra) * Sca;
                 }
 
-                // multiplication is really doubtful
+                // recursive mul of AposeLS gives correct worlspace
                 for (int i = 0; i < Rig.BoneCount; i++)
                 {
                     int j = 0;
                     j = Rig.Parent[i];
-                    if (j != -1)
-                        Rig.APoseLSMat[i] = matrix4X4s[i] * matrix4X4s[j];
+                    Mat M = matrix4X4s[i];
+                    while(j != -1)
+                    {
+                        M = M * matrix4X4s[j];
+                        j = Rig.Parent[j];
+                    }
+                    Rig.APoseLSMat[i] = M;
                 }
             }
             return Rig;
@@ -182,49 +187,5 @@ namespace CP77Rigs
 
             return bonenames;
         }
-        /*
-        static void ExportNodes(bones rig)
-        {
-            var bonesMapping = new Dictionary<int, NodeBuilder>();
-
-            // process bones
-            for (int i = 0; i < rig.boneCount; i++)
-            {
-                bonesMapping[i] = CreateBoneHierarchy(rig, i, bonesMapping);
-            }
-
-            // find root nodes by looking at the bones that don't have any parent.
-            var bonesRoots = bonesMapping
-                .Values
-                .Where(n => n.Parent == null)
-                .ToList();
-        }
-        
-        // recursive helper class
-        static NodeBuilder CreateBoneHierarchy(bones srcBones, int srcIndex, IReadOnlyDictionary<int, NodeBuilder> bonesMap)
-        {
-            var dstNode = new NodeBuilder();
-
-            var srcParentIdx = srcBones.parent[srcIndex]; // I guess a negative parent index means it's a root bone.
-
-            if (srcParentIdx >= 0) // if this bone has a parent, get the parent NodeBuilder from the bonesMap. 
-            {
-                var dstParent = bonesMap[srcParentIdx];
-                dstParent.Add(dstNode);
-            }
-
-            // fill transform or any other property...
-
-            var s = new Vec3(srcBones.localScale[srcIndex].X, srcBones.localScale[srcIndex].Y, srcBones.localScale[srcIndex].Z);
-            var r = new Quat(srcBones.localRot[srcIndex].X, srcBones.localRot[srcIndex].Z, srcBones.localRot[srcIndex].Y, srcBones.localRot[srcIndex].W);
-            var t = new Vec3(srcBones.localPosn[srcIndex].X, srcBones.localPosn[srcIndex].Y, srcBones.localPosn[srcIndex].Z);
-
-            dstNode.Scale.Value = s;
-            dstNode.Rotation.Value = r;
-            dstNode.Translation.Value = t;
-
-            return dstNode;
-        }
-        */
     }
 }
