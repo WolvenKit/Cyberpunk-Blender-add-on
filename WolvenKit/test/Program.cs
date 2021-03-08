@@ -15,31 +15,31 @@ using SharpGLTF.Materials;
 using SharpGLTF.Scenes;
 using System.Text;
 using GeneralStructs;
-using CP77Rigs;
+using CP77.RigFile;
+using CP77.MeshFile;
 
 namespace GLTFNodesTest
 {
     class Program
     {
+        public static bool LOD_filter = true;
+        public static List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
         [STAThread]
         static void Main(string[] args)
         {
             ServiceLocator.Default.RegisterType<ILoggerService, LoggerService>();
-            string filename = @"C:\Users\Abhinav\Desktop\New folder (2)\rigs\woman_base_deformations.rig";
-            FileStream fs = new FileStream(filename, FileMode.Open, FileAccess.Read);
 
-            BinaryReader br = new BinaryReader(fs);
-            CR2WFile cr2w = new CR2WFile();
-            br.BaseStream.Seek(0, SeekOrigin.Begin);
-            cr2w.Read(br);
 
-            RawArmature rig = CP77Rig.ProcessRig(fs, cr2w);
+            string filename_rig = @"C:\Users\Abhinav\Desktop\New folder (2)\rigs\woman_base_deformations.rig";
+            string filename_mesh = @"C:\Users\Abhinav\Desktop\New folder (2)\t0_001_wa_body__judy.mesh";
 
-            StringBuilder sbr = new StringBuilder();
+            byte[] mbytes = File.ReadAllBytes(filename_mesh);
+            MemoryStream mms = new MemoryStream(mbytes);
+            CP77.MeshFile.MeshFile.ExportMeshWithoutRig(mms, true);
 
-            for (int i = 0; i < rig.BoneCount; i++)
-                sbr.AppendLine(string.Format("v {0} {1} {2}", rig.WorldMat[i].M41, rig.WorldMat[i].M42, rig.WorldMat[i].M43));
-            File.WriteAllText(@"test.obj", sbr.ToString());
+            byte[] rbytes = File.ReadAllBytes(filename_rig);
+            MemoryStream rms = new MemoryStream(rbytes);
+            CP77.MeshFile.MeshFile.ExportMeshWithRig(mms,rms, true);
         }
     }
 }

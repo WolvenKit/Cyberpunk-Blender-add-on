@@ -20,13 +20,13 @@ namespace GeneralStructs
         public Vector3[] AposeMSTrans;
         public Quaternion[] AposeMSRot;
         public Vector3[] AposeMSScale;
-        public Matrix4x4[] APoseMSMat;
+        public Matrix4x4[] AposeMSMat;
         // temp, to be depreciated after fixing IBM mumbo jumbo
         public bool AposeLSExits;
         public Vector3[] AposeLSTrans;
         public Quaternion[] AposeLSRot;
         public Vector3[] AposeLSScale;
-        public Matrix4x4[] APoseLSMat;
+        public Matrix4x4[] AposeLSMat;
     }
     public class MeshesInfo
     {

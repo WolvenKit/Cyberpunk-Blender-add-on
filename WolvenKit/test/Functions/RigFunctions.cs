@@ -6,16 +6,22 @@ using GeneralStructs;
 using SharpGLTF.Scenes;
 using System.Collections.Generic;
 using System.Linq;
-namespace CP77Rigs
+
+namespace CP77.RigFile
 {
     using Vec3 = System.Numerics.Vector3;
     using Quat = System.Numerics.Quaternion;
     using Mat = System.Numerics.Matrix4x4;
 
-    public class CP77Rig
+    public class RigFile
     {
-        public static RawArmature ProcessRig(FileStream fs, CR2WFile cr2w)
+        public static RawArmature ProcessRig(MemoryStream fs)
         {
+            BinaryReader br = new BinaryReader(fs);
+            CR2WFile cr2w = new CR2WFile();
+            br.BaseStream.Seek(0, SeekOrigin.Begin);
+            cr2w.Read(br);
+
             RawArmature Rig = new RawArmature();
             Rig.Names = GetboneNames(cr2w, "animRig");
             Rig.BoneCount = Rig.Names.Length;
@@ -25,7 +31,6 @@ namespace CP77Rigs
             Rig.Parent = GetboneParents(fs, Rig.BoneCount, offset);
 
             offset = fs.Length - 48 * Rig.BoneCount;
-            BinaryReader br = new BinaryReader(fs);
 
             Rig.LocalPosn = new Vec3[Rig.BoneCount];
 
@@ -82,25 +87,27 @@ namespace CP77Rigs
                 Rig.AposeMSTrans = new Vec3[Rig.BoneCount];
                 Rig.AposeMSRot = new Quat[Rig.BoneCount];
                 Rig.AposeMSScale = new Vec3[Rig.BoneCount];
-                Rig.APoseMSMat = new Mat[Rig.BoneCount];
+                Rig.AposeMSMat = new Mat[Rig.BoneCount];
 
                 for (int i = 0; i < Rig.BoneCount; i++)
                 {
                     float x = (cr2w.Chunks[0].data as animRig).APoseMS[i].Translation.X.val;
                     float y = (cr2w.Chunks[0].data as animRig).APoseMS[i].Translation.Y.val;
                     float z = (cr2w.Chunks[0].data as animRig).APoseMS[i].Translation.Z.val;
-                    Mat Tra = Mat.CreateTranslation(new Vec3(x, y, z));
+                    Rig.AposeMSTrans[i] = new Vec3(x, y, z);
+                    Mat Tra = Mat.CreateTranslation(Rig.AposeMSTrans[i]);
                     float I = (cr2w.Chunks[0].data as animRig).APoseMS[i].Rotation.I.val;
                     float J = (cr2w.Chunks[0].data as animRig).APoseMS[i].Rotation.J.val;
                     float K = (cr2w.Chunks[0].data as animRig).APoseMS[i].Rotation.K.val;
                     float R = (cr2w.Chunks[0].data as animRig).APoseMS[i].Rotation.R.val;
-                    Mat Rot = Mat.CreateFromQuaternion(new Quat(I, J, K, R));
+                    Rig.AposeMSRot[i] = new Quat(I, J, K, R);
+                    Mat Rot = Mat.CreateFromQuaternion(Rig.AposeMSRot[i]);
                     float t = (cr2w.Chunks[0].data as animRig).APoseMS[i].Scale.X.val;
                     float u = (cr2w.Chunks[0].data as animRig).APoseMS[i].Scale.Y.val;
                     float v = (cr2w.Chunks[0].data as animRig).APoseMS[i].Scale.Z.val;
-                    Mat Sca = Mat.CreateScale(new Vec3(t, u, v));
-
-                    Rig.APoseMSMat[i] = (Rot * Tra) * Sca;
+                    Rig.AposeMSScale[i] = new Vec3(t, u, v);
+                    Mat Sca = Mat.CreateScale(Rig.AposeMSScale[i]);
+                    Rig.AposeMSMat[i] = (Rot * Tra) * Sca;
                 }
             }
 
@@ -111,7 +118,7 @@ namespace CP77Rigs
                 Rig.AposeLSTrans = new Vec3[Rig.BoneCount];
                 Rig.AposeLSRot = new Quat[Rig.BoneCount];
                 Rig.AposeLSScale = new Vec3[Rig.BoneCount];
-                Rig.APoseLSMat = new Mat[Rig.BoneCount];
+                Rig.AposeLSMat = new Mat[Rig.BoneCount];
 
                 Mat[] matrix4X4s = new Mat[Rig.BoneCount];
                 for (int i = 0; i < Rig.BoneCount; i++)
@@ -119,16 +126,19 @@ namespace CP77Rigs
                     float x = (cr2w.Chunks[0].data as animRig).APoseLS[i].Translation.X.val;
                     float y = (cr2w.Chunks[0].data as animRig).APoseLS[i].Translation.Y.val;
                     float z = (cr2w.Chunks[0].data as animRig).APoseLS[i].Translation.Z.val;
-                    Mat Tra = Mat.CreateTranslation(new Vec3(x, y, z));
+                    Rig.AposeLSTrans[i] = new Vec3(x, y, z);
+                    Mat Tra = Mat.CreateTranslation(Rig.AposeLSTrans[i]);
                     float I = (cr2w.Chunks[0].data as animRig).APoseLS[i].Rotation.I.val;
                     float J = (cr2w.Chunks[0].data as animRig).APoseLS[i].Rotation.J.val;
                     float K = (cr2w.Chunks[0].data as animRig).APoseLS[i].Rotation.K.val;
                     float R = (cr2w.Chunks[0].data as animRig).APoseLS[i].Rotation.R.val;
-                    Mat Rot = Mat.CreateFromQuaternion(new Quat(I, J, K, R));
+                    Rig.AposeLSRot[i] = new Quat(I, J, K, R);
+                    Mat Rot = Mat.CreateFromQuaternion(Rig.AposeLSRot[i]);
                     float t = (cr2w.Chunks[0].data as animRig).APoseLS[i].Scale.X.val;
                     float u = (cr2w.Chunks[0].data as animRig).APoseLS[i].Scale.Y.val;
                     float v = (cr2w.Chunks[0].data as animRig).APoseLS[i].Scale.Z.val;
-                    Mat Sca = Mat.CreateScale(new Vec3(t, u, v));
+                    Rig.AposeLSScale[i] = new Vec3(t, u, v);
+                    Mat Sca = Mat.CreateScale(Rig.AposeLSScale[i]);
 
                     matrix4X4s[i] = (Rot * Tra) * Sca;
                 }
@@ -142,14 +152,12 @@ namespace CP77Rigs
                 }
                 for (int i = 0; i < Rig.BoneCount; i++)
                 {
-                    Rig.APoseLSMat[i] = matrix4X4s[i];
+                    Rig.AposeLSMat[i] = matrix4X4s[i];
                 }
             }
-
-            ExportNodes(Rig);
             return Rig;
         }
-        static Int16[] GetboneParents(FileStream fs, int bonesCount, long offset)
+        static Int16[] GetboneParents(MemoryStream fs, int bonesCount, long offset)
         {
             BinaryReader br = new BinaryReader(fs);
             fs.Position = offset;
@@ -161,7 +169,7 @@ namespace CP77Rigs
             }
             return boneParents;
         }
-        static string[] GetboneNames(CR2WFile cr2w, string Type)
+        public static string[] GetboneNames(CR2WFile cr2w, string Type)
         {
             int last = 0;
             for (int i = 0; i < cr2w.Chunks.Count; i++)
@@ -189,7 +197,7 @@ namespace CP77Rigs
 
             return bonenames;
         }
-        static void ExportNodes(RawArmature rig)
+        public static Dictionary<int, NodeBuilder> ExportNodes(RawArmature rig)
         {
             var bonesMapping = new Dictionary<int, NodeBuilder>();
 
@@ -200,15 +208,10 @@ namespace CP77Rigs
             }
 
             // find root nodes by looking at the bones that don't have any parent.
-            //var bonesRoots = bonesMapping.Values.Where(n => n.Parent == null);
+            var bonesRoots = bonesMapping.Values.Where(n => n.Parent == null).FirstOrDefault();
 
-            var scene = new SceneBuilder();
-            scene.AddNode(bonesMapping[0]); // bonesMapping[0] is the root node, it has no parent
-
-            var model = scene.ToGltf2();
-            model.SaveGLTF("test.gltf");
+            return bonesMapping;
         }
-        
         // recursive helper class
         static NodeBuilder CreateBoneHierarchy(RawArmature srcBones, int srcIndex, IReadOnlyDictionary<int, NodeBuilder> bonesMap)
         {
@@ -224,11 +227,22 @@ namespace CP77Rigs
 
             // fill transform or any other property...
 
-            var s = new Vec3(srcBones.LocalScale[srcIndex].X, srcBones.LocalScale[srcIndex].Y, srcBones.LocalScale[srcIndex].Z);
-            var r = new Quat(srcBones.LocalRot[srcIndex].X, srcBones.LocalRot[srcIndex].Y, srcBones.LocalRot[srcIndex].Z, srcBones.LocalRot[srcIndex].W);
-            var t = new Vec3(srcBones.LocalPosn[srcIndex].X, srcBones.LocalPosn[srcIndex].Y, srcBones.LocalPosn[srcIndex].Z);
+            if(srcBones.AposeLSExits)
+            {
+                var s = new Vec3(srcBones.AposeLSScale[srcIndex].X, srcBones.AposeLSScale[srcIndex].Y, srcBones.AposeLSScale[srcIndex].Z);
+                var r = new Quat(srcBones.AposeLSRot[srcIndex].X, srcBones.AposeLSRot[srcIndex].Y, srcBones.AposeLSRot[srcIndex].Z, srcBones.AposeLSRot[srcIndex].W);
+                var t = new Vec3(srcBones.AposeLSTrans[srcIndex].X, srcBones.AposeLSTrans[srcIndex].Y, srcBones.AposeLSTrans[srcIndex].Z);
 
-            dstNode.WithLocalTranslation(t).WithLocalRotation(r).WithLocalScale(s);
+                dstNode.WithLocalTranslation(t).WithLocalRotation(r).WithLocalScale(s);
+            }
+            else
+            {
+                var s = new Vec3(srcBones.LocalScale[srcIndex].X, srcBones.LocalScale[srcIndex].Y, srcBones.LocalScale[srcIndex].Z);
+                var r = new Quat(srcBones.LocalRot[srcIndex].X, srcBones.LocalRot[srcIndex].Y, srcBones.LocalRot[srcIndex].Z, srcBones.LocalRot[srcIndex].W);
+                var t = new Vec3(srcBones.LocalPosn[srcIndex].X, srcBones.LocalPosn[srcIndex].Y, srcBones.LocalPosn[srcIndex].Z);
+
+                dstNode.WithLocalTranslation(t).WithLocalRotation(r).WithLocalScale(s);
+            }
             return dstNode;
         }
     }
