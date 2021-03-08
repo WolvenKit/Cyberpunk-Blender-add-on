@@ -38,8 +38,8 @@ namespace GLTFNodesTest
             StringBuilder sbr = new StringBuilder();
 
             for (int i = 0; i < rig.BoneCount; i++)
-                sbr.AppendLine(string.Format("v {0} {1} {2}", rig.APoseMSMat[i].M41, rig.APoseMSMat[i].M42, rig.APoseMSMat[i].M43));
-           File.WriteAllText(@"test.obj", sbr.ToString());
+                sbr.AppendLine(string.Format("v {0} {1} {2}", rig.WorldMat[i].M41, rig.WorldMat[i].M42, rig.WorldMat[i].M43));
+            File.WriteAllText(@"test.obj", sbr.ToString());
         }
     }
 }
