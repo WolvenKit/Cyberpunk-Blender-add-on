@@ -396,12 +396,11 @@ namespace CP77.MeshFile
             var bones = CP77.RigFile.RigFile.ExportNodes(Rig);
             var rootbone = bones.Values.Where(n => n.Parent == null).FirstOrDefault();
 
-            int mIndex = -1;
             foreach (var mesh in meshes)
             {
-                ++mIndex;
                 long indCount = mesh.indices.Length;
-                var expmesh = new SKINNEDMESH(mesh.name);
+                var expmesh = new SKINNEDMESH();
+                expmesh.VertexPreprocessor.SetValidationPreprocessors();
 
                 var prim = expmesh.UsePrimitive(new MaterialBuilder("Default"));
                 for (int i = 0; i < indCount; i += 3)
@@ -437,59 +436,27 @@ namespace CP77.MeshFile
                     Vec4 col_1 = new Vec4(mesh.colors[idx1].X, mesh.colors[idx1].Y, mesh.colors[idx1].Z, mesh.colors[idx1].W);
                     Vec4 col_2 = new Vec4(mesh.colors[idx2].X, mesh.colors[idx2].Y, mesh.colors[idx2].Z, mesh.colors[idx2].W);
 
-                    if(mesh.weightcount == 8)
+
+                    (int, float)[] bind0 = new (int, float)[8];
+                    (int, float)[] bind1 = new (int, float)[8];
+                    (int, float)[] bind2 = new (int, float)[8];
+
+                    for (int w = 0; w < mesh.weightcount ; w++)
                     {
-                        //VJ
-                        Vec4 b0_0 = new Vec4(mesh.boneindices[idx0, 0], mesh.boneindices[idx0, 1], mesh.boneindices[idx0, 2], mesh.boneindices[idx0, 3]);
-                        Vec4 b0_1 = new Vec4(mesh.boneindices[idx1, 0], mesh.boneindices[idx1, 1], mesh.boneindices[idx1, 2], mesh.boneindices[idx1, 3]);
-                        Vec4 b0_2 = new Vec4(mesh.boneindices[idx2, 0], mesh.boneindices[idx2, 1], mesh.boneindices[idx2, 2], mesh.boneindices[idx2, 3]);
-
-                        Vec4 b1_0 = new Vec4(mesh.boneindices[idx0, 4], mesh.boneindices[idx0, 5], mesh.boneindices[idx0, 6], mesh.boneindices[idx0, 7]);
-                        Vec4 b1_1 = new Vec4(mesh.boneindices[idx1, 4], mesh.boneindices[idx1, 5], mesh.boneindices[idx1, 6], mesh.boneindices[idx1, 7]);
-                        Vec4 b1_2 = new Vec4(mesh.boneindices[idx2, 4], mesh.boneindices[idx2, 5], mesh.boneindices[idx2, 6], mesh.boneindices[idx2, 7]);
-
-                        Vec4 w0_0 = new Vec4(mesh.weights[idx0, 0], mesh.weights[idx0, 1], mesh.weights[idx0, 2], mesh.weights[idx0, 3]);
-                        Vec4 w0_1 = new Vec4(mesh.weights[idx1, 0], mesh.weights[idx1, 1], mesh.weights[idx1, 2], mesh.weights[idx1, 3]);
-                        Vec4 w0_2 = new Vec4(mesh.weights[idx2, 0], mesh.weights[idx2, 1], mesh.weights[idx2, 2], mesh.weights[idx2, 3]);
-
-                        Vec4 w1_0 = new Vec4(mesh.weights[idx0, 4], mesh.weights[idx0, 5], mesh.weights[idx0, 6], mesh.weights[idx0, 7]);
-                        Vec4 w1_1 = new Vec4(mesh.weights[idx1, 4], mesh.weights[idx1, 5], mesh.weights[idx1, 6], mesh.weights[idx1, 7]);
-                        Vec4 w1_2 = new Vec4(mesh.weights[idx2, 4], mesh.weights[idx2, 5], mesh.weights[idx2, 6], mesh.weights[idx2, 7]);
-
-                        VJ bone0 = new VJ(new SharpGLTF.Transforms.SparseWeight8(b0_0, b1_0, w0_0, w1_0));
-                        VJ bone1 = new VJ(new SharpGLTF.Transforms.SparseWeight8(b0_1, b1_1, w0_1, w1_1));
-                        VJ bone2 = new VJ(new SharpGLTF.Transforms.SparseWeight8(b0_2, b1_2, w0_2, w1_2));
-                        // vertex build
-                        var v0 = new SKINNEDVERTEX(new VPNT(p_0, n_0, t_0), new VCT(col_0, tx0_0, tx1_0), bone0);
-                        var v1 = new SKINNEDVERTEX(new VPNT(p_1, n_1, t_1), new VCT(col_1, tx0_1, tx1_1), bone1);
-                        var v2 = new SKINNEDVERTEX(new VPNT(p_2, n_2, t_2), new VCT(col_2, tx0_2, tx1_2), bone2);
-                        // triangle build
-                        prim.AddTriangle(v0, v1, v2);
+                        bind0[w].Item1 = mesh.boneindices[idx0, w];
+                        bind0[w].Item2 = mesh.weights[idx0, w];
+                        bind1[w].Item1 = mesh.boneindices[idx1, w];
+                        bind1[w].Item2 = mesh.weights[idx1, w];
+                        bind2[w].Item1 = mesh.boneindices[idx2, w];
+                        bind2[w].Item2 = mesh.weights[idx2, w];
                     }
 
-                    // for weightcount = 4
-                    else
-                    {
-                        //VJ
-                        Vec4 b0_0 = new Vec4(mesh.boneindices[idx0, 0], mesh.boneindices[idx0, 1], mesh.boneindices[idx0, 2], mesh.boneindices[idx0, 3]);
-                        Vec4 b0_1 = new Vec4(mesh.boneindices[idx1, 0], mesh.boneindices[idx1, 1], mesh.boneindices[idx1, 2], mesh.boneindices[idx1, 3]);
-                        Vec4 b0_2 = new Vec4(mesh.boneindices[idx2, 0], mesh.boneindices[idx2, 1], mesh.boneindices[idx2, 2], mesh.boneindices[idx2, 3]);
-
-                        Vec4 w0_0 = new Vec4(mesh.weights[idx0, 0], mesh.weights[idx0, 1], mesh.weights[idx0, 2], mesh.weights[idx0, 3]);
-                        Vec4 w0_1 = new Vec4(mesh.weights[idx1, 0], mesh.weights[idx1, 1], mesh.weights[idx1, 2], mesh.weights[idx1, 3]);
-                        Vec4 w0_2 = new Vec4(mesh.weights[idx2, 0], mesh.weights[idx2, 1], mesh.weights[idx2, 2], mesh.weights[idx2, 3]);
-
-                        VJ bone0 = new VJ(new SharpGLTF.Transforms.SparseWeight8(b0_0, Vec4.Zero, w0_0, Vec4.Zero));
-                        VJ bone1 = new VJ(new SharpGLTF.Transforms.SparseWeight8(b0_1, Vec4.Zero, w0_1, Vec4.Zero));
-                        VJ bone2 = new VJ(new SharpGLTF.Transforms.SparseWeight8(b0_2, Vec4.Zero, w0_2, Vec4.Zero));
-                        // vertex build
-                        var v0 = new SKINNEDVERTEX(new VPNT(p_0, n_0, t_0), new VCT(col_0, tx0_0, tx1_0), bone0);
-                        var v1 = new SKINNEDVERTEX(new VPNT(p_1, n_1, t_1), new VCT(col_1, tx0_1, tx1_1), bone1);
-                        var v2 = new SKINNEDVERTEX(new VPNT(p_2, n_2, t_2), new VCT(col_2, tx0_2, tx1_2), bone2);
-
-                        // triangle build
-                        prim.AddTriangle(v0, v1, v2);
-                    }
+                    // vertex build
+                    var v0 = new SKINNEDVERTEX(new VPNT(p_0, n_0, t_0), new VCT(col_0, tx0_0, tx1_0), new VJ(bind0));
+                    var v1 = new SKINNEDVERTEX(new VPNT(p_1, n_1, t_1), new VCT(col_1, tx0_1, tx1_1), new VJ(bind1));
+                    var v2 = new SKINNEDVERTEX(new VPNT(p_2, n_2, t_2), new VCT(col_2, tx0_2, tx1_2), new VJ(bind2));
+                    // triangle build
+                    prim.AddTriangle(v0, v1, v2);
                 }
                 scene.AddSkinnedMesh(expmesh,rootbone.WorldMatrix, bones.Values.ToArray());
             }
