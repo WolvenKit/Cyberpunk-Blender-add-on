@@ -14,6 +14,7 @@ namespace GeneralStructs
         public Quaternion[] LocalRot;
         public Vector3[] LocalScale;
         public Matrix4x4[] WorldMat;
+        public Matrix4x4[] IBWorldMat;
 
         // temp, to be depreciated after fixing IBM mumbo jumbo
         public bool AposeMSExits;
@@ -21,6 +22,7 @@ namespace GeneralStructs
         public Quaternion[] AposeMSRot;
         public Vector3[] AposeMSScale;
         public Matrix4x4[] AposeMSMat;
+        public Matrix4x4[] IBAposeMat;
         // temp, to be depreciated after fixing IBM mumbo jumbo
         public bool AposeLSExits;
         public Vector3[] AposeLSTrans;

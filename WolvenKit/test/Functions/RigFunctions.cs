@@ -79,7 +79,11 @@ namespace CP77.RigFile
             {
                 Rig.WorldMat[i] = matrix4Xes[i];
             }
-
+            Rig.IBWorldMat = new Mat[Rig.BoneCount];
+            for (int i = 0; i < Rig.BoneCount; i++)
+            {
+                 Mat.Invert(matrix4Xes[i],out Rig.IBWorldMat[i]);
+            }
             // if AposeWorld/AposeMS Exists then..... this can be done better i guess...
             if ((cr2w.Chunks[0].data as animRig).APoseMS != null)
             {
@@ -88,7 +92,7 @@ namespace CP77.RigFile
                 Rig.AposeMSRot = new Quat[Rig.BoneCount];
                 Rig.AposeMSScale = new Vec3[Rig.BoneCount];
                 Rig.AposeMSMat = new Mat[Rig.BoneCount];
-
+                Rig.IBAposeMat = new Mat[Rig.BoneCount];
                 for (int i = 0; i < Rig.BoneCount; i++)
                 {
                     float x = (cr2w.Chunks[0].data as animRig).APoseMS[i].Translation.X.val;
@@ -108,6 +112,10 @@ namespace CP77.RigFile
                     Rig.AposeMSScale[i] = new Vec3(t, u, v);
                     Mat Sca = Mat.CreateScale(Rig.AposeMSScale[i]);
                     Rig.AposeMSMat[i] = (Rot * Tra) * Sca;
+                }
+                for (int i = 0; i < Rig.BoneCount; i++)
+                {
+                    Mat.Invert(Rig.AposeMSMat[i], out Rig.IBAposeMat[i]);
                 }
             }
 
@@ -197,6 +205,122 @@ namespace CP77.RigFile
 
             return bonenames;
         }
+
+        public static RawArmature CombineRigs(List<RawArmature> rigs)
+        {
+            List<string> Names = new List<string>();
+
+            List<Int16> Parent = new List<Int16>();
+            int BoneCount = 0;
+            bool Rig = true;
+            List<Vec3> LocalPosn = new List<Vec3>();
+            List<Quat> LocalRot = new List<Quat>();
+            List<Vec3> LocalScale = new List<Vec3>();
+
+            for(int i = 0; i < rigs.Count; i++)
+            {
+                for(int e = 0; e < rigs[i].BoneCount; e++)
+                {
+                    bool found = false;
+                    for(int eye = 0; eye < BoneCount; eye++)
+                    {
+                        if (Names[eye] == rigs[i].Names[e])
+                        {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if(!found)
+                    {
+                        Names.Add(rigs[i].Names[e]);
+                        if(rigs[i].AposeLSExits)
+                        {
+                            LocalPosn.Add(rigs[i].AposeLSTrans[e]);
+                            LocalScale.Add(rigs[i].AposeLSScale[e]);
+                            LocalRot.Add(rigs[i].AposeLSRot[e]);
+                        }
+                        else
+                        {
+                            LocalPosn.Add(rigs[i].LocalPosn[e]);
+                            LocalScale.Add(rigs[i].LocalScale[e]);
+                            LocalRot.Add(rigs[i].LocalRot[e]);
+                        }
+                        BoneCount++;
+                    }
+                }
+            }
+            Parent.Add(-1); // assuming at i = 0 is always "Root" bone
+            for (int i = 1; i < BoneCount; i++)  // i = 1, assuming at i = 0 is always "Root" bone
+            {
+                bool found = false;
+                string parentName = string.Empty;
+
+                for(int e = 0; e < rigs.Count; e++)
+                {
+                    for(int eye = 0; eye < rigs[e].BoneCount; eye++)
+                    {
+                        if (Names[i] == rigs[e].Names[eye])
+                        {
+                            found = true;
+                            parentName = rigs[e].Names[rigs[e].Parent[eye]];
+                            break;
+                        }
+                    }
+                    if (found)
+                        break;
+                }
+                for (Int16 r = 0; r < BoneCount; r++)
+                {
+                    if (parentName == Names[r])
+                    {
+                        Parent.Add(r);
+                        break;
+                    }
+                }
+            }
+
+            RawArmature CombinedRig = new RawArmature();
+            CombinedRig.Rig = true;
+            CombinedRig.BoneCount = BoneCount;
+            CombinedRig.Names = Names.ToArray();
+            CombinedRig.Parent = Parent.ToArray();
+            CombinedRig.LocalPosn = LocalPosn.ToArray();
+            CombinedRig.LocalScale = LocalScale.ToArray();
+            CombinedRig.LocalRot = LocalRot.ToArray();
+            CombinedRig.AposeLSExits = false;
+            CombinedRig.AposeMSExits = false;
+
+            Mat[] matrix4Xes = new Mat[CombinedRig.BoneCount];
+            for (int i = 0; i < CombinedRig.BoneCount; i++)
+            {
+                Mat T = Mat.CreateTranslation(CombinedRig.LocalPosn[i]);
+                Mat R = Mat.CreateFromQuaternion(CombinedRig.LocalRot[i]);
+                Mat S = Mat.CreateScale(CombinedRig.LocalScale[i]);
+                matrix4Xes[i] = (R * T) * S; //  bereal careful with this scaling multiplication, since scale is always one, can't be trusted, R*T is okay
+            }
+
+            // creating worldspace matrix by parent multiplication
+            for (int i = 0; i < CombinedRig.BoneCount; i++)
+            {
+                int j = 0;
+                j = CombinedRig.Parent[i];
+                if (j != -1)
+                    matrix4Xes[i] = matrix4Xes[i] * matrix4Xes[j];
+            }
+
+            CombinedRig.WorldMat = new Mat[CombinedRig.BoneCount];
+            for (int i = 0; i < CombinedRig.BoneCount; i++)
+            {
+                CombinedRig.WorldMat[i] = matrix4Xes[i];
+            }
+            /*
+            for (int i = 0; i < CombinedRig.BoneCount; i++)
+            {
+                Console.WriteLine(CombinedRig.Names[i] + " " + CombinedRig.Parent[i]);
+            }
+            */
+            return CombinedRig;
+        }
         public static Dictionary<int, NodeBuilder> ExportNodes(RawArmature rig)
         {
             var bonesMapping = new Dictionary<int, NodeBuilder>();
@@ -210,6 +334,11 @@ namespace CP77.RigFile
             // find root nodes by looking at the bones that don't have any parent.
             var bonesRoots = bonesMapping.Values.Where(n => n.Parent == null).FirstOrDefault();
 
+            var scene = new SceneBuilder();
+            scene.AddNode(bonesRoots);
+            var model = scene.ToGltf2();
+
+            model.SaveGLB("testnode.glb");
             return bonesMapping;
         }
         // recursive helper class
