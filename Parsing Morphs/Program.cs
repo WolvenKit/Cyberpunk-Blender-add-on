@@ -83,7 +83,12 @@ namespace Parsing_Morphs
             {
                 //ExportASCII(expMeshes, outfile, expTargets[i], targetsInfo.Names[i]);
             }
-            ContainedMeshToGLTF(expMeshes, outfile, expTargets, targetsInfo.Names);
+            string[] names = new string[targetsInfo.NumTargets];
+            for(int i = 0; i < targetsInfo.NumTargets; i++)
+            {
+                names[i] = targetsInfo.Names[i] + "_" + targetsInfo.RegionNames[i];
+            }
+            ContainedMeshToGLTF(expMeshes, outfile, expTargets, names);
             ExportTextures(cr2w, texbuffer,outfile);
         }
 
@@ -538,6 +543,9 @@ namespace Parsing_Morphs
                         morphBuilder.SetVertexDelta(mesh.vertices[expTargets[i][mIndex].vertexMapping[e]], new VertexGeometryDelta(expTargets[i][mIndex].vertexDelta[e], expTargets[i][mIndex].normalDelta[e], expTargets[i][mIndex].tangentDelta[e]));
                     }
                 }
+                var obj = new { targetNames = names }; // anonymous variable/obj
+
+                expmesh.Extras = SharpGLTF.IO.JsonContent.Serialize(obj);
                 scene.AddRigidMesh(expmesh, System.Numerics.Matrix4x4.Identity);
             }
             var model = scene.ToGltf2();
