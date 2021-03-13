@@ -11,6 +11,7 @@ using SharpGLTF.Geometry.VertexTypes;
 using SharpGLTF.Materials;
 using SharpGLTF.Scenes;
 using SharpGLTF.Schema2;
+using CP77.RigFile;
 
 namespace CP77.MeshFile
 {
@@ -26,7 +27,7 @@ namespace CP77.MeshFile
     using VCT = VertexColor1Texture2;
     using VJ = VertexJoints8;
 
-    class MeshFile
+    class MESH
     {
         public static void ExportMeshWithoutRig(MemoryStream meshStream, string _meshName, bool Filter, string outfile)
         {
@@ -86,7 +87,7 @@ namespace CP77.MeshFile
         }
         public static void ExportMeshWithRig(MemoryStream meshMstream, MemoryStream rigMStream,string _meshName, bool Filter, string outfile)
         {
-            RawArmature Rig = RigFile.RigFile.ProcessRig(rigMStream);
+            RawArmature Rig = RIG.ProcessRig(rigMStream);
 
             List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
 
@@ -107,7 +108,7 @@ namespace CP77.MeshFile
             }
             if ((cr2w.Chunks[last].data as CMesh).BoneNames.Count != 0)    // for rigid meshes
             {
-                bones.Names = RigFile.RigFile.GetboneNames(cr2w, "CMesh");
+                bones.Names = RIG.GetboneNames(cr2w, "CMesh");
                 bones.WorldPosn = GetMeshBonesPosn(cr2w);
             }
 
@@ -139,10 +140,10 @@ namespace CP77.MeshFile
             rigStreamS = rigStreamS.OrderByDescending(r => r.Length).ToList();  // not so smart hacky method to get bodybase rigs on top/ orderby descending
             for (int r = 0; r < rigStreamS.Count; r++)
             {
-                RawArmature Rig = RigFile.RigFile.ProcessRig(rigStreamS[r]);
+                RawArmature Rig = RIG.ProcessRig(rigStreamS[r]);
                 Rigs.Add(Rig);
             }
-            RawArmature expRig = RigFile.RigFile.CombineRigs(Rigs);
+            RawArmature expRig = RIG.CombineRigs(Rigs);
 
             List <RawMeshContainer> expMeshes = new List<RawMeshContainer>();
 
@@ -168,7 +169,7 @@ namespace CP77.MeshFile
                 }
                 if ((cr2w.Chunks[last].data as CMesh).BoneNames.Count != 0)    // for rigid meshes
                 {
-                    bones.Names = RigFile.RigFile.GetboneNames(cr2w, "CMesh");
+                    bones.Names = RIG.GetboneNames(cr2w, "CMesh");
                     bones.WorldPosn = GetMeshBonesPosn(cr2w);
                 }
 
@@ -481,7 +482,7 @@ namespace CP77.MeshFile
                 }
             }
         }
-        static MemoryStream GetMeshBufferStream(MemoryStream ms, CR2WFile cr2w)
+        public static MemoryStream GetMeshBufferStream(MemoryStream ms, CR2WFile cr2w)
         {
             MemoryStream meshstream = new MemoryStream();
             var buffers = cr2w.Buffers;
@@ -508,7 +509,7 @@ namespace CP77.MeshFile
         {
             var scene = new SceneBuilder();
 
-            var bones = CP77.RigFile.RigFile.ExportNodes(Rig);
+            var bones = RIG.ExportNodes(Rig);
             var rootbone = bones.Values.Where(n => n.Parent == null).FirstOrDefault();
 
             foreach (var mesh in meshes)

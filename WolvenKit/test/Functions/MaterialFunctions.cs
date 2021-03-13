@@ -9,7 +9,7 @@ using Newtonsoft.Json;
 
 namespace CP77.MeshFile.Materials
 {
-    class Material
+    class MATERIAL
     {
         public static void GetMateriaEntries(MemoryStream meshStream)
         {
@@ -63,6 +63,10 @@ namespace CP77.MeshFile.Materials
                 }
                 cMaterialInstances.Add((cr2w.Chunks[index].data as CMaterialInstance));
             }
+        }
+        static void ParseMaterialInstance(CMaterialInstance cMaterialInstance)
+        {
+
         }
         static MemoryStream GetMaterialStream(MemoryStream ms,CR2WFile cr2w)
         {

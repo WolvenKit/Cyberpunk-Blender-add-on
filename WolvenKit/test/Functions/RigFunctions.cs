@@ -13,7 +13,7 @@ namespace CP77.RigFile
     using Quat = System.Numerics.Quaternion;
     using Mat = System.Numerics.Matrix4x4;
 
-    public class RigFile
+    public class RIG
     {
         public static RawArmature ProcessRig(MemoryStream fs)
         {
