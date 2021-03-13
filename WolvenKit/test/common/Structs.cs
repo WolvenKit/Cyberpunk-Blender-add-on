@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using System.Collections.Generic;
 
 namespace GeneralStructs
 {
@@ -47,6 +48,7 @@ namespace GeneralStructs
         public Vector4 qScale { get; set; }
         public int meshC { get; set; }
         public UInt32[] LODLvl { get; set; }
+        public List<Appearance> appearances { get; set; }
     }
     public class RawMeshContainer
     {
@@ -61,6 +63,8 @@ namespace GeneralStructs
         public UInt16[,] boneindices { get; set; }
         public string name;
         public UInt32 weightcount { get; set; }
+        public string[] appNames { get; set; }
+        public string[] materialNames { get; set; }
     }
     public class RawTargetContainer
     {
@@ -85,5 +89,19 @@ namespace GeneralStructs
         public UInt32 NumTargets { get; set; }
         public string BaseMesh { get; set; }
         public string BaseTexture { get; set; }
+    }
+    public class DiffusedBSDF
+    {
+        public string AlbedoTEX;
+        public string NormalTEX;
+    }
+    public class Appearance
+    {
+        public string Name;
+        public string[] MaterialNames;
+    }
+    public class MaterialEntry
+    {
+        public string Name;
     }
 }
