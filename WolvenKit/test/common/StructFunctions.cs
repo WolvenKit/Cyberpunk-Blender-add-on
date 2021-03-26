@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Numerics;
 
-namespace GeneralStructs
+namespace WolvenKit.RED4.GeneralStructs
 {
-    class Converters
+    public class Converters
     {
         public static float hfconvert(UInt16 read)// for converting ushort representation of a Half float to a float32
         {
@@ -110,7 +110,7 @@ namespace GeneralStructs
             return new Vector4(X / 512f, Y / 512f, Z / 512f, W / 3f);
         }
     }
-    class Manipulators
+    public class Manipulators
     {
         public static float CalculateRealPart(Quaternion Q)
         {

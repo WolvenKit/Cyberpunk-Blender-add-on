@@ -2,7 +2,7 @@ using System;
 using System.Numerics;
 using System.Collections.Generic;
 
-namespace GeneralStructs
+namespace WolvenKit.RED4.GeneralStructs
 {
     public class RawArmature
     {
@@ -103,5 +103,23 @@ namespace GeneralStructs
     public class MaterialEntry
     {
         public string Name;
+        public bool IsMultiLayered;
+
+        public string baseMaterial;
+        public string MultilayerSetup;
+        public string MultilayerMask;
+        public string Roughness;
+        public string DetailNormal;
+        public string Normal;
+        public string Albedo;
+        public string Detailmap_Squash;
+        public string Detailmap_Stretch;
+        public string SkinProfile;
+        public string Bloodflow;
+        public string NormalTexture;
+        public string DiffuseTexture;
+        public string NormalAlphaTex;
+        public string RoughnessTexture;
+
     }
 }

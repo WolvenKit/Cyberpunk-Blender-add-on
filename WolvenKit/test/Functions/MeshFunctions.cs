@@ -1,19 +1,19 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
-using CP77.CR2W;
-using CP77.CR2W.Types;
+using WolvenKit.RED4.CR2W;
+using WolvenKit.RED4.CR2W.Types;
 using WolvenKit.Common.Oodle;
-using GeneralStructs;
+using WolvenKit.RED4.GeneralStructs;
 using SharpGLTF.Geometry;
 using SharpGLTF.Geometry.VertexTypes;
 using SharpGLTF.Materials;
 using SharpGLTF.Scenes;
 using SharpGLTF.Schema2;
-using CP77.RigFile;
+using WolvenKit.RED4.RigFile;
 
-namespace CP77.MeshFile
+namespace WolvenKit.RED4.MeshFile
 {
     using Vec4 = System.Numerics.Vector4;
     using Vec3 = System.Numerics.Vector3;
@@ -27,18 +27,18 @@ namespace CP77.MeshFile
     using VCT = VertexColor1Texture2;
     using VJ = VertexJoints8;
 
-    class MESH
+    public class MESH
     {
-        public static void ExportMeshWithoutRig(MemoryStream meshStream, string _meshName, bool Filter, string outfile)
+        public static void ExportMeshWithoutRig(Stream meshStream, string _meshName, string outfile, bool LodFilter = true, bool isGLBinary = true)
         {
             List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
-            var cr2w = ModTools.TryReadCr2WFile(meshStream);
+            var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshStream);
 
             MemoryStream ms = GetMeshBufferStream(meshStream,cr2w);
             MeshesInfo meshinfo = GetMeshesinfo(cr2w);
             for(int i = 0; i < meshinfo.meshC; i ++)
             {
-                if (meshinfo.LODLvl[i] != 1 && Filter)
+                if (meshinfo.LODLvl[i] != 1 && LodFilter)
                     continue;
                 RawMeshContainer mesh = ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i]);
                 mesh.name = _meshName + "_" + i;
@@ -53,21 +53,24 @@ namespace CP77.MeshFile
                 expMeshes.Add(mesh);
             }
             ModelRoot model = RawRigidMeshesToGLTF(expMeshes);
-            model.SaveGLB(outfile);
+            if(isGLBinary)
+                model.SaveGLB(outfile);
+            else
+                model.SaveGLTF(outfile);
         }
-        public static void ExportMultiMeshWithoutRig(List<MemoryStream> meshStreamS, List<string> _meshNameS, bool Filter, string outfile)
+        public static void ExportMultiMeshWithoutRig(List<Stream> meshStreamS, List<string> _meshNameS, string outfile, bool LodFilter = true, bool isGLBinary = true)
         {
             List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
 
             for(int m = 0; m < meshStreamS.Count; m++)
             {
-                var cr2w = ModTools.TryReadCr2WFile(meshStreamS[m]);
+                var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshStreamS[m]);
 
                 MemoryStream ms = GetMeshBufferStream(meshStreamS[m], cr2w);
                 MeshesInfo meshinfo = GetMeshesinfo(cr2w);
                 for (int i = 0; i < meshinfo.meshC; i++)
                 {
-                    if (meshinfo.LODLvl[i] != 1 && Filter)
+                    if (meshinfo.LODLvl[i] != 1 && LodFilter)
                         continue;
                     RawMeshContainer mesh = ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i]);
                     mesh.name = _meshNameS[m] + "_" + i;
@@ -83,15 +86,18 @@ namespace CP77.MeshFile
                 }
             }
             ModelRoot model = RawRigidMeshesToGLTF(expMeshes);
-            model.SaveGLB(outfile);
+            if (isGLBinary)
+                model.SaveGLB(outfile);
+            else
+                model.SaveGLTF(outfile);
         }
-        public static void ExportMeshWithRig(MemoryStream meshMstream, MemoryStream rigMStream,string _meshName, bool Filter, string outfile)
+        public static void ExportMeshWithRig(Stream meshMstream, Stream rigMStream,string _meshName,string outfile, bool LodFilter = true, bool isGLBinary = true)
         {
             RawArmature Rig = RIG.ProcessRig(rigMStream);
 
             List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
 
-            var cr2w = ModTools.TryReadCr2WFile(meshMstream);
+            var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshMstream);
 
             MemoryStream ms = GetMeshBufferStream(meshMstream, cr2w);
             MeshesInfo meshinfo = GetMeshesinfo(cr2w);
@@ -114,7 +120,7 @@ namespace CP77.MeshFile
 
             for (int i = 0; i < meshinfo.meshC; i++)
             {
-                if (meshinfo.LODLvl[i] != 1 && Filter)
+                if (meshinfo.LODLvl[i] != 1 && LodFilter)
                     continue;
                 RawMeshContainer mesh = ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i]);
                 mesh.name = _meshName + "_" + i;
@@ -131,10 +137,12 @@ namespace CP77.MeshFile
             }
 
             ModelRoot model = RawSkinnedMeshesToGLTF(expMeshes,Rig);
-
-            model.SaveGLB(outfile);
+            if (isGLBinary)
+                model.SaveGLB(outfile);
+            else
+                model.SaveGLTF(outfile);
         }
-        public static void ExportMultiMeshWithRig(List<MemoryStream> meshStreamS, List<MemoryStream> rigStreamS, List<string> _meshNameS, bool Filter, string outfile)
+        public static void ExportMultiMeshWithRig(List<Stream> meshStreamS, List<Stream> rigStreamS, List<string> _meshNameS,string outfile, bool LodFilter = true, bool isGLBinary = true)
         {
             List<RawArmature> Rigs = new List<RawArmature>();
             rigStreamS = rigStreamS.OrderByDescending(r => r.Length).ToList();  // not so smart hacky method to get bodybase rigs on top/ orderby descending
@@ -150,9 +158,8 @@ namespace CP77.MeshFile
             for (int m = 0; m < meshStreamS.Count; m++)
             {
                 BinaryReader br = new BinaryReader(meshStreamS[m]);
-                CR2WFile cr2w = new CR2WFile();
-                br.BaseStream.Seek(0, SeekOrigin.Begin);
-                cr2w.Read(br);
+
+                var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshStreamS[m]);
 
                 MemoryStream ms = GetMeshBufferStream(meshStreamS[m], cr2w);
                 MeshesInfo meshinfo = GetMeshesinfo(cr2w);
@@ -175,7 +182,7 @@ namespace CP77.MeshFile
 
                 for (int i = 0; i < meshinfo.meshC; i++)
                 {
-                    if (meshinfo.LODLvl[i] != 1 && Filter)
+                    if (meshinfo.LODLvl[i] != 1 && LodFilter)
                         continue;
                     RawMeshContainer mesh = ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i]);
                     mesh.name = _meshNameS[m] + "_" + i;
@@ -193,8 +200,10 @@ namespace CP77.MeshFile
                 }
             }
             ModelRoot model = RawSkinnedMeshesToGLTF(expMeshes, expRig);
-
-            model.SaveGLB(outfile);
+            if (isGLBinary)
+                model.SaveGLB(outfile);
+            else
+                model.SaveGLTF(outfile);
         }
         static Vec3[] GetMeshBonesPosn(CR2WFile cr2w)
         {
@@ -481,8 +490,9 @@ namespace CP77.MeshFile
                     }
                 }
             }
+
         }
-        public static MemoryStream GetMeshBufferStream(MemoryStream ms, CR2WFile cr2w)
+        public static MemoryStream GetMeshBufferStream(Stream ms, CR2WFile cr2w)
         {
             MemoryStream meshstream = new MemoryStream();
             var buffers = cr2w.Buffers;

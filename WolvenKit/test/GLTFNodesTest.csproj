@@ -11,26 +11,19 @@
     <PackageReference Include="FastMember" Version="1.5.0" />
     <PackageReference Include="FastMember.NetCore" Version="1.1.0" />
     <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
+    <PackageReference Include="SharpGLTF.Core" Version="1.0.0-alpha0022" />
+    <PackageReference Include="SharpGLTF.Toolkit" Version="1.0.0-alpha0022" />
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="SharpGLTF.Core">
-      <HintPath>SharpGLTF.Core.dll</HintPath>
-    </Reference>
-    <Reference Include="SharpGLTF.Toolkit">
-      <HintPath>SharpGLTF.Toolkit.dll</HintPath>
-    </Reference>
     <Reference Include="WolvenKit.Common">
       <HintPath>WolvenKit.Common.dll</HintPath>
-    </Reference>
-    <Reference Include="WolvenKit.Cyberformats">
-      <HintPath>WolvenKit.Cyberformats.dll</HintPath>
     </Reference>
     <Reference Include="WolvenKit.Modkit">
       <HintPath>WolvenKit.Modkit.dll</HintPath>
     </Reference>
-    <Reference Include="WolvenKit.Witcher3Formats">
-      <HintPath>WolvenKit.Witcher3Formats.dll</HintPath>
+    <Reference Include="WolvenKit.RED4.CR2W">
+      <HintPath>WolvenKit.RED4.CR2W.dll</HintPath>
     </Reference>
   </ItemGroup>
 

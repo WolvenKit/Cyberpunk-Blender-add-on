@@ -1,11 +1,11 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using GeneralStructs;
-using CP77.CR2W;
-using CP77.CR2W.Types;
+using WolvenKit.RED4.GeneralStructs;
+using WolvenKit.RED4.CR2W;
+using WolvenKit.RED4.CR2W.Types;
 using System.IO;
 using WolvenKit.Common.DDS;
-using CP77.MeshFile;
+using WolvenKit.RED4.MeshFile;
 using WolvenKit.Common.Oodle;
 using SharpGLTF.Geometry;
 using SharpGLTF.Geometry.VertexTypes;
@@ -13,7 +13,7 @@ using SharpGLTF.Materials;
 using SharpGLTF.Schema2;
 using SharpGLTF.Memory;
 
-namespace CP77.MorphTargetFile
+namespace WolvenKit.RED4.MorphTargetFile
 {
     using Vec4 = System.Numerics.Vector4;
     using Vec3 = System.Numerics.Vector3;
@@ -23,11 +23,11 @@ namespace CP77.MorphTargetFile
     using RIGIDMESH = MeshBuilder<VertexPositionNormalTangent, VertexColor1Texture2, VertexEmpty>;
     using VPNT = VertexPositionNormalTangent;
     using VCT = VertexColor1Texture2;
-    class TARGET
+    public class TARGET
     {
-        public static void ExportTargets(MemoryStream targetStream,string outfile)
+        public static void ExportTargets(Stream targetStream,string outfile, bool isGLBinary = true)
         {
-            var cr2w = ModTools.TryReadCr2WFile(targetStream);
+            var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(targetStream);
 
             List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
             MemoryStream meshbuffer = MESH.GetMeshBufferStream(targetStream, cr2w);
@@ -87,7 +87,11 @@ namespace CP77.MorphTargetFile
 
             List<MemoryStream> textureStreams =  ContainTextureStreams(cr2w, texbuffer);
             ModelRoot model = RawTargetsToGLTF(expMeshes, expTargets, names, textureStreams);
-            model.SaveGLTF(outfile);
+
+            if (isGLBinary)
+                model.SaveGLB(outfile);
+            else
+                model.SaveGLTF(outfile);
         }
         static TargetsInfo GetTargetInfos(CR2WFile cr2w, int SubMeshC)
         {

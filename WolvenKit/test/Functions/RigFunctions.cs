@@ -1,13 +1,13 @@
 using System;
 using System.IO;
-using CP77.CR2W;
-using CP77.CR2W.Types;
-using GeneralStructs;
+using WolvenKit.RED4.CR2W;
+using WolvenKit.RED4.CR2W.Types;
+using WolvenKit.RED4.GeneralStructs;
 using SharpGLTF.Scenes;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace CP77.RigFile
+namespace WolvenKit.RED4.RigFile
 {
     using Vec3 = System.Numerics.Vector3;
     using Quat = System.Numerics.Quaternion;
@@ -15,12 +15,11 @@ namespace CP77.RigFile
 
     public class RIG
     {
-        public static RawArmature ProcessRig(MemoryStream fs)
+        public static RawArmature ProcessRig(Stream fs)
         {
             BinaryReader br = new BinaryReader(fs);
-            CR2WFile cr2w = new CR2WFile();
-            br.BaseStream.Seek(0, SeekOrigin.Begin);
-            cr2w.Read(br);
+
+            var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(fs);
 
             RawArmature Rig = new RawArmature();
             Rig.Names = GetboneNames(cr2w, "animRig");
@@ -165,7 +164,7 @@ namespace CP77.RigFile
             }
             return Rig;
         }
-        static Int16[] GetboneParents(MemoryStream fs, int bonesCount, long offset)
+        static Int16[] GetboneParents(Stream fs, int bonesCount, long offset)
         {
             BinaryReader br = new BinaryReader(fs);
             fs.Position = offset;
@@ -248,6 +247,7 @@ namespace CP77.RigFile
                     }
                 }
             }
+            // this rig merging is gonna break if someone tries to merge rigs not having a "Root" bone, generally seen with weapons etc.
             Parent.Add(-1); // assuming at i = 0 is always "Root" bone
             for (int i = 1; i < BoneCount; i++)  // i = 1, assuming at i = 0 is always "Root" bone
             {

@@ -1,17 +1,18 @@
 ﻿using System;
 using System.IO;
 using CP77.CR2W;
-using GeneralStructs;
-using CP77.CR2W.Types;
+using WolvenKit.RED4.GeneralStructs;
+using WolvenKit.RED4.CR2W;
+using WolvenKit.RED4.CR2W.Types;
 using WolvenKit.Common.Oodle;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 
-namespace CP77.MeshFile.Materials
+namespace WolvenKit.RED4.MeshFile.Materials
 {
-    class MATERIAL
+    public class MATERIAL
     {
-        public static void GetMateriaEntries(MemoryStream meshStream)
+        public static void GetMateriaEntries(Stream meshStream)
         {
             var cr2w = ModTools.TryReadCr2WFile(meshStream);
 
@@ -68,7 +69,7 @@ namespace CP77.MeshFile.Materials
         {
 
         }
-        static MemoryStream GetMaterialStream(MemoryStream ms,CR2WFile cr2w)
+        static MemoryStream GetMaterialStream(Stream ms,CR2WFile cr2w)
         {
             MemoryStream materialStream = new MemoryStream();
 
