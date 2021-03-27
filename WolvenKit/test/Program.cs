@@ -2,11 +2,9 @@
 using System.IO;
 using Catel.IoC;
 using WolvenKit.Common.Services;
-using CP77.RigFile;
+using WolvenKit.RED4.CR2W;
 using System.Collections.Generic;
-using GeneralStructs;
-using SharpGLTF.Scenes;
-using System.Linq;
+using WolvenKit.RED4.MeshFile.Materials;
 
 namespace GLTFNodesTest
 {
@@ -15,19 +13,32 @@ namespace GLTFNodesTest
         static void Main(string[] args)
         {
             ServiceLocator.Default.RegisterType<ILoggerService, LoggerService>();
+            ServiceLocator.Default.RegisterType<IHashService, HashService>();
+            ServiceLocator.Default.RegisterType<IWolvenkitFileService, Cp77FileService>();
 
             /*
-            string filename_rig = @"C:\Users\Abhinav\Desktop\New folder (2)\rigs\h0_001_wa_c__judy_skeleton.rig";
-            string filename_mesh = @"C:\Users\Abhinav\Desktop\New folder (4)\l1_001_wa_pants__judy.mesh";
+            string filename_rig = @"C:\Users\Abhinav\Desktop\New folder (5)\man_base_deformations.rig";
+            string filename_mesh = @"C:\Users\Abhinav\Desktop\New folder (5)\t2_050_ma_jacket__scavenger_dangle.mesh";
             
-            byte[] mbytes = File.ReadAllBytes(filename_mesh);
-            MemoryStream mms = new MemoryStream(mbytes);
-            CP77.MeshFile.MeshFile.ExportMeshWithoutRig(mms, "l1_001_wa_pants__judy", true);
+            byte[] bytes = File.ReadAllBytes(filename_mesh);
+            MemoryStream ms = new MemoryStream(bytes);
+
+            byte[] bytes1 = File.ReadAllBytes(filename_rig);
+            MemoryStream ms1 = new MemoryStream(bytes1);
+            CP77.MeshFile.MESH.ExportMeshWithRig(ms,ms1, "h0_001_wa_c__judy", true, @"C:\Users\Abhinav\Desktop\h0_001_mb_c__jackie_welles.glb");
+            */
+            /*
+            CP77.MeshFile.Materials.Material.GetMateriaEntries(ms);
             
             
+            byte[] bytes = File.ReadAllBytes(@"C:\Users\Abhinav\Desktop\morphing\h0_000_pwa__morphs.morphtarget");
+            MemoryStream ms = new MemoryStream(bytes);
+            TARGET.ExportTargets(ms,"morphing.glb");
+            */
+            /*
             byte[] rbytes = File.ReadAllBytes(filename_rig);
             MemoryStream rms = new MemoryStream(rbytes);
-            CP77.MeshFile.MeshFile.ExportMeshWithRig(mms,rms, "h0_001_wa_c__judy", true);
+            CP77.MeshFile.MeshFile.ExportMeshWithRig(ms, rms, "h0_001_wa_c__judy", true, @"C:\Users\Abhinav\Desktop\3dskinned.glb");
             */
             /*
             string filename_rig2 = @"C:\Users\Abhinav\Desktop\New folder (2)\rigs\h0_001_wa_c__judy_skeleton.rig";
@@ -57,11 +68,12 @@ namespace GLTFNodesTest
 
             model.SaveGLTF("combined.gltf");
             */
-            
-            List<MemoryStream> meshStreams = new List<MemoryStream>();
-            List<MemoryStream> rigStreams = new List<MemoryStream>();
-            List<string> meshes = new List<string>(Directory.GetFiles(@"C:\Users\Abhinav\Desktop\New folder (6)", "*.mesh"));
-            List<string> rigs = new List<string>(Directory.GetFiles(@"C:\Users\Abhinav\Desktop\New folder (6)", "*.rig"));
+
+            /*
+            List<Stream> meshStreams = new List<Stream>();
+            List<Stream> rigStreams = new List<Stream>();
+            List<string> meshes = new List<string>(Directory.GetFiles(@"E:\stuff\New folder (4)", "*.mesh"));
+            List<string> rigs = new List<string>(Directory.GetFiles(@"E:\stuff\New folder (4)", "*.rig"));
             List<string> names = new List<string>();
 
             for(int i = 0; i < meshes.Count; i++)
@@ -77,8 +89,11 @@ namespace GLTFNodesTest
                 MemoryStream ms = new MemoryStream(bytes);
                 rigStreams.Add(ms);
             }
-            CP77.MeshFile.MeshFile.ExportMultiMeshWithRig(meshStreams, rigStreams, names, true, @"C:\Users\Abhinav\Desktop\3dskinned.gltf");
-
+            WolvenKit.RED4.MeshFile.MESH.ExportMultiMeshWithRig(meshStreams, rigStreams, names, E:\stuff\3dskinned.glb);
+            */
+            FileStream fs = new FileStream(@"E:\stuff\New folder (4)\h0_001_wa_c__judy.mesh", FileMode.Open, FileAccess.Read);
+            MATERIAL.ParseMaterials(fs, "h0_001_wa_c__judy", @"E:\stuff\rigid.glb",true,false);
+            MATERIAL.ParseMaterialInstance();
         }
     }
 }
