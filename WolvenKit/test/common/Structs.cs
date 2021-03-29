@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 using System.Collections.Generic;
+using WolvenKit.RED4.MeshFile.Materials.MaterialTypes;
 
 namespace WolvenKit.RED4.GeneralStructs
 {
@@ -90,36 +91,19 @@ namespace WolvenKit.RED4.GeneralStructs
         public string BaseMesh { get; set; }
         public string BaseTexture { get; set; }
     }
-    public class DiffusedBSDF
-    {
-        public string AlbedoTEX;
-        public string NormalTEX;
-    }
+
     public class Appearance
     {
         public string Name;
         public string[] MaterialNames;
     }
-    public class MaterialEntry
+    public class RawMaterial
     {
-        public string Name;
-        public bool IsMultiLayered;
-
-        public string baseMaterial;
-        public string MultilayerSetup;
-        public string MultilayerMask;
-        public string Roughness;
-        public string DetailNormal;
-        public string Normal;
-        public string Albedo;
-        public string Detailmap_Squash;
-        public string Detailmap_Stretch;
-        public string SkinProfile;
-        public string Bloodflow;
-        public string NormalTexture;
-        public string DiffuseTexture;
-        public string NormalAlphaTex;
-        public string RoughnessTexture;
-
+        public string Name { get; set; }
+        public MaterialType materialType { get; set; }
+        public bool extInstanced { get; set; } = false;
+        public HoomanSkin hoomanSkin { get; set; }
+        public MeshDecal meshDecal { get; set; }
+        public MultiLayered multiLayered { get; set; }
     }
 }

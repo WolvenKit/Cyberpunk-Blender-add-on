@@ -515,7 +515,7 @@ namespace WolvenKit.RED4.MeshFile
             }
             return meshstream;
         }
-        static ModelRoot RawSkinnedMeshesToGLTF(List<RawMeshContainer> meshes,RawArmature Rig)
+        public static ModelRoot RawSkinnedMeshesToGLTF(List<RawMeshContainer> meshes,RawArmature Rig)
         {
             var scene = new SceneBuilder();
 
@@ -589,13 +589,17 @@ namespace WolvenKit.RED4.MeshFile
                     // triangle build
                     prim.AddTriangle(v0, v1, v2);
                 }
+                var obj = new { appNames = mesh.appNames, materialNames = mesh.materialNames }; // anonymous variable/obj
+
+                expmesh.Extras = SharpGLTF.IO.JsonContent.Serialize(obj);
+
                 scene.AddSkinnedMesh(expmesh,rootbone.WorldMatrix, bones.Values.ToArray());
             }
             var model = scene.ToGltf2();
 
             return model;
         }
-        static ModelRoot RawRigidMeshesToGLTF(List<RawMeshContainer> meshes)
+        public static ModelRoot RawRigidMeshesToGLTF(List<RawMeshContainer> meshes)
         {
             var scene = new SceneBuilder();
 
@@ -645,6 +649,9 @@ namespace WolvenKit.RED4.MeshFile
                     // triangle build
                     prim.AddTriangle(v0, v1, v2);
                 }
+                var obj = new { appNames = mesh.appNames, materialNames = mesh.materialNames }; // anonymous variable/obj
+
+                expmesh.Extras = SharpGLTF.IO.JsonContent.Serialize(obj);
                 scene.AddRigidMesh(expmesh, System.Numerics.Matrix4x4.CreateFromQuaternion(new System.Numerics.Quaternion((float)-0.707107, 0, 0, (float)0.707107))); // to rotate mesh +Z up in blender
             }
             var model = scene.ToGltf2();
