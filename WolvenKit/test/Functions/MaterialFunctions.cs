@@ -400,6 +400,20 @@ namespace WolvenKit.RED4.MeshFile.Materials
 
             return materialStream;
         }
+        public static void testing(Stream meshStream)
+        {
+            List<string> primaryDependencies = new List<string>();
+
+            List<string> materialEntryNames = new List<string>();
+            List<CMaterialInstance> materialEntries = new List<CMaterialInstance>();
+
+            GetMateriaEntries(meshStream, ref primaryDependencies, ref materialEntryNames, ref materialEntries);
+
+            for(int i = 0; i < materialEntries.Count; i++)
+            {
+                Console.WriteLine(materialEntries[i].BaseMaterial.DepotPath);
+            }    
+        }
         
         public static void Parse(Stream meshStream, string _meshName, string outfile, bool LodFilter = true, bool isGLBinary = true)
         {

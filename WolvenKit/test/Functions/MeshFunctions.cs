@@ -652,7 +652,7 @@ namespace WolvenKit.RED4.MeshFile
                 var obj = new { appNames = mesh.appNames, materialNames = mesh.materialNames }; // anonymous variable/obj
 
                 expmesh.Extras = SharpGLTF.IO.JsonContent.Serialize(obj);
-                scene.AddRigidMesh(expmesh, System.Numerics.Matrix4x4.CreateFromQuaternion(new System.Numerics.Quaternion((float)-0.707107, 0, 0, (float)0.707107))); // to rotate mesh +Z up in blender
+                scene.AddRigidMesh(expmesh, System.Numerics.Matrix4x4.Identity);
             }
             var model = scene.ToGltf2();
             return model;

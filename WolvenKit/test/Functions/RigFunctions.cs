@@ -355,10 +355,10 @@ namespace WolvenKit.RED4.RigFile
                 var s = new Vec3(srcBones.AposeLSScale[srcIndex].X, srcBones.AposeLSScale[srcIndex].Y, srcBones.AposeLSScale[srcIndex].Z);
                 var r = new Quat(srcBones.AposeLSRot[srcIndex].X, srcBones.AposeLSRot[srcIndex].Y, srcBones.AposeLSRot[srcIndex].Z, srcBones.AposeLSRot[srcIndex].W);
                 var t = new Vec3(srcBones.AposeLSTrans[srcIndex].X, srcBones.AposeLSTrans[srcIndex].Y, srcBones.AposeLSTrans[srcIndex].Z);
-
+                /*
                 if (srcBones.Names[srcIndex] == "Root")
                     r = new Quat((float)-0.707107, 0, 0, (float)0.707107); // to rotate rig +Z up
-
+                */
                 dstNode.WithLocalTranslation(t).WithLocalRotation(r).WithLocalScale(s);
             }
             else
@@ -366,9 +366,10 @@ namespace WolvenKit.RED4.RigFile
                 var s = new Vec3(srcBones.LocalScale[srcIndex].X, srcBones.LocalScale[srcIndex].Y, srcBones.LocalScale[srcIndex].Z);
                 var r = new Quat(srcBones.LocalRot[srcIndex].X, srcBones.LocalRot[srcIndex].Y, srcBones.LocalRot[srcIndex].Z, srcBones.LocalRot[srcIndex].W);
                 var t = new Vec3(srcBones.LocalPosn[srcIndex].X, srcBones.LocalPosn[srcIndex].Y, srcBones.LocalPosn[srcIndex].Z);
-
+                /*
                 if (srcBones.Names[srcIndex] == "Root")
                     r = new Quat((float)-0.707107, 0, 0, (float)0.707107);   // to rotate rig +Z up
+                */
                 dstNode.WithLocalTranslation(t).WithLocalRotation(r).WithLocalScale(s);
             }
             return dstNode;

@@ -67,6 +67,21 @@ namespace WolvenKit.RED4.GeneralStructs
         public string[] appNames { get; set; }
         public string[] materialNames { get; set; }
     }
+    public class Re4MeshContainer
+    {
+        public Int16[,] ExpVerts { get; set; }
+        public UInt32[] Nor32s { get; set; }
+        public UInt32[] Tan32s { get; set; }
+        public UInt16[] indices { get; set; }
+        public UInt16[,] uv0s { get; set; }
+        public UInt16[,] uv1s { get; set; }
+        public Byte[,] colors { get; set; }
+        public Byte[,] weights { get; set; }
+        public Byte[,] boneindices { get; set; }
+        public string name;
+        public UInt32 weightcount { get; set; }
+    }
+    
     public class RawTargetContainer
     {
         public Vector3[] vertexDelta { get; set; }
