@@ -117,7 +117,7 @@ namespace WolvenKit.RED4.GeneralStructs
         public string Name { get; set; }
         public MaterialType materialType { get; set; }
         public bool extInstanced { get; set; } = false;
-        public HoomanSkin hoomanSkin { get; set; }
+        public HumanSkin humanSkin { get; set; }
         public MeshDecal meshDecal { get; set; }
         public MultiLayered multiLayered { get; set; }
     }
