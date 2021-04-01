@@ -4,7 +4,7 @@ namespace WolvenKit.RED4.MeshFile.Materials.MaterialTypes
 {
     public enum MaterialType
     {
-        MultiLayered, MeshDecal, HoomanSkin
+        MultiLayered, MeshDecal, HumanSkin
     }
     public class MultiLayered
     {
