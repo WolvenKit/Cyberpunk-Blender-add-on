@@ -21,7 +21,7 @@ namespace WolvenKit.RED4.MeshFile.Materials
     {
         static string cacheDir = Path.GetTempPath() + "WolvenKit\\Material\\Temp\\";
         public static List<Archive> archives;
-        public void ExporMeshWithMaterialsUsingAssetLib(Stream meshStream, DirectoryInfo assetLib, string _meshName, FileInfo outfile, bool isGLBinary = true,bool copyTextures = false,EUncookExtension eUncookExtension = EUncookExtension.dds , bool LodFilter = true)
+        public void ExportMeshWithMaterialsUsingAssetLib(Stream meshStream, DirectoryInfo assetLib, string _meshName, FileInfo outfile, bool isGLBinary = true,bool copyTextures = false,EUncookExtension eUncookExtension = EUncookExtension.dds , bool LodFilter = true)
         {
             Directory.CreateDirectory(cacheDir);
 
@@ -385,7 +385,7 @@ namespace WolvenKit.RED4.MeshFile.Materials
                 }
 
             }
-            catch (Exception e) { Console.WriteLine(e.Message + " " + e.StackTrace); }
+            catch { }
 
             File.WriteAllLines(outDir.FullName + "TexturesList.txt", TexturesList);
 
@@ -548,7 +548,7 @@ namespace WolvenKit.RED4.MeshFile.Materials
                 }
 
             }
-            catch(Exception e) { Console.WriteLine(e.Message + " " + e.StackTrace); }
+            catch { }
             File.WriteAllLines(outDir.FullName + "TexturesList.txt", TexturesList);
 
             string ext = "*.dds";

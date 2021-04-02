@@ -40,7 +40,7 @@ namespace WolvenKit.RED4.MaterialSetupFile
                     Layers[i].MetalLevelsOut = setup.Layers[i].MetalLevelsOut.Value;
                     Layers[i].Overrides = setup.Layers[i].Overrides.Value;
                 }
-                catch (Exception e) { Console.WriteLine(e.Message + " " + e.StackTrace); }
+                catch{ }
             }
         }
     }
@@ -273,7 +273,7 @@ namespace WolvenKit.RED4.MaterialSetupFile
                     Overrides.NormalStrength[i].V[0] = template.Overrides.NormalStrength[i].V.Value;
                 }
             }
-            catch (Exception e) { Console.WriteLine(e.Message + " " + e.StackTrace); }
+            catch {  }
         }
     }
     public class TemplateDefaultOverrides
