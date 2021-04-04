@@ -14,6 +14,7 @@ using WolvenKit.RED4.CR2W.Archive;
 using WolvenKit.Common.FNV1A;
 using WolvenKit.RED4.MaterialSetupFile;
 using SharpGLTF.IO;
+using System.Threading;
 
 namespace WolvenKit.RED4.MeshFile.Materials
 {
@@ -573,31 +574,35 @@ namespace WolvenKit.RED4.MeshFile.Materials
             RawMaterial rawMaterial = new RawMaterial();
 
             rawMaterial.Name = Name;
-            rawMaterial.BaseMaterial = cMaterialInstance.BaseMaterial.DepotPath;
-
-            if (Path.GetFileNameWithoutExtension(cMaterialInstance.BaseMaterial.DepotPath) == "mesh_decal")
+            try
             {
-                rawMaterial.MaterialType = MaterialType.MeshDecal;
+                rawMaterial.BaseMaterial = cMaterialInstance.BaseMaterial.DepotPath;
 
-                MeshDecal MeshDecal = new MeshDecal(cMaterialInstance);
-                rawMaterial.MeshDecal = MeshDecal;
+                if (Path.GetFileNameWithoutExtension(cMaterialInstance.BaseMaterial.DepotPath) == "mesh_decal")
+                {
+                    rawMaterial.MaterialType = MaterialType.MeshDecal;
 
+                    MeshDecal MeshDecal = new MeshDecal(cMaterialInstance);
+                    rawMaterial.MeshDecal = MeshDecal;
+
+                }
+                if (Path.GetFileNameWithoutExtension(cMaterialInstance.BaseMaterial.DepotPath) == "multilayered")
+                {
+                    rawMaterial.MaterialType = MaterialType.MultiLayered;
+
+                    MultiLayered multiLayered = new MultiLayered(cMaterialInstance);
+                    rawMaterial.MultiLayered = multiLayered;
+
+                }
+                if (cMaterialInstance.BaseMaterial.DepotPath.Contains("skin"))
+                {
+                    rawMaterial.MaterialType = MaterialType.HumanSkin;
+
+                    HumanSkin HumanSkin = new HumanSkin(cMaterialInstance);
+                    rawMaterial.HumanSkin = HumanSkin;
+                }
             }
-            if (Path.GetFileNameWithoutExtension(cMaterialInstance.BaseMaterial.DepotPath) == "multilayered")
-            {
-                rawMaterial.MaterialType = MaterialType.MultiLayered;
-
-                MultiLayered multiLayered = new MultiLayered(cMaterialInstance);
-                rawMaterial.MultiLayered = multiLayered;
-
-            }
-            if (cMaterialInstance.BaseMaterial.DepotPath.Contains("skin"))
-            {
-                rawMaterial.MaterialType = MaterialType.HumanSkin;
-
-                HumanSkin HumanSkin = new HumanSkin(cMaterialInstance);
-                rawMaterial.HumanSkin = HumanSkin;
-            }
+            catch { }
 
             return rawMaterial;
         }
@@ -624,13 +629,63 @@ namespace WolvenKit.RED4.MeshFile.Materials
             }
             return materialStream;
         }
-        public MATERIAL(List<Archive> Archives)
+        public MATERIAL(DirectoryInfo gameArchiveDir)
         {
-            archives = Archives;
+            string[] filenames = Directory.GetFiles(gameArchiveDir.FullName, "*.archive", SearchOption.AllDirectories);
+            archives = new List<Archive>();
+
+            for (int i = 0; i < filenames.Length; i++)
+                archives.Add(new Archive(filenames[i]));
         }
         public MATERIAL()
         {
 
         }
+    }
+    public class MaterialRepository
+    {
+        public static Thread Generate(DirectoryInfo gameArchiveDir, DirectoryInfo materialRepoDir, EUncookExtension texturesExtension)
+        {
+            GameArchiveDir = gameArchiveDir;
+            MaterialRepoDir = materialRepoDir;
+            TexturesExtension = texturesExtension;
+
+            Thread thread = new Thread(GenerateInBG);
+            thread.IsBackground = false;
+            thread.Start();
+            return thread;
+        }
+
+        static void GenerateInBG()
+        {
+            string[] filenames = Directory.GetFiles(GameArchiveDir.FullName, "*.archive", SearchOption.AllDirectories);
+            List<Archive> archives = new List<Archive>();
+
+            for (int i = 0; i < filenames.Length; i++)
+                archives.Add(new Archive(filenames[i]));
+
+            foreach (Archive ar in archives)
+            {
+                ModTools.ExtractAll(ar, MaterialRepoDir, "*.gradient");
+                ModTools.ExtractAll(ar, MaterialRepoDir, "*.w2mi");
+                ModTools.ExtractAll(ar, MaterialRepoDir, "*.matlib");
+                ModTools.ExtractAll(ar, MaterialRepoDir, "*.remt");
+                ModTools.ExtractAll(ar, MaterialRepoDir, "*.sp");
+                ModTools.ExtractAll(ar, MaterialRepoDir, "*.hp");
+                ModTools.ExtractAll(ar, MaterialRepoDir, "*.fp");
+                ModTools.ExtractAll(ar, MaterialRepoDir, "*.mi");
+                ModTools.ExtractAll(ar, MaterialRepoDir, "*.mt");
+                ModTools.ExtractAll(ar, MaterialRepoDir, "*.mlsetup");
+                ModTools.ExtractAll(ar, MaterialRepoDir, "*.mltemplate");
+                ModTools.ExtractAll(ar, MaterialRepoDir, "*.texarray");
+
+                ModTools.UncookAll(ar, MaterialRepoDir, "*.xbm", "", TexturesExtension);
+                ModTools.UncookAll(ar, MaterialRepoDir, "*.mlmask", "", TexturesExtension);
+                // try catch the decode in mlmask.cs for now
+            }
+        }
+        static DirectoryInfo GameArchiveDir;
+        static DirectoryInfo MaterialRepoDir;
+        static EUncookExtension TexturesExtension;
     }
 }
