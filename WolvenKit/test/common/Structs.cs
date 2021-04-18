@@ -50,6 +50,9 @@ namespace WolvenKit.RED4.GeneralStructs
         public int meshC { get; set; }
         public UInt32[] LODLvl { get; set; }
         public List<Appearance> appearances { get; set; }
+        public UInt32 vertBufferSize { get; set; }
+        public UInt32 indexBufferSize { get; set; }
+        public UInt32 indexBufferOffset { get; set; }
     }
     public class RawMeshContainer
     {

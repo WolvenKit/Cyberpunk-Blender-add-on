@@ -7,7 +7,9 @@ using WolvenKit.RED4.GeneralStructs;
 using SharpGLTF.Schema2;
 using SharpGLTF.IO;
 using WolvenKit.RED4.RigFile;
+using WolvenKit.RED4.CR2W.Types;
 using WolvenKit.RED4.CR2W;
+using CP77.CR2W;
 
 namespace WolvenKit.RED4.MeshFile
 {
@@ -16,18 +18,19 @@ namespace WolvenKit.RED4.MeshFile
     using Vec3 = System.Numerics.Vector3;
     public class MESHIMPORTER
     {
-        public static void Import(string glTFFileName, Stream meshStream)
+        public static void Import(FileInfo inGltfFile, Stream meshStream, FileInfo outMeshFile)
         {
-            var model = ModelRoot.Load(glTFFileName);
+            var model = ModelRoot.Load(inGltfFile.FullName);
 
             List<RawMeshContainer> Meshes = new List<RawMeshContainer>();
+
             for (int i = 0; i < model.LogicalMeshes.Count; i++)
             {
                 Meshes.Add(GltfMeshToRawContainer(model.LogicalMeshes[i]));
             }
-
             Vec3 max = new Vec3(Meshes[0].vertices[0].X, Meshes[0].vertices[0].Y, Meshes[0].vertices[0].Z);
             Vec3 min = new Vec3(Meshes[0].vertices[0].X, Meshes[0].vertices[0].Y, Meshes[0].vertices[0].Z);
+
             for(int e = 0; e < Meshes.Count; e++)
                 for (int i = 0; i < Meshes[e].vertices.Length; i++)
                 {
@@ -44,6 +47,7 @@ namespace WolvenKit.RED4.MeshFile
                     if (Meshes[e].vertices[i].Z <= min.Z)
                         min.Z = Meshes[e].vertices[i].Z;
                 }
+
             Vec4 QuantScale = new Vec4((max.X - min.X) / 2, (max.Y - min.Y) / 2, (max.Z - min.Z) / 2, 0);
             Vec4 QuantTrans = new Vec4((max.X + min.X) / 2, (max.Y + min.Y) / 2, (max.Z + min.Z) / 2, 1);
 
@@ -55,6 +59,7 @@ namespace WolvenKit.RED4.MeshFile
             var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshStream);
             string[] meshbones = RIG.GetboneNames(cr2w, "CMesh");
 
+            // reset vertex joint indices according to original
             for (int i = 0; i < Meshes.Count; i++)
                 for(int e = 0; e < Meshes[i].vertices.Length; e++)
                     for(int eye = 0; eye < Meshes[i].weightcount; eye++)
@@ -75,25 +80,48 @@ namespace WolvenKit.RED4.MeshFile
             MemoryStream meshBuffer = new MemoryStream();
             MeshesInfo meshesInfo = BufferWriter(expMeshes, ref meshBuffer);
 
+            for (int i = 0; i < model.LogicalMeshes.Count; i++)
+            {
+                meshesInfo.LODLvl[i] = Convert.ToUInt32(model.LogicalMeshes[i].Name.Substring(model.LogicalMeshes[i].Name.LastIndexOf('_') + 1));
+            }
+            meshesInfo.qScale = QuantScale;
+            meshesInfo.qTrans = QuantTrans;
+
+            MemoryStream ms = EditCr2w(cr2w, meshesInfo, meshBuffer);
+            File.WriteAllBytes(outMeshFile.FullName, ms.ToArray());
         }
         static RawMeshContainer GltfMeshToRawContainer(Mesh mesh)
         {
 
             List<string> accessors = mesh.Primitives[0].VertexAccessors.Keys.ToList();
 
-            List<uint> indices = mesh.Primitives[0].GetIndices().ToList();
+            List<uint> indicesList = mesh.Primitives[0].GetIndices().ToList();
 
-            List<Vec3> vertices = new List<Vec3>();
-            if (accessors.Contains("POSITION"))
-                vertices = mesh.Primitives[0].GetVertices("POSITION").AsVector3Array().ToList();
+            uint[] indices = new uint[indicesList.Count];
 
-            List<Vec3> normals = new List<Vec3>();
-            if (accessors.Contains("NORMAL"))
-                normals = mesh.Primitives[0].GetVertices("NORMAL").AsVector3Array().ToList();
+            // ReSwapping the faces
+            for(int i = 0; i < indicesList.Count; i+= 3)
+            {
+                indices[i] = indicesList[i + 1];
+                indices[i + 1] = indicesList[i];
+                indices[i + 2] = indicesList[i + 2];
+            }
 
-            List<Vec4> tangents = new List<Vec4>();
-            if (accessors.Contains("TANGENT"))
-                tangents = mesh.Primitives[0].GetVertices("TANGENT").AsVector4Array().ToList();
+            List<Vec3> verticesList = mesh.Primitives[0].GetVertices("POSITION").AsVector3Array().ToList();
+            List<Vec3> normalsList = mesh.Primitives[0].GetVertices("NORMAL").AsVector3Array().ToList();
+            List<Vec4> tangentsList = mesh.Primitives[0].GetVertices("TANGENT").AsVector4Array().ToList();
+
+            Vec3[] vertices = new Vec3[verticesList.Count];
+            Vec3[] normals = new Vec3[normalsList.Count];
+            Vec4[] tangents = new Vec4[tangentsList.Count];
+
+            // changing orientation of geomerty, Y+ Z+ RHS-LHS BS
+            for (int i = 0; i < verticesList.Count; i++)
+            {
+                vertices[i] = new Vec3(verticesList[i].X, -verticesList[i].Z, verticesList[i].Y);
+                normals[i] = new Vec3(normalsList[i].X, -normalsList[i].Z, normalsList[i].Y);
+                tangents[i] = new Vec4(tangentsList[i].X, -tangentsList[i].Z, tangentsList[i].Y, tangentsList[i].W);
+            }
 
             List<Vec4> colors = new List<Vec4>();
             if (accessors.Contains("COLOR_0"))
@@ -130,7 +158,8 @@ namespace WolvenKit.RED4.MeshFile
             if (joints1.Count != 0)
                 weightcount += 4;
 
-            int vertCount = vertices.Count;
+
+            int vertCount = vertices.Length;
             UInt16[,] boneindices = new UInt16[vertCount, weightcount];
             float[,] weights = new float[vertCount, weightcount];
 
@@ -164,12 +193,12 @@ namespace WolvenKit.RED4.MeshFile
 
             RawMeshContainer rawMeshContainer = new RawMeshContainer()
             {
-                vertices = vertices.ToArray(),
-                indices = indices.ToArray(),
+                vertices = vertices,
+                indices = indices,
                 tx0coords = tx0coords.ToArray(),
                 tx1coords = tx1coords.ToArray(),
-                normals = normals.ToArray(),
-                tangents = tangents.ToArray(),
+                normals = normals,
+                tangents = tangents,
                 colors = colors.ToArray(),
                 boneindices = boneindices,
                 weights = weights,
@@ -178,7 +207,6 @@ namespace WolvenKit.RED4.MeshFile
 
             return rawMeshContainer;
         }
-        
         static Re4MeshContainer RawMeshToRE4Mesh(RawMeshContainer mesh, Vec4 qScale, Vec4 qTrans)
         {
             int vertCount = mesh.vertices.Length;
@@ -209,7 +237,6 @@ namespace WolvenKit.RED4.MeshFile
                 Vec4 v = mesh.tangents[i]; // for tangents w == 1 or -1
                 Tan32s[i] = Converters.Vec4ToU32(v);
             }
-
 
             UInt16[,] uv0s = new UInt16[vertCount, 2];
 
@@ -287,13 +314,20 @@ namespace WolvenKit.RED4.MeshFile
             UInt32[] indicesOffsets = new UInt32[meshC];
             UInt32[] vpStrides = new UInt32[meshC];
             UInt32[] weightcounts = new UInt32[meshC];
-            UInt32[] LODLvl = new UInt32[meshC];        // can be determined based on a mesh name which is remained to be parsed an managed
+            UInt32[] LODLvl = new UInt32[meshC];
 
+            UInt32 vertBufferSize = 0;
+            UInt32 indexBufferSize = 0;
+            UInt32 indexBufferOffset = 0;
+
+            // tempoo
+            expMeshes[0].weightcount = 8;
+            expMeshes[1].weightcount = 4;
+            expMeshes[2].weightcount = 4;
+            expMeshes[3].weightcount = 4;
 
             BinaryWriter bw = new BinaryWriter(ms);
-            
-
-            for(int i = 0; i < expMeshes.Count; i++)
+            for (int i = 0; i < expMeshes.Count; i++)
             {
                 int vertCount = expMeshes[i].ExpVerts.Length / 3;
 
@@ -315,8 +349,21 @@ namespace WolvenKit.RED4.MeshFile
 
                     for (int eye = 0; eye < expMeshes[i].weightcount; eye++)
                         bw.Write(expMeshes[i].weights[e, eye]);
+
+                    // some crap extra data writing
+                    for (int eye = 0; eye < 4; eye++)
+                        bw.Write((UInt16)0);
                 }
 
+                // padding writer betwwen vertexBlock and uv0, if required
+                if (((UInt64)ms.Length % 16) != 0)
+                {
+                    int zeroesCount = (int)((((UInt64)ms.Length / 16) + 1) * 16 - (UInt64)ms.Length);
+                    Byte[] bytes = new Byte[zeroesCount];
+                    bw.Write(bytes);
+                }
+
+                // writing tx0s
                 tx0Offsets[i] = (UInt32)ms.Position;
                 for (int e = 0; e < vertCount; e++)
                 {
@@ -325,14 +372,14 @@ namespace WolvenKit.RED4.MeshFile
                 }
 
                 // padding writer betwwen uv0 and normals, if required
-                /*
-                if(((UInt64)ms.Length % 16) != 0)
+                if (((UInt64)ms.Length % 16) != 0)
                 {
-                    int tempCount = (int)((((UInt64)ms.Length / 16) + 1) * 16 - ((UInt64)ms.Length % 16));
-                    Byte[] bytes = new Byte[tempCount];
+                    int zeroesCount = (int)((((UInt64)ms.Length / 16) + 1) * 16 - (UInt64)ms.Length);
+                    Byte[] bytes = new Byte[zeroesCount];
                     bw.Write(bytes);
                 }
-                */
+                
+                // writing normals and tangents
                 normalOffsets[i] = (UInt32)ms.Position;
                 for (int e = 0; e < vertCount; e++)
                 {
@@ -341,48 +388,71 @@ namespace WolvenKit.RED4.MeshFile
                 }
 
                 // padding writer betwwen nors/tans and colors/uv1s, if required
-                /*
-                if(((UInt64)ms.Length % 16) != 0)
+                if (((UInt64)ms.Length % 16) != 0)
                 {
-                    int tempCount = (int)((((UInt64)ms.Length / 16) + 1) * 16 - ((UInt64)ms.Length % 16));
-                    Byte[] bytes = new Byte[tempCount];
+                    int zeroesCount = (int)((((UInt64)ms.Length / 16) + 1) * 16 - (UInt64)ms.Length);
+                    Byte[] bytes = new Byte[zeroesCount];
                     bw.Write(bytes);
                 }
-                */
-
+                
+                // writing colors and tx1s
                 colorOffsets[i] = (UInt32)ms.Position;
                 for (int e = 0; e < vertCount; e++)
                 {
+                    
                     bw.Write(expMeshes[i].colors[e, 0]);
                     bw.Write(expMeshes[i].colors[e, 1]);
                     bw.Write(expMeshes[i].colors[e, 2]);
                     bw.Write(expMeshes[i].colors[e, 3]);
+                    
+                    // Temp fix for improved lighting geomertry
+                    /*
+                    bw.Write((byte)0);
+                    bw.Write((byte)0);
+                    bw.Write((byte)0);
+                    bw.Write((byte)0);
+                    */
                     bw.Write(expMeshes[i].uv1s[e, 0]);
                     bw.Write(expMeshes[i].uv1s[e, 1]);
                 }
 
-                // after colors and uv1s some crap data is there, dunno what, (looking at judy head buffer)
                 // padding writer if necessary
-                /*
-                if(((UInt64)ms.Length % 16) != 0)
+                if (((UInt64)ms.Length % 16) != 0)
                 {
-                    int tempCount = (int)((((UInt64)ms.Length / 16) + 1) * 16 - ((UInt64)ms.Length % 16));
-                    Byte[] bytes = new Byte[tempCount];
+                    int zeroesCount = (int)((((UInt64)ms.Length / 16) + 1) * 16 - (UInt64)ms.Length);
+                    Byte[] bytes = new Byte[zeroesCount];
                     bw.Write(bytes);
                 }
-                */
+
                 unknownOffsets[i] = (UInt32)ms.Position;
+
+                for (int e = 0; e < vertCount; e++)
+                {
+                    bw.Write((float)0f);
+                }
+
+                vertBufferSize = (UInt32)ms.Length;
+
+                // padding writer if necessary
+                if (((UInt64)ms.Length % 16) != 0)
+                {
+                    int zeroesCount = (int)((((UInt64)ms.Length / 16) + 1) * 16 - (UInt64)ms.Length);
+                    Byte[] bytes = new Byte[zeroesCount];
+                    bw.Write(bytes);
+                }
             }
 
+            indexBufferOffset = (UInt32)ms.Position;
             for(int i = 0; i < expMeshes.Count; i++)
             {
                 int indCount = expMeshes[i].indices.Length;
                 indCounts[i] = (UInt32)indCount;
 
-                indicesOffsets[i] = (UInt32)ms.Position;
+                indicesOffsets[i] = (UInt32)ms.Position - indexBufferOffset;
                 for (int e = 0; e < indCount; e++)
                     bw.Write(expMeshes[i].indices[e]);
             }
+            indexBufferSize = (UInt32)ms.Length - indexBufferOffset;
 
             MeshesInfo meshesInfo = new MeshesInfo()
             {
@@ -396,10 +466,68 @@ namespace WolvenKit.RED4.MeshFile
                 indicesOffsets = indicesOffsets,
                 vpStrides = vpStrides,
                 weightcounts = weightcounts,
-                LODLvl = LODLvl
+                LODLvl = LODLvl,
+                meshC = meshC,
+                vertBufferSize = vertBufferSize,
+                indexBufferOffset = indexBufferOffset,
+                indexBufferSize = indexBufferSize
             };
 
             return meshesInfo;
+        }
+        static MemoryStream EditCr2w(CR2WFile cr2w, MeshesInfo info, MemoryStream buffer)
+        {
+            int Index = 0;
+            for (int i = 0; i < cr2w.Chunks.Count; i++)
+            {
+                if (cr2w.Chunks[i].REDType == "rendRenderMeshBlob")
+                {
+                    Index = i;
+                }
+            }
+            (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.QuantizationScale.X.Value = info.qScale.X;
+            (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.QuantizationScale.Y.Value = info.qScale.Y;
+            (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.QuantizationScale.Z.Value = info.qScale.Z;
+            (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.QuantizationOffset.X.Value = info.qTrans.X;
+            (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.QuantizationOffset.Y.Value = info.qTrans.Y;
+            (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.QuantizationOffset.Z.Value = info.qTrans.Z;
+
+            (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.VertexBufferSize.Value = info.vertBufferSize;
+            (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.IndexBufferSize.Value = info.indexBufferSize;
+            (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.IndexBufferOffset.Value = info.indexBufferOffset;
+
+            for(int i = 0; i < info.meshC; i++)
+            {
+                (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.RenderChunkInfos[i].ChunkVertices.ByteOffsets[0].Value = info.vertOffsets[i];
+                (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.RenderChunkInfos[i].ChunkVertices.ByteOffsets[1].Value = info.tx0Offsets[i];
+                (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.RenderChunkInfos[i].ChunkVertices.ByteOffsets[2].Value = info.normalOffsets[i];
+                (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.RenderChunkInfos[i].ChunkVertices.ByteOffsets[3].Value = info.colorOffsets[i];
+                (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.RenderChunkInfos[i].ChunkVertices.ByteOffsets[4].Value = info.unknownOffsets[i];
+
+                (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.RenderChunkInfos[i].ChunkIndices.TeOffset.Value = info.indicesOffsets[i];
+                (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.RenderChunkInfos[i].NumVertices.Value = (UInt16)info.vertCounts[i];
+                (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.RenderChunkInfos[i].NumIndices.Value = info.indCounts[i];
+                //(cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.RenderChunkInfos[i].LodMask.Value = (byte)info.LODLvl[i];
+                //(cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.RenderChunkInfos[i].ChunkVertices.VertexLayout.SlotStrides[0].Value = (byte)info.vpStrides[i];
+                //(cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.RenderChunkInfos[i].ChunkVertices.VertexLayout.SlotStrides[4].Value = 0;
+            }
+
+            var compressed = new MemoryStream();
+            using var buff = new BinaryWriter(compressed);
+            var (zsize, crc) = buff.CompressAndWrite(buffer.ToArray());
+           
+            cr2w.Buffers[1].DiskSize = zsize;
+            cr2w.Buffers[1].Crc32 = crc;
+            cr2w.Buffers[1].MemSize = (UInt32)buffer.Length;
+            var off = cr2w.Buffers[1].Offset;
+            cr2w.Buffers[1].Offset = 0;
+            cr2w.Buffers[1].ReadData(new BinaryReader(compressed));
+            cr2w.Buffers[1].Offset = off;
+
+            MemoryStream ms = new MemoryStream();
+            BinaryWriter bw = new BinaryWriter(ms);
+            cr2w.Write(bw);
+            return ms;
         }
     }
 }

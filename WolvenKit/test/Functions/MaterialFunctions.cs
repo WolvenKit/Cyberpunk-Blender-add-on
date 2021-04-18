@@ -651,7 +651,7 @@ namespace WolvenKit.RED4.MeshFile.Materials
             TexturesExtension = texturesExtension;
 
             Thread thread = new Thread(GenerateInBG);
-            thread.IsBackground = false;
+            thread.IsBackground = true;
             thread.Start();
             return thread;
         }

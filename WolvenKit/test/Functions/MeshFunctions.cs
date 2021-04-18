@@ -41,7 +41,7 @@ namespace WolvenKit.RED4.MeshFile
                 if (meshinfo.LODLvl[i] != 1 && LodFilter)
                     continue;
                 RawMeshContainer mesh = ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i]);
-                mesh.name = _meshName + "_" + i;
+                mesh.name = _meshName + "_" + i + "_" + meshinfo.LODLvl[i];
 
                 mesh.appNames = new string[meshinfo.appearances.Count];
                 mesh.materialNames = new string[meshinfo.appearances.Count];
@@ -57,6 +57,8 @@ namespace WolvenKit.RED4.MeshFile
                 model.SaveGLB(outfile.FullName);
             else
                 model.SaveGLTF(outfile.FullName);
+            meshStream.Dispose();
+            meshStream.Close();
         }
         public static void ExportMultiMeshWithoutRig(List<Stream> meshStreamS, List<string> _meshNameS, FileInfo outfile, bool LodFilter = true, bool isGLBinary = true)
         {
@@ -73,8 +75,7 @@ namespace WolvenKit.RED4.MeshFile
                     if (meshinfo.LODLvl[i] != 1 && LodFilter)
                         continue;
                     RawMeshContainer mesh = ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i]);
-                    mesh.name = _meshNameS[m] + "_" + i;
-
+                    mesh.name = _meshNameS[m] + "_" + i + "_" + meshinfo.LODLvl[i];
                     mesh.appNames = new string[meshinfo.appearances.Count];
                     mesh.materialNames = new string[meshinfo.appearances.Count];
                     for (int e = 0; e < meshinfo.appearances.Count; e++)
@@ -90,16 +91,22 @@ namespace WolvenKit.RED4.MeshFile
                 model.SaveGLB(outfile.FullName);
             else
                 model.SaveGLTF(outfile.FullName);
+
+            for(int i = 0; i < meshStreamS.Count; i++)
+            {
+                meshStreamS[i].Dispose();
+                meshStreamS[i].Close();
+            }
         }
-        public static void ExportMeshWithRig(Stream meshMstream, Stream rigMStream,string _meshName, FileInfo outfile, bool LodFilter = true, bool isGLBinary = true)
+        public static void ExportMeshWithRig(Stream meshStream, Stream rigStream,string _meshName, FileInfo outfile, bool LodFilter = true, bool isGLBinary = true)
         {
-            RawArmature Rig = RIG.ProcessRig(rigMStream);
+            RawArmature Rig = RIG.ProcessRig(rigStream);
 
             List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
 
-            var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshMstream);
+            var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshStream);
 
-            MemoryStream ms = GetMeshBufferStream(meshMstream, cr2w);
+            MemoryStream ms = GetMeshBufferStream(meshStream, cr2w);
             MeshesInfo meshinfo = GetMeshesinfo(cr2w);
 
             MeshBones bones = new MeshBones();
@@ -123,7 +130,7 @@ namespace WolvenKit.RED4.MeshFile
                 if (meshinfo.LODLvl[i] != 1 && LodFilter)
                     continue;
                 RawMeshContainer mesh = ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i]);
-                mesh.name = _meshName + "_" + i;
+                mesh.name = _meshName + "_" + i + "_" + meshinfo.LODLvl[i];
                 UpdateMeshJoints(ref mesh, Rig, bones);
 
                 mesh.appNames = new string[meshinfo.appearances.Count];
@@ -141,6 +148,11 @@ namespace WolvenKit.RED4.MeshFile
                 model.SaveGLB(outfile.FullName);
             else
                 model.SaveGLTF(outfile.FullName);
+
+            meshStream.Dispose();
+            meshStream.Close();
+            rigStream.Dispose();
+            rigStream.Close();
         }
         public static void ExportMultiMeshWithRig(List<Stream> meshStreamS, List<Stream> rigStreamS, List<string> _meshNameS, FileInfo outfile, bool LodFilter = true, bool isGLBinary = true)
         {
@@ -185,7 +197,7 @@ namespace WolvenKit.RED4.MeshFile
                     if (meshinfo.LODLvl[i] != 1 && LodFilter)
                         continue;
                     RawMeshContainer mesh = ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i]);
-                    mesh.name = _meshNameS[m] + "_" + i;
+                    mesh.name = _meshNameS[m] + "_" + i + "_" + meshinfo.LODLvl[i];
                     if (meshinfo.weightcounts[0] != 0)   // for static meshes
                         UpdateMeshJoints(ref mesh, expRig, bones);
 
@@ -204,6 +216,17 @@ namespace WolvenKit.RED4.MeshFile
                 model.SaveGLB(outfile.FullName);
             else
                 model.SaveGLTF(outfile.FullName);
+
+            for(int i = 0; i < meshStreamS.Count; i++)
+            {
+                meshStreamS[i].Dispose();
+                meshStreamS[i].Close();
+            }
+            for (int i = 0; i < rigStreamS.Count; i++)
+            {
+                rigStreamS[i].Dispose();
+                rigStreamS[i].Close();
+            }
         }
         static Vec3[] GetMeshBonesPosn(CR2WFile cr2w)
         {
@@ -365,7 +388,8 @@ namespace WolvenKit.RED4.MeshFile
                 float x = (gbr.ReadInt16() / 32767f) * qScale.X + qTrans.X;
                 float y = (gbr.ReadInt16() / 32767f) * qScale.Y + qTrans.Y;
                 float z = (gbr.ReadInt16() / 32767f) * qScale.Z + qTrans.Z;
-                vertices[i] = new Vec3(x, y, z);
+                // changing orientation of geomerty, Y+ Z+ RHS-LHS BS
+                vertices[i] = new Vec3(x, z, -y);
             }
             // got vertices
 
@@ -394,7 +418,8 @@ namespace WolvenKit.RED4.MeshFile
                 gfs.Position = normalOffset + 8 * i;
                 NorRead32 = gbr.ReadUInt32();
                 Vec4 tempv = Converters.TenBitShifted(NorRead32);
-                normals[i] = new Vec3(tempv.X, tempv.Y, tempv.Z);
+                // changing orientation of geomerty, Y+ Z+ RHS-LHS BS
+                normals[i] = new Vec3(tempv.X, tempv.Z, - tempv.Y);
             }
             // got 10bit normals
 
@@ -404,7 +429,8 @@ namespace WolvenKit.RED4.MeshFile
                 gfs.Position = normalOffset + 4 + 8 * i;
                 NorRead32 = gbr.ReadUInt32();
                 Vec4 tempv = Converters.TenBitShifted(NorRead32);
-                tangents[i] = new Vec4(tempv.X, tempv.Y, tempv.Z, 1f);
+                // changing orientation of geomerty, Y+ Z+ RHS-LHS BS
+                tangents[i] = new Vec4(tempv.X, tempv.Z, - tempv.Y, 1f);
             }
 
 
@@ -428,7 +454,6 @@ namespace WolvenKit.RED4.MeshFile
 
             if (colorOffset != 0)
             {
-                // getting vert colors, not sure of the format TBH RN,just a hush, may not work, lulz
                 for (int i = 0; i < vertCount; i++)
                 {
                     gfs.Position = colorOffset + i * 8;
@@ -452,10 +477,12 @@ namespace WolvenKit.RED4.MeshFile
             // getting weights
             for (int i = 0; i < vertCount; i++)
             {
+                float sum = 0;
                 gfs.Position = vertOffset + i * vpStride + 8 + weightcount;
                 for (int e = 0; e < weightcount; e++)
                 {
                     weights[i, e] = gbr.ReadByte() / 255f;
+                    sum += weights[i, e];
                 }
             }
             // got weights
@@ -483,7 +510,6 @@ namespace WolvenKit.RED4.MeshFile
             };
             return mesh;
         }
-
         static void UpdateMeshJoints(ref RawMeshContainer Mesh, RawArmature Rig, MeshBones Bones)
         {
             // updating mesh bone indexes
@@ -505,25 +531,20 @@ namespace WolvenKit.RED4.MeshFile
         }
         public static MemoryStream GetMeshBufferStream(Stream ms, CR2WFile cr2w)
         {
-            MemoryStream meshstream = new MemoryStream();
-            var buffers = cr2w.Buffers;
-            for (var i = 0; i < buffers.Count; i++)
+            int Index = 0;
+            for (int i = 0; i < cr2w.Chunks.Count; i++)
             {
-                var b = buffers[i];
-                ms.Seek(b.Offset, SeekOrigin.Begin);
-
-                MemoryStream outstream = new MemoryStream();
-                // copy to some outstream
-                ms.DecompressAndCopySegment(outstream, b.DiskSize, b.MemSize);
-
-                BinaryReader outreader = new BinaryReader(outstream);
-                outstream.Position = 6;
-                if (outreader.ReadInt16() == Int16.MaxValue)
+                if (cr2w.Chunks[i].REDType == "rendRenderMeshBlob")
                 {
-                    meshstream = outstream;
-                    break;
+                    Index = i;
                 }
+
             }
+            UInt16 p = BitConverter.ToUInt16((cr2w.Chunks[Index].data as rendRenderMeshBlob).RenderBuffer.Buffer.Bytes);
+            var b = cr2w.Buffers[p - 1];
+            ms.Seek(b.Offset, SeekOrigin.Begin);
+            MemoryStream meshstream = new MemoryStream();
+            ms.DecompressAndCopySegment(meshstream, b.DiskSize, b.MemSize);
             return meshstream;
         }
         public static ModelRoot RawSkinnedMeshesToGLTF(List<RawMeshContainer> meshes,RawArmature Rig)
@@ -538,7 +559,7 @@ namespace WolvenKit.RED4.MeshFile
                 long indCount = mesh.indices.Length;
                 var expmesh = new SKINNEDMESH(mesh.name);
 
-                var prim = expmesh.UsePrimitive(new MaterialBuilder("Default"));
+                var prim = expmesh.UsePrimitive(new MaterialBuilder("Default").WithDoubleSide(true));
                 for (int i = 0; i < indCount; i += 3)
                 {
                     uint idx0 = mesh.indices[i + 1];
@@ -619,7 +640,7 @@ namespace WolvenKit.RED4.MeshFile
                 long indCount = mesh.indices.Length;
                 var expmesh = new RIGIDMESH(mesh.name);
 
-                var prim = expmesh.UsePrimitive(new MaterialBuilder("Default"));
+                var prim = expmesh.UsePrimitive(new MaterialBuilder("Default").WithDoubleSide(true));
                 for (int i = 0; i < indCount; i += 3)
                 {
                     uint idx0 = mesh.indices[i + 1];
@@ -668,7 +689,6 @@ namespace WolvenKit.RED4.MeshFile
             var model = scene.ToGltf2();
             return model;
         }
-
         class MeshBones
         {
             public string[] Names;
