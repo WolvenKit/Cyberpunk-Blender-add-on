@@ -40,7 +40,7 @@ namespace WolvenKit.RED4.MeshFile
             {
                 if (meshinfo.LODLvl[i] != 1 && LodFilter)
                     continue;
-                RawMeshContainer mesh = ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i]);
+                RawMeshContainer mesh = ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i],meshinfo.extraExists[i]);
                 mesh.name = _meshName + "_" + i + "_" + meshinfo.LODLvl[i];
 
                 mesh.appNames = new string[meshinfo.appearances.Count];
@@ -74,7 +74,7 @@ namespace WolvenKit.RED4.MeshFile
                 {
                     if (meshinfo.LODLvl[i] != 1 && LodFilter)
                         continue;
-                    RawMeshContainer mesh = ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i]);
+                    RawMeshContainer mesh = ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i], meshinfo.extraExists[i]);
                     mesh.name = _meshNameS[m] + "_" + i + "_" + meshinfo.LODLvl[i];
                     mesh.appNames = new string[meshinfo.appearances.Count];
                     mesh.materialNames = new string[meshinfo.appearances.Count];
@@ -129,7 +129,7 @@ namespace WolvenKit.RED4.MeshFile
             {
                 if (meshinfo.LODLvl[i] != 1 && LodFilter)
                     continue;
-                RawMeshContainer mesh = ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i]);
+                RawMeshContainer mesh = ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i], meshinfo.extraExists[i]);
                 mesh.name = _meshName + "_" + i + "_" + meshinfo.LODLvl[i];
                 UpdateMeshJoints(ref mesh, Rig, bones);
 
@@ -196,7 +196,7 @@ namespace WolvenKit.RED4.MeshFile
                 {
                     if (meshinfo.LODLvl[i] != 1 && LodFilter)
                         continue;
-                    RawMeshContainer mesh = ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i]);
+                    RawMeshContainer mesh = ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i], meshinfo.extraExists[i]);
                     mesh.name = _meshNameS[m] + "_" + i + "_" + meshinfo.LODLvl[i];
                     if (meshinfo.weightcounts[0] != 0)   // for static meshes
                         UpdateMeshJoints(ref mesh, expRig, bones);
@@ -283,6 +283,8 @@ namespace WolvenKit.RED4.MeshFile
             UInt32[] indicesOffsets = new UInt32[meshC];
             UInt32[] vpStrides = new UInt32[meshC];
             UInt32[] LODLvl = new UInt32[meshC];
+            bool[] extraExists = new bool[meshC];
+
             for (int i = 0; i < meshC; i++)
             {
                 vertCounts[i] = (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.RenderChunkInfos[i].NumVertices.Value;
@@ -315,6 +317,7 @@ namespace WolvenKit.RED4.MeshFile
             int count = 0;
             UInt32 counter = 0;
             string checker = string.Empty;
+
             for (int i = 0; i < meshC; i++)
             {
                 count = (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.RenderChunkInfos[i].ChunkVertices.VertexLayout.Elements.Count;
@@ -328,6 +331,20 @@ namespace WolvenKit.RED4.MeshFile
                 weightcounts[i] = counter * 4;
             }
 
+            for (int i = 0; i < meshC; i++)
+            {
+                extraExists[i] = false;
+                count = (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.RenderChunkInfos[i].ChunkVertices.VertexLayout.Elements.Count;
+                
+                for (int e = 0; e < count; e++)
+                {
+                    checker = (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.RenderChunkInfos[i].ChunkVertices.VertexLayout.Elements[e].Usage.EnumValueList[0];
+                    if (checker == "PS_ExtraData")
+                    {
+                        extraExists[i] = true;
+                    }
+                }
+            }
             List<Appearance> appearances = new List<Appearance>();
             for (int i = 0; i < cr2w.Chunks.Count; i++)
             {
@@ -358,6 +375,7 @@ namespace WolvenKit.RED4.MeshFile
                 indicesOffsets = indicesOffsets,
                 vpStrides = vpStrides,
                 weightcounts = weightcounts,
+                extraExists = extraExists,
                 LODLvl = LODLvl,
                 qScale = qScale,
                 qTrans = qTrans,
@@ -366,7 +384,7 @@ namespace WolvenKit.RED4.MeshFile
             };
             return meshesInfo;
         }
-        public static RawMeshContainer ContainRawMesh(MemoryStream gfs, UInt32 vertCount, UInt32 indCount, UInt32 vertOffset, UInt32 tx0Offset, UInt32 normalOffset, UInt32 colorOffset, UInt32 unknownOffset, UInt32 indOffset, UInt32 vpStride, Vec4 qScale, Vec4 qTrans, UInt32 weightcount)
+        public static RawMeshContainer ContainRawMesh(MemoryStream gfs, UInt32 vertCount, UInt32 indCount, UInt32 vertOffset, UInt32 tx0Offset, UInt32 normalOffset, UInt32 colorOffset, UInt32 unknownOffset, UInt32 indOffset, UInt32 vpStride, Vec4 qScale, Vec4 qTrans, UInt32 weightcount, bool extraExist = false)
         {
             BinaryReader gbr = new BinaryReader(gfs);
 
@@ -379,6 +397,7 @@ namespace WolvenKit.RED4.MeshFile
             Vec2[] tx1coords = new Vec2[vertCount];
             float[,] weights = new float[vertCount, weightcount];
             UInt16[,] boneindices = new UInt16[vertCount, weightcount];
+            Vec3[] extradata = new Vec3[vertCount];
 
             // geting vertices
             for (int i = 0; i < vertCount; i++)
@@ -459,6 +478,11 @@ namespace WolvenKit.RED4.MeshFile
                     gfs.Position = colorOffset + i * 8;
                     Vec4 tempv = new Vec4(gbr.ReadByte() / 255f, gbr.ReadByte() / 255f, gbr.ReadByte() / 255f, gbr.ReadByte() / 255f);
                     colors[i] = new Vec4(tempv.X, tempv.Y, tempv.Z, tempv.W);
+
+                    /*
+                    gfs.Position = unknownOffset + i * 4;
+                    Console.WriteLine(colors[i].X + " " + colors[i].Y + " " + colors[i].Z + " " + colors[i].W + "    " + gbr.ReadSingle());
+                    */
                 }
                 // got vert colors
             }
@@ -477,16 +501,25 @@ namespace WolvenKit.RED4.MeshFile
             // getting weights
             for (int i = 0; i < vertCount; i++)
             {
-                float sum = 0;
                 gfs.Position = vertOffset + i * vpStride + 8 + weightcount;
                 for (int e = 0; e < weightcount; e++)
                 {
                     weights[i, e] = gbr.ReadByte() / 255f;
-                    sum += weights[i, e];
                 }
             }
             // got weights
 
+            if(extraExist)
+            {
+                for (int i = 0; i < vertCount; i++)
+                {
+                    gfs.Position = vertOffset + i * vpStride + 8 + 2 * weightcount;
+                    float x = Converters.hfconvert(gbr.ReadUInt16());
+                    float y = Converters.hfconvert(gbr.ReadUInt16());
+                    float z = Converters.hfconvert(gbr.ReadUInt16());
+                    extradata[i] = new Vec3(x, z, -y);
+                }
+            }
             // getting uint16 faces/indices
             gfs.Position = indOffset;
             for (int i = 0; i < indCount; i++)
@@ -506,7 +539,9 @@ namespace WolvenKit.RED4.MeshFile
                 tx1coords = tx1coords,
                 boneindices = boneindices,
                 weights = weights,
-                weightcount = weightcount
+                weightcount = weightcount,
+                extradata = extradata,
+                extraExist = extraExist
             };
             return mesh;
         }
@@ -621,6 +656,16 @@ namespace WolvenKit.RED4.MeshFile
                     // triangle build
                     prim.AddTriangle(v0, v1, v2);
                 }
+
+                if (mesh.extraExist)
+                {
+                    var morphbuilder = expmesh.UseMorphTarget(0);
+                    for (int i = 0; i < mesh.vertices.Length; i++)
+                    {
+                        morphbuilder.SetVertexDelta(mesh.vertices[i], mesh.extradata[i]);
+                    }
+                }
+
                 var obj = new { appNames = mesh.appNames, materialNames = mesh.materialNames }; // anonymous variable/obj
 
                 expmesh.Extras = SharpGLTF.IO.JsonContent.Serialize(obj);
@@ -680,6 +725,15 @@ namespace WolvenKit.RED4.MeshFile
                     var v2 = new RIGIDVERTEX(new VPNT(p_2, n_2, t_2), new VCT(col_2, tx0_2, tx1_2));
                     // triangle build
                     prim.AddTriangle(v0, v1, v2);
+                }
+
+                if(mesh.extraExist)
+                {
+                    var morphbuilder = expmesh.UseMorphTarget(0);
+                    for (int i = 0; i < mesh.vertices.Length; i++)
+                    {
+                        morphbuilder.SetVertexDelta(mesh.vertices[i], mesh.extradata[i]);
+                    }
                 }
                 var obj = new { appNames = mesh.appNames, materialNames = mesh.materialNames }; // anonymous variable/obj
 

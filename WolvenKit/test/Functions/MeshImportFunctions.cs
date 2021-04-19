@@ -399,19 +399,19 @@ namespace WolvenKit.RED4.MeshFile
                 colorOffsets[i] = (UInt32)ms.Position;
                 for (int e = 0; e < vertCount; e++)
                 {
-                    
+                    /*
                     bw.Write(expMeshes[i].colors[e, 0]);
                     bw.Write(expMeshes[i].colors[e, 1]);
                     bw.Write(expMeshes[i].colors[e, 2]);
                     bw.Write(expMeshes[i].colors[e, 3]);
-                    
-                    // Temp fix for improved lighting geomertry
-                    /*
-                    bw.Write((byte)0);
-                    bw.Write((byte)0);
-                    bw.Write((byte)0);
-                    bw.Write((byte)0);
                     */
+
+                    // Temp fix for improved lighting geomertry
+                    bw.Write((byte)0);
+                    bw.Write((byte)0);
+                    bw.Write((byte)0);
+                    bw.Write((byte)255);
+
                     bw.Write(expMeshes[i].uv1s[e, 0]);
                     bw.Write(expMeshes[i].uv1s[e, 1]);
                 }
