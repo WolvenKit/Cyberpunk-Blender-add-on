@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 using System.Collections.Generic;
+using WolvenKit.RED4.MeshFile.Materials.MaterialTypes;
 
 namespace WolvenKit.RED4.GeneralStructs
 {
@@ -42,13 +43,16 @@ namespace WolvenKit.RED4.GeneralStructs
         public UInt32[] unknownOffsets { get; set; }
         public UInt32[] indicesOffsets { get; set; }
         public UInt32[] vpStrides { get; set; }
-
         public UInt32[] weightcounts { get; set; }
+        public bool[] extraExists { get; set; }
         public Vector4 qTrans { get; set; }
         public Vector4 qScale { get; set; }
         public int meshC { get; set; }
         public UInt32[] LODLvl { get; set; }
         public List<Appearance> appearances { get; set; }
+        public UInt32 vertBufferSize { get; set; }
+        public UInt32 indexBufferSize { get; set; }
+        public UInt32 indexBufferOffset { get; set; }
     }
     public class RawMeshContainer
     {
@@ -60,12 +64,29 @@ namespace WolvenKit.RED4.GeneralStructs
         public Vector4[] tangents { get; set; }
         public Vector4[] colors { get; set; }
         public float[,] weights { get; set; }
+        public bool extraExist { get; set; }
         public UInt16[,] boneindices { get; set; }
+        public Vector3[] extradata { get; set; }
         public string name;
         public UInt32 weightcount { get; set; }
         public string[] appNames { get; set; }
         public string[] materialNames { get; set; }
     }
+    public class Re4MeshContainer
+    {
+        public Int16[,] ExpVerts { get; set; }
+        public UInt32[] Nor32s { get; set; }
+        public UInt32[] Tan32s { get; set; }
+        public UInt16[] indices { get; set; }
+        public UInt16[,] uv0s { get; set; }
+        public UInt16[,] uv1s { get; set; }
+        public Byte[,] colors { get; set; }
+        public Byte[,] weights { get; set; }
+        public Byte[,] boneindices { get; set; }
+        public string name;
+        public UInt32 weightcount { get; set; }
+    }
+    
     public class RawTargetContainer
     {
         public Vector3[] vertexDelta { get; set; }
@@ -90,36 +111,19 @@ namespace WolvenKit.RED4.GeneralStructs
         public string BaseMesh { get; set; }
         public string BaseTexture { get; set; }
     }
-    public class DiffusedBSDF
-    {
-        public string AlbedoTEX;
-        public string NormalTEX;
-    }
+
     public class Appearance
     {
         public string Name;
         public string[] MaterialNames;
     }
-    public class MaterialEntry
+    public class RawMaterial
     {
-        public string Name;
-        public bool IsMultiLayered;
-
-        public string baseMaterial;
-        public string MultilayerSetup;
-        public string MultilayerMask;
-        public string Roughness;
-        public string DetailNormal;
-        public string Normal;
-        public string Albedo;
-        public string Detailmap_Squash;
-        public string Detailmap_Stretch;
-        public string SkinProfile;
-        public string Bloodflow;
-        public string NormalTexture;
-        public string DiffuseTexture;
-        public string NormalAlphaTex;
-        public string RoughnessTexture;
-
+        public string Name { get; set; }
+        public string BaseMaterial { get; set; }
+        public MaterialType MaterialType { get; set; }
+        public HumanSkin HumanSkin { get; set; }
+        public MeshDecal MeshDecal { get; set; }
+        public MultiLayered MultiLayered { get; set; }
     }
 }
