@@ -780,8 +780,6 @@ namespace WolvenKit.RED4.MeshFile
                 chunk.ChunkVertices.VertexLayout.Elements[elementCount].Type.EnumValueList.Add("PT_Invalid");
                 elementCount = chunk.ChunkVertices.VertexLayout.Elements.Count;
 
-
-                Console.WriteLine(chunk.VertexFactory.Value);
                 // Adding Chunk
                 (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.RenderChunkInfos.Add(chunk);
             }
