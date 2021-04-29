@@ -452,7 +452,10 @@ namespace WolvenKit.RED4.MeshFile
                 qScale = qScale,
                 qTrans = qTrans,
                 meshC = meshC,
-                appearances = appearances
+                appearances = appearances,
+                vertBufferSize = (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.VertexBufferSize.Value,
+                indexBufferOffset = (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.IndexBufferOffset.Value,
+                indexBufferSize = (cr2w.Chunks[Index].data as rendRenderMeshBlob).Header.IndexBufferSize.Value
             };
             return meshesInfo;
         }
