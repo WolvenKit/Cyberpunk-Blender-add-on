@@ -101,6 +101,9 @@ namespace WolvenKit.RED4.MorphTargetFile
             {
                 File.WriteAllBytes(dir.FullName + "\\" + Path.GetFileNameWithoutExtension(outfile.FullName) + i + ".dds",textureStreams[i].ToArray());
             }
+
+            targetStream.Dispose();
+            targetStream.Close();
         }
         static TargetsInfo GetTargetInfos(CR2WFile cr2w, int SubMeshC)
         {

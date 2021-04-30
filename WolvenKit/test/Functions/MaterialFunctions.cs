@@ -36,7 +36,7 @@ namespace WolvenKit.RED4.MeshFile.Materials
                 if (meshinfo.LODLvl[i] != 1 && LodFilter)
                     continue;
                 RawMeshContainer mesh = MESH.ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i]);
-                mesh.name = _meshName + "_" + i;
+                mesh.name = _meshName + "_" + i + "_" + meshinfo.LODLvl[i];
 
                 mesh.appNames = new string[meshinfo.appearances.Count];
                 mesh.materialNames = new string[meshinfo.appearances.Count];
@@ -60,6 +60,9 @@ namespace WolvenKit.RED4.MeshFile.Materials
                 model.SaveGLTF(outfile.FullName);
 
             Directory.Delete(cacheDir, true);
+
+            meshStream.Dispose();
+            meshStream.Close();
         }
         public void ExportMeshWithMaterialsUsingArchives(Stream meshStream, string _meshName, FileInfo outfile, bool isGLBinary = true, EUncookExtension eUncookExtension = EUncookExtension.dds, bool LodFilter = true)
         {
@@ -75,7 +78,7 @@ namespace WolvenKit.RED4.MeshFile.Materials
                 if (meshinfo.LODLvl[i] != 1 && LodFilter)
                     continue;
                 RawMeshContainer mesh = MESH.ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i]);
-                mesh.name = _meshName + "_" + i;
+                mesh.name = _meshName + "_" + i + "_" + meshinfo.LODLvl[i];
 
                 mesh.appNames = new string[meshinfo.appearances.Count];
                 mesh.materialNames = new string[meshinfo.appearances.Count];
@@ -99,6 +102,8 @@ namespace WolvenKit.RED4.MeshFile.Materials
                 model.SaveGLTF(outfile.FullName);
 
             Directory.Delete(cacheDir, true);
+            meshStream.Dispose();
+            meshStream.Close();
         }
         static void GetMateriaEntries(Stream meshStream, ref List<string> primaryDependencies,ref List<string> materialEntryNames, ref List<CMaterialInstance> materialEntries, DirectoryInfo assetLib, bool useAssetLib)
         {

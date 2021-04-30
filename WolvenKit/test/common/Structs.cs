@@ -85,6 +85,8 @@ namespace WolvenKit.RED4.GeneralStructs
         public Byte[,] boneindices { get; set; }
         public string name;
         public UInt32 weightcount { get; set; }
+        public UInt16[,] extraData { get; set; }
+        public bool extraExist;
     }
     
     public class RawTargetContainer

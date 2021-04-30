@@ -554,10 +554,6 @@ namespace WolvenKit.RED4.MeshFile
                     Vec4 tempv = new Vec4(gbr.ReadByte() / 255f, gbr.ReadByte() / 255f, gbr.ReadByte() / 255f, gbr.ReadByte() / 255f);
                     colors[i] = new Vec4(tempv.X, tempv.Y, tempv.Z, tempv.W);
 
-                    /*
-                    gfs.Position = unknownOffset + i * 4;
-                    Console.WriteLine(colors[i].X + " " + colors[i].Y + " " + colors[i].Z + " " + colors[i].W + "    " + gbr.ReadSingle());
-                    */
                 }
                 // got vert colors
             }
