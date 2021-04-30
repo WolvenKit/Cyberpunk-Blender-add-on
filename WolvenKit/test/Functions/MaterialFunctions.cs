@@ -613,26 +613,143 @@ namespace WolvenKit.RED4.MeshFile.Materials
         }
         static MemoryStream GetMaterialStream(Stream ms,CR2WFile cr2w)
         {
-            MemoryStream materialStream = new MemoryStream();
-
-            var buffers = cr2w.Buffers;
-            for (var i = 0; i < buffers.Count; i++)
+            int Index = 0;
+            for (int i = 0; i < cr2w.Chunks.Count; i++)
             {
-                var b = buffers[i];
-                ms.Seek(b.Offset, SeekOrigin.Begin);
-
-                MemoryStream outstream = new MemoryStream();
-                // copy to some outstream
-                ms.DecompressAndCopySegment(outstream, b.DiskSize, b.MemSize);
-                BinaryReader outreader = new BinaryReader(outstream);
-                outstream.Position = 161;
-                if (new string(BitConverter.ToString(outreader.ReadBytes(17))) == "43-4D-61-74-65-72-69-61-6C-49-6E-73-74-61-6E-63-65") // CMaterialInstance
+                if (cr2w.Chunks[i].REDType == "CMesh")
                 {
-                    materialStream = outstream;
-                    break;
+                    Index = i;
+                }
+
+            }
+
+            UInt16 p = BitConverter.ToUInt16((cr2w.Chunks[Index].data as CMesh).LocalMaterialBuffer.RawData.Buffer.Bytes);
+            var b = cr2w.Buffers[p - 1];
+            ms.Seek(b.Offset, SeekOrigin.Begin);
+            MemoryStream materialStream = new MemoryStream();
+            ms.DecompressAndCopySegment(materialStream, b.DiskSize, b.MemSize);
+            return materialStream;
+        }
+        public static void UnpackLocalBufferMaterials(Stream meshStream, DirectoryInfo unpackDir)
+        {
+            var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshStream);
+            int index = 0;
+            for (int i = 0; i < cr2w.Chunks.Count; i++)
+            {
+                if (cr2w.Chunks[i].REDType == "CMesh")
+                {
+                    index = i;
                 }
             }
-            return materialStream;
+
+            int Count = (cr2w.Chunks[index].data as CMesh).LocalMaterialBuffer.RawDataHeaders.Count;
+            if(Count == 0)
+            {
+                throw new Exception("Provided .mesh doesn't contain any local material buffer");
+            }
+            else
+            {
+                byte[] bytes = GetMaterialStream(meshStream, cr2w).ToArray();
+                List<string> names = new List<string>();
+                for(int i = 0; i < (cr2w.Chunks[index].data as CMesh).MaterialEntries.Count; i++)
+                {
+                    if((cr2w.Chunks[index].data as CMesh).MaterialEntries[i].IsLocalInstance.Value)
+                    {
+                        names.Add((cr2w.Chunks[index].data as CMesh).MaterialEntries[i].Name.Value);
+                    }
+                }
+                for (int i = 0; i < Count; i++)
+                {
+                    UInt32 offset = (cr2w.Chunks[index].data as CMesh).LocalMaterialBuffer.RawDataHeaders[i].Offset.Value;
+                    UInt32 size = (cr2w.Chunks[index].data as CMesh).LocalMaterialBuffer.RawDataHeaders[i].Size.Value;
+                    MemoryStream ms = new MemoryStream(bytes, (int)offset, (int)size);
+
+                    File.WriteAllBytes(unpackDir.FullName + "\\" + names[i] + ".mi",ms.ToArray());
+                }
+            }
+            meshStream.Dispose();
+            meshStream.Close();
+        }
+        public static void PackMaterialToLocalBuffer(DirectoryInfo packDir, Stream inmeshStream, FileInfo outMeshFile)
+        {
+            var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(inmeshStream);
+            int index = 0;
+            for (int i = 0; i < cr2w.Chunks.Count; i++)
+            {
+                if (cr2w.Chunks[i].REDType == "CMesh")
+                {
+                    index = i;
+                }
+            }
+
+            int Count = (cr2w.Chunks[index].data as CMesh).LocalMaterialBuffer.RawDataHeaders.Count;
+            if (Count == 0)
+            {
+                throw new Exception("Provided .mesh doesn't contain any local material buffer");
+            }
+            else
+            {
+                List<string> names = new List<string>();
+                for (int i = 0; i < (cr2w.Chunks[index].data as CMesh).MaterialEntries.Count; i++)
+                {
+                    if ((cr2w.Chunks[index].data as CMesh).MaterialEntries[i].IsLocalInstance.Value)
+                    {
+                        names.Add((cr2w.Chunks[index].data as CMesh).MaterialEntries[i].Name.Value);
+                    }
+                }
+
+                string[] mifiles = Directory.GetFiles(packDir.FullName, "*.mi");
+                if(mifiles.Length != names.Count)
+                {
+                    throw new Exception("Provided .mi files doesn't match the number of local material entries in the provided mesh file");
+                }
+                MemoryStream buffer = new MemoryStream();
+                BinaryWriter writer = new BinaryWriter(buffer);
+                for(int i = 0; i < names.Count; i++)
+                {
+                    bool notfound = true;
+                    for(int e = 0; e < mifiles.Length; e++)
+                    {
+                        if(Path.GetFileNameWithoutExtension(mifiles[e]) == names[i])
+                        {
+                            notfound = false;
+                            (cr2w.Chunks[index].data as CMesh).LocalMaterialBuffer.RawDataHeaders[i].Offset.Value = Convert.ToUInt32(buffer.Length);
+                            byte[] bytes = File.ReadAllBytes(mifiles[e]);
+                            writer.Write(bytes);
+                            (cr2w.Chunks[index].data as CMesh).LocalMaterialBuffer.RawDataHeaders[i].Size.Value = Convert.ToUInt32(bytes.Length);
+
+                        }
+                    }
+                    if(notfound)
+                    {
+                        throw new Exception("One or more names of .mi files doesn't match the names of material enteries in provided mesh file");
+                    }
+                }
+
+                UInt16 p = BitConverter.ToUInt16((cr2w.Chunks[index].data as CMesh).LocalMaterialBuffer.RawData.Buffer.Bytes);
+
+                var compressed = new MemoryStream();
+                using var buff = new BinaryWriter(compressed);
+                var (zsize, crc) = buff.CompressAndWrite(buffer.ToArray());
+
+                cr2w.Buffers[p - 1].DiskSize = zsize;
+                cr2w.Buffers[p - 1].Crc32 = crc;
+                cr2w.Buffers[p - 1].MemSize = (UInt32)buffer.Length;
+                var off = cr2w.Buffers[p - 1].Offset;
+                cr2w.Buffers[p - 1].Offset = 0;
+                cr2w.Buffers[p - 1].ReadData(new BinaryReader(compressed));
+                cr2w.Buffers[p - 1].Offset = off;
+
+
+                MemoryStream ms = new MemoryStream();
+                BinaryWriter bw = new BinaryWriter(ms);
+                cr2w.Write(bw);
+
+                File.WriteAllBytes(outMeshFile.FullName, ms.ToArray());
+            }
+            inmeshStream.Dispose();
+            inmeshStream.Close();
+
         }
         public MATERIAL(DirectoryInfo gameArchiveDir)
         {
