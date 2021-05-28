@@ -29,7 +29,7 @@ namespace WolvenKit.RED4.MeshFile
 
     public class MESH
     {
-        public static void ExportMeshWithPlaceHolderRig(Stream meshStream, string _meshName, FileInfo outfile, bool LodFilter = true, bool isGLBinary = true)
+        public static void ExportMesh(Stream meshStream, string _meshName, FileInfo outfile, bool LodFilter = true, bool isGLBinary = true)
         {
             List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
             var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshStream);
@@ -45,7 +45,7 @@ namespace WolvenKit.RED4.MeshFile
                     last = i;
                 }
             }
-            if ((cr2w.Chunks[last].data as CMesh).BoneNames.Count != 0)    // for rigid meshes
+            if ((cr2w.Chunks[last].data as CMesh).BoneNames.Count != 0)    // for non-rigid meshes
             {
                 bones.Names = RIG.GetboneNames(cr2w, "CMesh");
                 bones.WorldPosn = GetMeshBonesPosn(cr2w);
@@ -58,7 +58,7 @@ namespace WolvenKit.RED4.MeshFile
                 Rig.Names = new string[Rig.BoneCount];
 
                 Rig.Parent[0] = -1;
-                Rig.Names[0] = "WkitPlaceHolderBone";
+                Rig.Names[0] = "WolvenKit_Root";
                 Rig.LocalPosn[0] = new Vec3(0f, 0f, 0f);
                 Rig.LocalRot[0] = new System.Numerics.Quaternion(0f, 0f, 0f, 1f);
                 Rig.LocalScale[0] = new Vec3(1f, 1f, 1f);
@@ -92,7 +92,9 @@ namespace WolvenKit.RED4.MeshFile
                 }
                 expMeshes.Add(mesh);
             }
+
             ModelRoot model = RawSkinnedMeshesToGLTF(expMeshes,Rig);
+
             if (isGLBinary)
                 model.SaveGLB(outfile.FullName);
             else
@@ -623,13 +625,19 @@ namespace WolvenKit.RED4.MeshFile
             {
                 for (int eye = 0; eye < Mesh.weightcount; eye++)
                 {
+                    bool found = false;
                     for (UInt16 r = 0; r < Rig.BoneCount; r++)
                     {
                         if (Rig.Names[r] == Bones.Names[Mesh.boneindices[e, eye]])
                         {
                             Mesh.boneindices[e, eye] = r;
+                            found = true;
                             break;
                         }
+                    }
+                    if(!found)
+                    {
+                        throw new Exception("Bone: " + Bones.Names[Mesh.boneindices[e, eye]] + " is not present in the Provided .rig(s).\nInput .rig(s) are incompatible or incomplete, Please provide a/more compatible .rig(s)\nTIP: 1. For body .rig(s) provide {BodyType}_base_deformations.rig instead of {BodyType}_base.rig. 2. if Input .mesh(s) contains any dangle/physics bones, provide the compatible dangle.rig also.\n");
                     }
                 }
             }
@@ -704,13 +712,14 @@ namespace WolvenKit.RED4.MeshFile
                     (int, float)[] bind1 = new (int, float)[8];
                     (int, float)[] bind2 = new (int, float)[8];
 
+                    
                     if(mesh.weightcount == 0)   // for rigid meshes
                     {
                         bind0[0].Item2 = 1f;
                         bind1[0].Item2 = 1f;
                         bind2[0].Item2 = 1f;
                     }
-
+                    
                     for (int w = 0; w < mesh.weightcount ; w++)
                     {
                         bind0[w].Item1 = mesh.boneindices[idx0, w];
@@ -741,7 +750,14 @@ namespace WolvenKit.RED4.MeshFile
 
                 expmesh.Extras = SharpGLTF.IO.JsonContent.Serialize(obj);
 
-                scene.AddSkinnedMesh(expmesh, rootbone.WorldMatrix, bones.Values.ToArray());
+                if(mesh.weightcount == 0)
+                {
+                    scene.AddRigidMesh(expmesh, System.Numerics.Matrix4x4.Identity);
+                }
+                else
+                {
+                    scene.AddSkinnedMesh(expmesh, rootbone.WorldMatrix, bones.Values.ToArray());
+                }
             }
             var model = scene.ToGltf2();
 

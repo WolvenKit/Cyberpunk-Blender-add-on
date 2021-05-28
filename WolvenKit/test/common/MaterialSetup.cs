@@ -29,6 +29,8 @@ namespace WolvenKit.RED4.MaterialSetupFile
                     Layers[i].MicroblendOffsetU = setup.Layers[i].MicroblendOffsetU.Value;
                     Layers[i].MicroblendOffsetV = setup.Layers[i].MicroblendOffsetV.Value;
                     Layers[i].Opacity = setup.Layers[i].Opacity.Value;
+                    if (!setup.Layers[i].Opacity.IsSerialized)
+                        Layers[i].Opacity = 9999;
                     Layers[i].OffsetU = setup.Layers[i].OffsetU.Value;
                     Layers[i].OffsetV = setup.Layers[i].OffsetV.Value;
                     Layers[i].Material = setup.Layers[i].Material.DepotPath;

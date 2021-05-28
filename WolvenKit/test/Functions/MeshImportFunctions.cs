@@ -103,7 +103,7 @@ namespace WolvenKit.RED4.MeshFile
                         }
                         else
                         {
-                            if(Meshes[i].boneindices[e, eye] > 255)
+                            if(Meshes[i].boneindices[e, eye] > (meshbones.Length - 1))
                             {
                                 Meshes[i].boneindices[e, eye] = 0;
                             }
@@ -304,7 +304,7 @@ namespace WolvenKit.RED4.MeshFile
 
             UInt16[,] uv1s = new UInt16[vertCount, 2];
 
-            for (int i = 0; i < mesh.tx0coords.Length; i++)
+            for (int i = 0; i < mesh.tx1coords.Length; i++)
             {
                 uv1s[i, 0] = Converters.converthf(mesh.tx1coords[i].X);
                 uv1s[i, 1] = Converters.converthf(mesh.tx1coords[i].Y);

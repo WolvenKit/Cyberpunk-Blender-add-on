@@ -393,7 +393,7 @@ namespace WolvenKit.RED4.MeshFile.Materials
             }
             catch { }
 
-            File.WriteAllLines(outDir.FullName + "TexturesList.txt", TexturesList);
+            File.WriteAllLines(outDir.FullName + "Textures List.txt", TexturesList);
 
 
             string ext = "*.dds";
@@ -409,8 +409,13 @@ namespace WolvenKit.RED4.MeshFile.Materials
                 ext = "*.tga";
 
             string[] files = Directory.GetFiles(cacheDir, ext);
+
             for (int i = 0; i < files.Length; i++)
-                File.Move(files[i], outDir.FullName + Path.GetFileName(files[i]),true);
+            {
+                string path = outDir.FullName + files[i].Replace(cacheDir, string.Empty);
+                Directory.CreateDirectory(path.Replace(Path.GetFileName(files[i]), string.Empty));
+                File.Move(files[i], path, true);
+            }
         }
         static void ParseMaterialsUsingArchives(Stream meshStream, ref ModelRoot model, DirectoryInfo outDir, EUncookExtension eUncookExtension = EUncookExtension.dds)
         {
@@ -572,7 +577,11 @@ namespace WolvenKit.RED4.MeshFile.Materials
             string[] files = Directory.GetFiles(cacheDir, ext,SearchOption.AllDirectories);
 
             for (int i = 0; i < files.Length; i++)
-                File.Move(files[i], outDir.FullName + Path.GetFileName(files[i]), true);
+            {
+                string path = outDir.FullName + files[i].Replace(cacheDir, string.Empty);
+                Directory.CreateDirectory(path.Replace(Path.GetFileName(files[i]),string.Empty));
+                File.Move(files[i], path, true);
+            }
         }
         static RawMaterial ContainRawMaterial(CMaterialInstance cMaterialInstance, string Name)
         {
