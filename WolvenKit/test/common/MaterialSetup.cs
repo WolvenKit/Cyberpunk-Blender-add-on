@@ -21,7 +21,10 @@ namespace WolvenKit.RED4.MaterialSetupFile
 
                 try
                 {
-                    Layers[i].MatTile = setup.Layers[i].MatTile.Value;
+                    if (setup.Layers[i].MatTile.IsSerialized)
+                        Layers[i].MatTile = setup.Layers[i].MatTile.Value;
+                    else
+                        Layers[i].MatTile = 9999;
                     Layers[i].MbTile = setup.Layers[i].MbTile.Value;
                     Layers[i].Microblend = setup.Layers[i].Microblend.DepotPath;
                     Layers[i].MicroblendContrast = setup.Layers[i].MicroblendContrast.Value;
@@ -91,8 +94,10 @@ namespace WolvenKit.RED4.MaterialSetupFile
                 NormalTexture = template.NormalTexture.DepotPath;
                 RoughnessTexture = template.RoughnessTexture.DepotPath;
                 MetalnessTexture = template.MetalnessTexture.DepotPath;
-                TilingMultiplier = template.TilingMultiplier.Value;
-
+                if (template.TilingMultiplier.IsSerialized)
+                    TilingMultiplier = template.TilingMultiplier.Value;
+                else
+                    TilingMultiplier = 9999;
                 Count = template.ColorMaskLevelsIn.Count;
 
                 if (Count == 0)
