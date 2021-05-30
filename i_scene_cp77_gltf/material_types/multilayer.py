@@ -3,16 +3,16 @@ import os
 from ..main.common import imageFromPath
 
 class Multilayered:
-    def __init__(self, BasePath, valueToIgnore, templates):
+    def __init__(self, BasePath, valueToIgnore, templates,image_format):
         self.BasePath = str(BasePath)
         self.valueToIgnore = float(valueToIgnore)
         self.templates = templates
-
+        self.image_format = image_format
     def createBaseMaterial(self,matTemplateObj):
-        CT = imageFromPath(self.BasePath + matTemplateObj["colorTexture"])
-        NT = imageFromPath(self.BasePath + matTemplateObj["normalTexture"],isNormal = True)
-        RT = imageFromPath(self.BasePath + matTemplateObj["roughnessTexture"])
-        MT = imageFromPath(self.BasePath + matTemplateObj["metalnessTexture"])
+        CT = imageFromPath(self.BasePath + matTemplateObj["colorTexture"],self.image_format)
+        NT = imageFromPath(self.BasePath + matTemplateObj["normalTexture"],self.image_format,isNormal = True)
+        RT = imageFromPath(self.BasePath + matTemplateObj["roughnessTexture"],self.image_format)
+        MT = imageFromPath(self.BasePath + matTemplateObj["metalnessTexture"],self.image_format)
     
         TileMult = float(matTemplateObj["tilingMultiplier"])
         if TileMult == self.valueToIgnore:
@@ -161,7 +161,7 @@ class Multilayered:
         GNSepRGB.location = (-800,-450)
         GNSepRGB.hide = True
     
-        GNImg = imageFromPath(self.BasePath + normalimgpath,True)
+        GNImg = imageFromPath(self.BasePath + normalimgpath,self.image_format,True)
     
         GNImgNode = CurMat.nodes.new("ShaderNodeTexImage")
         GNImgNode.image = GNImg
@@ -182,7 +182,7 @@ class Multilayered:
 
     def createLayerMaterial(self,LayerName,LayerCount,CurMat,mlmaskpath,normalimgpath):
         for x in range(LayerCount-1):
-            MaskTexture = imageFromPath(os.path.splitext(self.BasePath + mlmaskpath)[0]+"_"+str(x+1)+".png")
+            MaskTexture = imageFromPath(os.path.splitext(self.BasePath + mlmaskpath)[0]+"_"+str(x+1)+".png",self.image_format)
             NG = bpy.data.node_groups.new("Layer_Blend_"+str(x),"ShaderNodeTree")#create layer's node group
             NG.inputs.new('NodeSocketColor','Difuse1')
             NG.inputs.new('NodeSocketColor','Normal1')
@@ -328,7 +328,7 @@ class Multilayered:
             metalLevelsOut = x.get("metalLevelsOut")
         
             if Microblend != "null":
-                MBI = imageFromPath(self.BasePath+Microblend[:-3]+"png",True)
+                MBI = imageFromPath(self.BasePath+Microblend,self.image_format,True)
         
             cowunter = 0
             for i in range(0,len(self.templates)):
