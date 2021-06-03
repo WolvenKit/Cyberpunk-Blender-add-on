@@ -161,7 +161,10 @@ namespace WolvenKit.Modkit.RED4.Materials
 
                     ulong hash = FNV1A64HashAlgorithm.HashString(path);
                     foreach (Archive ar in archives)
-                        ModTools.ExtractSingle(ar, hash, new DirectoryInfo(cacheDir));
+                    {
+                        if(ar.Files.ContainsKey(hash))
+                            ModTools.ExtractSingle(ar, hash, new DirectoryInfo(cacheDir));
+                    }
 
                     path = cacheDir + (cr2w.Chunks[index].Data as CMesh).ExternalMaterials[i].DepotPath;
 
@@ -453,22 +456,30 @@ namespace WolvenKit.Modkit.RED4.Materials
 
                     ulong hash = FNV1A64HashAlgorithm.HashString(primaryDependencies[i]);
                     foreach (Archive ar in archives)
-                        ModTools.UncookSingle(ar, hash, new DirectoryInfo(cacheDir), eUncookExtension);
+                    {
+                        if (ar.Files.ContainsKey(hash))
+                            ModTools.UncookSingle(ar, hash, new DirectoryInfo(cacheDir), eUncookExtension);
+                    }
                 }
                 if (Path.GetExtension(primaryDependencies[i]) == ".mlmask")
                 {
                     TexturesList.Add(primaryDependencies[i]);
                     ulong hash = FNV1A64HashAlgorithm.HashString(primaryDependencies[i]);
                     foreach (Archive ar in archives)
-                        ModTools.UncookSingle(ar, hash, new DirectoryInfo(cacheDir), eUncookExtension);
-                    
+                    {
+                        if (ar.Files.ContainsKey(hash))
+                            ModTools.UncookSingle(ar, hash, new DirectoryInfo(cacheDir), eUncookExtension);
+                    }
                 }
 
                 if (Path.GetExtension(primaryDependencies[i]) == ".mlsetup")
                 {
                     ulong hash = FNV1A64HashAlgorithm.HashString(primaryDependencies[i]);
                     foreach (Archive ar in archives)
-                        ModTools.ExtractSingle(ar, hash, new DirectoryInfo(cacheDir));
+                    {
+                        if (ar.Files.ContainsKey(hash))
+                            ModTools.ExtractSingle(ar, hash, new DirectoryInfo(cacheDir));
+                    }
 
                     if (File.Exists(cacheDir + primaryDependencies[i]))
                     {
@@ -488,13 +499,19 @@ namespace WolvenKit.Modkit.RED4.Materials
 
                                 ulong hash1 = FNV1A64HashAlgorithm.HashString(cr2w.Imports[e].DepotPathStr);
                                 foreach (Archive ar in archives)
-                                    ModTools.UncookSingle(ar, hash1, new DirectoryInfo(cacheDir), eUncookExtension);
+                                {
+                                    if (ar.Files.ContainsKey(hash1))
+                                        ModTools.UncookSingle(ar, hash1, new DirectoryInfo(cacheDir), eUncookExtension);
+                                }
                             }
                             if (Path.GetExtension(cr2w.Imports[e].DepotPathStr) == ".mltemplate")
                             {
                                 ulong hash2 = FNV1A64HashAlgorithm.HashString(cr2w.Imports[e].DepotPathStr);
                                 foreach (Archive ar in archives)
-                                    ModTools.ExtractSingle(ar, hash2, new DirectoryInfo(cacheDir));
+                                {
+                                    if (ar.Files.ContainsKey(hash2))
+                                        ModTools.ExtractSingle(ar, hash2, new DirectoryInfo(cacheDir));
+                                }
 
                                 if (File.Exists(cacheDir + cr2w.Imports[e].DepotPathStr))
                                 {
@@ -512,7 +529,10 @@ namespace WolvenKit.Modkit.RED4.Materials
 
                                         ulong hash3 = FNV1A64HashAlgorithm.HashString(mlTempcr2w.Imports[eye].DepotPathStr);
                                         foreach (Archive ar in archives)
-                                            ModTools.UncookSingle(ar, hash3, new DirectoryInfo(cacheDir), eUncookExtension);
+                                        {
+                                            if (ar.Files.ContainsKey(hash3))
+                                                ModTools.UncookSingle(ar, hash3, new DirectoryInfo(cacheDir), eUncookExtension);
+                                        }
                                     }
                                 }
                             }
