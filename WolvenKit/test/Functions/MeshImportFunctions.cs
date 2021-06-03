@@ -1,30 +1,36 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
+using Catel.IoC;
 using System.IO;
-using WolvenKit.RED4.GeneralStructs;
+using WolvenKit.Modkit.RED4.GeneralStructs;
 using SharpGLTF.Schema2;
 using SharpGLTF.IO;
-using WolvenKit.RED4.RigFile;
+using WolvenKit.Modkit.RED4.RigFile;
 using WolvenKit.RED4.CR2W.Types;
 using WolvenKit.RED4.CR2W;
 using CP77.CR2W;
+using WolvenKit.Modkit.RED4;
 
-namespace WolvenKit.RED4.MeshFile
+namespace WolvenKit.Modkit.RED4.MeshFile
 {
     using Vec4 = System.Numerics.Vector4;
     using Vec2 = System.Numerics.Vector2;
     using Vec3 = System.Numerics.Vector3;
     public class MESHIMPORTER
     {
-        public static void Import(FileInfo inGltfFile, Stream inmeshStream, FileInfo outMeshFile)
+        private readonly ModTools ModTools;
+        public MESHIMPORTER()
+        {
+            ModTools = ServiceLocator.Default.ResolveType<ModTools>();
+        }
+        public void Import(FileInfo inGltfFile, Stream inmeshStream, FileInfo outMeshFile)
         {
             var model = ModelRoot.Load(inGltfFile.FullName);
 
             VerifyGLTF(model);
 
-            var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(inmeshStream);
+            var cr2w = ModTools.TryReadCr2WFile(inmeshStream);
             List<RawMeshContainer> Meshes = new List<RawMeshContainer>();
 
             for (int i = 0; i < model.LogicalMeshes.Count; i++)

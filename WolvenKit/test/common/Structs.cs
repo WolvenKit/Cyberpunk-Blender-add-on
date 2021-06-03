@@ -1,9 +1,9 @@
 using System;
 using System.Numerics;
 using System.Collections.Generic;
-using WolvenKit.RED4.MeshFile.Materials.MaterialTypes;
+using WolvenKit.Modkit.RED4.Materials.MaterialTypes;
 
-namespace WolvenKit.RED4.GeneralStructs
+namespace WolvenKit.Modkit.RED4.GeneralStructs
 {
     public class RawArmature
     {

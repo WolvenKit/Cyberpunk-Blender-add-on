@@ -1,33 +1,43 @@
 ﻿using System;
 using System.IO;
+using Catel.IoC;
 using CP77.CR2W;
-using WolvenKit.RED4.GeneralStructs;
+using WolvenKit.Common.Services;
+using WolvenKit.Modkit.RED4.GeneralStructs;
 using WolvenKit.RED4.CR2W;
 using WolvenKit.RED4.CR2W.Types;
 using WolvenKit.Common.Oodle;
 using System.Collections.Generic;
 using SharpGLTF.Schema2;
-using WolvenKit.RED4.MeshFile;
-using WolvenKit.RED4.MeshFile.Materials.MaterialTypes;
+using WolvenKit.Modkit.RED4.MeshFile;
+using WolvenKit.Modkit.RED4.Materials.MaterialTypes;
 using WolvenKit.Common.DDS;
 using WolvenKit.RED4.CR2W.Archive;
 using WolvenKit.Common.FNV1A;
-using WolvenKit.RED4.MaterialSetupFile;
+using WolvenKit.Modkit.RED4.MaterialSetupFile;
 using SharpGLTF.IO;
 using System.Threading;
+using WolvenKit.Modkit.RED4;
 
-namespace WolvenKit.RED4.MeshFile.Materials
+namespace WolvenKit.Modkit.RED4.Materials
 {
     public class MATERIAL
     {
-        static string cacheDir = Path.GetTempPath() + "WolvenKit\\Material\\Temp\\";
-        public static List<Archive> archives;
+        private readonly ModTools ModTools;
+        private readonly IHashService _hashService;
+        public MATERIAL()
+        {
+            ModTools = ServiceLocator.Default.ResolveType<ModTools>();
+            _hashService = ServiceLocator.Default.ResolveType<IHashService>();
+        }
+        private readonly string cacheDir = Path.GetTempPath() + "WolvenKit\\Material\\Temp\\";
+        private readonly List<Archive> archives;
         public void ExportMeshWithMaterialsUsingAssetLib(Stream meshStream, DirectoryInfo assetLib, string _meshName, FileInfo outfile, bool isGLBinary = true,bool copyTextures = false,EUncookExtension eUncookExtension = EUncookExtension.dds , bool LodFilter = true)
         {
             Directory.CreateDirectory(cacheDir);
 
             List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
-            var mesh_cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshStream);
+            var mesh_cr2w = ModTools.TryReadCr2WFile(meshStream);
 
             MemoryStream ms = MESH.GetMeshBufferStream(meshStream, mesh_cr2w);
             MeshesInfo meshinfo = MESH.GetMeshesinfo(mesh_cr2w);
@@ -69,7 +79,7 @@ namespace WolvenKit.RED4.MeshFile.Materials
             Directory.CreateDirectory(cacheDir);
 
             List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
-            var mesh_cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshStream);
+            var mesh_cr2w = ModTools.TryReadCr2WFile(meshStream);
 
             MemoryStream ms = MESH.GetMeshBufferStream(meshStream, mesh_cr2w);
             MeshesInfo meshinfo = MESH.GetMeshesinfo(mesh_cr2w);
@@ -105,7 +115,7 @@ namespace WolvenKit.RED4.MeshFile.Materials
             meshStream.Dispose();
             meshStream.Close();
         }
-        static void GetMateriaEntries(Stream meshStream, ref List<string> primaryDependencies,ref List<string> materialEntryNames, ref List<CMaterialInstance> materialEntries, DirectoryInfo assetLib, bool useAssetLib)
+        void GetMateriaEntries(Stream meshStream, ref List<string> primaryDependencies,ref List<string> materialEntryNames, ref List<CMaterialInstance> materialEntries, DirectoryInfo assetLib, bool useAssetLib)
         {
             var cr2w = ModTools.TryReadCr2WFile(meshStream);
 
@@ -245,7 +255,7 @@ namespace WolvenKit.RED4.MeshFile.Materials
                     materialEntries.Add(ExternalMaterial[Entry.Index.Value]);
             }
         }
-        static void ParseMaterialsUsingAssetLib(Stream meshStream, ref ModelRoot model,DirectoryInfo outDir, DirectoryInfo AssetLib, bool CopyTextures = false, EUncookExtension eUncookExtension = EUncookExtension.dds)
+        void ParseMaterialsUsingAssetLib(Stream meshStream, ref ModelRoot model,DirectoryInfo outDir, DirectoryInfo AssetLib, bool CopyTextures = false, EUncookExtension eUncookExtension = EUncookExtension.dds)
         {
             List<string> primaryDependencies = new List<string>();
 
@@ -417,7 +427,7 @@ namespace WolvenKit.RED4.MeshFile.Materials
                 File.Move(files[i], path, true);
             }
         }
-        static void ParseMaterialsUsingArchives(Stream meshStream, ref ModelRoot model, DirectoryInfo outDir, EUncookExtension eUncookExtension = EUncookExtension.dds)
+        void ParseMaterialsUsingArchives(Stream meshStream, ref ModelRoot model, DirectoryInfo outDir, EUncookExtension eUncookExtension = EUncookExtension.dds)
         {
             List<string> primaryDependencies = new List<string>();
 
@@ -639,9 +649,9 @@ namespace WolvenKit.RED4.MeshFile.Materials
             ms.DecompressAndCopySegment(materialStream, b.DiskSize, b.MemSize);
             return materialStream;
         }
-        public static void UnpackLocalBufferMaterials(Stream meshStream, DirectoryInfo unpackDir)
+        public void UnpackLocalBufferMaterials(Stream meshStream, DirectoryInfo unpackDir)
         {
-            var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshStream);
+            var cr2w = ModTools.TryReadCr2WFile(meshStream);
             int index = 0;
             for (int i = 0; i < cr2w.Chunks.Count; i++)
             {
@@ -679,9 +689,9 @@ namespace WolvenKit.RED4.MeshFile.Materials
             meshStream.Dispose();
             meshStream.Close();
         }
-        public static void PackMaterialToLocalBuffer(DirectoryInfo packDir, Stream inmeshStream, FileInfo outMeshFile)
+        public void PackMaterialToLocalBuffer(DirectoryInfo packDir, Stream inmeshStream, FileInfo outMeshFile)
         {
-            var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(inmeshStream);
+            var cr2w = ModTools.TryReadCr2WFile(inmeshStream);
             int index = 0;
             for (int i = 0; i < cr2w.Chunks.Count; i++)
             {
@@ -762,40 +772,49 @@ namespace WolvenKit.RED4.MeshFile.Materials
         }
         public MATERIAL(DirectoryInfo gameArchiveDir)
         {
+            ModTools = ServiceLocator.Default.ResolveType<ModTools>();
+            _hashService = ServiceLocator.Default.ResolveType<IHashService>();
             string[] filenames = Directory.GetFiles(gameArchiveDir.FullName, "*.archive", SearchOption.AllDirectories);
             archives = new List<Archive>();
 
             for (int i = 0; i < filenames.Length; i++)
-                archives.Add(new Archive(filenames[i]));
-        }
-        public MATERIAL()
-        {
-
+            {
+                archives.Add(Red4ParserServiceExtensions.ReadArchive(filenames[i], _hashService));
+            }
         }
     }
     public class MaterialRepository
     {
-        public static Thread Generate(DirectoryInfo gameArchiveDir, DirectoryInfo materialRepoDir, EUncookExtension texturesExtension)
+        private readonly ModTools ModTools;
+        private readonly IHashService _hashService;
+        public MaterialRepository()
+        {
+            ModTools = ServiceLocator.Default.ResolveType<ModTools>();
+            _hashService = ServiceLocator.Default.ResolveType<IHashService>();
+        }
+
+        public Thread Generate(DirectoryInfo gameArchiveDir, DirectoryInfo materialRepoDir, EUncookExtension texturesExtension)
         {
             GameArchiveDir = gameArchiveDir;
             MaterialRepoDir = materialRepoDir;
             TexturesExtension = texturesExtension;
 
-            Thread thread = new Thread(GenerateInBG);
-            thread.IsBackground = true;
+            var thread = new Thread(GenerateInBG) { IsBackground = true };
             thread.Start();
             return thread;
         }
 
-        static void GenerateInBG()
+        private void GenerateInBG()
         {
-            string[] filenames = Directory.GetFiles(GameArchiveDir.FullName, "*.archive", SearchOption.AllDirectories);
-            List<Archive> archives = new List<Archive>();
+            var filenames = Directory.GetFiles(GameArchiveDir.FullName, "*.archive", SearchOption.AllDirectories);
+            var archives = new List<Archive>();
 
             for (int i = 0; i < filenames.Length; i++)
-                archives.Add(new Archive(filenames[i]));
+            {
+                archives.Add(Red4ParserServiceExtensions.ReadArchive(filenames[i], _hashService));
+            }
 
-            foreach (Archive ar in archives)
+            foreach (var ar in archives)
             {
                 ModTools.ExtractAll(ar, MaterialRepoDir, "*.gradient");
                 ModTools.ExtractAll(ar, MaterialRepoDir, "*.w2mi");

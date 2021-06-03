@@ -1,18 +1,20 @@
 using System;
 using System.Collections.Generic;
-using WolvenKit.RED4.GeneralStructs;
+using System.IO;
+using Catel.IoC;
+using WolvenKit.Modkit.RED4.GeneralStructs;
 using WolvenKit.RED4.CR2W;
 using WolvenKit.RED4.CR2W.Types;
-using System.IO;
 using WolvenKit.Common.DDS;
-using WolvenKit.RED4.MeshFile;
+using WolvenKit.Modkit.RED4.MeshFile;
 using WolvenKit.Common.Oodle;
 using SharpGLTF.Geometry;
 using SharpGLTF.Geometry.VertexTypes;
 using SharpGLTF.Materials;
 using SharpGLTF.Schema2;
+using CP77.CR2W;
 
-namespace WolvenKit.RED4.MorphTargetFile
+namespace WolvenKit.Modkit.RED4.MorphTargetFile
 {
     using Vec4 = System.Numerics.Vector4;
     using Vec3 = System.Numerics.Vector3;
@@ -24,9 +26,14 @@ namespace WolvenKit.RED4.MorphTargetFile
     using VCT = VertexColor1Texture2;
     public class TARGET
     {
-        public static void ExportTargets(Stream targetStream,FileInfo outfile, bool isGLBinary = true)
+        private readonly ModTools ModTools;
+        public TARGET()
         {
-            var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(targetStream);
+            ModTools = ServiceLocator.Default.ResolveType<ModTools>();
+        }
+        public void ExportTargets(Stream targetStream,FileInfo outfile, bool isGLBinary = true)
+        {
+            var cr2w = ModTools.TryReadCr2WFile(targetStream);
 
             List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
             MemoryStream meshbuffer = MESH.GetMeshBufferStream(targetStream, cr2w);

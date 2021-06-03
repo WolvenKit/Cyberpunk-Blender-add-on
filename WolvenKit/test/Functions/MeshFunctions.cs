@@ -2,18 +2,20 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
+using Catel.IoC;
+using CP77.CR2W;
 using WolvenKit.RED4.CR2W;
 using WolvenKit.RED4.CR2W.Types;
 using WolvenKit.Common.Oodle;
-using WolvenKit.RED4.GeneralStructs;
+using WolvenKit.Modkit.RED4.GeneralStructs;
 using SharpGLTF.Geometry;
 using SharpGLTF.Geometry.VertexTypes;
 using SharpGLTF.Materials;
 using SharpGLTF.Scenes;
 using SharpGLTF.Schema2;
-using WolvenKit.RED4.RigFile;
+using WolvenKit.Modkit.RED4.RigFile;
 
-namespace WolvenKit.RED4.MeshFile
+namespace WolvenKit.Modkit.RED4.MeshFile
 {
     using Vec4 = System.Numerics.Vector4;
     using Vec3 = System.Numerics.Vector3;
@@ -29,10 +31,15 @@ namespace WolvenKit.RED4.MeshFile
 
     public class MESH
     {
-        public static void ExportMesh(Stream meshStream, string _meshName, FileInfo outfile, bool LodFilter = true, bool isGLBinary = true)
+        private readonly ModTools ModTools;
+        public MESH()
+        {
+            ModTools = ServiceLocator.Default.ResolveType<ModTools>();
+        }
+        public void ExportMesh(Stream meshStream, string _meshName, FileInfo outfile, bool LodFilter = true, bool isGLBinary = true)
         {
             List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
-            var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshStream);
+            var cr2w = ModTools.TryReadCr2WFile(meshStream);
 
             RawArmature Rig = new RawArmature();
             MeshBones bones = new MeshBones();
@@ -103,10 +110,10 @@ namespace WolvenKit.RED4.MeshFile
             meshStream.Dispose();
             meshStream.Close();
         }
-        public static void ExportMeshWithoutRig(Stream meshStream, string _meshName, FileInfo outfile, bool LodFilter = true, bool isGLBinary = true)
+        public void ExportMeshWithoutRig(Stream meshStream, string _meshName, FileInfo outfile, bool LodFilter = true, bool isGLBinary = true)
         {
             List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
-            var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshStream);
+            var cr2w = ModTools.TryReadCr2WFile(meshStream);
 
             MemoryStream ms = GetMeshBufferStream(meshStream,cr2w);
             MeshesInfo meshinfo = GetMeshesinfo(cr2w);
@@ -134,13 +141,13 @@ namespace WolvenKit.RED4.MeshFile
             meshStream.Dispose();
             meshStream.Close();
         }
-        public static void ExportMultiMeshWithoutRig(List<Stream> meshStreamS, List<string> _meshNameS, FileInfo outfile, bool LodFilter = true, bool isGLBinary = true)
+        public void ExportMultiMeshWithoutRig(List<Stream> meshStreamS, List<string> _meshNameS, FileInfo outfile, bool LodFilter = true, bool isGLBinary = true)
         {
             List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
 
             for(int m = 0; m < meshStreamS.Count; m++)
             {
-                var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshStreamS[m]);
+                var cr2w = ModTools.TryReadCr2WFile(meshStreamS[m]);
 
                 MemoryStream ms = GetMeshBufferStream(meshStreamS[m], cr2w);
                 MeshesInfo meshinfo = GetMeshesinfo(cr2w);
@@ -172,13 +179,13 @@ namespace WolvenKit.RED4.MeshFile
                 meshStreamS[i].Close();
             }
         }
-        public static void ExportMeshWithRig(Stream meshStream, Stream rigStream,string _meshName, FileInfo outfile, bool LodFilter = true, bool isGLBinary = true)
+        public void ExportMeshWithRig(Stream meshStream, Stream rigStream,string _meshName, FileInfo outfile, bool LodFilter = true, bool isGLBinary = true)
         {
-            RawArmature Rig = RIG.ProcessRig(rigStream);
+            RawArmature Rig = (new RIG()).ProcessRig(rigStream);
 
             List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
 
-            var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshStream);
+            var cr2w = ModTools.TryReadCr2WFile(meshStream);
 
             MemoryStream ms = GetMeshBufferStream(meshStream, cr2w);
             MeshesInfo meshinfo = GetMeshesinfo(cr2w);
@@ -228,13 +235,13 @@ namespace WolvenKit.RED4.MeshFile
             rigStream.Dispose();
             rigStream.Close();
         }
-        public static void ExportMultiMeshWithRig(List<Stream> meshStreamS, List<Stream> rigStreamS, List<string> _meshNameS, FileInfo outfile, bool LodFilter = true, bool isGLBinary = true)
+        public void ExportMultiMeshWithRig(List<Stream> meshStreamS, List<Stream> rigStreamS, List<string> _meshNameS, FileInfo outfile, bool LodFilter = true, bool isGLBinary = true)
         {
             List<RawArmature> Rigs = new List<RawArmature>();
             rigStreamS = rigStreamS.OrderByDescending(r => r.Length).ToList();  // not so smart hacky method to get bodybase rigs on top/ orderby descending
             for (int r = 0; r < rigStreamS.Count; r++)
             {
-                RawArmature Rig = RIG.ProcessRig(rigStreamS[r]);
+                RawArmature Rig = (new RIG()).ProcessRig(rigStreamS[r]);
                 Rigs.Add(Rig);
             }
             RawArmature expRig = RIG.CombineRigs(Rigs);
@@ -245,7 +252,7 @@ namespace WolvenKit.RED4.MeshFile
             {
                 BinaryReader br = new BinaryReader(meshStreamS[m]);
 
-                var cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshStreamS[m]);
+                var cr2w = ModTools.TryReadCr2WFile(meshStreamS[m]);
 
                 MemoryStream ms = GetMeshBufferStream(meshStreamS[m], cr2w);
                 MeshesInfo meshinfo = GetMeshesinfo(cr2w);

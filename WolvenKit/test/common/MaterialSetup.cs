@@ -1,7 +1,7 @@
 ﻿using WolvenKit.RED4.CR2W.Types;
 using System;
 
-namespace WolvenKit.RED4.MaterialSetupFile
+namespace WolvenKit.Modkit.RED4.MaterialSetupFile
 {
     public class Setup
     {
