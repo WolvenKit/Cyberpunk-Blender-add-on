@@ -11,7 +11,7 @@ using WolvenKit.Modkit.RED4.Opus;
 using System.Collections.Generic;
 using WolvenKit.Common.FNV1A;
 
-namespace GLTFNodesTest
+namespace CyberpunkToolz
 {
     class Program
     {
@@ -25,20 +25,26 @@ namespace GLTFNodesTest
             ServiceLocator.Default.RegisterType<IHashService, HashService>();
             ServiceLocator.Default.RegisterType<IWolvenkitFileService, Cp77FileService>();
             ServiceLocator.Default.RegisterType<ModTools>();
-
+            DirectoryInfo paksdir = new DirectoryInfo(@"D:\unbundle\base\sound\soundbanks");
+            DirectoryInfo outdir = new DirectoryInfo(@"D:\New folder");
+            FileInfo file = new FileInfo(@"D:\unbundle\base\sound\soundbanks\sfx_container.opusinfo");
+            OpusTools.Parse(file, paksdir, outdir);
+        }
+        static void hash()
+        {
             /*
-            string g = @"C:\Users\Abhinav\Desktop\missinghashes.txt";
-            string[] miss = File.ReadAllLines(g);
-            UInt64[] missed = new UInt64[miss.Length];
-            for(int i = 0; i < miss.Length; i++)
-            {
-                missed[i] = Convert.ToUInt64(miss[i]);
-            }
-            */
+string g = @"C:\Users\Abhinav\Desktop\missinghashes.txt";
+string[] miss = File.ReadAllLines(g);
+UInt64[] missed = new UInt64[miss.Length];
+for(int i = 0; i < miss.Length; i++)
+{
+    missed[i] = Convert.ToUInt64(miss[i]);
+}
+*/
             string f = @"C:\Users\Abhinav\Desktop\cp_list.txt";
             string[] lines = File.ReadAllLines(f);
             List<string> files = new List<string>();
-            for(int i = 20; i < lines.Length; i++)
+            for (int i = 20; i < lines.Length; i++)
             {
                 lines[i] = lines[i].Substring(53, lines[i].Length - 53);
                 files.Add(lines[i].Replace('/', '\\'));
@@ -51,6 +57,7 @@ namespace GLTFNodesTest
                 */
                 //Console.WriteLine(lines[i]);
             }
+            /*
             var dirs = Directory.GetDirectories(@"D:\unbundle", "", SearchOption.AllDirectories);
             for (int i = 0; i < dirs.Length; i++)
             {
@@ -69,7 +76,7 @@ namespace GLTFNodesTest
                     Console.WriteLine(dirs[i]);
                 }
             }
-
+            */
             /*
             string z = @"C:\Users\Abhinav\Desktop\archivehashes.txt";
             var ss = File.ReadAllLines(z).ToList();

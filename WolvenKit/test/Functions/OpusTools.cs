@@ -2,16 +2,25 @@
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace WolvenKit.Modkit.RED4.Opus
 {
     class OpusTools
     {
-        public static void Parse()
+        public static void Parse(FileInfo opusinfofile,DirectoryInfo paksdir,DirectoryInfo outdir)
         {
+            FileStream fs = new FileStream(opusinfofile.FullName, FileMode.Open, FileAccess.Read);
+            OpusInfo info = new OpusInfo(fs);
 
+
+            string[] files = Directory.GetFiles(paksdir.FullName, "*.opuspak").OrderBy(f => Convert.ToUInt32(f.Replace(".opuspak", string.Empty).Substring(f.LastIndexOf('_') + 1))).ToArray();
+            Stream[] paks = new Stream[files.Length];
+            for(int i = 0; i < files.Length; i++)
+            {
+                paks[i] = new FileStream(files[i], FileMode.Open, FileAccess.Read);
+            }
+            info.WriteAllOpusFromPaks(paks, outdir);
+            
         }
     }
     class OpusInfo
@@ -33,8 +42,9 @@ namespace WolvenKit.Modkit.RED4.Opus
             public UInt32 MemberCount { get; set; }
             public UInt32[] MemberHashes { get; set; }
         }
-        public OpusInfo(MemoryStream ms)
+        public OpusInfo(Stream ms)
         {
+            ms.Position = 0xc;
             BinaryReader br = new BinaryReader(ms);
             OpusCount = br.ReadUInt32();
             GroupingObjSize4x = br.ReadUInt32();
@@ -86,6 +96,42 @@ namespace WolvenKit.Modkit.RED4.Opus
                     group.MemberHashes[i] = br.ReadUInt32();
                 }
                 GroupObjs.Add(group);
+            }
+        }
+        public void WriteAllOpusFromPaks(Stream[] opuspaks,DirectoryInfo outdir)
+        {
+            BinaryReader[] brs = new BinaryReader[opuspaks.Length];
+            for(int i = 0; i < opuspaks.Length; i++)
+            {
+                brs[i] = new BinaryReader(opuspaks[i]);
+            }
+            for(UInt32 i =0; i < OpusCount; i++)
+            {
+                opuspaks[PackIndices[i]].Position = OpusOffsets[i] + RiffOpusOffsets[i];
+                //Console.WriteLine(OpusHashes[i] + " " + PackIndices[i] + " " + (OpusOffsets[i] + RiffOpusOffsets[i]) + " " + (OpusStreamLengths[i] - RiffOpusOffsets[i]));
+                byte[] bytes = brs[PackIndices[i]].ReadBytes(Convert.ToInt32(OpusStreamLengths[i] - RiffOpusOffsets[i]));
+                string name = OpusHashes[i] + ".opus";
+                File.WriteAllBytes(Path.Combine(outdir.FullName,name),bytes);
+            }
+        }
+        public void WriteOpusFromPaks(Stream[] opuspaks, DirectoryInfo outdir, UInt32 hash)
+        {
+            BinaryReader[] brs = new BinaryReader[opuspaks.Length];
+            for (int i = 0; i < opuspaks.Length; i++)
+            {
+                brs[i] = new BinaryReader(opuspaks[i]);
+            }
+
+            for (UInt32 i = 0; i < OpusCount; i++)
+            {
+                if(OpusHashes[i] == hash)
+                {
+                    opuspaks[PackIndices[i]].Position = OpusOffsets[i] + RiffOpusOffsets[i];
+                    byte[] bytes = brs[PackIndices[i]].ReadBytes(Convert.ToInt32(OpusStreamLengths[i] - RiffOpusOffsets[i]));
+                    string name = OpusHashes[i] + ".opus";
+                    File.WriteAllBytes(Path.Combine(outdir.FullName, name), bytes);
+                    break;
+                }
             }
         }
     }
