@@ -3,6 +3,7 @@ import os
 from ..material_types.multilayer import Multilayered
 from ..material_types.humanskin import Humanskin
 from ..material_types.meshdecal import MeshDecal
+from ..material_types.metalbase import MetalBase
 
 def createMaterials(obj,BasePath,image_format):
         valueToIgnore = float(obj["valueToBeIgnored"])
@@ -27,4 +28,7 @@ def createMaterials(obj,BasePath,image_format):
                 if rawMat.get("humanSkin"):
                     humskin = Humanskin(BasePath,valueToIgnore,image_format)
                     humskin.create(rawMat["humanSkin"],bpyMat)
-                
+            if int(rawMat["materialType"]) == 4:
+                if rawMat.get("metalBase"):
+                    metbase = MetalBase(BasePath,valueToIgnore,image_format)
+                    metbase.create(rawMat["metalBase"],bpyMat)

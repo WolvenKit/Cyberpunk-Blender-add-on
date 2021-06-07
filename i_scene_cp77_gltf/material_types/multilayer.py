@@ -167,6 +167,7 @@ class Multilayered:
         GNImgNode.image = GNImg
         GNImgNode.location = (-900,-550)
         GNImgNode.hide = True
+        GNImgNode.label = "globalNormal"
 
         CurMat.links.new(GNImgNode.outputs[0],GNSepRGB.inputs[0])
         CurMat.links.new(GNSepRGB.outputs[0],GNComRGB.inputs[0])

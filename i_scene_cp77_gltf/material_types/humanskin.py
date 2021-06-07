@@ -16,7 +16,8 @@ class Humanskin:
             nImgNode = CurMat.nodes.new("ShaderNodeTexImage")
             nImgNode.location = (-800,-250)
             nImgNode.image = nImg
-            
+            nImgNode.label = "normal"
+
             Sep = CurMat.nodes.new("ShaderNodeSeparateRGB")
             Sep.location = (-500,-250)
             Sep.hide = True
@@ -33,7 +34,7 @@ class Humanskin:
             nMap = CurMat.nodes.new("ShaderNodeNormalMap")
             nMap.location = (-150,-250)
             nMap.hide = True
-            
+
             CurMat.links.new(Comb.outputs[0],nMap.inputs[1])
             
             CurMat.links.new(nMap.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Normal'])
@@ -44,13 +45,15 @@ class Humanskin:
             aImgNode = CurMat.nodes.new("ShaderNodeTexImage")
             aImgNode.location = (-300,200)
             aImgNode.image = aImg
-            
+            aImgNode.label = "albedo"
+
             CurMat.links.new(aImgNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
             
         if Skin.get("tintColor"):
             tColor = CurMat.nodes.new("ShaderNodeRGB")
             tColor.location = (-300,200)
             tColor.hide = True
+            tColor.label = "tintColor"
             tColor.outputs[0].default_value = (float(Skin["tintColor"]["r"]),float(Skin["tintColor"]["g"]),float(Skin["tintColor"]["b"]),float(Skin["tintColor"]["a"]))
         
         if Skin.get("tintColorMask"):
@@ -60,7 +63,8 @@ class Humanskin:
             tmaskNode.location = (-500,200)
             tmaskNode.image = tmaskImg
             tmaskNode.hide = True
-            
+            tmaskNode.label = "tintColorMask"
+
         if Skin.get("roughness"):
             rImg = imageFromPath(self.BasePath + Skin["roughness"],self.image_format)
             
@@ -68,7 +72,8 @@ class Humanskin:
             rImgNode.location = (-600,100)
             rImgNode.image = rImg
             rImgNode.hide = True
-        
+            rImgNode.label = "roughness"
+
         if Skin.get("detailNormal"):
             ndImg = imageFromPath(self.BasePath + Skin["detailNormal"],self.image_format)
             
@@ -76,13 +81,15 @@ class Humanskin:
             ndImgNode.location = (-600,0)
             ndImgNode.image = ndImg
             ndImgNode.hide = True
-        
+            ndImgNode.label = "detailNormal"
+
         if Skin.get("detailNormalInfluence"):
             ndInfluence = CurMat.nodes.new("ShaderNodeValue")
             ndInfluence.location = (-600,0)
             ndInfluence.outputs[0].default_value = float(Skin["detailNormalInfluence"])
             ndInfluence.hide = True
-        
+            ndInfluence.label = "detailNormalInfluence"
+
         if Skin.get("detailmap_Squash"):
             ndSqImg = imageFromPath(self.BasePath + Skin["detailmap_Squash"],self.image_format)
             
@@ -90,6 +97,8 @@ class Humanskin:
             ndSqImgNode.location = (-800,-100)
             ndSqImgNode.image = ndSqImg
             ndSqImgNode.hide = True
+            ndSqImgNode.label = "detailmap_Squash"
+
         if Skin.get("detailmap_Stretch"):
             ndStImg = imageFromPath(self.BasePath + Skin["detailmap_Stretch"],self.image_format)
             
@@ -97,3 +106,4 @@ class Humanskin:
             ndStImgNode.location = (-1100,-100)
             ndStImgNode.image = ndStImg
             ndStImgNode.hide = True
+            ndStImgNode.label = "detailmap_Stretch"
