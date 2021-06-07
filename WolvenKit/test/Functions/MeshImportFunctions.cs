@@ -927,7 +927,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
             (cr2w.Chunks[Index].Data as rendRenderMeshBlob).Header.IndexBufferOffset.Value = info.indexBufferOffset;
 
 
-            UInt16 p = BitConverter.ToUInt16((cr2w.Chunks[Index].Data as rendRenderMeshBlob).RenderBuffer.Buffer.Bytes);
+            UInt16 p = (cr2w.Chunks[Index].Data as rendRenderMeshBlob).RenderBuffer.Buffer.Value;
 
             var compressed = new MemoryStream();
             using var buff = new BinaryWriter(compressed);

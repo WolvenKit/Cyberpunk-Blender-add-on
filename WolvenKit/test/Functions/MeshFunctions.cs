@@ -102,10 +102,10 @@ namespace WolvenKit.Modkit.RED4.MeshFile
 
             ModelRoot model = RawSkinnedMeshesToGLTF(expMeshes,Rig);
 
-            if (isGLBinary)
-                model.SaveGLB(outfile.FullName);
-            else
-                model.SaveGLTF(outfile.FullName);
+            MemoryStream glbstream = new MemoryStream();
+            model.WriteGLB(glbstream);
+            
+            File.WriteAllBytes(outfile.FullName,glbstream.ToArray());
 
             meshStream.Dispose();
             meshStream.Close();
@@ -661,7 +661,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
                 }
 
             }
-            UInt16 p = BitConverter.ToUInt16((cr2w.Chunks[Index].Data as rendRenderMeshBlob).RenderBuffer.Buffer.Bytes);
+            UInt16 p = (cr2w.Chunks[Index].Data as rendRenderMeshBlob).RenderBuffer.Buffer.Value;
             var b = cr2w.Buffers[p - 1];
             ms.Seek(b.Offset, SeekOrigin.Begin);
             MemoryStream meshstream = new MemoryStream();

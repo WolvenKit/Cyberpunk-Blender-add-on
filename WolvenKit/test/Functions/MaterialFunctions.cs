@@ -17,7 +17,7 @@ using WolvenKit.Common.FNV1A;
 using WolvenKit.Modkit.RED4.MaterialSetupFile;
 using SharpGLTF.IO;
 using System.Threading;
-using WolvenKit.Modkit.RED4;
+using WolvenKit.Common.Model.Arguments;
 
 namespace WolvenKit.Modkit.RED4.Materials
 {
@@ -133,7 +133,7 @@ namespace WolvenKit.Modkit.RED4.Materials
             {
                 if(useAssetLib)
                 {
-                    string path = assetLib.FullName + (cr2w.Chunks[index].Data as CMesh).ExternalMaterials[i].DepotPath;
+                    string path = assetLib.FullName + "\\" + (cr2w.Chunks[index].Data as CMesh).ExternalMaterials[i].DepotPath;
                     if(File.Exists(path))
                     {
                         FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read);
@@ -285,8 +285,9 @@ namespace WolvenKit.Modkit.RED4.Materials
                     {
                         if (CopyTextures)
                         {
-                            File.Copy(AssetLib.FullName + primaryDependencies[i], cacheDir + Path.GetFileName(primaryDependencies[i]), true);
-                            ModTools.Export(new FileInfo(cacheDir + Path.GetFileName(primaryDependencies[i])), eUncookExtension);
+                            File.Copy(AssetLib.FullName + "\\" + primaryDependencies[i], cacheDir + Path.GetFileName(primaryDependencies[i]), true);
+                            var exportArgs = new XbmExportArgs() { UncookExtension = eUncookExtension };
+                            ModTools.Export(new FileInfo(cacheDir + Path.GetFileName(primaryDependencies[i])), exportArgs);
                         }
                     }
                 }
@@ -298,7 +299,8 @@ namespace WolvenKit.Modkit.RED4.Materials
                         if (CopyTextures)
                         {
                             File.Copy(AssetLib.FullName + "\\" + primaryDependencies[i], cacheDir + Path.GetFileName(primaryDependencies[i]), true);
-                            ModTools.Export(new FileInfo(cacheDir + Path.GetFileName(primaryDependencies[i])), eUncookExtension);
+                            var exportArgs = new MlmaskExportArgs() { UncookExtension = eUncookExtension };
+                            ModTools.Export(new FileInfo(cacheDir + Path.GetFileName(primaryDependencies[i])), exportArgs);
                         }
                     }
                 }
@@ -323,7 +325,8 @@ namespace WolvenKit.Modkit.RED4.Materials
                                     if (CopyTextures)
                                     {
                                         File.Copy(AssetLib.FullName + "\\" + cr2w.Imports[e].DepotPathStr, cacheDir + Path.GetFileName(cr2w.Imports[e].DepotPathStr), true);
-                                        ModTools.Export(new FileInfo(cacheDir + Path.GetFileName(cr2w.Imports[e].DepotPathStr)), eUncookExtension);
+                                        var exportArgs = new XbmExportArgs() { UncookExtension = eUncookExtension };
+                                        ModTools.Export(new FileInfo(cacheDir + Path.GetFileName(cr2w.Imports[e].DepotPathStr)), exportArgs);
                                     }
                                 }
                             }
@@ -346,7 +349,8 @@ namespace WolvenKit.Modkit.RED4.Materials
                                             if (CopyTextures)
                                             {
                                                 File.Copy(AssetLib.FullName + "\\" + mlTempcr2w.Imports[eye].DepotPathStr, cacheDir + Path.GetFileName(mlTempcr2w.Imports[eye].DepotPathStr), true);
-                                                ModTools.Export(new FileInfo(cacheDir + Path.GetFileName(mlTempcr2w.Imports[eye].DepotPathStr)), eUncookExtension);
+                                                var exportArgs = new XbmExportArgs() { UncookExtension = eUncookExtension };
+                                                ModTools.Export(new FileInfo(cacheDir + Path.GetFileName(mlTempcr2w.Imports[eye].DepotPathStr)), exportArgs);
                                             }
                                         }
                                     }
@@ -458,7 +462,7 @@ namespace WolvenKit.Modkit.RED4.Materials
                     foreach (Archive ar in archives)
                     {
                         if (ar.Files.ContainsKey(hash))
-                            ModTools.UncookSingle(ar, hash, new DirectoryInfo(cacheDir), eUncookExtension);
+                            ModTools.UncookSingle(ar, hash, new DirectoryInfo(cacheDir), new XbmExportArgs() { UncookExtension = eUncookExtension });
                     }
                 }
                 if (Path.GetExtension(primaryDependencies[i]) == ".mlmask")
@@ -468,7 +472,7 @@ namespace WolvenKit.Modkit.RED4.Materials
                     foreach (Archive ar in archives)
                     {
                         if (ar.Files.ContainsKey(hash))
-                            ModTools.UncookSingle(ar, hash, new DirectoryInfo(cacheDir), eUncookExtension);
+                            ModTools.UncookSingle(ar, hash, new DirectoryInfo(cacheDir), new MlmaskExportArgs() { UncookExtension = eUncookExtension });
                     }
                 }
 
@@ -501,7 +505,7 @@ namespace WolvenKit.Modkit.RED4.Materials
                                 foreach (Archive ar in archives)
                                 {
                                     if (ar.Files.ContainsKey(hash1))
-                                        ModTools.UncookSingle(ar, hash1, new DirectoryInfo(cacheDir), eUncookExtension);
+                                        ModTools.UncookSingle(ar, hash1, new DirectoryInfo(cacheDir), new XbmExportArgs() { UncookExtension = eUncookExtension });
                                 }
                             }
                             if (Path.GetExtension(cr2w.Imports[e].DepotPathStr) == ".mltemplate")
@@ -531,7 +535,7 @@ namespace WolvenKit.Modkit.RED4.Materials
                                         foreach (Archive ar in archives)
                                         {
                                             if (ar.Files.ContainsKey(hash3))
-                                                ModTools.UncookSingle(ar, hash3, new DirectoryInfo(cacheDir), eUncookExtension);
+                                                ModTools.UncookSingle(ar, hash3, new DirectoryInfo(cacheDir), new XbmExportArgs() { UncookExtension = eUncookExtension });
                                         }
                                     }
                                 }
@@ -622,14 +626,6 @@ namespace WolvenKit.Modkit.RED4.Materials
             {
                 rawMaterial.BaseMaterial = cMaterialInstance.BaseMaterial.DepotPath;
 
-                if (Path.GetFileNameWithoutExtension(cMaterialInstance.BaseMaterial.DepotPath) == "mesh_decal")
-                {
-                    rawMaterial.MaterialType = MaterialType.MeshDecal;
-
-                    MeshDecal MeshDecal = new MeshDecal(cMaterialInstance);
-                    rawMaterial.MeshDecal = MeshDecal;
-
-                }
                 if (Path.GetFileNameWithoutExtension(cMaterialInstance.BaseMaterial.DepotPath) == "multilayered")
                 {
                     rawMaterial.MaterialType = MaterialType.MultiLayered;
@@ -638,12 +634,28 @@ namespace WolvenKit.Modkit.RED4.Materials
                     rawMaterial.MultiLayered = multiLayered;
 
                 }
+                if (Path.GetFileNameWithoutExtension(cMaterialInstance.BaseMaterial.DepotPath) == "mesh_decal")
+                {
+                    rawMaterial.MaterialType = MaterialType.MeshDecal;
+
+                    MeshDecal MeshDecal = new MeshDecal(cMaterialInstance);
+                    rawMaterial.MeshDecal = MeshDecal;
+
+                }
                 if (cMaterialInstance.BaseMaterial.DepotPath.Contains("skin"))
                 {
                     rawMaterial.MaterialType = MaterialType.HumanSkin;
 
                     HumanSkin HumanSkin = new HumanSkin(cMaterialInstance);
                     rawMaterial.HumanSkin = HumanSkin;
+                }
+                if (Path.GetFileNameWithoutExtension(cMaterialInstance.BaseMaterial.DepotPath) == "metal_base")
+                {
+                    rawMaterial.MaterialType = MaterialType.MetalBase;
+
+                    MetalBase metalBase = new MetalBase(cMaterialInstance);
+                    rawMaterial.MetalBase = metalBase;
+
                 }
             }
             catch { }
@@ -662,7 +674,7 @@ namespace WolvenKit.Modkit.RED4.Materials
 
             }
 
-            UInt16 p = BitConverter.ToUInt16((cr2w.Chunks[Index].Data as CMesh).LocalMaterialBuffer.RawData.Buffer.Bytes);
+            UInt16 p = (cr2w.Chunks[Index].Data as CMesh).LocalMaterialBuffer.RawData.Buffer.Value;
             var b = cr2w.Buffers[p - 1];
             ms.Seek(b.Offset, SeekOrigin.Begin);
             MemoryStream materialStream = new MemoryStream();
@@ -765,7 +777,7 @@ namespace WolvenKit.Modkit.RED4.Materials
                     }
                 }
 
-                UInt16 p = BitConverter.ToUInt16((cr2w.Chunks[index].Data as CMesh).LocalMaterialBuffer.RawData.Buffer.Bytes);
+                UInt16 p = (cr2w.Chunks[index].Data as CMesh).LocalMaterialBuffer.RawData.Buffer.Value;
 
                 var compressed = new MemoryStream();
                 using var buff = new BinaryWriter(compressed);
@@ -849,8 +861,8 @@ namespace WolvenKit.Modkit.RED4.Materials
                 ModTools.ExtractAll(ar, MaterialRepoDir, "*.mltemplate");
                 ModTools.ExtractAll(ar, MaterialRepoDir, "*.texarray");
 
-                ModTools.UncookAll(ar, MaterialRepoDir, "*.xbm", "", TexturesExtension);
-                ModTools.UncookAll(ar, MaterialRepoDir, "*.mlmask", "", TexturesExtension);
+                ModTools.UncookAll(ar, MaterialRepoDir, new XbmExportArgs() { UncookExtension = TexturesExtension }, "*.xbm", "");
+                ModTools.UncookAll(ar, MaterialRepoDir, new MlmaskExportArgs() { UncookExtension = TexturesExtension }, "*.mlmask", "");
                 // try catch the decode in mlmask.cs for now
             }
         }
