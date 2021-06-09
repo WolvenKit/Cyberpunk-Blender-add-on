@@ -25,7 +25,7 @@ class MetalBase:
             dColScale.location = (-450,200)
             dColScale.hide = True
             dColScale.label = "baseColorScale"
-            dColScale.outputs[0].default_value = (float(MetalBase["baseColorScale"]["r"]),float(MetalBase["baseColorScale"]["g"]),float(MetalBase["baseColorScale"]["b"]),float(MetalBase["baseColorScale"]["a"]))
+            dColScale.outputs[0].default_value = (float(MetalBase["baseColorScale"]["x"]),float(MetalBase["baseColorScale"]["y"]),float(MetalBase["baseColorScale"]["z"]),float(MetalBase["baseColorScale"]["w"]))
 
         if MetalBase.get("alphaThreshold"):
             aThreshold = CurMat.nodes.new("ShaderNodeValue")

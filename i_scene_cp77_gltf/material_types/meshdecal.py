@@ -25,7 +25,7 @@ class MeshDecal:
             dColor.location = (-450,200)
             dColor.hide = True
             dColor.label = "diffuseColor"
-            dColor.outputs[0].default_value = (float(Decal["diffuseColor"]["r"]),float(Decal["diffuseColor"]["g"]),float(Decal["diffuseColor"]["b"]),float(Decal["diffuseColor"]["a"]))
+            dColor.outputs[0].default_value = (float(Decal["diffuseColor"]["x"]),float(Decal["diffuseColor"]["y"]),float(Decal["diffuseColor"]["z"]),float(Decal["diffuseColor"]["w"]))
 
         if Decal.get("diffuseAlpha"):
             dAlpha = CurMat.nodes.new("ShaderNodeValue")

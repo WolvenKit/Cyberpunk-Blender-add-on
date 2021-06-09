@@ -54,7 +54,7 @@ class Humanskin:
             tColor.location = (-300,200)
             tColor.hide = True
             tColor.label = "tintColor"
-            tColor.outputs[0].default_value = (float(Skin["tintColor"]["r"]),float(Skin["tintColor"]["g"]),float(Skin["tintColor"]["b"]),float(Skin["tintColor"]["a"]))
+            tColor.outputs[0].default_value = (float(Skin["tintColor"]["x"]),float(Skin["tintColor"]["y"]),float(Skin["tintColor"]["z"]),float(Skin["tintColor"]["w"]))
         
         if Skin.get("tintColorMask"):
             tmaskImg = imageFromPath(self.BasePath + Skin["tintColorMask"],self.image_format)

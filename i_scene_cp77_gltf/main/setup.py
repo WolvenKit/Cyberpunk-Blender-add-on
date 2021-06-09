@@ -15,20 +15,20 @@ def createMaterials(obj,BasePath,image_format):
                 mulLayer = Multilayered(BasePath,valueToIgnore,obj["materialTemplates"],image_format)
                 index = 0
                 for i in range (0,len(obj["materialSetups"])):
-                    if str(os.path.basename(rawMat["multiLayered"].get("multilayerSetup"))) == str(obj["materialSetups"][i]["name"]):
+                    if str(os.path.basename(rawMat["materialInstanceData"].get("multilayerSetup"))) == str(obj["materialSetups"][i]["name"]):
                         index = i
-                globnormal = rawMat["multiLayered"].get("globalNormal")
-                mlmask = rawMat["multiLayered"].get("multilayerMask")
+                globnormal = rawMat["materialInstanceData"].get("globalNormal")
+                mlmask = rawMat["materialInstanceData"].get("multilayerMask")
                 mulLayer.create(obj["materialSetups"][index],mlmask,bpyMat,globnormal)
             if int(rawMat["materialType"]) == 2:
-                if rawMat.get("meshDecal"):
+                if rawMat.get("materialInstanceData"):
                     mesDec = MeshDecal(BasePath,valueToIgnore,image_format)
-                    mesDec.create(rawMat["meshDecal"],bpyMat)
+                    mesDec.create(rawMat["materialInstanceData"],bpyMat)
             if int(rawMat["materialType"]) == 3:
-                if rawMat.get("humanSkin"):
+                if rawMat.get("materialInstanceData"):
                     humskin = Humanskin(BasePath,valueToIgnore,image_format)
-                    humskin.create(rawMat["humanSkin"],bpyMat)
+                    humskin.create(rawMat["materialInstanceData"],bpyMat)
             if int(rawMat["materialType"]) == 4:
-                if rawMat.get("metalBase"):
+                if rawMat.get("materialInstanceData"):
                     metbase = MetalBase(BasePath,valueToIgnore,image_format)
-                    metbase.create(rawMat["metalBase"],bpyMat)
+                    metbase.create(rawMat["materialInstanceData"],bpyMat)

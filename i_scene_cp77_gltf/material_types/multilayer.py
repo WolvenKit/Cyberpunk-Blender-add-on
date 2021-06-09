@@ -14,9 +14,8 @@ class Multilayered:
         RT = imageFromPath(self.BasePath + matTemplateObj["roughnessTexture"],self.image_format)
         MT = imageFromPath(self.BasePath + matTemplateObj["metalnessTexture"],self.image_format)
     
-        TileMult = float(matTemplateObj["tilingMultiplier"])
-        if TileMult == self.valueToIgnore:
-            TileMult = 1
+        TileMult = float(matTemplateObj.get("tilingMultiplier",1))
+
         NG = bpy.data.node_groups.new(matTemplateObj["name"][:-11],"ShaderNodeTree")
         TMI = NG.inputs.new('NodeSocketVector','Tile Multiplier')
         TMI.default_value = (1,1,1)
@@ -111,7 +110,9 @@ class Multilayered:
             Output["ColorScale"][tmpName] = (tmpR,tmpG,tmpB,1)
         for x in OverList["normalStrength"]:
             tmpName = x["n"]
-            tmpStrength = float(x["v"][0])
+            tmpStrength = 0
+            if x.get("v") is not None:
+                tmpStrength = float(x["v"][0])
             Output["NormalStrength"][tmpName] = tmpStrength
         for x in OverList["roughLevelsOut"]:
             tmpName = x["n"]
@@ -120,7 +121,7 @@ class Multilayered:
             Output["RoughLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
         for x in OverList["metalLevelsOut"]:
             tmpName = x["n"]
-            if float(x["v"][0]) != self.valueToIgnore :
+            if x.get("v") is not None:
                 tmpStrength0 = float(x["v"][0])
                 tmpStrength1 = float(x["v"][1])
             else:
@@ -312,12 +313,16 @@ class Multilayered:
         LayerIndex = 0
         CurMat = Mat.node_tree
         for x in (xllay):            
-            MatTile = x["matTile"]
+            MatTile = x.get("matTile")
             MbTile = x.get("mbTile")
-            MbScale = float(MbTile)
+            MbScale = 1
+            if MatTile != None:
+                MbScale = float(MatTile)
+            if MbTile != None:
+                MbScale = float(MbTile)
         
             Microblend = x["microblend"]
-            MicroblendContrast = x["microblendContrast"]
+            MicroblendContrast = x.get("microblendContrast",1)
             microblendNormalStrength = x.get("microblendNormalStrength")
             opacity = x.get("opacity")
             material = x.get("material")
@@ -367,13 +372,13 @@ class Multilayered:
             OpacN.hide=True
             OpacN.location = (-200,-10)
             OpacN.outputs[0].default_value = 1
-            if opacity != self.valueToIgnore:
+            if opacity != None:
                 OpacN.outputs[0].default_value = float(opacity)
         
             TileMultN = NG.nodes.new("ShaderNodeValue")
             TileMultN.location = (-2200,0)
             TileMultN.hide = True
-            if MatTile != self.valueToIgnore:
+            if MatTile != None:
                 TileMultN.outputs[0].default_value = float(MatTile)
             else:
                 TileMultN.outputs[0].default_value = 1
@@ -410,7 +415,7 @@ class Multilayered:
             MBNormStrengthN = NG.nodes.new("ShaderNodeNormalMap")
             MBNormStrengthN.hide = True
             MBNormStrengthN.location = (-1500,-100)
-            if microblendNormalStrength:
+            if microblendNormalStrength != None:
                 MBNormStrengthN.inputs[0].default_value = float(microblendNormalStrength)
             
             NormStrengthN = NG.nodes.new("ShaderNodeNormalMap")
