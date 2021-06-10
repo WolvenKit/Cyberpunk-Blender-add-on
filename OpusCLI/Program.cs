@@ -24,7 +24,7 @@ namespace OpusToolZ
             FileStream fs = new FileStream(f, FileMode.Open, FileAccess.Read);
             BinaryReader br = new BinaryReader(fs);
             fs.Position = 0;
-            while(BitConverter.ToString(br.ReadBytes(3)) != "53-4E-44")
+            while (BitConverter.ToString(br.ReadBytes(3)) != "53-4E-44")
             {
                 fs.Dispose();
                 fs.Close();
@@ -62,11 +62,12 @@ namespace OpusToolZ
                 Console.WriteLine("1. Hit (d/D) to dump all the opusinfo information to a .json file\n");
                 Console.WriteLine("2. Hit (s/S) to extract a single .opus using 32bit Hash input\n");
                 Console.WriteLine("3. Hit (a/A) to extract all the .opus files to a directory\n");
-                Console.WriteLine("4. Hit (e/E) to exit\n");
+                Console.WriteLine("4. Hit (i/I) to get .opus hash info\n");
+                Console.WriteLine("5. Hit (e/E) to exit\n");
                 Console.ResetColor();
 
                 y = Console.ReadKey().KeyChar;
-                switch(y)
+                switch (y)
                 {
                     case 'd':
                     case 'D':
@@ -78,7 +79,7 @@ namespace OpusToolZ
                         break;
                     case 's':
                     case 'S':
-                        if(files.Length != 1444)
+                        if (files.Length != 1444)
                         {
                             Console.ForegroundColor = ConsoleColor.Red;
                             Console.WriteLine("All 1444 .opuspak files are not present in the directory of sfx_container.opusinfo\n");
@@ -140,6 +141,38 @@ namespace OpusToolZ
                         break;
                     case 'e':
                     case 'E':
+                        break;
+                    case 'i':
+                    case 'I':
+                        Console.WriteLine("Enter 32Bit uint Hash of the .opus file:\n");
+                        try
+                        {
+                            UInt32 hash = Convert.ToUInt32(Console.ReadLine());
+                            if (!info.OpusHashes.Contains(hash))
+                            {
+                                Console.ForegroundColor = ConsoleColor.Red;
+                                Console.WriteLine("Opus file hash not present in opusinfo , try again\n");
+                                Console.ResetColor();
+                            }
+                            else
+                            {
+                                Console.ForegroundColor = ConsoleColor.Green;
+                                for (int i = 0; i < info.OpusCount; i++)
+                                {
+                                    if (hash == info.OpusHashes[i])
+                                    {
+                                        Console.WriteLine("hash: " + info.OpusHashes[i]);
+                                        Console.WriteLine("present in sfx_container_" + info.PackIndices[i] + ".opuspak");
+                                        Console.WriteLine("offset: " + info.OpusOffsets[i]);
+                                        Console.WriteLine("riffoffset: " + info.RiffOpusOffsets[i]);
+                                        Console.WriteLine("opus file size: " + info.OpusStreamLengths[i]);
+                                        Console.WriteLine("wav file size: " + info.WavStreamLengths[i]);
+                                    }
+                                }
+                                Console.ResetColor();
+                            }
+                        }
+                        catch { Console.WriteLine("Invalid Hash, try again\n"); }
                         break;
                     default:
                         Console.ForegroundColor = ConsoleColor.Red;
