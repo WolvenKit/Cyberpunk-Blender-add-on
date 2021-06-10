@@ -52,7 +52,7 @@ namespace OpusToolZ
             {
                 streams[i] = new FileStream(files[i], FileMode.Open, FileAccess.Read);
             }
-            string s = JsonConvert.SerializeObject(info);
+            string s = JsonConvert.SerializeObject(info,Formatting.Indented);
 
             char y;
             do
