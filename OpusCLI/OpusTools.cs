@@ -2,6 +2,7 @@
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
+using System.Diagnostics;
 
 namespace WolvenKit.Modkit.RED4.Opus
 {
@@ -27,7 +28,7 @@ namespace WolvenKit.Modkit.RED4.Opus
     {
                                     //  S       N       D   ?....
         public byte[] Header { get; } = { 0x53, 0x4E, 0x44, 0x20, 0x02, 0x00, 0x00, 0xF0, 0x00, 0x00, 0x00, 0x00 };
-        public UInt32 OpusCount { get; set; }
+        public  UInt32 OpusCount { get; set; }
         public UInt32 GroupingObjSize4x { get; set; }
         public UInt32[] OpusHashes { get; set; }
         public UInt16[] PackIndices { get; set; }
@@ -133,6 +134,97 @@ namespace WolvenKit.Modkit.RED4.Opus
                     break;
                 }
             }
+        }
+        public void WriteOpusToPak(MemoryStream opus,ref Stream pak, UInt32 hash, UInt32 wavLen)
+        {
+            BinaryReader br = new BinaryReader(pak);
+            pak.Position = 0;
+            int index = 0;
+            for(int i = 0; i < OpusCount; i++)
+            {
+                if (hash == OpusHashes[i])
+                    index = i;
+            }
+            int pakIdx = PackIndices[index];
+            List<int> indices = new List<int>();
+            for (int i = 0; i < OpusCount; i++)
+            {
+                if (pakIdx == PackIndices[i])
+                    indices.Add(i);
+            }
+
+            MemoryStream ms = new MemoryStream();
+            BinaryWriter bw = new BinaryWriter(ms);
+            ms.Position = 0;
+            for (int i = 0; i < indices.Count; i++)
+            {
+                UInt32 temp = Convert.ToUInt32(ms.Position);
+                if(hash == OpusHashes[indices[i]])
+                {
+                    pak.Position = OpusOffsets[indices[i]];
+                    var bytes = br.ReadBytes(RiffOpusOffsets[indices[i]]);
+                    bw.Write(bytes);
+                    bw.Write(opus.ToArray());
+
+                    WavStreamLengths[indices[i]] = wavLen + 20;
+                    OpusStreamLengths[indices[i]] = Convert.ToUInt32(opus.Length + RiffOpusOffsets[indices[i]]);
+                    OpusOffsets[indices[i]] = Convert.ToUInt32(temp);
+                }
+                else
+                {
+                    pak.Position = OpusOffsets[indices[i]];
+                    var bytes = br.ReadBytes(Convert.ToInt32(OpusStreamLengths[indices[i]]));
+                    bw.Write(bytes);
+                    OpusOffsets[indices[i]] = Convert.ToUInt32(temp);
+                }
+            }
+
+            pak = ms;
+            //File.WriteAllBytes(@"C:\Users\Abhinav\Desktop\mod\sfx_container_1280.opuspak",ms.ToArray());
+        }
+        public void WriteOpusInfo(DirectoryInfo dir)
+        {
+            MemoryStream ms = new MemoryStream();
+            BinaryWriter bw = new BinaryWriter(ms);
+
+            bw.Write(Header);
+            bw.Write(OpusCount);
+            bw.Write(GroupingObjSize4x);
+            for(int i = 0; i < OpusCount; i++)
+            {
+                bw.Write(OpusHashes[i]);
+            }
+            for (int i = 0; i < OpusCount; i++)
+            {
+                bw.Write(PackIndices[i]);
+            }
+            for (int i = 0; i < OpusCount; i++)
+            {
+                bw.Write(OpusOffsets[i]);
+            }
+            for (int i = 0; i < OpusCount; i++)
+            {
+                bw.Write(RiffOpusOffsets[i]);
+            }
+            for (int i = 0; i < OpusCount; i++)
+            {
+                bw.Write(OpusStreamLengths[i]);
+            }
+            for (int i = 0; i < OpusCount; i++)
+            {
+                bw.Write(WavStreamLengths[i]);
+            }
+
+            for (int i = 0; i < GroupObjs.Count; i++)
+            {
+                bw.Write(GroupObjs[i].Hash);
+                bw.Write(GroupObjs[i].MemberCount);
+                for(int e = 0; e < GroupObjs[i].MemberCount; e++)
+                {
+                    bw.Write(GroupObjs[i].MemberHashes[e]);
+                }
+            }
+            File.WriteAllBytes(Path.Combine(dir.FullName,"sfx_container.opusinfo"), ms.ToArray());
         }
     }
 }
