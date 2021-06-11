@@ -12,7 +12,7 @@ namespace OpusToolZ
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Enter the path of sfx_container.opusinfo, (all the 1444 .opuspak files sould be present in the same directory as sfx_container.opusinfo)\n");
+            Console.WriteLine("Enter the path of sfx_container.opusinfo, (all the .opuspak files sould be present in the same directory as sfx_container.opusinfo)\n");
             string f = Console.ReadLine();
             f = f.Replace("\"", string.Empty);
             while (!File.Exists(f))
@@ -48,6 +48,18 @@ namespace OpusToolZ
                 fs.Position = 0;
             }
             var info = new OpusInfo(fs);
+
+            List<UInt16> tempolisto = new List<UInt16>();
+            for (int i = 0; i < info.OpusCount; i++)
+            {
+                if(!tempolisto.Contains(info.PackIndices[i]))
+                {
+                    tempolisto.Add(info.PackIndices[i]);
+                }
+            }
+
+            UInt32 numOfPaks = Convert.ToUInt32(tempolisto.Count);
+
             string[] files = Directory.GetFiles(Path.GetDirectoryName(f), "*.opuspak").OrderBy(_ => Convert.ToUInt32(_.Replace(".opuspak", string.Empty).Substring(_.LastIndexOf('_') + 1))).ToArray();
             Stream[] streams = new Stream[files.Length];
             for (int i = 0; i < files.Length; i++)
@@ -82,10 +94,10 @@ namespace OpusToolZ
                         break;
                     case 's':
                     case 'S':
-                        if(files.Length != 1444)
+                        if(files.Length != numOfPaks)
                         {
                             Console.ForegroundColor = ConsoleColor.Red;
-                            Console.WriteLine("All 1444 .opuspak files are not present in the directory of sfx_container.opusinfo\n");
+                            Console.WriteLine("All " + Convert.ToString(numOfPaks) + " .opuspak files are not present in the directory of sfx_container.opusinfo\n");
                             Console.WriteLine("Make sure all of them are there and restart the tool\n");
                             Console.ResetColor();
                         }
@@ -132,10 +144,10 @@ namespace OpusToolZ
                         break;
                     case 'a':
                     case 'A':
-                        if (files.Length != 1444)
+                        if (files.Length != numOfPaks)
                         {
                             Console.ForegroundColor = ConsoleColor.Red;
-                            Console.WriteLine("All 1444 .opuspak files are not present in the directory of sfx_container.opusinfo\n");
+                            Console.WriteLine("All " + Convert.ToString(numOfPaks) + " .opuspak files are not present in the directory of sfx_container.opusinfo\n");
                             Console.WriteLine("Make sure all of them are there and restart the tool\n");
                             Console.ResetColor();
                         }
@@ -197,10 +209,10 @@ namespace OpusToolZ
                     case 'p':
                     case 'P':
                         bool writeinfo = false;
-                        if (files.Length != 1444)
+                        if (files.Length != numOfPaks)
                         {
                             Console.ForegroundColor = ConsoleColor.Red;
-                            Console.WriteLine("All 1444 .opuspak files are not present in the directory of sfx_container.opusinfo\n");
+                            Console.WriteLine("All " + Convert.ToString(numOfPaks) + ".opuspak files are not present in the directory of sfx_container.opusinfo\n");
                             Console.WriteLine("Make sure all of them are there and restart the tool\n");
                             Console.ResetColor();
                         }
