@@ -135,7 +135,7 @@ namespace WolvenKit.Modkit.RED4.Opus
                 }
             }
         }
-        public void WriteOpusToPak(MemoryStream opus,ref Stream pak, UInt32 hash, UInt32 wavLen)
+        public void WriteOpusToPak(MemoryStream opus,ref Stream pak, UInt32 hash, MemoryStream wav)
         {
             BinaryReader br = new BinaryReader(pak);
             pak.Position = 0;
@@ -161,12 +161,15 @@ namespace WolvenKit.Modkit.RED4.Opus
                 UInt32 temp = Convert.ToUInt32(ms.Position);
                 if(hash == OpusHashes[indices[i]])
                 {
-                    pak.Position = OpusOffsets[indices[i]];
-                    var bytes = br.ReadBytes(RiffOpusOffsets[indices[i]]);
+                    pak.Position = OpusOffsets[indices[i]] + 8;
+                    var bytes = br.ReadBytes(RiffOpusOffsets[indices[i]] - 12);
+                    bw.Write(new byte[] { 0x52, 0x49, 0x46, 0x46 }); //RIFF
+                    bw.Write(Convert.ToUInt32(wav.Length - 44 + RiffOpusOffsets[indices[i]] - 8));
                     bw.Write(bytes);
+                    bw.Write(Convert.ToUInt32(wav.Length - 44));
                     bw.Write(opus.ToArray());
 
-                    WavStreamLengths[indices[i]] = wavLen + 20;
+                    WavStreamLengths[indices[i]] = Convert.ToUInt32(wav.Length - 44 + RiffOpusOffsets[indices[i]]);
                     OpusStreamLengths[indices[i]] = Convert.ToUInt32(opus.Length + RiffOpusOffsets[indices[i]]);
                     OpusOffsets[indices[i]] = Convert.ToUInt32(temp);
                 }

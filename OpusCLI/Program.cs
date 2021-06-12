@@ -292,6 +292,32 @@ namespace OpusToolZ
                                     {
                                         p.WaitForExit();
                                     }
+
+                                    var procnew = new ProcessStartInfo(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "opusdec.exe"))
+                                    {
+                                        WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory,
+                                        Arguments = $" \"{name}\" \"{name.Replace("opus", "wav")}\"",
+                                        UseShellExecute = false,
+                                        RedirectStandardOutput = true,
+                                        CreateNoWindow = true,
+                                    };
+                                    using (var p = Process.Start(procnew))
+                                    {
+                                        p.WaitForExit();
+                                    }
+
+                                    var procn = new ProcessStartInfo(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "opusenc.exe"))
+                                    {
+                                        WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory,
+                                        Arguments = $" \"{name.Replace("opus", "wav")}\" \"{name}\" --serial 42 --quiet --padding 0 --vbr --comp 10 --framesize 20 ",
+                                        UseShellExecute = false,
+                                        RedirectStandardOutput = true,
+                                        CreateNoWindow = true,
+                                    };
+                                    using (var p = Process.Start(procn))
+                                    {
+                                        p.WaitForExit();
+                                    }
                                     if (File.Exists(name))
                                     {
                                         Console.WriteLine("Processing:" + Path.GetFileName(name) + "\n");
@@ -301,7 +327,7 @@ namespace OpusToolZ
                                             {
                                                 int pakIdx = info.PackIndices[e];
 
-                                                info.WriteOpusToPak(new MemoryStream(File.ReadAllBytes(name)), ref modStreams[pakIdx], validids[i], Convert.ToUInt32(new FileInfo(name.Replace("opus", "wav")).Length));
+                                                info.WriteOpusToPak(new MemoryStream(File.ReadAllBytes(name)), ref modStreams[pakIdx], validids[i], new MemoryStream(File.ReadAllBytes(name.Replace("opus", "wav"))));
 
                                                 if (!pakstowrite.Contains(pakIdx))
                                                 {
