@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using WolvenKit.Modkit.RED4.GeneralStructs;
+using WolvenKit.Modkit.RED4.GeneralStruct;
 using WolvenKit.RED4.CR2W;
 using WolvenKit.RED4.CR2W.Types;
 //using System.IO;
@@ -13,8 +13,9 @@ using SharpGLTF.Geometry.VertexTypes;
 using SharpGLTF.Materials;
 using SharpGLTF.Schema2;
 using WolvenKit.Common.Services;
+using WolvenKit.Modkit.RED4.MeshFiles;
 
-namespace CP77.CR2W
+namespace WolvenKit.Modkit.RED4.MorphTargetFiles
 {
     using Vec4 = System.Numerics.Vector4;
     using Vec3 = System.Numerics.Vector3;
@@ -41,7 +42,7 @@ namespace CP77.CR2W
                 return false;
             }
 
-            MemoryStream meshbuffer = MeshTools.GetMeshBufferStream(targetStream, cr2w);
+            MemoryStream meshbuffer = MESH.GetMeshBufferStream(targetStream, cr2w);
 
 
             var buffers = cr2w.Buffers;
@@ -62,9 +63,9 @@ namespace CP77.CR2W
             targetStream.Dispose();
             targetStream.Close();
 
-            MeshesInfo meshinfo = MeshTools.GetMeshesinfo(cr2w);
+            MeshesInfo meshinfo = MESH.GetMeshesinfo(cr2w);
 
-            List<RawMeshContainer> expMeshes = MeshTools.ContainRawMesh(meshbuffer, meshinfo, true);
+            List<RawMeshContainer> expMeshes = MESH.ContainRawMesh(meshbuffer, meshinfo, true);
 
             int subMeshC = expMeshes.Count;
 

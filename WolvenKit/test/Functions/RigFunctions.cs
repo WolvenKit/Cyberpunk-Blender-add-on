@@ -2,12 +2,12 @@ using System;
 using System.IO;
 using WolvenKit.RED4.CR2W;
 using WolvenKit.RED4.CR2W.Types;
-using WolvenKit.Modkit.RED4.GeneralStructs;
+using WolvenKit.Modkit.RED4.GeneralStruct;
 using SharpGLTF.Scenes;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace WolvenKit.Modkit.RED4.RigFile
+namespace WolvenKit.Modkit.RED4.RigFiles
 {
     using Vec3 = System.Numerics.Vector3;
     using Quat = System.Numerics.Quaternion;

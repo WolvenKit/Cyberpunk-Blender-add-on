@@ -8,7 +8,11 @@ using WolvenKit.Common.Tools.Oodle;
 using WolvenKit.Modkit.RED4.MeshFile;
 using WolvenKit.Modkit.RED4;
 using WolvenKit.Modkit.RED4.RigFile;
-namespace CyberpunkToolz
+using System.Collections.Generic;
+using WolvenKit.RED4.CR2W.Archive;
+using WolvenKit.Modkit.RED4.Materials;
+
+namespace TEST
 {
     class Program
     {
@@ -26,7 +30,6 @@ namespace CyberpunkToolz
             serviceLocator.RegisterType<ModTools>();
             var oodlePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "oo2ext_7_win64.dll");
             OodleLoadLib.Load(oodlePath);
-
 
         }
     }

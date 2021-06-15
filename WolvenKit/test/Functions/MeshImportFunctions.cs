@@ -3,16 +3,16 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.IO;
-using WolvenKit.Modkit.RED4.GeneralStructs;
+using WolvenKit.Modkit.RED4.GeneralStruct;
 using SharpGLTF.Schema2;
 using SharpGLTF.IO;
-using WolvenKit.Modkit.RED4.RigFile;
+using WolvenKit.Modkit.RED4.RigFiles;
 using WolvenKit.RED4.CR2W.Types;
 using WolvenKit.RED4.CR2W;
 using CP77.CR2W;
 using WolvenKit.Modkit.RED4;
 
-namespace WolvenKit.Modkit.RED4.MeshFile
+namespace WolvenKit.Modkit.RED4.MeshFiles
 {
     using Vec4 = System.Numerics.Vector4;
     using Vec2 = System.Numerics.Vector2;

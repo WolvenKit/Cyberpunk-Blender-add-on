@@ -2,7 +2,7 @@
 using System;
 using WolvenKit.Modkit.RED4.GeneralStructs;
 
-namespace WolvenKit.Modkit.RED4.Materials.Types
+namespace WolvenKit.Modkit.RED4.Materials.Type
 {
     public enum MaterialType
     {

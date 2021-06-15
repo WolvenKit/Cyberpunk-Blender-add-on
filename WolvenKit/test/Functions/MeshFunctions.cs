@@ -5,7 +5,7 @@ using System.Linq;
 using WolvenKit.RED4.CR2W;
 using WolvenKit.RED4.CR2W.Types;
 using WolvenKit.Common.Oodle;
-using WolvenKit.Modkit.RED4.GeneralStructs;
+using WolvenKit.Modkit.RED4.GeneralStruct;
 using SharpGLTF.Geometry;
 using SharpGLTF.Geometry.VertexTypes;
 using SharpGLTF.Materials;
@@ -13,9 +13,9 @@ using SharpGLTF.Scenes;
 using SharpGLTF.Schema2;
 using WolvenKit.Common;
 using WolvenKit.Common.Services;
-using WolvenKit.Modkit.RED4.RigFile;
+using WolvenKit.Modkit.RED4.RigFiles;
 
-namespace CP77.CR2W
+namespace WolvenKit.Modkit.RED4.MeshFiles
 {
     using Vec4 = System.Numerics.Vector4;
     using Vec3 = System.Numerics.Vector3;
@@ -24,12 +24,12 @@ namespace CP77.CR2W
     using VCT = VertexColor1Texture2;
     using VJ = VertexJoints8;
 
-    public class MeshTools
+    public class MESH
     {
         private readonly Red4ParserService _modTools;
         private readonly RIG _rig;
 
-        public MeshTools(Red4ParserService modtools, RIG rig)
+        public MESH(Red4ParserService modtools, RIG rig)
         {
             _modTools = modtools;
             _rig = rig;

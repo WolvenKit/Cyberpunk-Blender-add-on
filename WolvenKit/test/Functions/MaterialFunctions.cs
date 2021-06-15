@@ -1,7 +1,7 @@
 ﻿using System;
 using System.IO;
 using CP77.CR2W;
-using WolvenKit.Modkit.RED4.GeneralStructs;
+using WolvenKit.Modkit.RED4.GeneralStruct;
 using WolvenKit.RED4.CR2W;
 using WolvenKit.RED4.CR2W.Types;
 using WolvenKit.Common.Oodle;
@@ -12,12 +12,13 @@ using WolvenKit.Modkit.RED4.Materials.Types;
 using WolvenKit.Common.DDS;
 using WolvenKit.RED4.CR2W.Archive;
 using WolvenKit.Common.FNV1A;
-using WolvenKit.Modkit.RED4.MaterialSetupFile;
+using WolvenKit.Modkit.RED4.MaterialSetupFiles;
 using SharpGLTF.IO;
 using System.Threading;
 using WolvenKit.Common.Model.Arguments;
 using WolvenKit.Common.Services;
 using Newtonsoft.Json;
+using WolvenKit.Modkit.RED4.MeshFiles;
 
 namespace WolvenKit.Modkit.RED4.Materials
 {
@@ -45,11 +46,11 @@ namespace WolvenKit.Modkit.RED4.Materials
             DirectoryInfo outDir = new DirectoryInfo(Path.Combine(outfile.DirectoryName, Path.GetFileNameWithoutExtension(outfile.FullName)));
 
             MemoryStream ms = MeshTools.GetMeshBufferStream(meshStream, cr2w);
-            MeshesInfo meshinfo = MeshTools.GetMeshesinfo(cr2w);
+            MeshesInfo meshinfo = MESH.GetMeshesinfo(cr2w);
 
-            List<RawMeshContainer> expMeshes = MeshTools.ContainRawMesh(ms, meshinfo, LodFilter);
+            List<RawMeshContainer> expMeshes = MESH.ContainRawMesh(ms, meshinfo, LodFilter);
 
-            ModelRoot model = MeshTools.RawMeshesToGLTF(expMeshes, null);
+            ModelRoot model = MESH.RawMeshesToGLTF(expMeshes, null);
 
             if (!outDir.Exists)
             {
@@ -321,21 +322,7 @@ namespace WolvenKit.Modkit.RED4.Materials
             RawMaterial rawMaterial = new RawMaterial();
 
             rawMaterial.Name = Name;
-
-            rawMaterial.BaseMaterial = cMaterialInstance.BaseMaterial.DepotPath;
-            rawMaterial.MaterialInstanceData = new MaterialInstanceData(cMaterialInstance);
-
-            if (Path.GetFileNameWithoutExtension(cMaterialInstance.BaseMaterial.DepotPath) == "multilayered")
-                rawMaterial.MaterialType = MaterialType.MultiLayered;
-
-            if (Path.GetFileNameWithoutExtension(cMaterialInstance.BaseMaterial.DepotPath) == "mesh_decal")
-                rawMaterial.MaterialType = MaterialType.MeshDecal;
-
-            if (cMaterialInstance.BaseMaterial.DepotPath.Contains("skin"))
-                rawMaterial.MaterialType = MaterialType.HumanSkin;
-
-            if (Path.GetFileNameWithoutExtension(cMaterialInstance.BaseMaterial.DepotPath) == "metal_base")
-                rawMaterial.MaterialType = MaterialType.MetalBase;
+            rawMaterial.CMaterialInstance = cMaterialInstance;
 
             return rawMaterial;
         }
