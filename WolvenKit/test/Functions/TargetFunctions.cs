@@ -1,20 +1,20 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Catel.IoC;
+using System.Linq;
 using WolvenKit.Modkit.RED4.GeneralStructs;
 using WolvenKit.RED4.CR2W;
 using WolvenKit.RED4.CR2W.Types;
+//using System.IO;
 using WolvenKit.Common.DDS;
-using WolvenKit.Modkit.RED4.MeshFile;
 using WolvenKit.Common.Oodle;
 using SharpGLTF.Geometry;
 using SharpGLTF.Geometry.VertexTypes;
 using SharpGLTF.Materials;
 using SharpGLTF.Schema2;
-using CP77.CR2W;
+using WolvenKit.Common.Services;
 
-namespace WolvenKit.Modkit.RED4.MorphTargetFile
+namespace CP77.CR2W
 {
     using Vec4 = System.Numerics.Vector4;
     using Vec3 = System.Numerics.Vector3;
@@ -24,19 +24,24 @@ namespace WolvenKit.Modkit.RED4.MorphTargetFile
     using RIGIDMESH = MeshBuilder<VertexPositionNormalTangent, VertexColor1Texture2, VertexEmpty>;
     using VPNT = VertexPositionNormalTangent;
     using VCT = VertexColor1Texture2;
-    public class TARGET
+    public class TargetTools
     {
-        private readonly ModTools ModTools;
-        public TARGET()
-        {
-            ModTools = ServiceLocator.Default.ResolveType<ModTools>();
-        }
-        public void ExportTargets(Stream targetStream,FileInfo outfile, bool isGLBinary = true)
-        {
-            var cr2w = ModTools.TryReadCr2WFile(targetStream);
+        private readonly Red4ParserService _modTools;
 
-            List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
-            MemoryStream meshbuffer = MESH.GetMeshBufferStream(targetStream, cr2w);
+        public TargetTools(Red4ParserService modTools)
+        {
+            _modTools = modTools;
+        }
+
+        public bool ExportTargets(Stream targetStream, FileInfo outfile, bool isGLBinary = true)
+        {
+            var cr2w = _modTools.TryReadRED4File(targetStream);
+            if (cr2w == null || !cr2w.Chunks.Select(_ => _.Data).OfType<MorphTargetMesh>().Any() || !cr2w.Chunks.Select(_ => _.Data).OfType<rendRenderMeshBlob>().Any())
+            {
+                return false;
+            }
+
+            MemoryStream meshbuffer = MeshTools.GetMeshBufferStream(targetStream, cr2w);
 
 
             var buffers = cr2w.Buffers;
@@ -54,19 +59,14 @@ namespace WolvenKit.Modkit.RED4.MorphTargetFile
             targetStream.Seek(cr2w.Buffers[2].Offset, SeekOrigin.Begin);
             targetStream.DecompressAndCopySegment(texbuffer, buffers[2].DiskSize, buffers[2].MemSize);
 
-            MeshesInfo meshinfo = MESH.GetMeshesinfo(cr2w);
+            targetStream.Dispose();
+            targetStream.Close();
 
-            int subMeshC = 0;
-            for (int i = 0; i < meshinfo.meshC; i++)
-            {
+            MeshesInfo meshinfo = MeshTools.GetMeshesinfo(cr2w);
 
-                if (meshinfo.LODLvl[i] != 1)
-                    continue;
-                RawMeshContainer mesh = MESH.ContainRawMesh(meshbuffer, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i]);
-                mesh.name = "mesh_" + i;
-                expMeshes.Add(mesh);
-                subMeshC++;
-            }
+            List<RawMeshContainer> expMeshes = MeshTools.ContainRawMesh(meshbuffer, meshinfo, true);
+
+            int subMeshC = expMeshes.Count;
 
             TargetsInfo targetsInfo = GetTargetInfos(cr2w, subMeshC);
 
@@ -81,7 +81,7 @@ namespace WolvenKit.Modkit.RED4.MorphTargetFile
                     temp_NumVertexDiffsInEachChunk[e] = targetsInfo.NumVertexDiffsInEachChunk[i, e];
                     temp_NumVertexDiffsMappingInEachChunk[e] = targetsInfo.NumVertexDiffsMappingInEachChunk[i, e];
                 }
-                expTargets.Add(ContainRawTargets(diffsbuffer, mappingbuffer, temp_NumVertexDiffsInEachChunk, temp_NumVertexDiffsMappingInEachChunk, targetsInfo.TargetStartsInVertexDiffs[i], targetsInfo.TargetStartsInVertexDiffsMapping[i], targetsInfo.TargetPositionDiffOffset[i], targetsInfo.TargetPositionDiffScale[i],subMeshC));
+                expTargets.Add(ContainRawTargets(diffsbuffer, mappingbuffer, temp_NumVertexDiffsInEachChunk, temp_NumVertexDiffsMappingInEachChunk, targetsInfo.TargetStartsInVertexDiffs[i], targetsInfo.TargetStartsInVertexDiffsMapping[i], targetsInfo.TargetPositionDiffOffset[i], targetsInfo.TargetPositionDiffScale[i], subMeshC));
             }
 
             string[] names = new string[targetsInfo.NumTargets];
@@ -90,27 +90,32 @@ namespace WolvenKit.Modkit.RED4.MorphTargetFile
                 names[i] = targetsInfo.Names[i] + "_" + targetsInfo.RegionNames[i];
             }
 
-            List<MemoryStream> textureStreams =  ContainTextureStreams(cr2w, texbuffer);
+            List<MemoryStream> textureStreams = ContainTextureStreams(cr2w, texbuffer);
             ModelRoot model = RawTargetsToGLTF(expMeshes, expTargets, names);
+
+            if (WolvenTesting.IsTesting)
+            {
+                return true;
+            }
 
             if (isGLBinary)
                 model.SaveGLB(outfile.FullName);
             else
                 model.SaveGLTF(outfile.FullName);
+
             var dir = new DirectoryInfo(outfile.FullName.Replace(Path.GetExtension(outfile.FullName), string.Empty) + "_Textures");
 
-            if(textureStreams.Count > 0)
+            if (textureStreams.Count > 0)
             {
                 Directory.CreateDirectory(dir.FullName);
             }
 
-            for(int i = 0; i < textureStreams.Count; i++)
+            for (int i = 0; i < textureStreams.Count; i++)
             {
-                File.WriteAllBytes(dir.FullName + "\\" + Path.GetFileNameWithoutExtension(outfile.FullName) + i + ".dds",textureStreams[i].ToArray());
+                File.WriteAllBytes(dir.FullName + "\\" + Path.GetFileNameWithoutExtension(outfile.FullName) + i + ".dds", textureStreams[i].ToArray());
             }
 
-            targetStream.Dispose();
-            targetStream.Close();
+            return true;
         }
         static TargetsInfo GetTargetInfos(CR2WFile cr2w, int SubMeshC)
         {
@@ -261,7 +266,7 @@ namespace WolvenKit.Modkit.RED4.MorphTargetFile
         }
         static List<MemoryStream> ContainTextureStreams(CR2WFile cr2w, MemoryStream texbuffer)
         {
-            List <MemoryStream> textureStreams = new List<MemoryStream>();
+            List<MemoryStream> textureStreams = new List<MemoryStream>();
 
             int Index = int.MaxValue;
             for (int i = 0; i < cr2w.Chunks.Count; i++)
@@ -296,7 +301,7 @@ namespace WolvenKit.Modkit.RED4.MorphTargetFile
                 byte[] bytes = texbr.ReadBytes((int)TargetDiffsDataSize[i]);
 
                 MemoryStream ms = new MemoryStream();
-                DDSMetadata metadata = new DDSMetadata(TargetDiffsWidth[i], TargetDiffsWidth[i], TargetDiffsMipLevelCounts[i], EFormat.BC7_UNORM,16,false,0,true);
+                DDSMetadata metadata = new DDSMetadata(TargetDiffsWidth[i], TargetDiffsWidth[i], TargetDiffsMipLevelCounts[i], EFormat.BC7_UNORM, 16, false, 0, true);
                 DDSUtils.GenerateAndWriteHeader(ms, metadata);
                 BinaryWriter bw = new BinaryWriter(ms);
                 bw.Write(bytes);

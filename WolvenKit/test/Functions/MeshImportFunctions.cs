@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using Catel.IoC;
+using System.Text;
 using System.IO;
 using WolvenKit.Modkit.RED4.GeneralStructs;
 using SharpGLTF.Schema2;
@@ -19,18 +19,24 @@ namespace WolvenKit.Modkit.RED4.MeshFile
     using Vec3 = System.Numerics.Vector3;
     public class MESHIMPORTER
     {
-        private readonly ModTools ModTools;
-        public MESHIMPORTER()
+        private readonly Red4ParserService _modTools;
+
+        public MESHIMPORTER(Red4ParserService modtools)
         {
-            ModTools = ServiceLocator.Default.ResolveType<ModTools>();
+            _modTools = modtools;
         }
-        public void Import(FileInfo inGltfFile, Stream inmeshStream, FileInfo outMeshFile)
+
+        public bool Import(FileInfo inGltfFile, Stream inmeshStream, Stream outStream = null)
         {
             var model = ModelRoot.Load(inGltfFile.FullName);
 
             VerifyGLTF(model);
 
-            var cr2w = ModTools.TryReadCr2WFile(inmeshStream);
+            var cr2w = _modTools.TryReadRED4File(inmeshStream);
+            if (cr2w == null || !cr2w.Chunks.Select(_ => _.Data).OfType<CMesh>().Any() || !cr2w.Chunks.Select(_ => _.Data).OfType<rendRenderMeshBlob>().Any())
+            {
+                throw new("Invalid CR2W File,CR2W File doesn't contain CMesh/rendMeshBlob");
+            }
             List<RawMeshContainer> Meshes = new List<RawMeshContainer>();
 
             for (int i = 0; i < model.LogicalMeshes.Count; i++)
@@ -40,7 +46,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
             Vec3 max = new Vec3(Meshes[0].vertices[0].X, Meshes[0].vertices[0].Y, Meshes[0].vertices[0].Z);
             Vec3 min = new Vec3(Meshes[0].vertices[0].X, Meshes[0].vertices[0].Y, Meshes[0].vertices[0].Z);
 
-            for(int e = 0; e < Meshes.Count; e++)
+            for (int e = 0; e < Meshes.Count; e++)
                 for (int i = 0; i < Meshes[e].vertices.Length; i++)
                 {
                     if (Meshes[e].vertices[i].X >= max.X)
@@ -79,47 +85,52 @@ namespace WolvenKit.Modkit.RED4.MeshFile
             Vec4 QuantScale = new Vec4((max.X - min.X) / 2, (max.Y - min.Y) / 2, (max.Z - min.Z) / 2, 0);
             Vec4 QuantTrans = new Vec4((max.X + min.X) / 2, (max.Y + min.Y) / 2, (max.Z + min.Z) / 2, 1);
 
-            string[] bones = new string[model.LogicalSkins[0].JointsCount];
-            for (int i = 0; i < model.LogicalSkins[0].JointsCount; i++)
-                bones[i] = model.LogicalSkins[0].GetJoint(i).Joint.Name;
+            if (model.LogicalSkins.Count != 0)
+            {
+                string[] bones = new string[model.LogicalSkins[0].JointsCount];
 
-            string[] meshbones = RIG.GetboneNames(cr2w, "CMesh");
+                for (int i = 0; i < model.LogicalSkins[0].JointsCount; i++)
+                    bones[i] = model.LogicalSkins[0].GetJoint(i).Joint.Name;
 
-            // reset vertex joint indices according to original
-            for (int i = 0; i < Meshes.Count; i++)
-                for(int e = 0; e < Meshes[i].vertices.Length; e++)
-                    for(int eye = 0; eye < Meshes[i].weightcount; eye++)
-                    {
-                        if(Meshes[i].weights[e, eye] != 0)
+                string[] meshbones = RIG.GetboneNames(cr2w, "CMesh");
+
+                // reset vertex joint indices according to original
+                for (int i = 0; i < Meshes.Count; i++)
+                    for (int e = 0; e < Meshes[i].vertices.Length; e++)
+                        for (int eye = 0; eye < Meshes[i].weightcount; eye++)
                         {
-                            bool existsInMeshBones = false;
-                            string name = bones[Meshes[i].boneindices[e, eye]];
-                            for (UInt16 t = 0; t < meshbones.Length; t++)
+                            if (Meshes[i].weights[e, eye] != 0)
                             {
-                                if (name == meshbones[t])
+                                bool existsInMeshBones = false;
+                                string name = bones[Meshes[i].boneindices[e, eye]];
+                                for (UInt16 t = 0; t < meshbones.Length; t++)
                                 {
-                                    Meshes[i].boneindices[e, eye] = t;
-                                    existsInMeshBones = true;
+                                    if (name == meshbones[t])
+                                    {
+                                        Meshes[i].boneindices[e, eye] = t;
+                                        existsInMeshBones = true;
+                                    }
+                                }
+                                if (!existsInMeshBones)
+                                {
+                                    throw new Exception("One or more vertices in submesh: " + Meshes[i].name + " was weight Painted to bone: " + name + " Which Doesn't Exist in the provided .mesh file");
                                 }
                             }
-                            if (!existsInMeshBones)
+                            else
                             {
-                                throw new Exception("One or more vertices in submesh: " + Meshes[i].name + " was weight Painted to bone: " + name + " Which Doesn't Exist in the provided .mesh file");
+                                if (Meshes[i].boneindices[e, eye] > (meshbones.Length - 1))
+                                {
+                                    Meshes[i].boneindices[e, eye] = 0;
+                                }
                             }
                         }
-                        else
-                        {
-                            if(Meshes[i].boneindices[e, eye] > (meshbones.Length - 1))
-                            {
-                                Meshes[i].boneindices[e, eye] = 0;
-                            }
-                        }
-                    }
+
+            }
 
             List<Re4MeshContainer> expMeshes = new List<Re4MeshContainer>();
 
             for (int i = 0; i < Meshes.Count; i++)
-                expMeshes.Add(RawMeshToRE4Mesh(Meshes[i],QuantScale,QuantTrans));
+                expMeshes.Add(RawMeshToRE4Mesh(Meshes[i], QuantScale, QuantTrans));
 
             MemoryStream meshBuffer = new MemoryStream();
             MeshesInfo meshesInfo = BufferWriter(expMeshes, ref meshBuffer);
@@ -128,10 +139,17 @@ namespace WolvenKit.Modkit.RED4.MeshFile
             meshesInfo.qTrans = QuantTrans;
 
             MemoryStream ms = GetEditedCr2wFile(cr2w, meshesInfo, meshBuffer);
-            File.WriteAllBytes(outMeshFile.FullName, ms.ToArray());
-
-            inmeshStream.Dispose();
-            inmeshStream.Close();
+            ms.Seek(0, SeekOrigin.Begin);
+            if (outStream != null)
+            {
+                ms.CopyTo(outStream);
+            }
+            else
+            {
+                inmeshStream.SetLength(0);
+                ms.CopyTo(inmeshStream);
+            }
+            return true;
         }
         static RawMeshContainer GltfMeshToRawContainer(Mesh mesh)
         {
@@ -143,7 +161,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
             uint[] indices = new uint[indicesList.Count];
 
             // ReSwapping the faces
-            for(int i = 0; i < indicesList.Count; i+= 3)
+            for (int i = 0; i < indicesList.Count; i += 3)
             {
                 indices[i] = indicesList[i + 1];
                 indices[i + 1] = indicesList[i];
@@ -236,16 +254,16 @@ namespace WolvenKit.Modkit.RED4.MeshFile
 
             Vec3[] extraData = new Vec3[vertCount];
             bool extraExist = false;
-            if(mesh.Primitives[0].MorphTargetsCount > 0)
+            if (mesh.Primitives[0].MorphTargetsCount > 0)
             {
                 extraExist = true;
             }
-            if(extraExist)
+            if (extraExist)
             {
                 int idx = mesh.Primitives[0].GetMorphTargetAccessors(0).Keys.ToList().IndexOf("POSITION");
                 List<Vec3> extraDataList = mesh.Primitives[0].GetMorphTargetAccessors(0).Values.ToList()[idx].AsVector3Array().ToList();
 
-                for(int i = 0; i < extraDataList.Count; i++)
+                for (int i = 0; i < extraDataList.Count; i++)
                 {
                     extraData[i] = new Vec3(extraDataList[i].X, -extraDataList[i].Z, extraDataList[i].Y);
                 }
@@ -302,7 +320,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
 
             UInt16[,] uv0s = new UInt16[vertCount, 2];
 
-            for(int i = 0; i < mesh.tx0coords.Length; i++)
+            for (int i = 0; i < mesh.tx0coords.Length; i++)
             {
                 uv0s[i, 0] = Converters.converthf(mesh.tx0coords[i].X);
                 uv0s[i, 1] = Converters.converthf(mesh.tx0coords[i].Y);
@@ -318,7 +336,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
 
             Byte[,] colors = new byte[vertCount, 4];
 
-            for(int i = 0; i < mesh.colors.Length; i++)
+            for (int i = 0; i < mesh.colors.Length; i++)
             {
                 colors[i, 0] = Convert.ToByte(mesh.colors[i].X * 255);
                 colors[i, 1] = Convert.ToByte(mesh.colors[i].Y * 255);
@@ -345,9 +363,9 @@ namespace WolvenKit.Modkit.RED4.MeshFile
             // extradata/ morphoffsetbs
             UInt16[,] extraData = new UInt16[vertCount, 3];
             bool extraExist = mesh.extraExist;
-            if(extraExist)
+            if (extraExist)
             {
-                for(int i = 0; i < vertCount; i++)
+                for (int i = 0; i < vertCount; i++)
                 {
                     extraData[i, 0] = Converters.converthf(mesh.extradata[i].X);
                     extraData[i, 1] = Converters.converthf(mesh.extradata[i].Y);
@@ -411,7 +429,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
                 weightcounts[i] = expMeshes[i].weightcount;
 
                 extraExists[i] = expMeshes[i].extraExist;
-                if(extraExists[i])
+                if (extraExists[i])
                 {
                     vpStrides[i] += 8;
                 }
@@ -428,7 +446,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
                     for (int eye = 0; eye < expMeshes[i].weightcount; eye++)
                         bw.Write(expMeshes[i].weights[e, eye]);
 
-                    if(extraExists[i])
+                    if (extraExists[i])
                     {
                         bw.Write(expMeshes[i].extraData[e, 0]);
                         bw.Write(expMeshes[i].extraData[e, 1]);
@@ -460,7 +478,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
                     Byte[] bytes = new Byte[zeroesCount];
                     bw.Write(bytes);
                 }
-                
+
                 // writing normals and tangents
                 normalOffsets[i] = (UInt32)ms.Position;
                 for (int e = 0; e < vertCount; e++)
@@ -476,17 +494,17 @@ namespace WolvenKit.Modkit.RED4.MeshFile
                     Byte[] bytes = new Byte[zeroesCount];
                     bw.Write(bytes);
                 }
-                
+
                 // writing colors and tx1s
                 colorOffsets[i] = (UInt32)ms.Position;
                 for (int e = 0; e < vertCount; e++)
                 {
-                    
+
                     bw.Write(expMeshes[i].colors[e, 0]);
                     bw.Write(expMeshes[i].colors[e, 1]);
                     bw.Write(expMeshes[i].colors[e, 2]);
                     bw.Write(expMeshes[i].colors[e, 3]);
-                    
+
 
                     // Temp fix for improved lighting geomertry
                     /*
@@ -531,7 +549,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
             }
 
             indexBufferOffset = (UInt32)ms.Position;
-            for(int i = 0; i < expMeshes.Count; i++)
+            for (int i = 0; i < expMeshes.Count; i++)
             {
                 int indCount = expMeshes[i].indices.Length;
                 indCounts[i] = (UInt32)indCount;
@@ -543,9 +561,21 @@ namespace WolvenKit.Modkit.RED4.MeshFile
             indexBufferSize = (UInt32)ms.Length - indexBufferOffset;
 
 
-            for(int i = 0; i < meshC; i++)
+            for (int i = 0; i < meshC; i++)
             {
-                LODLvl[i] = Convert.ToUInt32(expMeshes[i].name.Substring(expMeshes[i].name.Length - 1));
+                if (expMeshes[i].name.Contains("LOD"))
+                {
+                    int idx = expMeshes[i].name.IndexOf("LOD_");
+                    if (idx < expMeshes[i].name.Length - 1)
+                    {
+                        LODLvl[i] = Convert.ToUInt32(expMeshes[i].name.Substring(idx + 4, 1));
+                    }
+                }
+                else
+                {
+                    LODLvl[i] = 1;
+                }
+
             }
 
             MeshesInfo meshesInfo = new MeshesInfo()
@@ -597,7 +627,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
             Count = (cr2w.Chunks[Index].Data as rendRenderMeshBlob).Header.RenderLODs.Count;
             if (Count > 1)
             {
-                for(int i = 0; i < Count; i++)
+                for (int i = 0; i < Count; i++)
                 {
                     (cr2w.Chunks[Index].Data as rendRenderMeshBlob).Header.RenderLODs.Remove((cr2w.Chunks[Index].Data as rendRenderMeshBlob).Header.RenderLODs[0]);
                 }
@@ -632,7 +662,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
 
                 chunk.LodMask = new CUInt8(cr2w, chunk, "lodMask") { IsSerialized = true, IsNulled = false, Value = Convert.ToByte(info.LODLvl[i]) };
 
-                chunk.RenderMask = new CEnum<Enums.EMeshChunkFlags>(cr2w, chunk, "renderMask") { IsSerialized = true, IsNulled = false, Value = Enums.EMeshChunkFlags.MCF_RenderInScene};
+                chunk.RenderMask = new CEnum<Enums.EMeshChunkFlags>(cr2w, chunk, "renderMask") { IsSerialized = true, IsNulled = false, Value = Enums.EMeshChunkFlags.MCF_RenderInScene };
                 chunk.RenderMask.EnumValueList.Add("MCF_RenderInScene");
                 chunk.RenderMask.EnumValueList.Add("MCF_RenderInShadows");
 
@@ -668,7 +698,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
                 chunk.ChunkVertices.VertexLayout.SlotStrides.Add(new CUInt8(cr2w, chunk.ChunkVertices.VertexLayout.SlotStrides, "1") { IsSerialized = true, IsNulled = false, Value = Convert.ToByte(4) });
                 chunk.ChunkVertices.VertexLayout.SlotStrides.Add(new CUInt8(cr2w, chunk.ChunkVertices.VertexLayout.SlotStrides, "2") { IsSerialized = true, IsNulled = false, Value = Convert.ToByte(8) });
                 chunk.ChunkVertices.VertexLayout.SlotStrides.Add(new CUInt8(cr2w, chunk.ChunkVertices.VertexLayout.SlotStrides, "3") { IsSerialized = true, IsNulled = false, Value = Convert.ToByte(8) });
-                if(info.unknownOffsets[i] == 0)
+                if (info.unknownOffsets[i] == 0)
                 {
                     chunk.ChunkVertices.VertexLayout.SlotStrides.Add(new CUInt8(cr2w, chunk.ChunkVertices.VertexLayout.SlotStrides, "4") { IsSerialized = true, IsNulled = false, Value = Convert.ToByte(0) });
                 }
@@ -678,7 +708,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
                 }
                 chunk.ChunkVertices.VertexLayout.SlotStrides.Add(new CUInt8(cr2w, chunk.ChunkVertices.VertexLayout.SlotStrides, "5") { IsSerialized = true, IsNulled = false, Value = Convert.ToByte(0) });
                 chunk.ChunkVertices.VertexLayout.SlotStrides.Add(new CUInt8(cr2w, chunk.ChunkVertices.VertexLayout.SlotStrides, "6") { IsSerialized = true, IsNulled = false, Value = Convert.ToByte(0) });
-                if(info.weightcounts[i] == 0)
+                if (info.weightcounts[i] == 0)
                 {
                     chunk.ChunkVertices.VertexLayout.SlotStrides.Add(new CUInt8(cr2w, chunk.ChunkVertices.VertexLayout.SlotStrides, "7") { IsSerialized = true, IsNulled = false, Value = Convert.ToByte(48) });
                 }
@@ -831,7 +861,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
                 elementCount = chunk.ChunkVertices.VertexLayout.Elements.Count;
 
                 // extra data/ morphoffsets
-                if(info.extraExists[i])
+                if (info.extraExists[i])
                 {
                     chunk.ChunkVertices.VertexLayout.Elements.Add(new GpuWrapApiVertexPackingPackingElement(cr2w, chunk.ChunkVertices.VertexLayout.Elements, Convert.ToString(elementCount)) { IsSerialized = true, IsNulled = false });
                     // fishy
@@ -849,7 +879,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
                 }
 
                 // instanceTransforms
-                for(int e = 0; e < 3; e++)
+                for (int e = 0; e < 3; e++)
                 {
                     chunk.ChunkVertices.VertexLayout.Elements.Add(new GpuWrapApiVertexPackingPackingElement(cr2w, chunk.ChunkVertices.VertexLayout.Elements, Convert.ToString(elementCount)) { IsSerialized = true, IsNulled = false });
                     // fishy
@@ -864,7 +894,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
                 }
 
                 // instanceSkinningDatas
-                if(info.weightcounts[i] > 0)
+                if (info.weightcounts[i] > 0)
                 {
                     chunk.ChunkVertices.VertexLayout.Elements.Add(new GpuWrapApiVertexPackingPackingElement(cr2w, chunk.ChunkVertices.VertexLayout.Elements, Convert.ToString(elementCount)) { IsSerialized = true, IsNulled = false });
                     // fishy
@@ -879,7 +909,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
                 }
 
                 // LightBlockerIntensity
-                if(info.unknownOffsets[i] != 0)
+                if (info.unknownOffsets[i] != 0)
                 {
                     chunk.ChunkVertices.VertexLayout.Elements.Add(new GpuWrapApiVertexPackingPackingElement(cr2w, chunk.ChunkVertices.VertexLayout.Elements, Convert.ToString(elementCount)) { IsSerialized = true, IsNulled = false });
                     // fishy
@@ -895,8 +925,8 @@ namespace WolvenKit.Modkit.RED4.MeshFile
                     // for lightblocker its 24, after testing some files, somtimes unknownoffsets[4] is used for destruction indices and some paint instead of lightblocker, so this needs to be taken care of
                     chunk.VertexFactory.Value += 24;
                 }
-                
-                
+
+
                 // Invalid, Required
                 chunk.ChunkVertices.VertexLayout.Elements.Add(new GpuWrapApiVertexPackingPackingElement(cr2w, chunk.ChunkVertices.VertexLayout.Elements, Convert.ToString(elementCount)) { IsSerialized = true, IsNulled = false });
                 // fishy
@@ -927,7 +957,7 @@ namespace WolvenKit.Modkit.RED4.MeshFile
             (cr2w.Chunks[Index].Data as rendRenderMeshBlob).Header.IndexBufferOffset.Value = info.indexBufferOffset;
 
 
-            UInt16 p = (cr2w.Chunks[Index].Data as rendRenderMeshBlob).RenderBuffer.Buffer.Value;
+            UInt16 p = ((cr2w.Chunks[Index].Data as rendRenderMeshBlob).RenderBuffer.Buffer.Value);
 
             var compressed = new MemoryStream();
             using var buff = new BinaryWriter(compressed);
@@ -949,12 +979,12 @@ namespace WolvenKit.Modkit.RED4.MeshFile
         }
         static void VerifyGLTF(ModelRoot model)
         {
-            if(model.LogicalMeshes.Count == 0)
+            if (model.LogicalMeshes.Count == 0)
             {
                 throw new Exception("Provided GLTF doesn't contain any 3D Geomerty");
             }
             List<UInt32> LODs = new List<UInt32>();
-            for(int i = 0; i < model.LogicalMeshes.Count; i++)
+            for (int i = 0; i < model.LogicalMeshes.Count; i++)
             {
                 List<string> accessors = model.LogicalMeshes[i].Primitives[0].VertexAccessors.Keys.ToList();
 
@@ -970,27 +1000,39 @@ namespace WolvenKit.Modkit.RED4.MeshFile
                 {
                     throw new Exception("One or more Geometry in provided GLTF doesn't contain Tangents data");
                 }
-                if(model.LogicalMeshes[i].Primitives[0].GetIndices().ToList().Count < 3)
+                if (model.LogicalMeshes[i].Primitives[0].GetIndices().ToList().Count < 3)
                 {
                     throw new Exception("One or more Geometry in provided GLTF doesn't contain any Triangle primitives");
                 }
                 string name = model.LogicalMeshes[i].Name;
                 UInt32 LOD = 0;
-                try
+
+                if (name.Contains("LOD"))
                 {
-                    LOD = Convert.ToUInt32(name.Substring(name.Length - 1));
-                    LODs.Add(LOD);
+                    try
+                    {
+                        int idx = name.IndexOf("LOD_");
+                        if (idx < name.Length - 1)
+                        {
+                            LOD = Convert.ToUInt32(name.Substring(idx + 4, 1));
+                            LODs.Add(LOD);
+                        }
+                    }
+                    catch
+                    {
+                        throw new Exception("Invalid Geometry/sub mesh name: " + name + " , Character after \"LOD_\" should be 1 or 2 or 4 or 8, Representing the Level of Detail (LOD) of the submesh.");
+                    }
+                    if (LOD != 1 && LOD != 2 && LOD != 4 && LOD != 8)
+                    {
+                        throw new Exception("Invalid Geometry/sub mesh name: " + name + " , Character after \"LOD_\"  should be 1 or 2 or 4 or 8, Representing the Level of Detail (LOD) of the submesh.");
+                    }
                 }
-                catch
+                else
                 {
-                    throw new Exception("Invalid Geometry/sub mesh name: " + name + " , Last character of the name should be 1 or 2 or 4 or 8, Representing the Level of Detail (LOD) of the submesh.");
-                }
-                if(LOD != 1 && LOD != 2 && LOD != 4 && LOD != 8)
-                {
-                    throw new Exception("Invalid Geometry/sub mesh name: " + name + " , Last character of the name should be 1 or 2 or 4 or 8, Representing the Level of Detail (LOD) of the submesh.");
+                    LODs.Add(1);
                 }
             }
-            if(!LODs.Contains(1))
+            if (!LODs.Contains(1))
             {
                 throw new Exception("None of the Geometry/sub meshes are of 1 Level of Detail or (LOD 1) in provided GLTF");
             }
