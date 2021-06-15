@@ -1,210 +1,133 @@
 ﻿using System;
 using System.IO;
 using CP77.CR2W;
-using WolvenKit.RED4.GeneralStructs;
+using WolvenKit.Modkit.RED4.GeneralStruct;
 using WolvenKit.RED4.CR2W;
 using WolvenKit.RED4.CR2W.Types;
 using WolvenKit.Common.Oodle;
 using System.Collections.Generic;
+using System.Linq;
 using SharpGLTF.Schema2;
-using WolvenKit.RED4.MeshFile;
-using WolvenKit.RED4.MeshFile.Materials.MaterialTypes;
+using WolvenKit.Modkit.RED4.Materials.Types;
 using WolvenKit.Common.DDS;
 using WolvenKit.RED4.CR2W.Archive;
 using WolvenKit.Common.FNV1A;
-using WolvenKit.RED4.MaterialSetupFile;
+using WolvenKit.Modkit.RED4.MaterialSetupFiles;
 using SharpGLTF.IO;
 using System.Threading;
+using WolvenKit.Common.Model.Arguments;
+using WolvenKit.Common.Services;
+using Newtonsoft.Json;
+using WolvenKit.Modkit.RED4.MeshFiles;
 
-namespace WolvenKit.RED4.MeshFile.Materials
+namespace WolvenKit.Modkit.RED4.Materials
 {
-    public class MATERIAL
+    /// <summary>
+    /// Collection of common modding utilities.
+    /// </summary>
+    public partial class MATERIAL
     {
-        static string cacheDir = Path.GetTempPath() + "WolvenKit\\Material\\Temp\\";
-        public static List<Archive> archives;
-        public void ExportMeshWithMaterialsUsingAssetLib(Stream meshStream, DirectoryInfo assetLib, string _meshName, FileInfo outfile, bool isGLBinary = true,bool copyTextures = false,EUncookExtension eUncookExtension = EUncookExtension.dds , bool LodFilter = true)
+        private readonly Red4ParserService _wolvenkitFileService;
+        private readonly IHashService _hashService;
+        private readonly ModTools _modTools;
+        public MATERIAL(Red4ParserService r , IHashService h ,ModTools m)
         {
-            Directory.CreateDirectory(cacheDir);
-
-            List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
-            var mesh_cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshStream);
-
-            MemoryStream ms = MESH.GetMeshBufferStream(meshStream, mesh_cr2w);
-            MeshesInfo meshinfo = MESH.GetMeshesinfo(mesh_cr2w);
-            for (int i = 0; i < meshinfo.meshC; i++)
+            _wolvenkitFileService = r;
+            _hashService = h;
+            _modTools = m;
+        }
+        public bool ExportMeshWithMaterials(Stream meshStream, FileInfo outfile, List<Archive> archives, EUncookExtension eUncookExtension = EUncookExtension.dds, bool isGLBinary = true, bool LodFilter = true)
+        {
+            var cr2w = _wolvenkitFileService.TryReadRED4File(meshStream);
+            if (cr2w == null || !cr2w.Chunks.Select(_ => _.Data).OfType<CMesh>().Any() || !cr2w.Chunks.Select(_ => _.Data).OfType<rendRenderMeshBlob>().Any())
             {
-                if (meshinfo.LODLvl[i] != 1 && LodFilter)
-                    continue;
-                RawMeshContainer mesh = MESH.ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i]);
-                mesh.name = _meshName + "_" + i;
-
-                mesh.appNames = new string[meshinfo.appearances.Count];
-                mesh.materialNames = new string[meshinfo.appearances.Count];
-                for (int e = 0; e < meshinfo.appearances.Count; e++)
-                {
-                    mesh.appNames[e] = meshinfo.appearances[e].Name;
-                    mesh.materialNames[e] = meshinfo.appearances[e].MaterialNames[i];
-                }
-                expMeshes.Add(mesh);
+                return false;
             }
-            ModelRoot model = MESH.RawRigidMeshesToGLTF(expMeshes);
+            DirectoryInfo outDir = new DirectoryInfo(Path.Combine(outfile.DirectoryName, Path.GetFileNameWithoutExtension(outfile.FullName)));
 
-            DirectoryInfo outDir = new DirectoryInfo(outfile.DirectoryName + "\\" + Path.GetFileNameWithoutExtension(outfile.FullName) + "_Textures\\");
-            Directory.CreateDirectory(outDir.FullName);
+            MemoryStream ms = MeshTools.GetMeshBufferStream(meshStream, cr2w);
+            MeshesInfo meshinfo = MESH.GetMeshesinfo(cr2w);
 
-            ParseMaterialsUsingAssetLib(meshStream, ref model, outDir, assetLib, copyTextures, eUncookExtension);
+            List<RawMeshContainer> expMeshes = MESH.ContainRawMesh(ms, meshinfo, LodFilter);
+
+            ModelRoot model = MESH.RawMeshesToGLTF(expMeshes, null);
+
+            if (!outDir.Exists)
+            {
+                Directory.CreateDirectory(outDir.FullName);
+            }
+
+            ParseMaterials(cr2w, meshStream, outDir, archives, eUncookExtension);
 
             if (isGLBinary)
                 model.SaveGLB(outfile.FullName);
             else
                 model.SaveGLTF(outfile.FullName);
 
-            Directory.Delete(cacheDir, true);
+            meshStream.Dispose();
+            meshStream.Close();
+
+            return true;
         }
-        public void ExportMeshWithMaterialsUsingArchives(Stream meshStream, string _meshName, FileInfo outfile, bool isGLBinary = true, EUncookExtension eUncookExtension = EUncookExtension.dds, bool LodFilter = true)
+        private void GetMateriaEntries(CR2WFile cr2w, Stream meshStream, ref List<string> primaryDependencies, ref List<string> materialEntryNames, ref List<CMaterialInstance> materialEntries, List<Archive> archives)
         {
-            Directory.CreateDirectory(cacheDir);
-
-            List<RawMeshContainer> expMeshes = new List<RawMeshContainer>();
-            var mesh_cr2w = CP77.CR2W.ModTools.TryReadCr2WFile(meshStream);
-
-            MemoryStream ms = MESH.GetMeshBufferStream(meshStream, mesh_cr2w);
-            MeshesInfo meshinfo = MESH.GetMeshesinfo(mesh_cr2w);
-            for (int i = 0; i < meshinfo.meshC; i++)
-            {
-                if (meshinfo.LODLvl[i] != 1 && LodFilter)
-                    continue;
-                RawMeshContainer mesh = MESH.ContainRawMesh(ms, meshinfo.vertCounts[i], meshinfo.indCounts[i], meshinfo.vertOffsets[i], meshinfo.tx0Offsets[i], meshinfo.normalOffsets[i], meshinfo.colorOffsets[i], meshinfo.unknownOffsets[i], meshinfo.indicesOffsets[i], meshinfo.vpStrides[i], meshinfo.qScale, meshinfo.qTrans, meshinfo.weightcounts[i]);
-                mesh.name = _meshName + "_" + i;
-
-                mesh.appNames = new string[meshinfo.appearances.Count];
-                mesh.materialNames = new string[meshinfo.appearances.Count];
-                for (int e = 0; e < meshinfo.appearances.Count; e++)
-                {
-                    mesh.appNames[e] = meshinfo.appearances[e].Name;
-                    mesh.materialNames[e] = meshinfo.appearances[e].MaterialNames[i];
-                }
-                expMeshes.Add(mesh);
-            }
-            ModelRoot model = MESH.RawRigidMeshesToGLTF(expMeshes);
-
-            DirectoryInfo outDir = new DirectoryInfo(outfile.DirectoryName + "\\" + Path.GetFileNameWithoutExtension(outfile.FullName) + "_Textures\\");
-            Directory.CreateDirectory(outDir.FullName);
-
-            ParseMaterialsUsingArchives(meshStream, ref model, outDir, eUncookExtension);
-
-            if (isGLBinary)
-                model.SaveGLB(outfile.FullName);
-            else
-                model.SaveGLTF(outfile.FullName);
-
-            Directory.Delete(cacheDir, true);
-        }
-        static void GetMateriaEntries(Stream meshStream, ref List<string> primaryDependencies,ref List<string> materialEntryNames, ref List<CMaterialInstance> materialEntries, DirectoryInfo assetLib, bool useAssetLib)
-        {
-            var cr2w = ModTools.TryReadCr2WFile(meshStream);
-
-            int index = 0;
-            for (int i = 0; i < cr2w.Chunks.Count; i++)
-            {
-                if (cr2w.Chunks[i].REDType == "CMesh")
-                {
-                    index = i;
-                }
-            }
+            var cmesh = cr2w.Chunks.Select(_ => _.Data).OfType<CMesh>().First();
 
             List<CMaterialInstance> ExternalMaterial = new List<CMaterialInstance>();
-            for (int i = 0; i < (cr2w.Chunks[index].data as CMesh).ExternalMaterials.Count; i++)
+
+            for (int i = 0; i < cmesh.ExternalMaterials.Count; i++)
             {
-                if(useAssetLib)
+                string path = cmesh.ExternalMaterials[i].DepotPath;
+
+                ulong hash = FNV1A64HashAlgorithm.HashString(path);
+                foreach (Archive ar in archives)
                 {
-                    string path = assetLib.FullName + (cr2w.Chunks[index].data as CMesh).ExternalMaterials[i].DepotPath;
-                    if(File.Exists(path))
+                    if (ar.Files.ContainsKey(hash))
                     {
-                        FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read);
-                        var micr2w = ModTools.TryReadCr2WFile(fs);
-                        ExternalMaterial.Add(micr2w.Chunks[0].data as CMaterialInstance);
+                        var ms = new MemoryStream();
+                        ModTools.ExtractSingleToStream(ar, hash, ms);
 
-                        for (int t = 0; t < micr2w.Imports.Count; t++)
+                        var mi = _wolvenkitFileService.TryReadCr2WFile(ms);
+                        ExternalMaterial.Add(mi.Chunks[0].Data as CMaterialInstance);
+
+                        for (int t = 0; t < mi.Imports.Count; t++)
                         {
-                            bool notFound = true;
-                            for (int e = 0; e < primaryDependencies.Count; e++)
+                            if (!primaryDependencies.Contains(mi.Imports[t].DepotPathStr))
                             {
-                                if (primaryDependencies[e] == micr2w.Imports[t].DepotPathStr)
-                                    notFound = false;
+                                primaryDependencies.Add(mi.Imports[t].DepotPathStr);
                             }
-                            if (notFound)
-                                primaryDependencies.Add(micr2w.Imports[t].DepotPathStr);
                         }
-                        fs.Dispose();
-                        fs.Close();
-                    }
-                }
-                else
-                {
-                    string path = (cr2w.Chunks[index].data as CMesh).ExternalMaterials[i].DepotPath;
-
-                    ulong hash = FNV1A64HashAlgorithm.HashString(path);
-                    foreach (Archive ar in archives)
-                        ModTools.ExtractSingle(ar, hash, new DirectoryInfo(cacheDir));
-
-                    path = cacheDir + (cr2w.Chunks[index].data as CMesh).ExternalMaterials[i].DepotPath;
-
-                    if (File.Exists(path))
-                    {
-                        FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read);
-                        var micr2w = ModTools.TryReadCr2WFile(fs);
-                        ExternalMaterial.Add(micr2w.Chunks[0].data as CMaterialInstance);
-
-                        for (int t = 0; t < micr2w.Imports.Count; t++)
-                        {
-                            bool notFound = true;
-                            for (int e = 0; e < primaryDependencies.Count; e++)
-                            {
-                                if (primaryDependencies[e] == micr2w.Imports[t].DepotPathStr)
-                                    notFound = false;
-                            }
-                            if (notFound)
-                                primaryDependencies.Add(micr2w.Imports[t].DepotPathStr);
-                        }
-                        fs.Dispose();
-                        fs.Close();
+                        break;
                     }
                 }
             }
             List<CMaterialInstance> LocalMaterial = new List<CMaterialInstance>();
 
             bool isbuffered = true;
-            if ((cr2w.Chunks[index].data as CMesh).LocalMaterialBuffer.RawDataHeaders.Count == 0)
+            if (cmesh.LocalMaterialBuffer.RawDataHeaders.Count == 0)
                 isbuffered = false;
 
             if (isbuffered)
             {
                 MemoryStream materialStream = GetMaterialStream(meshStream, cr2w);
                 byte[] bytes = materialStream.ToArray();
-                for (int i = 0; i < (cr2w.Chunks[index].data as CMesh).LocalMaterialBuffer.RawDataHeaders.Count; i++)
+                for (int i = 0; i < cmesh.LocalMaterialBuffer.RawDataHeaders.Count; i++)
                 {
-                    UInt32 offset = (cr2w.Chunks[index].data as CMesh).LocalMaterialBuffer.RawDataHeaders[i].Offset.Value;
-                    UInt32 size = (cr2w.Chunks[index].data as CMesh).LocalMaterialBuffer.RawDataHeaders[i].Size.Value;
+                    UInt32 offset = cmesh.LocalMaterialBuffer.RawDataHeaders[i].Offset.Value;
+                    UInt32 size = cmesh.LocalMaterialBuffer.RawDataHeaders[i].Size.Value;
 
                     MemoryStream ms = new MemoryStream(bytes, (int)offset, (int)size);
-                    var mtcr2w = ModTools.TryReadCr2WFile(ms);
+                    var mi = _wolvenkitFileService.TryReadCr2WFile(ms);
 
-                    string path = (mtcr2w.Chunks[0].data as CMaterialInstance).BaseMaterial.DepotPath;
-
-                    for (int e = 0; e < mtcr2w.Imports.Count; e++)
+                    for (int e = 0; e < mi.Imports.Count; e++)
                     {
-                        bool notFound = true;
-                        for (int eye = 0; eye < primaryDependencies.Count; eye++)
+                        if (!primaryDependencies.Contains(mi.Imports[e].DepotPathStr))
                         {
-                            if (primaryDependencies[eye] == mtcr2w.Imports[e].DepotPathStr)
-                                notFound = false;
+                            primaryDependencies.Add(mi.Imports[e].DepotPathStr);
                         }
-                        if (notFound)
-                            primaryDependencies.Add(mtcr2w.Imports[e].DepotPathStr);
                     }
+                    LocalMaterial.Add(mi.Chunks[0].Data as CMaterialInstance);
 
-                    LocalMaterial.Add(mtcr2w.Chunks[0].data as CMaterialInstance);
                 }
             }
             else
@@ -213,26 +136,22 @@ namespace WolvenKit.RED4.MeshFile.Materials
                 {
                     if (cr2w.Chunks[i].REDType == "CMaterialInstance")
                     {
-                        LocalMaterial.Add(cr2w.Chunks[i].data as CMaterialInstance);
+                        LocalMaterial.Add(cr2w.Chunks[i].Data as CMaterialInstance);
                     }
                 }
-                for(int i = 0; i < cr2w.Imports.Count; i++)
+                for (int i = 0; i < cr2w.Imports.Count; i++)
                 {
-                    bool notFound = true;
-                    for(int e = 0; e < primaryDependencies.Count; e++)
+                    if (!primaryDependencies.Contains(cr2w.Imports[i].DepotPathStr))
                     {
-                        if (primaryDependencies[e] == cr2w.Imports[i].DepotPathStr)
-                            notFound = false;
-                    }
-                    if (notFound)
                         primaryDependencies.Add(cr2w.Imports[i].DepotPathStr);
+                    }
                 }
             }
 
-            int Count = (cr2w.Chunks[index].data as CMesh).MaterialEntries.Count;
+            int Count = cmesh.MaterialEntries.Count;
             for (int i = 0; i < Count; i++)
             {
-                var Entry = (cr2w.Chunks[index].data as CMesh).MaterialEntries[i];
+                var Entry = cmesh.MaterialEntries[i];
                 materialEntryNames.Add(Entry.Name.Value);
                 if (Entry.IsLocalInstance.Value)
                     materialEntries.Add(LocalMaterial[Entry.Index.Value]);
@@ -240,14 +159,14 @@ namespace WolvenKit.RED4.MeshFile.Materials
                     materialEntries.Add(ExternalMaterial[Entry.Index.Value]);
             }
         }
-        static void ParseMaterialsUsingAssetLib(Stream meshStream, ref ModelRoot model,DirectoryInfo outDir, DirectoryInfo AssetLib, bool CopyTextures = false, EUncookExtension eUncookExtension = EUncookExtension.dds)
+        private void ParseMaterials(CR2WFile cr2w, Stream meshStream, DirectoryInfo outDir, List<Archive> archives, EUncookExtension eUncookExtension = EUncookExtension.dds)
         {
             List<string> primaryDependencies = new List<string>();
 
             List<string> materialEntryNames = new List<string>();
             List<CMaterialInstance> materialEntries = new List<CMaterialInstance>();
 
-            GetMateriaEntries(meshStream, ref primaryDependencies, ref materialEntryNames, ref materialEntries,AssetLib,true);
+            GetMateriaEntries(cr2w, meshStream, ref primaryDependencies, ref materialEntryNames, ref materialEntries, archives);
 
             List<string> mlSetupNames = new List<string>();
             List<Multilayer_Setup> mlSetups = new List<Multilayer_Setup>();
@@ -257,430 +176,321 @@ namespace WolvenKit.RED4.MeshFile.Materials
 
             List<string> TexturesList = new List<string>();
 
+            var exportArgs =
+                new GlobalExportArgs().Register(
+                    new XbmExportArgs() { UncookExtension = eUncookExtension },
+                    new MlmaskExportArgs() { UncookExtension = eUncookExtension }
+                );
+
             for (int i = 0; i < primaryDependencies.Count; i++)
             {
 
                 if (Path.GetExtension(primaryDependencies[i]) == ".xbm")
                 {
-                    TexturesList.Add(primaryDependencies[i]);
-                    if (File.Exists(AssetLib.FullName + primaryDependencies[i]))
+                    if (!TexturesList.Contains(primaryDependencies[i]))
+                        TexturesList.Add(primaryDependencies[i]);
+
+                    ulong hash = FNV1A64HashAlgorithm.HashString(primaryDependencies[i]);
+                    foreach (Archive ar in archives)
                     {
-                        if (CopyTextures)
+                        if (ar.Files.ContainsKey(hash))
                         {
-                            File.Copy(AssetLib.FullName + primaryDependencies[i], cacheDir + Path.GetFileName(primaryDependencies[i]), true);
-                            ModTools.Export(new FileInfo(cacheDir + Path.GetFileName(primaryDependencies[i])), eUncookExtension);
+                            _modTools.UncookSingle(ar, hash, outDir, exportArgs);
+                            break;
                         }
+
                     }
                 }
                 if (Path.GetExtension(primaryDependencies[i]) == ".mlmask")
                 {
-                    TexturesList.Add(primaryDependencies[i]);
-                    if (File.Exists(AssetLib.FullName + primaryDependencies[i]))
+                    if (!TexturesList.Contains(primaryDependencies[i]))
+                        TexturesList.Add(primaryDependencies[i]);
+                    ulong hash = FNV1A64HashAlgorithm.HashString(primaryDependencies[i]);
+                    foreach (Archive ar in archives)
                     {
-                        if (CopyTextures)
+                        if (ar.Files.ContainsKey(hash))
                         {
-                            File.Copy(AssetLib.FullName + primaryDependencies[i], cacheDir + Path.GetFileName(primaryDependencies[i]), true);
-                            ModTools.Export(new FileInfo(cacheDir + Path.GetFileName(primaryDependencies[i])), eUncookExtension);
+                            _modTools.UncookSingle(ar, hash, outDir, exportArgs);
+                            break;
                         }
                     }
+
                 }
 
                 if (Path.GetExtension(primaryDependencies[i]) == ".mlsetup")
-                    if (File.Exists(AssetLib.FullName + primaryDependencies[i]))
+                {
+                    ulong hash = FNV1A64HashAlgorithm.HashString(primaryDependencies[i]);
+                    foreach (Archive ar in archives)
                     {
-                        FileStream setupFs = new FileStream((AssetLib.FullName + primaryDependencies[i]), FileMode.Open, FileAccess.Read);
-                        var cr2w = ModTools.TryReadCr2WFile(setupFs);
-                        mlSetupNames.Add(Path.GetFileName(primaryDependencies[i]));
-                        mlSetups.Add(cr2w.Chunks[0].data as Multilayer_Setup);
-
-                        setupFs.Dispose();
-                        setupFs.Close();
-                        for (int e = 0; e < cr2w.Imports.Count; e++)
+                        if (ar.Files.ContainsKey(hash))
                         {
-                            if (Path.GetExtension(cr2w.Imports[e].DepotPathStr) == ".xbm")
-                            {
-                                TexturesList.Add(cr2w.Imports[e].DepotPathStr);
-                                if (File.Exists(AssetLib.FullName + cr2w.Imports[e].DepotPathStr))
-                                {
-                                    if (CopyTextures)
-                                    {
-                                        File.Copy(AssetLib.FullName + cr2w.Imports[e].DepotPathStr, cacheDir + Path.GetFileName(cr2w.Imports[e].DepotPathStr), true);
-                                        ModTools.Export(new FileInfo(cacheDir + Path.GetFileName(cr2w.Imports[e].DepotPathStr)), eUncookExtension);
-                                    }
-                                }
-                            }
-                            if (Path.GetExtension(cr2w.Imports[e].DepotPathStr) == ".mltemplate")
-                            {
-                                if (File.Exists(AssetLib.FullName + cr2w.Imports[e].DepotPathStr))
-                                {
-                                    FileStream templateFs = new FileStream((AssetLib.FullName + cr2w.Imports[e].DepotPathStr), FileMode.Open, FileAccess.Read);
-                                    var mlTempcr2w = ModTools.TryReadCr2WFile(templateFs);
-                                    mlTemplateNames.Add(Path.GetFileName(cr2w.Imports[e].DepotPathStr));
-                                    mlTemplates.Add(mlTempcr2w.Chunks[0].data as Multilayer_LayerTemplate);
+                            var ms = new MemoryStream();
+                            ModTools.ExtractSingleToStream(ar, hash, ms);
+                            var mls = _wolvenkitFileService.TryReadCr2WFile(ms);
+                            mlSetupNames.Add(Path.GetFileName(primaryDependencies[i]));
+                            mlSetups.Add(mls.Chunks[0].Data as Multilayer_Setup);
 
-                                    templateFs.Dispose();
-                                    templateFs.Close();
-                                    for (int eye = 0; eye < mlTempcr2w.Imports.Count; eye++)
+                            for (int e = 0; e < mls.Imports.Count; e++)
+                            {
+                                if (Path.GetExtension(mls.Imports[e].DepotPathStr) == ".xbm")
+                                {
+                                    if (!TexturesList.Contains(mls.Imports[e].DepotPathStr))
+                                        TexturesList.Add(mls.Imports[e].DepotPathStr);
+
+                                    ulong hash1 = FNV1A64HashAlgorithm.HashString(mls.Imports[e].DepotPathStr);
+                                    foreach (Archive arr in archives)
                                     {
-                                        TexturesList.Add(mlTempcr2w.Imports[eye].DepotPathStr);
-                                        if (File.Exists(AssetLib.FullName + mlTempcr2w.Imports[eye].DepotPathStr))
+                                        if (arr.Files.ContainsKey(hash1))
                                         {
-                                            if (CopyTextures)
-                                            {
-                                                File.Copy(AssetLib.FullName + mlTempcr2w.Imports[eye].DepotPathStr, cacheDir + Path.GetFileName(mlTempcr2w.Imports[eye].DepotPathStr), true);
-                                                ModTools.Export(new FileInfo(cacheDir + Path.GetFileName(mlTempcr2w.Imports[eye].DepotPathStr)), eUncookExtension);
-                                            }
+                                            _modTools.UncookSingle(arr, hash1, outDir, exportArgs);
+                                            break;
                                         }
                                     }
                                 }
-                            }
-                        }
-
-                    }
-            }
-
-            try
-            {
-
-                List<RawMaterial> RawMaterials = new List<RawMaterial>();
-                for (int i = 0; i < materialEntries.Count; i++)
-                {
-                    RawMaterials.Add(ContainRawMaterial(materialEntries[i], materialEntryNames[i]));
-                }
-
-                List<Setup> MaterialSetups = new List<Setup>();
-                for (int i = 0; i < mlSetups.Count; i++)
-                {
-                    MaterialSetups.Add(new Setup(mlSetups[i], mlSetupNames[i]));
-                }
-
-                List<Template> MaterialTemplates = new List<Template>();
-                for (int i = 0; i < mlTemplates.Count; i++)
-                {
-                    MaterialTemplates.Add(new Template(mlTemplates[i], mlTemplateNames[i]));
-                }
-
-                if(RawMaterials.Count > 0)
-                {
-                    if(MaterialSetups.Count > 0)
-                    {
-                        if(MaterialTemplates.Count > 0)
-                        {
-                            var obj = new { AssetLib = AssetLib.FullName, CopyTextures, ValueToBeIgnored = 9999, RawMaterials, MaterialSetups, MaterialTemplates};
-                            model.Extras = JsonContent.Serialize(obj);
-                            File.WriteAllText(outDir.FullName + "Material.json", JsonContent.Serialize(obj).ToJson());
-                        }
-                        else
-                        {
-                            var obj = new { AssetLib = AssetLib.FullName, CopyTextures, ValueToBeIgnored = 9999, RawMaterials, MaterialSetups};
-                            model.Extras = JsonContent.Serialize(obj);
-                            File.WriteAllText(outDir.FullName + "Material.json", JsonContent.Serialize(obj).ToJson());
-                        }
-                    }
-                    else
-                    {
-                        var obj = new { AssetLib = AssetLib.FullName, CopyTextures, ValueToBeIgnored = 9999, RawMaterials};
-                        model.Extras = JsonContent.Serialize(obj);
-                        File.WriteAllText(outDir.FullName + "Material.json", JsonContent.Serialize(obj).ToJson());
-                    }
-                }
-
-            }
-            catch { }
-
-            File.WriteAllLines(outDir.FullName + "TexturesList.txt", TexturesList);
-
-
-            string ext = "*.dds";
-            if (eUncookExtension == EUncookExtension.png)
-                ext = "*.png";
-            if (eUncookExtension == EUncookExtension.bmp)
-                ext = "*.bmp";
-            if (eUncookExtension == EUncookExtension.jpeg)
-                ext = "*.jpeg";
-            if (eUncookExtension == EUncookExtension.jpg)
-                ext = "*.jpg";
-            if (eUncookExtension == EUncookExtension.tga)
-                ext = "*.tga";
-
-            string[] files = Directory.GetFiles(cacheDir, ext);
-            for (int i = 0; i < files.Length; i++)
-                File.Move(files[i], outDir.FullName + Path.GetFileName(files[i]),true);
-        }
-        static void ParseMaterialsUsingArchives(Stream meshStream, ref ModelRoot model, DirectoryInfo outDir, EUncookExtension eUncookExtension = EUncookExtension.dds)
-        {
-            List<string> primaryDependencies = new List<string>();
-
-            List<string> materialEntryNames = new List<string>();
-            List<CMaterialInstance> materialEntries = new List<CMaterialInstance>();
-
-            GetMateriaEntries(meshStream, ref primaryDependencies, ref materialEntryNames, ref materialEntries,new DirectoryInfo(cacheDir), false);
-
-            List<string> mlSetupNames = new List<string>();
-            List<Multilayer_Setup> mlSetups = new List<Multilayer_Setup>();
-
-            List<string> mlTemplateNames = new List<string>();
-            List<Multilayer_LayerTemplate> mlTemplates = new List<Multilayer_LayerTemplate>();
-
-            List<string> TexturesList = new List<string>();
-
-            for (int i = 0; i < primaryDependencies.Count; i++)
-            {
-
-                if (Path.GetExtension(primaryDependencies[i]) == ".xbm")
-                {
-                    TexturesList.Add(primaryDependencies[i]);
-
-                    ulong hash = FNV1A64HashAlgorithm.HashString(primaryDependencies[i]);
-                    foreach (Archive ar in archives)
-                        ModTools.UncookSingle(ar, hash, new DirectoryInfo(cacheDir), eUncookExtension);
-                }
-                if (Path.GetExtension(primaryDependencies[i]) == ".mlmask")
-                {
-                    TexturesList.Add(primaryDependencies[i]);
-                    ulong hash = FNV1A64HashAlgorithm.HashString(primaryDependencies[i]);
-                    foreach (Archive ar in archives)
-                        ModTools.UncookSingle(ar, hash, new DirectoryInfo(cacheDir), eUncookExtension);
-                    
-                }
-
-                if (Path.GetExtension(primaryDependencies[i]) == ".mlsetup")
-                {
-                    ulong hash = FNV1A64HashAlgorithm.HashString(primaryDependencies[i]);
-                    foreach (Archive ar in archives)
-                        ModTools.ExtractSingle(ar, hash, new DirectoryInfo(cacheDir));
-
-                    if (File.Exists(cacheDir + primaryDependencies[i]))
-                    {
-                        FileStream setupFs = new FileStream((cacheDir + primaryDependencies[i]), FileMode.Open, FileAccess.Read);
-                        var cr2w = ModTools.TryReadCr2WFile(setupFs);
-                        mlSetupNames.Add(Path.GetFileName(primaryDependencies[i]));
-                        mlSetups.Add(cr2w.Chunks[0].data as Multilayer_Setup);
-
-                        setupFs.Dispose();
-                        setupFs.Close();
-
-                        for (int e = 0; e < cr2w.Imports.Count; e++)
-                        {
-                            if (Path.GetExtension(cr2w.Imports[e].DepotPathStr) == ".xbm")
-                            {
-                                TexturesList.Add(cr2w.Imports[e].DepotPathStr);
-
-                                ulong hash1 = FNV1A64HashAlgorithm.HashString(cr2w.Imports[e].DepotPathStr);
-                                foreach (Archive ar in archives)
-                                    ModTools.UncookSingle(ar, hash1, new DirectoryInfo(cacheDir), eUncookExtension);
-                            }
-                            if (Path.GetExtension(cr2w.Imports[e].DepotPathStr) == ".mltemplate")
-                            {
-                                ulong hash2 = FNV1A64HashAlgorithm.HashString(cr2w.Imports[e].DepotPathStr);
-                                foreach (Archive ar in archives)
-                                    ModTools.ExtractSingle(ar, hash2, new DirectoryInfo(cacheDir));
-
-                                if (File.Exists(cacheDir + cr2w.Imports[e].DepotPathStr))
+                                if (Path.GetExtension(mls.Imports[e].DepotPathStr) == ".mltemplate")
                                 {
-                                    FileStream templateFs = new FileStream((cacheDir + cr2w.Imports[e].DepotPathStr), FileMode.Open, FileAccess.Read);
-                                    var mlTempcr2w = ModTools.TryReadCr2WFile(templateFs);
-                                    mlTemplateNames.Add(Path.GetFileName(cr2w.Imports[e].DepotPathStr));
-                                    mlTemplates.Add(mlTempcr2w.Chunks[0].data as Multilayer_LayerTemplate);
-
-                                    templateFs.Dispose();
-                                    templateFs.Close();
-
-                                    for (int eye = 0; eye < mlTempcr2w.Imports.Count; eye++)
+                                    ulong hash2 = FNV1A64HashAlgorithm.HashString(mls.Imports[e].DepotPathStr);
+                                    foreach (Archive arr in archives)
                                     {
-                                        TexturesList.Add(mlTempcr2w.Imports[eye].DepotPathStr);
+                                        if (arr.Files.ContainsKey(hash2))
+                                        {
+                                            var mss = new MemoryStream();
+                                            ModTools.ExtractSingleToStream(arr, hash2, mss);
 
-                                        ulong hash3 = FNV1A64HashAlgorithm.HashString(mlTempcr2w.Imports[eye].DepotPathStr);
-                                        foreach (Archive ar in archives)
-                                            ModTools.UncookSingle(ar, hash3, new DirectoryInfo(cacheDir), eUncookExtension);
+                                            var mlt = _wolvenkitFileService.TryReadCr2WFile(mss);
+                                            mlTemplateNames.Add(Path.GetFileName(mls.Imports[e].DepotPathStr));
+                                            mlTemplates.Add(mlt.Chunks[0].Data as Multilayer_LayerTemplate);
+
+                                            for (int eye = 0; eye < mlt.Imports.Count; eye++)
+                                            {
+                                                if (!TexturesList.Contains(mlt.Imports[eye].DepotPathStr))
+                                                    TexturesList.Add(mlt.Imports[eye].DepotPathStr);
+
+                                                ulong hash3 = FNV1A64HashAlgorithm.HashString(mlt.Imports[eye].DepotPathStr);
+                                                foreach (Archive arrr in archives)
+                                                {
+                                                    if (arrr.Files.ContainsKey(hash3))
+                                                    {
+                                                        _modTools.UncookSingle(arrr, hash3, outDir, exportArgs);
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            break;
+                                        }
                                     }
                                 }
+
                             }
-
+                            break;
                         }
                     }
                 }
             }
 
-            try
+            List<RawMaterial> RawMaterials = new List<RawMaterial>();
+            for (int i = 0; i < materialEntries.Count; i++)
             {
-
-                List<RawMaterial> RawMaterials = new List<RawMaterial>();
-                for (int i = 0; i < materialEntries.Count; i++)
-                {
-                    RawMaterials.Add(ContainRawMaterial(materialEntries[i], materialEntryNames[i]));
-                }
-
-                List<Setup> MaterialSetups = new List<Setup>();
-                for (int i = 0; i < mlSetups.Count; i++)
-                {
-                    MaterialSetups.Add(new Setup(mlSetups[i], mlSetupNames[i]));
-                }
-
-                List<Template> MaterialTemplates = new List<Template>();
-                for (int i = 0; i < mlTemplates.Count; i++)
-                {
-                    MaterialTemplates.Add(new Template(mlTemplates[i], mlTemplateNames[i]));
-                }
-
-                if (RawMaterials.Count > 0)
-                {
-                    if (MaterialSetups.Count > 0)
-                    {
-                        if (MaterialTemplates.Count > 0)
-                        {
-                            var obj = new { AssetLib = "", CopyTextures = true, ValueToBeIgnored = 9999, RawMaterials, MaterialSetups, MaterialTemplates };
-                            model.Extras = JsonContent.Serialize(obj);
-                            File.WriteAllText(outDir.FullName + "Material.json", JsonContent.Serialize(obj).ToJson());
-                        }
-                        else
-                        {
-                            var obj = new { AssetLib = "", CopyTextures = true, ValueToBeIgnored = 9999, RawMaterials, MaterialSetups };
-                            model.Extras = JsonContent.Serialize(obj);
-                            File.WriteAllText(outDir.FullName + "Material.json", JsonContent.Serialize(obj).ToJson());
-                        }
-                    }
-                    else
-                    {
-                        var obj = new { AssetLib = "", CopyTextures = true, ValueToBeIgnored = 9999, RawMaterials };
-                        model.Extras = JsonContent.Serialize(obj);
-                        File.WriteAllText(outDir.FullName + "Material.json", JsonContent.Serialize(obj).ToJson());
-                    }
-                }
-
+                RawMaterials.Add(ContainRawMaterial(materialEntries[i], materialEntryNames[i]));
             }
-            catch { }
-            File.WriteAllLines(outDir.FullName + "TexturesList.txt", TexturesList);
 
-            string ext = "*.dds";
-            if (eUncookExtension == EUncookExtension.png)
-                ext = "*.png";
-            if (eUncookExtension == EUncookExtension.bmp)
-                ext = "*.bmp";
-            if (eUncookExtension == EUncookExtension.jpeg)
-                ext = "*.jpeg";
-            if (eUncookExtension == EUncookExtension.jpg)
-                ext = "*.jpg";
-            if (eUncookExtension == EUncookExtension.tga)
-                ext = "*.tga";
+            List<Setup> MaterialSetups = new List<Setup>();
+            for (int i = 0; i < mlSetups.Count; i++)
+            {
+                MaterialSetups.Add(new Setup(mlSetups[i], mlSetupNames[i]));
+            }
 
-            string[] files = Directory.GetFiles(cacheDir, ext,SearchOption.AllDirectories);
+            List<Template> MaterialTemplates = new List<Template>();
+            for (int i = 0; i < mlTemplates.Count; i++)
+            {
+                MaterialTemplates.Add(new Template(mlTemplates[i], mlTemplateNames[i]));
+            }
+            var obj = new { RawMaterials = RawMaterials, MaterialSetups = MaterialSetups, MaterialTemplates = MaterialTemplates };
 
-            for (int i = 0; i < files.Length; i++)
-                File.Move(files[i], outDir.FullName + Path.GetFileName(files[i]), true);
+            var settings = new JsonSerializerSettings();
+            settings.NullValueHandling = NullValueHandling.Ignore;
+            settings.Formatting = Formatting.Indented;
+
+            string str = JsonConvert.SerializeObject(obj, settings);
+
+            File.WriteAllLines(Path.Combine(outDir.FullName, "Textures.txt"), TexturesList);
+            File.WriteAllText(Path.Combine(outDir.FullName, "Material.json"), str);
+
         }
-        static RawMaterial ContainRawMaterial(CMaterialInstance cMaterialInstance, string Name)
+        private static RawMaterial ContainRawMaterial(CMaterialInstance cMaterialInstance, string Name)
         {
             RawMaterial rawMaterial = new RawMaterial();
 
             rawMaterial.Name = Name;
-            try
-            {
-                rawMaterial.BaseMaterial = cMaterialInstance.BaseMaterial.DepotPath;
-
-                if (Path.GetFileNameWithoutExtension(cMaterialInstance.BaseMaterial.DepotPath) == "mesh_decal")
-                {
-                    rawMaterial.MaterialType = MaterialType.MeshDecal;
-
-                    MeshDecal MeshDecal = new MeshDecal(cMaterialInstance);
-                    rawMaterial.MeshDecal = MeshDecal;
-
-                }
-                if (Path.GetFileNameWithoutExtension(cMaterialInstance.BaseMaterial.DepotPath) == "multilayered")
-                {
-                    rawMaterial.MaterialType = MaterialType.MultiLayered;
-
-                    MultiLayered multiLayered = new MultiLayered(cMaterialInstance);
-                    rawMaterial.MultiLayered = multiLayered;
-
-                }
-                if (cMaterialInstance.BaseMaterial.DepotPath.Contains("skin"))
-                {
-                    rawMaterial.MaterialType = MaterialType.HumanSkin;
-
-                    HumanSkin HumanSkin = new HumanSkin(cMaterialInstance);
-                    rawMaterial.HumanSkin = HumanSkin;
-                }
-            }
-            catch { }
+            rawMaterial.CMaterialInstance = cMaterialInstance;
 
             return rawMaterial;
         }
-        static MemoryStream GetMaterialStream(Stream ms,CR2WFile cr2w)
+        private static MemoryStream GetMaterialStream(Stream ms, CR2WFile cr2w)
         {
+            var blob = cr2w.Chunks.Select(_ => _.Data).OfType<CMesh>().First();
+
+            UInt16 p = blob.LocalMaterialBuffer.RawData.Buffer.Value;
+            var b = cr2w.Buffers[p - 1];
+            ms.Seek(b.Offset, SeekOrigin.Begin);
             MemoryStream materialStream = new MemoryStream();
-
-            var buffers = cr2w.Buffers;
-            for (var i = 0; i < buffers.Count; i++)
-            {
-                var b = buffers[i];
-                ms.Seek(b.Offset, SeekOrigin.Begin);
-
-                MemoryStream outstream = new MemoryStream();
-                // copy to some outstream
-                ms.DecompressAndCopySegment(outstream, b.DiskSize, b.MemSize);
-                BinaryReader outreader = new BinaryReader(outstream);
-                outstream.Position = 161;
-                if (new string(BitConverter.ToString(outreader.ReadBytes(17))) == "43-4D-61-74-65-72-69-61-6C-49-6E-73-74-61-6E-63-65") // CMaterialInstance
-                {
-                    materialStream = outstream;
-                    break;
-                }
-            }
+            ms.DecompressAndCopySegment(materialStream, b.DiskSize, b.MemSize);
             return materialStream;
         }
-        public MATERIAL(DirectoryInfo gameArchiveDir)
+        public void UnpackLocalBufferMaterials(Stream meshStream, DirectoryInfo unpackDir)
         {
-            string[] filenames = Directory.GetFiles(gameArchiveDir.FullName, "*.archive", SearchOption.AllDirectories);
-            archives = new List<Archive>();
+            var cr2w = _wolvenkitFileService.TryReadRED4File(meshStream);
+            var blob = cr2w.Chunks.Select(_ => _.Data).OfType<CMesh>().First();
 
-            for (int i = 0; i < filenames.Length; i++)
-                archives.Add(new Archive(filenames[i]));
+            int Count = blob.LocalMaterialBuffer.RawDataHeaders.Count;
+            if (Count == 0)
+            {
+                throw new Exception("Provided .mesh doesn't contain any local material buffer");
+            }
+            else
+            {
+                byte[] bytes = GetMaterialStream(meshStream, cr2w).ToArray();
+                List<string> names = new List<string>();
+                for (int i = 0; i < blob.MaterialEntries.Count; i++)
+                {
+                    if (blob.MaterialEntries[i].IsLocalInstance.Value)
+                    {
+                        names.Add(blob.MaterialEntries[i].Name.Value);
+                    }
+                }
+                for (int i = 0; i < Count; i++)
+                {
+                    UInt32 offset = blob.LocalMaterialBuffer.RawDataHeaders[i].Offset.Value;
+                    UInt32 size = blob.LocalMaterialBuffer.RawDataHeaders[i].Size.Value;
+                    MemoryStream ms = new MemoryStream(bytes, (int)offset, (int)size);
+
+                    File.WriteAllBytes(unpackDir.FullName + "\\" + names[i] + ".mi", ms.ToArray());
+                }
+            }
+            meshStream.Dispose();
+            meshStream.Close();
         }
-        public MATERIAL()
+        public void PackMaterialToLocalBuffer(DirectoryInfo packDir, Stream inmeshStream, FileInfo outMeshFile)
         {
+            var cr2w = _wolvenkitFileService.TryReadCr2WFile(inmeshStream);
+            var blob = cr2w.Chunks.Select(_ => _.Data).OfType<CMesh>().First();
+
+            int Count = blob.LocalMaterialBuffer.RawDataHeaders.Count;
+            if (Count == 0)
+            {
+                throw new Exception("Provided .mesh doesn't contain any local material buffer");
+            }
+            else
+            {
+                List<string> names = new List<string>();
+                for (int i = 0; i < blob.MaterialEntries.Count; i++)
+                {
+                    if (blob.MaterialEntries[i].IsLocalInstance.Value)
+                    {
+                        names.Add(blob.MaterialEntries[i].Name.Value);
+                    }
+                }
+
+                string[] mifiles = Directory.GetFiles(packDir.FullName, "*.mi");
+                if (mifiles.Length != names.Count)
+                {
+                    throw new Exception("Provided .mi files doesn't match the number of local material entries in the provided mesh file");
+                }
+                MemoryStream buffer = new MemoryStream();
+                BinaryWriter writer = new BinaryWriter(buffer);
+                for (int i = 0; i < names.Count; i++)
+                {
+                    bool notfound = true;
+                    for (int e = 0; e < mifiles.Length; e++)
+                    {
+                        if (Path.GetFileNameWithoutExtension(mifiles[e]) == names[i])
+                        {
+                            notfound = false;
+                            blob.LocalMaterialBuffer.RawDataHeaders[i].Offset.Value = Convert.ToUInt32(buffer.Length);
+                            byte[] bytes = File.ReadAllBytes(mifiles[e]);
+                            writer.Write(bytes);
+                            blob.LocalMaterialBuffer.RawDataHeaders[i].Size.Value = Convert.ToUInt32(bytes.Length);
+
+                        }
+                    }
+                    if (notfound)
+                    {
+                        throw new Exception("One or more names of .mi files doesn't match the names of material enteries in provided mesh file");
+                    }
+                }
+
+                UInt16 p = (blob.LocalMaterialBuffer.RawData.Buffer.Value);
+
+                var compressed = new MemoryStream();
+                using var buff = new BinaryWriter(compressed);
+                var (zsize, crc) = buff.CompressAndWrite(buffer.ToArray());
+
+                cr2w.Buffers[p - 1].DiskSize = zsize;
+                cr2w.Buffers[p - 1].Crc32 = crc;
+                cr2w.Buffers[p - 1].MemSize = (UInt32)buffer.Length;
+                var off = cr2w.Buffers[p - 1].Offset;
+                cr2w.Buffers[p - 1].Offset = 0;
+                cr2w.Buffers[p - 1].ReadData(new BinaryReader(compressed));
+                cr2w.Buffers[p - 1].Offset = off;
+
+
+                MemoryStream ms = new MemoryStream();
+                BinaryWriter bw = new BinaryWriter(ms);
+                cr2w.Write(bw);
+
+                File.WriteAllBytes(outMeshFile.FullName, ms.ToArray());
+            }
+            inmeshStream.Dispose();
+            inmeshStream.Close();
 
         }
     }
-    public class MaterialRepository
+    public partial class MATERIAL
     {
-        public static Thread Generate(DirectoryInfo gameArchiveDir, DirectoryInfo materialRepoDir, EUncookExtension texturesExtension)
+        public Thread GenerateMaterialRepo(DirectoryInfo gameArchiveDir, DirectoryInfo materialRepoDir, EUncookExtension texturesExtension)
         {
             GameArchiveDir = gameArchiveDir;
             MaterialRepoDir = materialRepoDir;
             TexturesExtension = texturesExtension;
 
-            Thread thread = new Thread(GenerateInBG);
-            thread.IsBackground = true;
+            var thread = new Thread(GenerateInBG) { IsBackground = true };
             thread.Start();
             return thread;
         }
 
-        static void GenerateInBG()
+        private void GenerateInBG()
         {
-            string[] filenames = Directory.GetFiles(GameArchiveDir.FullName, "*.archive", SearchOption.AllDirectories);
-            List<Archive> archives = new List<Archive>();
+            var filenames = Directory.GetFiles(GameArchiveDir.FullName, "*.archive", SearchOption.AllDirectories);
+            var archives = new List<Archive>();
 
             for (int i = 0; i < filenames.Length; i++)
-                archives.Add(new Archive(filenames[i]));
-
-            foreach (Archive ar in archives)
             {
-                ModTools.ExtractAll(ar, MaterialRepoDir, "*.gradient");
-                ModTools.ExtractAll(ar, MaterialRepoDir, "*.w2mi");
-                ModTools.ExtractAll(ar, MaterialRepoDir, "*.matlib");
-                ModTools.ExtractAll(ar, MaterialRepoDir, "*.remt");
-                ModTools.ExtractAll(ar, MaterialRepoDir, "*.sp");
-                ModTools.ExtractAll(ar, MaterialRepoDir, "*.hp");
-                ModTools.ExtractAll(ar, MaterialRepoDir, "*.fp");
-                ModTools.ExtractAll(ar, MaterialRepoDir, "*.mi");
-                ModTools.ExtractAll(ar, MaterialRepoDir, "*.mt");
-                ModTools.ExtractAll(ar, MaterialRepoDir, "*.mlsetup");
-                ModTools.ExtractAll(ar, MaterialRepoDir, "*.mltemplate");
-                ModTools.ExtractAll(ar, MaterialRepoDir, "*.texarray");
+                archives.Add(Red4ParserServiceExtensions.ReadArchive(filenames[i], _hashService));
+            }
 
-                ModTools.UncookAll(ar, MaterialRepoDir, "*.xbm", "", TexturesExtension);
-                ModTools.UncookAll(ar, MaterialRepoDir, "*.mlmask", "", TexturesExtension);
+            var exportArgs =
+                new GlobalExportArgs().Register(
+                    new XbmExportArgs() { UncookExtension = TexturesExtension },
+                    new MlmaskExportArgs() { UncookExtension = TexturesExtension }
+                );
+
+            foreach (var ar in archives)
+            {
+                _modTools.ExtractAll(ar, MaterialRepoDir, "*.gradient");
+                _modTools.ExtractAll(ar, MaterialRepoDir, "*.w2mi");
+                _modTools.ExtractAll(ar, MaterialRepoDir, "*.matlib");
+                _modTools.ExtractAll(ar, MaterialRepoDir, "*.remt");
+                _modTools.ExtractAll(ar, MaterialRepoDir, "*.sp");
+                _modTools.ExtractAll(ar, MaterialRepoDir, "*.hp");
+                _modTools.ExtractAll(ar, MaterialRepoDir, "*.fp");
+                _modTools.ExtractAll(ar, MaterialRepoDir, "*.mi");
+                _modTools.ExtractAll(ar, MaterialRepoDir, "*.mt");
+                _modTools.ExtractAll(ar, MaterialRepoDir, "*.mlsetup");
+                _modTools.ExtractAll(ar, MaterialRepoDir, "*.mltemplate");
+                _modTools.ExtractAll(ar, MaterialRepoDir, "*.texarray");
+
+                _modTools.UncookAll(ar, MaterialRepoDir, exportArgs, false, "*.xbm", "");
+                _modTools.UncookAll(ar, MaterialRepoDir, exportArgs, false, "*.mlmask", "");
                 // try catch the decode in mlmask.cs for now
             }
         }

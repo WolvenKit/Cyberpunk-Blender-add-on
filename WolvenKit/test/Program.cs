@@ -3,41 +3,33 @@ using System.IO;
 using Catel.IoC;
 using WolvenKit.Common.Services;
 using WolvenKit.RED4.CR2W;
+using CP77.CR2W;
+using WolvenKit.Common.Tools.Oodle;
+using WolvenKit.Modkit.RED4.MeshFile;
+using WolvenKit.Modkit.RED4;
+using WolvenKit.Modkit.RED4.RigFile;
 using System.Collections.Generic;
-using WolvenKit.RED4.MeshFile;
-using WolvenKit.RED4.GeneralStructs;
-using SharpGLTF.Schema2;
-using WolvenKit.RED4.CR2W.Types;
+using WolvenKit.RED4.CR2W.Archive;
+using WolvenKit.Modkit.RED4.Materials;
 
-namespace GLTFNodesTest
+namespace TEST
 {
-    using Vec3 = System.Numerics.Vector3;
-    using Vec4 = System.Numerics.Vector4;
     class Program
     {
         static void Main(string[] args)
         {
-            ServiceLocator.Default.RegisterType<ILoggerService, LoggerService>();
-            ServiceLocator.Default.RegisterType<IHashService, HashService>();
-            ServiceLocator.Default.RegisterType<IWolvenkitFileService, Cp77FileService>();
-
-
-            string file = @"C:\Users\Abhinav\Desktop\h0_001_wa_c__judy.mesh";
-            string rig = @"C:\Users\Abhinav\Desktop\h0_001_wa_c__judy_skeleton.rig";
-
-            /*
-            string file = @"C:\Users\Abhinav\Desktop\t0_001_wa_body__judy.mesh";
-            string rig = @"C:\Users\Abhinav\Desktop\woman_base_deformations.rig";
-            */
-
-            //string file = @"C:\Users\Abhinav\Desktop\untitled.mesh";
-            //string rig = @"C:\Users\Abhinav\Desktop\h0_001_wa_c__judy_skeleton.rig";
-            FileStream fs = new FileStream(file, FileMode.Open, FileAccess.Read);
-            FileStream rs = new FileStream(rig, FileMode.Open, FileAccess.Read);
-
-            MESHIMPORTER.Import(new FileInfo(@"C:\Users\Abhinav\Desktop\catto.glb"), fs, new FileInfo(@"C:\Users\Abhinav\Desktop\untitled.mesh"));
-
-            //MESH.ExportMeshWithRig(fs,rs, "mesh", new FileInfo(@"C:\Users\Abhinav\Desktop\blop.glb"), false);
+            var serviceLocator = ServiceLocator.Default;
+            serviceLocator.RegisterType<ILoggerService, CatelLoggerService>();
+            serviceLocator.RegisterType<IProgress<double>, PercentProgressService>();
+            serviceLocator.RegisterType<IHashService, HashService>();
+            serviceLocator.RegisterType<Red4ParserService>();
+            serviceLocator.RegisterType<TargetTools>();
+            serviceLocator.RegisterType<RIG>();
+            serviceLocator.RegisterType<MeshTools>();
+            serviceLocator.RegisterType<MESHIMPORTER>();
+            serviceLocator.RegisterType<ModTools>();
+            var oodlePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "oo2ext_7_win64.dll");
+            OodleLoadLib.Load(oodlePath);
 
         }
     }

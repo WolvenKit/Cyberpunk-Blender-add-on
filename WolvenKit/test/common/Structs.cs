@@ -1,9 +1,8 @@
 using System;
 using System.Numerics;
 using System.Collections.Generic;
-using WolvenKit.RED4.MeshFile.Materials.MaterialTypes;
 
-namespace WolvenKit.RED4.GeneralStructs
+namespace WolvenKit.Modkit.RED4.GeneralStruct
 {
     public class RawArmature
     {
@@ -39,7 +38,9 @@ namespace WolvenKit.RED4.GeneralStructs
         public UInt32[] vertOffsets { get; set; }
         public UInt32[] tx0Offsets { get; set; }
         public UInt32[] normalOffsets { get; set; }
+        public UInt32[] tangentOffsets { get; set; }
         public UInt32[] colorOffsets { get; set; }
+        public UInt32[] tx1Offsets { get; set; }
         public UInt32[] unknownOffsets { get; set; }
         public UInt32[] indicesOffsets { get; set; }
         public UInt32[] vpStrides { get; set; }
@@ -67,7 +68,7 @@ namespace WolvenKit.RED4.GeneralStructs
         public bool extraExist { get; set; }
         public UInt16[,] boneindices { get; set; }
         public Vector3[] extradata { get; set; }
-        public string name;
+        public string name { get; set; }
         public UInt32 weightcount { get; set; }
         public string[] appNames { get; set; }
         public string[] materialNames { get; set; }
@@ -83,10 +84,12 @@ namespace WolvenKit.RED4.GeneralStructs
         public Byte[,] colors { get; set; }
         public Byte[,] weights { get; set; }
         public Byte[,] boneindices { get; set; }
-        public string name;
+        public string name { get; set; }
         public UInt32 weightcount { get; set; }
+        public UInt16[,] extraData { get; set; }
+        public bool extraExist;
     }
-    
+
     public class RawTargetContainer
     {
         public Vector3[] vertexDelta { get; set; }
@@ -120,10 +123,6 @@ namespace WolvenKit.RED4.GeneralStructs
     public class RawMaterial
     {
         public string Name { get; set; }
-        public string BaseMaterial { get; set; }
-        public MaterialType MaterialType { get; set; }
-        public HumanSkin HumanSkin { get; set; }
-        public MeshDecal MeshDecal { get; set; }
-        public MultiLayered MultiLayered { get; set; }
+        public WolvenKit.RED4.CR2W.Types.CMaterialInstance CMaterialInstance { get; set; }
     }
 }
