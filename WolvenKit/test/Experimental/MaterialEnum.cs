@@ -1,7 +1,8 @@
-namespace WolvenKit.Modkit.RED4.Material.Types
+namespace WolvenKit.Modkit.RED4.Materials.Type
 {
     public enum MaterialTypes
     {
+        unknown,
         _3d_map,
         _3d_map_cubes,
         _3d_map_solid,
