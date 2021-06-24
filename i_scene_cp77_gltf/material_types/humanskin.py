@@ -65,7 +65,7 @@ class HumanSkin:
             tmaskNode.label = "TintColorMask"
 
         if Skin.get("Roughness"):
-            rImg = imageFromPath(self.BasePath + Skin["Roughness"],self.image_format,true)
+            rImg = imageFromPath(self.BasePath + Skin["Roughness"],self.image_format,True)
             
             rImgNode = CurMat.nodes.new("ShaderNodeTexImage")
             rImgNode.location = (-600,100)
@@ -78,6 +78,7 @@ class HumanSkin:
             Sep.hide = True
             CurMat.links.new(rImgNode.outputs[0],Sep.inputs[0])
             CurMat.links.new(Sep.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Roughness'])
+            CurMat.links.new(Sep.outputs[2],CurMat.nodes['Principled BSDF'].inputs['Specular'])
 
         if Skin.get("DetailNormal"):
             ndImg = imageFromPath(self.BasePath + Skin["DetailNormal"],self.image_format)

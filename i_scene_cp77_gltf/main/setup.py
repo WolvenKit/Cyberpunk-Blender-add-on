@@ -8,6 +8,7 @@ from ..material_types.hair import Hair
 from ..material_types.meshdecalgradientmaprecolor import MeshDecalGradientMapReColor
 from ..material_types.eye import Eye
 from ..material_types.eyeshadow import EyeShadow
+from ..material_types.meshdecalemissive import MeshDecalEmissive
 
 def createMaterials(obj,BasePath,image_format):
 
@@ -52,3 +53,7 @@ def createMaterials(obj,BasePath,image_format):
                 if rawMat.get("_eye_shadow"):
                     eS = EyeShadow(BasePath,image_format)
                     eS.create(rawMat["_eye_shadow"],bpyMat)
+            if rawMat["MaterialType"] == "_mesh_decal_emissive":
+                if rawMat.get("_mesh_decal_emissive"):
+                    decEmiss = MeshDecalEmissive(BasePath,image_format)
+                    decEmiss.create(rawMat["_mesh_decal_emissive"],bpyMat)

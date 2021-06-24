@@ -22,7 +22,7 @@ class MeshDecalGradientMapReColor:
         CurMat.nodes['Principled BSDF'].inputs['Specular'].default_value = 0
 
 
-        nImg = imageFromPath(self.BasePath + mDecalGmap["NormalTexture"],self.image_format,true)
+        nImg = imageFromPath(self.BasePath + mDecalGmap["NormalTexture"],self.image_format,True)
             
         nImgNode = CurMat.nodes.new("ShaderNodeTexImage")
         nImgNode.location = (-800,-250)

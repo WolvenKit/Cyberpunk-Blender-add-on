@@ -7,7 +7,10 @@ class MetalBase:
         self.BasePath = BasePath
         self.image_format = image_format
     def create(self,MetalBase,Mat):
+
         CurMat = Mat.node_tree
+        CurMat.nodes['Principled BSDF'].inputs['Specular'].default_value = 0
+
         if MetalBase.get("BaseColor"):
             bColImg = imageFromPath(self.BasePath + MetalBase["BaseColor"],self.image_format)
             
@@ -72,3 +75,29 @@ class MetalBase:
             CurMat.links.new(bColNode.outputs[0],mixRGB.inputs[2])
             CurMat.links.new(dColScale.outputs[0],mixRGB.inputs[1])
             CurMat.links.new(mixRGB.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
+
+        if MetalBase.get("EmissiveColor"):
+            emColor = CurMat.nodes.new("ShaderNodeRGB")
+            emColor.location = (-800,-100)
+            emColor.hide = True
+            emColor.label = "EmissiveColor"
+            emColor.outputs[0].default_value = (float(MetalBase["EmissiveColor"]["Red"])/255,float(MetalBase["EmissiveColor"]["Green"])/255,float(MetalBase["EmissiveColor"]["Blue"])/255,float(MetalBase["EmissiveColor"]["Alpha"])/255)
+
+        if MetalBase.get("Emissive"):
+            emTeximg = imageFromPath(self.BasePath + MetalBase["Emissive"],self.image_format)
+            
+            emTexNode = CurMat.nodes.new("ShaderNodeTexImage")
+            emTexNode.location = (-800,200)
+            emTexNode.image = emTeximg
+            emTexNode.label = "Emissive"
+
+        mulNode = CurMat.nodes.new("ShaderNodeMixRGB")
+        mulNode.inputs[0].default_value = 1
+        mulNode.blend_type = 'MULTIPLY'
+        mulNode.location = (-550,50)
+
+        CurMat.links.new(emColor.outputs[0],mulNode.inputs[1])
+        CurMat.links.new(emTexNode.outputs[0],mulNode.inputs[2])
+        CurMat.links.new(mulNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Emission'])
+
+        CurMat.nodes['Principled BSDF'].inputs['Emission Strength'].default_value =  MetalBase["EmissiveEV"]
