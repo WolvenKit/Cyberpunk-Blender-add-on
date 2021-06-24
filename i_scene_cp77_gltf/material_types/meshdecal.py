@@ -3,44 +3,43 @@ import os
 from ..main.common import imageFromPath
 
 class MeshDecal:
-    def __init__(self, BasePath, valueToIgnore,image_format):
+    def __init__(self, BasePath,image_format):
         self.BasePath = BasePath
-        self.valueToIgnore = valueToIgnore
         self.image_format = image_format
     def create(self,Decal,Mat):
         CurMat = Mat.node_tree
-        if Decal.get("diffuseTexture"):
-            dImg = imageFromPath(self.BasePath + Decal["diffuseTexture"],self.image_format)
+        if Decal.get("DiffuseTexture"):
+            dImg = imageFromPath(self.BasePath + Decal["DiffuseTexture"],self.image_format)
             
             dImgNode = CurMat.nodes.new("ShaderNodeTexImage")
             dImgNode.location = (-450,130)
             dImgNode.image = dImg
-            dImgNode.label = "diffuseTexture"
+            dImgNode.label = "DiffuseTexture"
 
             CurMat.links.new(dImgNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
             CurMat.links.new(dImgNode.outputs[1],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
 
-        if Decal.get("diffuseColor"):
+        if Decal.get("DiffuseColor"):
             dColor = CurMat.nodes.new("ShaderNodeRGB")
             dColor.location = (-450,200)
             dColor.hide = True
-            dColor.label = "diffuseColor"
-            dColor.outputs[0].default_value = (float(Decal["diffuseColor"]["x"]),float(Decal["diffuseColor"]["y"]),float(Decal["diffuseColor"]["z"]),float(Decal["diffuseColor"]["w"]))
+            dColor.label = "DiffuseColor"
+            dColor.outputs[0].default_value = (float(Decal["DiffuseColor"]["Red"])/255,float(Decal["DiffuseColor"]["Green"])/255,float(Decal["DiffuseColor"]["Blue"])/255,float(Decal["DiffuseColor"]["Alpha"])/255)
 
-        if Decal.get("diffuseAlpha"):
+        if Decal.get("DiffuseAlpha"):
             dAlpha = CurMat.nodes.new("ShaderNodeValue")
             dAlpha.location = (-300,0)
-            dAlpha.outputs[0].default_value = float(Decal["diffuseAlpha"])
+            dAlpha.outputs[0].default_value = float(Decal["DiffuseAlpha"])
             dAlpha.hide = True
-            dAlpha.label = "diffuseAlpha"
+            dAlpha.label = "DiffuseAlpha"
 
-        if Decal.get("normalTexture"):
-            nImg = imageFromPath(self.BasePath + Decal["normalTexture"],self.image_format,True)
+        if Decal.get("NormalTexture"):
+            nImg = imageFromPath(self.BasePath + Decal["NormalTexture"],self.image_format,True)
             
             nImgNode = CurMat.nodes.new("ShaderNodeTexImage")
             nImgNode.location = (-800,-250)
             nImgNode.image = nImg
-            nImgNode.label = "normalTexture"
+            nImgNode.label = "NormalTexture"
 
             Sep = CurMat.nodes.new("ShaderNodeSeparateRGB")
             Sep.location = (-500,-250)
@@ -59,20 +58,19 @@ class MeshDecal:
             nMap.location = (-150,-250)
             nMap.hide = True
 
-            if Decal.get("normalAlpha"):
-                nMap.inputs[0].default_value = float(Decal["normalAlpha"])
+            if Decal.get("NormalAlpha"):
+                nMap.inputs[0].default_value = float(Decal["NormalAlpha"])
 
             CurMat.links.new(Comb.outputs[0],nMap.inputs[1])
             
             CurMat.links.new(nMap.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Normal'])
 
-        if Decal.get("diffuseColor") and Decal.get("diffuseTexture"):
+        if Decal.get("DiffuseColor") and Decal.get("DiffuseTexture"):
             mixRGB = CurMat.nodes.new("ShaderNodeMixRGB")
             mixRGB.location = (-150,200)
             mixRGB.hide = True
             mixRGB.blend_type = 'MULTIPLY'
-            if Decal.get("diffuseAlpha"):
-                mixRGB.inputs[0].default_value = float(Decal["diffuseAlpha"])
+            mixRGB.inputs[0].default_value = 1
 
             CurMat.links.new(dImgNode.outputs[0],mixRGB.inputs[2])
             CurMat.links.new(dColor.outputs[0],mixRGB.inputs[1])

@@ -9,6 +9,7 @@ bl_info = {
     "category": "Import-Export",
 }
 import bpy
+import json
 from bpy.props import (StringProperty,EnumProperty)
 from bpy_extras.io_utils import ImportHelper
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
@@ -45,11 +46,10 @@ class CP77Import(bpy.types.Operator,ImportHelper):
         gltf_importer = glTFImporter(self.filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'TEMPERANCE', "guess_original_bind_pose" : False})
         gltf_importer.read()
         gltf_importer.checks()
-        obj = gltf_importer.data.extras
-        BasePath = os.path.splitext(self.filepath)[0] + "_Textures\\"
-        if not obj["copyTextures"] and obj["assetLib"] != "":
-            BasePath = obj["assetLib"] + "\\"
 
+        BasePath = os.path.splitext(self.filepath)[0] + "\\"
+        file = open(BasePath + "Material.json",mode='r')
+        obj = json.loads(file.read())
         createMaterials(obj,BasePath,str(self.image_format))
 
         BlenderGlTF.set_convert_functions(gltf_importer)
