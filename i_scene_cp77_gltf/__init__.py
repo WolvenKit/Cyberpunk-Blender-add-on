@@ -2,7 +2,7 @@ bl_info = {
     "name": "Cyberpunk 2077 glTF Importer",
     "author": "HitmanHimself, Turk",
     "version": (0, 0, 1),
-    "blender": (2, 92, 0),
+    "blender": (2, 93, 0),
     "location": "File > Import-Export",
     "description": "Import WolvenKit Cyberpunk2077 glTF Models With Materials",
     "warning": "",
@@ -50,6 +50,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
         BasePath = os.path.splitext(self.filepath)[0] + "\\"
         file = open(BasePath + "Material.json",mode='r')
         obj = json.loads(file.read())
+        BasePath = str(obj["MaterialRepo"])  + "\\"
         createMaterials(obj,BasePath,str(self.image_format))
 
         BlenderGlTF.set_convert_functions(gltf_importer)

@@ -29,31 +29,43 @@ def createMaterials(obj,BasePath,image_format):
                 if rawMat.get("_mesh_decal"):
                     mesDec = MeshDecal(BasePath,image_format)
                     mesDec.create(rawMat["_mesh_decal"],bpyMat)
+
             if rawMat["MaterialType"] == "_skin":
                 if rawMat.get("_skin"):
                     humskin = HumanSkin(BasePath,image_format)
                     humskin.create(rawMat["_skin"],bpyMat)
+
             if rawMat["MaterialType"] == "_metal_base":
                 if rawMat.get("_metal_base"):
                     metbase = MetalBase(BasePath,image_format)
                     metbase.create(rawMat["_metal_base"],bpyMat)
+
             if rawMat["MaterialType"] == "_hair":
                 if rawMat.get("_hair"):
                     h = Hair(BasePath,obj["HairProfiles"],image_format)
                     h.create(rawMat["_hair"],bpyMat)
+
             if rawMat["MaterialType"] == "_mesh_decal_gradientmap_recolor":
                 if rawMat.get("_mesh_decal_gradientmap_recolor"):
                     hC = MeshDecalGradientMapReColor(BasePath,image_format)
                     hC.create(rawMat["_mesh_decal_gradientmap_recolor"],bpyMat)
+
             if rawMat["MaterialType"] == "_eye":
                 if rawMat.get("_eye"):
                     eye = Eye(BasePath,image_format)
                     eye.create(rawMat["_eye"],bpyMat)
+
             if rawMat["MaterialType"] == "_eye_shadow":
                 if rawMat.get("_eye_shadow"):
                     eS = EyeShadow(BasePath,image_format)
                     eS.create(rawMat["_eye_shadow"],bpyMat)
+
             if rawMat["MaterialType"] == "_mesh_decal_emissive":
                 if rawMat.get("_mesh_decal_emissive"):
                     decEmiss = MeshDecalEmissive(BasePath,image_format)
                     decEmiss.create(rawMat["_mesh_decal_emissive"],bpyMat)
+
+            if rawMat["MaterialType"] == "_mesh_decal_wet_character":
+                if rawMat.get("_mesh_decal_wet_character"):
+                    mesDec = MeshDecal(BasePath,image_format)
+                    mesDec.create(rawMat["_mesh_decal_wet_character"],bpyMat)
