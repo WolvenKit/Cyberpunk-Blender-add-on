@@ -21,6 +21,7 @@ class MeshDecal:
 
 
         dTexMapping = CurMat.nodes.new("ShaderNodeMapping")
+        dTexMapping.vector_type = 'TEXTURE'
         dTexMapping.label = "UVMapping"
         dTexMapping.location = (-600,130)
         dTexMapping.inputs[1].default_value[0] = Decal["UVOffsetX"]
@@ -88,6 +89,7 @@ class MeshDecal:
         nMap.location = (-150,-250)
         nMap.hide = True
 
+        CurMat.links.new(UVNode.outputs[2],nImgNode.inputs[0])
         CurMat.links.new(Comb.outputs[0],nMap.inputs[1])
         CurMat.links.new(nMap.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Normal'])
 
@@ -105,19 +107,7 @@ class MeshDecal:
         nAImgNode.location = (-900,-450)
         nAImgNode.image = nAImg
         nAImgNode.label = "NormalAlphaTex"
-
-        Sep1 = CurMat.nodes.new("ShaderNodeSeparateRGB")
-        Sep1.location = (-500,-450)
-        Sep1.hide = True
-            
-        Comb1 = CurMat.nodes.new("ShaderNodeCombineRGB")
-        Comb1.location = (-350,-450)
-        Comb1.hide = True
-            
-        CurMat.links.new(nAImgNode.outputs[0],Sep1.inputs[0])
-        CurMat.links.new(Sep1.outputs[0],Comb1.inputs[0])
-        CurMat.links.new(Sep1.outputs[1],Comb1.inputs[1])
-        Comb1.inputs[2].default_value = 1
+        CurMat.links.new(UVNode.outputs[2],nAImgNode.inputs[0])
 
 
         rImg = imageFromPath(self.BasePath + Decal["RoughnessTexture"],self.image_format,True)
@@ -132,6 +122,7 @@ class MeshDecal:
         mulNode1.operation = 'MULTIPLY'
         mulNode1.location = (-400,0)
 
+        CurMat.links.new(UVNode.outputs[2],rImgNode.inputs[0])
         CurMat.links.new(rImgNode.outputs[1],mulNode1.inputs[1])
         CurMat.links.new(mulNode1.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Roughness'])
 
@@ -148,5 +139,6 @@ class MeshDecal:
         mulNode2.operation = 'MULTIPLY'
         mulNode2.location = (-400,100)
 
+        CurMat.links.new(UVNode.outputs[2],mImgNode.inputs[0])
         CurMat.links.new(mImgNode.outputs[1],mulNode2.inputs[1])
         CurMat.links.new(mulNode2.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Metallic'])

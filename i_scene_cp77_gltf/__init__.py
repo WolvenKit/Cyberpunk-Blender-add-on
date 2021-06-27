@@ -33,7 +33,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                 ("tga", "Use TGA textures", ""),
                 ("bmp", "Use BMP textures", ""),
                 ("jpeg", "Use JPEG textures", "")),
-        description="How normals are computed during import",
+        description="Texture Format",
         default="png")
     filepath: StringProperty(subtype = 'FILE_PATH')
     def draw(self, context):
