@@ -137,15 +137,21 @@ class HumanSkin:
         CurMat.links.new(Comb2.outputs[0],nMap2.inputs[1])
 
         mdInfluence = CurMat.nodes.new("ShaderNodeValue")
-        mdInfluence.location = (-1000,-700)
+        mdInfluence.location = (-1100,-700)
         mdInfluence.outputs[0].default_value = float(Skin["MicroDetailInfluence"])
         mdInfluence.hide = True
         mdInfluence.label = "MicroDetailInfluence"
+        mulNode = CurMat.nodes.new("ShaderNodeMath")
+        mulNode.operation = 'MULTIPLY'
+        mulNode.hide = True
+        mulNode.location = (-1000,-700)
+        mulNode.inputs[0].default_value = 0.5
+        CurMat.links.new(mdInfluence.outputs[0],mulNode.inputs[1])
         mulNode1 = CurMat.nodes.new("ShaderNodeMath")
         mulNode1.operation = 'MULTIPLY'
         mulNode1.hide = True
         mulNode1.location = (-900,-700)
-        CurMat.links.new(mdInfluence.outputs[0],mulNode1.inputs[1])
+        CurMat.links.new(mulNode.outputs[0],mulNode1.inputs[1])
         CurMat.links.new(mulNode1.outputs[0],nMap2.inputs[0])
 
         # Creating MicroDetail
