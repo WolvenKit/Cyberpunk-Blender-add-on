@@ -1,6 +1,7 @@
 import bpy
 import os
 from ..main.common import imageFromPath
+from ..main.common import crop_image
 
 class HumanSkin:
     def __init__(self, BasePath,image_format):
@@ -9,7 +10,7 @@ class HumanSkin:
     def create(self,Skin,Mat):
 
         CurMat = Mat.node_tree
-        CurMat.nodes['Principled BSDF'].inputs['Subsurface'].default_value = 0.02
+        CurMat.nodes['Principled BSDF'].inputs['Subsurface'].default_value = 0.012
 
         # Creating Normal
         nImg = imageFromPath(self.BasePath + Skin["Normal"],self.image_format,True)
@@ -92,8 +93,16 @@ class HumanSkin:
         CurMat.links.new(nMap.outputs[0],AddVec.inputs[1])
 
         # Creating MicroDetail
-        mdImg = imageFromPath(self.BasePath + Skin["MicroDetail"],self.image_format, True)
-            
+        mdImg = bpy.data.images.get(os.path.basename(Skin["MicroDetail"])[:-4] + "01")
+        #mdImg = imageFromPath(self.BasePath + Skin["MicroDetail"],self.image_format, True)
+        if not mdImg:
+            tempImg = imageFromPath(self.BasePath + Skin["MicroDetail"],self.image_format, True)
+            mdImg = crop_image(tempImg,os.path.basename(Skin["MicroDetail"])[:-4] + "01",0,512,0,512)
+            mdImg.filepath_raw = self.BasePath + Skin["MicroDetail"][:-4] + "01.png"
+            mdImg.file_format = 'PNG'
+            mdImg.save()
+            mdImg.source = 'FILE'
+            mdImg.colorspace_settings.name = 'Non-Color'
         mdImgNode = CurMat.nodes.new("ShaderNodeTexImage")
         mdImgNode.location = (-1400,-600)
         mdImgNode.image = mdImg
@@ -128,15 +137,28 @@ class HumanSkin:
         CurMat.links.new(Comb2.outputs[0],nMap2.inputs[1])
 
         mdInfluence = CurMat.nodes.new("ShaderNodeValue")
-        mdInfluence.location = (-900,-700)
+        mdInfluence.location = (-1000,-700)
         mdInfluence.outputs[0].default_value = float(Skin["MicroDetailInfluence"])
         mdInfluence.hide = True
         mdInfluence.label = "MicroDetailInfluence"
-        CurMat.links.new(mdInfluence.outputs[0],nMap2.inputs[0])
+        mulNode1 = CurMat.nodes.new("ShaderNodeMath")
+        mulNode1.operation = 'MULTIPLY'
+        mulNode1.hide = True
+        mulNode1.location = (-900,-700)
+        CurMat.links.new(mdInfluence.outputs[0],mulNode1.inputs[1])
+        CurMat.links.new(mulNode1.outputs[0],nMap2.inputs[0])
 
         # Creating MicroDetail
-        mdImg1 = imageFromPath(self.BasePath + Skin["MicroDetail"],self.image_format, True)
-            
+        mdImg1 = bpy.data.images.get(os.path.basename(Skin["MicroDetail"])[:-4] + "02")
+        if not mdImg1:
+            tempImg1 = imageFromPath(self.BasePath + Skin["MicroDetail"],self.image_format, True)
+            mdImg1 = crop_image(tempImg1,os.path.basename(Skin["MicroDetail"])[:-4] + "02",512,1024,0,512)
+            mdImg1.filepath_raw = self.BasePath + Skin["MicroDetail"][:-4] + "02.png"
+            mdImg1.file_format = 'PNG'
+            mdImg1.save()
+            mdImg1.source = 'FILE'
+            mdImg1.colorspace_settings.name = 'Non-Color'
+
         mdImgNode1 = CurMat.nodes.new("ShaderNodeTexImage")
         mdImgNode1.location = (-1330,-800)
         mdImgNode1.image = mdImg1
@@ -170,7 +192,7 @@ class HumanSkin:
         nMap3.hide = True
         CurMat.links.new(Comb3.outputs[0],nMap3.inputs[1])
 
-        CurMat.links.new(mdInfluence.outputs[0],nMap3.inputs[0])
+        CurMat.links.new(mulNode1.outputs[0],nMap3.inputs[0])
         #Combining both MicroDetails
 
         UVMap = CurMat.nodes.new("ShaderNodeUVMap")
@@ -226,7 +248,7 @@ class HumanSkin:
         CurMat.links.new(AddVec2.outputs[0],Normalize.inputs[0])
         CurMat.links.new(Normalize.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Normal'])
         
-
+        #
         aImg = imageFromPath(self.BasePath + Skin["Albedo"],self.image_format)
             
         aImgNode = CurMat.nodes.new("ShaderNodeTexImage")
@@ -275,7 +297,7 @@ class HumanSkin:
         CurMat.links.new(rImgNode.outputs[0],Sep.inputs[0])
         CurMat.links.new(Sep.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Roughness'])
         #CurMat.links.new(Sep.outputs[2],CurMat.nodes['Principled BSDF'].inputs['Specular'])
-
+        CurMat.links.new(Sep.outputs[2],mulNode1.inputs[0])
 
         ndSqImg = imageFromPath(self.BasePath + Skin["Detailmap_Squash"],self.image_format)
             
