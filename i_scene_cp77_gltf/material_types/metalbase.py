@@ -3,44 +3,46 @@ import os
 from ..main.common import imageFromPath
 
 class MetalBase:
-    def __init__(self, BasePath, valueToIgnore,image_format):
+    def __init__(self, BasePath,image_format):
         self.BasePath = BasePath
-        self.valueToIgnore = valueToIgnore
         self.image_format = image_format
     def create(self,MetalBase,Mat):
+
         CurMat = Mat.node_tree
-        if MetalBase.get("baseColor"):
-            bColImg = imageFromPath(self.BasePath + MetalBase["baseColor"],self.image_format)
+        CurMat.nodes['Principled BSDF'].inputs['Specular'].default_value = 0
+
+        if MetalBase.get("BaseColor"):
+            bColImg = imageFromPath(self.BasePath + MetalBase["BaseColor"],self.image_format)
             
             bColNode = CurMat.nodes.new("ShaderNodeTexImage")
             bColNode.location = (-450,130)
             bColNode.image = bColImg
-            bColNode.label = "baseColor"
+            bColNode.label = "BaseColor"
 
             CurMat.links.new(bColNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
             CurMat.links.new(bColNode.outputs[1],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
 
-        if MetalBase.get("baseColorScale"):
+        if MetalBase.get("BaseColorScale"):
             dColScale = CurMat.nodes.new("ShaderNodeRGB")
             dColScale.location = (-450,200)
             dColScale.hide = True
-            dColScale.label = "baseColorScale"
-            dColScale.outputs[0].default_value = (float(MetalBase["baseColorScale"]["x"]),float(MetalBase["baseColorScale"]["y"]),float(MetalBase["baseColorScale"]["z"]),float(MetalBase["baseColorScale"]["w"]))
+            dColScale.label = "BaseColorScale"
+            dColScale.outputs[0].default_value = (float(MetalBase["BaseColorScale"]["X"]),float(MetalBase["BaseColorScale"]["Y"]),float(MetalBase["BaseColorScale"]["Z"]),float(MetalBase["BaseColorScale"]["W"]))
 
-        if MetalBase.get("alphaThreshold"):
+        if MetalBase.get("AlphaThreshold"):
             aThreshold = CurMat.nodes.new("ShaderNodeValue")
             aThreshold.location = (-300,0)
-            aThreshold.outputs[0].default_value = float(MetalBase["alphaThreshold"])
+            aThreshold.outputs[0].default_value = float(MetalBase["AlphaThreshold"])
             aThreshold.hide = True
-            aThreshold.label = "alphaThreshold"
+            aThreshold.label = "AlphaThreshold"
 
-        if MetalBase.get("normal"):
-            nImg = imageFromPath(self.BasePath + MetalBase["normal"],self.image_format,True)
+        if MetalBase.get("Normal"):
+            nImg = imageFromPath(self.BasePath + MetalBase["Normal"],self.image_format,True)
             
             nImgNode = CurMat.nodes.new("ShaderNodeTexImage")
             nImgNode.location = (-800,-250)
             nImgNode.image = nImg
-            nImgNode.label = "normal"
+            nImgNode.label = "Normal"
 
             Sep = CurMat.nodes.new("ShaderNodeSeparateRGB")
             Sep.location = (-500,-250)
@@ -63,15 +65,39 @@ class MetalBase:
             
             CurMat.links.new(nMap.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Normal'])
 
-        if MetalBase.get("baseColor") and MetalBase.get("baseColorScale"):
+        if MetalBase.get("BaseColor") and MetalBase.get("BaseColorScale"):
             mixRGB = CurMat.nodes.new("ShaderNodeMixRGB")
             mixRGB.location = (-150,200)
             mixRGB.hide = True
             mixRGB.blend_type = 'MULTIPLY'
-            #if MetalBase.get("alphaThreshold"):
-                #mixRGB.inputs[0].default_value = float(MetalBase["alphaThreshold"])
             mixRGB.inputs[0].default_value = 1
 
             CurMat.links.new(bColNode.outputs[0],mixRGB.inputs[2])
             CurMat.links.new(dColScale.outputs[0],mixRGB.inputs[1])
             CurMat.links.new(mixRGB.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
+
+        if MetalBase.get("EmissiveColor"):
+            emColor = CurMat.nodes.new("ShaderNodeRGB")
+            emColor.location = (-800,-100)
+            emColor.hide = True
+            emColor.label = "EmissiveColor"
+            emColor.outputs[0].default_value = (float(MetalBase["EmissiveColor"]["Red"])/255,float(MetalBase["EmissiveColor"]["Green"])/255,float(MetalBase["EmissiveColor"]["Blue"])/255,float(MetalBase["EmissiveColor"]["Alpha"])/255)
+
+        if MetalBase.get("Emissive"):
+            emTeximg = imageFromPath(self.BasePath + MetalBase["Emissive"],self.image_format)
+            
+            emTexNode = CurMat.nodes.new("ShaderNodeTexImage")
+            emTexNode.location = (-800,200)
+            emTexNode.image = emTeximg
+            emTexNode.label = "Emissive"
+
+        mulNode = CurMat.nodes.new("ShaderNodeMixRGB")
+        mulNode.inputs[0].default_value = 1
+        mulNode.blend_type = 'MULTIPLY'
+        mulNode.location = (-550,50)
+
+        CurMat.links.new(emColor.outputs[0],mulNode.inputs[1])
+        CurMat.links.new(emTexNode.outputs[0],mulNode.inputs[2])
+        CurMat.links.new(mulNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Emission'])
+
+        CurMat.nodes['Principled BSDF'].inputs['Emission Strength'].default_value =  MetalBase["EmissiveEV"]

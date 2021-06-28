@@ -11,6 +11,9 @@ using WolvenKit.RED4.CR2W.Types;
 using WolvenKit.RED4.CR2W;
 using CP77.CR2W;
 using WolvenKit.Modkit.RED4;
+using WolvenKit.RED4.CR2W.Archive;
+using WolvenKit.Modkit.RED4.Materials;
+using WolvenKit.Common.Services;
 
 namespace WolvenKit.Modkit.RED4.MeshFiles
 {
@@ -19,24 +22,35 @@ namespace WolvenKit.Modkit.RED4.MeshFiles
     using Vec3 = System.Numerics.Vector3;
     public class MESHIMPORTER
     {
-        private readonly Red4ParserService _modTools;
-
-        public MESHIMPORTER(Red4ParserService modtools)
+        private readonly Red4ParserService _wolvenkitFileService;
+        private readonly IHashService _hashService;
+        private readonly ModTools _modTools;
+        public MESHIMPORTER(Red4ParserService r, IHashService h, ModTools m)
         {
-            _modTools = modtools;
+            _wolvenkitFileService = r;
+            _hashService = h;
+            _modTools = m;
         }
 
-        public bool Import(FileInfo inGltfFile, Stream inmeshStream, Stream outStream = null)
+        public bool Import(FileInfo inGltfFile, Stream inmeshStream , Stream outStream = null, Archive ar = null)
         {
-            var model = ModelRoot.Load(inGltfFile.FullName);
 
-            VerifyGLTF(model);
-
-            var cr2w = _modTools.TryReadRED4File(inmeshStream);
+            var cr2w = _wolvenkitFileService.TryReadRED4File(inmeshStream);
             if (cr2w == null || !cr2w.Chunks.Select(_ => _.Data).OfType<CMesh>().Any() || !cr2w.Chunks.Select(_ => _.Data).OfType<rendRenderMeshBlob>().Any())
             {
-                throw new("Invalid CR2W File,CR2W File doesn't contain CMesh/rendMeshBlob");
+                return false;
             }
+
+            DirectoryInfo outDir = new DirectoryInfo(Path.Combine(inGltfFile.DirectoryName, Path.GetFileNameWithoutExtension(inGltfFile.FullName)));
+            if(File.Exists(Path.Combine(outDir.FullName, "Material.json")))
+            {
+                var m = new MATERIAL(_wolvenkitFileService, _hashService, _modTools);
+                if(ar != null)
+                    m.WriteMatToMesh(ref cr2w, File.ReadAllText(Path.Combine(outDir.FullName, "Material.json")), ar);
+            }
+
+            var model = ModelRoot.Load(inGltfFile.FullName);
+            VerifyGLTF(model);
             List<RawMeshContainer> Meshes = new List<RawMeshContainer>();
 
             for (int i = 0; i < model.LogicalMeshes.Count; i++)
