@@ -9,6 +9,7 @@ from ..material_types.meshdecalgradientmaprecolor import MeshDecalGradientMapReC
 from ..material_types.eye import Eye
 from ..material_types.eyeshadow import EyeShadow
 from ..material_types.meshdecalemissive import MeshDecalEmissive
+from ..material_types.glass import Glass
 
 def createMaterials(obj,BasePath,image_format):
 
@@ -69,3 +70,8 @@ def createMaterials(obj,BasePath,image_format):
                 if rawMat.get("_mesh_decal_wet_character"):
                     mesDec = MeshDecal(BasePath,image_format)
                     mesDec.create(rawMat["_mesh_decal_wet_character"],bpyMat)
+
+            if rawMat["MaterialType"] == "_glass":
+                if rawMat.get("_glass"):
+                    glass = Glass(BasePath,image_format)
+                    glass.create(rawMat["_glass"],bpyMat)
