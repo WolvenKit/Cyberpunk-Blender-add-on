@@ -3,6 +3,23 @@ import os
 
 def imageFromPath(Img,image_format,isNormal = False):
     Im = bpy.data.images.get(os.path.basename(Img)[:-4])
+    if Im:
+        if Im.colorspace_settings.name != 'Non-Color':
+            if isNormal:
+                Im = None
+        else:
+            if not isNormal:
+                Im = None
+    if not Im:
+        Im = bpy.data.images.get(os.path.basename(Img)[:-4] + ".001")
+        if Im:
+            if Im.colorspace_settings.name != 'Non-Color':
+                if isNormal:
+                    Im = None
+            else:
+                if not isNormal:
+                    Im = None
+        
     if not Im:
         Im = bpy.data.images.new(os.path.basename(Img)[:-4],1,1)
         Im.source = "FILE"
@@ -10,6 +27,7 @@ def imageFromPath(Img,image_format,isNormal = False):
         if isNormal:
             Im.colorspace_settings.name = 'Non-Color'
     return Im
+
 def crop_image(orig_img,outname, cropped_min_x, cropped_max_x, cropped_min_y, cropped_max_y):
     '''Crops an image object of type <class 'bpy.types.Image'>.  For example, for a 10x10 image, 
     if you put cropped_min_x = 2 and cropped_max_x = 6,
