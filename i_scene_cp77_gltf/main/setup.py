@@ -23,14 +23,11 @@ class MaterialBuilder:
         bpyMat.use_nodes = True
 
         if rawMat["MaterialType"] == "_multilayered":
-            mulLayer = Multilayered(self.BasePath,self.obj["MaterialTemplates"],self.image_format)
-            index = 0
-            for i in range (0,len(self.obj["MaterialSetups"])):
-                if str(os.path.basename(rawMat["_multilayered"].get("MultilayerSetup"))) == str(self.obj["MaterialSetups"][i]["Name"]):
-                    index = i
+            mulLayer = Multilayered(self.BasePath,self.image_format)
+            mlsetup = rawMat["_multilayered"].get("MultilayerSetup")
             globnormal = rawMat["_multilayered"].get("GlobalNormal")
             mlmask = rawMat["_multilayered"].get("MultilayerMask")
-            mulLayer.create(self.obj["MaterialSetups"][index],mlmask,bpyMat,globnormal)
+            mulLayer.create(mlsetup,mlmask,bpyMat,globnormal)
 
         if rawMat["MaterialType"] == "_mesh_decal":
             if rawMat.get("_mesh_decal"):
@@ -49,7 +46,7 @@ class MaterialBuilder:
 
         if rawMat["MaterialType"] == "_hair":
             if rawMat.get("_hair"):
-                h = Hair(self.BasePath,self.obj["HairProfiles"],self.image_format)
+                h = Hair(self.BasePath,self.image_format)
                 h.create(rawMat["_hair"],bpyMat)
 
         if rawMat["MaterialType"] == "_mesh_decal_gradientmap_recolor":

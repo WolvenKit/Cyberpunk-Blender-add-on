@@ -59,8 +59,8 @@ class CP77Import(bpy.types.Operator,ImportHelper):
             if name not in existingMaterials:
                 bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
 
-        BasePath = os.path.splitext(self.filepath)[0] + "\\"
-        file = open(BasePath + "Material.json",mode='r')
+        BasePath = os.path.splitext(self.filepath)[0]
+        file = open(BasePath + ".Material.json",mode='r')
         obj = json.loads(file.read())
         BasePath = str(obj["MaterialRepo"])  + "\\"
 

@@ -1,11 +1,11 @@
 import bpy
 import os
 from ..main.common import imageFromPath
+import json
 
 class Multilayered:
-    def __init__(self, BasePath, templates,image_format):
+    def __init__(self, BasePath,image_format):
         self.BasePath = str(BasePath)
-        self.templates = templates
         self.image_format = image_format
     def createBaseMaterial(self,matTemplateObj):
         CT = imageFromPath(self.BasePath + matTemplateObj["ColorTexture"],self.image_format)
@@ -300,12 +300,11 @@ class Multilayered:
         return
 
 
-    def create(self,mlsetup,mlmaskpath,Mat,normalimgpath):
-        for x in self.templates:
-            if not bpy.data.node_groups.get(x["Name"][:-11]):
-                self.createBaseMaterial(x)
-                continue
-        mltemplates = []
+    def create(self,mlsetuppath,mlmaskpath,Mat,normalimgpath):
+
+        file = open(self.BasePath + mlsetuppath + ".json",mode='r')
+        mlsetup = json.loads(file.read())
+        file.close()
         xllay = mlsetup["Layers"]
         LayerCount = len(xllay)
     
@@ -334,12 +333,11 @@ class Multilayered:
         
             if Microblend != "null":
                 MBI = imageFromPath(self.BasePath+Microblend,self.image_format,True)
-        
-            cowunter = 0
-            for i in range(0,len(self.templates)):
-                if os.path.basename(material) == self.templates[i]["Name"]:
-                    cowunter = i
-            OverrideTable = self.createOverrideTable(self.templates[cowunter])#get override info for colors and what not
+
+            file = open(self.BasePath + material + ".json",mode='r')
+            mltemplate = json.loads(file.read())
+            file.close()
+            OverrideTable = self.createOverrideTable(mltemplate)#get override info for colors and what not
 
             NG = bpy.data.node_groups.new(mlsetup["Name"][:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#create layer's node group
             NG.outputs.new('NodeSocketColor','Difuse')
@@ -359,8 +357,11 @@ class Multilayered:
             GroupOutN = NG.nodes.new("NodeGroupOutput")
             GroupOutN.hide=True
             GroupOutN.location = (0,0)
-        
-            BaseMat = bpy.data.node_groups.get(os.path.basename(material[:-11]))
+
+            if not bpy.data.node_groups.get(mltemplate["Name"][:-11]):
+                self.createBaseMaterial(mltemplate)
+
+            BaseMat = bpy.data.node_groups.get(mltemplate["Name"][:-11])
             if BaseMat:
                 BMN = NG.nodes.new("ShaderNodeGroup")
                 BMN.location = (-2000,0)

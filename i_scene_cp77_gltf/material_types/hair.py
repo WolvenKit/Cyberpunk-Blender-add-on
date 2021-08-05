@@ -1,19 +1,18 @@
 import bpy
 import os
 from ..main.common import imageFromPath
+import json
 
 class Hair:
-    def __init__(self, BasePath,HairProfiles,image_format):
+    def __init__(self, BasePath,image_format):
         self.BasePath = BasePath
         self.image_format = image_format
-        self.HairProfiles = HairProfiles
 
     def create(self,hair,Mat):
 
-        profile = self.HairProfiles[0]
-        for i in range (0,len(self.HairProfiles)):
-            if str(os.path.basename(hair["HairProfile"])) == str(self.HairProfiles[i]["Name"]):
-                profile = self.HairProfiles[i]
+        file = open(self.BasePath + hair["HairProfile"] + ".json",mode='r')
+        profile = json.loads(file.read())
+        file.close()
 
         CurMat = Mat.node_tree
 
