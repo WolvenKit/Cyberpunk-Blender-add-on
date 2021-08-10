@@ -7,7 +7,7 @@ class Multilayered:
     def __init__(self, BasePath,image_format):
         self.BasePath = str(BasePath)
         self.image_format = image_format
-    def createBaseMaterial(self,matTemplateObj):
+    def createBaseMaterial(self,matTemplateObj,name):
         CT = imageFromPath(self.BasePath + matTemplateObj["ColorTexture"],self.image_format)
         NT = imageFromPath(self.BasePath + matTemplateObj["NormalTexture"],self.image_format,isNormal = True)
         RT = imageFromPath(self.BasePath + matTemplateObj["RoughnessTexture"],self.image_format)
@@ -15,7 +15,7 @@ class Multilayered:
     
         TileMult = float(matTemplateObj.get("TilingMultiplier",1))
 
-        NG = bpy.data.node_groups.new(matTemplateObj["Name"][:-11],"ShaderNodeTree")
+        NG = bpy.data.node_groups.new(name[:-11],"ShaderNodeTree")
         TMI = NG.inputs.new('NodeSocketVector','Tile Multiplier')
         TMI.default_value = (1,1,1)
         NG.outputs.new('NodeSocketColor','Difuse')
@@ -339,7 +339,7 @@ class Multilayered:
             file.close()
             OverrideTable = self.createOverrideTable(mltemplate)#get override info for colors and what not
 
-            NG = bpy.data.node_groups.new(mlsetup["Name"][:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#create layer's node group
+            NG = bpy.data.node_groups.new(os.path.basename(mlsetuppath)[:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#create layer's node group
             NG.outputs.new('NodeSocketColor','Difuse')
             NG.outputs.new('NodeSocketColor','Normal')
             NG.outputs.new('NodeSocketColor','Roughness')
@@ -358,10 +358,10 @@ class Multilayered:
             GroupOutN.hide=True
             GroupOutN.location = (0,0)
 
-            if not bpy.data.node_groups.get(mltemplate["Name"][:-11]):
-                self.createBaseMaterial(mltemplate)
+            if not bpy.data.node_groups.get(os.path.basename(material)[:-11]):
+                self.createBaseMaterial(mltemplate,os.path.basename(material))
 
-            BaseMat = bpy.data.node_groups.get(mltemplate["Name"][:-11])
+            BaseMat = bpy.data.node_groups.get(os.path.basename(material)[:-11])
             if BaseMat:
                 BMN = NG.nodes.new("ShaderNodeGroup")
                 BMN.location = (-2000,0)
@@ -472,4 +472,4 @@ class Multilayered:
             NG.links.new(ColorScaleMixN.outputs[0],GroupOutN.inputs[0])
             NG.links.new(OpacN.outputs[0],GroupOutN.inputs[4])
         
-        self.createLayerMaterial(mlsetup["Name"][:-8]+"_Layer_",LayerCount,CurMat,mlmaskpath,normalimgpath)
+        self.createLayerMaterial(os.path.basename(mlsetuppath)[:-8]+"_Layer_",LayerCount,CurMat,mlmaskpath,normalimgpath)
