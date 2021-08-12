@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -8,10 +8,6 @@
 
   <ItemGroup>
     <PackageReference Include="Catel.Core" Version="5.12.16" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\..\WolvenKit\WolvenKit.Modkit\WolvenKit.Modkit.csproj" />
   </ItemGroup>
 
 </Project>

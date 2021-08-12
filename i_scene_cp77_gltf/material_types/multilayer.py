@@ -1,21 +1,21 @@
 import bpy
 import os
 from ..main.common import imageFromPath
+import json
 
 class Multilayered:
-    def __init__(self, BasePath, templates,image_format):
+    def __init__(self, BasePath,image_format):
         self.BasePath = str(BasePath)
-        self.templates = templates
         self.image_format = image_format
-    def createBaseMaterial(self,matTemplateObj):
-        CT = imageFromPath(self.BasePath + matTemplateObj["ColorTexture"],self.image_format)
-        NT = imageFromPath(self.BasePath + matTemplateObj["NormalTexture"],self.image_format,isNormal = True)
-        RT = imageFromPath(self.BasePath + matTemplateObj["RoughnessTexture"],self.image_format)
-        MT = imageFromPath(self.BasePath + matTemplateObj["MetalnessTexture"],self.image_format)
+    def createBaseMaterial(self,matTemplateObj,name):
+        CT = imageFromPath(self.BasePath + matTemplateObj["colorTexture"],self.image_format)
+        NT = imageFromPath(self.BasePath + matTemplateObj["normalTexture"],self.image_format,isNormal = True)
+        RT = imageFromPath(self.BasePath + matTemplateObj["roughnessTexture"],self.image_format)
+        MT = imageFromPath(self.BasePath + matTemplateObj["metalnessTexture"],self.image_format)
     
-        TileMult = float(matTemplateObj.get("TilingMultiplier",1))
+        TileMult = float(matTemplateObj.get("tilingMultiplier",1))
 
-        NG = bpy.data.node_groups.new(matTemplateObj["Name"][:-11],"ShaderNodeTree")
+        NG = bpy.data.node_groups.new(name[:-11],"ShaderNodeTree")
         TMI = NG.inputs.new('NodeSocketVector','Tile Multiplier')
         TMI.default_value = (1,1,1)
         NG.outputs.new('NodeSocketColor','Difuse')
@@ -95,34 +95,36 @@ class Multilayered:
         return
 
     def createOverrideTable(self,matTemplateObj):
-        OverList = matTemplateObj["Overrides"]
+        OverList = matTemplateObj.get("overrides")
+        if OverList is None:
+            OverList = matTemplateObj.get("Overrides")
         Output = {}
         Output["ColorScale"] = {}
         Output["NormalStrength"] = {}
         Output["RoughLevelsOut"] = {}
         Output["MetalLevelsOut"] = {}
-        for x in OverList["ColorScale"]:
-            tmpName = x["N"]
-            tmpR = float(x["V"][0])
-            tmpG = float(x["V"][1])
-            tmpB = float(x["V"][2])
+        for x in OverList["colorScale"]:
+            tmpName = x["n"]
+            tmpR = float(x["v"][0])
+            tmpG = float(x["v"][1])
+            tmpB = float(x["v"][2])
             Output["ColorScale"][tmpName] = (tmpR,tmpG,tmpB,1)
-        for x in OverList["NormalStrength"]:
-            tmpName = x["N"]
+        for x in OverList["normalStrength"]:
+            tmpName = x["n"]
             tmpStrength = 0
-            if x.get("V") is not None:
-                tmpStrength = float(x["V"][0])
+            if x.get("v") is not None:
+                tmpStrength = float(x["v"])
             Output["NormalStrength"][tmpName] = tmpStrength
-        for x in OverList["RoughLevelsOut"]:
-            tmpName = x["N"]
-            tmpStrength0 = float(x["V"][0])
-            tmpStrength1 = float(x["V"][1])
+        for x in OverList["roughLevelsOut"]:
+            tmpName = x["n"]
+            tmpStrength0 = float(x["v"][0])
+            tmpStrength1 = float(x["v"][1])
             Output["RoughLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
-        for x in OverList["MetalLevelsOut"]:
-            tmpName = x["N"]
-            if x.get("V") is not None:
-                tmpStrength0 = float(x["V"][0])
-                tmpStrength1 = float(x["V"][1])
+        for x in OverList["metalLevelsOut"]:
+            tmpName = x["n"]
+            if x.get("v") is not None:
+                tmpStrength0 = float(x["v"][0])
+                tmpStrength1 = float(x["v"][1])
             else:
                 tmpStrength0 = 0
                 tmpStrength1 = 1
@@ -300,48 +302,71 @@ class Multilayered:
         return
 
 
-    def create(self,mlsetup,mlmaskpath,Mat,normalimgpath):
-        for x in self.templates:
-            if not bpy.data.node_groups.get(x["Name"][:-11]):
-                self.createBaseMaterial(x)
-                continue
-        mltemplates = []
-        xllay = mlsetup["Layers"]
+    def create(self,mlsetuppath,mlmaskpath,Mat,normalimgpath):
+
+        file = open(self.BasePath + mlsetuppath + ".json",mode='r')
+        mlsetup = json.loads(file.read())["Chunks"]["0"]["Properties"]
+        file.close()
+        xllay = mlsetup.get("layers")
+        if xllay is None:
+            xllay = x.get("Layers")
         LayerCount = len(xllay)
     
         LayerIndex = 0
         CurMat = Mat.node_tree
         for x in (xllay):            
-            MatTile = x.get("MatTile")
-            MbTile = x.get("MbTile")
+            MatTile = x.get("matTile")
+            if MatTile is None:
+                MatTile = x.get("MatTile")
+            MbTile = x.get("mbTile")
+            if MbTile is None:
+                MbTile = x.get("MbTile")
+
             MbScale = 1
             if MatTile != None:
                 MbScale = float(MatTile)
             if MbTile != None:
                 MbScale = float(MbTile)
         
-            Microblend = x["Microblend"]
-            MicroblendContrast = x.get("MicroblendContrast",1)
-            microblendNormalStrength = x.get("MicroblendNormalStrength")
-            opacity = x.get("Opacity")
-            material = x.get("Material")
-            colorScale = x.get("ColorScale")
-            normalStrength = x.get("NormalStrength")
+            Microblend = x.get("microblend")
+            if Microblend is None:
+                Microblend = x.get("Microblend")
+            MicroblendContrast = x.get("microblendContrast")
+            if MicroblendContrast is None:
+                MicroblendContrast = x.get("Microblend",1)
+            microblendNormalStrength = x.get("microblendNormalStrength")
+            if microblendNormalStrength is None:
+                microblendNormalStrength = x.get("MicroblendNormalStrength")
+            opacity = x.get("opacity")
+            if opacity is None:
+                opacity = x.get("Opacity")
+            material = x.get("material")
+            if material is None:
+                material = x.get("Material")
+            colorScale = x.get("colorScale")
+            if colorScale is None:
+                colorScale = x.get("ColorScale")
+            normalStrength = x.get("normalStrength")
+            if normalStrength is None:
+                normalStrength = x.get("NormalStrength")
             #roughLevelsIn = x["roughLevelsIn"]
-            roughLevelsOut = x.get("RoughLevelsOut")
+            roughLevelsOut = x.get("roughLevelsOut")
+            if roughLevelsOut is None:
+                roughLevelsOut = x.get("RoughLevelsOut")
             #metalLevelsIn = x["metalLevelsIn"]
-            metalLevelsOut = x.get("MetalLevelsOut")
-        
+            metalLevelsOut = x.get("metalLevelsOut")
+            if metalLevelsOut is None:
+                metalLevelsOut = x.get("MetalLevelsOut")
+
             if Microblend != "null":
                 MBI = imageFromPath(self.BasePath+Microblend,self.image_format,True)
-        
-            cowunter = 0
-            for i in range(0,len(self.templates)):
-                if os.path.basename(material) == self.templates[i]["Name"]:
-                    cowunter = i
-            OverrideTable = self.createOverrideTable(self.templates[cowunter])#get override info for colors and what not
 
-            NG = bpy.data.node_groups.new(mlsetup["Name"][:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#create layer's node group
+            file = open(self.BasePath + material + ".json",mode='r')
+            mltemplate = json.loads(file.read())["Chunks"]["0"]["Properties"]
+            file.close()
+            OverrideTable = self.createOverrideTable(mltemplate)#get override info for colors and what not
+
+            NG = bpy.data.node_groups.new(os.path.basename(mlsetuppath)[:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#create layer's node group
             NG.outputs.new('NodeSocketColor','Difuse')
             NG.outputs.new('NodeSocketColor','Normal')
             NG.outputs.new('NodeSocketColor','Roughness')
@@ -359,8 +384,11 @@ class Multilayered:
             GroupOutN = NG.nodes.new("NodeGroupOutput")
             GroupOutN.hide=True
             GroupOutN.location = (0,0)
-        
-            BaseMat = bpy.data.node_groups.get(os.path.basename(material[:-11]))
+
+            if not bpy.data.node_groups.get(os.path.basename(material)[:-11]):
+                self.createBaseMaterial(mltemplate,os.path.basename(material))
+
+            BaseMat = bpy.data.node_groups.get(os.path.basename(material)[:-11])
             if BaseMat:
                 BMN = NG.nodes.new("ShaderNodeGroup")
                 BMN.location = (-2000,0)
@@ -471,4 +499,4 @@ class Multilayered:
             NG.links.new(ColorScaleMixN.outputs[0],GroupOutN.inputs[0])
             NG.links.new(OpacN.outputs[0],GroupOutN.inputs[4])
         
-        self.createLayerMaterial(mlsetup["Name"][:-8]+"_Layer_",LayerCount,CurMat,mlmaskpath,normalimgpath)
+        self.createLayerMaterial(os.path.basename(mlsetuppath)[:-8]+"_Layer_",LayerCount,CurMat,mlmaskpath,normalimgpath)

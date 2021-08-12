@@ -1,7 +1,8 @@
-﻿using WolvenKit.RED4.CR2W.Types;
+using WolvenKit.RED4.CR2W.Types;
+using Materials.Types;
 using System;
 
-namespace WolvenKit.Modkit.RED4.MaterialSetupFiles
+namespace MaterialSetup
 {
     public class Setup
     {
@@ -31,13 +32,13 @@ namespace WolvenKit.Modkit.RED4.MaterialSetupFiles
 
                 Layers[i].MicroblendOffsetU = data.MicroblendOffsetU.IsSerialized ? data.MicroblendOffsetU.Value : null;
 
-                Layers[i].MicroblendOffsetV = data.MicroblendOffsetV.IsSerialized ? data.MicroblendOffsetV.Value : null;
+                Layers[i].MicroblendOffsetV = data.MicroblendOffsetV.IsSerialized? data.MicroblendOffsetV.Value : null;
 
-                Layers[i].Opacity = data.Opacity.IsSerialized ? data.Opacity.Value : null;
+                Layers[i].Opacity = data.Opacity.IsSerialized? data.Opacity.Value : null;
 
-                Layers[i].OffsetU = data.OffsetU.IsSerialized ? data.OffsetU.Value : null;
+                Layers[i].OffsetU = data.OffsetU.IsSerialized? data.OffsetU.Value : null;
 
-                Layers[i].OffsetV = data.OffsetV.IsSerialized ? data.OffsetV.Value : null;
+                Layers[i].OffsetV = data.OffsetV.IsSerialized? data.OffsetV.Value : null;
 
                 Layers[i].Material = data.Material.DepotPath;
 
@@ -215,7 +216,7 @@ namespace WolvenKit.Modkit.RED4.MaterialSetupFiles
                 Overrides.NormalStrength[i] = new OverrideValue();
                 Overrides.NormalStrength[i].N = template.Overrides.NormalStrength[i].N.Value;
 
-                if (template.Overrides.NormalStrength[i].V.IsSerialized)
+                if(template.Overrides.NormalStrength[i].V.IsSerialized)
                 {
                     Overrides.NormalStrength[i].V = new Nullable<float>[1];
                     Overrides.NormalStrength[i].V[0] = template.Overrides.NormalStrength[i].V.Value;
@@ -246,5 +247,36 @@ namespace WolvenKit.Modkit.RED4.MaterialSetupFiles
     {
         public string N { get; set; } = null;
         public Nullable<float>[] V { get; set; } = null;
+    }
+    public class HairProfile
+    {
+        public string Name { get; set; }
+        public GradientEntry[] GradientEntriesID { get; set; }
+        public GradientEntry[] GradientEntriesRootToTip { get; set; }
+        public HairProfile(CHairProfile c, string name)
+        {
+            Name = name;
+            GradientEntriesID = new GradientEntry[c.GradientEntriesID.Count];
+            GradientEntriesRootToTip = new GradientEntry[c.GradientEntriesRootToTip.Count];
+
+            for (int i = 0; i < c.GradientEntriesID.Count; i++)
+            {
+                GradientEntriesID[i] = new GradientEntry(c.GradientEntriesID[i]);
+            }
+            for (int i = 0; i < c.GradientEntriesRootToTip.Count; i++)
+            {
+                GradientEntriesRootToTip[i] = new GradientEntry(c.GradientEntriesRootToTip[i]);
+            }
+        }
+    }
+    public class GradientEntry
+    {
+        public float Value;
+        public Color Color;
+        public GradientEntry(rendGradientEntry g)
+        {
+            Value = g.Value.Value;
+            Color = new Color(g.Color);
+        }
     }
 }

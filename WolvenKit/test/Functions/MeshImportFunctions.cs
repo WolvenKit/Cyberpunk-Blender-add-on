@@ -1,40 +1,27 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.IO;
-using WolvenKit.Modkit.RED4.GeneralStruct;
+using GeneralStructs;
 using SharpGLTF.Schema2;
 using SharpGLTF.IO;
-using WolvenKit.Modkit.RED4.RigFiles;
+using RigFile;
 using WolvenKit.RED4.CR2W.Types;
 using WolvenKit.RED4.CR2W;
 using CP77.CR2W;
 using WolvenKit.Modkit.RED4;
 using WolvenKit.RED4.CR2W.Archive;
-using WolvenKit.Modkit.RED4.Materials;
-using WolvenKit.Common.Services;
-
-namespace WolvenKit.Modkit.RED4.MeshFiles
+using Materials;
+namespace MeshFile
 {
     using Vec4 = System.Numerics.Vector4;
     using Vec2 = System.Numerics.Vector2;
     using Vec3 = System.Numerics.Vector3;
-    public class MESHIMPORTER
+    public partial class MESH
     {
-        private readonly Red4ParserService _wolvenkitFileService;
-        private readonly IHashService _hashService;
-        private readonly ModTools _modTools;
-        public MESHIMPORTER(Red4ParserService r, IHashService h, ModTools m)
+        public bool ImportMesh(FileInfo inGltfFile, Stream inmeshStream, Archive ar = null,bool importMaterialOnly = false, Stream outStream = null)
         {
-            _wolvenkitFileService = r;
-            _hashService = h;
-            _modTools = m;
-        }
-
-        public bool Import(FileInfo inGltfFile, Stream inmeshStream , Stream outStream = null, Archive ar = null)
-        {
-
             var cr2w = _wolvenkitFileService.TryReadRED4File(inmeshStream);
             if (cr2w == null || !cr2w.Chunks.Select(_ => _.Data).OfType<CMesh>().Any() || !cr2w.Chunks.Select(_ => _.Data).OfType<rendRenderMeshBlob>().Any())
             {
@@ -42,14 +29,33 @@ namespace WolvenKit.Modkit.RED4.MeshFiles
             }
 
             DirectoryInfo outDir = new DirectoryInfo(Path.Combine(inGltfFile.DirectoryName, Path.GetFileNameWithoutExtension(inGltfFile.FullName)));
-            if(File.Exists(Path.Combine(outDir.FullName, "Material.json")))
+            if (File.Exists(Path.Combine(outDir.FullName, "Material.json")))
             {
-                var m = new MATERIAL(_wolvenkitFileService, _hashService, _modTools);
-                if(ar != null)
-                    m.WriteMatToMesh(ref cr2w, File.ReadAllText(Path.Combine(outDir.FullName, "Material.json")), ar);
+                if (ar != null)
+                {
+                    //MATERIAL.WriteMatToMesh(ref cr2w, File.ReadAllText(Path.Combine(outDir.FullName, "Material.json")), ar);
+                }
+                if (importMaterialOnly)
+                {
+                    MemoryStream matOnlyStream = new MemoryStream();
+                    cr2w.Write(new BinaryWriter(matOnlyStream));
+                    matOnlyStream.Seek(0, SeekOrigin.Begin);
+                    if (outStream != null)
+                    {
+                        matOnlyStream.CopyTo(outStream);
+                    }
+                    else
+                    {
+                        inmeshStream.SetLength(0);
+                        matOnlyStream.CopyTo(inmeshStream);
+                    }
+                    return true;
+                }
+
             }
 
             var model = ModelRoot.Load(inGltfFile.FullName);
+
             VerifyGLTF(model);
             List<RawMeshContainer> Meshes = new List<RawMeshContainer>();
 
@@ -99,14 +105,14 @@ namespace WolvenKit.Modkit.RED4.MeshFiles
             Vec4 QuantScale = new Vec4((max.X - min.X) / 2, (max.Y - min.Y) / 2, (max.Z - min.Z) / 2, 0);
             Vec4 QuantTrans = new Vec4((max.X + min.X) / 2, (max.Y + min.Y) / 2, (max.Z + min.Z) / 2, 1);
 
-            if (model.LogicalSkins.Count != 0)
+            if(model.LogicalSkins.Count != 0)
             {
                 string[] bones = new string[model.LogicalSkins[0].JointsCount];
 
                 for (int i = 0; i < model.LogicalSkins[0].JointsCount; i++)
                     bones[i] = model.LogicalSkins[0].GetJoint(i).Joint.Name;
 
-                string[] meshbones = RIG.GetboneNames(cr2w, "CMesh");
+                string[] meshbones = RIG.GetboneNames(cr2w);
 
                 // reset vertex joint indices according to original
                 for (int i = 0; i < Meshes.Count; i++)
@@ -1021,14 +1027,14 @@ namespace WolvenKit.Modkit.RED4.MeshFiles
                 string name = model.LogicalMeshes[i].Name;
                 UInt32 LOD = 0;
 
-                if (name.Contains("LOD"))
+                if(name.Contains("LOD"))
                 {
                     try
                     {
                         int idx = name.IndexOf("LOD_");
-                        if (idx < name.Length - 1)
+                        if(idx < name.Length - 1)
                         {
-                            LOD = Convert.ToUInt32(name.Substring(idx + 4, 1));
+                            LOD = Convert.ToUInt32(name.Substring(idx + 4,1));
                             LODs.Add(LOD);
                         }
                     }

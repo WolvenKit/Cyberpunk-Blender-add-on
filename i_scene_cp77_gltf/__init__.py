@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Cyberpunk 2077 glTF Importer",
-    "author": "HitmanHimself, Turk",
-    "version": (1, 0, 0),
+    "author": "HitmanHimself, Turk, Jato",
+    "version": (1, 0, 1),
     "blender": (2, 93, 0),
     "location": "File > Import-Export",
     "description": "Import WolvenKit Cyberpunk2077 glTF Models With Materials",
@@ -17,7 +17,8 @@ from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
 from io_scene_gltf2.blender.imp.gltf2_blender_mesh import BlenderMesh
 from .material_types.multilayer import Multilayered
 import os
-from .main.setup import createMaterials
+from .main.setup import MaterialBuilder
+
 class CP77Import(bpy.types.Operator,ImportHelper):
     bl_idname = "io_scene_gltf.cp77"
     bl_label = "Import glTF"
@@ -47,21 +48,58 @@ class CP77Import(bpy.types.Operator,ImportHelper):
         gltf_importer.read()
         gltf_importer.checks()
 
-        BasePath = os.path.splitext(self.filepath)[0] + "\\"
-        file = open(BasePath + "Material.json",mode='r')
+
+        existingMeshes = bpy.data.meshes.keys()
+        existingObjects = bpy.data.objects.keys()
+        existingMaterials = bpy.data.materials.keys()
+
+        BlenderGlTF.create(gltf_importer)
+
+        for name in bpy.data.materials.keys():
+            if name not in existingMaterials:
+                bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
+
+        BasePath = os.path.splitext(self.filepath)[0]
+        file = open(BasePath + ".Material.json",mode='r')
         obj = json.loads(file.read())
         BasePath = str(obj["MaterialRepo"])  + "\\"
-        createMaterials(obj,BasePath,str(self.image_format))
 
-        BlenderGlTF.set_convert_functions(gltf_importer)
-        BlenderGlTF.pre_compute(gltf_importer)
-        for i in range(0,len(gltf_importer.data.meshes)):
-            bpymesh = BlenderMesh.create(gltf_importer,i,None)
-            bpymesh.materials.clear()
-            for e in range (0,len(gltf_importer.data.meshes[i].extras["materialNames"])):
-                bpymesh.materials.append(bpy.data.materials.get(gltf_importer.data.meshes[i].extras["materialNames"][e]))
-            mesh_object = bpy.data.objects.new(name=gltf_importer.data.meshes[i].name, object_data=bpymesh)
-            bpy.context.view_layer.active_layer_collection.collection.objects.link(mesh_object)
+        Builder = MaterialBuilder(obj,BasePath,str(self.image_format))
+
+        usedMaterials = {}
+        counter = 0
+        for name in bpy.data.meshes.keys():
+            if name not in existingMeshes:
+                bpy.data.meshes[name].materials.clear()
+                for matname in gltf_importer.data.meshes[counter].extras["materialNames"]:
+                    if matname not in usedMaterials.keys():
+                        index = 0
+                        for rawmat in obj["Materials"]:
+                            if rawmat["Name"] == matname:
+                                bpymat = Builder.create(index)
+                                bpy.data.meshes[name].materials.append(bpymat)
+                                usedMaterials.update( {matname: bpymat} )
+                            index = index + 1
+                    else:
+                        bpy.data.meshes[name].materials.append(usedMaterials[matname])
+                        
+                counter = counter + 1
+
+        index = 0
+        for rawmat in obj["Materials"]:
+            if rawmat["Name"] not in usedMaterials:
+                Builder.create(index)
+            index = index + 1
+
+
+        collection = bpy.data.collections.new(os.path.splitext(os.path.basename(self.filepath))[0])
+        bpy.context.scene.collection.children.link(collection)
+
+        for name in bpy.data.objects.keys():
+            if name not in existingObjects:
+                for parent in bpy.data.objects[name].users_collection:
+                    parent.objects.unlink(bpy.data.objects[name])
+                collection.objects.link(bpy.data.objects[name])
 
         return {'FINISHED'}
 

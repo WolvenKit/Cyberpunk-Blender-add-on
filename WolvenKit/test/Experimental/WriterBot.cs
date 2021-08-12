@@ -7,13 +7,10 @@ using WolvenKit.RED4.CR2W;
 using WolvenKit.Common.Tools.Oodle;
 using WolvenKit.RED4.CR2W.Archive;
 using Catel.IoC;
-using WolvenKit.Modkit.RED4.RigFile;
 using WolvenKit.Modkit.RED4;
-using WolvenKit.Modkit.RED4.MeshFile;
 using WolvenKit.RED4.CR2W.Types;
-using WolvenKit.Modkit.RED4.Opus;
+using WolvenKit.Modkit.RED4.RigFile;
 using System.Linq;
-using Newtonsoft.Json;
 
 namespace Writer
 {
@@ -27,10 +24,8 @@ namespace Writer
             serviceLocator.RegisterType < IProgress<double>, PercentProgressService > ();
             serviceLocator.RegisterType<IHashService, HashService>();
             serviceLocator.RegisterType<Red4ParserService>();
-            serviceLocator.RegisterType<TargetTools>();
             serviceLocator.RegisterType<RIG>();
             serviceLocator.RegisterType<MeshTools>();
-            serviceLocator.RegisterType<MESHIMPORTER>();
             serviceLocator.RegisterType<ModTools>();
             var oodlePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "oo2ext_7_win64.dll");
             OodleLoadLib.Load(oodlePath);
@@ -43,12 +38,14 @@ namespace Writer
             var all = new List<string>();
             all.AddRange(mts);
             all.AddRange(remts);
-
+            /*
             List<string> typer = new List<string>();
             foreach (string a in all)
             {
                 typer.Add($"case \"{Path.GetFileName(a)}\":");
-                typer.Add($"rawMaterial._{Path.GetFileNameWithoutExtension(a)} = new _{Path.GetFileNameWithoutExtension(a)}(cMaterialInstance);");
+                typer.Add($"if(rawMaterial._{Path.GetFileNameWithoutExtension(a)} == null)");
+                typer.Add($"    rawMaterial._{Path.GetFileNameWithoutExtension(a)} = new _{Path.GetFileNameWithoutExtension(a)}();");
+                typer.Add($"rawMaterial._{Path.GetFileNameWithoutExtension(a)}.Read(cMaterialInstance);");
                 typer.Add($"rawMaterial.MaterialType = MaterialTypes._{Path.GetFileNameWithoutExtension(a)}.ToString();");
                 typer.Add("break;");
             }
@@ -66,9 +63,10 @@ namespace Writer
                 typer.Add("[JsonProperty(NullValueHandling = NullValueHandling.Ignore)]");
                 typer.Add($"public _{Path.GetFileNameWithoutExtension(a)} _{Path.GetFileNameWithoutExtension(a)}    {{ get; set; }}");
             }
-            File.WriteAllLines(@"swit", typer);
+            File.WriteAllLines(@"switch.cs", typer);
             //
-            /*
+            */
+            
             var ck = new List<string>();
             var types = new List<string>();
             string file = @"MaterialTypes.cs";
@@ -89,16 +87,16 @@ namespace Writer
                 var cr2w = _wolvenkitFileService.TryReadCr2WFile(ms);
 
                 var b = cr2w.Chunks.Select(_ => _.Data).OfType<CMaterialTemplate>().First();
-                enumtyper.Add("   " + "_" + b.Name.Value + ",");
+                enumtyper.Add("   " + "_" + Path.GetFileNameWithoutExtension(a)+ ",");
                 //Console.WriteLine(b.Name.Value);
-                typer.Add($"public partial class _{b.Name.Value}\n{{");
-                inittyper.Add($"public partial class _{b.Name.Value}\n{{");
-                inittyper.Add($"   public _{b.Name.Value}()   {{}}");
-                inittyper.Add($"   public _{b.Name.Value}(CMaterialInstance cMaterialInstance)\n   {{");
+                typer.Add($"public partial class _{Path.GetFileNameWithoutExtension(a)}\n{{");
+                inittyper.Add($"public partial class _{Path.GetFileNameWithoutExtension(a)}\n{{");
+                inittyper.Add($"   public _{Path.GetFileNameWithoutExtension(a)}()   {{}}");
+                inittyper.Add($"   public void Read(CMaterialInstance cMaterialInstance)\n   {{");
                 inittyper.Add($"       for (int i = 0; i < cMaterialInstance.CMaterialInstanceData.Count; i++)\n       {{");
                 inittyper.Add($"           var data = cMaterialInstance.CMaterialInstanceData[i];");
 
-                deinittyper.Add($"public partial class _{b.Name.Value}\n{{");
+                deinittyper.Add($"public partial class _{Path.GetFileNameWithoutExtension(a)}\n{{");
                 deinittyper.Add($"  public void write(ref CR2WFile cr2w)\n    {{");
                 deinittyper.Add($"      var m = (cr2w.Chunks[0].Data as CMaterialInstance).CMaterialInstanceData;");
                 //                if (data.REDName == "MultilayerSetup")
@@ -116,7 +114,7 @@ namespace Writer
                             continue;
                             var type = (d as CMaterialParameterColor).Color.REDType;
                         //Console.WriteLine(type); CColor
-                        typer.Add($"    public Color {val} {{ get; set;}}    //{type}");
+                        typer.Add($"    public Color {val} {{ get; set;}} = new Color({(d as CMaterialParameterColor).Color.Red.Value}, {(d as CMaterialParameterColor).Color.Green.Value}, {(d as CMaterialParameterColor).Color.Blue.Value}, {(d as CMaterialParameterColor).Color.Alpha.Value});      //{type}");
                         inittyper.Add($"           if (data.REDName == \"{val}\")");
                         inittyper.Add($"               {val} = new Color(data.Variant as CColor);");
 
@@ -136,7 +134,7 @@ namespace Writer
                             continue;
                         var type = (d as CMaterialParameterScalar).Scalar.REDType;
                         //Console.WriteLine(type); //CFloat
-                        typer.Add($"    public float {val} {{ get; set; }}    //{type}");
+                        typer.Add($"    public float {val} {{ get; set; }} = {(d as CMaterialParameterScalar).Scalar.Value}f;     //{type}");
                         inittyper.Add($"           if (data.REDName == \"{val}\")");
                         inittyper.Add($"               {val} = (data.Variant as CFloat).Value;");
 
@@ -154,7 +152,7 @@ namespace Writer
                             continue;
                         var type = (d as CMaterialParameterTexture).Texture.REDType;
                         //Console.WriteLine(type); rRef<ITexture>
-                        typer.Add($"    public string {val} {{ get; set; }}    //{type}");
+                        typer.Add($"    public string {val} {{ get; set; }} = @\"{(d as CMaterialParameterTexture).Texture.DepotPath}\";    //{type}");
                         inittyper.Add($"           if (data.REDName == \"{val}\")");
                         inittyper.Add($"               {val} = (data.Variant as rRef<ITexture>).DepotPath;");
 
@@ -172,7 +170,7 @@ namespace Writer
                             continue;
                         var type = (d as CMaterialParameterVector).Vector.REDType;
                         //Console.WriteLine(type); //Vector4
-                        typer.Add($"    public Vec4 {val} {{ get; set; }}    //{type}");
+                        typer.Add($"    public Vec4 {val} {{ get; set; }} = new Vec4({(d as CMaterialParameterVector).Vector.X.Value}f,{(d as CMaterialParameterVector).Vector.Y.Value}f,{(d as CMaterialParameterVector).Vector.Z.Value}f,{(d as CMaterialParameterVector).Vector.W.Value}f);    //{type}");
                         inittyper.Add($"           if (data.REDName == \"{val}\")");
                         inittyper.Add($"               {val} = new Vec4(data.Variant as Vector4);");
 
@@ -192,7 +190,7 @@ namespace Writer
                             continue;
                         var type = (d as CMaterialParameterTextureArray).Texture.REDType;
                         //Console.WriteLine(type); rRef<ITexture>
-                        typer.Add($"    public string {val} {{ get; set; }}    //{type}");
+                        typer.Add($"    public string {val} {{ get; set; }} = @\"{(d as CMaterialParameterTextureArray).Texture.DepotPath}\";    //{type}");
                         inittyper.Add($"           if (data.REDName == \"{val}\")");
                         inittyper.Add($"               {val} = (data.Variant as rRef<ITexture>).DepotPath;");
 
@@ -210,7 +208,7 @@ namespace Writer
                             continue;
                         var type = (d as CMaterialParameterMultilayerMask).Mask.REDType;
                         //Console.WriteLine(type); rRef<Multilayer_Mask>
-                        typer.Add($"    public string {val} {{ get; set; }}     //{type}");
+                        typer.Add($"    public string {val} {{ get; set; }} = @\"{(d as CMaterialParameterMultilayerMask).Mask.DepotPath}\";     //{type}");
                         inittyper.Add($"           if (data.REDName == \"{val}\")");
                         inittyper.Add($"               {val} = (data.Variant as rRef<Multilayer_Mask>).DepotPath;");
 
@@ -229,7 +227,7 @@ namespace Writer
                             continue;
                         var type = (d as CMaterialParameterMultilayerSetup).Setup.REDType;
                         //Console.WriteLine(type); //rRef<Multilayer_Setup>
-                        typer.Add($"    public string {val} {{ get; set; }}     //{type}");
+                        typer.Add($"    public string {val} {{ get; set; }} = @\"{(d as CMaterialParameterMultilayerSetup).Setup.DepotPath}\";     //{type}");
                         inittyper.Add($"           if (data.REDName == \"{val}\")");
                         inittyper.Add($"               {val} = (data.Variant as rRef<Multilayer_Setup>).DepotPath;");
 
@@ -260,7 +258,7 @@ namespace Writer
                             continue;
                         var type = (d as CMaterialParameterCube).Texture.REDType;
                         //Console.WriteLine(type);  rRef<ITexture>
-                        typer.Add($"    public string {val} {{ get; set; }}     //{type}");
+                        typer.Add($"    public string {val} {{ get; set; }} =  @\"{(d as CMaterialParameterCube).Texture.DepotPath}\";     //{type}");
                         inittyper.Add($"           if (data.REDName == \"{val}\")");
                         inittyper.Add($"               {val} = (data.Variant as rRef<ITexture>).DepotPath;");
 
@@ -279,7 +277,7 @@ namespace Writer
                             continue;
                         var type = (d as CMaterialParameterGradient).Gradient.REDType;
                         //Console.WriteLine(type); rRef<CGradient>
-                        typer.Add($"    public string {val} {{ get; set; }}     //{type}");
+                        typer.Add($"    public string {val} {{ get; set; }} = @\"{(d as CMaterialParameterGradient).Gradient.DepotPath}\";     //{type}");
                         inittyper.Add($"           if (data.REDName == \"{val}\")");
                         inittyper.Add($"               {val} = (data.Variant as rRef<CGradient>).DepotPath;");
 
@@ -298,7 +296,7 @@ namespace Writer
                             continue;
                         var type = (d as CMaterialParameterHairParameters).HairProfile.REDType;
                         //Console.WriteLine(type); rRef<CHairProfile>
-                        typer.Add($"    public string {val} {{ get; set;}}     //{type}");
+                        typer.Add($"    public string {val} {{ get; set;}} = @\"{(d as CMaterialParameterHairParameters).HairProfile.DepotPath}\";     //{type}");
                         inittyper.Add($"           if (data.REDName == \"{val}\")");
                         inittyper.Add($"               {val} = (data.Variant as rRef<CHairProfile>).DepotPath;");
 
@@ -318,7 +316,7 @@ namespace Writer
                         var type = (d as CMaterialParameterCpuNameU64).Name.REDType;
                         //Console.WriteLine(a);  CName
                         //Console.WriteLine(type); 
-                        typer.Add($"    public string {val} {{ get; set; }}     //{type}");
+                        typer.Add($"    public string {val} {{ get; set; }} = @\"{(d as CMaterialParameterCpuNameU64).Name.Value}\";     //{type}");
                         inittyper.Add($"           if (data.REDName == \"{val}\")");
                         inittyper.Add($"               {val} = (data.Variant as CName).Value;");
                     }
@@ -332,7 +330,7 @@ namespace Writer
                             continue;
                         var type = (d as CMaterialParameterTerrainSetup).Setup.REDType;
                         //Console.WriteLine(type); rRef<CTerrainSetup>
-                        typer.Add($"    public string {val} {{ get; set; }}     //{type}");
+                        typer.Add($"    public string {val} {{ get; set; }} = @\"{(d as CMaterialParameterTerrainSetup).Setup.DepotPath}\";     //{type}");
                         inittyper.Add($"           if (data.REDName == \"{val}\")");
                         inittyper.Add($"               {val} = (data.Variant as rRef<CTerrainSetup>).DepotPath;");
 
@@ -351,7 +349,7 @@ namespace Writer
                             continue;
                         var type = (d as CMaterialParameterSkinParameters).SkinProfile.REDType;
                         //Console.WriteLine(type); rRef<CSkinProfile>
-                        typer.Add($"    public string {val} {{ get; set; }}     //{type}");
+                        typer.Add($"    public string {val} {{ get; set; }} = @\"{(d as CMaterialParameterSkinParameters).SkinProfile.DepotPath}\";      //{type}");
                         inittyper.Add($"           if (data.REDName == \"{val}\")");
                         inittyper.Add($"               {val} = (data.Variant as rRef<CSkinProfile>).DepotPath;");
 
@@ -370,7 +368,7 @@ namespace Writer
                             continue;
                         var type = (d as CMaterialParameterFoliageParameters).FoliageProfile.REDType;
                         //Console.WriteLine(type); rRef<CFoliageProfile>
-                        typer.Add($"    public string {val} {{ get; set; }}     //{type}");
+                        typer.Add($"    public string {val} {{ get; set; }} = @\"{(d as CMaterialParameterFoliageParameters).FoliageProfile.DepotPath}\";     //{type}");
                         inittyper.Add($"           if (data.REDName == \"{val}\")");
                         inittyper.Add($"               {val} = (data.Variant as rRef<CFoliageProfile>).DepotPath;");
 
@@ -396,7 +394,7 @@ namespace Writer
             File.WriteAllLines(@"MaterialInit.cs", inittyper);
             File.WriteAllLines(@"MaterialEnum.cs", enumtyper);
             File.WriteAllLines(@"MaterialDeinit.cs", deinittyper);
-            */
+            
         }
     }
 }
