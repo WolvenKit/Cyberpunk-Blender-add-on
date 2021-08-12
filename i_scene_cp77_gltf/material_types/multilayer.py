@@ -8,12 +8,12 @@ class Multilayered:
         self.BasePath = str(BasePath)
         self.image_format = image_format
     def createBaseMaterial(self,matTemplateObj,name):
-        CT = imageFromPath(self.BasePath + matTemplateObj["ColorTexture"],self.image_format)
-        NT = imageFromPath(self.BasePath + matTemplateObj["NormalTexture"],self.image_format,isNormal = True)
-        RT = imageFromPath(self.BasePath + matTemplateObj["RoughnessTexture"],self.image_format)
-        MT = imageFromPath(self.BasePath + matTemplateObj["MetalnessTexture"],self.image_format)
+        CT = imageFromPath(self.BasePath + matTemplateObj["colorTexture"],self.image_format)
+        NT = imageFromPath(self.BasePath + matTemplateObj["normalTexture"],self.image_format,isNormal = True)
+        RT = imageFromPath(self.BasePath + matTemplateObj["roughnessTexture"],self.image_format)
+        MT = imageFromPath(self.BasePath + matTemplateObj["metalnessTexture"],self.image_format)
     
-        TileMult = float(matTemplateObj.get("TilingMultiplier",1))
+        TileMult = float(matTemplateObj.get("tilingMultiplier",1))
 
         NG = bpy.data.node_groups.new(name[:-11],"ShaderNodeTree")
         TMI = NG.inputs.new('NodeSocketVector','Tile Multiplier')
@@ -95,34 +95,36 @@ class Multilayered:
         return
 
     def createOverrideTable(self,matTemplateObj):
-        OverList = matTemplateObj["Overrides"]
+        OverList = matTemplateObj.get("overrides")
+        if OverList is None:
+            OverList = matTemplateObj.get("Overrides")
         Output = {}
         Output["ColorScale"] = {}
         Output["NormalStrength"] = {}
         Output["RoughLevelsOut"] = {}
         Output["MetalLevelsOut"] = {}
-        for x in OverList["ColorScale"]:
-            tmpName = x["N"]
-            tmpR = float(x["V"][0])
-            tmpG = float(x["V"][1])
-            tmpB = float(x["V"][2])
+        for x in OverList["colorScale"]:
+            tmpName = x["n"]
+            tmpR = float(x["v"][0])
+            tmpG = float(x["v"][1])
+            tmpB = float(x["v"][2])
             Output["ColorScale"][tmpName] = (tmpR,tmpG,tmpB,1)
-        for x in OverList["NormalStrength"]:
-            tmpName = x["N"]
+        for x in OverList["normalStrength"]:
+            tmpName = x["n"]
             tmpStrength = 0
-            if x.get("V") is not None:
-                tmpStrength = float(x["V"][0])
+            if x.get("v") is not None:
+                tmpStrength = float(x["v"])
             Output["NormalStrength"][tmpName] = tmpStrength
-        for x in OverList["RoughLevelsOut"]:
-            tmpName = x["N"]
-            tmpStrength0 = float(x["V"][0])
-            tmpStrength1 = float(x["V"][1])
+        for x in OverList["roughLevelsOut"]:
+            tmpName = x["n"]
+            tmpStrength0 = float(x["v"][0])
+            tmpStrength1 = float(x["v"][1])
             Output["RoughLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
-        for x in OverList["MetalLevelsOut"]:
-            tmpName = x["N"]
-            if x.get("V") is not None:
-                tmpStrength0 = float(x["V"][0])
-                tmpStrength1 = float(x["V"][1])
+        for x in OverList["metalLevelsOut"]:
+            tmpName = x["n"]
+            if x.get("v") is not None:
+                tmpStrength0 = float(x["v"][0])
+                tmpStrength1 = float(x["v"][1])
             else:
                 tmpStrength0 = 0
                 tmpStrength1 = 1
@@ -303,39 +305,64 @@ class Multilayered:
     def create(self,mlsetuppath,mlmaskpath,Mat,normalimgpath):
 
         file = open(self.BasePath + mlsetuppath + ".json",mode='r')
-        mlsetup = json.loads(file.read())
+        mlsetup = json.loads(file.read())["Chunks"]["0"]["Properties"]
         file.close()
-        xllay = mlsetup["Layers"]
+        xllay = mlsetup.get("layers")
+        if xllay is None:
+            xllay = x.get("Layers")
         LayerCount = len(xllay)
     
         LayerIndex = 0
         CurMat = Mat.node_tree
         for x in (xllay):            
-            MatTile = x.get("MatTile")
-            MbTile = x.get("MbTile")
+            MatTile = x.get("matTile")
+            if MatTile is None:
+                MatTile = x.get("MatTile")
+            MbTile = x.get("mbTile")
+            if MbTile is None:
+                MbTile = x.get("MbTile")
+
             MbScale = 1
             if MatTile != None:
                 MbScale = float(MatTile)
             if MbTile != None:
                 MbScale = float(MbTile)
         
-            Microblend = x["Microblend"]
-            MicroblendContrast = x.get("MicroblendContrast",1)
-            microblendNormalStrength = x.get("MicroblendNormalStrength")
-            opacity = x.get("Opacity")
-            material = x.get("Material")
-            colorScale = x.get("ColorScale")
-            normalStrength = x.get("NormalStrength")
+            Microblend = x.get("microblend")
+            if Microblend is None:
+                Microblend = x.get("Microblend")
+            MicroblendContrast = x.get("microblendContrast")
+            if MicroblendContrast is None:
+                MicroblendContrast = x.get("Microblend",1)
+            microblendNormalStrength = x.get("microblendNormalStrength")
+            if microblendNormalStrength is None:
+                microblendNormalStrength = x.get("MicroblendNormalStrength")
+            opacity = x.get("opacity")
+            if opacity is None:
+                opacity = x.get("Opacity")
+            material = x.get("material")
+            if material is None:
+                material = x.get("Material")
+            colorScale = x.get("colorScale")
+            if colorScale is None:
+                colorScale = x.get("ColorScale")
+            normalStrength = x.get("normalStrength")
+            if normalStrength is None:
+                normalStrength = x.get("NormalStrength")
             #roughLevelsIn = x["roughLevelsIn"]
-            roughLevelsOut = x.get("RoughLevelsOut")
+            roughLevelsOut = x.get("roughLevelsOut")
+            if roughLevelsOut is None:
+                roughLevelsOut = x.get("RoughLevelsOut")
             #metalLevelsIn = x["metalLevelsIn"]
-            metalLevelsOut = x.get("MetalLevelsOut")
-        
+            metalLevelsOut = x.get("metalLevelsOut")
+            if metalLevelsOut is None:
+                metalLevelsOut = x.get("MetalLevelsOut")
+
             if Microblend != "null":
                 MBI = imageFromPath(self.BasePath+Microblend,self.image_format,True)
 
             file = open(self.BasePath + material + ".json",mode='r')
-            mltemplate = json.loads(file.read())
+            mltemplate = json.loads(file.read())["Chunks"]["0"]["Properties"]
             file.close()
             OverrideTable = self.createOverrideTable(mltemplate)#get override info for colors and what not
 
