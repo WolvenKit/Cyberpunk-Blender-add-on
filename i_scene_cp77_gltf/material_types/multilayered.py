@@ -1,6 +1,6 @@
 import bpy
 import os
-from ..main.common import imageFromPath
+from ..main.common import *
 import json
 
 class Multilayered:
@@ -151,31 +151,7 @@ class Multilayered:
         GNGeo.location = (-800,-250)
         GNGeo.hide = True
     
-        GNMap = CurMat.nodes.new("ShaderNodeNormalMap")
-        GNMap.location = (-600,-350)
-        GNMap.hide = True
-    
-        GNComRGB = CurMat.nodes.new("ShaderNodeCombineRGB")
-        GNComRGB.location = (-600,-450)
-        GNComRGB.hide = True
-    
-        GNSepRGB = CurMat.nodes.new("ShaderNodeSeparateRGB")
-        GNSepRGB.location = (-800,-450)
-        GNSepRGB.hide = True
-    
-        GNImg = imageFromPath(self.BasePath + normalimgpath,self.image_format,True)
-    
-        GNImgNode = CurMat.nodes.new("ShaderNodeTexImage")
-        GNImgNode.image = GNImg
-        GNImgNode.location = (-900,-550)
-        GNImgNode.hide = True
-        GNImgNode.label = "GlobalNormal"
-
-        CurMat.links.new(GNImgNode.outputs[0],GNSepRGB.inputs[0])
-        CurMat.links.new(GNSepRGB.outputs[0],GNComRGB.inputs[0])
-        CurMat.links.new(GNSepRGB.outputs[1],GNComRGB.inputs[1])
-        GNComRGB.inputs[2].default_value = 1
-        CurMat.links.new(GNComRGB.outputs[0],GNMap.inputs[1])
+        GNMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + normalimgpath,-600,-550,'GlobalNormal',self.image_format)
         CurMat.links.new(GNGeo.outputs['Normal'],GNS.inputs[1])
         CurMat.links.new(GNMap.outputs[0],GNS.inputs[0])
         CurMat.links.new(GNS.outputs[0],GNA.inputs[1])
@@ -302,9 +278,9 @@ class Multilayered:
         return
 
 
-    def create(self,mlsetuppath,mlmaskpath,Mat,normalimgpath):
+    def create(self,Data,Mat):
 
-        file = open(self.BasePath + mlsetuppath + ".json",mode='r')
+        file = open(self.BasePath + Data["MultilayerSetup"] + ".json",mode='r')
         mlsetup = json.loads(file.read())["Chunks"]["0"]["Properties"]
         file.close()
         xllay = mlsetup.get("layers")
@@ -366,7 +342,7 @@ class Multilayered:
             file.close()
             OverrideTable = self.createOverrideTable(mltemplate)#get override info for colors and what not
 
-            NG = bpy.data.node_groups.new(os.path.basename(mlsetuppath)[:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#create layer's node group
+            NG = bpy.data.node_groups.new(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#create layer's node group
             NG.outputs.new('NodeSocketColor','Difuse')
             NG.outputs.new('NodeSocketColor','Normal')
             NG.outputs.new('NodeSocketColor','Roughness')
@@ -499,4 +475,4 @@ class Multilayered:
             NG.links.new(ColorScaleMixN.outputs[0],GroupOutN.inputs[0])
             NG.links.new(OpacN.outputs[0],GroupOutN.inputs[4])
         
-        self.createLayerMaterial(os.path.basename(mlsetuppath)[:-8]+"_Layer_",LayerCount,CurMat,mlmaskpath,normalimgpath)
+        self.createLayerMaterial(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_",LayerCount,CurMat,Data["MultilayerMask"],Data["GlobalNormal"])

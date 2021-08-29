@@ -26,7 +26,66 @@ def imageFromPath(Img,image_format,isNormal = False):
         Im.filepath = Img[:-3]+ image_format
         if isNormal:
             Im.colorspace_settings.name = 'Non-Color'
+
     return Im
+def CreateShaderNodeTexImage(curMat,path = None, x = 0, y = 0, name = None,image_format = 'png', nonCol = False):
+    ImgNode = curMat.nodes.new("ShaderNodeTexImage")
+    ImgNode.location = (x, y)
+    ImgNode.hide = True
+    if name is not None:
+        ImgNode.label = name
+    if path is not None:
+        Img = imageFromPath(path,image_format,nonCol)
+        ImgNode.image = Img
+
+    return ImgNode
+
+def CreateShaderNodeNormalMap(curMat,path = None, x = 0, y = 0, name = None,image_format = 'png', nonCol = True):
+    nMap = curMat.nodes.new("ShaderNodeNormalMap")
+    nMap.location = (x,y)
+    nMap.hide = True
+
+    if path is not None:
+        ImgNode = curMat.nodes.new("ShaderNodeTexImage")
+        ImgNode.location = (x - 600, y)
+        ImgNode.hide = True
+        if name is not None:
+            ImgNode.label = name
+        Img = imageFromPath(path,image_format,nonCol)
+        ImgNode.image = Img
+
+        RgbCurve = curMat.nodes.new("ShaderNodeRGBCurve")
+        RgbCurve.location = (x - 300, y)
+        RgbCurve.hide = True
+        RgbCurve.mapping.curves[2].points[0].location = (0,1)
+        RgbCurve.mapping.curves[2].points[1].location = (1,1)
+
+        curMat.links.new(ImgNode.outputs[0],RgbCurve.inputs[1])
+        curMat.links.new(RgbCurve.outputs[0],nMap.inputs[1])
+
+    return nMap
+def CreateShaderNodeRGB(curMat, color,x = 0, y = 0,name = None, isVector = False):
+    rgbNode = curMat.nodes.new("ShaderNodeRGB")
+    rgbNode.location = (x, y)
+    rgbNode.hide = True
+    if name is not None:
+        rgbNode.label = name
+
+    if isVector:
+        rgbNode.outputs[0].default_value = (float(color["X"]),float(color["Y"]),float(color["Z"]),float(color["W"]))
+    else:
+        rgbNode.outputs[0].default_value = (float(color["Red"])/255,float(color["Green"])/255,float(color["Blue"])/255,float(color["Alpha"])/255)
+
+    return rgbNode
+def CreateShaderNodeValue(curMat, value = 0,x = 0, y = 0,name = None):
+    valNode = curMat.nodes.new("ShaderNodeValue")
+    valNode.location = (x,y)
+    valNode.outputs[0].default_value = float(value)
+    valNode.hide = True
+    if name is not None:
+        valNode.label = name
+
+    return valNode
 
 def crop_image(orig_img,outname, cropped_min_x, cropped_max_x, cropped_min_y, cropped_max_y):
     '''Crops an image object of type <class 'bpy.types.Image'>.  For example, for a 10x10 image, 
