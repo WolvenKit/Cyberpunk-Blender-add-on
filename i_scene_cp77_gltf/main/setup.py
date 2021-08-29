@@ -3,6 +3,7 @@ import os
 from ..material_types.multilayer import Multilayered
 from ..material_types.humanskin import HumanSkin
 from ..material_types.meshdecal import MeshDecal
+from ..material_types.vehiclemeshdecal import VehicleMeshDecal
 from ..material_types.metalbase import MetalBase
 from ..material_types.hair import Hair
 from ..material_types.meshdecalgradientmaprecolor import MeshDecalGradientMapReColor
@@ -33,6 +34,11 @@ class MaterialBuilder:
             if rawMat.get("_mesh_decal"):
                 mesDec = MeshDecal(self.BasePath,self.image_format)
                 mesDec.create(rawMat["_mesh_decal"],bpyMat)
+
+        if rawMat["MaterialType"] == "_vehicle_mesh_decal":
+            if rawMat.get("_vehicle_mesh_decal"):
+                mesDec = VehicleMeshDecal(self.BasePath,self.image_format)
+                mesDec.create(rawMat["_vehicle_mesh_decal"],bpyMat)
 
         if rawMat["MaterialType"] == "_skin":
             if rawMat.get("_skin"):
