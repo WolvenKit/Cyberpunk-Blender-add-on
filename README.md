@@ -14,3 +14,9 @@ The Cyberpunk Blender add-on is designed to fully automate the shader setup for 
 The Cyberpunk add-on requires Blender 2.92 or higher. Not all Cyberpunk shaders are currently supported by the add-on. If you're interested in adding support for a new shader please consider reaching out to us on our Discord, [Cyberpunk 2077 Modding Community.](https://discord.gg/Epkq79kd96)
 
 [Read more about Cyberpunk shaders and materials on the RED Modding wiki](https://wiki.redmodding.org/redengine4-research/assets/shaders)
+
+  [Research Documentation](./docs/README.md)
+ </p>
+  <p align="center">
+    <a href="https://www.patreon.com/HitmanHimself"><img src="https://i.ibb.co/RBZKRg4/Become-a-patron-button.png" alt="Become-a-patron-button" border="0"></a>
+ </p>
