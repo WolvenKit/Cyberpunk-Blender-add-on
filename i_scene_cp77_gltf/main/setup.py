@@ -1,15 +1,18 @@
 import bpy
 import os
-from ..material_types.multilayer import Multilayered
-from ..material_types.humanskin import HumanSkin
-from ..material_types.meshdecal import MeshDecal
-from ..material_types.vehiclemeshdecal import VehicleMeshDecal
-from ..material_types.metalbase import MetalBase
+from ..material_types.multilayered import Multilayered
+from ..material_types.vehicleDestrBlendshape import VehicleDestrBlendshape
+from ..material_types.skin import Skin
+from ..material_types.meshDecal import MeshDecal
+from ..material_types.meshDecalDoubleDiffuse import MeshDecalDoubleDiffuse
+from ..material_types.vehicleMeshDecal import VehicleMeshDecal
+from ..material_types.metalBase import MetalBase
 from ..material_types.hair import Hair
-from ..material_types.meshdecalgradientmaprecolor import MeshDecalGradientMapReColor
+from ..material_types.meshDecalGradientMapReColor import MeshDecalGradientMapReColor
 from ..material_types.eye import Eye
-from ..material_types.eyeshadow import EyeShadow
-from ..material_types.meshdecalemissive import MeshDecalEmissive
+from ..material_types.eyeGradient import EyeGradient
+from ..material_types.eyeShadow import EyeShadow
+from ..material_types.meshDecalEmissive import MeshDecalEmissive
 from ..material_types.glass import Glass
 
 class MaterialBuilder:
@@ -23,66 +26,64 @@ class MaterialBuilder:
         bpyMat = bpy.data.materials.new(rawMat["Name"])
         bpyMat.use_nodes = True
 
-        if rawMat["MaterialType"] == "_multilayered":
-            mulLayer = Multilayered(self.BasePath,self.image_format)
-            mlsetup = rawMat["_multilayered"].get("MultilayerSetup")
-            globnormal = rawMat["_multilayered"].get("GlobalNormal")
-            mlmask = rawMat["_multilayered"].get("MultilayerMask")
-            mulLayer.create(mlsetup,mlmask,bpyMat,globnormal)
+        if rawMat["MaterialTemplate"] == "engine\\materials\\multilayered.mt":
+            multilayered = Multilayered(self.BasePath,self.image_format)
+            multilayered.create(rawMat["Data"],bpyMat)
 
-        if rawMat["MaterialType"] == "_mesh_decal":
-            if rawMat.get("_mesh_decal"):
-                mesDec = MeshDecal(self.BasePath,self.image_format)
-                mesDec.create(rawMat["_mesh_decal"],bpyMat)
+        if rawMat["MaterialTemplate"] == "base\\materials\\vehicle_destr_blendshape.mt":
+            vehicleDestrBlendshape = VehicleDestrBlendshape(self.BasePath,self.image_format)
+            vehicleDestrBlendshape.create(rawMat["Data"],bpyMat)
 
-        if rawMat["MaterialType"] == "_vehicle_mesh_decal":
-            if rawMat.get("_vehicle_mesh_decal"):
-                mesDec = VehicleMeshDecal(self.BasePath,self.image_format)
-                mesDec.create(rawMat["_vehicle_mesh_decal"],bpyMat)
+        if rawMat["MaterialTemplate"] == "base\\materials\\mesh_decal.mt":
+            meshDecal = MeshDecal(self.BasePath,self.image_format)
+            meshDecal.create(rawMat["Data"],bpyMat)
 
-        if rawMat["MaterialType"] == "_skin":
-            if rawMat.get("_skin"):
-                humskin = HumanSkin(self.BasePath,self.image_format)
-                humskin.create(rawMat["_skin"],bpyMat)
+        if rawMat["MaterialTemplate"] == "base\\materials\\mesh_decal_double_diffuse.mt":
+            meshDecalDoubleDiffuse = MeshDecalDoubleDiffuse(self.BasePath,self.image_format)
+            meshDecalDoubleDiffuse.create(rawMat["Data"],bpyMat)
 
-        if rawMat["MaterialType"] == "_metal_base":
-            if rawMat.get("_metal_base"):
-                metbase = MetalBase(self.BasePath,self.image_format)
-                metbase.create(rawMat["_metal_base"],bpyMat)
+        if rawMat["MaterialTemplate"] == "base\\materials\\vehicle_mesh_decal.mt":
+            vehicleMeshDecal = VehicleMeshDecal(self.BasePath,self.image_format)
+            vehicleMeshDecal.create(rawMat["Data"],bpyMat)
 
-        if rawMat["MaterialType"] == "_hair":
-            if rawMat.get("_hair"):
-                h = Hair(self.BasePath,self.image_format)
-                h.create(rawMat["_hair"],bpyMat)
+        if rawMat["MaterialTemplate"] == "base\\materials\\skin.mt":
+            skin = Skin(self.BasePath,self.image_format)
+            skin.create(rawMat["Data"],bpyMat)
 
-        if rawMat["MaterialType"] == "_mesh_decal_gradientmap_recolor":
-            if rawMat.get("_mesh_decal_gradientmap_recolor"):
-                hC = MeshDecalGradientMapReColor(self.BasePath,self.image_format)
-                hC.create(rawMat["_mesh_decal_gradientmap_recolor"],bpyMat)
+        if rawMat["MaterialTemplate"] == "engine\\materials\\metal_base.remt":
+            metalBase = MetalBase(self.BasePath,self.image_format)
+            metalBase.create(rawMat["Data"],bpyMat)
 
-        if rawMat["MaterialType"] == "_eye":
-            if rawMat.get("_eye"):
-                eye = Eye(self.BasePath,self.image_format)
-                eye.create(rawMat["_eye"],bpyMat)
+        if rawMat["MaterialTemplate"] == "base\\materials\\hair.mt":
+            hair = Hair(self.BasePath,self.image_format)
+            hair.create(rawMat["Data"],bpyMat)
 
-        if rawMat["MaterialType"] == "_eye_shadow":
-            if rawMat.get("_eye_shadow"):
-                eS = EyeShadow(self.BasePath,self.image_format)
-                eS.create(rawMat["_eye_shadow"],bpyMat)
+        if rawMat["MaterialTemplate"] == "base\\materials\\mesh_decal_gradientmap_recolor.mt":
+            meshDecalGradientMapReColor = MeshDecalGradientMapReColor(self.BasePath,self.image_format)
+            meshDecalGradientMapReColor.create(rawMat["Data"],bpyMat)
 
-        if rawMat["MaterialType"] == "_mesh_decal_emissive":
-            if rawMat.get("_mesh_decal_emissive"):
-                decEmiss = MeshDecalEmissive(self.BasePath,self.image_format)
-                decEmiss.create(rawMat["_mesh_decal_emissive"],bpyMat)
+        if rawMat["MaterialTemplate"] == "base\\materials\\eye.mt":
+            eye = Eye(self.BasePath,self.image_format)
+            eye.create(rawMat["Data"],bpyMat)
 
-        if rawMat["MaterialType"] == "_mesh_decal_wet_character":
-            if rawMat.get("_mesh_decal_wet_character"):
-                mesDec = MeshDecal(self.BasePath,self.image_format)
-                mesDec.create(rawMat["_mesh_decal_wet_character"],bpyMat)
+        if rawMat["MaterialTemplate"] == "base\\materials\\eye_gradient.mt":
+            eyeGradient = EyeGradient(self.BasePath,self.image_format)
+            eyeGradient.create(rawMat["Data"],bpyMat)
 
-        if rawMat["MaterialType"] == "_glass":
-            if rawMat.get("_glass"):
-                glass = Glass(self.BasePath,self.image_format)
-                glass.create(rawMat["_glass"],bpyMat)
+        if rawMat["MaterialTemplate"] == "base\\materials\\eye_shadow.mt":
+            eyeShadow = EyeShadow(self.BasePath,self.image_format)
+            eyeShadow.create(rawMat["Data"],bpyMat)
+
+        if rawMat["MaterialTemplate"] == "base\\materials\\mesh_decal_emissive.mt":
+            meshDecalEmissive = MeshDecalEmissive(self.BasePath,self.image_format)
+            meshDecalEmissive.create(rawMat["Data"],bpyMat)
+
+        if rawMat["MaterialTemplate"] == "base\\materials\\mesh_decal_wet_character.mt":
+            meshDecal = MeshDecal(self.BasePath,self.image_format)
+            meshDecal.create(rawMat["Data"],bpyMat)
+
+        if rawMat["MaterialTemplate"] == "base\\materials\\glass.mt":
+            glass = Glass(self.BasePath,self.image_format)
+            glass.create(rawMat["Data"],bpyMat)
 
         return bpyMat
