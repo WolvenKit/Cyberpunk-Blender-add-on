@@ -2,7 +2,7 @@ import bpy
 import os
 from ..main.common import *
 
-class Eye:
+class EyeGradient:
     def __init__(self, BasePath,image_format):
         self.BasePath = BasePath
         self.image_format = image_format
