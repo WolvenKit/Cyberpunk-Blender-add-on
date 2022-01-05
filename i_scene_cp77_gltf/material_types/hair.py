@@ -1,6 +1,7 @@
 import bpy
 import os
-from ..main.common import imageFromPath
+from ..main.common import *
+
 import json
 
 class Hair:
@@ -16,24 +17,12 @@ class Hair:
 
         CurMat = Mat.node_tree
 
-
-        aImg = imageFromPath(self.BasePath + hair["Strand_Alpha"],self.image_format)
-        aImgNode = CurMat.nodes.new("ShaderNodeTexImage")
-        aImgNode.location = (-300,-150)
-        aImgNode.image = aImg
-        aImgNode.hide = True
-        aImgNode.label = "Strand_Alpha"
+        aImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + hair["Strand_Alpha"],-300,-150,'Strand_Alpha',self.image_format)
         CurMat.links.new(aImgNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
-
 
         CurMat.nodes['Principled BSDF'].inputs['Specular'].default_value = 0
 
-
-        gImg = imageFromPath(self.BasePath + hair["Strand_Gradient"],self.image_format,True)
-        gImgNode = CurMat.nodes.new("ShaderNodeTexImage")
-        gImgNode.location = (-1100,50)
-        gImgNode.image = gImg
-        gImgNode.label = "Strand_Gradient"
+        gImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + hair["Strand_Gradient"],-1100,50,'Strand_Gradient',self.image_format,True)
 
         RootToTip = CurMat.nodes.new("ShaderNodeValToRGB")
         RootToTip.location = (-800,50)
@@ -55,11 +44,7 @@ class Hair:
         CurMat.links.new(gImgNode.outputs[0],RootToTip.inputs[0])
 
 
-        idImg = imageFromPath(self.BasePath + hair["Strand_ID"],self.image_format,True)
-        idImgNode = CurMat.nodes.new("ShaderNodeTexImage")
-        idImgNode.location = (-1100,350)
-        idImgNode.image = idImg
-        idImgNode.label = "Strand_ID"
+        idImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + hair["Strand_ID"],-1100,350,'Strand_ID',self.image_format,True)
 
         ID = CurMat.nodes.new("ShaderNodeValToRGB")
         ID.location = (-800,350)
@@ -95,24 +80,5 @@ class Hair:
 
         CurMat.links.new(gamma0.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
 
-        nImg = imageFromPath(self.BasePath + hair["Flow"],self.image_format,True)
-
-        nImgNode = CurMat.nodes.new("ShaderNodeTexImage")
-        nImgNode.location = (-800,-250)
-        nImgNode.image = nImg
-        nImgNode.label = "Flow"
-
-
-        nRgbCurve = CurMat.nodes.new("ShaderNodeRGBCurve")
-        nRgbCurve.location = (-500,-250)
-        nRgbCurve.hide = True
-        nRgbCurve.mapping.curves[2].points[0].location = (0,1)
-        nRgbCurve.mapping.curves[2].points[1].location = (1,1)
-
-        nMap = CurMat.nodes.new("ShaderNodeNormalMap")
-        nMap.location = (-200,-250)
-        nMap.hide = True
-
-        CurMat.links.new(nImgNode.outputs[0],nRgbCurve.inputs[1])
-        CurMat.links.new(nRgbCurve.outputs[0],nMap.inputs[1])
+        nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + hair["Flow"],-200,-250,'Flow',self.image_format)
         CurMat.links.new(nMap.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Normal'])

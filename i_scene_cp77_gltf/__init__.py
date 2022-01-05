@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Cyberpunk 2077 glTF Importer",
     "author": "HitmanHimself, Turk, Jato",
-    "version": (1, 0, 1),
+    "version": (1, 0, 3),
     "blender": (2, 93, 0),
     "location": "File > Import-Export",
     "description": "Import WolvenKit Cyberpunk2077 glTF Models With Materials",
@@ -10,13 +10,12 @@ bl_info = {
 }
 import bpy
 import json
-from bpy.props import (StringProperty,EnumProperty)
+import os
+from bpy.props import (StringProperty,EnumProperty,BoolProperty)
 from bpy_extras.io_utils import ImportHelper
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
 from io_scene_gltf2.blender.imp.gltf2_blender_mesh import BlenderMesh
-from .material_types.multilayer import Multilayered
-import os
 from .main.setup import MaterialBuilder
 
 class CP77Import(bpy.types.Operator,ImportHelper):
@@ -36,11 +35,13 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                 ("jpeg", "Use JPEG textures", "")),
         description="Texture Format",
         default="png")
+    exclude_unused_mats: BoolProperty(name="Exclude Unused Materials",default=True,description="Enabling this options skips all the materials that aren't being used by any mesh")
     filepath: StringProperty(subtype = 'FILE_PATH')
+
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
-
+        layout.prop(self, 'exclude_unused_mats')
         layout.prop(self, 'image_format')
 
     def execute(self, context):
@@ -85,11 +86,12 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                         
                 counter = counter + 1
 
-        index = 0
-        for rawmat in obj["Materials"]:
-            if rawmat["Name"] not in usedMaterials:
-                Builder.create(index)
-            index = index + 1
+        if not self.exclude_unused_mats:
+            index = 0
+            for rawmat in obj["Materials"]:
+                if rawmat["Name"] not in usedMaterials:
+                    Builder.create(index)
+                index = index + 1
 
 
         collection = bpy.data.collections.new(os.path.splitext(os.path.basename(self.filepath))[0])

@@ -1,6 +1,6 @@
 import bpy
 import os
-from ..main.common import imageFromPath
+from ..main.common import *
 
 
 class EyeShadow:
@@ -8,19 +8,13 @@ class EyeShadow:
         self.BasePath = BasePath
         self.image_format = image_format
 
-    def create(self,eyeshadow,Mat):
+    def create(self,Data,Mat):
         CurMat = Mat.node_tree
-        aImg = imageFromPath(self.BasePath + eyeshadow["Mask"],self.image_format)
 
-        aImgNode = CurMat.nodes.new("ShaderNodeTexImage")
-        aImgNode.location = (-300,-250)
-        aImgNode.image = aImg
-        aImgNode.label = "Mask"
-        CurMat.links.new(aImgNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
+        if "Mask" in Data:
+            aImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["Mask"],-300,-250,'Mask',self.image_format)
+            CurMat.links.new(aImgNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
 
-        dColor = CurMat.nodes.new("ShaderNodeRGB")
-        dColor.location = (-450,200)
-        dColor.hide = True
-        dColor.label = "ShadowColor"
-        dColor.outputs[0].default_value = (float(eyeshadow["ShadowColor"]["Red"])/255,float(eyeshadow["ShadowColor"]["Green"])/255,float(eyeshadow["ShadowColor"]["Blue"])/255,float(eyeshadow["ShadowColor"]["Alpha"])/255)
-        CurMat.links.new(dColor.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
+        if "ShadowColor" in Data:
+            shadowColor = CreateShaderNodeRGB(CurMat, Data["ShadowColor"],-450,200,'ShadowColor')
+            CurMat.links.new(shadowColor.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
