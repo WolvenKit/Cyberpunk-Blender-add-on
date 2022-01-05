@@ -1,18 +1,18 @@
 import bpy
 import os
 from ..material_types.multilayered import Multilayered
-from ..material_types.vehicleDestrBlendshape import VehicleDestrBlendshape
+from ..material_types.vehicledestrblendshape import VehicleDestrBlendshape
 from ..material_types.skin import Skin
-from ..material_types.meshDecal import MeshDecal
-from ..material_types.meshDecalDoubleDiffuse import MeshDecalDoubleDiffuse
-from ..material_types.vehicleMeshDecal import VehicleMeshDecal
-from ..material_types.metalBase import MetalBase
+from ..material_types.meshdecal import MeshDecal
+from ..material_types.meshdecaldoublediffuse import MeshDecalDoubleDiffuse
+from ..material_types.vehiclemeshdecal import VehicleMeshDecal
+from ..material_types.metalbase import MetalBase
 from ..material_types.hair import Hair
-from ..material_types.meshDecalGradientMapReColor import MeshDecalGradientMapReColor
+from ..material_types.meshdecalgradientmaprecolor import MeshDecalGradientMapReColor
 from ..material_types.eye import Eye
-from ..material_types.eyeGradient import EyeGradient
-from ..material_types.eyeShadow import EyeShadow
-from ..material_types.meshDecalEmissive import MeshDecalEmissive
+from ..material_types.eyegradient import EyeGradient
+from ..material_types.eyeshadow import EyeShadow
+from ..material_types.meshdecalemissive import MeshDecalEmissive
 from ..material_types.glass import Glass
 
 class MaterialBuilder:
