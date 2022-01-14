@@ -40,6 +40,77 @@ def CreateShaderNodeTexImage(curMat,path = None, x = 0, y = 0, name = None,image
 
     return ImgNode
 
+def CreateRebildNormalGroup(curMat, x = 0, y = 0,name = 'Rebuild Normal Z'):
+    group = bpy.data.node_groups.get("Rebuild Normal Z")
+
+    if group is None:
+        group = bpy.data.node_groups.new("Rebuild Normal Z","ShaderNodeTree")
+    
+        GroupInN = group.nodes.new("NodeGroupInput")
+        GroupInN.location = (-1400,0)
+    
+        GroupOutN = group.nodes.new("NodeGroupOutput")
+        GroupOutN.location = (0,0)
+    
+        group.inputs.new('NodeSocketColor','Image')
+        group.outputs.new('NodeSocketColor','Image')
+    
+        VMup = group.nodes.new("ShaderNodeVectorMath")
+        VMup.location = (-1200,-200)
+        VMup.operation = 'MULTIPLY'
+        VMup.inputs[1].default_value[0] = 2.0
+        VMup.inputs[1].default_value[1] = 2.0
+    
+        VSub = group.nodes.new("ShaderNodeVectorMath")
+        VSub.location = (-1000,-200)
+        VSub.operation = 'SUBTRACT'
+        VSub.inputs[1].default_value[0] = 1.0
+        VSub.inputs[1].default_value[1] = 1.0
+    
+        VDot = group.nodes.new("ShaderNodeVectorMath")
+        VDot.location = (-800,-200)
+        VDot.operation = 'DOT_PRODUCT'
+    
+        Sub = group.nodes.new("ShaderNodeMath")
+        Sub.location = (-600,-200)
+        Sub.operation = 'SUBTRACT'
+        group.links.new(VDot.outputs[0],Sub.inputs[1])
+        Sub.inputs[0].default_value = 1.020
+    
+        SQR = group.nodes.new("ShaderNodeMath")
+        SQR.location = (-400,-200)
+        SQR.operation = 'SQRT'
+
+        Range = group.nodes.new("ShaderNodeMapRange")
+        Range.location = (-200,-200)
+        Range.clamp = True
+        Range.inputs[1].default_value = -1.0
+
+        Sep = group.nodes.new("ShaderNodeSeparateRGB")
+        Sep.location = (-600,0)
+        Comb = group.nodes.new("ShaderNodeCombineRGB")
+        Comb.location = (-300,0)
+    
+        group.links.new(GroupInN.outputs[0],VMup.inputs[0])
+        group.links.new(VMup.outputs[0],VSub.inputs[0])
+        group.links.new(VSub.outputs[0],VDot.inputs[0])
+        group.links.new(VSub.outputs[0],VDot.inputs[1])
+        group.links.new(Sub.outputs[0],SQR.inputs[0])
+        group.links.new(SQR.outputs[0],Range.inputs[0])
+        group.links.new(GroupInN.outputs[0],Sep.inputs[0])
+        group.links.new(Sep.outputs[0],Comb.inputs[0])
+        group.links.new(Sep.outputs[1],Comb.inputs[1])
+        group.links.new(Range.outputs[0],Comb.inputs[2])
+        group.links.new(Comb.outputs[0],GroupOutN.inputs[0])
+    
+    ShaderGroup = curMat.nodes.new("ShaderNodeGroup")
+    ShaderGroup.location = (x,y)
+    ShaderGroup.hide = True
+    ShaderGroup.node_tree = group
+    ShaderGroup.name = name
+
+    return ShaderGroup
+
 def CreateShaderNodeNormalMap(curMat,path = None, x = 0, y = 0, name = None,image_format = 'png', nonCol = True):
     nMap = curMat.nodes.new("ShaderNodeNormalMap")
     nMap.location = (x,y)
@@ -47,21 +118,17 @@ def CreateShaderNodeNormalMap(curMat,path = None, x = 0, y = 0, name = None,imag
 
     if path is not None:
         ImgNode = curMat.nodes.new("ShaderNodeTexImage")
-        ImgNode.location = (x - 600, y)
+        ImgNode.location = (x - 400, y)
         ImgNode.hide = True
         if name is not None:
             ImgNode.label = name
         Img = imageFromPath(path,image_format,nonCol)
         ImgNode.image = Img
 
-        RgbCurve = curMat.nodes.new("ShaderNodeRGBCurve")
-        RgbCurve.location = (x - 300, y)
-        RgbCurve.hide = True
-        RgbCurve.mapping.curves[2].points[0].location = (0,1)
-        RgbCurve.mapping.curves[2].points[1].location = (1,1)
+        NormalRebuildGroup = CreateRebildNormalGroup(curMat, x - 200, y, name + ' Rebuilt')
 
-        curMat.links.new(ImgNode.outputs[0],RgbCurve.inputs[1])
-        curMat.links.new(RgbCurve.outputs[0],nMap.inputs[1])
+        curMat.links.new(ImgNode.outputs[0],NormalRebuildGroup.inputs[0])
+        curMat.links.new(NormalRebuildGroup.outputs[0],nMap.inputs[1])
 
     return nMap
 def CreateShaderNodeRGB(curMat, color,x = 0, y = 0,name = None, isVector = False):
