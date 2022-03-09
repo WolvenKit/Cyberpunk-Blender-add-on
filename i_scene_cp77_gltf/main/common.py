@@ -95,6 +95,7 @@ def CreateRebildNormalGroup(curMat, x = 0, y = 0,name = 'Rebuild Normal Z'):
         group.links.new(VMup.outputs[0],VSub.inputs[0])
         group.links.new(VSub.outputs[0],VDot.inputs[0])
         group.links.new(VSub.outputs[0],VDot.inputs[1])
+        group.links.new(VDot.outputs["Value"],Sub.inputs[1])
         group.links.new(Sub.outputs[0],SQR.inputs[0])
         group.links.new(SQR.outputs[0],Range.inputs[0])
         group.links.new(GroupInN.outputs[0],Sep.inputs[0])
@@ -125,7 +126,7 @@ def CreateShaderNodeNormalMap(curMat,path = None, x = 0, y = 0, name = None,imag
         Img = imageFromPath(path,image_format,nonCol)
         ImgNode.image = Img
 
-        NormalRebuildGroup = CreateRebildNormalGroup(curMat, x - 200, y, name + ' Rebuilt')
+        NormalRebuildGroup = CreateRebildNormalGroup(curMat, x - 150, y, name + ' Rebuilt')
 
         curMat.links.new(ImgNode.outputs[0],NormalRebuildGroup.inputs[0])
         curMat.links.new(NormalRebuildGroup.outputs[0],nMap.inputs[1])
@@ -159,11 +160,9 @@ def crop_image(orig_img,outname, cropped_min_x, cropped_max_x, cropped_min_y, cr
     if you put cropped_min_x = 2 and cropped_max_x = 6,
     you would get back a cropped image with width 4, and 
     pixels ranging from the 2 to 5 in the x-coordinate
-
     Note: here y increasing as you down the image.  So, 
     if cropped_min_x and cropped_min_y are both zero, 
     you'll get the top-left of the image (as in GIMP).
-
     Returns: An image of type  <class 'bpy.types.Image'>
     '''
 

@@ -68,7 +68,7 @@ class VehicleMeshDecal:
             dirtOpacVal = CreateShaderNodeValue(CurMat, Data["DirtOpacity"], -1200,350, "DirtOpacity")
 
         if "DamageInfluence" in Data:
-            dmgInfVal = CreateShaderNodeValue(CurMat, Data["DamageInfluence"], -1200, 550, "DamageInfluence")
+            dmgInfVal = CreateShaderNodeValue(CurMat, Data["DamageInfluence"]["Value"], -1200, 550, "DamageInfluence")
 
         if "UseGradientMap" in Data:
             gradMapVal = CreateShaderNodeValue(CurMat, Data["UseGradientMap"], -1200, 750, "UseGradientMap")

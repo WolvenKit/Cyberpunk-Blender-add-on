@@ -12,7 +12,7 @@ class Hair:
     def create(self,hair,Mat):
 
         file = open(self.BasePath + hair["HairProfile"] + ".json",mode='r')
-        profile = json.loads(file.read())["Chunks"]["0"]["Properties"]
+        profile = json.loads(file.read())["Data"]["RootChunk"]["Properties"]
         file.close()
 
         CurMat = Mat.node_tree
@@ -32,13 +32,13 @@ class Hair:
         counter = 0
         for Entry in profile["gradientEntriesRootToTip"]:
             if counter is 0:
-                RootToTip.color_ramp.elements[0].position = Entry.get("value",0)
-                colr = Entry.get("color","255, 255, 255").split(', ')
-                RootToTip.color_ramp.elements[0].color = (float(colr[0])/255,float(colr[1])/255,float(colr[2])/255,float(1))
+                RootToTip.color_ramp.elements[0].position = Entry["Properties"].get("value",0)
+                colr = Entry["Properties"]["color"].get("Properties")
+                RootToTip.color_ramp.elements[0].color = (float(colr["Red"])/255,float(colr["Green"])/255,float(colr["Blue"])/255,float(1))
             else:
-                element = RootToTip.color_ramp.elements.new(Entry.get("value",0))
-                colr = Entry.get("color","255, 255, 255").split(', ')
-                element.color = (float(colr[0])/255,float(colr[1])/255,float(colr[2])/255,float(1))
+                element = RootToTip.color_ramp.elements.new(Entry["Properties"].get("value",0))
+                colr = Entry["Properties"]["color"].get("Properties")
+                element.color =  (float(colr["Red"])/255,float(colr["Green"])/255,float(colr["Blue"])/255,float(1))
             counter = counter + 1
 
         CurMat.links.new(gImgNode.outputs[0],RootToTip.inputs[0])
@@ -54,15 +54,15 @@ class Hair:
         counter = 0
         for Entry in profile["gradientEntriesID"]:
             if counter is 0:
-                ID.color_ramp.elements[0].position = Entry.get("value",0)
-                colr = Entry.get("color","255, 255, 255").split(', ')
-                ID.color_ramp.elements[0].color = (float(colr[0])/255,float(colr[1])/255,float(colr[2])/255,float(1))
+                ID.color_ramp.elements[0].position = Entry["Properties"].get("value",0)
+                colr = Entry["Properties"]["color"].get("Properties")
+                ID.color_ramp.elements[0].color = (float(colr["Red"])/255,float(colr["Green"])/255,float(colr["Blue"])/255,float(1))
             else:
-                element = ID.color_ramp.elements.new(Entry.get("value",0))
-                colr = Entry.get("color","255, 255, 255").split(', ')
-                element.color = (float(colr[0])/255,float(colr[1])/255,float(colr[2])/255,float(1))
+                element = ID.color_ramp.elements.new(Entry["Properties"].get("value",0))
+                colr = Entry["Properties"]["color"].get("Properties")
+                element.color = (float(colr["Red"])/255,float(colr["Green"])/255,float(colr["Blue"])/255,float(1))
             counter = counter + 1
-
+			
         CurMat.links.new(idImgNode.outputs[0],ID.inputs[0])
 
         mulNode = CurMat.nodes.new("ShaderNodeMixRGB")
