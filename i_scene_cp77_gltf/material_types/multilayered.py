@@ -112,7 +112,7 @@ class Multilayered:
         for x in OverList["normalStrength"]:
             tmpName = x["Properties"]["n"]
             tmpStrength = 0
-            if x.get("v") is not None:
+            if x["Properties"].get("v") is not None:
                 tmpStrength = float(x["Properties"]["v"])
             Output["NormalStrength"][tmpName] = tmpStrength
         for x in OverList["roughLevelsOut"]:
@@ -122,7 +122,7 @@ class Multilayered:
             Output["RoughLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
         for x in OverList["metalLevelsOut"]:
             tmpName = x["Properties"]["n"]
-            if x.get("v") is not None:
+            if x["Properties"].get("v") is not None:
                 tmpStrength0 = float(x["Properties"]["v"]["Elements"][0])
                 tmpStrength1 = float(x["Properties"]["v"]["Elements"][1])
             else:
