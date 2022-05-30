@@ -1,22 +1,44 @@
 bl_info = {
     "name": "Cyberpunk 2077 glTF Importer",
     "author": "HitmanHimself, Turk, Jato, dragonzkiller",
-    "version": (1, 0, 6),
+    "version": (1, 0, 7),
     "blender": (3, 0, 0),
     "location": "File > Import-Export",
     "description": "Import WolvenKit Cyberpunk2077 glTF Models With Materials",
     "warning": "",
     "category": "Import-Export",
 }
+
 import bpy
+import bpy.utils.previews
 import json
 import os
-from bpy.props import (StringProperty,EnumProperty,BoolProperty)
+
+from bpy.props import (
+    StringProperty,
+    EnumProperty,
+    BoolProperty)
 from bpy_extras.io_utils import ImportHelper
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
-from io_scene_gltf2.blender.imp.gltf2_blender_mesh import BlenderMesh
 from .main.setup import MaterialBuilder
+
+icons_dir = os.path.join(os.path.dirname(__file__), "icons")
+custom_icon_col = {}
+
+class CP77StreamingSectorImport(bpy.types.Operator,ImportHelper):
+
+    bl_idname = "io_scene_glft.cp77sector"
+    bl_label = "Import StreamingSector"
+    use_filter_folder = True
+    filter_glob: StringProperty(
+        default=".",
+        options={'HIDDEN'},
+        )
+
+    def execute(self, context):
+        self.report({'ERROR'}, "Streaming Sector Import is not yet implemented!")
+        return {'FINISHED'}
 
 class CP77Import(bpy.types.Operator,ImportHelper):
     bl_idname = "io_scene_gltf.cp77"
@@ -106,13 +128,23 @@ class CP77Import(bpy.types.Operator,ImportHelper):
         return {'FINISHED'}
 
 def menu_func_import(self, context):
-    self.layout.operator(CP77Import.bl_idname, text="Cyberpunk GLTF (.gltf/.glb)")
+    self.layout.operator(CP77Import.bl_idname, text="Cyberpunk GLTF (.gltf/.glb)", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
+    #self.layout.operator(CP77StreamingSectorImport.bl_idname, text="Cyberpunk StreamingSector (.json)")
+
 def register():
+    custom_icon = bpy.utils.previews.new()
+    custom_icon.load("WKIT", os.path.join(icons_dir, "wkit.png"), 'IMAGE')
+    custom_icon_col["import"] = custom_icon
+
     bpy.utils.register_class(CP77Import)
+    #bpy.utils.register_class(CP77StreamingSectorImport)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
     
 def unregister():
+    bpy.utils.previews.remove(custom_icon_col["import"])
+
     bpy.utils.unregister_class(CP77Import)
+    #bpy.utils.unregister_class(CP77StreamingSectorImport)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
         
 if __name__ == "__main__":
