@@ -12,7 +12,7 @@ class Hair:
     def create(self,hair,Mat):
 
         file = open(self.BasePath + hair["HairProfile"] + ".json",mode='r')
-        profile = json.loads(file.read())["Data"]["RootChunk"]["Properties"]
+        profile = json.loads(file.read())["Data"]["RootChunk"]
         file.close()
 
         CurMat = Mat.node_tree
@@ -32,12 +32,12 @@ class Hair:
         counter = 0
         for Entry in profile["gradientEntriesRootToTip"]:
             if counter is 0:
-                RootToTip.color_ramp.elements[0].position = Entry["Properties"].get("value",0)
-                colr = Entry["Properties"]["color"].get("Properties")
+                RootToTip.color_ramp.elements[0].position = Entry.get("value",0)
+                colr = Entry["color"]
                 RootToTip.color_ramp.elements[0].color = (float(colr["Red"])/255,float(colr["Green"])/255,float(colr["Blue"])/255,float(1))
             else:
-                element = RootToTip.color_ramp.elements.new(Entry["Properties"].get("value",0))
-                colr = Entry["Properties"]["color"].get("Properties")
+                element = RootToTip.color_ramp.elements.new(Entry.get("value",0))
+                colr = Entry["color"]
                 element.color =  (float(colr["Red"])/255,float(colr["Green"])/255,float(colr["Blue"])/255,float(1))
             counter = counter + 1
 
@@ -54,12 +54,12 @@ class Hair:
         counter = 0
         for Entry in profile["gradientEntriesID"]:
             if counter is 0:
-                ID.color_ramp.elements[0].position = Entry["Properties"].get("value",0)
-                colr = Entry["Properties"]["color"].get("Properties")
+                ID.color_ramp.elements[0].position = Entry.get("value",0)
+                colr = Entry["color"]
                 ID.color_ramp.elements[0].color = (float(colr["Red"])/255,float(colr["Green"])/255,float(colr["Blue"])/255,float(1))
             else:
-                element = ID.color_ramp.elements.new(Entry["Properties"].get("value",0))
-                colr = Entry["Properties"]["color"].get("Properties")
+                element = ID.color_ramp.elements.new(Entry.get("value",0))
+                colr = Entry["color"]
                 element.color = (float(colr["Red"])/255,float(colr["Green"])/255,float(colr["Blue"])/255,float(1))
             counter = counter + 1
 			

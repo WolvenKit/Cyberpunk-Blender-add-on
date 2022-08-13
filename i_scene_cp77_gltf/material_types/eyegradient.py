@@ -13,7 +13,7 @@ class EyeGradient:
 
         # load the gradient profile from the depot
         file = open(self.BasePath + Data["IrisColorGradient"] + ".json",mode='r')
-        profile = json.loads(file.read())["Data"]["RootChunk"]["Properties"]
+        profile = json.loads(file.read())["Data"]["RootChunk"]
         file.close()
         CurMat = Mat.node_tree
 
@@ -68,12 +68,12 @@ class EyeGradient:
             counter = 0
             for Entry in profile["gradientEntries"]:
                 if counter is 0:
-                    igradNode.color_ramp.elements[0].position = Entry["Properties"].get("value",0)
-                    colr = Entry["Properties"]["color"].get("Properties")
+                    igradNode.color_ramp.elements[0].position = Entry.get("value",0)
+                    colr = Entry["color"]
                     igradNode.color_ramp.elements[0].color = (float(colr["Red"])/255,float(colr["Green"])/255,float(colr["Blue"])/255,float(1))
                 else:
-                    element = igradNode.color_ramp.elements.new(Entry["Properties"].get("value",0))
-                    colr = Entry["Properties"]["color"].get("Properties")
+                    element = igradNode.color_ramp.elements.new(Entry.get("value",0))
+                    colr = Entry["color"]
                     element.color =  (float(colr["Red"])/255,float(colr["Green"])/255,float(colr["Blue"])/255,float(1))
                 counter = counter + 1
 
