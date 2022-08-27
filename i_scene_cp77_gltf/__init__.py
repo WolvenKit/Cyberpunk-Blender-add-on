@@ -1,8 +1,8 @@
 bl_info = {
     "name": "Cyberpunk 2077 glTF Importer",
     "author": "HitmanHimself, Turk, Jato, dragonzkiller",
-    "version": (1, 0, 8),
-    "blender": (3, 0, 0),
+    "version": (1, 0, 9),
+    "blender": (3, 1, 0),
     "location": "File > Import-Export",
     "description": "Import WolvenKit Cyberpunk2077 glTF Models With Materials",
     "warning": "",
