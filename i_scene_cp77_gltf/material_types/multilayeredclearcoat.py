@@ -453,6 +453,18 @@ class MultilayeredClearCoat:
             MBMixN.location =  (-1200,-400)
             MBMixN.blend_type ='MIX'
             
+            MBMixColorRamp = NG.nodes.new("ShaderNodeValToRGB")
+            MBMixColorRamp.hide = True
+            MBMixColorRamp.location = (-1350,-500)
+            MBMixColorRamp.color_ramp.elements.remove(MBMixColorRamp.color_ramp.elements[1])
+            MBMix_colors = [(0.25,0.25,0.25,1), (1,1,1,1)]
+            MBMix_positions = [0.9, 0.99608]
+            
+            elements = MBMixColorRamp.color_ramp.elements
+            for i in range(len(MBMix_colors)):
+                element = elements.new(MBMix_positions[i])
+                element.color = MBMix_colors[i]
+            
             MBMixNormStrength = NG.nodes.new("ShaderNodeMixRGB")
             MBMixNormStrength.hide = True
             MBMixNormStrength.location =  (-950,-350)
@@ -580,7 +592,8 @@ class MultilayeredClearCoat:
             NG.links.new(MaskMix1.outputs[0],MaskMBPower.inputs[0])
             NG.links.new(MaskMBPower.outputs[0],MaskMix2.inputs[1])
             NG.links.new(MaskMix2.outputs[0],MaskMix3.inputs[1])
-            NG.links.new(MaskMix2.outputs[0],MBMixNormStrength.inputs[0])
+            NG.links.new(MaskMix2.outputs[0],MBMixColorRamp.inputs[0])
+            NG.links.new(MBMixColorRamp.outputs[0],MBMixNormStrength.inputs[0])
             
             NG.links.new(NormStrengthN.outputs[0],NormalCombineN.inputs[0])
             
