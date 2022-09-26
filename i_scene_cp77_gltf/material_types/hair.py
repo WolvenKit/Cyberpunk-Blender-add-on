@@ -15,6 +15,9 @@ class Hair:
         profile = json.loads(file.read())["Data"]["RootChunk"]
         file.close()
 
+        Mat.blend_method = 'HASHED'
+        Mat.shadow_method = 'HASHED'
+
         CurMat = Mat.node_tree
 
         aImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + hair["Strand_Alpha"],-300,-150,'Strand_Alpha',self.image_format)
@@ -67,14 +70,14 @@ class Hair:
 
         mulNode = CurMat.nodes.new("ShaderNodeMixRGB")
         mulNode.inputs[0].default_value = 1
-        mulNode.blend_type = 'BURN'
+        mulNode.blend_type = 'MULTIPLY'
         mulNode.location = (-400,200)
 
-        CurMat.links.new(ID.outputs[0],mulNode.inputs[2])
-        CurMat.links.new(RootToTip.outputs[0],mulNode.inputs[1])
+        CurMat.links.new(ID.outputs[0],mulNode.inputs[1])
+        CurMat.links.new(RootToTip.outputs[0],mulNode.inputs[2])
 
         gamma0 = CurMat.nodes.new("ShaderNodeGamma")
-        gamma0.inputs[1].default_value = 1.5
+        gamma0.inputs[1].default_value = 2.2
         gamma0.location = (-200,200)
         CurMat.links.new(mulNode.outputs[0],gamma0.inputs[0])
 
