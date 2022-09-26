@@ -50,7 +50,7 @@ def CreateRebildNormalGroup(curMat, x = 0, y = 0,name = 'Rebuild Normal Z'):
         GroupInN.location = (-1400,0)
     
         GroupOutN = group.nodes.new("NodeGroupOutput")
-        GroupOutN.location = (0,0)
+        GroupOutN.location = (200,0)
     
         group.inputs.new('NodeSocketColor','Image')
         group.outputs.new('NodeSocketColor','Image')
@@ -90,6 +90,13 @@ def CreateRebildNormalGroup(curMat, x = 0, y = 0,name = 'Rebuild Normal Z'):
         Sep.location = (-600,0)
         Comb = group.nodes.new("ShaderNodeCombineRGB")
         Comb.location = (-300,0)
+        
+        RGBCurvesConvert = group.nodes.new("ShaderNodeRGBCurve")
+        RGBCurvesConvert.label = "Convert DX to OpenGL Normal"
+        RGBCurvesConvert.hide = True
+        RGBCurvesConvert.location = (-100,0)
+        RGBCurvesConvert.mapping.curves[1].points[0].location = (0,1)
+        RGBCurvesConvert.mapping.curves[1].points[1].location = (1,0)
     
         group.links.new(GroupInN.outputs[0],VMup.inputs[0])
         group.links.new(VMup.outputs[0],VSub.inputs[0])
@@ -102,7 +109,8 @@ def CreateRebildNormalGroup(curMat, x = 0, y = 0,name = 'Rebuild Normal Z'):
         group.links.new(Sep.outputs[0],Comb.inputs[0])
         group.links.new(Sep.outputs[1],Comb.inputs[1])
         group.links.new(Range.outputs[0],Comb.inputs[2])
-        group.links.new(Comb.outputs[0],GroupOutN.inputs[0])
+        group.links.new(Comb.outputs[0],RGBCurvesConvert.inputs[1])
+        group.links.new(RGBCurvesConvert.outputs[0],GroupOutN.inputs[0])
     
     ShaderGroup = curMat.nodes.new("ShaderNodeGroup")
     ShaderGroup.location = (x,y)

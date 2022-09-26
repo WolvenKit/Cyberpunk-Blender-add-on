@@ -3,7 +3,7 @@ import os
 from ..main.common import *
 import json
 
-class VehicleDestrBlendshape:
+class MultilayeredClearCoat:
     def __init__(self, BasePath,image_format):
         self.BasePath = str(BasePath)
         self.image_format = image_format

@@ -1,6 +1,7 @@
 import bpy
 import os
 from ..material_types.multilayered import Multilayered
+from ..material_types.multilayeredclearcoat import MultilayeredClearCoat
 from ..material_types.vehicledestrblendshape import VehicleDestrBlendshape
 from ..material_types.skin import Skin
 from ..material_types.meshdecal import MeshDecal
@@ -27,6 +28,10 @@ class MaterialBuilder:
         bpyMat.use_nodes = True
 
         if rawMat["MaterialTemplate"] == "engine\\materials\\multilayered.mt":
+            multilayered = Multilayered(self.BasePath,self.image_format)
+            multilayered.create(rawMat["Data"],bpyMat)
+
+        if rawMat["MaterialTemplate"] == "base\\materials\\multilayered_clear_coat.mt":
             multilayered = Multilayered(self.BasePath,self.image_format)
             multilayered.create(rawMat["Data"],bpyMat)
 
