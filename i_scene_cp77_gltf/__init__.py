@@ -17,7 +17,8 @@ import os
 from bpy.props import (
     StringProperty,
     EnumProperty,
-    BoolProperty)
+    BoolProperty,
+    CollectionProperty)
 from bpy_extras.io_utils import ImportHelper
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
@@ -60,6 +61,9 @@ class CP77Import(bpy.types.Operator,ImportHelper):
     exclude_unused_mats: BoolProperty(name="Exclude Unused Materials",default=True,description="Enabling this options skips all the materials that aren't being used by any mesh")
     filepath: StringProperty(subtype = 'FILE_PATH')
 
+    files: CollectionProperty(type=bpy.types.OperatorFileListElement)
+    directory: StringProperty()
+
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
@@ -67,63 +71,69 @@ class CP77Import(bpy.types.Operator,ImportHelper):
         layout.prop(self, 'image_format')
 
     def execute(self, context):
-        gltf_importer = glTFImporter(self.filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'TEMPERANCE', "guess_original_bind_pose" : False, "import_user_extensions": ""})
-        gltf_importer.read()
-        gltf_importer.checks()
+        directory = self.directory
+
+        for f in self.files:
+            filepath = os.path.join(directory, f.name)
+            print(filepath + " Loaded with materials.")
+
+            gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'TEMPERANCE', "guess_original_bind_pose" : False, "import_user_extensions": ""})
+            gltf_importer.read()
+            gltf_importer.checks()
 
 
-        existingMeshes = bpy.data.meshes.keys()
-        existingObjects = bpy.data.objects.keys()
-        existingMaterials = bpy.data.materials.keys()
+            existingMeshes = bpy.data.meshes.keys()
+            existingObjects = bpy.data.objects.keys()
+            existingMaterials = bpy.data.materials.keys()
 
-        BlenderGlTF.create(gltf_importer)
+            BlenderGlTF.create(gltf_importer)
 
-        for name in bpy.data.materials.keys():
-            if name not in existingMaterials:
-                bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
+            for name in bpy.data.materials.keys():
+                if name not in existingMaterials:
+                    bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
 
-        BasePath = os.path.splitext(self.filepath)[0]
-        file = open(BasePath + ".Material.json",mode='r')
-        obj = json.loads(file.read())
-        BasePath = str(obj["MaterialRepo"])  + "\\"
+            BasePath = os.path.splitext(filepath)[0]
+            file = open(BasePath + ".Material.json",mode='r')
+            obj = json.loads(file.read())
+            BasePath = str(obj["MaterialRepo"])  + "\\"
 
-        Builder = MaterialBuilder(obj,BasePath,str(self.image_format))
+            Builder = MaterialBuilder(obj,BasePath,str(self.image_format))
 
-        usedMaterials = {}
-        counter = 0
-        for name in bpy.data.meshes.keys():
-            if name not in existingMeshes:
-                bpy.data.meshes[name].materials.clear()
-                for matname in gltf_importer.data.meshes[counter].extras["materialNames"]:
-                    if matname not in usedMaterials.keys():
-                        index = 0
-                        for rawmat in obj["Materials"]:
-                            if rawmat["Name"] == matname:
-                                bpymat = Builder.create(index)
-                                bpy.data.meshes[name].materials.append(bpymat)
-                                usedMaterials.update( {matname: bpymat} )
-                            index = index + 1
-                    else:
-                        bpy.data.meshes[name].materials.append(usedMaterials[matname])
+            usedMaterials = {}
+            counter = 0
+            for name in bpy.data.meshes.keys():
+                if name not in existingMeshes:
+                    bpy.data.meshes[name].materials.clear()
+                    for matname in gltf_importer.data.meshes[counter].extras["materialNames"]:
+                        if matname not in usedMaterials.keys():
+                            index = 0
+                            for rawmat in obj["Materials"]:
+                                if rawmat["Name"] == matname:
+                                    bpymat = Builder.create(index)
+                                    bpy.data.meshes[name].materials.append(bpymat)
+                                    usedMaterials.update( {matname: bpymat} )
+                                index = index + 1
+                        else:
+                            bpy.data.meshes[name].materials.append(usedMaterials[matname])
                         
-                counter = counter + 1
+                    counter = counter + 1
 
-        if not self.exclude_unused_mats:
-            index = 0
-            for rawmat in obj["Materials"]:
-                if rawmat["Name"] not in usedMaterials:
-                    Builder.create(index)
-                index = index + 1
+            if not self.exclude_unused_mats:
+                index = 0
+                for rawmat in obj["Materials"]:
+                    if rawmat["Name"] not in usedMaterials:
+                        Builder.create(index)
+                    index = index + 1
 
 
-        collection = bpy.data.collections.new(os.path.splitext(os.path.basename(self.filepath))[0])
-        bpy.context.scene.collection.children.link(collection)
+            collection = bpy.data.collections.new(os.path.splitext(f.name)[0])
+            bpy.context.scene.collection.children.link(collection)
 
-        for name in bpy.data.objects.keys():
-            if name not in existingObjects:
-                for parent in bpy.data.objects[name].users_collection:
-                    parent.objects.unlink(bpy.data.objects[name])
-                collection.objects.link(bpy.data.objects[name])
+            for name in bpy.data.objects.keys():
+                if name not in existingObjects:
+                    for parent in bpy.data.objects[name].users_collection:
+                        parent.objects.unlink(bpy.data.objects[name])
+                    collection.objects.link(bpy.data.objects[name])
 
         return {'FINISHED'}
 
