@@ -115,10 +115,15 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                                         index = 0
                                         for rawmat in obj["Materials"]:
                                             if rawmat["Name"] == matname:
-                                                bpymat = Builder.create(index)
-                                                bpy.data.meshes[name].materials.append(bpymat)
-                                                usedMaterials.update( {matname: bpymat} )
-                                            index = index + 1
+                                                try:
+                                                    bpymat = Builder.create(index)
+                                                    bpy.data.meshes[name].materials.append(bpymat)
+                                                    usedMaterials.update( {matname: bpymat} )
+                                                    index = index + 1
+                                                except FileNotFoundError as fnfe:
+                                                    #Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on - fixing the Builder is Out-of-scope
+                                                    print(str(fnfe))
+                                                    pass 
                                     else:
                                         bpy.data.meshes[name].materials.append(usedMaterials[matname])
                                 
