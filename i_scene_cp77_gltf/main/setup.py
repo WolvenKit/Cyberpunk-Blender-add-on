@@ -15,6 +15,8 @@ from ..material_types.eyegradient import EyeGradient
 from ..material_types.eyeshadow import EyeShadow
 from ..material_types.meshdecalemissive import MeshDecalEmissive
 from ..material_types.glass import Glass
+from ..material_types.signages import Signages
+
 
 class MaterialBuilder:
     def __init__(self,Obj,BasePath,image_format):
@@ -90,5 +92,9 @@ class MaterialBuilder:
         if rawMat["MaterialTemplate"] == "base\\materials\\glass.mt":
             glass = Glass(self.BasePath,self.image_format)
             glass.create(rawMat["Data"],bpyMat)
+            
+        if rawMat["MaterialTemplate"] == "base\\fx\\shaders\\signages.mt":
+            signages= Signages(self.BasePath,self.image_format)
+            signages.create(rawMat["Data"],bpyMat)
 
         return bpyMat
