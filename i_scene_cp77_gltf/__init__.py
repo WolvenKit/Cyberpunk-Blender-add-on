@@ -1,6 +1,6 @@
 bl_info = {
     "name": "Cyberpunk 2077 glTF Importer",
-    "author": "HitmanHimself, Turk, Jato, dragonzkiller",
+    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster",
     "version": (1, 0, 9),
     "blender": (3, 1, 0),
     "location": "File > Import-Export",
@@ -93,37 +93,48 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                     bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
 
             BasePath = os.path.splitext(filepath)[0]
-            file = open(BasePath + ".Material.json",mode='r')
-            obj = json.loads(file.read())
-            BasePath = str(obj["MaterialRepo"])  + "\\"
+            #Kwek: Gate this--do the block iff corresponding Material.json exist 
+            #Kwek: was tempted to do a try-catch, but that is just La-Z
+            if os.path.exists(BasePath + ".Material.json"):
+                file = open(BasePath + ".Material.json",mode='r')
+                obj = json.loads(file.read())
+                BasePath = str(obj["MaterialRepo"])  + "\\"
+                
+                
 
-            Builder = MaterialBuilder(obj,BasePath,str(self.image_format))
+                Builder = MaterialBuilder(obj,BasePath,str(self.image_format))
 
-            usedMaterials = {}
-            counter = 0
-            for name in bpy.data.meshes.keys():
-                if name not in existingMeshes:
-                    bpy.data.meshes[name].materials.clear()
-                    for matname in gltf_importer.data.meshes[counter].extras["materialNames"]:
-                        if matname not in usedMaterials.keys():
-                            index = 0
-                            for rawmat in obj["Materials"]:
-                                if rawmat["Name"] == matname:
-                                    bpymat = Builder.create(index)
-                                    bpy.data.meshes[name].materials.append(bpymat)
-                                    usedMaterials.update( {matname: bpymat} )
-                                index = index + 1
-                        else:
-                            bpy.data.meshes[name].materials.append(usedMaterials[matname])
-                        
-                    counter = counter + 1
+                usedMaterials = {}
+                counter = 0
+                for name in bpy.data.meshes.keys():
+                    if name not in existingMeshes:
+                        bpy.data.meshes[name].materials.clear()
+                        if gltf_importer.data.meshes[counter].extras is not None: #Kwek: I also found that other material hiccups will cause the Collection to fail
+                            for matname in gltf_importer.data.meshes[counter].extras["materialNames"]:
+                                if matname not in usedMaterials.keys():
+                                    index = 0
+                                    for rawmat in obj["Materials"]:
+                                        if rawmat["Name"] == matname:
+                                            try:
+                                                bpymat = Builder.create(index)
+                                                bpy.data.meshes[name].materials.append(bpymat)
+                                                usedMaterials.update( {matname: bpymat} )
+                                            except FileNotFoundError as fnfe:
+                                                #Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
+                                                print(str(fnfe))
+                                                pass                                            
+                                        index = index + 1
+                                else:
+                                    bpy.data.meshes[name].materials.append(usedMaterials[matname])
+                            
+                        counter = counter + 1
 
-            if not self.exclude_unused_mats:
-                index = 0
-                for rawmat in obj["Materials"]:
-                    if rawmat["Name"] not in usedMaterials:
-                        Builder.create(index)
-                    index = index + 1
+                if not self.exclude_unused_mats:
+                    index = 0
+                    for rawmat in obj["Materials"]:
+                        if rawmat["Name"] not in usedMaterials:
+                            Builder.create(index)
+                        index = index + 1
 
 
             collection = bpy.data.collections.new(os.path.splitext(f.name)[0])
