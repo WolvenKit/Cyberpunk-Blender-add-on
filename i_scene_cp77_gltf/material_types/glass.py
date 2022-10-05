@@ -16,7 +16,12 @@ class Glass:
             CurMat.links.new(Color.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
 
         if "IOR" in Data:
-            IOR = CreateShaderNodeValue(CurMat, Data["IOR"],-400,-150,"IOR")
+            safeIOR = (Data['IOR'])
+            if safeIOR == 0:
+                safeIOR = 1
+            else:
+                safeIOR = (Data['IOR'])
+            IOR = CreateShaderNodeValue(CurMat, safeIOR,-400,-150,"IOR")
             CurMat.links.new(IOR.outputs[0],CurMat.nodes['Principled BSDF'].inputs['IOR'])
 
         if "Roughness" in Data:

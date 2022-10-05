@@ -91,4 +91,8 @@ class MaterialBuilder:
             glass = Glass(self.BasePath,self.image_format)
             glass.create(rawMat["Data"],bpyMat)
 
+        if rawMat["MaterialTemplate"] == "base\\materials\\glass_onesided.mt":
+            glass = Glass(self.BasePath,self.image_format)
+            glass.create(rawMat["Data"],bpyMat)
+
         return bpyMat
