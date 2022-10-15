@@ -44,7 +44,7 @@ class CP77StreamingSectorImport(bpy.types.Operator,ImportHelper):
 class CP77Import(bpy.types.Operator,ImportHelper):
     bl_idname = "io_scene_gltf.cp77"
     bl_label = "Import glTF"
-    bl_description = "Import Wolvenkit .glb/.gltf files" #Kwek: tooltips towards a more polished UI.
+    bl_description = "Load glTF 2.0 files with Cyberpunk 2077 materials" #Kwek: tooltips towards a more polished UI.
     filter_glob: StringProperty(
         default="*.gltf;*.glb",
         options={'HIDDEN'},
