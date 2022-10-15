@@ -44,6 +44,7 @@ class CP77StreamingSectorImport(bpy.types.Operator,ImportHelper):
 class CP77Import(bpy.types.Operator,ImportHelper):
     bl_idname = "io_scene_gltf.cp77"
     bl_label = "Import glTF"
+    bl_description = "Import Wolvenkit .glb/.gltf files" #Kwek: tooltips towards a more polished UI.
     filter_glob: StringProperty(
         default="*.gltf;*.glb",
         options={'HIDDEN'},
@@ -59,6 +60,10 @@ class CP77Import(bpy.types.Operator,ImportHelper):
         description="Texture Format",
         default="png")
     exclude_unused_mats: BoolProperty(name="Exclude Unused Materials",default=True,description="Enabling this options skips all the materials that aren't being used by any mesh")
+    
+    #Kwek: QoL option to match WolvenKit GUI options
+    exclude_all_mats: BoolProperty(name="Ignore All Materials",default=False,description="Import mesh only, ignoring material.json files")
+    
     filepath: StringProperty(subtype = 'FILE_PATH')
 
     files: CollectionProperty(type=bpy.types.OperatorFileListElement)
@@ -69,6 +74,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
         layout.use_property_split = True
         layout.prop(self, 'exclude_unused_mats')
         layout.prop(self, 'image_format')
+        layout.prop(self, 'exclude_all_mats') #Kwek: matching layout entry
 
     def execute(self, context):
         directory = self.directory
@@ -95,7 +101,8 @@ class CP77Import(bpy.types.Operator,ImportHelper):
             BasePath = os.path.splitext(filepath)[0]
             #Kwek: Gate this--do the block iff corresponding Material.json exist 
             #Kwek: was tempted to do a try-catch, but that is just La-Z
-            if os.path.exists(BasePath + ".Material.json"):
+            #Kwek: Added another gate for ignoring all materials
+            if not self.exclude_all_mats and os.path.exists(BasePath + ".Material.json"):
                 file = open(BasePath + ".Material.json",mode='r')
                 obj = json.loads(file.read())
                 BasePath = str(obj["MaterialRepo"])  + "\\"
