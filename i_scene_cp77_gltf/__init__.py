@@ -1,6 +1,6 @@
 bl_info = {
     "name": "Cyberpunk 2077 glTF Importer",
-    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered",
+    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwek/kwekmaster, glitchered",
     "version": (1, 0, 9),
     "blender": (3, 1, 0),
     "location": "File > Import-Export",
@@ -41,6 +41,30 @@ class CP77StreamingSectorImport(bpy.types.Operator,ImportHelper):
         self.report({'ERROR'}, "Streaming Sector Import is not yet implemented!")
         return {'FINISHED'}
 
+# Material Sub-panel
+class CP77ImportWithMaterial(bpy.types.Panel):
+    bl_space_type = 'FILE_BROWSER'
+    bl_region_type = 'TOOL_PROPS'
+    bl_label = "With Materials"
+
+    @classmethod
+    def poll(cls, context):
+        operator = context.space_data.active_operator
+        return operator.bl_idname == "IO_SCENE_GLTF_OT_cp77"
+
+    def draw_header(self, context):
+        operator = context.space_data.active_operator
+        self.layout.prop(operator, "with_materials", text="")
+
+    def draw(self, context):
+        operator = context.space_data.active_operator
+        layout = self.layout
+        layout.enabled = operator.with_materials
+        layout.use_property_split = True
+        layout.prop(operator, 'exclude_unused_mats')
+        layout.prop(operator, 'image_format')
+
+
 class CP77Import(bpy.types.Operator,ImportHelper):
     bl_idname = "io_scene_gltf.cp77"
     bl_label = "Import glTF"
@@ -61,27 +85,29 @@ class CP77Import(bpy.types.Operator,ImportHelper):
         default="png")
     exclude_unused_mats: BoolProperty(name="Exclude Unused Materials",default=True,description="Enabling this options skips all the materials that aren't being used by any mesh")
     
-    #Kwek: QoL option to match WolvenKit GUI options
-    exclude_all_mats: BoolProperty(name="Ignore All Materials",default=False,description="Import mesh only, ignoring material.json files")
+    #Kwekmaster: QoL option to match WolvenKit GUI options - Name change to With Materials
+    with_materials: BoolProperty(name="With Materials",default=True,description="Import mesh with Wolvenkit-exported materials")
     
     filepath: StringProperty(subtype = 'FILE_PATH')
 
     files: CollectionProperty(type=bpy.types.OperatorFileListElement)
     directory: StringProperty()
 
+    #kwekmaster: refactor UI layout from the operator.
     def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-        layout.prop(self, 'exclude_unused_mats')
-        layout.prop(self, 'image_format')
-        layout.prop(self, 'exclude_all_mats') #Kwek: matching layout entry
+        pass
+
+        
+        
 
     def execute(self, context):
         directory = self.directory
 
         for f in self.files:
             filepath = os.path.join(directory, f.name)
-            print(filepath + " Loaded with materials.")
+            
+            #kwekmaster: modified to reflect user choice
+            print(filepath + " Loaded; With materials: "+str(self.with_materials))
 
             gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'TEMPERANCE', "guess_original_bind_pose" : False, "import_user_extensions": ""})
             gltf_importer.read()
@@ -101,8 +127,8 @@ class CP77Import(bpy.types.Operator,ImportHelper):
             BasePath = os.path.splitext(filepath)[0]
             #Kwek: Gate this--do the block iff corresponding Material.json exist 
             #Kwek: was tempted to do a try-catch, but that is just La-Z
-            #Kwek: Added another gate for ignoring all materials
-            if not self.exclude_all_mats and os.path.exists(BasePath + ".Material.json"):
+            #Kwek: Added another gate for materials
+            if self.with_materials and os.path.exists(BasePath + ".Material.json"):
                 file = open(BasePath + ".Material.json",mode='r')
                 obj = json.loads(file.read())
                 BasePath = str(obj["MaterialRepo"])  + "\\"
@@ -159,20 +185,31 @@ def menu_func_import(self, context):
     self.layout.operator(CP77Import.bl_idname, text="Cyberpunk GLTF (.gltf/.glb)", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
     #self.layout.operator(CP77StreamingSectorImport.bl_idname, text="Cyberpunk StreamingSector (.json)")
 
+#kwekmaster - Minor Refactoring 
+classes = (
+    CP77Import,
+    CP77ImportWithMaterial,
+#    CP77StreamingSectorImport, #kwekmaster: keeping this in--to mimic previous structure.
+)
+
 def register():
     custom_icon = bpy.utils.previews.new()
     custom_icon.load("WKIT", os.path.join(icons_dir, "wkit.png"), 'IMAGE')
     custom_icon_col["import"] = custom_icon
 
-    bpy.utils.register_class(CP77Import)
-    #bpy.utils.register_class(CP77StreamingSectorImport)
+    #kwekmaster - Minor Refactoring 
+    for cls in classes:
+        bpy.utils.register_class(cls)
+        
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
     
 def unregister():
     bpy.utils.previews.remove(custom_icon_col["import"])
 
-    bpy.utils.unregister_class(CP77Import)
-    #bpy.utils.unregister_class(CP77StreamingSectorImport)
+    #kwekmaster - Minor Refactoring 
+    for cls in classes:
+        bpy.utils.unregister_class(cls)
+        
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
         
 if __name__ == "__main__":
