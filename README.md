@@ -25,7 +25,7 @@ The latest version of the Cyberpunk add-on requires Blender 3.1 or higher. Not a
 
 2) Install the Cyberpunk add-on for Blender by navigating within Blender to **Edit \ Preferences \ Add-ons \ Install...** and locating the downloaded .ZIP file. Be sure the add-on is enabled by marking the checkbox within the installed add-on list.
 
-3) Export a mesh with materials using WolvenKit [Learn more](https://wiki.redmodding.org/wolvenkit/wolvenkit-app/editor/import-export/blender-integration)
+3) Export a mesh with materials using WolvenKit [Learn more](https://wiki.redmodding.org/wolvenkit/wolvenkit-app/usage/blender-integration)
 
 4) Navigate within Blender to **File \ Import \ Cyberpunk GLTF** and select the exported gLTF/glb file. Within the import options choose the same texture format as the WolvenKit export. (PNG is default)
 
