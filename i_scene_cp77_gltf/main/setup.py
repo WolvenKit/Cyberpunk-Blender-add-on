@@ -97,4 +97,9 @@ class MaterialBuilder:
             signages= Signages(self.BasePath,self.image_format)
             signages.create(rawMat["Data"],bpyMat)
 
+        if rawMat["MaterialTemplate"] == "base\\materials\\glass_onesided.mt":
+            glass = Glass(self.BasePath,self.image_format)
+            glass.create(rawMat["Data"],bpyMat)
+
         return bpyMat
+
