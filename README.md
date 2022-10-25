@@ -21,11 +21,11 @@ The Cyberpunk Blender add-on is designed to fully automate the shader setup for 
 
 The latest version of the Cyberpunk add-on requires Blender 3.1 or higher. Not all Cyberpunk shaders are currently supported by the add-on. If you're interested in adding support for a new shader please consider reaching out to us on our Discord, [Cyberpunk 2077 Modding Community.](https://discord.gg/Epkq79kd96)
 
-1) Download the .ZIP file from the *Releases* section
+1) Download the .ZIP file from the [*Releases*](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/releases) section
 
 2) Install the Cyberpunk add-on for Blender by navigating within Blender to **Edit \ Preferences \ Add-ons \ Install...** and locating the downloaded .ZIP file. Be sure the add-on is enabled by marking the checkbox within the installed add-on list.
 
-3) Export a mesh with materials using WolvenKit [Learn more](https://wiki.redmodding.org/wolvenkit/wolvenkit-app/editor/import-export/blender-integration)
+3) Export a mesh with materials using WolvenKit [Learn more](https://wiki.redmodding.org/wolvenkit/wolvenkit-app/usage/blender-integration)
 
 4) Navigate within Blender to **File \ Import \ Cyberpunk GLTF** and select the exported gLTF/glb file. Within the import options choose the same texture format as the WolvenKit export. (PNG is default)
 
