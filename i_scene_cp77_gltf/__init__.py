@@ -101,18 +101,31 @@ class CP77Import(bpy.types.Operator,ImportHelper):
         
 
     def execute(self, context):
-        directory = self.directory
-
-        for f in self.files:
-            filepath = os.path.join(directory, f.name)
+        loadfiles=self.files
+        
+        
+        # prevent crash if no directory supplied when using filepath
+        if len(self.directory)>0:
+            directory = self.directory
+        else:
+            directory = os.path.dirname(self.filepath)
             
-            #kwekmaster: modified to reflect user choice
-            print(filepath + " Loaded; With materials: "+str(self.with_materials))
-
+        #if no files were supplied and a filepath is populate the files from the filepath
+        if len(loadfiles)==0 and len(self.filepath)>0:
+            f={}
+            f['name']=os.path.basename(self.filepath)
+            loadfiles=(f,)
+            
+        
+        for f in loadfiles:
+            filepath = os.path.join(directory, f['name'])
+                        
             gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'TEMPERANCE', "guess_original_bind_pose" : False, "import_user_extensions": ""})
             gltf_importer.read()
             gltf_importer.checks()
-
+            
+            #kwekmaster: modified to reflect user choice
+            print(filepath + " Loaded; With materials: "+str(self.with_materials))
 
             existingMeshes = bpy.data.meshes.keys()
             existingObjects = bpy.data.objects.keys()
@@ -170,7 +183,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                         index = index + 1
 
 
-            collection = bpy.data.collections.new(os.path.splitext(f.name)[0])
+            collection = bpy.data.collections.new(os.path.splitext(f['name'])[0])
             bpy.context.scene.collection.children.link(collection)
 
             for name in bpy.data.objects.keys():
