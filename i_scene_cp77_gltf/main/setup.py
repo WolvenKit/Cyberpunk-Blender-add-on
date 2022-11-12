@@ -94,5 +94,6 @@ class MaterialBuilder:
         if rawMat["MaterialTemplate"] == "base\\materials\\glass_onesided.mt":
             glass = Glass(self.BasePath,self.image_format)
             glass.create(rawMat["Data"],bpyMat)
-
+        #set default to hashed to get rid of the black tattoos etc in eevee
+        bpyMat.blend_mode='HASHED'
         return bpyMat
