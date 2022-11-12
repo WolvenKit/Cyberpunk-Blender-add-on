@@ -100,13 +100,11 @@ class MaterialBuilder:
                 signages= Signages(self.BasePath,self.image_format)
                 signages.create(rawMat["Data"],bpyMat)
 
-            case "base\\materials\\glass_onesided.mt":
-                glass = Glass(self.BasePath,self.image_format)
-                glass.create(rawMat["Data"],bpyMat)
-
-            case _:
-                if verbose:
-                    print(rawMat["MaterialTemplate"], ' not processed.')
+        if rawMat["MaterialTemplate"] == "base\\materials\\glass_onesided.mt":
+            glass = Glass(self.BasePath,self.image_format)
+            glass.create(rawMat["Data"],bpyMat)
+            
+        #set the viewport blend mode to hashed - no more black tattoos and cybergear
         bpyMat.blend_mode='HASHED'
         return bpyMat
 
