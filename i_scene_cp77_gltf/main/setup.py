@@ -17,6 +17,7 @@ from ..material_types.eyeshadow import EyeShadow
 from ..material_types.meshdecalemissive import MeshDecalEmissive
 from ..material_types.glass import Glass
 from ..material_types.signages import Signages
+from ..material_types.meshdecalparallax import MeshDecalParallax
 
 
 class MaterialBuilder:
@@ -26,6 +27,8 @@ class MaterialBuilder:
         self.obj = Obj
     def create(self,materialIndex):
         rawMat = self.obj["Materials"][materialIndex]
+        
+        
 
         verbose=True
 
@@ -99,12 +102,16 @@ class MaterialBuilder:
             case "base\\fx\\shaders\\signages.mt":
                 signages= Signages(self.BasePath,self.image_format)
                 signages.create(rawMat["Data"],bpyMat)
-
-        if rawMat["MaterialTemplate"] == "base\\materials\\glass_onesided.mt":
-            glass = Glass(self.BasePath,self.image_format)
-            glass.create(rawMat["Data"],bpyMat)
             
+            case "base\\materials\\glass_onesided.mt":
+                glass = Glass(self.BasePath,self.image_format)
+                glass.create(rawMat["Data"],bpyMat)
+            
+            case "base\\materials\\mesh_decal_parallax.mt":
+                meshDecalParallax = MeshDecalParallax(self.BasePath,self.image_format)
+                meshDecalParallax.create(rawMat["Data"],bpyMat)
+
         #set the viewport blend mode to hashed - no more black tattoos and cybergear
-        bpyMat.blend_mode='HASHED'
+        bpyMat.blend_method='HASHED'
         return bpyMat
 

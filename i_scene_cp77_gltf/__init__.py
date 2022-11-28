@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Cyberpunk 2077 glTF Importer",
-    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered",
-    "version": (1, 0, 9),
+    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius",
+    "version": (1, 1, 0),
     "blender": (3, 1, 0),
     "location": "File > Import-Export",
     "description": "Import WolvenKit Cyberpunk2077 glTF Models With Materials",
@@ -12,6 +12,7 @@ bl_info = {
 import bpy
 import bpy.utils.previews
 import json
+from pprint import pprint
 import os
 
 from bpy.props import (
@@ -92,6 +93,8 @@ class CP77Import(bpy.types.Operator,ImportHelper):
 
     files: CollectionProperty(type=bpy.types.OperatorFileListElement)
     directory: StringProperty()
+    
+    appearances: CollectionProperty(type=bpy.types.OperatorFileListElement)
 
     #kwekmaster: refactor UI layout from the operator.
     def draw(self, context):
@@ -103,6 +106,8 @@ class CP77Import(bpy.types.Operator,ImportHelper):
     def execute(self, context):
         loadfiles=self.files
         
+        for f in self.appearances:
+            print(f.name)
         
         # prevent crash if no directory supplied when using filepath
         if len(self.directory)>0:
@@ -145,7 +150,24 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                 file = open(BasePath + ".Material.json",mode='r')
                 obj = json.loads(file.read())
                 BasePath = str(obj["MaterialRepo"])  + "\\"
+
+               
+                json_apps=obj['Appearances']
+                # fix the app names as for some reason they have their index added on the end.
+                appkeys=[k for k in json_apps.keys()]
+                for i,k in enumerate(appkeys):
+                    json_apps[k[:-1*len(str(i))]]=json_apps.pop(k)
+
+                validmats={}
+                #appearances = ({'name':'short_hair'},{'name':'02_ca_limestone'},{'name':'ml_plastic_doll'},{'name':'03_ca_senna'})
+
+                for key in json_apps.keys():
+                    if key  in [i['name'] for i in self.appearances]:
+                        for m in json_apps[key]:
+                            validmats[m]=True
                 
+
+                MatImportList=[k for k in validmats.keys()]
                 
 
                 Builder = MaterialBuilder(obj,BasePath,str(self.image_format))
@@ -160,11 +182,12 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                                 if matname not in usedMaterials.keys():
                                     index = 0
                                     for rawmat in obj["Materials"]:
-                                        if rawmat["Name"] == matname:
+                                        if rawmat["Name"] == matname and ((rawmat["Name"] in MatImportList) or len(MatImportList)<1):
                                             try:
                                                 bpymat = Builder.create(index)
-                                                bpy.data.meshes[name].materials.append(bpymat)
-                                                usedMaterials.update( {matname: bpymat} )
+                                                if bpymat:
+                                                    bpy.data.meshes[name].materials.append(bpymat)
+                                                    usedMaterials.update( {matname: bpymat} )
                                             except FileNotFoundError as fnfe:
                                                 #Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
                                                 print(str(fnfe))
@@ -178,7 +201,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                 if not self.exclude_unused_mats:
                     index = 0
                     for rawmat in obj["Materials"]:
-                        if rawmat["Name"] not in usedMaterials:
+                        if rawmat["Name"] not in usedMaterials and ((rawmat["Name"] in MatImportList) or len(MatImportList)<1):
                             Builder.create(index)
                         index = index + 1
 
