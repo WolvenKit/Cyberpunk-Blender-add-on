@@ -9,6 +9,7 @@ bl_info = {
     "category": "Import-Export",
 }
 
+from pickle import TRUE
 import bpy
 import bpy.utils.previews
 import json
@@ -133,11 +134,19 @@ class CP77Import(bpy.types.Operator,ImportHelper):
             print(filepath + " Loaded; With materials: "+str(self.with_materials))
 
             existingMeshes = bpy.data.meshes.keys()
-            existingObjects = bpy.data.objects.keys()
+           
             existingMaterials = bpy.data.materials.keys()
 
             BlenderGlTF.create(gltf_importer)
 
+            imported= context.selected_objects #the new stuff should be selected 
+            collection = bpy.data.collections.new(os.path.splitext(f['name'])[0])
+            bpy.context.scene.collection.children.link(collection)
+            for o in imported:
+                for parent in o.users_collection:
+                        parent.objects.unlink(o)
+                collection.objects.link(o)        
+                
             for name in bpy.data.materials.keys():
                 if name not in existingMaterials:
                     bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
@@ -160,12 +169,23 @@ class CP77Import(bpy.types.Operator,ImportHelper):
 
                 validmats={}
                 #appearances = ({'name':'short_hair'},{'name':'02_ca_limestone'},{'name':'ml_plastic_doll'},{'name':'03_ca_senna'})
-
-                for key in json_apps.keys():
-                    if key  in [i['name'] for i in self.appearances]:
+                if len(self.appearances)>0:
+                    for key in json_apps.keys():
+                        if key in [i['name'] for i in self.appearances]:
+                            for m in json_apps[key]:
+                                validmats[m]=True
+                else:
+                    for key in json_apps.keys():
                         for m in json_apps[key]:
                             validmats[m]=True
-                
+
+                for mat in validmats.keys():
+                    for m in obj['Materials']:
+                        if m['Name']==mat:
+                            if 'BaseMaterial' in m.keys():
+                                validmats[mat]=m['BaseMaterial']
+                            else:
+                                print(m.keys())
 
                 MatImportList=[k for k in validmats.keys()]
                 
@@ -179,42 +199,52 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                         bpy.data.meshes[name].materials.clear()
                         if gltf_importer.data.meshes[counter].extras is not None: #Kwek: I also found that other material hiccups will cause the Collection to fail
                             for matname in gltf_importer.data.meshes[counter].extras["materialNames"]:
-                                if matname not in usedMaterials.keys():
-                                    index = 0
-                                    for rawmat in obj["Materials"]:
-                                        if rawmat["Name"] == matname and ((rawmat["Name"] in MatImportList) or len(MatImportList)<1):
-                                            try:
-                                                bpymat = Builder.create(index)
-                                                if bpymat:
-                                                    bpy.data.meshes[name].materials.append(bpymat)
-                                                    usedMaterials.update( {matname: bpymat} )
-                                            except FileNotFoundError as fnfe:
-                                                #Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
-                                                print(str(fnfe))
-                                                pass                                            
-                                        index = index + 1
+                                if matname in validmats.keys():
+                                    print('matname: ',matname, validmats[matname])
+                               
+                                    if matname in bpy.data.materials.keys() and bpy.data.materials[matname]['BaseMaterial']==validmats[matname] :
+                                        bpy.data.meshes[name].materials.append(bpy.data.materials[matname])
+                                    else:
+                                        if matname in validmats.keys():
+                                            index = 0
+                                            for rawmat in obj["Materials"]:
+                                                if rawmat["Name"] == matname :
+                                                    try:
+                                                        bpymat = Builder.create(index)
+                                                        if bpymat:
+                                                            bpymat['BaseMaterial']=validmats[matname]
+                                                            bpy.data.meshes[name].materials.append(bpymat)
+                                                    except FileNotFoundError as fnfe:
+                                                        #Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
+                                                        #print(str(fnfe))
+                                                        pass                                            
+                                                index = index + 1
                                 else:
-                                    bpy.data.meshes[name].materials.append(usedMaterials[matname])
+                                    print(matname, validmats.keys())
                             
                         counter = counter + 1
 
                 if not self.exclude_unused_mats:
                     index = 0
                     for rawmat in obj["Materials"]:
-                        if rawmat["Name"] not in usedMaterials and ((rawmat["Name"] in MatImportList) or len(MatImportList)<1):
+                        if rawmat["Name"] not in  bpy.data.materials.keys() and ((rawmat["Name"] in MatImportList) or len(MatImportList)<1):
                             Builder.create(index)
                         index = index + 1
 
 
-            collection = bpy.data.collections.new(os.path.splitext(f['name'])[0])
-            bpy.context.scene.collection.children.link(collection)
 
+
+
+
+
+
+            '''
             for name in bpy.data.objects.keys():
                 if name not in existingObjects:
                     for parent in bpy.data.objects[name].users_collection:
                         parent.objects.unlink(bpy.data.objects[name])
                     collection.objects.link(bpy.data.objects[name])
-
+                    '''
         return {'FINISHED'}
 
 def menu_func_import(self, context):
