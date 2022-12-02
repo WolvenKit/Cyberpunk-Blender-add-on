@@ -93,7 +93,7 @@ class MeshDecalParallax:
         if "MetalnessTexture" in Data:
             mImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["MetalnessTexture"],-800,200,'MetalnessTexture',self.image_format,True)
             CurMat.links.new(mImgNode.outputs[0],mulNode2.inputs[1])
-                
+'''     
         if "SecondaryMask"in Data:
             print('SecondaryMask detected', Data['SecondaryMask'])
             
@@ -121,3 +121,4 @@ class MeshDecalParallax:
             print('HeightTexture detected', Data['HeightTexture'])
         if "HeightStrength"in Data:
             print('HeightStrength detected', Data['HeightStrength'])
+'''

@@ -169,6 +169,8 @@ class CP77Import(bpy.types.Operator,ImportHelper):
 
                 validmats={}
                 #appearances = ({'name':'short_hair'},{'name':'02_ca_limestone'},{'name':'ml_plastic_doll'},{'name':'03_ca_senna'})
+                #if appearances defined populate valid mats with the mats for them, otherwise populate with everything used.
+
                 if len(self.appearances)>0:
                     for key in json_apps.keys():
                         if key in [i['name'] for i in self.appearances]:
@@ -200,7 +202,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                         if gltf_importer.data.meshes[counter].extras is not None: #Kwek: I also found that other material hiccups will cause the Collection to fail
                             for matname in gltf_importer.data.meshes[counter].extras["materialNames"]:
                                 if matname in validmats.keys():
-                                    print('matname: ',matname, validmats[matname])
+                                    #print('matname: ',matname, validmats[matname])
                                
                                     if matname in bpy.data.materials.keys() and bpy.data.materials[matname]['BaseMaterial']==validmats[matname] :
                                         bpy.data.meshes[name].materials.append(bpy.data.materials[matname])
@@ -220,7 +222,8 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                                                         pass                                            
                                                 index = index + 1
                                 else:
-                                    print(matname, validmats.keys())
+                                    #print(matname, validmats.keys())
+                                    pass
                             
                         counter = counter + 1
 
