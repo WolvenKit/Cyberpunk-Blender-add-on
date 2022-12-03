@@ -23,10 +23,10 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
     ent_apps= j['Data']['RootChunk']['appearances']
 
     # if no apps requested populate the list with all available.
-    if len(appearances)==0:
+    if len(appearances[0])==0:
         for app in ent_apps:
             appearances.append(app['appearanceName'])
-
+    
     # find the appearance file jsons
     app_path = glob.glob(path+"\**\*.app.json", recursive = True)
     if len(app_path)==0:

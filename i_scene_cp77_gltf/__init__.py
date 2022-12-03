@@ -33,7 +33,7 @@ custom_icon_col = {}
 class CP77EntityImport(bpy.types.Operator,ImportHelper):
 
     bl_idname = "io_scene_glft.cp77entity"
-    bl_label = "Import Cyberpunk2077 Entity from JSON"
+    bl_label = "Import Ent from JSON"
     
     filter_glob: StringProperty(
         default="*.json",
@@ -44,9 +44,9 @@ class CP77EntityImport(bpy.types.Operator,ImportHelper):
                              subtype = 'FILE_PATH')
 
     appearances: StringProperty(name= "Appearances",
-                                description="Entity Appearances to extract.",
-                                default="",
-                                options={'HIDDEN'})
+                                description="Entity Appearances to extract. Needs appearanceName from ent. Comma seperate multiples",
+                                default="default",
+                                )
     exclude_meshes: StringProperty(name= "Meshes_to_Exclude",
                                 description="Meshes to skip during import",
                                 default="",
@@ -54,6 +54,7 @@ class CP77EntityImport(bpy.types.Operator,ImportHelper):
 
     def execute(self, context):
         apps=self.appearances.split(",")
+        print('apps - ',apps)
         excluded=self.appearances.split(",")
         bob=self.filepath
         print('Bob - ',bob)
