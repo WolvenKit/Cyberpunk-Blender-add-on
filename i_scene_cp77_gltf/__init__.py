@@ -9,11 +9,10 @@ bl_info = {
     "category": "Import-Export",
 }
 
-from pickle import TRUE
+
 import bpy
 import bpy.utils.previews
 import json
-from pprint import pprint
 import os
 
 from bpy.props import (
