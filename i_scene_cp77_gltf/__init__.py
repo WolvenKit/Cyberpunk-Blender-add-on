@@ -95,7 +95,11 @@ class CP77Import(bpy.types.Operator,ImportHelper):
     files: CollectionProperty(type=bpy.types.OperatorFileListElement)
     directory: StringProperty()
     
-    appearances: CollectionProperty(type=bpy.types.OperatorFileListElement)
+    appearances: StringProperty(name= "Appearances",
+                                description="Appearances to extract with models",
+                                default="",
+                                options={'HIDDEN'}
+                                )
 
     #kwekmaster: refactor UI layout from the operator.
     def draw(self, context):
@@ -106,9 +110,9 @@ class CP77Import(bpy.types.Operator,ImportHelper):
 
     def execute(self, context):
         loadfiles=self.files
-        
-        for f in self.appearances:
-            print(f.name)
+        appearances=self.appearances.split(",")
+        for f in appearances:
+            print(f)
         
         # prevent crash if no directory supplied when using filepath
         if len(self.directory)>0:
@@ -171,9 +175,9 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                 #appearances = ({'name':'short_hair'},{'name':'02_ca_limestone'},{'name':'ml_plastic_doll'},{'name':'03_ca_senna'})
                 #if appearances defined populate valid mats with the mats for them, otherwise populate with everything used.
 
-                if len(self.appearances)>0:
+                if len(appearances)>0:
                     for key in json_apps.keys():
-                        if key in [i['name'] for i in self.appearances]:
+                        if key in  appearances:
                             for m in json_apps[key]:
                                 validmats[m]=True
                 else:
