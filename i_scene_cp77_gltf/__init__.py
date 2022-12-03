@@ -25,9 +25,41 @@ from bpy_extras.io_utils import ImportHelper
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
 from .main.setup import MaterialBuilder
+from .main.entity_import import *
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
+
+class CP77EntityImport(bpy.types.Operator,ImportHelper):
+
+    bl_idname = "io_scene_glft.cp77entity"
+    bl_label = "Import Cyberpunk2077 Entity from JSON"
+    
+    filter_glob: StringProperty(
+        default="*.json",
+        options={'HIDDEN'},
+        )
+
+    filepath: StringProperty(name= "Filepath",
+                             subtype = 'FILE_PATH')
+
+    appearances: StringProperty(name= "Appearances",
+                                description="Entity Appearances to extract.",
+                                default="",
+                                options={'HIDDEN'})
+    exclude_meshes: StringProperty(name= "Meshes_to_Exclude",
+                                description="Meshes to skip during import",
+                                default="",
+                                options={'HIDDEN'})
+
+    def execute(self, context):
+        apps=self.appearances.split(",")
+        excluded=self.appearances.split(",")
+        bob=self.filepath
+        print('Bob - ',bob)
+        importEnt( bob, apps, excluded)
+
+        return {'FINISHED'}
 
 class CP77StreamingSectorImport(bpy.types.Operator,ImportHelper):
 
@@ -256,12 +288,14 @@ class CP77Import(bpy.types.Operator,ImportHelper):
 
 def menu_func_import(self, context):
     self.layout.operator(CP77Import.bl_idname, text="Cyberpunk GLTF (.gltf/.glb)", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
+    self.layout.operator(CP77EntityImport.bl_idname, text="Cyberpunk Entity (.json)", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
     #self.layout.operator(CP77StreamingSectorImport.bl_idname, text="Cyberpunk StreamingSector (.json)")
 
 #kwekmaster - Minor Refactoring 
 classes = (
     CP77Import,
     CP77ImportWithMaterial,
+    CP77EntityImport,
 #    CP77StreamingSectorImport, #kwekmaster: keeping this in--to mimic previous structure.
 )
 
