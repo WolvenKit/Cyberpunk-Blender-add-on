@@ -32,7 +32,7 @@ custom_icon_col = {}
 
 class CP77EntityImport(bpy.types.Operator,ImportHelper):
 
-    bl_idname = "io_scene_glft.cp77entity"
+    bl_idname = "io_scene_gltf.cp77entity"
     bl_label = "Import Ent from JSON"
     
     filter_glob: StringProperty(
@@ -64,7 +64,7 @@ class CP77EntityImport(bpy.types.Operator,ImportHelper):
 
 class CP77StreamingSectorImport(bpy.types.Operator,ImportHelper):
 
-    bl_idname = "io_scene_glft.cp77sector"
+    bl_idname = "io_scene_gltf.cp77sector"
     bl_label = "Import StreamingSector"
     use_filter_folder = True
     filter_glob: StringProperty(
@@ -295,8 +295,8 @@ def menu_func_import(self, context):
 #kwekmaster - Minor Refactoring 
 classes = (
     CP77Import,
-    CP77ImportWithMaterial,
     CP77EntityImport,
+    CP77ImportWithMaterial,
 #    CP77StreamingSectorImport, #kwekmaster: keeping this in--to mimic previous structure.
 )
 
