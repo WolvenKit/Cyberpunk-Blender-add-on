@@ -97,6 +97,7 @@ class CP77ImportWithMaterial(bpy.types.Panel):
         layout.use_property_split = True
         layout.prop(operator, 'exclude_unused_mats')
         layout.prop(operator, 'image_format')
+        layout.prop(operator, 'hide_armatures')
 
 
 class CP77Import(bpy.types.Operator,ImportHelper):
@@ -121,6 +122,8 @@ class CP77Import(bpy.types.Operator,ImportHelper):
     
     #Kwekmaster: QoL option to match WolvenKit GUI options - Name change to With Materials
     with_materials: BoolProperty(name="With Materials",default=True,description="Import mesh with Wolvenkit-exported materials")
+
+    hide_armatures: BoolProperty(name="Hide Armatures",default=True,description="Hide the armatures on imported meshes")
     
     filepath: StringProperty(subtype = 'FILE_PATH')
 
@@ -129,7 +132,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
     
     appearances: StringProperty(name= "Appearances",
                                 description="Appearances to extract with models",
-                                default="",
+                                default="ALL",
                                 options={'HIDDEN'}
                                 )
 
@@ -181,7 +184,10 @@ class CP77Import(bpy.types.Operator,ImportHelper):
             for o in imported:
                 for parent in o.users_collection:
                         parent.objects.unlink(o)
-                collection.objects.link(o)        
+                collection.objects.link(o)  
+                #print('o.name - ',o.name)
+                if 'Armature' in o.name:
+                    o.hide_set(self.hide_armatures)
                 
             for name in bpy.data.materials.keys():
                 if name not in existingMaterials:
@@ -207,12 +213,13 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                 #appearances = ({'name':'short_hair'},{'name':'02_ca_limestone'},{'name':'ml_plastic_doll'},{'name':'03_ca_senna'})
                 #if appearances defined populate valid mats with the mats for them, otherwise populate with everything used.
 
-                if len(appearances)>0:
+                if len(appearances)>0 and 'ALL' not in appearances:
                     for key in json_apps.keys():
                         if key in  appearances:
                             for m in json_apps[key]:
                                 validmats[m]=True
-                else:
+                # there isnt always a default, so if none were listed, or ALL was used, or an invalid one add everything. 
+                if len(validmats)==0:
                     for key in json_apps.keys():
                         for m in json_apps[key]:
                             validmats[m]=True
@@ -221,7 +228,15 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                     for m in obj['Materials']:
                         if m['Name']==mat:
                             if 'BaseMaterial' in m.keys():
-                                validmats[mat]=m['BaseMaterial']
+                                 if 'GlobalNormal' in m['Data'].keys():
+                                     GlobalNormal=m['Data']['GlobalNormal']
+                                 else:
+                                     GlobalNormal='None'
+                                 if 'MultilayerMask' in m['Data'].keys():
+                                     MultilayerMask=m['Data']['MultilayerMask']
+                                 else:
+                                     MultilayerMask='None'
+                                 validmats[mat]={'Name':m['Name'], 'BaseMaterial': m['BaseMaterial'],'GlobalNormal':GlobalNormal, 'MultilayerMask':MultilayerMask}
                             else:
                                 print(m.keys())
 
@@ -232,6 +247,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
 
                 usedMaterials = {}
                 counter = 0
+                bpy_mats=bpy.data.materials
                 for name in bpy.data.meshes.keys():
                     if name not in existingMeshes:
                         bpy.data.meshes[name].materials.clear()
@@ -239,9 +255,9 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                             for matname in gltf_importer.data.meshes[counter].extras["materialNames"]:
                                 if matname in validmats.keys():
                                     #print('matname: ',matname, validmats[matname])
-                               
-                                    if matname in bpy.data.materials.keys() and bpy.data.materials[matname]['BaseMaterial']==validmats[matname] :
-                                        bpy.data.meshes[name].materials.append(bpy.data.materials[matname])
+                                    m=validmats[matname]
+                                    if matname in bpy_mats.keys() and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['GlobalNormal']==m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask']==m['MultilayerMask'] :
+                                        bpy.data.meshes[name].materials.append(bpy_mats[matname])
                                     else:
                                         if matname in validmats.keys():
                                             index = 0
@@ -250,7 +266,9 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                                                     try:
                                                         bpymat = Builder.create(index)
                                                         if bpymat:
-                                                            bpymat['BaseMaterial']=validmats[matname]
+                                                            bpymat['BaseMaterial']=validmats[matname]['BaseMaterial']
+                                                            bpymat['GlobalNormal']=validmats[matname]['GlobalNormal']
+                                                            bpymat['MultilayerMask']=validmats[matname]['MultilayerMask']
                                                             bpy.data.meshes[name].materials.append(bpymat)
                                                     except FileNotFoundError as fnfe:
                                                         #Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
@@ -276,6 +294,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
 
 
 
+            
 
             '''
             for name in bpy.data.objects.keys():
