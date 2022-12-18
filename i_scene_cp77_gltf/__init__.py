@@ -1,6 +1,6 @@
 bl_info = {
     "name": "Cyberpunk 2077 glTF Importer",
-    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered",
+    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius",
     "version": (1, 1, 0),
     "blender": (3, 1, 0),
     "location": "File > Import-Export",
@@ -8,6 +8,7 @@ bl_info = {
     "warning": "",
     "category": "Import-Export",
 }
+
 
 import bpy
 import bpy.utils.previews
@@ -23,13 +24,46 @@ from bpy_extras.io_utils import ImportHelper
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
 from .main.setup import MaterialBuilder
+from .main.entity_import import *
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
 
+class CP77EntityImport(bpy.types.Operator,ImportHelper):
+
+    bl_idname = "io_scene_gltf.cp77entity"
+    bl_label = "Import Ent from JSON"
+    
+    filter_glob: StringProperty(
+        default="*.json",
+        options={'HIDDEN'},
+        )
+
+    filepath: StringProperty(name= "Filepath",
+                             subtype = 'FILE_PATH')
+
+    appearances: StringProperty(name= "Appearances",
+                                description="Entity Appearances to extract. Needs appearanceName from ent. Comma seperate multiples",
+                                default="default",
+                                )
+    exclude_meshes: StringProperty(name= "Meshes_to_Exclude",
+                                description="Meshes to skip during import",
+                                default="",
+                                options={'HIDDEN'})
+
+    def execute(self, context):
+        apps=self.appearances.split(",")
+        print('apps - ',apps)
+        excluded=self.appearances.split(",")
+        bob=self.filepath
+        print('Bob - ',bob)
+        importEnt( bob, apps, excluded)
+
+        return {'FINISHED'}
+
 class CP77StreamingSectorImport(bpy.types.Operator,ImportHelper):
 
-    bl_idname = "io_scene_glft.cp77sector"
+    bl_idname = "io_scene_gltf.cp77sector"
     bl_label = "Import StreamingSector"
     use_filter_folder = True
     filter_glob: StringProperty(
@@ -63,6 +97,7 @@ class CP77ImportWithMaterial(bpy.types.Panel):
         layout.use_property_split = True
         layout.prop(operator, 'exclude_unused_mats')
         layout.prop(operator, 'image_format')
+        layout.prop(operator, 'hide_armatures')
 
 
 class CP77Import(bpy.types.Operator,ImportHelper):
@@ -87,11 +122,19 @@ class CP77Import(bpy.types.Operator,ImportHelper):
     
     #Kwekmaster: QoL option to match WolvenKit GUI options - Name change to With Materials
     with_materials: BoolProperty(name="With Materials",default=True,description="Import mesh with Wolvenkit-exported materials")
+
+    hide_armatures: BoolProperty(name="Hide Armatures",default=True,description="Hide the armatures on imported meshes")
     
     filepath: StringProperty(subtype = 'FILE_PATH')
 
     files: CollectionProperty(type=bpy.types.OperatorFileListElement)
     directory: StringProperty()
+    
+    appearances: StringProperty(name= "Appearances",
+                                description="Appearances to extract with models",
+                                default="ALL",
+                                options={'HIDDEN'}
+                                )
 
     #kwekmaster: refactor UI layout from the operator.
     def draw(self, context):
@@ -102,7 +145,9 @@ class CP77Import(bpy.types.Operator,ImportHelper):
 
     def execute(self, context):
         loadfiles=self.files
-        
+        appearances=self.appearances.split(",")
+        for f in appearances:
+            print(f)
         
         # prevent crash if no directory supplied when using filepath
         if len(self.directory)>0:
@@ -128,11 +173,22 @@ class CP77Import(bpy.types.Operator,ImportHelper):
             print(filepath + " Loaded; With materials: "+str(self.with_materials))
 
             existingMeshes = bpy.data.meshes.keys()
-            existingObjects = bpy.data.objects.keys()
+           
             existingMaterials = bpy.data.materials.keys()
 
             BlenderGlTF.create(gltf_importer)
 
+            imported= context.selected_objects #the new stuff should be selected 
+            collection = bpy.data.collections.new(os.path.splitext(f['name'])[0])
+            bpy.context.scene.collection.children.link(collection)
+            for o in imported:
+                for parent in o.users_collection:
+                        parent.objects.unlink(o)
+                collection.objects.link(o)  
+                #print('o.name - ',o.name)
+                if 'Armature' in o.name:
+                    o.hide_set(self.hide_armatures)
+                
             for name in bpy.data.materials.keys():
                 if name not in existingMaterials:
                     bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
@@ -145,62 +201,119 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                 file = open(BasePath + ".Material.json",mode='r')
                 obj = json.loads(file.read())
                 BasePath = str(obj["MaterialRepo"])  + "\\"
-                
+
+               
+                json_apps=obj['Appearances']
+                # fix the app names as for some reason they have their index added on the end.
+                appkeys=[k for k in json_apps.keys()]
+                for i,k in enumerate(appkeys):
+                    json_apps[k[:-1*len(str(i))]]=json_apps.pop(k)
+
+                validmats={}
+                #appearances = ({'name':'short_hair'},{'name':'02_ca_limestone'},{'name':'ml_plastic_doll'},{'name':'03_ca_senna'})
+                #if appearances defined populate valid mats with the mats for them, otherwise populate with everything used.
+
+                if len(appearances)>0 and 'ALL' not in appearances:
+                    for key in json_apps.keys():
+                        if key in  appearances:
+                            for m in json_apps[key]:
+                                validmats[m]=True
+                # there isnt always a default, so if none were listed, or ALL was used, or an invalid one add everything. 
+                if len(validmats)==0:
+                    for key in json_apps.keys():
+                        for m in json_apps[key]:
+                            validmats[m]=True
+
+                for mat in validmats.keys():
+                    for m in obj['Materials']:
+                        if m['Name']==mat:
+                            if 'BaseMaterial' in m.keys():
+                                 if 'GlobalNormal' in m['Data'].keys():
+                                     GlobalNormal=m['Data']['GlobalNormal']
+                                 else:
+                                     GlobalNormal='None'
+                                 if 'MultilayerMask' in m['Data'].keys():
+                                     MultilayerMask=m['Data']['MultilayerMask']
+                                 else:
+                                     MultilayerMask='None'
+                                 validmats[mat]={'Name':m['Name'], 'BaseMaterial': m['BaseMaterial'],'GlobalNormal':GlobalNormal, 'MultilayerMask':MultilayerMask}
+                            else:
+                                print(m.keys())
+
+                MatImportList=[k for k in validmats.keys()]
                 
 
                 Builder = MaterialBuilder(obj,BasePath,str(self.image_format))
 
                 usedMaterials = {}
                 counter = 0
+                bpy_mats=bpy.data.materials
                 for name in bpy.data.meshes.keys():
                     if name not in existingMeshes:
                         bpy.data.meshes[name].materials.clear()
                         if gltf_importer.data.meshes[counter].extras is not None: #Kwek: I also found that other material hiccups will cause the Collection to fail
                             for matname in gltf_importer.data.meshes[counter].extras["materialNames"]:
-                                if matname not in usedMaterials.keys():
-                                    index = 0
-                                    for rawmat in obj["Materials"]:
-                                        if rawmat["Name"] == matname:
-                                            try:
-                                                bpymat = Builder.create(index)
-                                                bpy.data.meshes[name].materials.append(bpymat)
-                                                usedMaterials.update( {matname: bpymat} )
-                                            except FileNotFoundError as fnfe:
-                                                #Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
-                                                print(str(fnfe))
-                                                pass                                            
-                                        index = index + 1
+                                if matname in validmats.keys():
+                                    #print('matname: ',matname, validmats[matname])
+                                    m=validmats[matname]
+                                    if matname in bpy_mats.keys() and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['GlobalNormal']==m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask']==m['MultilayerMask'] :
+                                        bpy.data.meshes[name].materials.append(bpy_mats[matname])
+                                    else:
+                                        if matname in validmats.keys():
+                                            index = 0
+                                            for rawmat in obj["Materials"]:
+                                                if rawmat["Name"] == matname :
+                                                    try:
+                                                        bpymat = Builder.create(index)
+                                                        if bpymat:
+                                                            bpymat['BaseMaterial']=validmats[matname]['BaseMaterial']
+                                                            bpymat['GlobalNormal']=validmats[matname]['GlobalNormal']
+                                                            bpymat['MultilayerMask']=validmats[matname]['MultilayerMask']
+                                                            bpy.data.meshes[name].materials.append(bpymat)
+                                                    except FileNotFoundError as fnfe:
+                                                        #Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
+                                                        #print(str(fnfe))
+                                                        pass                                            
+                                                index = index + 1
                                 else:
-                                    bpy.data.meshes[name].materials.append(usedMaterials[matname])
+                                    #print(matname, validmats.keys())
+                                    pass
                             
                         counter = counter + 1
 
                 if not self.exclude_unused_mats:
                     index = 0
                     for rawmat in obj["Materials"]:
-                        if rawmat["Name"] not in usedMaterials:
+                        if rawmat["Name"] not in  bpy.data.materials.keys() and ((rawmat["Name"] in MatImportList) or len(MatImportList)<1):
                             Builder.create(index)
                         index = index + 1
 
 
-            collection = bpy.data.collections.new(os.path.splitext(f['name'])[0])
-            bpy.context.scene.collection.children.link(collection)
 
+
+
+
+
+            
+
+            '''
             for name in bpy.data.objects.keys():
                 if name not in existingObjects:
                     for parent in bpy.data.objects[name].users_collection:
                         parent.objects.unlink(bpy.data.objects[name])
                     collection.objects.link(bpy.data.objects[name])
-
+                    '''
         return {'FINISHED'}
 
 def menu_func_import(self, context):
     self.layout.operator(CP77Import.bl_idname, text="Cyberpunk GLTF (.gltf/.glb)", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
+    self.layout.operator(CP77EntityImport.bl_idname, text="Cyberpunk Entity (.json)", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
     #self.layout.operator(CP77StreamingSectorImport.bl_idname, text="Cyberpunk StreamingSector (.json)")
 
 #kwekmaster - Minor Refactoring 
 classes = (
     CP77Import,
+    CP77EntityImport,
     CP77ImportWithMaterial,
 #    CP77StreamingSectorImport, #kwekmaster: keeping this in--to mimic previous structure.
 )

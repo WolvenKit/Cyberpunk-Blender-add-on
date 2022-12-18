@@ -138,6 +138,7 @@ class Skin:
 
         if "Normal" in Data:
             nMap = CreateShaderNodeTexImage(CurMat, self.BasePath + Data["Normal"], -1800,-300, "Normal",self.image_format,True)
+            nMap.image.colorspace_settings.name='Non-Color'
 	
         if "DetailNormal" in Data:
             dnMap = CreateShaderNodeTexImage(CurMat, self.BasePath + Data["DetailNormal"], -1800,-450, "DetailNormal",self.image_format,True)
