@@ -29,6 +29,25 @@ from .main.entity_import import *
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
 
+def SetCyclesRenderer(set_gi_params=False):
+    # set the render engine for all scenes to Cycles
+    for scene in bpy.data.scenes:
+        scene.render.engine = 'CYCLES'
+
+    if set_gi_params:
+        cycles = bpy.context.scene.cycles
+        cycles.max_bounces = 32
+        cycles.caustics_reflective = True
+        cycles.caustics_refractive = True
+        cycles.diffuse_bounces = 32
+        cycles.glossy_bounces = 32
+        cycles.transmission_bounces = 32
+        cycles.volume_bounces = 32
+        cycles.transparent_max_bounces = 32
+        cycles.use_fast_gi = False
+        cycles.ao_bounces = 1
+        cycles.ao_bounces_render = 1
+
 class CP77EntityImport(bpy.types.Operator,ImportHelper):
 
     bl_idname = "io_scene_gltf.cp77entity"
@@ -50,8 +69,12 @@ class CP77EntityImport(bpy.types.Operator,ImportHelper):
                                 description="Meshes to skip during import",
                                 default="",
                                 options={'HIDDEN'})
+    
+    update_gi: BoolProperty(name="Update Global Illumination",default=True,description="Update Cycles global illumination options for transparency fixes and higher quality renders")
 
     def execute(self, context):
+        SetCyclesRenderer(self.update_gi)
+
         apps=self.appearances.split(",")
         print('apps - ',apps)
         excluded=self.appearances.split(",")
@@ -98,6 +121,7 @@ class CP77ImportWithMaterial(bpy.types.Panel):
         layout.prop(operator, 'exclude_unused_mats')
         layout.prop(operator, 'image_format')
         layout.prop(operator, 'hide_armatures')
+        layout.prop(operator, 'update_gi')
 
 
 class CP77Import(bpy.types.Operator,ImportHelper):
@@ -124,6 +148,8 @@ class CP77Import(bpy.types.Operator,ImportHelper):
     with_materials: BoolProperty(name="With Materials",default=True,description="Import mesh with Wolvenkit-exported materials")
 
     hide_armatures: BoolProperty(name="Hide Armatures",default=True,description="Hide the armatures on imported meshes")
+
+    update_gi: BoolProperty(name="Update Global Illumination",default=True,description="Update Cycles global illumination options for transparency fixes and higher quality renders")
     
     filepath: StringProperty(subtype = 'FILE_PATH')
 
@@ -140,10 +166,9 @@ class CP77Import(bpy.types.Operator,ImportHelper):
     def draw(self, context):
         pass
 
-        
-        
-
     def execute(self, context):
+        SetCyclesRenderer(self.update_gi)
+
         loadfiles=self.files
         appearances=self.appearances.split(",")
         for f in appearances:
@@ -244,8 +269,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                 
 
                 Builder = MaterialBuilder(obj,BasePath,str(self.image_format))
-
-                usedMaterials = {}
+                
                 counter = 0
                 bpy_mats=bpy.data.materials
                 for name in bpy.data.meshes.keys():
@@ -287,22 +311,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                         if rawmat["Name"] not in  bpy.data.materials.keys() and ((rawmat["Name"] in MatImportList) or len(MatImportList)<1):
                             Builder.create(index)
                         index = index + 1
-
-
-
-
-
-
-
-            
-
-            '''
-            for name in bpy.data.objects.keys():
-                if name not in existingObjects:
-                    for parent in bpy.data.objects[name].users_collection:
-                        parent.objects.unlink(bpy.data.objects[name])
-                    collection.objects.link(bpy.data.objects[name])
-                    '''
+                        
         return {'FINISHED'}
 
 def menu_func_import(self, context):
