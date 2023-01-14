@@ -2,11 +2,6 @@ import bpy
 import os
 from ..main.common import *
 
-import bpy
-import os
-import json
-
-from common import *
 
 class SpeedTree:
     def __init__(self, BasePath,image_format):
@@ -52,8 +47,12 @@ class SpeedTree:
             nMap.inputs[1].links[0].from_node.inputs[0].links[0].from_node.hide=False
             nMap.inputs[1].links[0].from_node.inputs[0].links[0].from_node.location = (-800,-200)
 
-
         if "TransGlossMap" in Data:
             rImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["TransGlossMap"],-800,100,'TransGlossMap',self.image_format,True)
-            CurMat.links.new(rImgNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Roughness'])
-            rImgNode.hide=False
+            rImgNode.hide=False            
+            mathNode = CurMat.nodes.new("ShaderNodeMath")
+            mathNode.operation = 'SUBTRACT'
+            mathNode.inputs[0].default_value = 1.0
+            mathNode.location = (-400,100)
+            CurMat.links.new(rImgNode.outputs[0],mathNode.inputs[1])
+            CurMat.links.new(mathNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Roughness'])
