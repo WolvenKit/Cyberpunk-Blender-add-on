@@ -18,6 +18,8 @@ from ..material_types.meshdecalemissive import MeshDecalEmissive
 from ..material_types.glass import Glass
 from ..material_types.signages import Signages
 from ..material_types.meshdecalparallax import MeshDecalParallax
+from ..material_types.multilayeredTerrain import MultilayeredTerrain
+from ..material_types.speedtree import SpeedTree
 
 
 class MaterialBuilder:
@@ -110,6 +112,17 @@ class MaterialBuilder:
             case "base\\materials\\mesh_decal_parallax.mt":
                 meshDecalParallax = MeshDecalParallax(self.BasePath,self.image_format)
                 meshDecalParallax.create(rawMat["Data"],bpyMat)
+            
+            case "base\\materials\\multilayered_terrain.mt":
+                multilayeredTerrain = MultilayeredTerrain(self.BasePath,self.image_format)
+                multilayeredTerrain.create(rawMat["Data"],bpyMat)
+                
+            case "base\\materials\\speedtree_3d_v8_twosided.mt":
+                speedtree = SpeedTree(self.BasePath,self.image_format)
+                speedtree.create(rawMat["Data"],bpyMat)
+
+            case _:
+                print('Unhandled mt - ', rawMat["MaterialTemplate"])
 
         #set the viewport blend mode to hashed - no more black tattoos and cybergear
         bpyMat.blend_method='HASHED'
