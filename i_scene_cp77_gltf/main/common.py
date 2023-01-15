@@ -4,7 +4,6 @@ import os
 
 def imageFromPath(Img,image_format,isNormal = False):
     # The speedtree materials use the same name textures for different plants this code was loading the same leaves on all of them
-    # Worst case this loads a material twice rather than reusing the wrong thing. (searching for atlas in wkit there appear to possibly be similar issues with decals)
     Im = bpy.data.images.get(os.path.basename(Img)[:-4])
     if Im.filepath==Img[:-3]+ image_format:
         if Im:
