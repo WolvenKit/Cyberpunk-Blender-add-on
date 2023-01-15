@@ -5,9 +5,8 @@ import os
 def imageFromPath(Img,image_format,isNormal = False):
     # The speedtree materials use the same name textures for different plants this code was loading the same leaves on all of them
     # Worst case this loads a material twice rather than reusing the wrong thing. (searching for atlas in wkit there appear to possibly be similar issues with decals)
-    Im=NULL
-    if os.path.basename(Img)[:-4][:5]!='atlas':
-        Im = bpy.data.images.get(os.path.basename(Img)[:-4])
+    Im = bpy.data.images.get(os.path.basename(Img)[:-4])
+    if Im.filepath==Img[:-3]+ image_format:
         if Im:
             if Im.colorspace_settings.name != 'Non-Color':
                 if isNormal:
@@ -15,7 +14,7 @@ def imageFromPath(Img,image_format,isNormal = False):
             else:
                 if not isNormal:
                     Im = None
-        if not Im and os.path.basename(Img)[:-4][:5]!='atlas':
+        if not Im :
             Im = bpy.data.images.get(os.path.basename(Img)[:-4] + ".001")
             if Im:
                 if Im.colorspace_settings.name != 'Non-Color':
@@ -24,15 +23,18 @@ def imageFromPath(Img,image_format,isNormal = False):
                 else:
                     if not isNormal:
                         Im = None
-        
+    else:
+        Im = None
+
     if not Im:
         Im = bpy.data.images.new(os.path.basename(Img)[:-4],1,1)
         Im.source = "FILE"
         Im.filepath = Img[:-3]+ image_format
         if isNormal:
             Im.colorspace_settings.name = 'Non-Color'
-
     return Im
+
+
 def CreateShaderNodeTexImage(curMat,path = None, x = 0, y = 0, name = None,image_format = 'png', nonCol = False):
     ImgNode = curMat.nodes.new("ShaderNodeTexImage")
     ImgNode.location = (x, y)
