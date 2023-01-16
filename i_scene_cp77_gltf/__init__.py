@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Cyberpunk 2077 glTF Importer",
     "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius",
-    "version": (1, 1, 0),
+    "version": (1, 1, 1),
     "blender": (3, 1, 0),
     "location": "File > Import-Export",
     "description": "Import WolvenKit Cyberpunk2077 glTF Models With Materials",
@@ -261,7 +261,11 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                                      MultilayerMask=m['Data']['MultilayerMask']
                                  else:
                                      MultilayerMask='None'
-                                 validmats[mat]={'Name':m['Name'], 'BaseMaterial': m['BaseMaterial'],'GlobalNormal':GlobalNormal, 'MultilayerMask':MultilayerMask}
+                                 if 'DiffuseMap' in m['Data'].keys():
+                                     DiffuseMap=m['Data']['DiffuseMap']
+                                 else:
+                                     DiffuseMap='None'
+                                 validmats[mat]={'Name':m['Name'], 'BaseMaterial': m['BaseMaterial'],'GlobalNormal':GlobalNormal, 'MultilayerMask':MultilayerMask,'DiffuseMap':DiffuseMap}
                             else:
                                 print(m.keys())
 
@@ -280,8 +284,11 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                                 if matname in validmats.keys():
                                     #print('matname: ',matname, validmats[matname])
                                     m=validmats[matname]
-                                    if matname in bpy_mats.keys() and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['GlobalNormal']==m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask']==m['MultilayerMask'] :
+                                    if matname in bpy_mats.keys() and matname[:5]!='Atlas' and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['GlobalNormal']==m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask']==m['MultilayerMask'] :
                                         bpy.data.meshes[name].materials.append(bpy_mats[matname])
+                                    elif matname in bpy_mats.keys() and matname[:5]=='Atlas' and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['DiffuseMap']==m['DiffuseMap'] :
+                                        bpy.data.meshes[name].materials.append(bpy_mats[matname])
+                                    #think the plants might pass that, need to add another elif that catches them.
                                     else:
                                         if matname in validmats.keys():
                                             index = 0
@@ -293,6 +300,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                                                             bpymat['BaseMaterial']=validmats[matname]['BaseMaterial']
                                                             bpymat['GlobalNormal']=validmats[matname]['GlobalNormal']
                                                             bpymat['MultilayerMask']=validmats[matname]['MultilayerMask']
+                                                            bpymat['DiffuseMap']=validmats[matname]['DiffuseMap']
                                                             bpy.data.meshes[name].materials.append(bpymat)
                                                     except FileNotFoundError as fnfe:
                                                         #Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
