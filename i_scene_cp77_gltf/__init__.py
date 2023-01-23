@@ -123,6 +123,7 @@ class CP77ImportWithMaterial(bpy.types.Panel):
         layout.prop(operator, 'image_format')
         layout.prop(operator, 'hide_armatures')
         layout.prop(operator, 'update_gi')
+        layout.prop(operator, 'import_garmentsupport')
 
 
 class CP77Import(bpy.types.Operator,ImportHelper):
@@ -151,6 +152,8 @@ class CP77Import(bpy.types.Operator,ImportHelper):
     hide_armatures: BoolProperty(name="Hide Armatures",default=True,description="Hide the armatures on imported meshes")
 
     update_gi: BoolProperty(name="Update Global Illumination",default=True,description="Update Cycles global illumination options for transparency fixes and higher quality renders")
+
+    import_garmentsupport: BoolProperty(name="Import Garment Support (Experimental)",default=True,description="Imports Garment Support mesh data as color attributes")
     
     filepath: StringProperty(subtype = 'FILE_PATH')
 
@@ -219,7 +222,8 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                 if name not in existingMaterials:
                     bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
             
-            manage_garment_support(existingMeshes, gltf_importer)
+            if self.import_garmentsupport:
+                manage_garment_support(existingMeshes, gltf_importer)
 
             BasePath = os.path.splitext(filepath)[0]
             #Kwek: Gate this--do the block iff corresponding Material.json exist 
