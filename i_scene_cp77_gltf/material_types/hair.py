@@ -12,6 +12,7 @@ class Hair:
     def create(self,hair,Mat):
 
         file = open(self.BasePath + hair["HairProfile"] + ".json",mode='r')
+        Mat['hp_file']=self.BasePath + hair["HairProfile"] + ".json"
         profile = json.loads(file.read())["Data"]["RootChunk"]
         file.close()
 
