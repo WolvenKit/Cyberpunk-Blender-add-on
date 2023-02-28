@@ -85,10 +85,10 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                 if 'mesh' in c.keys():
                     #print(c['mesh']['DepotPath'])
                     app='default'
-                    if isinstance( c['mesh']['DepotPath'], str):
-                        meshname=os.path.basename(c['mesh']['DepotPath'])
-                        meshpath=os.path.join(path, c['mesh']['DepotPath'][:-4]+'glb')
-                        if meshname not in exclude_meshes:      
+                    meshname=os.path.basename(c['mesh']['DepotPath'])
+                    meshpath=os.path.join(path, c['mesh']['DepotPath'][:-4]+'glb')
+                    if meshname not in exclude_meshes:                
+                        if isinstance( c['mesh']['DepotPath'], str):       
                             if os.path.exists(meshpath):
                                 try:
                                     meshApp='default'
