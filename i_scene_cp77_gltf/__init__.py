@@ -88,7 +88,7 @@ class CP77EntityImport(bpy.types.Operator,ImportHelper):
 class CP77StreamingSectorImport(bpy.types.Operator,ImportHelper):
 
     bl_idname = "io_scene_gltf.cp77sector"
-    bl_label = "Import StreamingSectors from project"
+    bl_label = "Import All StreamingSectors from project"
     
     filter_glob: StringProperty(
         default="*.cpmodproj",

@@ -27,9 +27,6 @@ from pprint import pprint
 
 
 
-
-
-
 def get_pos_whole(inst):
     pos=[0,0,0]
     if 'Position' in inst.keys():
