@@ -1,33 +1,40 @@
+from asyncio.windows_events import NULL
 import bpy
 import os
 
 def imageFromPath(Img,image_format,isNormal = False):
-    Im = bpy.data.images.get(os.path.basename(Img)[:-4])
-    if Im:
+    # The speedtree materials use the same name textures for different plants this code was loading the same leaves on all of them
+    Im = bpy.data.images.get(os.path.basename(Img)[:-4])    
+    if Im and Im.filepath==Img[:-3]+ image_format:
         if Im.colorspace_settings.name != 'Non-Color':
             if isNormal:
                 Im = None
         else:
             if not isNormal:
                 Im = None
-    if not Im:
+    else: 
+        Im=None
+    if not Im :
         Im = bpy.data.images.get(os.path.basename(Img)[:-4] + ".001")
-        if Im:
+        if Im and Im.filepath==Img[:-3]+ image_format:
             if Im.colorspace_settings.name != 'Non-Color':
                 if isNormal:
                     Im = None
             else:
                 if not isNormal:
                     Im = None
-        
+        else :
+            Im = None
+    
     if not Im:
         Im = bpy.data.images.new(os.path.basename(Img)[:-4],1,1)
         Im.source = "FILE"
         Im.filepath = Img[:-3]+ image_format
         if isNormal:
             Im.colorspace_settings.name = 'Non-Color'
-
     return Im
+
+
 def CreateShaderNodeTexImage(curMat,path = None, x = 0, y = 0, name = None,image_format = 'png', nonCol = False):
     ImgNode = curMat.nodes.new("ShaderNodeTexImage")
     ImgNode.location = (x, y)
