@@ -270,7 +270,12 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                                      MultilayerMask=m['Data']['MultilayerMask']
                                  else:
                                      MultilayerMask='None'
-                                 validmats[mat]={'Name':m['Name'], 'BaseMaterial': m['BaseMaterial'],'GlobalNormal':GlobalNormal, 'MultilayerMask':MultilayerMask}
+                                 if 'DiffuseMap' in m['Data'].keys():
+                                     DiffuseMap=m['Data']['DiffuseMap']
+                                 else:
+                                     DiffuseMap='None'
+ 
+                                 validmats[mat]={'Name':m['Name'], 'BaseMaterial': m['BaseMaterial'],'GlobalNormal':GlobalNormal, 'MultilayerMask':MultilayerMask,'DiffuseMap':DiffuseMap}
                             else:
                                 print(m.keys())
 
@@ -304,6 +309,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                                                             bpymat['BaseMaterial']=validmats[matname]['BaseMaterial']
                                                             bpymat['GlobalNormal']=validmats[matname]['GlobalNormal']
                                                             bpymat['MultilayerMask']=validmats[matname]['MultilayerMask']
+                                                            bpymat['DiffuseMap']=validmats[matname]['DiffuseMap']
                                                             bpy.data.meshes[name].materials.append(bpymat)
                                                     except FileNotFoundError as fnfe:
                                                         #Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
