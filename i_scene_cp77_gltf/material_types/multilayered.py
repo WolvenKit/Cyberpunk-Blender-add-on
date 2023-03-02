@@ -271,12 +271,13 @@ class Multilayered:
 
 
     def create(self,Data,Mat):
+
         file = open(self.BasePath + Data["MultilayerSetup"] + ".json",mode='r')
         mlsetup = json.loads(file.read())["Data"]["RootChunk"]
         file.close()
         xllay = mlsetup.get("layers")
         if xllay is None:
-            xllay = mlsetup.get("Layers")
+            xllay = x.get("Layers")
         LayerCount = len(xllay)
     
         LayerIndex = 0
@@ -514,9 +515,8 @@ class Multilayered:
             RoughRampN = NG.nodes.new("ShaderNodeMapRange")
             RoughRampN.hide=True
             RoughRampN.location = (-1400,-100)
-            if roughLevelsOut in OverrideTable["RoughLevelsOut"].keys():
-                RoughRampN.inputs['To Min'].default_value = (OverrideTable["RoughLevelsOut"][roughLevelsOut][1][0])
-                RoughRampN.inputs['To Max'].default_value = (OverrideTable["RoughLevelsOut"][roughLevelsOut][0][0])
+            RoughRampN.inputs['To Min'].default_value = (OverrideTable["RoughLevelsOut"][roughLevelsOut][1][0])
+            RoughRampN.inputs['To Max'].default_value = (OverrideTable["RoughLevelsOut"][roughLevelsOut][0][0])
             RoughRampN.label = "Roughness Ramp"
             
             # Metalness
