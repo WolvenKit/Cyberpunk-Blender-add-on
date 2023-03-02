@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Cyberpunk 2077 glTF Importer",
     "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius",
-    "version": (1, 1, 0),
+    "version": (1, 2, 0),
     "blender": (3, 1, 0),
     "location": "File > Import-Export",
     "description": "Import WolvenKit Cyberpunk2077 glTF Models With Materials",
@@ -25,6 +25,7 @@ from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
 from .main.setup import MaterialBuilder
 from .main.entity_import import *
+from .main.sector_import import *
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
@@ -87,19 +88,27 @@ class CP77EntityImport(bpy.types.Operator,ImportHelper):
 class CP77StreamingSectorImport(bpy.types.Operator,ImportHelper):
 
     bl_idname = "io_scene_gltf.cp77sector"
-    bl_label = "Import StreamingSector"
-    use_filter_folder = True
+    bl_label = "Import All StreamingSectors from project"
+    
     filter_glob: StringProperty(
-        default=".",
+        default="*.cpmodproj",
         options={'HIDDEN'},
         )
+    
+    filepath: StringProperty(name= "Filepath",
+                             subtype = 'FILE_PATH')
 
+    want_collisions: BoolProperty(name="Import Collisions",default=False,description="Import Box and Capsule Collision objects (mesh not yet supported)")
+    am_modding: BoolProperty(name="Generate New Collectors",default=False,description="Generate _new collectors for sectors to allow modifications to be saved back to game")
+    
     def execute(self, context):
-        self.report({'ERROR'}, "Streaming Sector Import is not yet implemented!")
+        bob=self.filepath
+        print('Importing Sectors from project - ',bob)
+        importSectors( bob, self.want_collisions, self.am_modding)
         return {'FINISHED'}
 
 # Material Sub-panel
-class CP77ImportWithMaterial(bpy.types.Panel):
+class CP77_PT_ImportWithMaterial(bpy.types.Panel):
     bl_space_type = 'FILE_BROWSER'
     bl_region_type = 'TOOL_PROPS'
     bl_label = "With Materials"
@@ -261,7 +270,12 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                                      MultilayerMask=m['Data']['MultilayerMask']
                                  else:
                                      MultilayerMask='None'
-                                 validmats[mat]={'Name':m['Name'], 'BaseMaterial': m['BaseMaterial'],'GlobalNormal':GlobalNormal, 'MultilayerMask':MultilayerMask}
+                                 if 'DiffuseMap' in m['Data'].keys():
+                                     DiffuseMap=m['Data']['DiffuseMap']
+                                 else:
+                                     DiffuseMap='None'
+ 
+                                 validmats[mat]={'Name':m['Name'], 'BaseMaterial': m['BaseMaterial'],'GlobalNormal':GlobalNormal, 'MultilayerMask':MultilayerMask,'DiffuseMap':DiffuseMap}
                             else:
                                 print(m.keys())
 
@@ -280,7 +294,9 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                                 if matname in validmats.keys():
                                     #print('matname: ',matname, validmats[matname])
                                     m=validmats[matname]
-                                    if matname in bpy_mats.keys() and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['GlobalNormal']==m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask']==m['MultilayerMask'] :
+                                    if matname in bpy_mats.keys() and matname[:5]!='Atlas' and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['GlobalNormal']==m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask']==m['MultilayerMask'] :
+                                        bpy.data.meshes[name].materials.append(bpy_mats[matname])
+                                    elif matname in bpy_mats.keys() and matname[:5]=='Atlas' and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['DiffuseMap']==m['DiffuseMap'] :
                                         bpy.data.meshes[name].materials.append(bpy_mats[matname])
                                     else:
                                         if matname in validmats.keys():
@@ -293,6 +309,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                                                             bpymat['BaseMaterial']=validmats[matname]['BaseMaterial']
                                                             bpymat['GlobalNormal']=validmats[matname]['GlobalNormal']
                                                             bpymat['MultilayerMask']=validmats[matname]['MultilayerMask']
+                                                            bpymat['DiffuseMap']=validmats[matname]['DiffuseMap']
                                                             bpy.data.meshes[name].materials.append(bpymat)
                                                     except FileNotFoundError as fnfe:
                                                         #Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
@@ -317,14 +334,14 @@ class CP77Import(bpy.types.Operator,ImportHelper):
 def menu_func_import(self, context):
     self.layout.operator(CP77Import.bl_idname, text="Cyberpunk GLTF (.gltf/.glb)", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
     self.layout.operator(CP77EntityImport.bl_idname, text="Cyberpunk Entity (.json)", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
-    #self.layout.operator(CP77StreamingSectorImport.bl_idname, text="Cyberpunk StreamingSector (.json)")
+    self.layout.operator(CP77StreamingSectorImport.bl_idname, text="Cyberpunk StreamingSector", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
 
 #kwekmaster - Minor Refactoring 
 classes = (
     CP77Import,
     CP77EntityImport,
-    CP77ImportWithMaterial,
-#    CP77StreamingSectorImport, #kwekmaster: keeping this in--to mimic previous structure.
+    CP77_PT_ImportWithMaterial,
+    CP77StreamingSectorImport,
 )
 
 def register():
