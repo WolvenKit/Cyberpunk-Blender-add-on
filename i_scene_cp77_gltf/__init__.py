@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Cyberpunk 2077 glTF Importer",
     "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius",
-    "version": (1, 1, 0),
+    "version": (1, 2, 0),
     "blender": (3, 1, 0),
     "location": "File > Import-Export",
     "description": "Import WolvenKit Cyberpunk2077 glTF Models With Materials",
@@ -26,6 +26,9 @@ from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
 from .main.setup import MaterialBuilder
 from .main.entity_import import *
 from .main.attribute_import import manage_garment_support
+from .main.sector_import import *
+from bpy_extras.io_utils import ExportHelper
+from io_scene_gltf2.blender.exp.gltf2_blender_gltf2_exporter import GlTF2Exporter
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
@@ -48,6 +51,48 @@ def SetCyclesRenderer(set_gi_params=False):
         cycles.use_fast_gi = False
         cycles.ao_bounces = 1
         cycles.ao_bounces_render = 1
+        
+class CP77GLBExport(bpy.types.Operator, ExportHelper):
+    # Doctor Presto trying to help, making a big mess:
+    # export selected meshes to GLB with the correct settings for Wolvenkit import
+    bl_idname = "export_scene.cp77_glb"
+    bl_label = "Export for Cyberpunk"
+    bl_options = {'REGISTER', 'UNDO'}
+    filename_ext = ".glb"
+    
+    filter_glob: bpy.props.StringProperty(default="*.glb", options={'HIDDEN'})
+    
+    def execute(self, context):
+        selected_objects = context.selected_objects
+        ## I think this section might be mostly redundant 
+        ## ensure no lights or cameras are included in the GLB,            
+        for obj in context.selected_objects:
+            if obj.type == "LIGHT" or obj.type == "CAMERA":
+                obj.select_set(False)
+        ## make sure there are meshes selected before proceeding
+        meshes = [obj for obj in selected_objects if obj.type == 'MESH']
+        if not meshes:
+            self.report({'ERROR'}, "No mesh selected.")
+            return {'CANCELLED'}
+        else:
+            ## actually export the meshes, ensure that tangents and armature are included, that transforms and modifiers are applied  and lights/cameras are not exported    
+            print("Exporting object:", obj.name)
+                
+            bpy.ops.export_scene.gltf(
+            filepath = os.path.join(self.filepath),
+            check_existing=True,
+            export_skins=True,
+            export_cameras = False, 
+            use_selection=True,
+            export_yup=True,
+            export_animations=True,
+            export_apply=True,
+            export_tangents=True, 
+            export_materials='NONE',
+            export_morph_tangent=True)
+            print("Export complete.")
+            
+            return {'FINISHED'}
 
 class CP77EntityImport(bpy.types.Operator,ImportHelper):
 
@@ -88,19 +133,27 @@ class CP77EntityImport(bpy.types.Operator,ImportHelper):
 class CP77StreamingSectorImport(bpy.types.Operator,ImportHelper):
 
     bl_idname = "io_scene_gltf.cp77sector"
-    bl_label = "Import StreamingSector"
-    use_filter_folder = True
+    bl_label = "Import All StreamingSectors from project"
+    
     filter_glob: StringProperty(
-        default=".",
+        default="*.cpmodproj",
         options={'HIDDEN'},
         )
+    
+    filepath: StringProperty(name= "Filepath",
+                             subtype = 'FILE_PATH')
 
+    want_collisions: BoolProperty(name="Import Collisions",default=False,description="Import Box and Capsule Collision objects (mesh not yet supported)")
+    am_modding: BoolProperty(name="Generate New Collectors",default=False,description="Generate _new collectors for sectors to allow modifications to be saved back to game")
+    
     def execute(self, context):
-        self.report({'ERROR'}, "Streaming Sector Import is not yet implemented!")
+        bob=self.filepath
+        print('Importing Sectors from project - ',bob)
+        importSectors( bob, self.want_collisions, self.am_modding)
         return {'FINISHED'}
 
 # Material Sub-panel
-class CP77ImportWithMaterial(bpy.types.Panel):
+class CP77_PT_ImportWithMaterial(bpy.types.Panel):
     bl_space_type = 'FILE_BROWSER'
     bl_region_type = 'TOOL_PROPS'
     bl_label = "With Materials"
@@ -268,7 +321,12 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                                      MultilayerMask=m['Data']['MultilayerMask']
                                  else:
                                      MultilayerMask='None'
-                                 validmats[mat]={'Name':m['Name'], 'BaseMaterial': m['BaseMaterial'],'GlobalNormal':GlobalNormal, 'MultilayerMask':MultilayerMask}
+                                 if 'DiffuseMap' in m['Data'].keys():
+                                     DiffuseMap=m['Data']['DiffuseMap']
+                                 else:
+                                     DiffuseMap='None'
+ 
+                                 validmats[mat]={'Name':m['Name'], 'BaseMaterial': m['BaseMaterial'],'GlobalNormal':GlobalNormal, 'MultilayerMask':MultilayerMask,'DiffuseMap':DiffuseMap}
                             else:
                                 print(m.keys())
 
@@ -287,7 +345,9 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                                 if matname in validmats.keys():
                                     #print('matname: ',matname, validmats[matname])
                                     m=validmats[matname]
-                                    if matname in bpy_mats.keys() and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['GlobalNormal']==m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask']==m['MultilayerMask'] :
+                                    if matname in bpy_mats.keys() and matname[:5]!='Atlas' and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['GlobalNormal']==m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask']==m['MultilayerMask'] :
+                                        bpy.data.meshes[name].materials.append(bpy_mats[matname])
+                                    elif matname in bpy_mats.keys() and matname[:5]=='Atlas' and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['DiffuseMap']==m['DiffuseMap'] :
                                         bpy.data.meshes[name].materials.append(bpy_mats[matname])
                                     else:
                                         if matname in validmats.keys():
@@ -300,6 +360,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                                                             bpymat['BaseMaterial']=validmats[matname]['BaseMaterial']
                                                             bpymat['GlobalNormal']=validmats[matname]['GlobalNormal']
                                                             bpymat['MultilayerMask']=validmats[matname]['MultilayerMask']
+                                                            bpymat['DiffuseMap']=validmats[matname]['DiffuseMap']
                                                             bpy.data.meshes[name].materials.append(bpymat)
                                                     except FileNotFoundError as fnfe:
                                                         #Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
@@ -324,35 +385,41 @@ class CP77Import(bpy.types.Operator,ImportHelper):
 def menu_func_import(self, context):
     self.layout.operator(CP77Import.bl_idname, text="Cyberpunk GLTF (.gltf/.glb)", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
     self.layout.operator(CP77EntityImport.bl_idname, text="Cyberpunk Entity (.json)", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
-    #self.layout.operator(CP77StreamingSectorImport.bl_idname, text="Cyberpunk StreamingSector (.json)")
+    self.layout.operator(CP77StreamingSectorImport.bl_idname, text="Cyberpunk StreamingSector", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
 
+def menu_func_export(self, context):
+    self.layout.operator(CP77GLBExport.bl_idname, text="Export Selection to GLB for Cyberpunk", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
+    
 #kwekmaster - Minor Refactoring 
 classes = (
     CP77Import,
     CP77EntityImport,
-    CP77ImportWithMaterial,
-#    CP77StreamingSectorImport, #kwekmaster: keeping this in--to mimic previous structure.
+    CP77_PT_ImportWithMaterial,
+    CP77StreamingSectorImport,
+    CP77GLBExport,
 )
 
 def register():
     custom_icon = bpy.utils.previews.new()
     custom_icon.load("WKIT", os.path.join(icons_dir, "wkit.png"), 'IMAGE')
     custom_icon_col["import"] = custom_icon
-
+    
     #kwekmaster - Minor Refactoring 
     for cls in classes:
         bpy.utils.register_class(cls)
         
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
+    bpy.types.TOPBAR_MT_file_export.append(menu_func_export) 
     
 def unregister():
     bpy.utils.previews.remove(custom_icon_col["import"])
-
+    
     #kwekmaster - Minor Refactoring 
     for cls in classes:
         bpy.utils.unregister_class(cls)
         
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
-        
+    bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
+                
 if __name__ == "__main__":
     register()
