@@ -25,10 +25,10 @@ from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
 from .main.setup import MaterialBuilder
 from .main.entity_import import *
+from .main.attribute_import import manage_garment_support
 from .main.sector_import import *
 from bpy_extras.io_utils import ExportHelper
 from io_scene_gltf2.blender.exp.gltf2_blender_gltf2_exporter import GlTF2Exporter
-
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
@@ -176,6 +176,7 @@ class CP77_PT_ImportWithMaterial(bpy.types.Panel):
         layout.prop(operator, 'image_format')
         layout.prop(operator, 'hide_armatures')
         layout.prop(operator, 'update_gi')
+        layout.prop(operator, 'import_garmentsupport')
 
 
 class CP77Import(bpy.types.Operator,ImportHelper):
@@ -204,6 +205,8 @@ class CP77Import(bpy.types.Operator,ImportHelper):
     hide_armatures: BoolProperty(name="Hide Armatures",default=True,description="Hide the armatures on imported meshes")
 
     update_gi: BoolProperty(name="Update Global Illumination",default=True,description="Update Cycles global illumination options for transparency fixes and higher quality renders")
+
+    import_garmentsupport: BoolProperty(name="Import Garment Support (Experimental)",default=True,description="Imports Garment Support mesh data as color attributes")
     
     filepath: StringProperty(subtype = 'FILE_PATH')
 
@@ -271,6 +274,9 @@ class CP77Import(bpy.types.Operator,ImportHelper):
             for name in bpy.data.materials.keys():
                 if name not in existingMaterials:
                     bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
+            
+            if self.import_garmentsupport:
+                manage_garment_support(existingMeshes, gltf_importer)
 
             BasePath = os.path.splitext(filepath)[0]
             #Kwek: Gate this--do the block iff corresponding Material.json exist 
