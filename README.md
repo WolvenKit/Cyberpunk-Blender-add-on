@@ -27,7 +27,7 @@ The latest version of the Cyberpunk add-on requires Blender 3.1 or higher. Not a
 
 2) Install the Cyberpunk add-on for Blender by navigating within Blender to **Edit \ Preferences \ Add-ons \ Install...** and locating the downloaded .ZIP file. Be sure the add-on is enabled by marking the checkbox within the installed add-on list.
 
-3) When installed Cyberpunk options should be available under File > Import and File > Export
+3) When installed Cyberpunk options should be available under **File \ Import** and **File \ Export**
 
 ## Mesh Import
 
