@@ -20,7 +20,10 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
 
     with open(filepath,'r') as f: 
         j=json.load(f) 
+        
     ent_apps= j['Data']['RootChunk']['appearances']
+    if  j['Data']['RootChunk']['components'][0]['name']=='vehicle_slots':
+        vehicle_slots= j['Data']['RootChunk']['components'][0]['slots']
 
     # if no apps requested populate the list with all available.
     if len(appearances[0])==0:
@@ -36,6 +39,16 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
     meshes =  glob.glob(path+"\**\*.glb", recursive = True)
     if len(meshes)==0:
         print('No Meshes found in path')
+
+    # find the rig jsons
+    rigs = glob.glob(path+"\\base\\animations"+"\**\*.glb", recursive = True)
+    if len(rigs)>0:
+            oldarms= [x for x in bpy.data.objects if 'Armature' in x.name]
+            bpy.ops.io_scene_gltf.cp77(filepath=rigs[0])
+            arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
+            rig=arms[0]
+            bones=rig.pose.bones
+            print('rig loaded')
 
     if len(meshes)<1 or len(app_path)<1:
         print("You need to export the meshes and convert app and ent to json")
@@ -60,10 +73,10 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                         print('appearance matched, id = ',i)
                         ent_app_idx=i
                 app_file = ent_apps[ent_app_idx]['appearanceResource']['DepotPath']
-                filepath=os.path.join(path,app_file)+'.json'
+                appfilepath=os.path.join(path,app_file)+'.json'
                         
-                if os.path.exists(filepath):
-                    with open(filepath,'r') as a: 
+                if os.path.exists(appfilepath):
+                    with open(appfilepath,'r') as a: 
                         a_j=json.load(a)
                 else:
                     print('app file not found - ',filepath)
@@ -77,6 +90,9 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                         app_idx=i
                 if 'Data' in a_j['Data']['RootChunk']['appearances'][app_idx].keys():
                     comps= a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['components']
+                    if 'compiledData' in a_j['Data']['RootChunk']['appearances'][app_idx]['Data'].keys():
+                        chunks= a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['compiledData']['Data']['Chunks']
+                        print('Chunks found')
                         
             if len(comps)==0:      
                 print('falling back to rootchunk comps')
@@ -84,7 +100,6 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
             for c in comps:
                 if 'mesh' in c.keys():
                     #print(c['mesh']['DepotPath'])
-                    app='default'
                     if isinstance( c['mesh']['DepotPath'], str):
                         meshname=os.path.basename(c['mesh']['DepotPath'])
                         meshpath=os.path.join(path, c['mesh']['DepotPath'][:-4]+'glb')
@@ -95,18 +110,98 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                     if 'meshAppearance' in c.keys():
                                         meshApp=c['meshAppearance']
                                         #print(meshApp)
-                                   
-                                    bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=meshApp)
+                                    try:
+                                        bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=meshApp)
+                                    except:
+                                        print('import threw an error')
                                     objs = C.selected_objects
+                                    
+                                    # NEW parentTransform stuff - should fix vehicles being exploded
+                                    pt_trans=[0,0,0]
+                                    pt_rot=[0,0,0,0]
+                                    pT=c['parentTransform']
+                                    pT_HId=pT['HandleRefId']
+                                    print('pT_HId = ',pT_HId)
+                                    chunk_pt = 0 
+                                    for chunk in chunks:
+                                        if 'parentTransform' in chunk.keys():
+                                             #print('pt found')
+                                             if 'HandleId' in chunk['parentTransform'].keys():
+                                                
+                                                 if chunk['parentTransform']['HandleId']==pT_HId:
+                                                     chunk_pt=chunk['parentTransform']
+                                                     print('HandleId found',chunk['parentTransform']['HandleId'])
+                                    if chunk_pt:   
+                                        print('in chunk pt processing')                                     
+                                        bindname=chunk_pt['Data']['bindName']
+                                        if bindname=='vehicle_slots':
+                                            if vehicle_slots:
+                                                slotname=chunk_pt['Data']['slotName']
+                                                for slot in vehicle_slots:
+                                                    if slot['slotName']==slotname:
+                                                        bindname=slot['boneName']
+                                            else:
+                                                bindname= chunk_pt['Data']['slotName']
+                                                #look to see if its in te
+                                        print('bindname = ',bindname)
+                                        bones=rig.pose.bones
+                                        if bindname and bones:
+                                            print('bindname and bones')
+                                            if bindname not in bones.keys():
+                                                # if bindname isnt in the bones then its a part thats already bound to a bone, find it and work out what the transform is
+                                                for o in comps:
+                                                    if o['name']==bindname:
+                                                        pT=o['parentTransform']
+                                                        pT_HId=pT['HandleRefId']
+                                                        print(bindname, 'pT_HId = ',pT_HId)
+                                                        chunk_pt = 0 
+                                                        for chunk in chunks:
+                                                            if 'parentTransform' in chunk.keys():
+                                                                 if 'HandleId' in chunk['parentTransform'].keys():                                                                    
+                                                                     if chunk['parentTransform']['HandleId']==pT_HId:
+                                                                         chunk_pt=chunk['parentTransform']
+                                                                         print('HandleId found',chunk['parentTransform']['HandleId'])
+                                                        if chunk_pt:   
+                                                            print('in chunk pt processing')                                     
+                                                            bindname=chunk_pt['Data']['bindName']
+                                                            if bindname=='vehicle_slots':
+                                                                if vehicle_slots:
+                                                                    slotname=chunk_pt['Data']['slotName']
+                                                                    for slot in vehicle_slots:
+                                                                        if slot['slotName']==slotname:
+                                                                            bindname=slot['boneName']
+                                            
+                                            ######
+                                            if bindname in bones.keys():
+                                                print('bindname in bones')                                                
+                                                for obj in objs:
+                                                    print(bindname, bones[bindname].head)
+                                                    obj['bindname']=bindname
+                                                    pt_trans=bones[bindname].head
+                                                    pt_rot=bones[bindname].rotation_quaternion
+                                                    obj.location.x =  obj.location.x+pt_trans[0]
+                                                    obj.location.y = obj.location.y+pt_trans[1]                     
+                                                    obj.location.z =  obj.location.z+pt_trans[2]
+                                                    obj.rotation_quaternion.x = pt_rot[0]
+                                                    obj.rotation_quaternion.y = pt_rot[1]
+                                                    obj.rotation_quaternion.z = pt_rot[2]
+                                                    obj.rotation_quaternion.w = pt_rot[3]
+                                            
+                                                 
+
+                                        
+                                                                                
+                                    # end new stuff
+                                    
                                     x=c['localTransform']['Position']['x']['Bits']/131072
                                     y=c['localTransform']['Position']['y']['Bits']/131072
                                     z=c['localTransform']['Position']['z']['Bits']/131072
                                    
                                     for obj in objs:
                                         #print(obj.name, obj.type)
-                                        obj.location.x = x
-                                        obj.location.y = y                     
-                                        obj.location.z = z 
+                                        obj.location.x =  obj.location.x+x
+                                        obj.location.y = obj.location.y+y           
+                                        obj.location.z =  obj.location.z+z 
                                         obj.rotation_quaternion.x = c['localTransform']['Orientation']['i']
                                         obj.rotation_quaternion.y = c['localTransform']['Orientation']['j']
                                         obj.rotation_quaternion.z = c['localTransform']['Orientation']['k']
@@ -115,13 +210,43 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                             obj.scale.x = c['localTransform']['scale']['X'] 
                                             obj.scale.y = c['localTransform']['scale']['Y'] 
                                             obj.scale.z = c['localTransform']['scale']['Z'] 
+                                        if 'visualScale' in c.keys():
+                                            obj.scale.x = c['visualScale']['X'] 
+                                            obj.scale.y = c['visualScale']['Y'] 
+                                            obj.scale.z = c['visualScale']['Z']
+                                            
 
                                     move_coll= coll_scene.children.get( objs[0].users_collection[0].name )
                                     move_coll['depotPath']=c['mesh']['DepotPath']
                                     move_coll['meshAppearance']=meshApp
+                                    if bindname:
+                                        move_coll['bindname']=bindname
                                     ent_coll.children.link(move_coll) 
                                     coll_scene.children.unlink(move_coll)
                                 except:
                                     print("Failed on ",c['mesh']['DepotPath'])
         print('Exported' ,app_name)
     print("--- %s seconds ---" % (time.time() - start_time))
+
+
+
+
+# The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
+
+if __name__ == "__main__":
+
+    path = 'F:\\CPmod\\porsche\\source\\raw'
+    ent_name = 'v_sport2_porsche_911turbo__basic_01.ent'
+    # The list below needs to be the appearanceNames for each ent that you want to import 
+    # NOT the name in appearances list, expand it and its the property inside, also its name in the app file
+    appearances =['johnny']
+
+    jsonpath = glob.glob(path+"\**\*.ent.json", recursive = True)
+    if len(jsonpath)==0:
+        print('No jsons found')
+        
+    for i,e in enumerate(jsonpath):
+        if os.path.basename(e)== ent_name+'.json' :
+            filepath=e
+            
+    importEnt( filepath, appearances )
