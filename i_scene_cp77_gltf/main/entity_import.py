@@ -22,9 +22,9 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
         j=json.load(f) 
         
     ent_apps= j['Data']['RootChunk']['appearances']
-    if  j['Data']['RootChunk']['components'][0]['name']=='vehicle_slots':
-        vehicle_slots= j['Data']['RootChunk']['components'][0]['slots']
-
+    
+    vehicle_slots=[x for x in j['Data']['RootChunk']['components'] if x['name']=='vehicle_slots'][0]['slots']
+    
     # if no apps requested populate the list with all available.
     if len(appearances[0])==0:
         for app in ent_apps:
@@ -48,13 +48,13 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
             arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
             rig=arms[0]
             bones=rig.pose.bones
-            print('rig loaded')
+            print('anim rig loaded')
             
     rigjsons = glob.glob(path+"\**\*.rig.json", recursive = True)
     if len(rigjsons)>0:
             with open(rigjsons[0],'r') as f: 
                 rig_j=json.load(f)['Data']['RootChunk']
-                print('rig loaded')
+                print('rig json loaded')
                 
     if len(meshes)<1 or len(app_path)<1:
         print("You need to export the meshes and convert app and ent to json")
@@ -130,7 +130,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                     print('pT_HId = ',pT_HId)
                                     chunk_pt = 0 
                                     for chunk in chunks:
-                                        if 'parentTransform' in chunk.keys():
+                                        if 'parentTransform' in chunk.keys() and isinstance( chunk['parentTransform'], dict):
                                              #print('pt found')
                                              if 'HandleId' in chunk['parentTransform'].keys():
                                                 
@@ -154,6 +154,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                         if bindname and bones:
                                             print('bindname and bones')
                                             if bindname not in bones.keys():
+                                                print('bindname ',bindname, ' not in boneNames')
                                                 # if bindname isnt in the bones then its a part thats already bound to a bone, find it and work out what the transform is
                                                 for o in comps:
                                                     if o['name']==bindname:
@@ -162,7 +163,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                                         print(bindname, 'pT_HId = ',pT_HId)
                                                         chunk_pt = 0 
                                                         for chunk in chunks:
-                                                            if 'parentTransform' in chunk.keys():
+                                                            if 'parentTransform' in chunk.keys() and isinstance( chunk['parentTransform'], dict):
                                                                  if 'HandleId' in chunk['parentTransform'].keys():                                                                    
                                                                      if chunk['parentTransform']['HandleId']==pT_HId:
                                                                          chunk_pt=chunk['parentTransform']
@@ -251,11 +252,11 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
 
 if __name__ == "__main__":
 
-    path = 'F:\\CPmod\\porsche\\source\\raw'
-    ent_name = 'v_sport2_porsche_911turbo__basic_01.ent'
+    path = 'D:\\temp\\quadra\\source\\raw'
+    ent_name = 'v_sport1_quadra_turbo__basic_01.ent'
     # The list below needs to be the appearanceNames for each ent that you want to import 
     # NOT the name in appearances list, expand it and its the property inside, also its name in the app file
-    appearances =['johnny']
+    appearances =['tygerclaws_05']
 
     jsonpath = glob.glob(path+"\**\*.ent.json", recursive = True)
     if len(jsonpath)==0:
