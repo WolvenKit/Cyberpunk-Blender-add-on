@@ -218,10 +218,10 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                         obj.location.y = obj.location.y+y           
                                         obj.location.z =  obj.location.z+z 
                                         if not bindname:
-                                        obj.rotation_quaternion.x = c['localTransform']['Orientation']['i']
-                                        obj.rotation_quaternion.y = c['localTransform']['Orientation']['j']
-                                        obj.rotation_quaternion.z = c['localTransform']['Orientation']['k']
-                                        obj.rotation_quaternion.w = c['localTransform']['Orientation']['r']
+                                            obj.rotation_quaternion.x = c['localTransform']['Orientation']['i']
+                                            obj.rotation_quaternion.y = c['localTransform']['Orientation']['j']
+                                            obj.rotation_quaternion.z = c['localTransform']['Orientation']['k']
+                                            obj.rotation_quaternion.w = c['localTransform']['Orientation']['r']
                                         if 'scale' in c['localTransform'].keys():    
                                             obj.scale.x = c['localTransform']['scale']['X'] 
                                             obj.scale.y = c['localTransform']['scale']['Y'] 
