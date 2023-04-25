@@ -23,7 +23,12 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
         
     ent_apps= j['Data']['RootChunk']['appearances']
     
-    vehicle_slots=[x for x in j['Data']['RootChunk']['components'] if x['name']=='vehicle_slots'][0]['slots']
+    VS=[]
+    for x in j['Data']['RootChunk']['components']:
+        if 'name' in x.keys() and x['name']=='vehicle_slots':
+            VS.append(x)
+        if len(VS)>0:
+            vehicle_slots= VS[0]['slots']
     
     # if no apps requested populate the list with all available.
     if len(appearances[0])==0:
