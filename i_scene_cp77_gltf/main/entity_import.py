@@ -201,6 +201,12 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                                     obj.rotation_quaternion.y = btrans['Rotation']['j'] 
                                                     obj.rotation_quaternion.z = btrans['Rotation']['k'] 
                                                     obj.rotation_quaternion.w = btrans['Rotation']['r']
+                                                    
+                                                    co=obj.constraints.new(type='CHILD_OF')
+                                                    co.target=rig
+                                                    co.subtarget= bindname
+                                                    bpy.context.view_layer.objects.active = obj
+                                                    bpy.ops.constraint.childof_set_inverse(constraint="Child Of", owner='OBJECT')
                                                         
                                             
                                                  
