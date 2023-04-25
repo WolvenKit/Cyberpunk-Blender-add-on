@@ -40,7 +40,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
     if len(meshes)==0:
         print('No Meshes found in path')
 
-    # find the rig jsons
+    # find the anims
     rigs = glob.glob(path+"\\base\\animations"+"\**\*.glb", recursive = True)
     if len(rigs)>0:
             oldarms= [x for x in bpy.data.objects if 'Armature' in x.name]
@@ -49,7 +49,13 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
             rig=arms[0]
             bones=rig.pose.bones
             print('rig loaded')
-
+            
+    rigjsons = glob.glob(path+"\**\*.rig.json", recursive = True)
+    if len(rigjsons)>0:
+            with open(rigjsons[0],'r') as f: 
+                rig_j=json.load(f)['Data']['RootChunk']
+                print('rig loaded')
+                
     if len(meshes)<1 or len(app_path)<1:
         print("You need to export the meshes and convert app and ent to json")
 
@@ -173,7 +179,14 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                             
                                             ######
                                             if bindname in bones.keys():
-                                                print('bindname in bones')                                                
+                                                print('bindname in bones')
+                                                bidx=0
+                                                for bid, b in enumerate(rig_j['boneNames']):
+                                                    if b==bindname:
+                                                        bidx=bid
+                                                        print('bone found - ',bidx)                                                
+                                                btrans=rig_j['boneTransforms'][bidx]
+                                                
                                                 for obj in objs:
                                                     print(bindname, bones[bindname].head)
                                                     obj['bindname']=bindname
@@ -182,10 +195,12 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                                     obj.location.x =  obj.location.x+pt_trans[0]
                                                     obj.location.y = obj.location.y+pt_trans[1]                     
                                                     obj.location.z =  obj.location.z+pt_trans[2]
-                                                    obj.rotation_quaternion.x = pt_rot[0]
-                                                    obj.rotation_quaternion.y = pt_rot[1]
-                                                    obj.rotation_quaternion.z = pt_rot[2]
-                                                    obj.rotation_quaternion.w = pt_rot[3]
+                                            
+                                                    obj.rotation_quaternion.x = btrans['Rotation']['i'] 
+                                                    obj.rotation_quaternion.y = btrans['Rotation']['j'] 
+                                                    obj.rotation_quaternion.z = btrans['Rotation']['k'] 
+                                                    obj.rotation_quaternion.w = btrans['Rotation']['r']
+                                                        
                                             
                                                  
 
@@ -202,6 +217,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                         obj.location.x =  obj.location.x+x
                                         obj.location.y = obj.location.y+y           
                                         obj.location.z =  obj.location.z+z 
+                                        if not bindname:
                                         obj.rotation_quaternion.x = c['localTransform']['Orientation']['i']
                                         obj.rotation_quaternion.y = c['localTransform']['Orientation']['j']
                                         obj.rotation_quaternion.z = c['localTransform']['Orientation']['k']
