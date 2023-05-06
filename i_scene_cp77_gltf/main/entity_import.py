@@ -27,8 +27,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
     for x in j['Data']['RootChunk']['components']:
         if 'name' in x.keys() and x['name']=='vehicle_slots':
             VS.append(x)
-        if len(VS)>0:
-            vehicle_slots= VS[0]['slots']
+    if len(VS)>0:
+        vehicle_slots= VS[0]['slots']
     
     # if no apps requested populate the list with all available.
     if len(appearances[0])==0:
@@ -54,12 +54,16 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
             rig=arms[0]
             bones=rig.pose.bones
             print('anim rig loaded')
+    else:
+        print('no anim rig found')
             
     rigjsons = glob.glob(path+"\**\*.rig.json", recursive = True)
     if len(rigjsons)>0:
             with open(rigjsons[0],'r') as f: 
                 rig_j=json.load(f)['Data']['RootChunk']
                 print('rig json loaded')
+    else: 
+        print('no rig json found')
                 
     if len(meshes)<1 or len(app_path)<1:
         print("You need to export the meshes and convert app and ent to json")
@@ -263,11 +267,11 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
 
 if __name__ == "__main__":
 
-    path = 'D:\\temp\\quadra\\source\\raw'
-    ent_name = 'v_sport1_quadra_turbo__basic_01.ent'
+    path = 'F:\\CPMod\\colby\\source\\raw'
+    ent_name = 'v_standard25_thorton_colby_pickup_nomad__basic_01.ent'
     # The list below needs to be the appearanceNames for each ent that you want to import 
     # NOT the name in appearances list, expand it and its the property inside, also its name in the app file
-    appearances =['tygerclaws_05']
+    appearances =['player_01']
 
     jsonpath = glob.glob(path+"\**\*.ent.json", recursive = True)
     if len(jsonpath)==0:
