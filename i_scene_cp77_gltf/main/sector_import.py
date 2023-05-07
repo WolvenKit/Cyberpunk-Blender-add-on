@@ -23,6 +23,7 @@ from mathutils import Vector, Matrix , Quaternion
 from pathlib import Path
 import time
 from pprint import pprint 
+from .setup import MaterialBuilder
 
 
 
@@ -31,17 +32,17 @@ def get_pos_whole(inst):
     pos=[0,0,0]
     if 'Position' in inst.keys():
         if 'Properties' in inst['Position'].keys():
-            pos[0] = inst['Position']['Properties']['X'] 
-            pos[1] = inst['Position']['Properties']['Y'] 
-            pos[2] = inst['Position']['Properties']['Z']           
+            pos[0] = inst['Position']['Properties']['X'] * 10
+            pos[1] = inst['Position']['Properties']['Y'] * 10
+            pos[2] = inst['Position']['Properties']['Z'] * 10          
         else:
-            pos[0] = inst['Position']['X'] 
-            pos[1] = inst['Position']['Y'] 
-            pos[2] = inst['Position']['Z'] 
+            pos[0] = inst['Position']['X'] * 10
+            pos[1] = inst['Position']['Y'] * 10
+            pos[2] = inst['Position']['Z'] * 10
     elif 'position' in inst.keys():
-        pos[0] = inst['position']['X'] 
-        pos[1] = inst['position']['Y'] 
-        pos[2] = inst['position']['Z'] 
+        pos[0] = inst['position']['X'] * 10
+        pos[1] = inst['position']['Y'] * 10
+        pos[2] = inst['position']['Z'] * 10
     return pos
 
 def add_to_list(mesh, dict):
@@ -58,27 +59,27 @@ def get_pos(inst):
     pos=[0,0,0]
     if 'Position' in inst.keys():
         if 'Properties' in inst['Position'].keys():
-            pos[0] = inst['Position']['Properties']['X'] /100
-            pos[1] = inst['Position']['Properties']['Y'] /100
-            pos[2] = inst['Position']['Properties']['Z'] /100          
+            pos[0] = inst['Position']['Properties']['X'] /10
+            pos[1] = inst['Position']['Properties']['Y'] /10
+            pos[2] = inst['Position']['Properties']['Z'] /10    
         else:
             if 'X' in inst['Position'].keys():
-                pos[0] = inst['Position']['X'] /100
-                pos[1] = inst['Position']['Y'] /100
-                pos[2] = inst['Position']['Z'] /100
+                pos[0] = inst['Position']['X'] /10
+                pos[1] = inst['Position']['Y'] /10
+                pos[2] = inst['Position']['Z'] /10
             else:
-                pos[0] = inst['Position']['x'] /100
-                pos[1] = inst['Position']['y'] /100
-                pos[2] = inst['Position']['z'] /100
+                pos[0] = inst['Position']['x'] /10
+                pos[1] = inst['Position']['y'] /10
+                pos[2] = inst['Position']['z'] /10
     elif 'position' in inst.keys():
         if 'X' in inst['position'].keys():
-                pos[0] = inst['position']['X'] /100
-                pos[1] = inst['position']['Y'] /100
-                pos[2] = inst['position']['Z'] /100
+                pos[0] = inst['position']['X'] /10
+                pos[1] = inst['position']['Y'] /10
+                pos[2] = inst['position']['Z'] /10
     elif 'translation' in inst.keys():
-        pos[0] = inst['translation']['X'] /100
-        pos[1] = inst['translation']['Y'] /100
-        pos[2] = inst['translation']['Z'] /100
+        pos[0] = inst['translation']['X'] /10
+        pos[1] = inst['translation']['Y'] /10
+        pos[2] = inst['translation']['Z'] /10
     return pos
 
 def get_rot(inst):
@@ -115,20 +116,25 @@ def get_scale(inst):
     scale=[0,0,0]
     if 'Scale' in inst.keys():
         if 'Properties' in inst['Scale'].keys():
-            scale[0] = inst['Scale']['Properties']['X'] /100
-            scale[1] = inst['Scale']['Properties']['Y'] /100
-            scale[2] = inst['Scale']['Properties']['Z'] /100
+            scale[0] = inst['Scale']['Properties']['X'] /10
+            scale[1] = inst['Scale']['Properties']['Y'] /10
+            scale[2] = inst['Scale']['Properties']['Z'] /10
         else:
-            scale[0] = inst['Scale']['X'] /100
-            scale[1] = inst['Scale']['Y'] /100
-            scale[2] = inst['Scale']['Z'] /100
+            scale[0] = inst['Scale']['X'] /10
+            scale[1] = inst['Scale']['Y'] /10
+            scale[2] = inst['Scale']['Z'] /10
     elif 'scale' in inst.keys():
-        scale[0] = inst['scale']['X'] /100
-        scale[1] = inst['scale']['Y'] /100
-        scale[2] = inst['scale']['Z'] /100
+        scale[0] = inst['scale']['X'] /10
+        scale[1] = inst['scale']['Y'] /10
+        scale[2] = inst['scale']['Z'] /10
     return scale
 
-def importSectors( filepath='', want_collisions=False, am_modding=False ):
+def get_depotpath(path):
+    global depotpath
+    depotpath = path
+
+
+def importSectors( filepath='', want_collisions=False, am_modding=False, basepath=''):
     # Enter the path to your projects source\raw\base folder below, needs double slashes between folder names.
     path = os.path.join( os.path.dirname(filepath),'source\\raw\\base')
     print('path is ',path)
@@ -217,7 +223,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False ):
                     coll_target.children.link(move_coll) 
                     coll_scene.children.unlink(move_coll)
                 except:
-                    print('failed on ',os.path.basename(meshpath))
+                    print('\033[93m'+'failed on ',os.path.basename(meshpath)+'\033[0m')
 
 
 
@@ -277,7 +283,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False ):
                             coll_scene.children.unlink(move_coll)
                             imported=True
                         except:
-                            print('failed on ',os.path.basename(entpath))
+                            print('\033[93m'+'failed on ',os.path.basename(entpath)+'\033[0m')
                     if imported:
                         instances = [x for x in t if x['NodeIndex'] == i]
                         for idx,inst in enumerate(instances):
@@ -370,7 +376,9 @@ def importSectors( filepath='', want_collisions=False, am_modding=False ):
                     instances = [x for x in t if x['NodeIndex'] == i]
                     for idx,inst in enumerate(instances):
                         #print( inst)
-                        o = bpy.data.objects.new( "empty", None )
+                        bpy.ops.mesh.primitive_plane_add(size=1, location=(0, 0, 0))
+                        o = bpy.context.active_object
+                        #o = bpy.data.objects.new( "empty", inst )
                         o['nodeType']='worldStaticDecalNode'
                         o['nodeIndex']=i
                         o['instance_idx']=idx
@@ -378,11 +386,30 @@ def importSectors( filepath='', want_collisions=False, am_modding=False ):
                         o['debugName']=e['Data']['debugName']
                         o['sectorName']=sectorName
                         Sector_coll.objects.link(o)
+                        o.name = e['Data']['debugName']
+                        o.rotation_mode = "QUATERNION"
                         o.location = get_pos(inst)
                         o.rotation_quaternion = get_rot(inst)
                         o.scale = get_scale(inst)
-                        o.empty_display_size = 0.002
-                        o.empty_display_type = 'IMAGE'   
+                        # searching mi.json
+                        #jsonpath = glob.glob(path+"\**\*.mi.json", recursive = True)
+                        mipath = o['decal']
+                        jsonpath = path+"\\"+mipath+".json"
+                        #print(jsonpath)
+                        try:
+                            with open(jsonpath,'r') as jsonpath:
+                                obj=json.load(jsonpath)
+                            index = 0
+                            obj["Data"]["RootChunk"]['alpha'] = e['Data']['alpha']
+                            #FIXME: image_format
+                            builder = MaterialBuilder(obj,depotpath,'png')
+                            bpymat = builder.create(index)
+                            o.data.materials.append(bpymat)
+                        except FileNotFoundError:
+                            name = os.path.basename(jsonpath)
+                            print(f'File not found {name}, you need to export .mi files manually!')
+                        #o.empty_display_size = 0.002
+                        #o.empty_display_type = 'IMAGE'   
 
                 case 'XworldStaticOccluderMeshNode':
                     #print('worldStaticOccluderMeshNode',i)
@@ -409,7 +436,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False ):
                                        coll_target['glb_file']=meshname
                                        imported=True
                                     except:
-                                        print("Failed on ",meshpath)
+                                        print('\033[93m'+"Failed on ",meshpath+'\033[0m')
                                 
                                     if (imported):
                                         #print('Group found for ',groupname) 
@@ -433,7 +460,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False ):
                                                 if obj.location.x == 0:
                                                     print('Mesh - ',meshname, ' - ',i,'HandleId - ', e['HandleId'])      
                                                 curse=bpy.context.scene.cursor.location
-                                                bpy.context.scene.cursor.location=Vector((inst['Pivot']['X'] /100,inst['Pivot']['Y'] /100,inst['Pivot']['Z'] /100))
+                                                bpy.context.scene.cursor.location=Vector((inst['Pivot']['X'] /10,inst['Pivot']['Y'] /10,inst['Pivot']['Z'] /10))
                                                 with bpy.context.temp_override(selected_editable_objects=obj):
                                                     bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
                                             
@@ -442,7 +469,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False ):
                                                 obj.scale = get_scale(inst)
                                                 bpy.context.scene.cursor.location=curse  
                                     else:
-                                        print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
+                                        print('wrpmn Mesh not found - ',meshname, ' - ',i, e['HandleId'])
 
                 case 'worldStaticMeshNode' | 'worldBuildingProxyMeshNode' | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode': 
                     if isinstance(e, dict) and 'mesh' in data.keys():
@@ -450,6 +477,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False ):
                         #print('Mesh name is - ',meshname, e['HandleId'])
                         if(meshname != 0):
                                     #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
+                                    # max len of name in blender is 63
                                     groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
                                     group=Masters.children.get(groupname)
                                     if (group):
@@ -474,7 +502,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False ):
                                                 obj.rotation_quaternion = get_rot(inst)
                                                 obj.scale = get_scale(inst)
                                     else:
-                                        print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
+                                        print('wsmn Mesh not found - ',meshname, ' - ',i, e['HandleId'])
                                   
                 case 'worldInstancedDestructibleMeshNode':
                     #print('worldInstancedDestructibleMeshNode',i)
@@ -543,7 +571,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False ):
                                                     obj.matrix_local= tm   
                                                     obj.scale=get_scale(inst)
                                     else:
-                                        print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
+                                        print('widmn Mesh not found - ',meshname, ' - ',i, e['HandleId'])
                 case 'worldCollisionNode':
                 
     #   ______      _____      _                 

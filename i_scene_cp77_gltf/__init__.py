@@ -286,8 +286,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                 file = open(BasePath + ".Material.json",mode='r')
                 obj = json.loads(file.read())
                 BasePath = str(obj["MaterialRepo"])  + "\\"
-
-               
+                get_depotpath(BasePath)
                 json_apps=obj['Appearances']
                 # fix the app names as for some reason they have their index added on the end.
                 appkeys=[k for k in json_apps.keys()]
