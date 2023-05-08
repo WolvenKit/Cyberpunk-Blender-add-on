@@ -101,7 +101,7 @@ class MaterialBuilder:
                 meshDecal = MeshDecal(self.BasePath,self.image_format)
                 meshDecal.create(rawMat["Data"],bpyMat)
 
-            case "base\\materials\\glass.mt":
+            case "base\\materials\\glass.mt" | "base\\materials\\vehicle_glass.mt":
                 glass = Glass(self.BasePath,self.image_format)
                 glass.create(rawMat["Data"],bpyMat)
             
