@@ -109,11 +109,11 @@ class MaterialBuilder:
                 signages= Signages(self.BasePath,self.image_format)
                 signages.create(rawMat["Data"],bpyMat)
             
-            case "base\\materials\\glass_onesided.mt":
+            case "base\\materials\\glass_onesided.mt" | "base\\materials\\vehicle_glass_onesided.mt":
                 glass = Glass(self.BasePath,self.image_format)
                 glass.create(rawMat["Data"],bpyMat)
             
-            case "base\\materials\\mesh_decal_parallax.mt"  :
+            case "base\\materials\\mesh_decal_parallax.mt" | "base\\materials\\parallaxscreen.mt" :
                 meshDecalParallax = MeshDecalParallax(self.BasePath,self.image_format)
                 meshDecalParallax.create(rawMat["Data"],bpyMat)
                 

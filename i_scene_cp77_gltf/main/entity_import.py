@@ -1,9 +1,12 @@
 # Blender Entity import script by Simarilius
+# Updated May 23 with vehicle rig support
 import json
 import glob
 import os
 import bpy
 import time
+from math import sin,cos
+from mathutils import Vector, Matrix , Quaternion
 
 # The appearance list needs to be the appearanceNames for each ent that you want to import, will import all if not specified
 # if you've already imported the body/head and set the rig up you can exclude them by putting them in the exclude_meshes list 
@@ -44,7 +47,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
     meshes =  glob.glob(path+"\**\*.glb", recursive = True)
     if len(meshes)==0:
         print('No Meshes found in path')
-
+    mesh_jsons =  glob.glob(path+"\**\*mesh.json", recursive = True)
+    
     # find the anims
     rigs = glob.glob(path+"\\base\\animations"+"\**\*.glb", recursive = True)
     if len(rigs)>0:
@@ -132,8 +136,12 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                     objs = C.selected_objects
                                     
                                     # NEW parentTransform stuff - should fix vehicles being exploded
+                                    x=None
+                                    y=None
+                                    z=None
                                     pt_trans=[0,0,0]
                                     pt_rot=[0,0,0,0]
+                                    pt_eul=None
                                     pT=c['parentTransform']
                                     pT_HId=pT['HandleRefId']
                                     print('pT_HId = ',pT_HId)
@@ -147,7 +155,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                                      chunk_pt=chunk['parentTransform']
                                                      print('HandleId found',chunk['parentTransform']['HandleId'])
                                     if chunk_pt:   
-                                        print('in chunk pt processing')                                     
+                                        print('in chunk pt processing bindName = ',chunk_pt['Data']['bindName'],' slotname= ',chunk_pt['Data']['slotName'])                                     
                                         bindname=chunk_pt['Data']['bindName']
                                         if bindname=='vehicle_slots':
                                             if vehicle_slots:
@@ -157,7 +165,59 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                                         bindname=slot['boneName']
                                             else:
                                                 bindname= chunk_pt['Data']['slotName']
-                                                #look to see if its in te
+
+                                        # some meshes have boneRigMatrices in the mesh file, still trying to work it out, this kinda works with bikes, but blows up cars
+                                        if bindname=="deformation_rig" and not chunk_pt['Data']['slotName'] :
+                                            json_name=os.path.join(path, c['mesh']['DepotPath']+'.json')
+                                            print("in the deformation rig bit",json_name)
+                                            if json_name in mesh_jsons:
+                                                with open(mesh_jsons[mesh_jsons.index(json_name)],'r') as f: 
+                                                    mesh_j=json.load(f)['Data']['RootChunk']
+                                                
+                                                print('bindname from json ' ,mesh_j['boneNames'][0],bindname)
+                                                if 'boneRigMatrices' in mesh_j.keys():
+                                                    bm= mesh_j['boneRigMatrices'][0]
+                                                    row0=[bm['X']['X'],bm['Y']['X'],bm['Z']['X'],bm['W']['X']]
+                                                    row1=[bm['X']['Y'],bm['Y']['Y'],bm['Z']['Y'],bm['W']['Y']]
+                                                    row2=[bm['X']['Z'],bm['Y']['Z'],bm['Z']['Z'],bm['W']['Z']]
+                                                    row3=[bm['X']['W'],bm['Y']['W'],bm['Z']['W'],bm['W']['W']]
+
+                                                    matrix = Matrix()
+                                                    matrix[0]=Vector(row0)
+                                                    matrix[1]=Vector(row1)
+                                                    matrix[2]=Vector(row2)
+                                                    matrix[3]=Vector(row3)
+                                                    x = '\n'.join([''.join(['{:4.2f} '.format(item) for item in row]) for row in matrix])
+                                                    print(x)
+                                                    bones=rig.pose.bones
+                                                    bone=bones[mesh_j['boneNames'][0]]
+                                                    bone_mat_rot=bone.matrix.to_euler()
+                                                    print(bone_mat_rot)
+                                                    xdisp=0
+                                                    ydisp=0
+                                                    zdisp=0
+                                                    if abs(bone_mat_rot.y)>0.001:
+                                                        print("A")
+                                                        xdisp = -matrix[1][3]/sin(bone_mat_rot.y)
+                                                    if abs(bone_mat_rot.x)>0.001:
+                                                        print("B")
+                                                        ydisp = -matrix[1][3]/sin(bone_mat_rot.x)
+                                                        print("B2")
+                                                    if abs(bone_mat_rot.z)>0.001:  
+                                                        print("C")
+                                                        zdisp = matrix[2][3]/sin(bone_mat_rot.z)
+                                                    print(xdisp, ydisp ,zdisp)
+                                                    for obj in objs:
+                                                        print(xdisp, ydisp ,zdisp)
+                                                        obj.location.x =  obj.location.x+xdisp
+                                                        obj.location.y = obj.location.y+ydisp          
+                                                        obj.location.z =  obj.location.z+zdisp
+                                                    co=obj.constraints.new(type='CHILD_OF')
+                                                    co.target=rig
+                                                    co.subtarget= bones[mesh_j['boneNames'][0]]
+                                                    bpy.context.view_layer.objects.active = obj
+                                                    bpy.ops.constraint.childof_set_inverse(constraint="Child Of", owner='OBJECT')
+
                                         print('bindname = ',bindname)
                                         bones=rig.pose.bones
                                         if bindname and bones:
@@ -168,6 +228,9 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                                 for o in comps:
                                                     if o['name']==bindname:
                                                         pT=o['parentTransform']
+                                                        x=o['localTransform']['Position']['x']['Bits']/131072
+                                                        y=o['localTransform']['Position']['y']['Bits']/131072
+                                                        z=o['localTransform']['Position']['z']['Bits']/131072
                                                         pT_HId=pT['HandleRefId']
                                                         print(bindname, 'pT_HId = ',pT_HId)
                                                         chunk_pt = 0 
@@ -186,9 +249,9 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                                                     for slot in vehicle_slots:
                                                                         if slot['slotName']==slotname:
                                                                             bindname=slot['boneName']
-                                            
+                                                                                       
                                             ######
-                                            if bindname in bones.keys():
+                                            if bindname in bones.keys(): 
                                                 print('bindname in bones')
                                                 bidx=0
                                                 for bid, b in enumerate(rig_j['boneNames']):
@@ -202,6 +265,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                                     obj['bindname']=bindname
                                                     pt_trans=bones[bindname].head
                                                     pt_rot=bones[bindname].rotation_quaternion
+                                                    
                                                     obj.location.x =  obj.location.x+pt_trans[0]
                                                     obj.location.y = obj.location.y+pt_trans[1]                     
                                                     obj.location.z =  obj.location.z+pt_trans[2]
@@ -223,11 +287,27 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                         
                                                                                 
                                     # end new stuff
-                                    
-                                    x=c['localTransform']['Position']['x']['Bits']/131072
-                                    y=c['localTransform']['Position']['y']['Bits']/131072
-                                    z=c['localTransform']['Position']['z']['Bits']/131072
-                                   
+                                    if not x:   
+                                        x=c['localTransform']['Position']['x']['Bits']/131072
+                                    if not y: 
+                                        y=c['localTransform']['Position']['y']['Bits']/131072
+                                    if not z: 
+                                        z=c['localTransform']['Position']['z']['Bits']/131072
+                                    print ('Local transform  x= ',x,'  y= ',y,' z= ',z)
+                                    # local transforms are in the original mesh coord sys, but get applied after its already re-oriented, mainly only matters for wheels.
+                                    # this is hacky af as I cant be arsed dealing with doing it properly with quaternions or whatever right now. Feel free to fix it.
+                                    if bindname and bindname in bones.keys():
+                                        print('A')
+                                        z_ang=bones[bindname].matrix.to_euler().z
+                                        print('A2')
+                                        x_orig=x
+                                        y_orig=y
+                                        print('A3')
+                                        x=x_orig*cos(z_ang)+y_orig*sin(z_ang)
+                                        print('A')
+                                        y=x_orig*sin(z_ang)+y_orig*cos(z_ang)
+                                    print ('Local transform  x= ',x,'  y= ',y,' z= ',z)
+                                        
                                     for obj in objs:
                                         #print(obj.name, obj.type)
                                         obj.location.x =  obj.location.x+x
@@ -267,8 +347,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
 
 if __name__ == "__main__":
 
-    path = 'F:\\CPMod\\colby\\source\\raw'
-    ent_name = 'v_standard25_thorton_colby_pickup_nomad__basic_01.ent'
+    path = 'F:\\CPMod\\arch\\source\\raw'
+    ent_name = 'v_sportbike2_arch_nemesis_basic_01.ent'
     # The list below needs to be the appearanceNames for each ent that you want to import 
     # NOT the name in appearances list, expand it and its the property inside, also its name in the app file
     appearances =['player_01']
