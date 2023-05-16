@@ -115,18 +115,20 @@ class CP77EntityImport(bpy.types.Operator,ImportHelper):
                                 description="Meshes to skip during import",
                                 default="",
                                 options={'HIDDEN'})
-    
+      
     update_gi: BoolProperty(name="Update Global Illumination",default=True,description="Update Cycles global illumination options for transparency fixes and higher quality renders")
+    with_materials: BoolProperty(name="With Materials",default=True,description="Import Wolvenkit-exported materials")
+
 
     def execute(self, context):
         SetCyclesRenderer(self.update_gi)
 
         apps=self.appearances.split(",")
         print('apps - ',apps)
-        excluded=self.appearances.split(",")
+        excluded=""
         bob=self.filepath
         print('Bob - ',bob)
-        importEnt( bob, apps, excluded)
+        importEnt( bob, apps, excluded,self.with_materials)
 
         return {'FINISHED'}
 
@@ -145,11 +147,12 @@ class CP77StreamingSectorImport(bpy.types.Operator,ImportHelper):
 
     want_collisions: BoolProperty(name="Import Collisions",default=False,description="Import Box and Capsule Collision objects (mesh not yet supported)")
     am_modding: BoolProperty(name="Generate New Collectors",default=False,description="Generate _new collectors for sectors to allow modifications to be saved back to game")
-    
+    with_materials: BoolProperty(name="With Materials",default=False,description="Import Wolvenkit-exported materials")
+
     def execute(self, context):
         bob=self.filepath
         print('Importing Sectors from project - ',bob)
-        importSectors( bob, self.want_collisions, self.am_modding)
+        importSectors( bob, self.want_collisions, self.am_modding, self.with_materials)
         return {'FINISHED'}
 
 # Material Sub-panel

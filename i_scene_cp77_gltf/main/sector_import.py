@@ -128,7 +128,7 @@ def get_scale(inst):
         scale[2] = inst['scale']['Z'] /100
     return scale
 
-def importSectors( filepath='', want_collisions=False, am_modding=False ):
+def importSectors( filepath='', want_collisions=False, am_modding=False, with_materials=True ):
     # Enter the path to your projects source\raw\base folder below, needs double slashes between folder names.
     path = os.path.join( os.path.dirname(filepath),'source\\raw\\base')
     print('path is ',path)
@@ -201,7 +201,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False ):
     to_mesh_no=100000
 
     for i,m in enumerate(meshes_w_apps):
-        if i>=from_mesh_no and i<=to_mesh_no:
+        if i>=from_mesh_no and i<=to_mesh_no and m[-4:]=='mesh':
             apps=[]
             for meshApp in meshes_w_apps[m]['apps']:
                 apps.append(meshApp)
@@ -211,7 +211,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False ):
             groupname = os.path.splitext(os.path.split(meshpath)[-1])[0]
             if groupname not in Masters.children.keys():
                 try:
-                    bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=impapps, update_gi=False)
+                    bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=impapps, update_gi=False, with_materials=with_materials)
                     objs = C.selected_objects
                     move_coll= coll_scene.children.get( objs[0].users_collection[0].name )
                     coll_target.children.link(move_coll) 
@@ -275,7 +275,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False ):
                     else:
                         try:
                             print('Importing ',entpath, ' using app ',app)
-                            bpy.ops.io_scene_gltf.cp77entity(filepath=entpath, appearances=app)
+                            bpy.ops.io_scene_gltf.cp77entity(filepath=entpath, appearances=app,with_materials=with_materials)
                             objs = C.selected_objects
                             move_coll= coll_scene.children.get( ent_groupname )
                             Masters.children.link(move_coll) 
@@ -305,15 +305,26 @@ def importSectors( filepath='', want_collisions=False, am_modding=False ):
                                 for old_obj in group.all_objects:                            
                                     obj=old_obj.copy()  
                                     new.objects.link(obj)  
-                                    curse=bpy.context.scene.cursor.location
-                                    with bpy.context.temp_override(selected_editable_objects=obj):
-                                        bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
-                                    pos=get_pos(inst)
-                                    # objects may already be offset by the entity import, need to preserve that.
-                                    obj.location = (obj.location.x*.01+pos[0],obj.location.y*.01+pos[1],obj.location.z*.01+pos[2])
-                                    obj.rotation_quaternion = get_rot(inst)
-                                    obj.scale = get_scale(inst)
-                                    bpy.context.scene.cursor.location=curse 
+                                    pos =Vector(get_pos(inst))
+                                    rot=[0,0,0,0]
+                                    rot =get_rot(inst)
+                                    scale =Vector((.01,.01,.01))
+                                    rot =Quaternion(get_rot(inst))
+                                    print(rot)
+                                    modrot=Quaternion((rot[0],rot[1],-rot[2],-rot[3]))
+                                    print(modrot)
+                                    inst_trans_mat=Matrix.LocRotScale(pos,modrot,scale)
+                                    
+                                    obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
+                                    #curse=bpy.context.scene.cursor.location
+                                    #with bpy.context.temp_override(selected_editable_objects=obj):
+                                    #    bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+                                    #pos=get_pos(inst)
+                                 # objects may already be offset by the entity import, need to preserve that.
+                                    #obj.location = (obj.location.x*.01+pos[0],obj.location.y*.01+pos[1],obj.location.z*.01+pos[2])
+                                    #obj.rotation_quaternion = get_rot(inst)
+                                    #obj.scale = get_scale(inst)
+                                    #bpy.context.scene.cursor.location=curse 
 
  
                 case 'worldInstancedMeshNode' :
