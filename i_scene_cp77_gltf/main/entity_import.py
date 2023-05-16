@@ -142,7 +142,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                         meshpath=os.path.join(path, c['mesh']['DepotPath'][:-4]+'glb')
                         if meshname not in exclude_meshes:      
                             if os.path.exists(meshpath):
-                                try:
+                                if True:
+                                #try:
                                     meshApp='default'
                                     if 'meshAppearance' in c.keys():
                                         meshApp=c['meshAppearance']
@@ -153,16 +154,6 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                         print('import threw an error')
                                         continue
                                     objs = C.selected_objects
-                                    # New chunkMask reading 
-                                    # convert the value to a list of bools, then apply those statuses to the submeshes.
-                                    if 'chunkMask' in c.keys():
-                                        bin_str = bin(c['chunkMask'])[2:]
-                                        cm_list = [bool(int(bit)) for bit in bin_str]
-                                        cm_list.reverse()
-                                        for obj in objs:
-                                            subnum=int(obj.name[8:10])
-                                            obj.hide_viewport=not cm_list[subnum]
-                                            obj.hide_set(not cm_list[subnum])
                                     
                                     # NEW parentTransform stuff - fixes vehicles being exploded
                                     x=None
@@ -250,9 +241,10 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                                             obj.location.y = obj.location.y+ydisp          
                                                             obj.location.z =  obj.location.z+zdisp
                                                             # Apply child of constraints to them and set the inverse
+                                                           
                                                             co=obj.constraints.new(type='CHILD_OF')
                                                             co.target=rig
-                                                            co.subtarget= bones[mesh_j['boneNames'][0]]
+                                                            co.subtarget= mesh_j['boneNames'][0]
                                                             bpy.context.view_layer.objects.active = obj
                                                             bpy.ops.constraint.childof_set_inverse(constraint="Child Of", owner='OBJECT')
 
@@ -338,14 +330,14 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                         y_orig=y
                                         x=x_orig*cos(z_ang)+y_orig*sin(z_ang)
                                         y=x_orig*sin(z_ang)+y_orig*cos(z_ang)
-                                    #print ('Local transform  x= ',x,'  y= ',y,' z= ',z)
+                                        print ('Local transform  x= ',x,'  y= ',y,' z= ',z)
                                         
                                     for obj in objs:
                                         #print(obj.name, obj.type)
                                         obj.location.x =  obj.location.x+x
                                         obj.location.y = obj.location.y+y           
                                         obj.location.z =  obj.location.z+z 
-                                        if not bindname:
+                                        if 'Orientation' in c['localTransform'].keys() and not rig:    
                                             obj.rotation_quaternion.x = c['localTransform']['Orientation']['i']
                                             obj.rotation_quaternion.y = c['localTransform']['Orientation']['j']
                                             obj.rotation_quaternion.z = c['localTransform']['Orientation']['k']
@@ -366,8 +358,18 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                         move_coll['bindname']=bindname
                                     ent_coll.children.link(move_coll) 
                                     coll_scene.children.unlink(move_coll)
-                                except:
-                                    print("Failed on ",c['mesh']['DepotPath'])
+                                    # New chunkMask reading 
+                                    # convert the value to a list of bools, then apply those statuses to the submeshes.
+                                    if 'chunkMask' in c.keys():
+                                        bin_str = bin(c['chunkMask'])[2:]
+                                        cm_list = [bool(int(bit)) for bit in bin_str]
+                                        cm_list.reverse()
+                                        for obj in objs:
+                                            subnum=int(obj.name[8:10])
+                                            obj.hide_viewport=not cm_list[subnum]
+                                            obj.hide_set(not cm_list[subnum])
+                                #except:
+                                 #   print("Failed on ",c['mesh']['DepotPath'])
         print('Exported' ,app_name)
     print("--- %s seconds ---" % (time.time() - start_time))
 
