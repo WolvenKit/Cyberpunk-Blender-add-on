@@ -142,7 +142,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                         meshpath=os.path.join(path, c['mesh']['DepotPath'][:-4]+'glb')
                         if meshname not in exclude_meshes:      
                             if os.path.exists(meshpath):
-                                if True:
+                                #if True:
                                 try:
                                     meshApp='default'
                                     if 'meshAppearance' in c.keys():
