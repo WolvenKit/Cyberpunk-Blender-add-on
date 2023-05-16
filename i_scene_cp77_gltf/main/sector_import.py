@@ -274,9 +274,10 @@ def importSectors( filepath='', want_collisions=False, am_modding=False ):
                         imported=True
                     else:
                         try:
+                            print('Importing ',entpath, ' using app ',app)
                             bpy.ops.io_scene_gltf.cp77entity(filepath=entpath, appearances=app)
                             objs = C.selected_objects
-                            move_coll= coll_scene.children.get( os.path.basename(entpath).split('.')[0]+'_'+app )
+                            move_coll= coll_scene.children.get( ent_groupname )
                             Masters.children.link(move_coll) 
                             coll_scene.children.unlink(move_coll)
                             imported=True

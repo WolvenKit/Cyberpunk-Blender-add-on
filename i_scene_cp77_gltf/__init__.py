@@ -339,7 +339,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                                 if matname in validmats.keys():
                                     #print('matname: ',matname, validmats[matname])
                                     m=validmats[matname]
-                                    if matname in bpy_mats.keys() and matname[:5]!='Atlas' and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['GlobalNormal']==m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask']==m['MultilayerMask'] :
+                                    if matname in bpy_mats.keys() and matname[:5]!='Atlas' and 'BaseMaterial' in bpy_mats[matname].keys() and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['GlobalNormal']==m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask']==m['MultilayerMask'] :
                                         bpy.data.meshes[name].materials.append(bpy_mats[matname])
                                     elif matname in bpy_mats.keys() and matname[:5]=='Atlas' and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['DiffuseMap']==m['DiffuseMap'] :
                                         bpy.data.meshes[name].materials.append(bpy_mats[matname])
