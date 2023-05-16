@@ -11,7 +11,8 @@ from mathutils import Vector, Matrix , Quaternion
 # The appearance list needs to be the appearanceNames for each ent that you want to import, will import all if not specified
 # if you've already imported the body/head and set the rig up you can exclude them by putting them in the exclude_meshes list 
 
-def importEnt( filepath='', appearances=[], exclude_meshes=[] ): 
+def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=True): 
+    
     C = bpy.context
     coll_scene = C.scene.collection
     start_time = time.time()
@@ -20,7 +21,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
     path=before+mid
 
     ent_name=os.path.basename(filepath)[:-9]
-
+    print('Importing Entity', ent_name)
     with open(filepath,'r') as f: 
         j=json.load(f) 
         
@@ -53,6 +54,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
     rigs = glob.glob(path+"\\base\\animations"+"\**\*.glb", recursive = True)
     rig=None
     bones=None
+    chunks=None
     if len(rigs)>0:
             oldarms= [x for x in bpy.data.objects if 'Armature' in x.name]
             bpy.ops.io_scene_gltf.cp77(filepath=rigs[0])
@@ -122,6 +124,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                     if a['Data']['name']==app_name:
                         print('appearance matched, id = ',i)
                         app_idx=i
+                chunks=None
                 if 'Data' in a_j['Data']['RootChunk']['appearances'][app_idx].keys():
                     comps= a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['components']
                     if 'compiledData' in a_j['Data']['RootChunk']['appearances'][app_idx]['Data'].keys():
@@ -139,14 +142,13 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                         meshpath=os.path.join(path, c['mesh']['DepotPath'][:-4]+'glb')
                         if meshname not in exclude_meshes:      
                             if os.path.exists(meshpath):
-                                if True:
-                                #try:
+                                try:
                                     meshApp='default'
                                     if 'meshAppearance' in c.keys():
                                         meshApp=c['meshAppearance']
                                         #print(meshApp)
                                     try:
-                                        bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=meshApp)
+                                        bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=meshApp, with_materials=with_materials)
                                     except:
                                         print('import threw an error')
                                         continue
@@ -176,14 +178,15 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                         print('pT_HId = ',pT_HId)
                                         chunk_pt = 0 
                                         # find the parent transform in the chunks
-                                        for chunk in chunks:
-                                            if 'parentTransform' in chunk.keys() and isinstance( chunk['parentTransform'], dict):
-                                                 #print('pt found')
-                                                 if 'HandleId' in chunk['parentTransform'].keys():
+                                        if chunks:
+                                            for chunk in chunks:
+                                                if 'parentTransform' in chunk.keys() and isinstance( chunk['parentTransform'], dict):
+                                                     #print('pt found')
+                                                     if 'HandleId' in chunk['parentTransform'].keys():
                                                 
-                                                     if chunk['parentTransform']['HandleId']==pT_HId:
-                                                         chunk_pt=chunk['parentTransform']
-                                                         print('HandleId found',chunk['parentTransform']['HandleId'])
+                                                         if chunk['parentTransform']['HandleId']==pT_HId:
+                                                             chunk_pt=chunk['parentTransform']
+                                                             print('HandleId found',chunk['parentTransform']['HandleId'])
                                         # if we found it then process it, most chars etc will just skip this                                                     
                                         if chunk_pt:   
                                             print('in chunk pt processing bindName = ',chunk_pt['Data']['bindName'],' slotname= ',chunk_pt['Data']['slotName'])                                     
@@ -363,8 +366,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] ):
                                         move_coll['bindname']=bindname
                                     ent_coll.children.link(move_coll) 
                                     coll_scene.children.unlink(move_coll)
-                                #except:
-                                #    print("Failed on ",c['mesh']['DepotPath'])
+                                except:
+                                    print("Failed on ",c['mesh']['DepotPath'])
         print('Exported' ,app_name)
     print("--- %s seconds ---" % (time.time() - start_time))
 
