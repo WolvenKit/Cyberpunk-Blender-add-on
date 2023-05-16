@@ -311,10 +311,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     scale =Vector((.01,.01,.01))
                                     rot =Quaternion(get_rot(inst))
                                     print(rot)
-                                    modrot=Quaternion((rot[0],rot[1],-rot[2],-rot[3]))
-                                    print(modrot)
-                                    inst_trans_mat=Matrix.LocRotScale(pos,modrot,scale)
-                                    
+                                    inst_trans_mat=Matrix.LocRotScale(pos,rot,scale)
                                     obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
                                     #curse=bpy.context.scene.cursor.location
                                     #with bpy.context.temp_override(selected_editable_objects=obj):
