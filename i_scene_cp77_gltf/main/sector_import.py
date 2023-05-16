@@ -218,9 +218,13 @@ def importSectors( filepath='', want_collisions=False, am_modding=False ):
                     coll_scene.children.unlink(move_coll)
                 except:
                     print('failed on ',os.path.basename(meshpath))
-
-
-
+    empty=[]
+    for child in Masters.children:
+        if len(child.objects)<1:
+            empty.append(child)
+    
+    for failed in empty:
+        Masters.children.unlink(failed)
 
 
     for filepath in jsonpath:    
@@ -491,19 +495,20 @@ def importSectors( filepath='', want_collisions=False, am_modding=False ):
                                         #print('Glb found - ',glbfoundname)     
                                         #print('Glb found, looking for instances of ',i)
                                         instances = [x for x in t if x['NodeIndex'] == i]
-                                        for inst in instances:
-                                            #print('Inst - ',i, ' - ',meshname)
+                                        for instidx, inst in enumerate(instances):
+                                            #print('Node - ',i, ' - ',meshname)
                                             for idx in range(start, start+num):
                                                 new=bpy.data.collections.new(groupname)
                                                 Sector_coll.children.link(new)
                                                 new['nodeType']=type
-                                                new['nodeIndex']=i                                            
-                                                new['instance_idx']=idx
+                                                new['nodeIndex']=i    
+                                                new['tl_instance_idx']=instidx
+                                                new['sub_instance_idx']=idx
                                                 new['mesh']=meshname
                                                 new['debugName']=e['Data']['debugName']
                                                 new['sectorName']=sectorName  
                                                 new['pivot']=inst['Pivot']                     
-                                                new['instance_idx']=idx
+                                                
                                             
                                                 if 'Data' in data['cookedInstanceTransforms']['sharedDataBuffer'].keys():
                                                     #print(data['cookedInstanceTransforms'])
