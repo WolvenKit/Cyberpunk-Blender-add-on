@@ -302,6 +302,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                 new['entityTemplate']=os.path.basename(data['entityTemplate']['DepotPath'])
                                 new['appearanceName']=data['appearanceName']
                                 new['pivot']=inst['Pivot']
+                                if len(group.all_objects)>0:
+                                    new['matrix']=group.all_objects[0].matrix_local
                                 for old_obj in group.all_objects:                            
                                     obj=old_obj.copy()  
                                     new.objects.link(obj)  
