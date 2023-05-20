@@ -12,7 +12,7 @@ The Cyberpunk Blender add-on is designed to fully automate the shader setup for 
 1) **Blender** version 3.1 or higher
 <br>https://www.blender.org/<br/>
 
-2) **WolvenKit** version 8.7 or higher
+2) **WolvenKit** version 8.8.1 or higher
 <br>https://github.com/WolvenKit/WolvenKit<br/>
 
 ---
@@ -21,13 +21,31 @@ The Cyberpunk Blender add-on is designed to fully automate the shader setup for 
 
 The latest version of the Cyberpunk add-on requires Blender 3.1 or higher. Not all Cyberpunk shaders are currently supported by the add-on. If you're interested in adding support for a new shader please consider reaching out to us on our Discord, [Cyberpunk 2077 Modding Community.](https://discord.gg/Epkq79kd96)
 
+## Installation
+
 1) Download the .ZIP file from the [*Releases*](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/releases) section
 
 2) Install the Cyberpunk add-on for Blender by navigating within Blender to **Edit \ Preferences \ Add-ons \ Install...** and locating the downloaded .ZIP file. Be sure the add-on is enabled by marking the checkbox within the installed add-on list.
 
-3) Export a mesh with materials using WolvenKit [Learn more](https://wiki.redmodding.org/wolvenkit/wolvenkit-app/usage/blender-integration)
+3) When installed Cyberpunk options should be available under **File \ Import** and **File \ Export**
 
-4) Navigate within Blender to **File \ Import \ Cyberpunk GLTF** and select the exported gLTF/glb file. Within the import options choose the same texture format as the WolvenKit export. (PNG is default)
+## Mesh Import
+
+1) Export a mesh with materials using WolvenKit [Learn more](https://wiki.redmodding.org/wolvenkit/wolvenkit-app/usage/blender-integration)
+
+2) Navigate within Blender to **File \ Import \ Cyberpunk GLTF** and select the exported gLTF/glb file. Within the import options choose the same texture format as the WolvenKit export. (PNG is default)
+
+## Entity Import
+
+1) Convert the ent file to json and export all the meshes used using WolvenKit, a wscript to automate this is available on Discord in the wolvenkit-scripts channel.
+
+2) Navigate within Blender to **File \ Import \ Cyberpunk Entity** and select the exported json file. You can enter the appearance you want in the import options, this requires the appearanceName from the entity appearances info. Enter ALL for all appearances.
+
+## Streaming Sector Import
+
+1) Convert the streaming sectors you want to import from WolvenKit as json, and export all the meshes used using WolvenKit, a wscript to automate this is available on Discord in the wolvenkit-scripts channel.
+
+2) Navigate within Blender to **File \ Import \ Cyberpunk StreamingSectors** and select the wkit project file for the project they were added to. All sector file jsons found in the project raw folders will be imported.
 
 ---
 
