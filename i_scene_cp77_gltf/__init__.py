@@ -25,12 +25,10 @@ from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
 from .main.setup import MaterialBuilder
 from .main.entity_import import *
+from .main.attribute_import import manage_garment_support
 from .main.sector_import import *
 from bpy_extras.io_utils import ExportHelper
 from io_scene_gltf2.blender.exp.gltf2_blender_gltf2_exporter import GlTF2Exporter
-from io_scene_gltf2.blender.exp import gltf2_blender_export
-from io_scene_gltf2.io.exp.gltf2_io_user_extensions import export_user_extensions
-from io_scene_gltf2.io.exp.gltf2_io_export import save_gltf
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
@@ -55,8 +53,9 @@ def SetCyclesRenderer(set_gi_params=False):
         cycles.ao_bounces_render = 1
         
 class CP77GLBExport(bpy.types.Operator, ExportHelper):
-# Doctor Presto trying to help, making a big mess :D
-# export selected meshes to GLB with normal export settings to reimport into wolvenkit
+
+    # Doctor Presto trying to help, making a big mess:
+    # export selected meshes to GLB with the correct settings for Wolvenkit import
     bl_idname = "export_scene.cp77_glb"
     bl_label = "Export for Cyberpunk"
     bl_options = {'REGISTER', 'UNDO'}
@@ -66,16 +65,20 @@ class CP77GLBExport(bpy.types.Operator, ExportHelper):
     
     def execute(self, context):
         selected_objects = context.selected_objects
- ##tried to clean everything up as much as possible, I think the light/camera bit here might be redundant as I've also set the settins to not export them.  the idea here was for it to automatically deselect them if you had them by accident              
+
+        ## I think this section might be mostly redundant 
+        ## ensure no lights or cameras are included in the GLB,            
         for obj in context.selected_objects:
             if obj.type == "LIGHT" or obj.type == "CAMERA":
                 obj.select_set(False)
+        ## make sure there are meshes selected before proceeding
         meshes = [obj for obj in selected_objects if obj.type == 'MESH']
         if not meshes:
             self.report({'ERROR'}, "No mesh selected.")
             return {'CANCELLED'}
         else:
-        #actually exporting the meshes, ensuring that tangents and armature are included, that transforms and modifiers are applied  and lights/cameras are not exported    
+
+            ## actually export the meshes, ensure that tangents and armature are included, that transforms and modifiers are applied  and lights/cameras are not exported    
             print("Exporting object:", obj.name)
                 
             bpy.ops.export_scene.gltf(
@@ -179,6 +182,7 @@ class CP77_PT_ImportWithMaterial(bpy.types.Panel):
         layout.prop(operator, 'image_format')
         layout.prop(operator, 'hide_armatures')
         layout.prop(operator, 'update_gi')
+        layout.prop(operator, 'import_garmentsupport')
 
 
 class CP77Import(bpy.types.Operator,ImportHelper):
@@ -207,6 +211,8 @@ class CP77Import(bpy.types.Operator,ImportHelper):
     hide_armatures: BoolProperty(name="Hide Armatures",default=True,description="Hide the armatures on imported meshes")
 
     update_gi: BoolProperty(name="Update Global Illumination",default=True,description="Update Cycles global illumination options for transparency fixes and higher quality renders")
+
+    import_garmentsupport: BoolProperty(name="Import Garment Support (Experimental)",default=True,description="Imports Garment Support mesh data as color attributes")
     
     filepath: StringProperty(subtype = 'FILE_PATH')
 
@@ -274,6 +280,9 @@ class CP77Import(bpy.types.Operator,ImportHelper):
             for name in bpy.data.materials.keys():
                 if name not in existingMaterials:
                     bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
+            
+            if self.import_garmentsupport:
+                manage_garment_support(existingMeshes, gltf_importer)
 
             BasePath = os.path.splitext(filepath)[0]
             #Kwek: Gate this--do the block iff corresponding Material.json exist 
@@ -383,7 +392,7 @@ def menu_func_import(self, context):
     self.layout.operator(CP77Import.bl_idname, text="Cyberpunk GLTF (.gltf/.glb)", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
     self.layout.operator(CP77EntityImport.bl_idname, text="Cyberpunk Entity (.json)", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
     self.layout.operator(CP77StreamingSectorImport.bl_idname, text="Cyberpunk StreamingSector", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
-## Doctor Presto adding the export button to the menu, the one thing I know really well :D - not sure what the button should say - export to wolvenkit?
+
 def menu_func_export(self, context):
     self.layout.operator(CP77GLBExport.bl_idname, text="Export Selection to GLB for Cyberpunk", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
     
