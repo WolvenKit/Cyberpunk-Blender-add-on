@@ -153,7 +153,9 @@ def importSectors( filepath='', want_collisions=False, am_modding=False ):
             match type:
                 case 'worldEntityNode': 
                     print('worldEntityNode',i)
-                    meshes.append({'basename':e['Data']['entityTemplate']['DepotPath'],'appearance':e['Data']['appearanceName'],'sector':sectorName})
+                    meshname = data['entityTemplate']['DepotPath'] 
+                    if(meshname != 0):
+                        meshes.append({'basename':e['Data']['entityTemplate']['DepotPath'],'appearance':e['Data']['appearanceName'],'sector':sectorName})
                 case 'worldInstancedMeshNode':
                     meshname = data['mesh']['DepotPath'] 
                     if(meshname != 0):
