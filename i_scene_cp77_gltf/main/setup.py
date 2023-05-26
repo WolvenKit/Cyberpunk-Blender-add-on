@@ -8,6 +8,7 @@ from ..material_types.skin import Skin
 from ..material_types.meshdecal import MeshDecal
 from ..material_types.meshdecaldoublediffuse import MeshDecalDoubleDiffuse
 from ..material_types.vehiclemeshdecal import VehicleMeshDecal
+from ..material_types.vehiclelights import VehicleLights
 from ..material_types.metalbase import MetalBase
 from ..material_types.hair import Hair
 from ..material_types.meshdecalgradientmaprecolor import MeshDecalGradientMapReColor
@@ -56,9 +57,13 @@ class MaterialBuilder:
                 meshDecalDoubleDiffuse = MeshDecalDoubleDiffuse(self.BasePath,self.image_format)
                 meshDecalDoubleDiffuse.create(rawMat["Data"],bpyMat)
 
-            case "base\\materials\\vehicle_mesh_decal.mt":
+            case "base\\materials\\vehicle_mesh_decal.mt" :
                 vehicleMeshDecal = VehicleMeshDecal(self.BasePath,self.image_format)
                 vehicleMeshDecal.create(rawMat["Data"],bpyMat)
+            
+            case "base\\materials\\vehicle_lights.mt":
+                vehicleLights = VehicleLights(self.BasePath,self.image_format)
+                vehicleLights.create(rawMat["Data"],bpyMat)
 
             case "base\\materials\\skin.mt":
                 skin = Skin(self.BasePath,self.image_format)
@@ -88,7 +93,7 @@ class MaterialBuilder:
                 eyeShadow = EyeShadow(self.BasePath,self.image_format)
                 eyeShadow.create(rawMat["Data"],bpyMat)
 
-            case "base\\materials\\mesh_decal_emissive.mt":
+            case "base\\materials\\mesh_decal_emissive.mt" :
                 meshDecalEmissive = MeshDecalEmissive(self.BasePath,self.image_format)
                 meshDecalEmissive.create(rawMat["Data"],bpyMat)
 
@@ -96,19 +101,19 @@ class MaterialBuilder:
                 meshDecal = MeshDecal(self.BasePath,self.image_format)
                 meshDecal.create(rawMat["Data"],bpyMat)
 
-            case "base\\materials\\glass.mt":
+            case "base\\materials\\glass.mt" | "base\\materials\\vehicle_glass.mt":
                 glass = Glass(self.BasePath,self.image_format)
                 glass.create(rawMat["Data"],bpyMat)
             
-            case "base\\fx\\shaders\\signages.mt":
+            case "base\\fx\\shaders\\signages.mt" :
                 signages= Signages(self.BasePath,self.image_format)
                 signages.create(rawMat["Data"],bpyMat)
             
-            case "base\\materials\\glass_onesided.mt":
+            case "base\\materials\\glass_onesided.mt" | "base\\materials\\vehicle_glass_onesided.mt":
                 glass = Glass(self.BasePath,self.image_format)
                 glass.create(rawMat["Data"],bpyMat)
             
-            case "base\\materials\\mesh_decal_parallax.mt":
+            case "base\\materials\\mesh_decal_parallax.mt" | "base\\materials\\parallaxscreen.mt" :
                 meshDecalParallax = MeshDecalParallax(self.BasePath,self.image_format)
                 meshDecalParallax.create(rawMat["Data"],bpyMat)
                 

@@ -16,8 +16,12 @@ class VehicleMeshDecal:
         mulNode.location = (-500,450)
         if "DiffuseTexture" in Data:
             dImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["DiffuseTexture"],-800,500,'DiffuseTexture',self.image_format)
-            CurMat.links.new(dImgNode.outputs[1],mulNode.inputs[1])
-            CurMat.links.new(mulNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
+            
+            if "enableMask" in Data and Data["enableMask"==True]:
+                CurMat.links.new(dImgNode.outputs[1],mulNode.inputs[1])
+                CurMat.links.new(mulNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
+            else:
+                CurMat.links.new(dImgNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
 
         if "DiffuseAlpha" in Data:
             mulNode.inputs[0].default_value = float(Data["DiffuseAlpha"])
