@@ -7,8 +7,7 @@ def default_cp77_options():
         'check_existing': True,
         'export_skins': True,
         'export_cameras': False,
-        'export_yup': True,
-        'export_animations': True,
+        'export_yup': True,
         'export_tangents': True,
         'export_materials': 'NONE',
         'export_all_influences': True,
@@ -23,13 +22,13 @@ def cp77_mesh_options():
     options = {
         'export_morph': True,
         'export_morph_normal': True,
-        'export_all_influences': True,
         'export_colors': True
     }
     return options
 
 def pose_export_options():
     options = {
+        'export_animations': True,
         'export_frame_range': False,
         'export_anim_single_armature': True       
     }
