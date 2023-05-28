@@ -2,13 +2,11 @@ import bpy
 
 def default_cp77_options():
     options = {
-        'export_format': 'GLB',
-        'export_normals': True,
+        'export_format': 'GLB',
         'check_existing': True,
         'export_skins': True,
         'export_cameras': False,
-        'export_yup': True,
-        'export_tangents': True,
+        'export_yup': True,
         'export_materials': 'NONE',
         'export_all_influences': True,
         'export_lights': False,
@@ -20,6 +18,8 @@ def default_cp77_options():
 
 def cp77_mesh_options():
     options = {
+        'export_tangents': True,
+        'export_normals': True,
         'export_morph': True,
         'export_morph_normal': True,
         'export_colors': True
