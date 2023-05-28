@@ -67,22 +67,24 @@ def export_cyberpunk_glb(context, filepath, export_poses):
         options.update(cp77_mesh_options())
 
     print(options)  
-    # if exporting meshes, make sure that any hidden armatures connected to those meshes are exported by making them visible, selecting them
-    hidden_armatures = []
-    for obj in objects:
-        if obj.type == 'MESH':
-            for modifier in obj.modifiers:
-                if modifier.type == 'ARMATURE' and modifier.object and modifier.object.hide_get():
-                    modifier.object.hide_set(False)
-                    modifier.object.select_set(True)
-             #add these armatures to a dictionary so we can hide them again later
-                    hidden_armatures.append(modifier.object)
+    # if exporting meshes, iterate through any attached armatures, storing their original state. if hidden, unhide them and select them for export
+armature_states = {}  # Dictionary to store original armature states
 
-    # Export the meshes to glb
-    bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
-    
-    # Restore armature visibility and selection state
-    for armature in hidden_armatures:
-        armature.select_set(False)  # Deselect the armature
-        armature.hide_set(True)  # Hide the armature
-          
+for obj in objects:
+    if obj.type == 'MESH':
+        for modifier in obj.modifiers:
+            if modifier.type == 'ARMATURE' and modifier.object and modifier.object.hide_get():
+                # Store original visibility and selection state
+                armature_states[modifier.object] = {"hide": modifier.object.hide_get(),
+                                                    "select": modifier.object.select_get()}
+                # Make necessary changes for export
+                modifier.object.hide_set(False)
+                modifier.object.select_set(True)
+
+# Export the meshes to glb
+bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
+
+# Restore original armature visibility and selection state
+for armature, state in armature_states.items():
+    armature.select_set(state["select"])  # Restore original selection state
+    armature.hide_set(state["hide"]) 
