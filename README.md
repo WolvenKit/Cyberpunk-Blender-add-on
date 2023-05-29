@@ -47,7 +47,7 @@ The latest version of the Cyberpunk add-on requires Blender 3.1 or higher. Not a
 
 2) Navigate within Blender to **File \ Import \ Cyberpunk StreamingSectors** and select the wkit project file for the project they were added to. All sector file jsons found in the project raw folders will be imported.
 
-## Meshes Export
+## Mesh Export as GLB
 
 1) Follow the steps above to import and edit your meshes.
 2) Select the mesh you want to export
@@ -57,8 +57,9 @@ The latest version of the Cyberpunk add-on requires Blender 3.1 or higher. Not a
 
 The plugin will automatically apply the correct settings to ensure your mesh imports back into Wolvenkit for use with your mod.
 
-## Export Animations For Photomode Poses
+## Export Animations For Photomode
 **Should work for all types of animation 
+
 1) Follow the community guides in order to import your anims to Blender and make the necessary edits
 2) Select the armature which contains the animations you'd like to export
 3) Navigate within Blender to **File \ Export \ Export Selection to GLB for Cyberpunk
