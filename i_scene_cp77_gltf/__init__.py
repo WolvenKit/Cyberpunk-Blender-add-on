@@ -52,7 +52,7 @@ def SetCyclesRenderer(set_gi_params=False):
         cycles.ao_bounces = 1
         cycles.ao_bounces_render = 1
 
-## adds a message box fpr the exporters to use for error notifications, will also be used later for redmod integration    
+## adds a message box for the exporters to use for error notifications, will also be used later for redmod integration    
 class ShowMessageBox(bpy.types.Operator):
     bl_idname = "cp77.message_box"
     bl_label = "Message"
