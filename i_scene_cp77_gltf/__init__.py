@@ -1,10 +1,10 @@
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
-    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius",
+    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, The Magnificent Doctor Presto",
     "version": (1, 2, 0),
     "blender": (3, 1, 0),
     "location": "File > Import-Export",
-    "description": "Import/Export WolvenKit Cyberpunk2077 gLTF models, Import only of materials, .streamingsector and .ent assets",
+    "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
     "warning": "",
     "category": "Import-Export",
 }
