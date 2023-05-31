@@ -1,10 +1,10 @@
 bl_info = {
-    "name": "Cyberpunk 2077 glTF Importer",
-    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius",
+    "name": "Cyberpunk 2077 IO Suite",
+    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, The Magnificent Doctor Presto",
     "version": (1, 2, 0),
     "blender": (3, 1, 0),
     "location": "File > Import-Export",
-    "description": "Import WolvenKit Cyberpunk2077 glTF Models With Materials",
+    "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
     "warning": "",
     "category": "Import-Export",
 }
@@ -28,7 +28,7 @@ from .main.entity_import import *
 from .main.attribute_import import manage_garment_support
 from .main.sector_import import *
 from bpy_extras.io_utils import ExportHelper
-from io_scene_gltf2.blender.exp.gltf2_blender_gltf2_exporter import GlTF2Exporter
+from .main.exporters import *
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
@@ -51,51 +51,45 @@ def SetCyclesRenderer(set_gi_params=False):
         cycles.use_fast_gi = False
         cycles.ao_bounces = 1
         cycles.ao_bounces_render = 1
-        
-class CP77GLBExport(bpy.types.Operator, ExportHelper):
 
-    # Doctor Presto trying to help, making a big mess:
-    # export selected meshes to GLB with the correct settings for Wolvenkit import
+## adds a message box fpr the exporters to use for error notifications, will also be used later for redmod integration    
+class ShowMessageBox(bpy.types.Operator):
+    bl_idname = "cp77.message_box"
+    bl_label = "Message"
+
+    message: bpy.props.StringProperty(default="")
+
+    def execute(self, context):
+        self.report({'INFO'}, self.message)
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self, width=300)
+
+    def draw(self, context):
+        self.layout.label(text=self.message)           
+        
+class CP77GLBExport(bpy.types.Operator,ExportHelper):
+  ### cleaned this up and moved most code to exporters.py
     bl_idname = "export_scene.cp77_glb"
     bl_label = "Export for Cyberpunk"
-    bl_options = {'REGISTER', 'UNDO'}
+    bl_options = {'REGISTER','UNDO'}
     filename_ext = ".glb"
-    
-    filter_glob: bpy.props.StringProperty(default="*.glb", options={'HIDDEN'})
-    
+   ### adds a checkbox for anim export settings
+    filter_glob: StringProperty(default="*.glb", options={'HIDDEN'})
+    export_poses: BoolProperty(
+        name="As Photomode Pose",
+        default=False,
+        description="Use this option if you are exporting anims to be imported into wkit as .anim"
+    )
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, "export_poses")
+        
     def execute(self, context):
-        selected_objects = context.selected_objects
+        export_cyberpunk_glb(context, self.filepath, self.export_poses)
+        return {'FINISHED'}
 
-        ## I think this section might be mostly redundant 
-        ## ensure no lights or cameras are included in the GLB,            
-        for obj in context.selected_objects:
-            if obj.type == "LIGHT" or obj.type == "CAMERA":
-                obj.select_set(False)
-        ## make sure there are meshes selected before proceeding
-        meshes = [obj for obj in selected_objects if obj.type == 'MESH']
-        if not meshes:
-            self.report({'ERROR'}, "No mesh selected.")
-            return {'CANCELLED'}
-        else:
-
-            ## actually export the meshes, ensure that tangents and armature are included, that transforms and modifiers are applied  and lights/cameras are not exported    
-            print("Exporting object:", obj.name)
-                
-            bpy.ops.export_scene.gltf(
-            filepath = os.path.join(self.filepath),
-            check_existing=True,
-            export_skins=True,
-            export_cameras = False, 
-            use_selection=True,
-            export_yup=True,
-            export_animations=True,
-            export_apply=True,
-            export_tangents=True, 
-            export_materials='NONE',
-            export_morph_tangent=True)
-            print("Export complete.")
-            
-            return {'FINISHED'}
 
 class CP77EntityImport(bpy.types.Operator,ImportHelper):
 
@@ -403,6 +397,7 @@ classes = (
     CP77_PT_ImportWithMaterial,
     CP77StreamingSectorImport,
     CP77GLBExport,
+    ShowMessageBox,
 )
 
 def register():
