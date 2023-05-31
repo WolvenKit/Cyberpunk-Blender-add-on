@@ -1,5 +1,5 @@
 import bpy
-
+#setup the default options to be applied to all export types
 def default_cp77_options():
     options = {
         'export_format': 'GLB',
@@ -10,22 +10,22 @@ def default_cp77_options():
         'export_materials': 'NONE',
         'export_all_influences': True,
         'export_lights': False,
-        'export_morph_tangent': True,
-        'export_morph_normal': True,
         'export_apply': False
     }
     return options
-
+#make sure meshes are exported with tangents, morphs and vertex colors
 def cp77_mesh_options():
     options = {
         'export_tangents': True,
         'export_normals': True,
+        'export_morph_tangent': True,
+        'export_morph_normal': True,
         'export_morph': True,
         'export_morph_normal': True,
         'export_colors': True
     }
     return options
-
+#the options for anims
 def pose_export_options():
     options = {
         'export_animations': True,
@@ -33,7 +33,7 @@ def pose_export_options():
         'export_anim_single_armature': True       
     }
     return options
-
+#setup the actual exporter - rewrote almost all of this, much quicker now
 def export_cyberpunk_glb(context, filepath, export_poses):
     # Retrieve the selected objects
     objects = context.selected_objects
@@ -50,6 +50,7 @@ def export_cyberpunk_glb(context, filepath, export_poses):
         #if export_poses option isn't used, check to make sure there are meshes selected and throw an error if not
         meshes = [obj for obj in objects if obj.type == 'MESH']
         if not meshes:
+            #throw an error in the message box if you haven't selected a mesh to export
             bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="No meshes selected, please select at least one mesh")
             return {'CANCELLED'}
         #check that meshes include UVs and have less than 65000 verts, throw an error if not
@@ -66,7 +67,7 @@ def export_cyberpunk_glb(context, filepath, export_poses):
         options.update(cp77_mesh_options())
 
     print(options)  
-    # if exporting meshes, iterate through any attached armatures, storing their original state. if hidden, unhide them and select them for export
+    # if exporting meshes, iterate through any connected armatures, store their currebt state. if hidden, unhide them and select them for export
     armature_states = {}  
 
     for obj in objects:
@@ -83,7 +84,7 @@ def export_cyberpunk_glb(context, filepath, export_poses):
     # Export the meshes to glb
     bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
 
-    # Restore original armature visibility and selection state
+    # Restore original armature visibility and selection states
     for armature, state in armature_states.items():
-        armature.select_set(state["select"])  # Restore original selection state
+        armature.select_set(state["select"])
         armature.hide_set(state["hide"]) 
