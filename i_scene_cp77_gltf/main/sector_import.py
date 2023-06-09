@@ -146,13 +146,13 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
         sectorName=os.path.basename(filepath)[:-5]
         t=j['Data']['RootChunk']['nodeData']['Data']
         nodes = j["Data"]["RootChunk"]["nodes"]
-        print(len(nodes))
+        #print(len(nodes))
         for i,e in enumerate(nodes):
             data = e['Data']
             type = data['$type']
             match type:
                 case 'worldEntityNode': 
-                    print('worldEntityNode',i)
+                    #print('worldEntityNode',i)
                     meshname = data['entityTemplate']['DepotPath'] 
                     if(meshname != 0):
                         meshes.append({'basename':e['Data']['entityTemplate']['DepotPath'],'appearance':e['Data']['appearanceName'],'sector':sectorName})
@@ -229,7 +229,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
         Masters.children.unlink(failed)
 
 
-    for filepath in jsonpath:    
+    for fpn,filepath in enumerate(jsonpath):    
         with open(filepath,'r') as f: 
               j=json.load(f) 
           
@@ -256,11 +256,12 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
         meshnames = [ os.path.splitext(x)[0]+".mesh" for x in glbnames]
 
         nodes = j["Data"]["RootChunk"]["nodes"]
-        print('Processing ',len(nodes),' nodes for sector', sectorName)
+        print(fpn, ' Processing ',len(nodes),' nodes for sector', sectorName)
         group=''
         for i,e in enumerate(nodes):
     
-            #if i > 2: break
+            #if i % 20==0: 
+            #   continue
             data = e['Data']
             type = data['$type']
 
@@ -284,7 +285,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                             coll_scene.children.unlink(move_coll)
                             imported=True
                         except:
-                            print('failed on ',os.path.basename(entpath))
+                            print('Failed during Entity import on ',os.path.basename(entpath))
                     if imported:
                         instances = [x for x in t if x['NodeIndex'] == i]
                         for idx,inst in enumerate(instances):
@@ -314,7 +315,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     rot =get_rot(inst)
                                     scale =Vector((.01,.01,.01))
                                     rot =Quaternion(get_rot(inst))
-                                    print(rot)
+                                    #print(rot)
                                     inst_trans_mat=Matrix.LocRotScale(pos,rot,scale)
                                     obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
                                     #curse=bpy.context.scene.cursor.location
@@ -382,7 +383,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     #print('worldInstancedOccluderNode')
                     pass
                 case 'worldStaticDecalNode':
-                    print('worldStaticDecalNode')
+                    #print('worldStaticDecalNode')
                     # decals are imported as planes tagged with the material details so you can see what they are and move them.
                     instances = [x for x in t if x['NodeIndex'] == i]
                     for idx,inst in enumerate(instances):
@@ -628,8 +629,18 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                         
             
                 case _:
-                    print('None of the above',i)
+                    #print('None of the above',i)
                     pass
 
         print('Finished with ',filepath)
     print('Finished Importing Sectors')
+
+
+
+# The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
+
+if __name__ == "__main__":
+
+    filepath = 'F:\\CPMod\\thatMassiveSector\\thatMassiveSector.cpmodproj'
+
+    importSectors( filepath, want_collisions=False, am_modding=False, with_materials=True )        

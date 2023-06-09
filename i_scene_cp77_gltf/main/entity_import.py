@@ -120,7 +120,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                 app_idx=0
                 apps=a_j['Data']['RootChunk']['appearances']
                 for i,a in enumerate(apps):
-                    print(i,a['Data']['name'])
+                    #print(i,a['Data']['name'])
                     if a['Data']['name']==app_name:
                         print('appearance matched, id = ',i)
                         app_idx=i
@@ -166,7 +166,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                     pT=c['parentTransform']
                                     if pT:
                                         pT_HId=pT['HandleRefId']
-                                        print('pT_HId = ',pT_HId)
+                                        #print('pT_HId = ',pT_HId)
                                         chunk_pt = 0 
                                         # find the parent transform in the chunks
                                         if chunks:
@@ -177,10 +177,10 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                                 
                                                          if chunk['parentTransform']['HandleId']==pT_HId:
                                                              chunk_pt=chunk['parentTransform']
-                                                             print('HandleId found',chunk['parentTransform']['HandleId'])
+                                                             #print('HandleId found',chunk['parentTransform']['HandleId'])
                                         # if we found it then process it, most chars etc will just skip this                                                     
                                         if chunk_pt:   
-                                            print('in chunk pt processing bindName = ',chunk_pt['Data']['bindName'],' slotname= ',chunk_pt['Data']['slotName'])                                     
+                                            #print('in chunk pt processing bindName = ',chunk_pt['Data']['bindName'],' slotname= ',chunk_pt['Data']['slotName'])                                     
                                             # parts have a bindname, and sometimes a slotname
                                             bindname=chunk_pt['Data']['bindName']
                                             # if it has a bindname of vehicle_slots, you may need to find the bone name in the vehicle slots in the root ent components
@@ -197,12 +197,12 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                             # some meshes have boneRigMatrices in the mesh file which means we need jsons for the meshes or we cant access it. oh joy
                                             if bindname=="deformation_rig" and not chunk_pt['Data']['slotName'] :
                                                 json_name=os.path.join(path, c['mesh']['DepotPath']+'.json')
-                                                print("in the deformation rig bit",json_name)
+                                                #print("in the deformation rig bit",json_name)
                                                 if json_name in mesh_jsons:
                                                     with open(mesh_jsons[mesh_jsons.index(json_name)],'r') as f: 
                                                         mesh_j=json.load(f)['Data']['RootChunk']
                                                 
-                                                    print('bindname from json ' ,mesh_j['boneNames'][0],bindname)
+                                                    #print('bindname from json ' ,mesh_j['boneNames'][0],bindname)
                                                     if 'boneRigMatrices' in mesh_j.keys():
                                                         bm= mesh_j['boneRigMatrices'][0]
                                                         row0=[bm['X']['X'],bm['Y']['X'],bm['Z']['X'],bm['W']['X']]
@@ -222,7 +222,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                                         bone=bones[mesh_j['boneNames'][0]]
                                                         # the transform matrix above is in the orientation of the bone that its linked to, so I'm doing a bodged job of correcting for that here.
                                                         bone_mat_rot=bone.matrix.to_euler()
-                                                        print(bone_mat_rot)
+                                                        #print(bone_mat_rot)
                                                         xdisp=0
                                                         ydisp=0
                                                         zdisp=0
@@ -236,7 +236,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                                         #print(xdisp, ydisp ,zdisp)
                                                         # now we have the displacements. move things
                                                         for obj in objs:
-                                                            print(xdisp, ydisp ,zdisp)
+                                                            #print(xdisp, ydisp ,zdisp)
                                                             obj.location.x =  obj.location.x+xdisp
                                                             obj.location.y = obj.location.y+ydisp          
                                                             obj.location.z =  obj.location.z+zdisp
@@ -248,13 +248,13 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                                             bpy.context.view_layer.objects.active = obj
                                                             bpy.ops.constraint.childof_set_inverse(constraint="Child Of", owner='OBJECT')
 
-                                            print('bindname = ',bindname)
+                                            #print('bindname = ',bindname)
                                             if rig:
                                                 bones=rig.pose.bones
                                             if bindname and bones:
-                                                print('bindname and bones')
+                                                #print('bindname and bones')
                                                 if bindname not in bones.keys():
-                                                    print('bindname ',bindname, ' not in boneNames')
+                                                    #print('bindname ',bindname, ' not in boneNames')
                                                     # if bindname isnt in the bones then its a part thats already bound to a bone, 
                                                     # These inherit the parent and local transforms from the other part, find it and work out what the transform is
                                                     for o in comps:
@@ -264,16 +264,16 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                                             y=o['localTransform']['Position']['y']['Bits']/131072
                                                             z=o['localTransform']['Position']['z']['Bits']/131072
                                                             pT_HId=pT['HandleRefId']
-                                                            print(bindname, 'pT_HId = ',pT_HId)
+                                                            #print(bindname, 'pT_HId = ',pT_HId)
                                                             chunk_pt = 0 
                                                             for chunk in chunks:
                                                                 if 'parentTransform' in chunk.keys() and isinstance( chunk['parentTransform'], dict):
                                                                      if 'HandleId' in chunk['parentTransform'].keys():                                                                    
                                                                          if chunk['parentTransform']['HandleId']==pT_HId:
                                                                              chunk_pt=chunk['parentTransform']
-                                                                             print('HandleId found',chunk['parentTransform']['HandleId'])
+                                                                             #print('HandleId found',chunk['parentTransform']['HandleId'])
                                                             if chunk_pt:   
-                                                                print('in chunk pt processing')                                     
+                                                                #print('in chunk pt processing')                                     
                                                                 bindname=chunk_pt['Data']['bindName']
                                                                 if bindname=='vehicle_slots':
                                                                     if vehicle_slots:
@@ -284,16 +284,16 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                                                                        
                                                 ######
                                                 if bindname in bones.keys(): 
-                                                    print('bindname in bones')
+                                                    #print('bindname in bones')
                                                     bidx=0
                                                     for bid, b in enumerate(rig_j['boneNames']):
                                                         if b==bindname:
                                                             bidx=bid
-                                                            print('bone found - ',bidx)                                                
+                                                            #print('bone found - ',bidx)                                                
                                                     btrans=rig_j['boneTransforms'][bidx]
                                                 
                                                     for obj in objs:
-                                                        print(bindname, bones[bindname].head)
+                                                        #print(bindname, bones[bindname].head)
                                                         obj['bindname']=bindname
                                                         pt_trans=bones[bindname].head
                                                         pt_rot=bones[bindname].rotation_quaternion
@@ -330,7 +330,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                         y_orig=y
                                         x=x_orig*cos(z_ang)+y_orig*sin(z_ang)
                                         y=x_orig*sin(z_ang)+y_orig*cos(z_ang)
-                                        print ('Local transform  x= ',x,'  y= ',y,' z= ',z)
+                                        #print ('Local transform  x= ',x,'  y= ',y,' z= ',z)
                                         
                                     for obj in objs:
                                         #print(obj.name, obj.type)
@@ -360,14 +360,19 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                     coll_scene.children.unlink(move_coll)
                                     # New chunkMask reading 
                                     # convert the value to a list of bools, then apply those statuses to the submeshes.
-                                    if 'chunkMask' in c.keys():
-                                        bin_str = bin(c['chunkMask'])[2:]
+                                    if 'chunkMask' in c.keys():       
+                                        cm= c['chunkMask']                              
+                                        if isinstance(cm,str):
+                                            bin_str = bin(int(cm))[2:]
+                                        else:
+                                            bin_str = bin(cm)[2:]
                                         cm_list = [bool(int(bit)) for bit in bin_str]
                                         cm_list.reverse()
                                         for obj in objs:
                                             subnum=int(obj.name[8:10])
                                             obj.hide_viewport=not cm_list[subnum]
                                             obj.hide_set(not cm_list[subnum])
+                                #else:
                                 except:
                                     print("Failed on ",c['mesh']['DepotPath'])
         print('Exported' ,app_name)
@@ -380,11 +385,11 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
 
 if __name__ == "__main__":
 
-    path = 'F:\\CPMod\\arch\\source\\raw'
-    ent_name = 'v_sportbike2_arch_nemesis_basic_01.ent'
+    path = 'F:\\CPmod\\heist_hotel\\source\\raw'
+    ent_name = 'single_door.ent'
     # The list below needs to be the appearanceNames for each ent that you want to import 
     # NOT the name in appearances list, expand it and its the property inside, also its name in the app file
-    appearances =['player_01']
+    appearances =['kitsch_f']
 
     jsonpath = glob.glob(path+"\**\*.ent.json", recursive = True)
     if len(jsonpath)==0:
