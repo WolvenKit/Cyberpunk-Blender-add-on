@@ -63,6 +63,11 @@ def export_cyberpunk_glb(context, filepath, export_poses):
                 if len(submesh.vertices) > 65000:
                     bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Each submesh must have less than 65,000 vertices")
                     return {'CANCELLED'}
+                            #check that faces are triangulated, if not cancel and throw an error    
+            for face in mesh.data.polygons:
+                if len(face.vertices) != 3:
+                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="All faces must be triangulated")
+                    return {'CANCELLED'}
         #use the right options for exporting a mesh
         options = default_cp77_options()
         options.update(cp77_mesh_options())
