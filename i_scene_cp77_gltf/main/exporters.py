@@ -16,6 +16,7 @@ def default_cp77_options():
 #make sure meshes are exported with tangents, morphs and vertex colors
 def cp77_mesh_options():
     options = {
+        'export_animations': False,
         'export_tangents': True,
         'export_normals': True,
         'export_morph_tangent': True,
