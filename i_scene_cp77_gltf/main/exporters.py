@@ -5,8 +5,8 @@ def default_cp77_options():
         'export_format': 'GLB',
         'check_existing': True,
         'export_skins': True,
-        'export_cameras': False,
         'export_yup': True,
+        'export_cameras': False,
         'export_materials': 'NONE',
         'export_all_influences': True,
         'export_lights': False,
@@ -22,7 +22,6 @@ def cp77_mesh_options():
         'export_morph_tangent': True,
         'export_morph_normal': True,
         'export_morph': True,
-        'export_morph_normal': True,
         'export_colors': True
     }
     return options
@@ -63,34 +62,45 @@ def export_cyberpunk_glb(context, filepath, export_poses):
                 if len(submesh.vertices) > 65000:
                     bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Each submesh must have less than 65,000 vertices")
                     return {'CANCELLED'}
-                            #check that faces are triangulated, if not cancel and throw an error    
             for face in mesh.data.polygons:
                 if len(face.vertices) != 3:
-                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="All faces must be triangulated")
+                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="All faces must be triangulated before exporting to glb")
                     return {'CANCELLED'}
-        #use the right options for exporting a mesh
         options = default_cp77_options()
         options.update(cp77_mesh_options())
 
     print(options)  
     # if exporting meshes, iterate through any connected armatures, store their currebt state. if hidden, unhide them and select them for export
-    armature_states = {}  
+    armature_states = {}
 
-    for obj in objects:
-        if obj.type == 'MESH':
+    for obj in objects: 
+        if obj.type == 'MESH' and obj.select_get():
+            armature_modifier = None
             for modifier in obj.modifiers:
-                if modifier.type == 'ARMATURE' and modifier.object and modifier.object.hide_get():
-                    # Store original visibility and selection state
-                    armature_states[modifier.object] = {"hide": modifier.object.hide_get(),
-                                                        "select": modifier.object.select_get()}
-                    # Make necessary changes for export
-                    modifier.object.hide_set(False)
-                    modifier.object.select_set(True)
+                if modifier.type == 'ARMATURE' and modifier.object:
+                    armature_modifier = modifier
+                    break
 
-    # Export the meshes to glb
+            if armature_modifier:
+                # Store original visibility and selection state
+                armature = armature_modifier.object
+                armature_states[armature] = {"hide": armature.hide_get(),
+                                            "select": armature.select_get()}
+
+                # Make necessary changes for export
+                armature.hide_set(False)
+                armature.select_set(True)
+
+                # Check for ungrouped vertices
+                ungrouped_vertices = [v for v in obj.data.vertices if not v.groups]
+                if ungrouped_vertices:
+                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Some vertices are not assigned to any vertex group.")
+                    return {'CANCELLED'}
+
+    # Export the selected meshes to glb
     bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
 
     # Restore original armature visibility and selection states
     for armature, state in armature_states.items():
         armature.select_set(state["select"])
-        armature.hide_set(state["hide"]) 
+        armature.hide_set(state["hide"])
