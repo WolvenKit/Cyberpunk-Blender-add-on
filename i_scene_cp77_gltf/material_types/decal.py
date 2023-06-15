@@ -52,7 +52,7 @@ class Decal:
 
         CurMat = Mat.node_tree
         Prin_BSDF=CurMat.nodes['Principled BSDF']
-        Prin_BSDF.inputs['Specular'].default_value = 0
+        Prin_BSDF.inputs['Specular'].default_value = 0.5
         TexCoordinate = CurMat.nodes.new("ShaderNodeTexCoord")
         TexCoordinate.location = (-1000,300)
         if difftex and os.path.exists(os.path.join(self.BasePath ,difftex)):

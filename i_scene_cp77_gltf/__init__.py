@@ -124,7 +124,7 @@ class CP77EntityImport(bpy.types.Operator,ImportHelper):
         print('apps - ',apps)
         excluded=""
         bob=self.filepath
-        print('Bob - ',bob)
+        #print('Bob - ',bob)
         importEnt( bob, apps, excluded,self.with_materials)
 
         return {'FINISHED'}
