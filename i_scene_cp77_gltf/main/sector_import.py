@@ -213,6 +213,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
             #print(os.path.join(path, m[:-4]+'glb'),impapps)
             meshpath=os.path.join(path, m[:-4]+'glb')
             groupname = os.path.splitext(os.path.split(meshpath)[-1])[0]
+            while len(groupname) > 63:
+                groupname = groupname[:-1]
             if groupname not in Masters.children.keys():
                 try:
                     bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=impapps, update_gi=False, with_materials=with_materials)
@@ -273,6 +275,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     app=data['appearanceName']
                     entpath=os.path.join(path,data['entityTemplate']['DepotPath'])+'.json'
                     ent_groupname=os.path.basename(entpath).split('.')[0]+'_'+app
+                    while len(ent_groupname) > 63:
+                        ent_groupname = ent_groupname[:-1]
                     imported=False
                     if ent_groupname in Masters.children.keys():
                         move_coll=Masters.children.get(ent_groupname)
@@ -339,6 +343,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     if(meshname != 0):
                                     #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
                                     groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
+                                    while len(groupname) > 63:
+                                        groupname = groupname[:-1]
                                     group=Masters.children.get(groupname)
                                     if (group):
                                         #print('Group found for ',groupname)                               
@@ -441,14 +447,14 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     # Roads all have stupid prx0 names so instancing by name wont work.
                                     imported=False
                                     try:                                   
-                                       bpy.ops.io_scene_gltf.cp77(filepath=meshpath, with_materials=True)
-                                       objs = C.selected_objects     
-                                       groupname = objs[0].users_collection[0].name
-                                       group= coll_scene.children.get( groupname )
-                                       coll_target.children.link(group) 
-                                       coll_scene.children.unlink(group)
-                                       coll_target['glb_file']=meshname
-                                       imported=True
+                                        bpy.ops.io_scene_gltf.cp77(filepath=meshpath, with_materials=True)
+                                        objs = C.selected_objects     
+                                        groupname = objs[0].users_collection[0].name
+                                        group= coll_scene.children.get( groupname )
+                                        coll_target.children.link(group) 
+                                        coll_scene.children.unlink(group)
+                                        coll_target['glb_file']=meshname
+                                        imported=True
                                     except:
                                         print("Failed on ",meshpath)
                                 
@@ -492,6 +498,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                         if(meshname != 0):
                                     #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
                                     groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
+                                    while len(groupname) > 63:
+                                        groupname = groupname[:-1]
                                     group=Masters.children.get(groupname)
                                     if (group):
                                         #print('Group found for ',groupname) 
@@ -527,6 +535,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                         if(meshname != 0):
                                     #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
                                     groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
+                                    while len(groupname) > 63:
+                                        groupname = groupname[:-1]
                                     group=Masters.children.get(groupname)
                                     if (group):
                                         #print('Glb found - ',glbfoundname)     
