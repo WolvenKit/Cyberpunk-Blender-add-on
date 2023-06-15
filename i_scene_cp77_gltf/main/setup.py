@@ -17,9 +17,12 @@ from ..material_types.eyegradient import EyeGradient
 from ..material_types.eyeshadow import EyeShadow
 from ..material_types.meshdecalemissive import MeshDecalEmissive
 from ..material_types.glass import Glass
+from ..material_types.glassdeferred import GlassDeferred
 from ..material_types.signages import Signages
 from ..material_types.meshdecalparallax import MeshDecalParallax
 from ..material_types.speedtree import SpeedTree
+from ..material_types.decal import Decal
+from ..material_types.decal_gradientmap_recolor import DecalGradientmapRecolor
 
 
 class MaterialBuilder:
@@ -27,104 +30,138 @@ class MaterialBuilder:
         self.BasePath = BasePath
         self.image_format = image_format
         self.obj = Obj
+    
     def create(self,materialIndex):
-        rawMat = self.obj["Materials"][materialIndex]
-        
-        
-
-        verbose=True
-
-        bpyMat = bpy.data.materials.new(rawMat["Name"])
-        bpyMat.use_nodes = True
-        match rawMat["MaterialTemplate"]:
-            case "engine\\materials\\multilayered.mt":
-                multilayered = Multilayered(self.BasePath,self.image_format)
-                multilayered.create(rawMat["Data"],bpyMat)
-
-            case "base\\materials\\multilayered_clear_coat.mt":
-                multilayered = Multilayered(self.BasePath,self.image_format)
-                multilayered.create(rawMat["Data"],bpyMat)
-
-            case "base\\materials\\vehicle_destr_blendshape.mt":
-                vehicleDestrBlendshape = VehicleDestrBlendshape(self.BasePath,self.image_format)
-                vehicleDestrBlendshape.create(rawMat["Data"],bpyMat)
-
-            case "base\\materials\\mesh_decal.mt":
-                meshDecal = MeshDecal(self.BasePath,self.image_format)
-                meshDecal.create(rawMat["Data"],bpyMat)
-
-            case "base\\materials\\mesh_decal_double_diffuse.mt":
-                meshDecalDoubleDiffuse = MeshDecalDoubleDiffuse(self.BasePath,self.image_format)
-                meshDecalDoubleDiffuse.create(rawMat["Data"],bpyMat)
-
-            case "base\\materials\\vehicle_mesh_decal.mt" :
-                vehicleMeshDecal = VehicleMeshDecal(self.BasePath,self.image_format)
-                vehicleMeshDecal.create(rawMat["Data"],bpyMat)
+        if self.obj.get("Materials"):
+            rawMat = self.obj["Materials"][materialIndex]
             
-            case "base\\materials\\vehicle_lights.mt":
-                vehicleLights = VehicleLights(self.BasePath,self.image_format)
-                vehicleLights.create(rawMat["Data"],bpyMat)
 
-            case "base\\materials\\skin.mt":
-                skin = Skin(self.BasePath,self.image_format)
-                skin.create(rawMat["Data"],bpyMat)
-
-            case "engine\\materials\\metal_base.remt":
-                metalBase = MetalBase(self.BasePath,self.image_format)
-                metalBase.create(rawMat["Data"],bpyMat)
-
-            case "base\\materials\\hair.mt":
-                hair = Hair(self.BasePath,self.image_format)
-                hair.create(rawMat["Data"],bpyMat)
-
-            case "base\\materials\\mesh_decal_gradientmap_recolor.mt":
-                meshDecalGradientMapReColor = MeshDecalGradientMapReColor(self.BasePath,self.image_format)
-                meshDecalGradientMapReColor.create(rawMat["Data"],bpyMat)
-
-            case "base\\materials\\eye.mt":
-                eye = Eye(self.BasePath,self.image_format)
-                eye.create(rawMat["Data"],bpyMat)
-
-            case "base\\materials\\eye_gradient.mt":
-                eyeGradient = EyeGradient(self.BasePath,self.image_format)
-                eyeGradient.create(rawMat["Data"],bpyMat)
-
-            case "base\\materials\\eye_shadow.mt":
-                eyeShadow = EyeShadow(self.BasePath,self.image_format)
-                eyeShadow.create(rawMat["Data"],bpyMat)
-
-            case "base\\materials\\mesh_decal_emissive.mt" :
-                meshDecalEmissive = MeshDecalEmissive(self.BasePath,self.image_format)
-                meshDecalEmissive.create(rawMat["Data"],bpyMat)
-
-            case "base\\materials\\mesh_decal_wet_character.mt":
-                meshDecal = MeshDecal(self.BasePath,self.image_format)
-                meshDecal.create(rawMat["Data"],bpyMat)
-
-            case "base\\materials\\glass.mt" | "base\\materials\\vehicle_glass.mt":
-                glass = Glass(self.BasePath,self.image_format)
-                glass.create(rawMat["Data"],bpyMat)
             
-            case "base\\fx\\shaders\\signages.mt" :
-                signages= Signages(self.BasePath,self.image_format)
-                signages.create(rawMat["Data"],bpyMat)
-            
-            case "base\\materials\\glass_onesided.mt" | "base\\materials\\vehicle_glass_onesided.mt":
-                glass = Glass(self.BasePath,self.image_format)
-                glass.create(rawMat["Data"],bpyMat)
-            
-            case "base\\materials\\mesh_decal_parallax.mt" | "base\\materials\\parallaxscreen.mt" :
-                meshDecalParallax = MeshDecalParallax(self.BasePath,self.image_format)
-                meshDecalParallax.create(rawMat["Data"],bpyMat)
+
+            verbose=True
+
+            bpyMat = bpy.data.materials.new(rawMat["Name"])
+            bpyMat.use_nodes = True
+            match rawMat["MaterialTemplate"]:
+                case "engine\\materials\\multilayered.mt":
+                    multilayered = Multilayered(self.BasePath,self.image_format)
+                    multilayered.create(rawMat["Data"],bpyMat)
+
+                case "base\\materials\\multilayered_clear_coat.mt":
+                    multilayered = Multilayered(self.BasePath,self.image_format)
+                    multilayered.create(rawMat["Data"],bpyMat)
+
+                case "base\\materials\\vehicle_destr_blendshape.mt":
+                    vehicleDestrBlendshape = VehicleDestrBlendshape(self.BasePath,self.image_format)
+                    vehicleDestrBlendshape.create(rawMat["Data"],bpyMat)
+
+                case "base\\materials\\mesh_decal.mt":
+                    meshDecal = MeshDecal(self.BasePath,self.image_format)
+                    meshDecal.create(rawMat["Data"],bpyMat)
+
+                case "base\\materials\\mesh_decal_double_diffuse.mt":
+                    meshDecalDoubleDiffuse = MeshDecalDoubleDiffuse(self.BasePath,self.image_format)
+                    meshDecalDoubleDiffuse.create(rawMat["Data"],bpyMat)
+
+                case "base\\materials\\vehicle_mesh_decal.mt" :
+                    vehicleMeshDecal = VehicleMeshDecal(self.BasePath,self.image_format)
+                    vehicleMeshDecal.create(rawMat["Data"],bpyMat)
                 
-            case "base\\materials\\speedtree_3d_v8_twosided.mt" |  "base\\materials\\speedtree_3d_v8_onesided.mt" |  "base\\materials\\speedtree_3d_v8_seams.mt":
-                speedtree = SpeedTree(self.BasePath,self.image_format)
-                speedtree.create(rawMat["Data"],bpyMat)
+                case "base\\materials\\vehicle_lights.mt":
+                    vehicleLights = VehicleLights(self.BasePath,self.image_format)
+                    vehicleLights.create(rawMat["Data"],bpyMat)
 
-            case _:
-                print('Unhandled mt - ', rawMat["MaterialTemplate"])
+                case "base\\materials\\skin.mt":
+                    skin = Skin(self.BasePath,self.image_format)
+                    skin.create(rawMat["Data"],bpyMat)
 
-        #set the viewport blend mode to hashed - no more black tattoos and cybergear
-        bpyMat.blend_method='HASHED'
-        return bpyMat
+                case "engine\\materials\\metal_base.remt":
+                    metalBase = MetalBase(self.BasePath,self.image_format)
+                    metalBase.create(rawMat["Data"],bpyMat)
+
+                case "base\\materials\\hair.mt":
+                    hair = Hair(self.BasePath,self.image_format)
+                    hair.create(rawMat["Data"],bpyMat)
+
+                case "base\\materials\\mesh_decal_gradientmap_recolor.mt":
+                    meshDecalGradientMapReColor = MeshDecalGradientMapReColor(self.BasePath,self.image_format)
+                    meshDecalGradientMapReColor.create(rawMat["Data"],bpyMat)
+
+                case "base\\materials\\eye.mt":
+                    eye = Eye(self.BasePath,self.image_format)
+                    eye.create(rawMat["Data"],bpyMat)
+
+                case "base\\materials\\eye_gradient.mt":
+                    eyeGradient = EyeGradient(self.BasePath,self.image_format)
+                    eyeGradient.create(rawMat["Data"],bpyMat)
+
+                case "base\\materials\\eye_shadow.mt":
+                    eyeShadow = EyeShadow(self.BasePath,self.image_format)
+                    eyeShadow.create(rawMat["Data"],bpyMat)
+
+                case "base\\materials\\mesh_decal_emissive.mt" :
+                    meshDecalEmissive = MeshDecalEmissive(self.BasePath,self.image_format)
+                    meshDecalEmissive.create(rawMat["Data"],bpyMat)
+
+                case "base\\materials\\mesh_decal_wet_character.mt":
+                    meshDecal = MeshDecal(self.BasePath,self.image_format)
+                    meshDecal.create(rawMat["Data"],bpyMat)
+
+                case "base\\materials\\glass.mt" | "base\\materials\\vehicle_glass.mt":
+                    glass = Glass(self.BasePath,self.image_format)
+                    glass.create(rawMat["Data"],bpyMat)
+                
+                case "base\\materials\\glass_deferred.mt":
+                    glassdef = GlassDeferred(self.BasePath,self.image_format)
+                    glassdef.create(rawMat["Data"],bpyMat)
+
+                case "base\\fx\\shaders\\signages.mt" :
+                    signages= Signages(self.BasePath,self.image_format)
+                    signages.create(rawMat["Data"],bpyMat)
+                
+                case "base\\materials\\glass_onesided.mt" | "base\\materials\\vehicle_glass_onesided.mt":
+                    glass = Glass(self.BasePath,self.image_format)
+                    glass.create(rawMat["Data"],bpyMat)
+                
+                case "base\\materials\\mesh_decal_parallax.mt" | "base\\materials\\parallaxscreen.mt" :
+                    meshDecalParallax = MeshDecalParallax(self.BasePath,self.image_format)
+                    meshDecalParallax.create(rawMat["Data"],bpyMat)
+                    
+                case "base\\materials\\speedtree_3d_v8_twosided.mt" |  "base\\materials\\speedtree_3d_v8_onesided.mt" |  "base\\materials\\speedtree_3d_v8_seams.mt":
+                    speedtree = SpeedTree(self.BasePath,self.image_format)
+                    speedtree.create(rawMat["Data"],bpyMat)
+
+                case _:
+                    print('Unhandled mt - ', rawMat["MaterialTemplate"])
+
+            #set the viewport blend mode to hashed - no more black tattoos and cybergear
+            bpyMat.blend_method='HASHED'
+            return bpyMat
+        
+        elif self.obj["Data"]["RootChunk"].get("baseMaterial"):
+            if self.obj["Header"].get("ArchiveFileName"):
+                name = self.obj["Header"]["ArchiveFileName"]
+                name = os.path.basename(name)
+            else:
+                name = 'decal_material'
+            
+            bpyMat = bpy.data.materials.new(name)
+            bpyMat.use_nodes = True
+
+            match self.obj["Data"]["RootChunk"]["baseMaterial"]["DepotPath"]:
+                case "base\\materials\\decal.remt" | "base\\materials\\decal_roughness.mt" | "base\materials\decal_puddle.mt":# | "base\materials\decal_normal_roughness_metalness.mt":
+                    print('decal.remt')
+                    decal = Decal(self.BasePath,self.image_format)
+                    decal.create(self.obj["Data"]["RootChunk"],bpyMat)
+
+                case "base\\materials\\decal_gradientmap_recolor.mt":
+                    print('decal_gradientmap_recolor.mt')
+                    decalGradientMapRecolor = DecalGradientmapRecolor(self.BasePath,self.image_format)
+                    decalGradientMapRecolor.create(self.obj["Data"]["RootChunk"],bpyMat)
+
+                case _:
+                    print(self.obj["Data"]["RootChunk"]["baseMaterial"]["DepotPath"]," | unimplemented yet")
+            
+            bpyMat.blend_method='HASHED'
+            return bpyMat
 

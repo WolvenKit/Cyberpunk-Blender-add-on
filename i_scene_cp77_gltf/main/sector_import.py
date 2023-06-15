@@ -23,6 +23,7 @@ from mathutils import Vector, Matrix , Quaternion
 from pathlib import Path
 import time
 from pprint import pprint 
+from .setup import MaterialBuilder
 
 
 
@@ -136,7 +137,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
     # want_collisions when True will import/generate the box and capsule collisions
  
     jsonpath = glob.glob(path+"\**\*.streamingsector.json", recursive = True)
-
+    
     meshes=[]
     C = bpy.context
 
@@ -147,6 +148,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
         t=j['Data']['RootChunk']['nodeData']['Data']
         nodes = j["Data"]["RootChunk"]["nodes"]
         #print(len(nodes))
+        #nodes=[]
         for i,e in enumerate(nodes):
             data = e['Data']
             type = data['$type']
@@ -160,7 +162,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     meshname = data['mesh']['DepotPath'] 
                     if(meshname != 0):
                         meshes.append({'basename':data['mesh']['DepotPath'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
-                case 'worldStaticMeshNode' | 'worldBuildingProxyMeshNode' | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode': 
+                case 'worldStaticMeshNode' | 'worldPhysicalDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode': 
                     if isinstance(e, dict) and 'mesh' in data.keys():
                         meshname = data['mesh']['DepotPath']
                         #print('Mesh name is - ',meshname, e['HandleId'])
@@ -388,7 +390,12 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     instances = [x for x in t if x['NodeIndex'] == i]
                     for idx,inst in enumerate(instances):
                         #print( inst)
-                        o = bpy.data.objects.new( "empty", None )
+                        #o = bpy.data.objects.new( "empty", None )
+                        vert = [(-0.5, -0.5, 0.0), (0.5, -0.5, 0.0), (-0.5, 0.5, 0.0), (0.5,0.5, 0.0)]
+                        fac = [(0, 1, 3, 2)]
+                        pl_data = bpy.data.meshes.new("PL")
+                        pl_data.from_pydata(vert, [], fac)
+                        o = bpy.data.objects.new("Decal_Plane", pl_data)
                         o['nodeType']='worldStaticDecalNode'
                         o['nodeIndex']=i
                         o['instance_idx']=idx
@@ -397,10 +404,26 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                         o['sectorName']=sectorName
                         Sector_coll.objects.link(o)
                         o.location = get_pos(inst)
+                        o.rotation_mode = "QUATERNION"
                         o.rotation_quaternion = get_rot(inst)
                         o.scale = get_scale(inst)
-                        o.empty_display_size = 0.002
-                        o.empty_display_type = 'IMAGE'   
+                        #o.empty_display_size = 0.002
+                        #o.empty_display_type = 'IMAGE'
+                        mipath = o['decal']
+                        jsonpath = os.path.join(path,mipath)+".json"
+                        print(jsonpath)
+                        try:
+                            with open(jsonpath,'r') as jsonpath:
+                                obj=json.load(jsonpath)
+                            index = 0
+                            obj["Data"]["RootChunk"]['alpha'] = e['Data']['alpha']
+                            #FIXME: image_format
+                            builder = MaterialBuilder(obj,path,'png')
+                            bpymat = builder.create(index)
+                            o.data.materials.append(bpymat)
+                        except FileNotFoundError:
+                            name = os.path.basename(jsonpath)
+                            print(f'File not found {name}, you need to export .mi files')   
 
                 case 'XworldStaticOccluderMeshNode':
                     #print('worldStaticOccluderMeshNode',i)
@@ -462,7 +485,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     else:
                                         print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
 
-                case 'worldStaticMeshNode' | 'worldBuildingProxyMeshNode' | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode': 
+                case 'worldStaticMeshNode' | 'worldPhysicalDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode': 
                     if isinstance(e, dict) and 'mesh' in data.keys():
                         meshname = data['mesh']['DepotPath']
                         #print('Mesh name is - ',meshname, e['HandleId'])
@@ -641,6 +664,6 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
 
 if __name__ == "__main__":
 
-    filepath = 'F:\\CPMod\\thatMassiveSector\\thatMassiveSector.cpmodproj'
+    filepath = 'F:\\CPMod\\judysApt\\judysApt.cpmodproj'
 
     importSectors( filepath, want_collisions=False, am_modding=False, with_materials=True )        
