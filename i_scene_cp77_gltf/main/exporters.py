@@ -22,7 +22,9 @@ def cp77_mesh_options():
         'export_morph_normal': True,
         'export_morph': True,
         'export_morph_normal': True,
-        'export_colors': True
+        'export_colors': True,
+        'export_animations': False,
+        'export_anim_single_armature': True   
     }
     return options
 #the options for anims
