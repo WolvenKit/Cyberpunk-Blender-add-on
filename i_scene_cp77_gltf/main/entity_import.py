@@ -110,26 +110,29 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
 
                 app_file = ent_apps[ent_app_idx]['appearanceResource']['DepotPath']
                 appfilepath=os.path.join(path,app_file)+'.json'
-                        
+                a_j=None        
                 if os.path.exists(appfilepath):
                     with open(appfilepath,'r') as a: 
                         a_j=json.load(a)
+                    apps=a_j['Data']['RootChunk']['appearances']
+                    app_idx=0
+                    for i,a in enumerate(apps):
+                        #print(i,a['Data']['name'])
+                        if a['Data']['name']==app_name:
+                            print('appearance matched, id = ',i)
+                            app_idx=i
+                    chunks=None
+                    if 'Data' in a_j['Data']['RootChunk']['appearances'][app_idx].keys():
+                        comps= a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['components']
+                        if 'compiledData' in a_j['Data']['RootChunk']['appearances'][app_idx]['Data'].keys():
+                            chunks= a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['compiledData']['Data']['Chunks']
+                            print('Chunks found')
                 else:
                     print('app file not found - ',filepath)
                     
-                app_idx=0
-                apps=a_j['Data']['RootChunk']['appearances']
-                for i,a in enumerate(apps):
-                    #print(i,a['Data']['name'])
-                    if a['Data']['name']==app_name:
-                        print('appearance matched, id = ',i)
-                        app_idx=i
-                chunks=None
-                if 'Data' in a_j['Data']['RootChunk']['appearances'][app_idx].keys():
-                    comps= a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['components']
-                    if 'compiledData' in a_j['Data']['RootChunk']['appearances'][app_idx]['Data'].keys():
-                        chunks= a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['compiledData']['Data']['Chunks']
-                        print('Chunks found')
+                
+                
+                    
                         
             if len(comps)==0:      
                 print('falling back to rootchunk comps')
