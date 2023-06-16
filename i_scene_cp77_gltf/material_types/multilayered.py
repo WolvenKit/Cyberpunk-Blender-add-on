@@ -386,10 +386,10 @@ class Multilayered:
             
             # SET LAYER GROUP DEFAULT VALUES
             
-            if colorScale != None:
+            if colorScale != None and colorScale in OverrideTable["ColorScale"].keys():
                 LayerGroupN.inputs[0].default_value = OverrideTable["ColorScale"][colorScale]
             else:
-                LayerGroupN.inputs[0].default_value = 1
+                LayerGroupN.inputs[0].default_value = (1.0,1.0,1.0,1)
             
             if MatTile != None:
                 LayerGroupN.inputs[1].default_value = float(MatTile)
@@ -518,16 +518,18 @@ class Multilayered:
             RoughRampN = NG.nodes.new("ShaderNodeMapRange")
             RoughRampN.hide=True
             RoughRampN.location = (-1400,-100)
-            RoughRampN.inputs['To Min'].default_value = (OverrideTable["RoughLevelsOut"][roughLevelsOut][1][0])
-            RoughRampN.inputs['To Max'].default_value = (OverrideTable["RoughLevelsOut"][roughLevelsOut][0][0])
+            if roughLevelsOut in OverrideTable["RoughLevelsOut"].keys():
+                RoughRampN.inputs['To Min'].default_value = (OverrideTable["RoughLevelsOut"][roughLevelsOut][1][0])
+                RoughRampN.inputs['To Max'].default_value = (OverrideTable["RoughLevelsOut"][roughLevelsOut][0][0])
             RoughRampN.label = "Roughness Ramp"
             
             # Metalness
             MetalRampN = NG.nodes.new("ShaderNodeValToRGB")
             MetalRampN.hide=True
             MetalRampN.location = (-1400,-50)
-            MetalRampN.color_ramp.elements[1].color = (OverrideTable["MetalLevelsOut"][metalLevelsOut][0])
-            MetalRampN.color_ramp.elements[0].color = (OverrideTable["MetalLevelsOut"][metalLevelsOut][1])
+            if metalLevelsOut in OverrideTable["MetalLevelsOut"].keys():
+                MetalRampN.color_ramp.elements[1].color = (OverrideTable["MetalLevelsOut"][metalLevelsOut][0])
+                MetalRampN.color_ramp.elements[0].color = (OverrideTable["MetalLevelsOut"][metalLevelsOut][1])
             MetalRampN.label = "Metal Ramp"
 			
 			# Mask Layer
