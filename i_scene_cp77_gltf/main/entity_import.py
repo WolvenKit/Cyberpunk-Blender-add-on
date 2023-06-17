@@ -123,7 +123,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                             app_idx=i
                     chunks=None
                     if 'Data' in a_j['Data']['RootChunk']['appearances'][app_idx].keys():
-                        comps= a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['components']
+                        if a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['components']:
+                            comps= a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['components']
                         if 'compiledData' in a_j['Data']['RootChunk']['appearances'][app_idx]['Data'].keys():
                             chunks= a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['compiledData']['Data']['Chunks']
                             print('Chunks found')
@@ -137,6 +138,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
             if len(comps)==0:      
                 print('falling back to rootchunk comps')
                 comps= j['Data']['RootChunk']['components']
+
             for c in comps:
                 if 'mesh' in c.keys():
                     #print(c['mesh']['DepotPath'])
@@ -198,7 +200,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                                     bindname= chunk_pt['Data']['slotName']
 
                                             # some meshes have boneRigMatrices in the mesh file which means we need jsons for the meshes or we cant access it. oh joy
-                                            if bindname=="deformation_rig" and not chunk_pt['Data']['slotName'] :
+                                            elif bindname=="deformation_rig" and not chunk_pt['Data']['slotName'] :
                                                 json_name=os.path.join(path, c['mesh']['DepotPath']+'.json')
                                                 #print("in the deformation rig bit",json_name)
                                                 if json_name in mesh_jsons:
@@ -250,6 +252,14 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                                             co.subtarget= mesh_j['boneNames'][0]
                                                             bpy.context.view_layer.objects.active = obj
                                                             bpy.ops.constraint.childof_set_inverse(constraint="Child Of", owner='OBJECT')
+
+                                            # things like the tvs have a bindname but no slotname, bindname appears to point at the name of the main component, and its the only one with a transform applied
+                                            elif bindname:
+                                                #see if we can find a component that matches it
+                                                bindpt=[cmp for cmp in comps if cmp['name']==bindname]
+                                                if bindpt and len(bindpt)==1:
+                                                    c['localTransform']=bindpt[0]['localTransform']
+
 
                                             #print('bindname = ',bindname)
                                             if rig:
@@ -325,6 +335,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                     if not z: 
                                         z=c['localTransform']['Position']['z']['Bits']/131072
                                     #print ('Local transform  x= ',x,'  y= ',y,' z= ',z)
+                                    
                                     # local transforms are in the original mesh coord sys, but get applied after its already re-oriented, mainly only matters for wheels.
                                     # this is hacky af as I cant be arsed dealing with doing it properly with quaternions or whatever right now. Feel free to fix it.
                                     if bindname and bones and bindname in bones.keys() and bindname!='Base':
