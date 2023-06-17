@@ -78,8 +78,8 @@ class DecalGradientmapRecolor:
              #   mulNode1.inputs[0].default_value = float(Data["alpha"])
 
             if diffAsMask:
-                CurMat.links.new(diff_image_node.outputs[0],mulNode1.inputs[1])
-                CurMat.links.new(mulNode1.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
+                #CurMat.links.new(diff_image_node.outputs[0],mulNode1.inputs[1])
+                CurMat.links.new(diff_image_node.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
                 #CurMat.links.new(dImgNode.outputs[1],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
             else:
                 if self.found(masktex):
