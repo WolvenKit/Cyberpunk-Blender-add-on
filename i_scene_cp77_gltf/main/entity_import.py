@@ -259,7 +259,10 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                                 #see if we can find a component that matches it
                                                 bindpt=[cmp for cmp in comps if cmp['name']==bindname]
                                                 if bindpt and len(bindpt)==1:
-                                                    c['localTransform']=bindpt[0]['localTransform']
+                                                    if c['localTransform']['Position']['x']['Bits']==0 and c['localTransform']['Position']['y']['Bits']==0 and c['localTransform']['Position']['z']['Bits']==0:
+                                                        c['localTransform']['Position']=bindpt[0]['localTransform']['Position']
+                                                    if c['localTransform']['Orientation']['i']==0 and c['localTransform']['Orientation']['j']==0 and c['localTransform']['Orientation']['k']==0 and c['localTransform']['Orientation']['r']==1:
+                                                        c['localTransform']['Orientation']=bindpt[0]['localTransform']['Orientation']
 
 
                                             #print('bindname = ',bindname)
