@@ -141,7 +141,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
 
             for c in comps:
                 if 'mesh' in c.keys():
-                    #print(c['mesh']['DepotPath'])
+                    print(c['mesh']['DepotPath'])
                     if isinstance( c['mesh']['DepotPath'], str):
                         meshname=os.path.basename(c['mesh']['DepotPath'])
                         meshpath=os.path.join(path, c['mesh']['DepotPath'][:-4]+'glb')
@@ -159,7 +159,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                         print('import threw an error')
                                         continue
                                     objs = C.selected_objects
-                                    
+                                    if meshname=='v_sportbike2_arch_nemesis__ext01_axle_f_a_01':
+                                        print('those annoying front forks')
                                     # NEW parentTransform stuff - fixes vehicles being exploded
                                     x=None
                                     y=None
@@ -200,7 +201,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                                     bindname= chunk_pt['Data']['slotName']
 
                                             # some meshes have boneRigMatrices in the mesh file which means we need jsons for the meshes or we cant access it. oh joy
-                                            elif bindname=="deformation_rig" and not chunk_pt['Data']['slotName'] :
+                                            elif bindname=="deformation_rig" and (not chunk_pt['Data']['slotName'] or len(chunk_pt['Data']['slotName'])==1):
                                                 json_name=os.path.join(path, c['mesh']['DepotPath']+'.json')
                                                 #print("in the deformation rig bit",json_name)
                                                 if json_name in mesh_jsons:
