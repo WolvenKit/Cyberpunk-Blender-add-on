@@ -105,3 +105,4 @@ def export_cyberpunk_glb(context, filepath, export_poses):
     for armature, state in armature_states.items():
         armature.select_set(state["select"])
         armature.hide_set(state["hide"])
+
