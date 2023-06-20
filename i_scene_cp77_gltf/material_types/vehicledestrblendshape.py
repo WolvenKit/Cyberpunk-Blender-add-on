@@ -614,4 +614,9 @@ class VehicleDestrBlendshape:
             NG.links.new(NormalizeN.outputs[0],GroupOutN.inputs[3]) #Normal output
             NG.links.new(MaskMix3.outputs[0],GroupOutN.inputs[4]) #Mask Layer output
         
-        self.createLayerMaterial(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_",LayerCount,CurMat,Data["MultilayerMask"],Data["GlobalNormal"])
+        if "BakedNormal" in Data.keys():
+            LayerNormal=Data["BakedNormal"]
+        else:
+            LayerNormal=Data["GlobalNormal"]
+
+        self.createLayerMaterial(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_",LayerCount,CurMat,Data["MultilayerMask"],LayerNormal)
