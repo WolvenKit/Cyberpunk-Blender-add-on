@@ -23,6 +23,7 @@ from mathutils import Vector, Matrix , Quaternion
 from pathlib import Path
 import time
 from pprint import pprint 
+from .setup import MaterialBuilder
 
 
 
@@ -136,7 +137,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
     # want_collisions when True will import/generate the box and capsule collisions
  
     jsonpath = glob.glob(path+"\**\*.streamingsector.json", recursive = True)
-
+    
     meshes=[]
     C = bpy.context
 
@@ -146,13 +147,14 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
         sectorName=os.path.basename(filepath)[:-5]
         t=j['Data']['RootChunk']['nodeData']['Data']
         nodes = j["Data"]["RootChunk"]["nodes"]
-        print(len(nodes))
+        #print(len(nodes))
+        #nodes=[]
         for i,e in enumerate(nodes):
             data = e['Data']
             type = data['$type']
             match type:
                 case 'worldEntityNode': 
-                    print('worldEntityNode',i)
+                    #print('worldEntityNode',i)
                     meshname = data['entityTemplate']['DepotPath'] 
                     if(meshname != 0):
                         meshes.append({'basename':e['Data']['entityTemplate']['DepotPath'],'appearance':e['Data']['appearanceName'],'sector':sectorName})
@@ -160,7 +162,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     meshname = data['mesh']['DepotPath'] 
                     if(meshname != 0):
                         meshes.append({'basename':data['mesh']['DepotPath'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
-                case 'worldStaticMeshNode' | 'worldBuildingProxyMeshNode' | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode': 
+                case 'worldStaticMeshNode' | 'worldPhysicalDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode': 
                     if isinstance(e, dict) and 'mesh' in data.keys():
                         meshname = data['mesh']['DepotPath']
                         #print('Mesh name is - ',meshname, e['HandleId'])
@@ -211,6 +213,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
             #print(os.path.join(path, m[:-4]+'glb'),impapps)
             meshpath=os.path.join(path, m[:-4]+'glb')
             groupname = os.path.splitext(os.path.split(meshpath)[-1])[0]
+            while len(groupname) > 63:
+                groupname = groupname[:-1]
             if groupname not in Masters.children.keys():
                 try:
                     bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=impapps, update_gi=False, with_materials=with_materials)
@@ -229,7 +233,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
         Masters.children.unlink(failed)
 
 
-    for filepath in jsonpath:    
+    for fpn,filepath in enumerate(jsonpath):    
         with open(filepath,'r') as f: 
               j=json.load(f) 
           
@@ -256,11 +260,12 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
         meshnames = [ os.path.splitext(x)[0]+".mesh" for x in glbnames]
 
         nodes = j["Data"]["RootChunk"]["nodes"]
-        print('Processing ',len(nodes),' nodes for sector', sectorName)
+        print(fpn, ' Processing ',len(nodes),' nodes for sector', sectorName)
         group=''
         for i,e in enumerate(nodes):
     
-            #if i > 2: break
+            #if i % 20==0: 
+            #   continue
             data = e['Data']
             type = data['$type']
 
@@ -270,6 +275,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     app=data['appearanceName']
                     entpath=os.path.join(path,data['entityTemplate']['DepotPath'])+'.json'
                     ent_groupname=os.path.basename(entpath).split('.')[0]+'_'+app
+                    while len(ent_groupname) > 63:
+                        ent_groupname = ent_groupname[:-1]
                     imported=False
                     if ent_groupname in Masters.children.keys():
                         move_coll=Masters.children.get(ent_groupname)
@@ -284,7 +291,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                             coll_scene.children.unlink(move_coll)
                             imported=True
                         except:
-                            print('failed on ',os.path.basename(entpath))
+                            print('Failed during Entity import on ',os.path.basename(entpath))
                     if imported:
                         instances = [x for x in t if x['NodeIndex'] == i]
                         for idx,inst in enumerate(instances):
@@ -314,7 +321,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     rot =get_rot(inst)
                                     scale =Vector((.01,.01,.01))
                                     rot =Quaternion(get_rot(inst))
-                                    print(rot)
+                                    #print(rot)
                                     inst_trans_mat=Matrix.LocRotScale(pos,rot,scale)
                                     obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
                                     #curse=bpy.context.scene.cursor.location
@@ -336,6 +343,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     if(meshname != 0):
                                     #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
                                     groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
+                                    while len(groupname) > 63:
+                                        groupname = groupname[:-1]
                                     group=Masters.children.get(groupname)
                                     if (group):
                                         #print('Group found for ',groupname)                               
@@ -382,12 +391,17 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     #print('worldInstancedOccluderNode')
                     pass
                 case 'worldStaticDecalNode':
-                    print('worldStaticDecalNode')
+                    #print('worldStaticDecalNode')
                     # decals are imported as planes tagged with the material details so you can see what they are and move them.
                     instances = [x for x in t if x['NodeIndex'] == i]
                     for idx,inst in enumerate(instances):
                         #print( inst)
-                        o = bpy.data.objects.new( "empty", None )
+                        #o = bpy.data.objects.new( "empty", None )
+                        vert = [(-0.5, -0.5, 0.0), (0.5, -0.5, 0.0), (-0.5, 0.5, 0.0), (0.5,0.5, 0.0)]
+                        fac = [(0, 1, 3, 2)]
+                        pl_data = bpy.data.meshes.new("PL")
+                        pl_data.from_pydata(vert, [], fac)
+                        o = bpy.data.objects.new("Decal_Plane", pl_data)
                         o['nodeType']='worldStaticDecalNode'
                         o['nodeIndex']=i
                         o['instance_idx']=idx
@@ -396,10 +410,26 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                         o['sectorName']=sectorName
                         Sector_coll.objects.link(o)
                         o.location = get_pos(inst)
+                        o.rotation_mode = "QUATERNION"
                         o.rotation_quaternion = get_rot(inst)
                         o.scale = get_scale(inst)
-                        o.empty_display_size = 0.002
-                        o.empty_display_type = 'IMAGE'   
+                        #o.empty_display_size = 0.002
+                        #o.empty_display_type = 'IMAGE'
+                        mipath = o['decal']
+                        jsonpath = os.path.join(path,mipath)+".json"
+                        print(jsonpath)
+                        try:
+                            with open(jsonpath,'r') as jsonpath:
+                                obj=json.load(jsonpath)
+                            index = 0
+                            obj["Data"]["RootChunk"]['alpha'] = e['Data']['alpha']
+                            #FIXME: image_format
+                            builder = MaterialBuilder(obj,path,'png')
+                            bpymat = builder.create(index)
+                            o.data.materials.append(bpymat)
+                        except FileNotFoundError:
+                            name = os.path.basename(jsonpath)
+                            print(f'File not found {name}, you need to export .mi files')   
 
                 case 'XworldStaticOccluderMeshNode':
                     #print('worldStaticOccluderMeshNode',i)
@@ -417,14 +447,14 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     # Roads all have stupid prx0 names so instancing by name wont work.
                                     imported=False
                                     try:                                   
-                                       bpy.ops.io_scene_gltf.cp77(filepath=meshpath, with_materials=True)
-                                       objs = C.selected_objects     
-                                       groupname = objs[0].users_collection[0].name
-                                       group= coll_scene.children.get( groupname )
-                                       coll_target.children.link(group) 
-                                       coll_scene.children.unlink(group)
-                                       coll_target['glb_file']=meshname
-                                       imported=True
+                                        bpy.ops.io_scene_gltf.cp77(filepath=meshpath, with_materials=True)
+                                        objs = C.selected_objects     
+                                        groupname = objs[0].users_collection[0].name
+                                        group= coll_scene.children.get( groupname )
+                                        coll_target.children.link(group) 
+                                        coll_scene.children.unlink(group)
+                                        coll_target['glb_file']=meshname
+                                        imported=True
                                     except:
                                         print("Failed on ",meshpath)
                                 
@@ -461,13 +491,15 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     else:
                                         print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
 
-                case 'worldStaticMeshNode' | 'worldBuildingProxyMeshNode' | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode': 
+                case 'worldStaticMeshNode' | 'worldPhysicalDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode': 
                     if isinstance(e, dict) and 'mesh' in data.keys():
                         meshname = data['mesh']['DepotPath']
                         #print('Mesh name is - ',meshname, e['HandleId'])
                         if(meshname != 0):
                                     #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
                                     groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
+                                    while len(groupname) > 63:
+                                        groupname = groupname[:-1]
                                     group=Masters.children.get(groupname)
                                     if (group):
                                         #print('Group found for ',groupname) 
@@ -503,6 +535,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                         if(meshname != 0):
                                     #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
                                     groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
+                                    while len(groupname) > 63:
+                                        groupname = groupname[:-1]
                                     group=Masters.children.get(groupname)
                                     if (group):
                                         #print('Glb found - ',glbfoundname)     
@@ -628,8 +662,18 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                         
             
                 case _:
-                    print('None of the above',i)
+                    #print('None of the above',i)
                     pass
 
         print('Finished with ',filepath)
     print('Finished Importing Sectors')
+
+
+
+# The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
+
+if __name__ == "__main__":
+
+    filepath = 'F:\\CPMod\\judysApt\\judysApt.cpmodproj'
+
+    importSectors( filepath, want_collisions=False, am_modding=False, with_materials=True )        
