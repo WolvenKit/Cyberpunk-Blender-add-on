@@ -575,12 +575,13 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 else :
                                                     print(e)
                                             
-                                                inst_trans_rot=Quaternion((inst_trans['orientation']['r'],inst_trans['orientation']['i'], -inst_trans['orientation']['j'],-inst_trans['orientation']['k']))  
+                                                inst_trans_rot=Quaternion((inst_trans['orientation']['r'],inst_trans['orientation']['i'], inst_trans['orientation']['j'],inst_trans['orientation']['k']))  
                                                 inst_trans_pos=Vector(get_pos_whole(inst_trans))
                                                 inst_trans_scale=Vector((1,1,1))
                                                                                         
                                                 inst_pos =Vector(get_pos_whole(inst))
-                                                inst_rot =Quaternion(get_rot(inst))
+                                                intr=get_rot(inst)
+                                                inst_rot =Quaternion((intr[0],intr[1],intr[2],intr[3]))
                                                 inst_scale =Vector((1,1,1))
                                                 inst_trans_m=Matrix.LocRotScale(inst_trans_pos,inst_trans_rot,inst_trans_scale)
                                                 inst_m=Matrix.LocRotScale(inst_pos,inst_rot,inst_scale)
@@ -588,6 +589,10 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 tm[0][3]=tm[0][3]*.01 
                                                 tm[1][3]=tm[1][3]*.01
                                                 tm[2][3]=tm[2][3]*.01
+                                                new['inst_rot']=inst_rot
+                                                new['inst_pos']=inst_pos
+                                                new['inst_trans_rot']=inst_trans_rot
+                                                new['inst_trans_pos']=inst_trans_pos
 
                                                 for old_obj in group.all_objects:                            
                                                     obj=old_obj.copy()  
