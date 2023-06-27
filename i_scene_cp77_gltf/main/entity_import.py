@@ -26,18 +26,33 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
         j=json.load(f) 
         
     ent_apps= j['Data']['RootChunk']['appearances']
+    ent_applist=[]
+    for app in ent_apps:
+        ent_applist.append(app['appearanceName'])
     
+    ent_components= j['Data']['RootChunk']['components']    
+    ent_complist=[]
+    ent_rigs=[]
+    for comp in ent_components:
+        ent_complist.append(comp['name'])
+        if 'rig' in comp.keys():
+            print(comp['rig'])
+            ent_rigs.append(os.path.join(path,comp['rig']['DepotPath']))
+    resolved=[]
+    for res_p in j['Data']['RootChunk']['resolvedDependencies']:
+        resolved.append(os.path.join(path,res_p['DepotPath']))
+
+    # if no apps requested populate the list with all available.
+    if len(appearances[0])==0:
+        for app in ent_apps:
+            appearances.append(app['appearanceName'])
+
     VS=[]
     for x in j['Data']['RootChunk']['components']:
         if 'name' in x.keys() and x['name']=='vehicle_slots':
             VS.append(x)
     if len(VS)>0:
         vehicle_slots= VS[0]['slots']
-    
-    # if no apps requested populate the list with all available.
-    if len(appearances[0])==0:
-        for app in ent_apps:
-            appearances.append(app['appearanceName'])
     
     # find the appearance file jsons
     app_path = glob.glob(path+"\**\*.app.json", recursive = True)
@@ -50,29 +65,53 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
         print('No Meshes found in path')
     mesh_jsons =  glob.glob(path+"\**\*mesh.json", recursive = True)
     
-    # find the anims
-    rigs = glob.glob(path+"\\base\\animations"+"\**\*.glb", recursive = True)
+    # find the anims  
+    # look through the components and find an anim, and load that, 
+    # then check for an anim in the project thats using the rig (some things like the arch bike dont ref the anim in the ent)
+    # otherwise just skip this section
+    #
+    anim_files = glob.glob(path+"\\base\\animations\\vehicle"+"\**\*.glb", recursive = True)
     rig=None
     bones=None
     chunks=None
-    if len(rigs)>0:
+    if len(anim_files)>0 and len(ent_rigs)>0: # we have glbs and we have rigs called up in the ent
+            # get the armatures already in the model
             oldarms= [x for x in bpy.data.objects if 'Armature' in x.name]
-            bpy.ops.io_scene_gltf.cp77(filepath=rigs[0])
-            arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
-            rig=arms[0]
-            bones=rig.pose.bones
-            print('anim rig loaded')
+            animsinres=[x for x in anim_files if x[:-3]+'anims' in resolved] 
+            if len(animsinres)==0:
+                for anim in anim_files:
+                    if os.path.exists(anim[:-3]+'anims.json'):
+                        with open(anim[:-3]+'anims.json','r') as f: 
+                            anm_j=json.load(f) 
+                        if os.path.join(path,anm_j['Data']['RootChunk']['rig']['DepotPath']) in ent_rigs:
+                            animsinres.append(os.path.join(path,anim))
+            
+            if len(animsinres)>0:
+                bpy.ops.io_scene_gltf.cp77(filepath=animsinres[0])
+                #find what we just loaded
+                arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
+                rig=arms[0]
+                bones=rig.pose.bones
+                print('anim rig loaded')
+            
+                
+                
+                        
+
     else:
         print('no anim rig found')
-            
+
+    # find the rig json associated with the ent
     rigjsons = glob.glob(path+"\**\*.rig.json", recursive = True)
     rig_j=None
-    if len(rigjsons)>0:
-            with open(rigjsons[0],'r') as f: 
-                rig_j=json.load(f)['Data']['RootChunk']
-                print('rig json loaded')
+    if len(rigjsons)>0 and len(ent_rigs)>0:
+            entrigjsons=[x for x in rigjsons if x[:-5] in ent_rigs] 
+            if len(entrigjsons)>0:
+                with open(entrigjsons[0],'r') as f: 
+                    rig_j=json.load(f)['Data']['RootChunk']
+                    print('rig json loaded')
     else: 
-        print('no rig json found')
+        print('no rig json loaded')
                 
     if len(meshes)<1 or len(app_path)<1:
         print("You need to export the meshes and convert app and ent to json")
@@ -147,8 +186,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                         meshpath=os.path.join(path, c['mesh']['DepotPath'][:-4]+'glb')
                         if meshname not in exclude_meshes:      
                             if os.path.exists(meshpath):
-                                #if True:
-                                try:
+                                if True:
+                                #try:
                                     meshApp='default'
                                     if 'meshAppearance' in c.keys():
                                         meshApp=c['meshAppearance']
@@ -316,7 +355,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                                         pt_rot=bones[bindname].rotation_quaternion
                                                     
                                                         obj.location.x =  obj.location.x+pt_trans[0]
-                                                        obj.location.y = obj.location.y+pt_trans[1]                     
+                                                        obj.location.y = obj.location.y+pt_trans[1]
                                                         obj.location.z =  obj.location.z+pt_trans[2]
                                             
                                                         obj.rotation_quaternion.x = btrans['Rotation']['i'] 
@@ -390,8 +429,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                             subnum=int(obj.name[8:10])
                                             obj.hide_viewport=not cm_list[subnum]
                                             obj.hide_set(not cm_list[subnum])
-                                #else:
-                                except:
+                                else:
+                                #except:
                                     print("Failed on ",c['mesh']['DepotPath'])
         print('Exported' ,app_name)
     print("--- %s seconds ---" % (time.time() - start_time))
