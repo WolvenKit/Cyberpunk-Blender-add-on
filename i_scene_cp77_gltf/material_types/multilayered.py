@@ -558,6 +558,7 @@ class Multilayered:
             MaskMBMultiply.location = (-1600,-450)
             MaskMBMultiply.operation = 'MULTIPLY'
             MaskMBMultiply.inputs[1].default_value = 6.0
+            NG.links.new(GroupInN.outputs[2],MaskMBMultiply.inputs[1])
             
             MaskMBPower = NG.nodes.new("ShaderNodeMath")
             MaskMBPower.hide = True
