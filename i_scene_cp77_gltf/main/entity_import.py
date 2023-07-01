@@ -186,8 +186,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                         meshpath=os.path.join(path, c['mesh']['DepotPath'][:-4]+'glb')
                         if meshname not in exclude_meshes:      
                             if os.path.exists(meshpath):
-                                if True:
-                                #try:
+                                #if True:
+                                try:
                                     meshApp='default'
                                     if 'meshAppearance' in c.keys():
                                         meshApp=c['meshAppearance']
@@ -429,8 +429,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                             subnum=int(obj.name[8:10])
                                             obj.hide_viewport=not cm_list[subnum]
                                             obj.hide_set(not cm_list[subnum])
-                                else:
-                                #except:
+                                #else:
+                                except:
                                     print("Failed on ",c['mesh']['DepotPath'])
         print('Exported' ,app_name)
     print("--- %s seconds ---" % (time.time() - start_time))
