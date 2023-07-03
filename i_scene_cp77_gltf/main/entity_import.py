@@ -37,10 +37,10 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
         ent_complist.append(comp['name'])
         if 'rig' in comp.keys():
             print(comp['rig'])
-            ent_rigs.append(os.path.join(path,comp['rig']['DepotPath']))
+            ent_rigs.append(os.path.join(path,comp['rig']['DepotPath']['$value']))
     resolved=[]
     for res_p in j['Data']['RootChunk']['resolvedDependencies']:
-        resolved.append(os.path.join(path,res_p['DepotPath']))
+        resolved.append(os.path.join(path,res_p['DepotPath']['$value']))
 
     # if no apps requested populate the list with all available.
     if len(appearances[0])==0:
@@ -83,7 +83,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                     if os.path.exists(anim[:-3]+'anims.json'):
                         with open(anim[:-3]+'anims.json','r') as f: 
                             anm_j=json.load(f) 
-                        if os.path.join(path,anm_j['Data']['RootChunk']['rig']['DepotPath']) in ent_rigs:
+                        if os.path.join(path,anm_j['Data']['RootChunk']['rig']['DepotPath']['$value']) in ent_rigs:
                             animsinres.append(os.path.join(path,anim))
             
             if len(animsinres)>0:
@@ -147,7 +147,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                 if ent_app_idx<0:
                     ent_app_idx=0
 
-                app_file = ent_apps[ent_app_idx]['appearanceResource']['DepotPath']
+                app_file = ent_apps[ent_app_idx]['appearanceResource']['DepotPath']['$value']
                 appfilepath=os.path.join(path,app_file)+'.json'
                 a_j=None        
                 if os.path.exists(appfilepath):
@@ -180,17 +180,17 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
 
             for c in comps:
                 if 'mesh' in c.keys():
-                    print(c['mesh']['DepotPath'])
-                    if isinstance( c['mesh']['DepotPath'], str):
-                        meshname=os.path.basename(c['mesh']['DepotPath'])
-                        meshpath=os.path.join(path, c['mesh']['DepotPath'][:-4]+'glb')
+                    print(c['mesh']['DepotPath']['$value'])
+                    if isinstance( c['mesh']['DepotPath']['$value'], str):
+                        meshname=os.path.basename(c['mesh']['DepotPath']['$value'])
+                        meshpath=os.path.join(path, c['mesh']['DepotPath']['$value'][:-4]+'glb')
                         if meshname not in exclude_meshes:      
                             if os.path.exists(meshpath):
                                 #if True:
                                 try:
                                     meshApp='default'
                                     if 'meshAppearance' in c.keys():
-                                        meshApp=c['meshAppearance']
+                                        meshApp=c['meshAppearance']['$value']
                                         #print(meshApp)
                                     try:
                                         bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=meshApp, with_materials=with_materials)
@@ -241,7 +241,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
 
                                             # some meshes have boneRigMatrices in the mesh file which means we need jsons for the meshes or we cant access it. oh joy
                                             elif bindname=="deformation_rig" and (not chunk_pt['Data']['slotName'] or len(chunk_pt['Data']['slotName'])==1):
-                                                json_name=os.path.join(path, c['mesh']['DepotPath']+'.json')
+                                                json_name=os.path.join(path, c['mesh']['DepotPath']['$value']+'.json')
                                                 #print("in the deformation rig bit",json_name)
                                                 if json_name in mesh_jsons:
                                                     with open(mesh_jsons[mesh_jsons.index(json_name)],'r') as f: 
@@ -409,7 +409,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                             obj.scale.z = c['visualScale']['Z']
 
                                     move_coll= coll_scene.children.get( objs[0].users_collection[0].name )
-                                    move_coll['depotPath']=c['mesh']['DepotPath']
+                                    move_coll['depotPath']=c['mesh']['DepotPath']['$value']
                                     move_coll['meshAppearance']=meshApp
                                     if bindname:
                                         move_coll['bindname']=bindname
@@ -431,7 +431,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                             obj.hide_set(not cm_list[subnum])
                                 #else:
                                 except:
-                                    print("Failed on ",c['mesh']['DepotPath'])
+                                    print("Failed on ",c['mesh']['DepotPath']['$value'])
         print('Exported' ,app_name)
     print("--- %s seconds ---" % (time.time() - start_time))
 

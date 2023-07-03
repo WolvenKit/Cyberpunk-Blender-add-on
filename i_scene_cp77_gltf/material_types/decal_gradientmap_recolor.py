@@ -1,5 +1,6 @@
 import bpy
 import os
+import math
 from mathutils import Color
 if __name__ != "__main__":
     from ..main.common import *
@@ -58,16 +59,20 @@ class DecalGradientmapRecolor:
                 # Create ColorRamp node
             color_ramp_node = CurMat.nodes.new('ShaderNodeValToRGB')
             color_ramp_node.location = (-400, 250)
-        
+            print(len(colors))
+            step=1
+            if len(colors)>32:
+                step=math.ceil(len(colors)/32)
             # Set the stops
             color_ramp_node.color_ramp.elements.remove(color_ramp_node.color_ramp.elements[1])
             for i, color in enumerate(colors):
-                if i>0:
-                    element = color_ramp_node.color_ramp.elements.new(i / (len(colors) ))
-                else:
-                    element = color_ramp_node.color_ramp.elements[0]
-                element.color = (color.r, color.g, color.b, 1.0)
-                element.position = stop_positions[i]
+                if i%step==0:
+                    if i>0:
+                        element = color_ramp_node.color_ramp.elements.new(i / (len(colors) ))
+                    else:
+                        element = color_ramp_node.color_ramp.elements[0]
+                    element.color = (color.r, color.g, color.b, 1.0)
+                    element.position = stop_positions[i]
                 
             color_ramp_node.color_ramp.interpolation = 'CONSTANT' 
 
