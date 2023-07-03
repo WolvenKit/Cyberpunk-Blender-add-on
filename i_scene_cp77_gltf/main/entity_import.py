@@ -28,7 +28,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
     ent_apps= j['Data']['RootChunk']['appearances']
     ent_applist=[]
     for app in ent_apps:
-        ent_applist.append(app['appearanceName'])
+        ent_applist.append(app['appearanceName']['$value'])
     
     ent_components= j['Data']['RootChunk']['components']    
     ent_complist=[]
@@ -45,11 +45,11 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
     # if no apps requested populate the list with all available.
     if len(appearances[0])==0:
         for app in ent_apps:
-            appearances.append(app['appearanceName'])
+            appearances.append(app['appearanceName']['$value'])
 
     VS=[]
     for x in j['Data']['RootChunk']['components']:
-        if 'name' in x.keys() and x['name']=='vehicle_slots':
+        if 'name' in x.keys() and x['name']['$value']=='vehicle_slots':
             VS.append(x)
     if len(VS)>0:
         vehicle_slots= VS[0]['slots']
@@ -132,17 +132,17 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                 ent_app_idx=-1
                 # Find the appearance in the entity app list
                 for i,a in enumerate(ent_apps):
-                    if a['appearanceName']==app_name:
+                    if a['appearanceName']['$value']==app_name:
                         print('appearance matched, id = ',i)
                         ent_app_idx=i
 
                 # apparently they sometimes just sack it off and use the name not the appearanceName after all. (single_doors.ent for instance)
                 if ent_app_idx<0:
                     for i,a in enumerate(ent_apps):
-                        if a['name']==app_name:
+                        if a['name']['$value']==app_name:
                             print('appearance matched, id = ',i)
                             ent_app_idx=i
-                            app_name=a['appearanceName']
+                            app_name=a['appearanceName']['$value']
 
                 if ent_app_idx<0:
                     ent_app_idx=0
@@ -157,7 +157,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                     app_idx=0
                     for i,a in enumerate(apps):
                         #print(i,a['Data']['name'])
-                        if a['Data']['name']==app_name:
+                        if a['Data']['name']['$value']==app_name:
                             print('appearance matched, id = ',i)
                             app_idx=i
                     chunks=None
@@ -227,20 +227,20 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                         if chunk_pt:   
                                             #print('in chunk pt processing bindName = ',chunk_pt['Data']['bindName'],' slotname= ',chunk_pt['Data']['slotName'])                                     
                                             # parts have a bindname, and sometimes a slotname
-                                            bindname=chunk_pt['Data']['bindName']
+                                            bindname=chunk_pt['Data']['bindName']['$value']
                                             # if it has a bindname of vehicle_slots, you may need to find the bone name in the vehicle slots in the root ent components
                                             # this should have been loaded earlier, check for it in the vehicle slots if not just set to the slot value
                                             if bindname=='vehicle_slots':
                                                 if vehicle_slots:
-                                                    slotname=chunk_pt['Data']['slotName']
+                                                    slotname=chunk_pt['Data']['slotName']['$value']
                                                     for slot in vehicle_slots:
-                                                        if slot['slotName']==slotname:
-                                                            bindname=slot['boneName']
+                                                        if slot['slotName']['$value']==slotname:
+                                                            bindname=slot['boneName']['$value']
                                                 else:
-                                                    bindname= chunk_pt['Data']['slotName']
+                                                    bindname= chunk_pt['Data']['slotName']['$value']
 
                                             # some meshes have boneRigMatrices in the mesh file which means we need jsons for the meshes or we cant access it. oh joy
-                                            elif bindname=="deformation_rig" and (not chunk_pt['Data']['slotName'] or len(chunk_pt['Data']['slotName'])==1):
+                                            elif bindname=="deformation_rig" and (not chunk_pt['Data']['slotName']['$value'] or len(chunk_pt['Data']['slotName']['$value'])==1):
                                                 json_name=os.path.join(path, c['mesh']['DepotPath']['$value']+'.json')
                                                 #print("in the deformation rig bit",json_name)
                                                 if json_name in mesh_jsons:
@@ -314,7 +314,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                                     # if bindname isnt in the bones then its a part thats already bound to a bone, 
                                                     # These inherit the parent and local transforms from the other part, find it and work out what the transform is
                                                     for o in comps:
-                                                        if o['name']==bindname:
+                                                        if o['name']['$value']==bindname:
                                                             pT=o['parentTransform']                                                        
                                                             x=o['localTransform']['Position']['x']['Bits']/131072
                                                             y=o['localTransform']['Position']['y']['Bits']/131072
@@ -330,20 +330,20 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                                                              #print('HandleId found',chunk['parentTransform']['HandleId'])
                                                             if chunk_pt:   
                                                                 #print('in chunk pt processing')                                     
-                                                                bindname=chunk_pt['Data']['bindName']
+                                                                bindname=chunk_pt['Data']['bindName']['$value']
                                                                 if bindname=='vehicle_slots':
                                                                     if vehicle_slots:
-                                                                        slotname=chunk_pt['Data']['slotName']
+                                                                        slotname=chunk_pt['Data']['slotName']['$value']
                                                                         for slot in vehicle_slots:
-                                                                            if slot['slotName']==slotname:
-                                                                                bindname=slot['boneName']
+                                                                            if slot['slotName']['$value']==slotname:
+                                                                                bindname=slot['boneName']['$value']
                                                                                        
                                                 ######
                                                 if bindname in bones.keys(): 
                                                     #print('bindname in bones')
                                                     bidx=0
                                                     for bid, b in enumerate(rig_j['boneNames']):
-                                                        if b==bindname:
+                                                        if b['$value']==bindname:
                                                             bidx=bid
                                                             #print('bone found - ',bidx)                                                
                                                     btrans=rig_j['boneTransforms'][bidx]
