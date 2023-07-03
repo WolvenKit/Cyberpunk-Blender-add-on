@@ -2,6 +2,7 @@
 import bpy
 import os
 from ..material_types.multilayered import Multilayered
+from ..material_types.multilayeredTerrain import MultilayeredTerrain
 from ..material_types.multilayeredclearcoat import MultilayeredClearCoat
 from ..material_types.vehicledestrblendshape import VehicleDestrBlendshape
 from ..material_types.skin import Skin
@@ -26,10 +27,11 @@ from ..material_types.decal_gradientmap_recolor import DecalGradientmapRecolor
 
 
 class MaterialBuilder:
-    def __init__(self,Obj,BasePath,image_format):
+    def __init__(self,Obj,BasePath,image_format,MeshPath):
         self.BasePath = BasePath
         self.image_format = image_format
         self.obj = Obj
+        self.MeshPath= MeshPath
     
     def create(self,materialIndex):
         if self.obj.get("Materials"):
@@ -43,9 +45,13 @@ class MaterialBuilder:
             bpyMat = bpy.data.materials.new(rawMat["Name"])
             bpyMat.use_nodes = True
             match rawMat["MaterialTemplate"]:
-                case "engine\\materials\\multilayered.mt":
+                case "engine\\materials\\multilayered.mt" :
                     multilayered = Multilayered(self.BasePath,self.image_format)
                     multilayered.create(rawMat["Data"],bpyMat)
+
+                case  "base\\materials\\multilayered_terrain.mt":
+                    multilayeredTerrain = MultilayeredTerrain(self.BasePath,self.image_format,self.MeshPath)
+                    multilayeredTerrain.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\multilayered_clear_coat.mt":
                     multilayered = Multilayered(self.BasePath,self.image_format)
@@ -75,7 +81,7 @@ class MaterialBuilder:
                     skin = Skin(self.BasePath,self.image_format)
                     skin.create(rawMat["Data"],bpyMat)
 
-                case "engine\\materials\\metal_base.remt":
+                case "engine\\materials\\metal_base.remt" | "engine\\materials\\metal_base_proxy.mt":
                     metalBase = MetalBase(self.BasePath,self.image_format)
                     metalBase.create(rawMat["Data"],bpyMat)
 

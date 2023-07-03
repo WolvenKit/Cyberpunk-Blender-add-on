@@ -285,7 +285,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
             if self.with_materials and os.path.exists(BasePath + ".Material.json"):
                 file = open(BasePath + ".Material.json",mode='r')
                 obj = json.loads(file.read())
-                BasePath = str(obj["MaterialRepo"])  + "\\"
+                DepotPath = str(obj["MaterialRepo"])  + "\\"
 
                
                 json_apps=obj['Appearances']
@@ -333,7 +333,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                 MatImportList=[k for k in validmats.keys()]
                 
 
-                Builder = MaterialBuilder(obj,BasePath,str(self.image_format))
+                Builder = MaterialBuilder(obj,DepotPath,str(self.image_format),BasePath)
                 
                 counter = 0
                 bpy_mats=bpy.data.materials
