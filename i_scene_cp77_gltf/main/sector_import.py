@@ -273,7 +273,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
             match type:
                 case 'worldEntityNode': 
                     #print('worldEntityNode',i)
-                    app=data['appearanceName']
+                    app=data['appearanceName']["$value"]
                     entpath=os.path.join(path,data['entityTemplate']['DepotPath']['$value'])+'.json'
                     ent_groupname=os.path.basename(entpath).split('.')[0]+'_'+app
                     while len(ent_groupname) > 63:
@@ -425,7 +425,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                             index = 0
                             obj["Data"]["RootChunk"]['alpha'] = e['Data']['alpha']
                             #FIXME: image_format
-                            builder = MaterialBuilder(obj,path,'png')
+                            builder = MaterialBuilder(obj,path,'png',path)
                             bpymat = builder.create(index)
                             o.data.materials.append(bpymat)
                         except FileNotFoundError:
