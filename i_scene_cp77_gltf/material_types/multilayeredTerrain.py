@@ -119,43 +119,7 @@ class MultilayeredTerrain:
     
         return
 
-    def createOverrideTable(self,matTemplateObj):
-        OverList = matTemplateObj["overrides"]
-        if OverList is None:
-            OverList = matTemplateObj.get("Overrides")
-        Output = {}
-        Output["ColorScale"] = {}
-        Output["NormalStrength"] = {}
-        Output["RoughLevelsOut"] = {}
-        Output["MetalLevelsOut"] = {}
-        for x in OverList["colorScale"]:
-            tmpName = x["n"]["$value"]
-            tmpR = float(x["v"]["Elements"][0])
-            tmpG = float(x["v"]["Elements"][1])
-            tmpB = float(x["v"]["Elements"][2])
-            Output["ColorScale"][tmpName] = (tmpR,tmpG,tmpB,1)
-        for x in OverList["normalStrength"]:
-            tmpName = x["n"]["$value"]
-            tmpStrength = 0
-            if x.get("v") is not None:
-                tmpStrength = float(x["v"])
-            Output["NormalStrength"][tmpName] = tmpStrength
-        for x in OverList["roughLevelsOut"]:
-            tmpName = x["n"]["$value"]
-            tmpStrength0 = float(x["v"]["Elements"][0])
-            tmpStrength1 = float(x["v"]["Elements"][1])
-            Output["RoughLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
-        for x in OverList["metalLevelsOut"]:
-            tmpName = x["n"]["$value"]
-            if x.get("v") is not None:
-                tmpStrength0 = float(x["v"]["Elements"][0])
-                tmpStrength1 = float(x["v"]["Elements"][1])
-            else:
-                tmpStrength0 = 0
-                tmpStrength1 = 1
-            Output["MetalLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
-        return Output
-
+    
     def setGlobNormal(self,normalimgpath,CurMat,input):
         GNN = CurMat.nodes.new("ShaderNodeVectorMath")
         GNN.location = (-200,-250)
@@ -326,9 +290,9 @@ class MultilayeredTerrain:
             if MbTile != None:
                 MbScale = float(MbTile)
         
-            Microblend = x["microblend"]["DepotPath"]["$value"]
+            Microblend = x["microblend"]["DepotPath"].get("$value")
             if Microblend is None:
-                Microblend = x["Microblend"]["DepotPath"]["$value"]
+                Microblend = x["Microblend"]["DepotPath"].get("$value")
             MicroblendContrast = x.get("microblendContrast")
             if MicroblendContrast is None:
                 MicroblendContrast = x.get("Microblend",1)
@@ -339,23 +303,27 @@ class MultilayeredTerrain:
             if opacity is None:
                 opacity = x.get("Opacity")
 				
-            material = x["material"]["DepotPath"]["$value"]
+            material = x["material"]["DepotPath"].get("$value")
             if material is None:
-                material = x["Material"]["DepotPath"]["$value"]
-            colorScale = x["colorScale"]["$value"]
+                material = x["Material"]["DepotPath"].get("$value")
+
+            colorScale = x["colorScale"].get("$value")
             if colorScale is None:
-                colorScale =  x["ColorScale"]["$value"]
-            normalStrength = x["normalStrength"]["$value"]
+                colorScale =  x["ColorScale"].get("$value")
+
+            normalStrength = x["normalStrength"].get("$value")
             if normalStrength is None:
-                normalStrength = x["NormalStrength"]["$value"]
+                normalStrength = x["NormalStrength"].get("$value")
+
             #roughLevelsIn = x["roughLevelsIn"]
-            roughLevelsOut = x["roughLevelsOut"]["$value"]
+            roughLevelsOut = x["roughLevelsOut"].get("$value")
             if roughLevelsOut is None:
-                roughLevelsOut = x["RoughLevelsOut"]["$value"]
+                roughLevelsOut = x["RoughLevelsOut"].get("$value")
+
             #metalLevelsIn = x["metalLevelsIn"]
-            metalLevelsOut = x["metalLevelsOut"]["$value"]
+            metalLevelsOut = x["metalLevelsOut"].get("$value")
             if metalLevelsOut is None:
-                metalLevelsOut = x["MetalLevelsOut"]["$value"]
+                metalLevelsOut = x["MetalLevelsOut"].get("$value")
 
             if Microblend != "null":
                 if os.path.exists(self.BasePath+Microblend[:-3]+'png'):
@@ -367,7 +335,7 @@ class MultilayeredTerrain:
             file = open(self.BasePath + material + ".json",mode='r')
             mltemplate = json.loads(file.read())["Data"]["RootChunk"]
             file.close()
-            OverrideTable = self.createOverrideTable(mltemplate)#get override info for colors and what not
+            OverrideTable = createOverrideTable(mltemplate)#get override info for colors and what not
 
             NG = bpy.data.node_groups.new(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#create layer's node group
             NG.inputs.new('NodeSocketColor','ColorScale')
