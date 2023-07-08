@@ -8,10 +8,10 @@ class MultilayeredClearCoat:
         self.BasePath = str(BasePath)
         self.image_format = image_format
     def createBaseMaterial(self,matTemplateObj,name):
-        CT = imageFromPath(self.BasePath + matTemplateObj["colorTexture"]["DepotPath"],self.image_format)
-        NT = imageFromPath(self.BasePath + matTemplateObj["normalTexture"]["DepotPath"],self.image_format,isNormal = True)
-        RT = imageFromPath(self.BasePath + matTemplateObj["roughnessTexture"]["DepotPath"],self.image_format,isNormal = True)
-        MT = imageFromPath(self.BasePath + matTemplateObj["metalnessTexture"]["DepotPath"],self.image_format,isNormal = True)
+        CT = imageFromPath(self.BasePath + matTemplateObj["colorTexture"]["DepotPath"]["$value"],self.image_format)
+        NT = imageFromPath(self.BasePath + matTemplateObj["normalTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True)
+        RT = imageFromPath(self.BasePath + matTemplateObj["roughnessTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True)
+        MT = imageFromPath(self.BasePath + matTemplateObj["metalnessTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True)
     
         TileMult = float(matTemplateObj.get("tilingMultiplier",1))
 
@@ -105,24 +105,24 @@ class MultilayeredClearCoat:
         Output["RoughLevelsOut"] = {}
         Output["MetalLevelsOut"] = {}
         for x in OverList["colorScale"]:
-            tmpName = x["n"]
+            tmpName = x["n"]["$value"]
             tmpR = float(x["v"]["Elements"][0])
             tmpG = float(x["v"]["Elements"][1])
             tmpB = float(x["v"]["Elements"][2])
             Output["ColorScale"][tmpName] = (tmpR,tmpG,tmpB,1)
         for x in OverList["normalStrength"]:
-            tmpName = x["n"]
+            tmpName = x["n"]["$value"]
             tmpStrength = 0
             if x.get("v") is not None:
                 tmpStrength = float(x["v"])
             Output["NormalStrength"][tmpName] = tmpStrength
         for x in OverList["roughLevelsOut"]:
-            tmpName = x["n"]
+            tmpName = x["n"]["$value"]
             tmpStrength0 = float(x["v"]["Elements"][0])
             tmpStrength1 = float(x["v"]["Elements"][1])
             Output["RoughLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
         for x in OverList["metalLevelsOut"]:
-            tmpName = x["n"]
+            tmpName = x["n"]["$value"]
             if x.get("v") is not None:
                 tmpStrength0 = float(x["v"]["Elements"][0])
                 tmpStrength1 = float(x["v"]["Elements"][1])
@@ -296,9 +296,9 @@ class MultilayeredClearCoat:
             if MbTile != None:
                 MbScale = float(MbTile)
         
-            Microblend = x["microblend"].get("DepotPath")
+            Microblend = x["microblend"]["DepotPath"]["$value"]
             if Microblend is None:
-                Microblend = x.get("Microblend")
+                Microblend = x["Microblend"]["$value"]
             MicroblendContrast = x.get("microblendContrast")
             if MicroblendContrast is None:
                 MicroblendContrast = x.get("Microblend",1)
@@ -309,23 +309,23 @@ class MultilayeredClearCoat:
             if opacity is None:
                 opacity = x.get("Opacity")
 				
-            material = x["material"].get("DepotPath")
+            material = x["material"]["DepotPath"]["$value"]
             if material is None:
-                material = x.get("Material")
-            colorScale = x.get("colorScale")
+                material = x["Material"]["DepotPath"]["$value"]
+            colorScale = x["colorScale"]["$value"]
             if colorScale is None:
-                colorScale = x.get("ColorScale")
-            normalStrength = x.get("normalStrength")
+                colorScale =  x["ColorScale"]["$value"]
+            normalStrength = x["normalStrength"]["$value"]
             if normalStrength is None:
-                normalStrength = x.get("NormalStrength")
+                normalStrength = x["NormalStrength"]["$value"]
             #roughLevelsIn = x["roughLevelsIn"]
-            roughLevelsOut = x.get("roughLevelsOut")
+            roughLevelsOut = x["roughLevelsOut"]["$value"]
             if roughLevelsOut is None:
-                roughLevelsOut = x.get("RoughLevelsOut")
+                roughLevelsOut = x["RoughLevelsOut"]["$value"]
             #metalLevelsIn = x["metalLevelsIn"]
-            metalLevelsOut = x.get("metalLevelsOut")
+            metalLevelsOut = x["metalLevelsOut"]["$value"]
             if metalLevelsOut is None:
-                metalLevelsOut = x.get("MetalLevelsOut")
+                metalLevelsOut = x["MetalLevelsOut"]["$value"]
 
             if Microblend != "null":
                 MBI = imageFromPath(self.BasePath+Microblend,self.image_format,True)
