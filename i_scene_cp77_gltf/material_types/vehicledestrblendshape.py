@@ -95,42 +95,7 @@ class VehicleDestrBlendshape:
     
         return
 
-    def createOverrideTable(self,matTemplateObj):
-        OverList = matTemplateObj["overrides"]
-        if OverList is None:
-            OverList = matTemplateObj.get("Overrides")
-        Output = {}
-        Output["ColorScale"] = {}
-        Output["NormalStrength"] = {}
-        Output["RoughLevelsOut"] = {}
-        Output["MetalLevelsOut"] = {}
-        for x in OverList["colorScale"]:
-            tmpName = x["n"]["$value"]
-            tmpR = float(x["v"]["Elements"][0])
-            tmpG = float(x["v"]["Elements"][1])
-            tmpB = float(x["v"]["Elements"][2])
-            Output["ColorScale"][tmpName] = (tmpR,tmpG,tmpB,1)
-        for x in OverList["normalStrength"]:
-            tmpName = x["n"]["$value"]
-            tmpStrength = 0
-            if x.get("v") is not None:
-                tmpStrength = float(x["v"])
-            Output["NormalStrength"][tmpName] = tmpStrength
-        for x in OverList["roughLevelsOut"]:
-            tmpName = x["n"]["$value"]
-            tmpStrength0 = float(x["v"]["Elements"][0])
-            tmpStrength1 = float(x["v"]["Elements"][1])
-            Output["RoughLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
-        for x in OverList["metalLevelsOut"]:
-            tmpName = x["n"]["$value"]
-            if x.get("v") is not None:
-                tmpStrength0 = float(x["v"]["Elements"][0])
-                tmpStrength1 = float(x["v"]["Elements"][1])
-            else:
-                tmpStrength0 = 0
-                tmpStrength1 = 1
-            Output["MetalLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
-        return Output
+    
 
     def setGlobNormal(self,normalimgpath,CurMat,input):
         GNN = CurMat.nodes.new("ShaderNodeVectorMath")
@@ -334,7 +299,7 @@ class VehicleDestrBlendshape:
             file = open(self.BasePath + material + ".json",mode='r')
             mltemplate = json.loads(file.read())["Data"]["RootChunk"]
             file.close()
-            OverrideTable = self.createOverrideTable(mltemplate)#get override info for colors and what not
+            OverrideTable = createOverrideTable(mltemplate)#get override info for colors and what not
 
             NG = bpy.data.node_groups.new(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#create layer's node group
             NG.inputs.new('NodeSocketColor','ColorScale')

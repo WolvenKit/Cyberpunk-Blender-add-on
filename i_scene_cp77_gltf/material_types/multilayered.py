@@ -8,10 +8,10 @@ class Multilayered:
         self.BasePath = str(BasePath)
         self.image_format = image_format
     def createBaseMaterial(self,matTemplateObj,name):
-        CT = imageFromPath(self.BasePath + matTemplateObj["colorTexture"]["DepotPath"],self.image_format)
-        NT = imageFromPath(self.BasePath + matTemplateObj["normalTexture"]["DepotPath"],self.image_format,isNormal = True)
-        RT = imageFromPath(self.BasePath + matTemplateObj["roughnessTexture"]["DepotPath"],self.image_format,isNormal = True)
-        MT = imageFromPath(self.BasePath + matTemplateObj["metalnessTexture"]["DepotPath"],self.image_format,isNormal = True)
+        CT = imageFromPath(self.BasePath + matTemplateObj["colorTexture"]["DepotPath"]["$value"],self.image_format)
+        NT = imageFromPath(self.BasePath + matTemplateObj["normalTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True)
+        RT = imageFromPath(self.BasePath + matTemplateObj["roughnessTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True)
+        MT = imageFromPath(self.BasePath + matTemplateObj["metalnessTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True)
     
         TileMult = float(matTemplateObj.get("tilingMultiplier",1))
 
@@ -23,59 +23,31 @@ class Multilayered:
         NG.outputs.new('NodeSocketColor','Roughness')
         NG.outputs.new('NodeSocketColor','Normal')
     
-        CTN = NG.nodes.new("ShaderNodeTexImage")
-        CTN.hide = True
-        CTN.image = CT
+        CTN = create_node( NG.nodes, "ShaderNodeTexImage",(0,0),image = CT)
     
-        MTN = NG.nodes.new("ShaderNodeTexImage")
-        MTN.hide = True
-        MTN.image = MT
-        MTN.location[1] = -50*1
+        MTN = create_node( NG.nodes, "ShaderNodeTexImage",(0,-50*1),image = MT)
     
-        RTN = NG.nodes.new("ShaderNodeTexImage")
-        RTN.hide = True
-        RTN.image = RT
-        RTN.location[1] = -50*2
+        RTN = create_node( NG.nodes, "ShaderNodeTexImage",(0,-50*2),image = RT)
     
-        NTN = NG.nodes.new("ShaderNodeTexImage")
-        NTN.hide = True
-        NTN.image = NT
-        NTN.location[1] = -50*3
+        NTN = create_node( NG.nodes, "ShaderNodeTexImage",(0,-50*3),image = NT)
     
-        MapN = NG.nodes.new("ShaderNodeMapping")
-        MapN.hide = True
-        MapN.location = (-310,-64)
+        MapN = create_node( NG.nodes, "ShaderNodeMapping",(-310,-64))
     
-        TexCordN = NG.nodes.new("ShaderNodeTexCoord")
-        TexCordN.hide = True
-        TexCordN.location = (-500,-64)
+        TexCordN = create_node( NG.nodes, "ShaderNodeTexCoord",(-500,-64))
     
-        TileMultN = NG.nodes.new("ShaderNodeValue")
-        TileMultN.location = (-700,-45*2)
-        TileMultN.hide = True
+        TileMultN = create_node( NG.nodes, "ShaderNodeValue", (-700,-45*2))
         TileMultN.outputs[0].default_value = TileMult
     
-        GroupInN = NG.nodes.new("NodeGroupInput")
-        GroupInN.location = (-700,-45*4)
-        GroupInN.hide = True
+        GroupInN = create_node( NG.nodes, "NodeGroupInput", (-700,-45*4))
     
-        VecMathN = NG.nodes.new("ShaderNodeVectorMath")
-        VecMathN.hide=True
-        VecMathN.location = (-500,-45*3)
-        VecMathN.operation = 'MULTIPLY'
+        VecMathN = create_node( NG.nodes, "ShaderNodeVectorMath", (-500,-45*3), operation = 'MULTIPLY')
     
-        NormSepN = NG.nodes.new("ShaderNodeSeparateRGB")
-        NormSepN.hide=True
-        NormSepN.location = (300,-150)
+        NormSepN = create_node( NG.nodes, "ShaderNodeSeparateRGB", (300,-150))
     
-        NormCombN = NG.nodes.new("ShaderNodeCombineRGB")
-        NormCombN.hide=True
-        NormCombN.location = (500,-150)
+        NormCombN = create_node( NG.nodes, "ShaderNodeCombineRGB", (500,-150))
         NormCombN.inputs[2].default_value = 1
     
-        GroupOutN = NG.nodes.new("NodeGroupOutput")
-        GroupOutN.hide=True
-        GroupOutN.location = (700,0)
+        GroupOutN = create_node( NG.nodes, "NodeGroupOutput", (700,0))
     
         NG.links.new(TexCordN.outputs['UV'],MapN.inputs['Vector'])
         NG.links.new(VecMathN.outputs[0],MapN.inputs['Scale'])
@@ -95,62 +67,16 @@ class Multilayered:
     
         return
 
-    def createOverrideTable(self,matTemplateObj):
-        OverList = matTemplateObj["overrides"]
-        if OverList is None:
-            OverList = matTemplateObj.get("Overrides")
-        Output = {}
-        Output["ColorScale"] = {}
-        Output["NormalStrength"] = {}
-        Output["RoughLevelsOut"] = {}
-        Output["MetalLevelsOut"] = {}
-        for x in OverList["colorScale"]:
-            tmpName = x["n"]
-            tmpR = float(x["v"]["Elements"][0])
-            tmpG = float(x["v"]["Elements"][1])
-            tmpB = float(x["v"]["Elements"][2])
-            Output["ColorScale"][tmpName] = (tmpR,tmpG,tmpB,1)
-        for x in OverList["normalStrength"]:
-            tmpName = x["n"]
-            tmpStrength = 0
-            if x.get("v") is not None:
-                tmpStrength = float(x["v"])
-            Output["NormalStrength"][tmpName] = tmpStrength
-        for x in OverList["roughLevelsOut"]:
-            tmpName = x["n"]
-            tmpStrength0 = float(x["v"]["Elements"][0])
-            tmpStrength1 = float(x["v"]["Elements"][1])
-            Output["RoughLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
-        for x in OverList["metalLevelsOut"]:
-            tmpName = x["n"]
-            if x.get("v") is not None:
-                tmpStrength0 = float(x["v"]["Elements"][0])
-                tmpStrength1 = float(x["v"]["Elements"][1])
-            else:
-                tmpStrength0 = 0
-                tmpStrength1 = 1
-            Output["MetalLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
-        return Output
+    
 
     def setGlobNormal(self,normalimgpath,CurMat,input):
-        GNN = CurMat.nodes.new("ShaderNodeVectorMath")
-        GNN.location = (-200,-250)
-        GNN.operation = 'NORMALIZE'
-        GNN.hide = True
+        GNN = create_node(CurMat.nodes, "ShaderNodeVectorMath",(-200,-250),operation='NORMALIZE')        
+            
+        GNA = create_node(CurMat.nodes, "ShaderNodeVectorMath",(-400,-250),operation='ADD')
     
-        GNA = CurMat.nodes.new("ShaderNodeVectorMath")
-        GNA.location = (-400,-250)
-        GNA.operation = 'ADD'
-        GNA.hide = True
+        GNS = create_node(CurMat.nodes, "ShaderNodeVectorMath", (-600,-250),operation='SUBTRACT')
     
-        GNS = CurMat.nodes.new("ShaderNodeVectorMath")
-        GNS.location = (-600,-250)
-        GNS.operation = 'SUBTRACT'
-        GNS.hide = True
-    
-        GNGeo = CurMat.nodes.new("ShaderNodeNewGeometry")
-        GNGeo.location = (-800,-250)
-        GNGeo.hide = True
+        GNGeo = create_node(CurMat.nodes, "ShaderNodeNewGeometry", (-800,-250))
     
         GNMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + normalimgpath,-600,-550,'GlobalNormal',self.image_format)
         CurMat.links.new(GNGeo.outputs['Normal'],GNS.inputs[1])
@@ -161,7 +87,7 @@ class Multilayered:
         return GNN.outputs[0]
 
     def createLayerMaterial(self,LayerName,LayerCount,CurMat,mlmaskpath,normalimgpath):
-
+        
         for x in range(LayerCount-1):
             MaskTexture = imageFromPath(os.path.splitext(self.BasePath + mlmaskpath)[0]+"_"+str(x+1)+".png",self.image_format,isNormal = True)
             NG = bpy.data.node_groups.new("Layer_Blend_"+str(x),"ShaderNodeTree")#create layer's node group
@@ -179,47 +105,27 @@ class Multilayered:
             NG.outputs.new('NodeSocketColor','Roughness')
             NG.outputs.new('NodeSocketColor','Normal')
         
-            GroupInN = NG.nodes.new("NodeGroupInput")
-            GroupInN.location = (-700,0)
+            GroupInN = create_node(NG.nodes,"NodeGroupInput", (-700,0), hide=False)
         
-            GroupOutN = NG.nodes.new("NodeGroupOutput")
-            GroupOutN.hide=True
-            GroupOutN.location = (200,0)
+            GroupOutN = create_node(NG.nodes,"NodeGroupOutput",(200,0))
         
-            ColorMixN = NG.nodes.new("ShaderNodeMixRGB")
-            ColorMixN.hide=True
-            ColorMixN.location = (-300,100)
-            ColorMixN.label = "Color Mix"
+            ColorMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-300,100), label="Color Mix")
+                    
+            MetalMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-300,50), label = "Metal Mix")
         
-            MetalMixN = NG.nodes.new("ShaderNodeMixRGB")
-            MetalMixN.hide=True
-            MetalMixN.location = (-300,50)
-            MetalMixN.label = "Metal Mix"
+            RoughMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-300,0), label = "Rough Mix")
         
-            RoughMixN = NG.nodes.new("ShaderNodeMixRGB")
-            RoughMixN.hide=True
-            RoughMixN.location = (-300,0)
-            RoughMixN.label = "Rough Mix"
+            NormalMixN = create_node(NG.nodes,"ShaderNodeMixRGB",(-300,-50), label = "Normal Mix")
         
-            NormalMixN = NG.nodes.new("ShaderNodeMixRGB")
-            NormalMixN.hide=True
-            NormalMixN.location = (-300,-50)
-            NormalMixN.label = "Normal Mix"
-        
-            LayerGroupN = CurMat.nodes.new("ShaderNodeGroup")
-            LayerGroupN.location = (-1400,400-100*x)
-            LayerGroupN.hide = True
+            LayerGroupN = create_node(CurMat.nodes,"ShaderNodeGroup", (-1400,400-100*x))
             LayerGroupN.node_tree = NG
             LayerGroupN.name = "Layer_"+str(x)
         
-            MaskN = CurMat.nodes.new("ShaderNodeTexImage")
-            MaskN.hide = True
-            MaskN.image = MaskTexture
-            MaskN.location = (-2400,400-100*x)
+            MaskN = create_node(CurMat.nodes,"ShaderNodeTexImage",(-2400,400-100*x), image = MaskTexture,label="Layer_"+str(x+1))
+            
             #if self.flipMaskY:
             # Mask flip deprecated in WolvenKit deveolpment build 8.7+
             #MaskN.texture_mapping.scale[1] = -1 #flip mask if needed
-            MaskN.label="Layer_"+str(x+1)
             
             if x == 0:
                 CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+"0"].outputs[0],LayerGroupN.inputs[0])
@@ -297,36 +203,43 @@ class Multilayered:
             if MbTile != None:
                 MbScale = float(MbTile)
         
-            Microblend = x["microblend"].get("DepotPath")
+            Microblend = x["microblend"]["DepotPath"].get("$value")
             if Microblend is None:
-                Microblend = x.get("Microblend")
+                Microblend = x["Microblend"].get("$value")
+
             MicroblendContrast = x.get("microblendContrast")
             if MicroblendContrast is None:
                 MicroblendContrast = x.get("Microblend",1)
+
             microblendNormalStrength = x.get("microblendNormalStrength")
             if microblendNormalStrength is None:
                 microblendNormalStrength = x.get("MicroblendNormalStrength")
+
             opacity = x.get("opacity")
             if opacity is None:
                 opacity = x.get("Opacity")
 				
-            material = x["material"].get("DepotPath")
+            material = x["material"]["DepotPath"].get("$value")
             if material is None:
-                material = x.get("Material")
-            colorScale = x.get("colorScale")
+                material = x["Material"]["DepotPath"].get("$value")
+
+            colorScale = x["colorScale"].get("$value")
             if colorScale is None:
-                colorScale = x.get("ColorScale")
-            normalStrength = x.get("normalStrength")
+                colorScale = x["ColorScale"].get("$value")
+
+            normalStrength = x["normalStrength"].get("$value")
             if normalStrength is None:
-                normalStrength = x.get("NormalStrength")
+                normalStrength = x["NormalStrength"].get("$value")
+
             #roughLevelsIn = x["roughLevelsIn"]
-            roughLevelsOut = x.get("roughLevelsOut")
+            roughLevelsOut = x["roughLevelsOut"].get("$value")
             if roughLevelsOut is None:
-                roughLevelsOut = x.get("RoughLevelsOut")
+                roughLevelsOut = x["RoughLevelsOut"].get("$value")
+
             #metalLevelsIn = x["metalLevelsIn"]
-            metalLevelsOut = x.get("metalLevelsOut")
+            metalLevelsOut = x["metalLevelsOut"].get("$value")
             if metalLevelsOut is None:
-                metalLevelsOut = x.get("MetalLevelsOut")
+                metalLevelsOut = x["MetalLevelsOut"].get("$value")
 
             if Microblend != "null":
                 MBI = imageFromPath(self.BasePath+Microblend,self.image_format,True)
@@ -334,7 +247,7 @@ class Multilayered:
             file = open(self.BasePath + material + ".json",mode='r')
             mltemplate = json.loads(file.read())["Data"]["RootChunk"]
             file.close()
-            OverrideTable = self.createOverrideTable(mltemplate)#get override info for colors and what not
+            OverrideTable = createOverrideTable(mltemplate)#get override info for colors and what not
 
             NG = bpy.data.node_groups.new(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#create layer's node group
             NG.inputs.new('NodeSocketColor','ColorScale')
@@ -355,35 +268,26 @@ class Multilayered:
             NG.inputs[6].min_value = 0
             NG.inputs[6].max_value = 1
             
-            LayerGroupN = CurMat.nodes.new("ShaderNodeGroup")
-            LayerGroupN.location = (-2000,500-100*LayerIndex)
-            LayerGroupN.hide = True
+            LayerGroupN = create_node(CurMat.nodes, "ShaderNodeGroup", (-2000,500-100*LayerIndex))
             LayerGroupN.width = 400
             LayerGroupN.node_tree = NG
             LayerGroupN.name = "Mat_Mod_Layer_"+str(LayerIndex)
             LayerIndex += 1
             
-            GroupInN = NG.nodes.new("NodeGroupInput")
-            GroupInN.hide=True
-            GroupInN.location = (-2600,0)
+            GroupInN = create_node(NG.nodes, "NodeGroupInput", (-2600,0))
             
-            GroupOutN = NG.nodes.new("NodeGroupOutput")
-            GroupOutN.hide=True
-            GroupOutN.location = (200,0)
+            GroupOutN = create_node(NG.nodes, "NodeGroupOutput", (200,0))
 
             if not bpy.data.node_groups.get(os.path.basename(material)[:-11]):
                 self.createBaseMaterial(mltemplate,os.path.basename(material))
 
             BaseMat = bpy.data.node_groups.get(os.path.basename(material)[:-11])
             if BaseMat:
-                BMN = NG.nodes.new("ShaderNodeGroup")
-                BMN.location = (-2000,0)
+                BMN = create_node(NG.nodes,"ShaderNodeGroup", (-2000,0))
                 BMN.width = 300
-                BMN.hide = True
                 BMN.node_tree = BaseMat
             
             # SET LAYER GROUP DEFAULT VALUES
-            
             if colorScale != None and colorScale in OverrideTable["ColorScale"].keys():
                 LayerGroupN.inputs[0].default_value = OverrideTable["ColorScale"][colorScale]
             else:
@@ -423,40 +327,23 @@ class Multilayered:
             # DEFINES MAIN MULTILAYERED PROPERTIES
         
             if colorScale != "null":
-                ColorScaleMixN = NG.nodes.new("ShaderNodeMixRGB")
-                ColorScaleMixN.hide=True
-                ColorScaleMixN.location=(-1500,50)
+                ColorScaleMixN = create_node(NG.nodes,"ShaderNodeMixRGB",(-1500,50),blend_type='MULTIPLY')
                 ColorScaleMixN.inputs[0].default_value=1
-                ColorScaleMixN.blend_type='MULTIPLY'
             
-            MBN = NG.nodes.new("ShaderNodeTexImage")
-            MBN.hide = True
-            MBN.image = MBI
-            MBN.location = (-1900,-400)
-            MBN.label = "Microblend"
+            MBN = create_node(NG.nodes,"ShaderNodeTexImage",(-2050,-250),image = MBI,label = "Microblend")
             
-            MBRGBCurveN = NG.nodes.new("ShaderNodeRGBCurve")
-            MBRGBCurveN.hide = True
-            MBRGBCurveN.location = (-1600,-350)
+            MBRGBCurveN = create_node(NG.nodes,"ShaderNodeRGBCurve",(-1600,-250))
             MBRGBCurveN.mapping.curves[0].points[0].location = (0,1)
             MBRGBCurveN.mapping.curves[0].points[1].location = (1,0)
             MBRGBCurveN.mapping.curves[1].points[0].location = (0,1)
             MBRGBCurveN.mapping.curves[1].points[1].location = (1,0)
             
-            MBGrtrThanN = NG.nodes.new("ShaderNodeMath")
-            MBGrtrThanN.hide = True
-            MBGrtrThanN.location = (-1200,-350)
-            MBGrtrThanN.operation = 'GREATER_THAN'
+            MBGrtrThanN = create_node(NG.nodes,"ShaderNodeMath", (-1200,-350),operation = 'GREATER_THAN')
             MBGrtrThanN.inputs[1].default_value = 0
             
-            MBMixN = NG.nodes.new("ShaderNodeMixRGB")
-            MBMixN.hide = True
-            MBMixN.location =  (-1200,-400)
-            MBMixN.blend_type ='MIX'
+            MBMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-1200,-400), blend_type ='MIX')
             
-            MBMixColorRamp = NG.nodes.new("ShaderNodeValToRGB")
-            MBMixColorRamp.hide = True
-            MBMixColorRamp.location = (-1350,-500)
+            MBMixColorRamp = create_node(NG.nodes,"ShaderNodeValToRGB", (-1100,-500))
             MBMixColorRamp.color_ramp.elements.remove(MBMixColorRamp.color_ramp.elements[1])
             MBMix_colors = [(0.25,0.25,0.25,1), (1,1,1,1)]
             MBMix_positions = [0.9, 0.99608]
@@ -466,106 +353,75 @@ class Multilayered:
                 element = elements.new(MBMix_positions[i])
                 element.color = MBMix_colors[i]
             
-            MBMixNormStrength = NG.nodes.new("ShaderNodeMixRGB")
-            MBMixNormStrength.hide = True
-            MBMixNormStrength.location =  (-950,-350)
-            MBMixNormStrength.blend_type ='MIX'
+            MBMixNormStrength = create_node(NG.nodes,"ShaderNodeMixRGB", (-950,-350),blend_type ='MIX')
             MBMixNormStrength.inputs[2].default_value = (0.5,0.5,1.0,1.0)
             
-            MBMapping = NG.nodes.new("ShaderNodeMapping")
-            MBMapping.hide = True
-            MBMapping.location = (-2100,-400)
+            MBMapping = create_node(NG.nodes,"ShaderNodeMapping", (-2300,-50))
             
-            MBTexCord = NG.nodes.new("ShaderNodeTexCoord")
-            MBTexCord.hide = True
-            MBTexCord.location = (-2100,-450)
+            MBTexCord = create_node(NG.nodes,"ShaderNodeTexCoord", (-2300,-100))
             
-            MBNormAbsN = NG.nodes.new("ShaderNodeMath")
-            MBNormAbsN.hide=True
-            MBNormAbsN.location = (-750,-300)
-            MBNormAbsN.operation = 'ABSOLUTE'
+            MBNormAbsN = create_node(NG.nodes,"ShaderNodeMath", (-750,-300), operation = 'ABSOLUTE')
             
-            MBNormalN = NG.nodes.new("ShaderNodeNormalMap")
-            MBNormalN.hide = True
-            MBNormalN.location = (-750,-350)
+            MBNormalN = create_node(NG.nodes,"ShaderNodeNormalMap", (-750,-350))
             
-            NormalCombineN = NG.nodes.new("ShaderNodeVectorMath")
-            NormalCombineN.hide = True
-            NormalCombineN.location = (-550,-250)
+            NormalCombineN = create_node(NG.nodes,"ShaderNodeVectorMath", (-550,-250))
             
-            NormSubN = NG.nodes.new("ShaderNodeVectorMath")
-            NormSubN.hide=True
-            NormSubN.location = (-550, -350)
-            NormSubN.operation = 'SUBTRACT'
+            NormSubN = create_node(NG.nodes,"ShaderNodeVectorMath", (-550, -350), operation = 'SUBTRACT')
             
-            NormalizeN = NG.nodes.new("ShaderNodeVectorMath")
-            NormalizeN.hide = True
-            NormalizeN.location = (-350,-200)
-            NormalizeN.operation = 'NORMALIZE'
+            NormalizeN =create_node(NG.nodes,"ShaderNodeVectorMath", (-350,-200), operation = 'NORMALIZE')
             
-            GeoN = NG.nodes.new("ShaderNodeNewGeometry")
-            GeoN.hide=True
-            GeoN.location=(-750, -450)
+            GeoN = create_node(NG.nodes,"ShaderNodeNewGeometry", (-750, -450))
             
-            NormStrengthN = NG.nodes.new("ShaderNodeNormalMap")
-            NormStrengthN.hide = True
-            NormStrengthN.label = ("NormalStrength")
-            NormStrengthN.location = (-1200,-200)
+            NormStrengthN = create_node(NG.nodes,"ShaderNodeNormalMap", (-1200,-200), label = "NormalStrength")
+         
             
             # Roughness
-            RoughRampN = NG.nodes.new("ShaderNodeMapRange")
-            RoughRampN.hide=True
-            RoughRampN.location = (-1400,-100)
+            RoughRampN = create_node(NG.nodes,"ShaderNodeMapRange", (-1400,-100), label = "Roughness Ramp")
             if roughLevelsOut in OverrideTable["RoughLevelsOut"].keys():
                 RoughRampN.inputs['To Min'].default_value = (OverrideTable["RoughLevelsOut"][roughLevelsOut][1][0])
                 RoughRampN.inputs['To Max'].default_value = (OverrideTable["RoughLevelsOut"][roughLevelsOut][0][0])
-            RoughRampN.label = "Roughness Ramp"
+            
             
             # Metalness
-            MetalRampN = NG.nodes.new("ShaderNodeValToRGB")
-            MetalRampN.hide=True
-            MetalRampN.location = (-1400,-50)
+            MetalRampN = create_node(NG.nodes,"ShaderNodeValToRGB", (-1400,-50),label = "Metal Ramp")
             if metalLevelsOut in OverrideTable["MetalLevelsOut"].keys():
                 MetalRampN.color_ramp.elements[1].color = (OverrideTable["MetalLevelsOut"][metalLevelsOut][0])
                 MetalRampN.color_ramp.elements[0].color = (OverrideTable["MetalLevelsOut"][metalLevelsOut][1])
-            MetalRampN.label = "Metal Ramp"
+            
 			
 			# Mask Layer
-            MaskMix1 = NG.nodes.new("ShaderNodeMixRGB")
-            MaskMix1.hide = True
-            MaskMix1.location =  (-1600,-500)
-            MaskMix1.blend_type ='OVERLAY'
-            MaskMix1.inputs[0].default_value = 1
-            
-            MaskMix2 = NG.nodes.new("ShaderNodeMixRGB")
-            MaskMix2.hide = True
-            MaskMix2.location =  (-1600,-600)
-            MaskMix2.blend_type ='MIX'
-            MaskMix2.inputs[0].default_value = 1
-            
-            MaskOpReroute = NG.nodes.new("NodeReroute")
-            MaskOpReroute.location = (-1600,-650)
-            
-            MaskMix3 = NG.nodes.new("ShaderNodeMixRGB")
-            MaskMix3.label = "OPACITY MIX"
-            MaskMix3.hide = True
-            MaskMix3.location =  (-600,-550)
-            MaskMix3.blend_type ='MULTIPLY'
-            MaskMix3.inputs[0].default_value = 1
-            
-            MaskMBMultiply = NG.nodes.new("ShaderNodeMath")
-            MaskMBMultiply.hide = True
-            MaskMBMultiply.location = (-1600,-450)
-            MaskMBMultiply.operation = 'MULTIPLY'
-            MaskMBMultiply.inputs[1].default_value = 6.0
-            NG.links.new(GroupInN.outputs[2],MaskMBMultiply.inputs[0])
-            
-            MaskMBPower = NG.nodes.new("ShaderNodeMath")
-            MaskMBPower.hide = True
-            MaskMBPower.location = (-1600,-550)
-            MaskMBPower.operation = 'POWER'
-            MaskMBPower.inputs[1].default_value = 100.0
-            MaskMBPower.use_clamp = True
+            MaskMBInvert = create_node(NG.nodes,"ShaderNodeInvert", (-1700,-350))
+            MaskMBInvert.inputs[0].default_value = 1.0
+
+            MaskRange = create_node(NG.nodes,"ShaderNodeMapRange", (-2200,-550))
+            MaskRange.inputs['From Min'].default_value = (0)
+            MaskRange.inputs['From Max'].default_value = (1)
+            MaskRange.inputs['To Min'].default_value = (0)
+            MaskRange.inputs['To Max'].default_value = (1)
+            MaskRange.clamp = True
+
+            MaskMBMultiplyAdd = create_node(NG.nodes,"ShaderNodeMath", (-2000,-650), operation = 'MULTIPLY_ADD')
+            MaskMBMultiplyAdd.inputs[1].default_value = 1
+            MaskMBMultiplyAdd.inputs[2].default_value = 0.5
+
+            MaskMBAdd = create_node(NG.nodes,"ShaderNodeMath", (-1700,-650), operation = 'ADD')
+            MaskMBAdd.inputs[0].default_value = 0
+
+            MaskMBSubtract = create_node(NG.nodes,"ShaderNodeMath", (-1700,-750), operation = 'SUBTRACT')
+            MaskMBSubtract.inputs[1].default_value = 1.0
+
+            MaskRange2 = create_node(NG.nodes,"ShaderNodeMapRange", (-1400,-650))
+
+            MaskMBContrastSubtract = create_node(NG.nodes,"ShaderNodeMath", (-1400,-550), operation = 'SUBTRACT')
+            MaskMBContrastSubtract.inputs[0].default_value = 1.0
+
+            MaskOpReroute = create_node(NG.nodes,"NodeReroute", (-1600,-650))
+
+            MaskMBMix = create_node(NG.nodes,"ShaderNodeMix", (-900,-550), label = "MASK MB BLEND", blend_type ='LINEAR_LIGHT')
+            MaskMBMix.data_type ='RGBA'
+
+            MaskOpMix = create_node(NG.nodes,"ShaderNodeMixRGB", (-600,-550), label = "OPACITY MIX", blend_type ='MIX')
+            MaskOpMix.inputs[1].default_value = (0,0,0,1)
             
             
             # CREATE FINAL LINKS
@@ -574,13 +430,27 @@ class Multilayered:
             NG.links.new(GroupInN.outputs[2],MBMapping.inputs[3])
             NG.links.new(GroupInN.outputs[3],MBGrtrThanN.inputs[0])
             NG.links.new(GroupInN.outputs[3],MBNormAbsN.inputs[0])
-            NG.links.new(GroupInN.outputs[4],MaskMix2.inputs[0])
+            NG.links.new(GroupInN.outputs[4],MaskMBMultiplyAdd.inputs[0])
+            NG.links.new(GroupInN.outputs[4],MaskMBContrastSubtract.inputs[1])
             NG.links.new(GroupInN.outputs[5],NormStrengthN.inputs[0])
             NG.links.new(GroupInN.outputs[6],MaskOpReroute.inputs[0])
-            NG.links.new(MaskOpReroute.outputs[0],MaskMix3.inputs[2])
-            NG.links.new(GroupInN.outputs[7],MaskMix1.inputs[1])
-            NG.links.new(GroupInN.outputs[7],MaskMix2.inputs[2])
-            
+            NG.links.new(MaskOpReroute.outputs[0],MaskOpMix.inputs[0])
+            NG.links.new(GroupInN.outputs[7],MaskRange.inputs[0])
+
+            NG.links.new(MaskMBContrastSubtract.outputs[0],MaskMBMix.inputs[0])
+            NG.links.new(MaskRange.outputs[0],MaskMBMix.inputs[6])
+            NG.links.new(MaskRange2.outputs[0],MaskMBMix.inputs[7])
+
+            NG.links.new(MaskMBMultiplyAdd.outputs[0],MaskMBAdd.inputs[1])
+            NG.links.new(MaskMBMultiplyAdd.outputs[0],MaskMBSubtract.inputs[1])
+
+            NG.links.new(MBN.outputs[1],MaskMBInvert.inputs[1])
+            NG.links.new(MaskMBInvert.outputs[0],MaskRange2.inputs[0])
+            NG.links.new(MaskMBAdd.outputs[0],MaskRange2.inputs[1])
+            NG.links.new(MaskMBSubtract.outputs[0],MaskRange2.inputs[2])
+
+            NG.links.new(MaskMBMix.outputs[2],MaskOpMix.inputs[2])
+
             NG.links.new(BMN.outputs[0],ColorScaleMixN.inputs[1])
             NG.links.new(BMN.outputs[1],MetalRampN.inputs[0])
             NG.links.new(BMN.outputs[2],RoughRampN.inputs[0])
@@ -590,13 +460,7 @@ class Multilayered:
             NG.links.new(MBMapping.outputs[0],MBN.inputs[0])
             NG.links.new(MBN.outputs[0],MBRGBCurveN.inputs[1])
             NG.links.new(MBN.outputs[0],MBMixN.inputs[2])
-            NG.links.new(MBN.outputs[1],MaskMBMultiply.inputs[0])
-            
-            NG.links.new(MaskMBMultiply.outputs[0],MaskMix1.inputs[2])
-            NG.links.new(MaskMix1.outputs[0],MaskMBPower.inputs[0])
-            NG.links.new(MaskMBPower.outputs[0],MaskMix2.inputs[1])
-            NG.links.new(MaskMix2.outputs[0],MaskMix3.inputs[1])
-            NG.links.new(MaskMix2.outputs[0],MBMixColorRamp.inputs[0])
+
             NG.links.new(MBMixColorRamp.outputs[0],MBMixNormStrength.inputs[0])
             
             NG.links.new(NormStrengthN.outputs[0],NormalCombineN.inputs[0])
@@ -615,6 +479,6 @@ class Multilayered:
             NG.links.new(MetalRampN.outputs[0],GroupOutN.inputs[1]) #Metalness output
             NG.links.new(RoughRampN.outputs[0],GroupOutN.inputs[2]) #Roughness output
             NG.links.new(NormalizeN.outputs[0],GroupOutN.inputs[3]) #Normal output
-            NG.links.new(MaskMix3.outputs[0],GroupOutN.inputs[4]) #Mask Layer output
+            NG.links.new(MaskOpMix.outputs[0],GroupOutN.inputs[4]) #Mask Layer output
         
         self.createLayerMaterial(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_",LayerCount,CurMat,Data["MultilayerMask"],Data["GlobalNormal"])
