@@ -12,29 +12,29 @@ class MultilayeredTerrain:
         self.ProjPath=before+mid
 
     def createBaseMaterial(self,matTemplateObj,name):
-        print(self.BasePath + matTemplateObj["colorTexture"]["DepotPath"])
-        if os.path.exists(self.BasePath + matTemplateObj["colorTexture"]["DepotPath"][:-3]+'png'):
-            ct_path=self.BasePath + matTemplateObj["colorTexture"]["DepotPath"]
+        print(self.BasePath + matTemplateObj["colorTexture"]["DepotPath"]["$value"])
+        if os.path.exists(self.BasePath + matTemplateObj["colorTexture"]["DepotPath"]["$value"][:-3]+'png'):
+            ct_path=self.BasePath + matTemplateObj["colorTexture"]["DepotPath"]["$value"]
         else:
-            ct_path=self.ProjPath + matTemplateObj["colorTexture"]["DepotPath"]
+            ct_path=self.ProjPath + matTemplateObj["colorTexture"]["DepotPath"]["$value"]
         CT = imageFromPath(ct_path,self.image_format)
 
-        if os.path.exists(self.BasePath + matTemplateObj["normalTexture"]["DepotPath"][:-3]+'png'):
-            nt_path=self.BasePath + matTemplateObj["normalTexture"]["DepotPath"]
+        if os.path.exists(self.BasePath + matTemplateObj["normalTexture"]["DepotPath"]["$value"][:-3]+'png'):
+            nt_path=self.BasePath + matTemplateObj["normalTexture"]["DepotPath"]["$value"]
         else:
-            nt_path=self.ProjPath + matTemplateObj["normalTexture"]["DepotPath"]
+            nt_path=self.ProjPath + matTemplateObj["normalTexture"]["DepotPath"]["$value"]
         NT = imageFromPath(nt_path,self.image_format,isNormal = True)
         
-        if os.path.exists(self.BasePath + matTemplateObj["roughnessTexture"]["DepotPath"][:-3]+'png'):
-            rt_path=self.BasePath + matTemplateObj["roughnessTexture"]["DepotPath"]
+        if os.path.exists(self.BasePath + matTemplateObj["roughnessTexture"]["DepotPath"]["$value"][:-3]+'png'):
+            rt_path=self.BasePath + matTemplateObj["roughnessTexture"]["DepotPath"]["$value"]
         else:
-            rt_path=self.ProjPath + matTemplateObj["roughnessTexture"]["DepotPath"]
+            rt_path=self.ProjPath + matTemplateObj["roughnessTexture"]["DepotPath"]["$value"]
         RT = imageFromPath(rt_path,self.image_format,isNormal = True)
      
-        if os.path.exists(self.BasePath + matTemplateObj["metalnessTexture"]["DepotPath"][:-3]+'png'):
-            mt_path=self.BasePath + matTemplateObj["metalnessTexture"]["DepotPath"]
+        if os.path.exists(self.BasePath + matTemplateObj["metalnessTexture"]["DepotPath"]["$value"][:-3]+'png'):
+            mt_path=self.BasePath + matTemplateObj["metalnessTexture"]["DepotPath"]["$value"]
         else:
-            mt_path=self.ProjPath + matTemplateObj["metalnessTexture"]["DepotPath"]
+            mt_path=self.ProjPath + matTemplateObj["metalnessTexture"]["DepotPath"]["$value"]
         MT = imageFromPath(mt_path,self.image_format,isNormal = True)
     
         TileMult = float(matTemplateObj.get("tilingMultiplier",1))
@@ -129,24 +129,24 @@ class MultilayeredTerrain:
         Output["RoughLevelsOut"] = {}
         Output["MetalLevelsOut"] = {}
         for x in OverList["colorScale"]:
-            tmpName = x["n"]
+            tmpName = x["n"]["$value"]
             tmpR = float(x["v"]["Elements"][0])
             tmpG = float(x["v"]["Elements"][1])
             tmpB = float(x["v"]["Elements"][2])
             Output["ColorScale"][tmpName] = (tmpR,tmpG,tmpB,1)
         for x in OverList["normalStrength"]:
-            tmpName = x["n"]
+            tmpName = x["n"]["$value"]
             tmpStrength = 0
             if x.get("v") is not None:
                 tmpStrength = float(x["v"])
             Output["NormalStrength"][tmpName] = tmpStrength
         for x in OverList["roughLevelsOut"]:
-            tmpName = x["n"]
+            tmpName = x["n"]["$value"]
             tmpStrength0 = float(x["v"]["Elements"][0])
             tmpStrength1 = float(x["v"]["Elements"][1])
             Output["RoughLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
         for x in OverList["metalLevelsOut"]:
-            tmpName = x["n"]
+            tmpName = x["n"]["$value"]
             if x.get("v") is not None:
                 tmpStrength0 = float(x["v"]["Elements"][0])
                 tmpStrength1 = float(x["v"]["Elements"][1])
@@ -326,9 +326,9 @@ class MultilayeredTerrain:
             if MbTile != None:
                 MbScale = float(MbTile)
         
-            Microblend = x["microblend"].get("DepotPath")
+            Microblend = x["microblend"]["DepotPath"]["$value"]
             if Microblend is None:
-                Microblend = x.get("Microblend")
+                Microblend = x["Microblend"]["DepotPath"]["$value"]
             MicroblendContrast = x.get("microblendContrast")
             if MicroblendContrast is None:
                 MicroblendContrast = x.get("Microblend",1)
@@ -339,23 +339,23 @@ class MultilayeredTerrain:
             if opacity is None:
                 opacity = x.get("Opacity")
 				
-            material = x["material"].get("DepotPath")
+            material = x["material"]["DepotPath"]["$value"]
             if material is None:
-                material = x.get("Material")
-            colorScale = x.get("colorScale")
+                material = x["Material"]["DepotPath"]["$value"]
+            colorScale = x["colorScale"]["$value"]
             if colorScale is None:
-                colorScale = x.get("ColorScale")
-            normalStrength = x.get("normalStrength")
+                colorScale =  x["ColorScale"]["$value"]
+            normalStrength = x["normalStrength"]["$value"]
             if normalStrength is None:
-                normalStrength = x.get("NormalStrength")
+                normalStrength = x["NormalStrength"]["$value"]
             #roughLevelsIn = x["roughLevelsIn"]
-            roughLevelsOut = x.get("roughLevelsOut")
+            roughLevelsOut = x["roughLevelsOut"]["$value"]
             if roughLevelsOut is None:
-                roughLevelsOut = x.get("RoughLevelsOut")
+                roughLevelsOut = x["RoughLevelsOut"]["$value"]
             #metalLevelsIn = x["metalLevelsIn"]
-            metalLevelsOut = x.get("metalLevelsOut")
+            metalLevelsOut = x["metalLevelsOut"]["$value"]
             if metalLevelsOut is None:
-                metalLevelsOut = x.get("MetalLevelsOut")
+                metalLevelsOut = x["MetalLevelsOut"]["$value"]
 
             if Microblend != "null":
                 if os.path.exists(self.BasePath+Microblend[:-3]+'png'):
