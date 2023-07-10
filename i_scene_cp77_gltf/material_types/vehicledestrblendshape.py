@@ -8,10 +8,10 @@ class VehicleDestrBlendshape:
         self.BasePath = str(BasePath)
         self.image_format = image_format
     def createBaseMaterial(self,matTemplateObj,name):
-        CT = imageFromPath(self.BasePath + matTemplateObj["colorTexture"]["DepotPath"],self.image_format)
-        NT = imageFromPath(self.BasePath + matTemplateObj["normalTexture"]["DepotPath"],self.image_format,isNormal = True)
-        RT = imageFromPath(self.BasePath + matTemplateObj["roughnessTexture"]["DepotPath"],self.image_format,isNormal = True)
-        MT = imageFromPath(self.BasePath + matTemplateObj["metalnessTexture"]["DepotPath"],self.image_format,isNormal = True)
+        CT = imageFromPath(self.BasePath + matTemplateObj["colorTexture"]["DepotPath"]["$value"],self.image_format)
+        NT = imageFromPath(self.BasePath + matTemplateObj["normalTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True)
+        RT = imageFromPath(self.BasePath + matTemplateObj["roughnessTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True)
+        MT = imageFromPath(self.BasePath + matTemplateObj["metalnessTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True)
     
         TileMult = float(matTemplateObj.get("tilingMultiplier",1))
 
@@ -95,42 +95,7 @@ class VehicleDestrBlendshape:
     
         return
 
-    def createOverrideTable(self,matTemplateObj):
-        OverList = matTemplateObj["overrides"]
-        if OverList is None:
-            OverList = matTemplateObj.get("Overrides")
-        Output = {}
-        Output["ColorScale"] = {}
-        Output["NormalStrength"] = {}
-        Output["RoughLevelsOut"] = {}
-        Output["MetalLevelsOut"] = {}
-        for x in OverList["colorScale"]:
-            tmpName = x["n"]
-            tmpR = float(x["v"]["Elements"][0])
-            tmpG = float(x["v"]["Elements"][1])
-            tmpB = float(x["v"]["Elements"][2])
-            Output["ColorScale"][tmpName] = (tmpR,tmpG,tmpB,1)
-        for x in OverList["normalStrength"]:
-            tmpName = x["n"]
-            tmpStrength = 0
-            if x.get("v") is not None:
-                tmpStrength = float(x["v"])
-            Output["NormalStrength"][tmpName] = tmpStrength
-        for x in OverList["roughLevelsOut"]:
-            tmpName = x["n"]
-            tmpStrength0 = float(x["v"]["Elements"][0])
-            tmpStrength1 = float(x["v"]["Elements"][1])
-            Output["RoughLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
-        for x in OverList["metalLevelsOut"]:
-            tmpName = x["n"]
-            if x.get("v") is not None:
-                tmpStrength0 = float(x["v"]["Elements"][0])
-                tmpStrength1 = float(x["v"]["Elements"][1])
-            else:
-                tmpStrength0 = 0
-                tmpStrength1 = 1
-            Output["MetalLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
-        return Output
+    
 
     def setGlobNormal(self,normalimgpath,CurMat,input):
         GNN = CurMat.nodes.new("ShaderNodeVectorMath")
@@ -297,9 +262,9 @@ class VehicleDestrBlendshape:
             if MbTile != None:
                 MbScale = float(MbTile)
         
-            Microblend = x["microblend"].get("DepotPath")
+            Microblend = x["microblend"]["DepotPath"]["$value"]
             if Microblend is None:
-                Microblend = x.get("Microblend")
+                Microblend = x["Microblend"]["DepotPath"]["$value"]
             MicroblendContrast = x.get("microblendContrast")
             if MicroblendContrast is None:
                 MicroblendContrast = x.get("Microblend",1)
@@ -310,23 +275,23 @@ class VehicleDestrBlendshape:
             if opacity is None:
                 opacity = x.get("Opacity")
 				
-            material = x["material"].get("DepotPath")
+            material = x["material"]["DepotPath"]["$value"]
             if material is None:
-                material = x.get("Material")
-            colorScale = x.get("colorScale")
+                material = x["Material"]["DepotPath"]["$value"]
+            colorScale = x["colorScale"]["$value"]
             if colorScale is None:
-                colorScale = x.get("ColorScale")
-            normalStrength = x.get("normalStrength")
+                colorScale =  x["ColorScale"]["$value"]
+            normalStrength = x["normalStrength"]["$value"]
             if normalStrength is None:
-                normalStrength = x.get("NormalStrength")
+                normalStrength = x["NormalStrength"]["$value"]
             #roughLevelsIn = x["roughLevelsIn"]
-            roughLevelsOut = x.get("roughLevelsOut")
+            roughLevelsOut = x["roughLevelsOut"]["$value"]
             if roughLevelsOut is None:
-                roughLevelsOut = x.get("RoughLevelsOut")
+                roughLevelsOut = x["RoughLevelsOut"]["$value"]
             #metalLevelsIn = x["metalLevelsIn"]
-            metalLevelsOut = x.get("metalLevelsOut")
+            metalLevelsOut = x["metalLevelsOut"]["$value"]
             if metalLevelsOut is None:
-                metalLevelsOut = x.get("MetalLevelsOut")
+                metalLevelsOut = x["MetalLevelsOut"]["$value"]
 
             if Microblend != "null":
                 MBI = imageFromPath(self.BasePath+Microblend,self.image_format,True)
@@ -334,7 +299,7 @@ class VehicleDestrBlendshape:
             file = open(self.BasePath + material + ".json",mode='r')
             mltemplate = json.loads(file.read())["Data"]["RootChunk"]
             file.close()
-            OverrideTable = self.createOverrideTable(mltemplate)#get override info for colors and what not
+            OverrideTable = createOverrideTable(mltemplate)#get override info for colors and what not
 
             NG = bpy.data.node_groups.new(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#create layer's node group
             NG.inputs.new('NodeSocketColor','ColorScale')
@@ -614,4 +579,9 @@ class VehicleDestrBlendshape:
             NG.links.new(NormalizeN.outputs[0],GroupOutN.inputs[3]) #Normal output
             NG.links.new(MaskMix3.outputs[0],GroupOutN.inputs[4]) #Mask Layer output
         
-        self.createLayerMaterial(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_",LayerCount,CurMat,Data["MultilayerMask"],Data["GlobalNormal"])
+        if "BakedNormal" in Data.keys():
+            LayerNormal=Data["BakedNormal"]
+        else:
+            LayerNormal=Data["GlobalNormal"]
+
+        self.createLayerMaterial(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_",LayerCount,CurMat,Data["MultilayerMask"],LayerNormal)

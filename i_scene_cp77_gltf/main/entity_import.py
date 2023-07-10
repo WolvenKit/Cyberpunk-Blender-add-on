@@ -26,18 +26,33 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
         j=json.load(f) 
         
     ent_apps= j['Data']['RootChunk']['appearances']
+    ent_applist=[]
+    for app in ent_apps:
+        ent_applist.append(app['appearanceName']['$value'])
     
-    VS=[]
-    for x in j['Data']['RootChunk']['components']:
-        if 'name' in x.keys() and x['name']=='vehicle_slots':
-            VS.append(x)
-    if len(VS)>0:
-        vehicle_slots= VS[0]['slots']
-    
+    ent_components= j['Data']['RootChunk']['components']    
+    ent_complist=[]
+    ent_rigs=[]
+    for comp in ent_components:
+        ent_complist.append(comp['name'])
+        if 'rig' in comp.keys():
+            print(comp['rig'])
+            ent_rigs.append(os.path.join(path,comp['rig']['DepotPath']['$value']))
+    resolved=[]
+    for res_p in j['Data']['RootChunk']['resolvedDependencies']:
+        resolved.append(os.path.join(path,res_p['DepotPath']['$value']))
+
     # if no apps requested populate the list with all available.
     if len(appearances[0])==0:
         for app in ent_apps:
-            appearances.append(app['appearanceName'])
+            appearances.append(app['appearanceName']['$value'])
+
+    VS=[]
+    for x in j['Data']['RootChunk']['components']:
+        if 'name' in x.keys() and x['name']['$value']=='vehicle_slots':
+            VS.append(x)
+    if len(VS)>0:
+        vehicle_slots= VS[0]['slots']
     
     # find the appearance file jsons
     app_path = glob.glob(path+"\**\*.app.json", recursive = True)
@@ -50,29 +65,53 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
         print('No Meshes found in path')
     mesh_jsons =  glob.glob(path+"\**\*mesh.json", recursive = True)
     
-    # find the anims
-    rigs = glob.glob(path+"\\base\\animations"+"\**\*.glb", recursive = True)
+    # find the anims  
+    # look through the components and find an anim, and load that, 
+    # then check for an anim in the project thats using the rig (some things like the arch bike dont ref the anim in the ent)
+    # otherwise just skip this section
+    #
+    anim_files = glob.glob(path+"\\base\\animations\\vehicle"+"\**\*.glb", recursive = True)
     rig=None
     bones=None
     chunks=None
-    if len(rigs)>0:
+    if len(anim_files)>0 and len(ent_rigs)>0: # we have glbs and we have rigs called up in the ent
+            # get the armatures already in the model
             oldarms= [x for x in bpy.data.objects if 'Armature' in x.name]
-            bpy.ops.io_scene_gltf.cp77(filepath=rigs[0])
-            arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
-            rig=arms[0]
-            bones=rig.pose.bones
-            print('anim rig loaded')
+            animsinres=[x for x in anim_files if x[:-3]+'anims' in resolved] 
+            if len(animsinres)==0:
+                for anim in anim_files:
+                    if os.path.exists(anim[:-3]+'anims.json'):
+                        with open(anim[:-3]+'anims.json','r') as f: 
+                            anm_j=json.load(f) 
+                        if os.path.join(path,anm_j['Data']['RootChunk']['rig']['DepotPath']['$value']) in ent_rigs:
+                            animsinres.append(os.path.join(path,anim))
+            
+            if len(animsinres)>0:
+                bpy.ops.io_scene_gltf.cp77(filepath=animsinres[0])
+                #find what we just loaded
+                arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
+                rig=arms[0]
+                bones=rig.pose.bones
+                print('anim rig loaded')
+            
+                
+                
+                        
+
     else:
         print('no anim rig found')
-            
+
+    # find the rig json associated with the ent
     rigjsons = glob.glob(path+"\**\*.rig.json", recursive = True)
     rig_j=None
-    if len(rigjsons)>0:
-            with open(rigjsons[0],'r') as f: 
-                rig_j=json.load(f)['Data']['RootChunk']
-                print('rig json loaded')
+    if len(rigjsons)>0 and len(ent_rigs)>0:
+            entrigjsons=[x for x in rigjsons if x[:-5] in ent_rigs] 
+            if len(entrigjsons)>0:
+                with open(entrigjsons[0],'r') as f: 
+                    rig_j=json.load(f)['Data']['RootChunk']
+                    print('rig json loaded')
     else: 
-        print('no rig json found')
+        print('no rig json loaded')
                 
     if len(meshes)<1 or len(app_path)<1:
         print("You need to export the meshes and convert app and ent to json")
@@ -93,22 +132,22 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                 ent_app_idx=-1
                 # Find the appearance in the entity app list
                 for i,a in enumerate(ent_apps):
-                    if a['appearanceName']==app_name:
+                    if a['appearanceName']['$value']==app_name:
                         print('appearance matched, id = ',i)
                         ent_app_idx=i
 
                 # apparently they sometimes just sack it off and use the name not the appearanceName after all. (single_doors.ent for instance)
                 if ent_app_idx<0:
                     for i,a in enumerate(ent_apps):
-                        if a['name']==app_name:
+                        if a['name']['$value']==app_name:
                             print('appearance matched, id = ',i)
                             ent_app_idx=i
-                            app_name=a['appearanceName']
+                            app_name=a['appearanceName']['$value']
 
                 if ent_app_idx<0:
                     ent_app_idx=0
 
-                app_file = ent_apps[ent_app_idx]['appearanceResource']['DepotPath']
+                app_file = ent_apps[ent_app_idx]['appearanceResource']['DepotPath']['$value']
                 appfilepath=os.path.join(path,app_file)+'.json'
                 a_j=None        
                 if os.path.exists(appfilepath):
@@ -118,7 +157,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                     app_idx=0
                     for i,a in enumerate(apps):
                         #print(i,a['Data']['name'])
-                        if a['Data']['name']==app_name:
+                        if a['Data']['name']['$value']==app_name:
                             print('appearance matched, id = ',i)
                             app_idx=i
                     chunks=None
@@ -141,17 +180,17 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
 
             for c in comps:
                 if 'mesh' in c.keys():
-                    print(c['mesh']['DepotPath'])
-                    if isinstance( c['mesh']['DepotPath'], str):
-                        meshname=os.path.basename(c['mesh']['DepotPath'])
-                        meshpath=os.path.join(path, c['mesh']['DepotPath'][:-4]+'glb')
+                    print(c['mesh']['DepotPath']['$value'])
+                    if isinstance( c['mesh']['DepotPath']['$value'], str):
+                        meshname=os.path.basename(c['mesh']['DepotPath']['$value'])
+                        meshpath=os.path.join(path, c['mesh']['DepotPath']['$value'][:-4]+'glb')
                         if meshname not in exclude_meshes:      
                             if os.path.exists(meshpath):
                                 #if True:
                                 try:
                                     meshApp='default'
                                     if 'meshAppearance' in c.keys():
-                                        meshApp=c['meshAppearance']
+                                        meshApp=c['meshAppearance']['$value']
                                         #print(meshApp)
                                     try:
                                         bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=meshApp, with_materials=with_materials)
@@ -188,21 +227,21 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                         if chunk_pt:   
                                             #print('in chunk pt processing bindName = ',chunk_pt['Data']['bindName'],' slotname= ',chunk_pt['Data']['slotName'])                                     
                                             # parts have a bindname, and sometimes a slotname
-                                            bindname=chunk_pt['Data']['bindName']
+                                            bindname=chunk_pt['Data']['bindName']['$value']
                                             # if it has a bindname of vehicle_slots, you may need to find the bone name in the vehicle slots in the root ent components
                                             # this should have been loaded earlier, check for it in the vehicle slots if not just set to the slot value
                                             if bindname=='vehicle_slots':
                                                 if vehicle_slots:
-                                                    slotname=chunk_pt['Data']['slotName']
+                                                    slotname=chunk_pt['Data']['slotName']['$value']
                                                     for slot in vehicle_slots:
-                                                        if slot['slotName']==slotname:
-                                                            bindname=slot['boneName']
+                                                        if slot['slotName']['$value']==slotname:
+                                                            bindname=slot['boneName']['$value']
                                                 else:
-                                                    bindname= chunk_pt['Data']['slotName']
+                                                    bindname= chunk_pt['Data']['slotName']['$value']
 
                                             # some meshes have boneRigMatrices in the mesh file which means we need jsons for the meshes or we cant access it. oh joy
-                                            elif bindname=="deformation_rig" and (not chunk_pt['Data']['slotName'] or len(chunk_pt['Data']['slotName'])==1):
-                                                json_name=os.path.join(path, c['mesh']['DepotPath']+'.json')
+                                            elif bindname=="deformation_rig" and (not chunk_pt['Data']['slotName']['$value'] or len(chunk_pt['Data']['slotName']['$value'])==1):
+                                                json_name=os.path.join(path, c['mesh']['DepotPath']['$value']+'.json')
                                                 #print("in the deformation rig bit",json_name)
                                                 if json_name in mesh_jsons:
                                                     with open(mesh_jsons[mesh_jsons.index(json_name)],'r') as f: 
@@ -275,7 +314,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                                     # if bindname isnt in the bones then its a part thats already bound to a bone, 
                                                     # These inherit the parent and local transforms from the other part, find it and work out what the transform is
                                                     for o in comps:
-                                                        if o['name']==bindname:
+                                                        if o['name']['$value']==bindname:
                                                             pT=o['parentTransform']                                                        
                                                             x=o['localTransform']['Position']['x']['Bits']/131072
                                                             y=o['localTransform']['Position']['y']['Bits']/131072
@@ -291,20 +330,20 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                                                              #print('HandleId found',chunk['parentTransform']['HandleId'])
                                                             if chunk_pt:   
                                                                 #print('in chunk pt processing')                                     
-                                                                bindname=chunk_pt['Data']['bindName']
+                                                                bindname=chunk_pt['Data']['bindName']['$value']
                                                                 if bindname=='vehicle_slots':
                                                                     if vehicle_slots:
-                                                                        slotname=chunk_pt['Data']['slotName']
+                                                                        slotname=chunk_pt['Data']['slotName']['$value']
                                                                         for slot in vehicle_slots:
-                                                                            if slot['slotName']==slotname:
-                                                                                bindname=slot['boneName']
+                                                                            if slot['slotName']['$value']==slotname:
+                                                                                bindname=slot['boneName']['$value']
                                                                                        
                                                 ######
                                                 if bindname in bones.keys(): 
                                                     #print('bindname in bones')
                                                     bidx=0
                                                     for bid, b in enumerate(rig_j['boneNames']):
-                                                        if b==bindname:
+                                                        if b['$value']==bindname:
                                                             bidx=bid
                                                             #print('bone found - ',bidx)                                                
                                                     btrans=rig_j['boneTransforms'][bidx]
@@ -316,7 +355,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                                         pt_rot=bones[bindname].rotation_quaternion
                                                     
                                                         obj.location.x =  obj.location.x+pt_trans[0]
-                                                        obj.location.y = obj.location.y+pt_trans[1]                     
+                                                        obj.location.y = obj.location.y+pt_trans[1]
                                                         obj.location.z =  obj.location.z+pt_trans[2]
                                             
                                                         obj.rotation_quaternion.x = btrans['Rotation']['i'] 
@@ -370,7 +409,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                             obj.scale.z = c['visualScale']['Z']
 
                                     move_coll= coll_scene.children.get( objs[0].users_collection[0].name )
-                                    move_coll['depotPath']=c['mesh']['DepotPath']
+                                    move_coll['depotPath']=c['mesh']['DepotPath']['$value']
                                     move_coll['meshAppearance']=meshApp
                                     if bindname:
                                         move_coll['bindname']=bindname
@@ -392,7 +431,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                             obj.hide_set(not cm_list[subnum])
                                 #else:
                                 except:
-                                    print("Failed on ",c['mesh']['DepotPath'])
+                                    print("Failed on ",c['mesh']['DepotPath']['$value'])
         print('Exported' ,app_name)
     print("--- %s seconds ---" % (time.time() - start_time))
 
