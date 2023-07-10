@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
     "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, The Magnificent Doctor Presto",
-    "version": (1, 2, 0),
+    "version": (1,3, 0),
     "blender": (3, 1, 0),
     "location": "File > Import-Export",
     "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
@@ -285,7 +285,10 @@ class CP77Import(bpy.types.Operator,ImportHelper):
             if self.with_materials and os.path.exists(BasePath + ".Material.json"):
                 file = open(BasePath + ".Material.json",mode='r')
                 obj = json.loads(file.read())
-                BasePath = str(obj["MaterialRepo"])  + "\\"
+                if 'Header' not in obj.keys():
+                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="JSON is from old version of wkit not compatible with this Plugin version")
+                    break
+                DepotPath = str(obj["MaterialRepo"])  + "\\"
 
                
                 json_apps=obj['Appearances']
@@ -333,7 +336,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                 MatImportList=[k for k in validmats.keys()]
                 
 
-                Builder = MaterialBuilder(obj,BasePath,str(self.image_format))
+                Builder = MaterialBuilder(obj,DepotPath,str(self.image_format),BasePath)
                 
                 counter = 0
                 bpy_mats=bpy.data.materials

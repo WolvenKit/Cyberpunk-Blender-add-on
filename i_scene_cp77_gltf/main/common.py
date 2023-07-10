@@ -33,6 +33,7 @@ def imageFromPath(Img,image_format,isNormal = False):
         if isNormal:
             Im.colorspace_settings.name = 'Non-Color'
     return Im
+
 def CreateShaderNodeTexImage(curMat,path = None, x = 0, y = 0, name = None,image_format = 'png', nonCol = False):
     ImgNode = curMat.nodes.new("ShaderNodeTexImage")
     ImgNode.location = (x, y)
@@ -211,3 +212,54 @@ def crop_image(orig_img,outname, cropped_min_x, cropped_max_x, cropped_min_y, cr
         current_cropped_row += 1
 
     return cropped_img
+
+def create_node(NG, type, loc, hide=True, operation=None, image=None, label=None, blend_type=None):
+    Node=NG.new(type)
+    Node.hide = hide
+    Node.location = loc
+    if operation:
+        Node.operation=operation
+    if image:
+        Node.image=image
+    if label:
+        Node.label=label
+    if blend_type:
+        Node.blend_type=blend_type
+    return Node
+
+def createOverrideTable(matTemplateObj):
+        OverList = matTemplateObj["overrides"]
+        if OverList is None:
+            OverList = matTemplateObj.get("Overrides")
+        Output = {}
+        Output["ColorScale"] = {}
+        Output["NormalStrength"] = {}
+        Output["RoughLevelsOut"] = {}
+        Output["MetalLevelsOut"] = {}
+        for x in OverList["colorScale"]:
+            tmpName = x["n"]["$value"]
+            tmpR = float(x["v"]["Elements"][0])
+            tmpG = float(x["v"]["Elements"][1])
+            tmpB = float(x["v"]["Elements"][2])
+            Output["ColorScale"][tmpName] = (tmpR,tmpG,tmpB,1)
+        for x in OverList["normalStrength"]:
+            tmpName = x["n"]["$value"]
+            tmpStrength = 0
+            if x.get("v") is not None:
+                tmpStrength = float(x["v"])
+            Output["NormalStrength"][tmpName] = tmpStrength
+        for x in OverList["roughLevelsOut"]:
+            tmpName = x["n"]["$value"]
+            tmpStrength0 = float(x["v"]["Elements"][0])
+            tmpStrength1 = float(x["v"]["Elements"][1])
+            Output["RoughLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
+        for x in OverList["metalLevelsOut"]:
+            tmpName = x["n"]["$value"]
+            if x.get("v") is not None:
+                tmpStrength0 = float(x["v"]["Elements"][0])
+                tmpStrength1 = float(x["v"]["Elements"][1])
+            else:
+                tmpStrength0 = 0
+                tmpStrength1 = 1
+            Output["MetalLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
+        return Output
