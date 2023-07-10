@@ -392,66 +392,40 @@ class Multilayered:
             # --- Mask Layer ---
 
             # MicroOffset prevents shader error when microblend contrast is exactly zero
-            MBCMicroOffset = NG.nodes.new("ShaderNodeMath")
-            MBCMicroOffset.hide = True
-            MBCMicroOffset.location = (-2300,-400)
-            MBCMicroOffset.operation = 'ADD'
-            MBCMicroOffset.label = "Micro-offset"
+            MBCMicroOffset = create_node(NG.nodes,"ShaderNodeMath", (-2300,-400), operation = 'ADD', label = "Micro-offset")
             MBCMicroOffset.inputs[1].default_value = 0.0001
 
             # Invert microblend contrast so mbcontrast value of 1 = 0, and 0 = 1
-            MBCSubtract = NG.nodes.new("ShaderNodeMath")
-            MBCSubtract.hide = True
-            MBCSubtract.location = (-1200,-650)
-            MBCSubtract.operation = 'SUBTRACT'
+            MBCSubtract = create_node(NG.nodes,"ShaderNodeMath", (-1200,-650), operation = 'SUBTRACT')
             MBCSubtract.inputs[0].default_value = 1.0
             
             # Doubles mlmask levels as mbcontrast approaches 1
-            MBCAdd = NG.nodes.new("ShaderNodeMath")
-            MBCAdd.hide = True
-            MBCAdd.location = (-1400,-700)
-            MBCAdd.operation = 'ADD'
+            MBCAdd = create_node(NG.nodes,"ShaderNodeMath", (-1400,-700), operation = 'ADD')
             MBCAdd.inputs[1].default_value = 1.0
             
             # Doubles mlmask levels as mbcontrast approaches 1
-            MaskMultiply = NG.nodes.new("ShaderNodeMath")
-            MaskMultiply.hide = True
-            MaskMultiply.location = (-1200,-700)
-            MaskMultiply.operation = 'MULTIPLY'
+            MaskMultiply = create_node(NG.nodes,"ShaderNodeMath", (-1200,-700), operation = 'MULTIPLY')
             MaskMultiply.use_clamp = True
             
             # Blender doesn't support Linear Burn blend mode, so we do it manually
-            MaskLinearBurnAdd = NG.nodes.new("ShaderNodeMath")
-            MaskLinearBurnAdd.hide = True
-            MaskLinearBurnAdd.location = (-1600,-800)
-            MaskLinearBurnAdd.operation = 'ADD'
+            MaskLinearBurnAdd = create_node(NG.nodes,"ShaderNodeMath", (-1600,-800), operation = 'ADD')
 
             # Blender doesn't support Linear Burn blend mode, so we do it manually
-            MaskLinearBurnSubtract = NG.nodes.new("ShaderNodeMath")
-            MaskLinearBurnSubtract.hide = True
-            MaskLinearBurnSubtract.location = (-1400,-800)
-            MaskLinearBurnSubtract.operation = 'SUBTRACT'
+            MaskLinearBurnSubtract = create_node(NG.nodes,"ShaderNodeMath", (-1400,-800), operation = 'SUBTRACT')
             MaskLinearBurnSubtract.inputs[0].default_value = 1.0
 
             # Blender doesn't support Linear Burn blend mode, so we do it manually
-            MaskLinearBurnInvert = NG.nodes.new("ShaderNodeInvert")
-            MaskLinearBurnInvert.hide = True
-            MaskLinearBurnInvert.location = (-1200,-800)
+            MaskLinearBurnInvert = create_node(NG.nodes,"ShaderNodeInvert", (-1200,-800))
             MaskLinearBurnInvert.inputs[0].default_value = 1.0
 
             # Mix the microblend against the original mlmask
-            MaskMBMix = NG.nodes.new("ShaderNodeMix")
-            MaskMBMix.label = "MICROBLEND MIXER"
-            MaskMBMix.hide = True
-            MaskMBMix.location =  (-900,-800)
+            MaskMBMix = create_node(NG.nodes,"ShaderNodeMix", (-900,-800), label = "MICROBLEND MIXER")
             MaskMBMix.data_type ='RGBA'
             MaskMBMix.clamp_factor = False
 
             # Raise the contrast of the microblend as mbcontrast approaches zero by increasing `From Min` value
             # Smoother Step setting appears to disable clamp in the UI? Not sure if this matters
-            MaskRange = NG.nodes.new("ShaderNodeMapRange")
-            MaskRange.hide = True
-            MaskRange.location =  (-600,-800)
+            MaskRange = create_node(NG.nodes,"ShaderNodeMapRange", (-600,-800))
             MaskRange.inputs['From Min'].default_value = (0)
             MaskRange.inputs['From Max'].default_value = (1)
             MaskRange.inputs['To Min'].default_value = (0)
@@ -459,14 +433,10 @@ class Multilayered:
             MaskRange.interpolation_type = 'SMOOTHERSTEP'
             MaskRange.clamp = True
             
-            MaskOpReroute = NG.nodes.new("NodeReroute")
-            MaskOpReroute.location = (-1500,-750)
+            MaskOpReroute = create_node(NG.nodes,"NodeReroute", (-1500,-750))
             
             # Mix the complete mlmask with microblend against the opacity value
-            MaskOpMix = NG.nodes.new("ShaderNodeMixRGB")
-            MaskOpMix.label = "OPACITY MIX"
-            MaskOpMix.hide = True
-            MaskOpMix.location =  (-300,-750)
+            MaskOpMix = create_node(NG.nodes,"ShaderNodeMixRGB", (-300,-750), label = "OPACITY MIX")
             MaskOpMix.blend_type ='MIX'
             MaskOpMix.inputs[1].default_value = (0,0,0,1)
 
