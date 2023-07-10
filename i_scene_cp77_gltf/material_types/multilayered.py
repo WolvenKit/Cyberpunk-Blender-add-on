@@ -458,6 +458,10 @@ class Multilayered:
             NG.links.new(MBCMicroOffset.outputs[0],MBCSubtract.inputs[1])
             NG.links.new(MBCMicroOffset.outputs[0],MBCAdd.inputs[0])
 
+            NG.links.new(MBTexCord.outputs[2],MBMapping.inputs[0])
+            NG.links.new(MBMapping.outputs[0],MBN.inputs[0])
+            NG.links.new(MBN.outputs[0],MBRGBCurveN.inputs[1])
+            NG.links.new(MBN.outputs[0],MBMixN.inputs[2])
             NG.links.new(MBN.outputs[1],MaskLinearBurnAdd.inputs[1])
 
             NG.links.new(MBCSubtract.outputs[0],MaskMBMix.inputs[0])
@@ -469,23 +473,16 @@ class Multilayered:
             NG.links.new(MaskMultiply.outputs[0],MaskMBMix.inputs[6])    
             NG.links.new(MaskLinearBurnInvert.outputs[0],MaskMBMix.inputs[7])
             NG.links.new(MaskMBMix.outputs[2],MaskRange.inputs[0])
-            
-            NG.links.new(MaskOpReroute.outputs[0],MaskOpMix.inputs[0])
                         
             NG.links.new(BMN.outputs[0],ColorScaleMixN.inputs[1])
             NG.links.new(BMN.outputs[1],MetalRampN.inputs[0])
             NG.links.new(BMN.outputs[2],RoughRampN.inputs[0])
             NG.links.new(BMN.outputs[3],NormStrengthN.inputs[1])
             
-            NG.links.new(MBTexCord.outputs[2],MBMapping.inputs[0])
-            NG.links.new(MBMapping.outputs[0],MBN.inputs[0])
-            NG.links.new(MBN.outputs[0],MBRGBCurveN.inputs[1])
-            NG.links.new(MBN.outputs[0],MBMixN.inputs[2])
-            
             NG.links.new(MBMixColorRamp.outputs[0],MBMixNormStrength.inputs[0])
-            
             NG.links.new(NormStrengthN.outputs[0],NormalCombineN.inputs[0])
             
+            NG.links.new(MaskOpReroute.outputs[0],MaskOpMix.inputs[0])
             NG.links.new(MaskRange.outputs[0],MaskOpMix.inputs[2])
 
             NG.links.new(MBGrtrThanN.outputs[0],MBMixN.inputs[0])
