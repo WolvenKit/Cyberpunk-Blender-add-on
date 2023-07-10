@@ -28,7 +28,7 @@ class Decal:
         for i in range(len(Data["values"])):
             
                 if "DiffuseTexture" in Data["values"][i].keys():
-                    difftex = Data["values"][i]["DiffuseTexture"]["DepotPath"][:-3]+self.image_format
+                    difftex = Data["values"][i]["DiffuseTexture"]["DepotPath"]['$value'][:-3]+self.image_format
                     print("Diffuse Texture path is: ", difftex)
                 elif "DiffuseTextureAsMaskTexture" in Data["values"][i].keys():
                     DiffuseTextureAsMaskTexture = Data["values"][i]["DiffuseTextureAsMaskTexture"]
@@ -40,13 +40,13 @@ class Decal:
                     DiffuseAlpha = Data["values"][i]["DiffuseAlpha"]
                     print("DiffuseAlpha is:  ",Data["values"][i]["DiffuseAlpha"])
                 elif "RoughnessTexture" in Data["values"][i].keys():
-                    RoughnessTexture = Data["values"][i]["RoughnessTexture"]["DepotPath"][:-3]+self.image_format
+                    RoughnessTexture = Data["values"][i]["RoughnessTexture"]["DepotPath"]['$value'][:-3]+self.image_format
                     print("Roughness Texture path is:  ",Data["values"][i]["RoughnessTexture"])
                 elif "NormalTexture" in Data["values"][i].keys():
-                    NormalTexture = Data["values"][i]["NormalTexture"]["DepotPath"][:-3]+self.image_format
+                    NormalTexture = Data["values"][i]["NormalTexture"]["DepotPath"]['$value'][:-3]+self.image_format
                     print("Normal Texture path is:  ",Data["values"][i]["NormalTexture"])
                 elif "MetalnessTexture" in Data["values"][i].keys():
-                    MetalnessTexture = Data["values"][i]["MetalnessTexture"]["DepotPath"][:-3]+self.image_format
+                    MetalnessTexture = Data["values"][i]["MetalnessTexture"]["DepotPath"]['$value'][:-3]+self.image_format
                     print("Metalness Texture path is:  ",Data["values"][i]["MetalnessTexture"])
                 
 

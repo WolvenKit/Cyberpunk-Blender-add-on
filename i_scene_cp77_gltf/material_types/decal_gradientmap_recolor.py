@@ -10,7 +10,7 @@ class DecalGradientmapRecolor:
         self.BasePath = BasePath
         self.image_format = image_format
 
-
+ 
     def found(self,tex):
         result = os.path.exists(os.path.join(self.BasePath, tex))
         if not result:
@@ -25,12 +25,12 @@ class DecalGradientmapRecolor:
             for value in Data["values"][i]:
                 #print(value)
                 if value == "DiffuseTexture":
-                    difftex = Data["values"][i]["DiffuseTexture"]["DepotPath"][:-3]+self.image_format
+                    difftex = Data["values"][i]["DiffuseTexture"]["DepotPath"]['$value'][:-3]+self.image_format
                    # print(f"Diffuse Texture path is:  {difftex}")
                 if value == "GradientMap":
-                    gradmap = Data["values"][i]["GradientMap"]["DepotPath"][:-3]+self.image_format
+                    gradmap = Data["values"][i]["GradientMap"]["DepotPath"]['$value'][:-3]+self.image_format
                 if value == "MaskTexture":
-                    masktex = Data["values"][i]["MaskTexture"]["DepotPath"][:-3]+self.image_format
+                    masktex = Data["values"][i]["MaskTexture"]["DepotPath"]['$value'][:-3]+self.image_format
                 if value == "DiffuseTextureAsMaskTexture":
                     diffAsMask = Data["values"][i]["DiffuseTextureAsMaskTexture"]
 
