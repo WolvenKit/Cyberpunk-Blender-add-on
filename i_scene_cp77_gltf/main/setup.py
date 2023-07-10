@@ -75,7 +75,7 @@ class MaterialBuilder:
                     skin = Skin(self.BasePath,self.image_format)
                     skin.create(rawMat["Data"],bpyMat)
 
-                case "engine\\materials\\metal_base.remt":
+                case "engine\\materials\\metal_base.remt" | "engine\\materials\\metal_base_proxy.mt":
                     metalBase = MetalBase(self.BasePath,self.image_format)
                     metalBase.create(rawMat["Data"],bpyMat)
 
@@ -148,7 +148,7 @@ class MaterialBuilder:
             bpyMat = bpy.data.materials.new(name)
             bpyMat.use_nodes = True
 
-            match self.obj["Data"]["RootChunk"]["baseMaterial"]["DepotPath"]:
+            match self.obj["Data"]["RootChunk"]["baseMaterial"]["DepotPath"]['$value']:
                 case "base\\materials\\decal.remt" | "base\\materials\\decal_roughness.mt" | "base\materials\decal_puddle.mt":# | "base\materials\decal_normal_roughness_metalness.mt":
                     print('decal.remt')
                     decal = Decal(self.BasePath,self.image_format)
@@ -160,7 +160,7 @@ class MaterialBuilder:
                     decalGradientMapRecolor.create(self.obj["Data"]["RootChunk"],bpyMat)
 
                 case _:
-                    print(self.obj["Data"]["RootChunk"]["baseMaterial"]["DepotPath"]," | unimplemented yet")
+                    print(self.obj["Data"]["RootChunk"]["baseMaterial"]["DepotPath"]['$value']," | unimplemented yet")
             
             bpyMat.blend_method='HASHED'
             return bpyMat
