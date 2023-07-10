@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
     "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, The Magnificent Doctor Presto",
-    "version": (1,3, 0),
+    "version": (1,4, 0),
     "blender": (3, 1, 0),
     "location": "File > Import-Export",
     "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
@@ -14,6 +14,7 @@ import bpy
 import bpy.utils.previews
 import json
 import os
+import textwrap
 
 from bpy.props import (
     StringProperty,
@@ -67,7 +68,13 @@ class ShowMessageBox(bpy.types.Operator):
         return context.window_manager.invoke_props_dialog(self, width=300)
 
     def draw(self, context):
-        self.layout.label(text=self.message)           
+        wrapp = textwrap.TextWrapper(width=50) #50 = maximum length       
+        wList = wrapp.wrap(text=self.message) 
+        for text in wList: 
+            row = self.layout.row(align = True)
+            row.alignment = 'EXPAND'
+            row.label(text=text)
+   #self.layout.label(text=self.message)           
         
 class CP77GLBExport(bpy.types.Operator,ExportHelper):
   ### cleaned this up and moved most code to exporters.py
