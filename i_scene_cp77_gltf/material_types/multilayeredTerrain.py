@@ -4,38 +4,26 @@ from ..main.common import *
 import json
 
 class MultilayeredTerrain:
-    def __init__(self, BasePath,image_format,MeshPath):
+    def __init__(self, BasePath,image_format,ProjPath):
         self.BasePath = str(BasePath)
-        self.MeshPath = MeshPath
+        self.ProjPath = ProjPath
         self.image_format = image_format
-        before,mid,after=MeshPath.partition('source\\raw\\')
-        self.ProjPath=before+mid
+
 
     def createBaseMaterial(self,matTemplateObj,name):
         print(self.BasePath + matTemplateObj["colorTexture"]["DepotPath"]["$value"])
-        if os.path.exists(self.BasePath + matTemplateObj["colorTexture"]["DepotPath"]["$value"][:-3]+'png'):
-            ct_path=self.BasePath + matTemplateObj["colorTexture"]["DepotPath"]["$value"]
-        else:
-            ct_path=self.ProjPath + matTemplateObj["colorTexture"]["DepotPath"]["$value"]
-        CT = imageFromPath(ct_path,self.image_format)
-
-        if os.path.exists(self.BasePath + matTemplateObj["normalTexture"]["DepotPath"]["$value"][:-3]+'png'):
-            nt_path=self.BasePath + matTemplateObj["normalTexture"]["DepotPath"]["$value"]
-        else:
-            nt_path=self.ProjPath + matTemplateObj["normalTexture"]["DepotPath"]["$value"]
-        NT = imageFromPath(nt_path,self.image_format,isNormal = True)
         
-        if os.path.exists(self.BasePath + matTemplateObj["roughnessTexture"]["DepotPath"]["$value"][:-3]+'png'):
-            rt_path=self.BasePath + matTemplateObj["roughnessTexture"]["DepotPath"]["$value"]
-        else:
-            rt_path=self.ProjPath + matTemplateObj["roughnessTexture"]["DepotPath"]["$value"]
-        RT = imageFromPath(rt_path,self.image_format,isNormal = True)
+        ct_path=matTemplateObj["colorTexture"]["DepotPath"]["$value"]
+        CT = imageFromRelPath(ct_path,self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+                
+        nt_path= matTemplateObj["normalTexture"]["DepotPath"]["$value"]
+        NT = imageFromRelPath(nt_path,self.image_format,isNormal = True, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+                
+        rt_path=matTemplateObj["roughnessTexture"]["DepotPath"]["$value"]
+        RT = imageFromRelPath(rt_path,self.image_format,isNormal = True, DepotPath=self.BasePath, ProjPath=self.ProjPath)
      
-        if os.path.exists(self.BasePath + matTemplateObj["metalnessTexture"]["DepotPath"]["$value"][:-3]+'png'):
-            mt_path=self.BasePath + matTemplateObj["metalnessTexture"]["DepotPath"]["$value"]
-        else:
-            mt_path=self.ProjPath + matTemplateObj["metalnessTexture"]["DepotPath"]["$value"]
-        MT = imageFromPath(mt_path,self.image_format,isNormal = True)
+        mt_path=matTemplateObj["metalnessTexture"]["DepotPath"]["$value"]
+        MT = imageFromRelPath(mt_path,self.image_format,isNormal = True, DepotPath=self.BasePath, ProjPath=self.ProjPath)
     
         TileMult = float(matTemplateObj.get("tilingMultiplier",1))
 
@@ -153,10 +141,10 @@ class MultilayeredTerrain:
     def createLayerMaterial(self,LayerName,LayerCount,CurMat,mlmaskpath,normalimgpath):
 
         for x in range(LayerCount-1):
-            if os.path.exists(os.path.splitext(self.BasePath + mlmaskpath)[0]+"_"+str(x+1)+".png"):
-                MaskTexture = imageFromPath(os.path.splitext(self.BasePath + mlmaskpath)[0]+"_"+str(x+1)+".png",self.image_format,isNormal = True)
-            else:
+            if os.path.exists(os.path.splitext(self.ProjPath + mlmaskpath)[0]+'_layers\\'+mlmaskpath.split('\\')[-1:][0][:-7]+"_"+str(x+1)+".png"):
                 MaskTexture = imageFromPath(os.path.splitext(self.ProjPath+ mlmaskpath)[0]+'_layers\\'+mlmaskpath.split('\\')[-1:][0][:-7]+"_"+str(x+1)+".png",self.image_format,isNormal = True)
+            else:
+                MaskTexture = imageFromPath(os.path.splitext(self.BasePath + mlmaskpath)[0]+"_"+str(x+1)+".png",self.image_format,isNormal = True)
             NG = bpy.data.node_groups.new("Layer_Blend_"+str(x),"ShaderNodeTree")#create layer's node group
             NG.inputs.new('NodeSocketColor','Color A')
             NG.inputs.new('NodeSocketColor','Metalness A')
@@ -326,10 +314,7 @@ class MultilayeredTerrain:
                 metalLevelsOut = x["MetalLevelsOut"].get("$value")
 
             if Microblend != "null":
-                if os.path.exists(self.BasePath+Microblend[:-3]+'png'):
-                    MBI = imageFromPath(self.BasePath+Microblend,self.image_format,True)
-                else:
-                    MBI = imageFromPath(self.ProjPath+Microblend,self.image_format,True)
+                MBI = imageFromRelPath(Microblend,self.image_format,True,self.BasePath,self.ProjPath)
 
 
             file = open(self.BasePath + material + ".json",mode='r')

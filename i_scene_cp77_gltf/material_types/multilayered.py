@@ -4,14 +4,16 @@ from ..main.common import *
 import json
 
 class Multilayered:
-    def __init__(self, BasePath,image_format):
+    def __init__(self, BasePath,image_format, ProjPath):
         self.BasePath = str(BasePath)
         self.image_format = image_format
+        self.ProjPath = ProjPath
+
     def createBaseMaterial(self,matTemplateObj,name):
-        CT = imageFromPath(self.BasePath + matTemplateObj["colorTexture"]["DepotPath"]["$value"],self.image_format)
-        NT = imageFromPath(self.BasePath + matTemplateObj["normalTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True)
-        RT = imageFromPath(self.BasePath + matTemplateObj["roughnessTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True)
-        MT = imageFromPath(self.BasePath + matTemplateObj["metalnessTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True)
+        CT = imageFromRelPath(matTemplateObj["colorTexture"]["DepotPath"]["$value"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
+        NT = imageFromRelPath(matTemplateObj["normalTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True,DepotPath=self.BasePath, ProjPath=self.ProjPath)
+        RT = imageFromRelPath(matTemplateObj["roughnessTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True,DepotPath=self.BasePath, ProjPath=self.ProjPath)
+        MT = imageFromRelPath(matTemplateObj["metalnessTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True,DepotPath=self.BasePath, ProjPath=self.ProjPath)
     
         TileMult = float(matTemplateObj.get("tilingMultiplier",1))
 
@@ -88,7 +90,10 @@ class Multilayered:
     def createLayerMaterial(self,LayerName,LayerCount,CurMat,mlmaskpath,normalimgpath):
         
         for x in range(LayerCount-1):
-            MaskTexture = imageFromPath(os.path.splitext(self.BasePath + mlmaskpath)[0]+"_"+str(x+1)+".png",self.image_format,isNormal = True)
+            if os.path.exists(os.path.splitext(self.ProjPath + mlmaskpath)[0]+'_layers\\'+mlmaskpath.split('\\')[-1:][0][:-7]+"_"+str(x+1)+".png"):
+                MaskTexture = imageFromPath(os.path.splitext(self.ProjPath+ mlmaskpath)[0]+'_layers\\'+mlmaskpath.split('\\')[-1:][0][:-7]+"_"+str(x+1)+".png",self.image_format,isNormal = True)
+            else:
+                MaskTexture = imageFromPath(os.path.splitext(self.BasePath + mlmaskpath)[0]+"_"+str(x+1)+".png",self.image_format,isNormal = True)
             NG = bpy.data.node_groups.new("Layer_Blend_"+str(x),"ShaderNodeTree")#create layer's node group
             NG.inputs.new('NodeSocketColor','Color A')
             NG.inputs.new('NodeSocketColor','Metalness A')
@@ -178,7 +183,7 @@ class Multilayered:
 
     def create(self,Data,Mat):
 
-        file = open(self.BasePath + Data["MultilayerSetup"] + ".json",mode='r')
+        file = openJSON( Data["MultilayerSetup"] + ".json",mode='r',DepotPath=self.BasePath, ProjPath=self.ProjPath)
         mlsetup = json.loads(file.read())["Data"]["RootChunk"]
         file.close()
         xllay = mlsetup.get("layers")
@@ -243,7 +248,7 @@ class Multilayered:
             if Microblend != "null":
                 MBI = imageFromPath(self.BasePath+Microblend,self.image_format,True)
 
-            file = open(self.BasePath + material + ".json",mode='r')
+            file = openJSON( material + ".json",mode='r',DepotPath=self.BasePath, ProjPath=self.ProjPath)
             mltemplate = json.loads(file.read())["Data"]["RootChunk"]
             file.close()
             OverrideTable = createOverrideTable(mltemplate)#get override info for colors and what not

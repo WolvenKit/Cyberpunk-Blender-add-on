@@ -2,6 +2,15 @@
 import bpy
 import os
 
+def openJSON(path, mode='r',  ProjPath='', DepotPath=''):
+    inproj=os.path.join(ProjPath,path)
+    if os.path.exists(inproj):
+        file = open(inproj,mode)
+    else:
+        file = open(os.path.join(DepotPath,path),mode)
+    return file
+
+
 def imageFromPath(Img,image_format,isNormal = False):
     # The speedtree materials use the same name textures for different plants this code was loading the same leaves on all of them
     Im = bpy.data.images.get(os.path.basename(Img)[:-4])    
@@ -34,13 +43,58 @@ def imageFromPath(Img,image_format,isNormal = False):
             Im.colorspace_settings.name = 'Non-Color'
     return Im
 
-def CreateShaderNodeTexImage(curMat,path = None, x = 0, y = 0, name = None,image_format = 'png', nonCol = False):
+def imageFromRelPath(ImgPath,image_format,isNormal = False,DepotPath='',ProjPath=''):
+    # The speedtree materials use the same name textures for different plants this code was loading the same leaves on all of them
+    Im = bpy.data.images.get(os.path.basename(ImgPath)[:-4])    
+    if Im:
+        before,mid,after=Im.filepath.partition('source\\raw')
+        path=mid+after
+        
+
+    if Im and path==ImgPath[:-3]+ image_format:
+        if Im.colorspace_settings.name != 'Non-Color':
+            if isNormal:
+                Im = None
+        else:
+            if not isNormal:
+                Im = None
+    else: 
+        Im=None
+    if not Im :
+        Im = bpy.data.images.get(os.path.basename(ImgPath)[:-4] + ".001")
+        if Im:
+            before,mid,after=Im.filepath.partition('source\\raw')
+            path=mid+after
+        if Im and path==ImgPath[:-3]+ image_format:
+            if Im.colorspace_settings.name != 'Non-Color':
+                if isNormal:
+                    Im = None
+            else:
+                if not isNormal:
+                    Im = None
+        else :
+            Im = None
+    
+    if not Im:
+        inProj=os.path.join(ProjPath,ImgPath)[:-3]+ image_format
+        inDepot=os.path.join(DepotPath,ImgPath)[:-3]+ image_format
+        Im = bpy.data.images.new(os.path.basename(ImgPath)[:-4],1,1)
+        Im.source = "FILE"
+        if os.path.exists(inProj):
+            Im.filepath = inProj
+        else:
+            Im.filepath = inDepot
+        if isNormal:
+            Im.colorspace_settings.name = 'Non-Color'
+    return Im
+
+def CreateShaderNodeTexImage(curMat,path = None, x = 0, y = 0, name = None, image_format = 'png', nonCol = False):
     ImgNode = curMat.nodes.new("ShaderNodeTexImage")
     ImgNode.location = (x, y)
     ImgNode.hide = True
-    if name is not None:
+    if name:
         ImgNode.label = name
-    if path is not None:
+    if path:
         Img = imageFromPath(path,image_format,nonCol)
         ImgNode.image = Img
 

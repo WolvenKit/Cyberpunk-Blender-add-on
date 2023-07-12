@@ -32,6 +32,8 @@ class MaterialBuilder:
         self.image_format = image_format
         self.obj = Obj
         self.MeshPath= MeshPath
+        before,mid,after=MeshPath.partition('source\\raw\\')
+        self.ProjPath=before+mid
     
     def create(self,materialIndex):
         if self.obj.get("Materials"):
@@ -46,15 +48,15 @@ class MaterialBuilder:
             bpyMat.use_nodes = True
             match rawMat["MaterialTemplate"]:
                 case "engine\\materials\\multilayered.mt" :
-                    multilayered = Multilayered(self.BasePath,self.image_format)
+                    multilayered = Multilayered(self.BasePath,self.image_format,self.ProjPath)
                     multilayered.create(rawMat["Data"],bpyMat)
 
                 case  "base\\materials\\multilayered_terrain.mt":
-                    multilayeredTerrain = MultilayeredTerrain(self.BasePath,self.image_format,self.MeshPath)
+                    multilayeredTerrain = MultilayeredTerrain(self.BasePath,self.image_format,self.ProjPath)
                     multilayeredTerrain.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\multilayered_clear_coat.mt":
-                    multilayered = MultilayeredClearCoat.BasePath,(self.image_format)
+                    multilayered = MultilayeredClearCoat(self.BasePath,self.image_format)
                     multilayered.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\vehicle_destr_blendshape.mt":
