@@ -54,7 +54,7 @@ class MaterialBuilder:
                     multilayeredTerrain.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\multilayered_clear_coat.mt":
-                    multilayered = MultilayeredClearCoat.BasePath,(self.image_format)
+                    multilayered = MultilayeredClearCoat(self.BasePath,self.image_format)
                     multilayered.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\vehicle_destr_blendshape.mt":
