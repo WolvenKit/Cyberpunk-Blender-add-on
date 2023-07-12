@@ -2,7 +2,6 @@
 import bpy
 import os
 from ..material_types.multilayered import Multilayered
-from ..material_types.multilayeredTerrain import MultilayeredTerrain
 from ..material_types.multilayeredclearcoat import MultilayeredClearCoat
 from ..material_types.vehicledestrblendshape import VehicleDestrBlendshape
 from ..material_types.skin import Skin
@@ -52,7 +51,7 @@ class MaterialBuilder:
                     multilayered.create(rawMat["Data"],bpyMat)
 
                 case  "base\\materials\\multilayered_terrain.mt":
-                    multilayeredTerrain = MultilayeredTerrain(self.BasePath,self.image_format,self.ProjPath)
+                    multilayeredTerrain = Multilayered(self.BasePath,self.image_format, self.ProjPath)
                     multilayeredTerrain.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\multilayered_clear_coat.mt":
@@ -60,27 +59,27 @@ class MaterialBuilder:
                     multilayered.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\vehicle_destr_blendshape.mt":
-                    vehicleDestrBlendshape = VehicleDestrBlendshape(self.BasePath,self.image_format)
+                    vehicleDestrBlendshape = VehicleDestrBlendshape(self.BasePath, self.image_format)
                     vehicleDestrBlendshape.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal.mt":
-                    meshDecal = MeshDecal(self.BasePath,self.image_format)
+                    meshDecal = MeshDecal(self.BasePath, self.image_format)
                     meshDecal.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal_double_diffuse.mt":
-                    meshDecalDoubleDiffuse = MeshDecalDoubleDiffuse(self.BasePath,self.image_format)
+                    meshDecalDoubleDiffuse = MeshDecalDoubleDiffuse(self.BasePath, self.image_format)
                     meshDecalDoubleDiffuse.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\vehicle_mesh_decal.mt" :
-                    vehicleMeshDecal = VehicleMeshDecal(self.BasePath,self.image_format)
+                    vehicleMeshDecal = VehicleMeshDecal(self.BasePath, self.image_format)
                     vehicleMeshDecal.create(rawMat["Data"],bpyMat)
                 
                 case "base\\materials\\vehicle_lights.mt":
-                    vehicleLights = VehicleLights(self.BasePath,self.image_format)
+                    vehicleLights = VehicleLights(self.BasePath, self.image_format)
                     vehicleLights.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\skin.mt":
-                    skin = Skin(self.BasePath,self.image_format)
+                    skin = Skin(self.BasePath, self.image_format, self.ProjPath)
                     skin.create(rawMat["Data"],bpyMat)
 
                 case "engine\\materials\\metal_base.remt" | "engine\\materials\\metal_base_proxy.mt":
