@@ -7,7 +7,7 @@ class Multilayered:
     def __init__(self, BasePath,image_format, ProjPath):
         self.BasePath = str(BasePath)
         self.image_format = image_format
-        self.ProjPath = ProjPath
+        self.ProjPath = str(ProjPath)
 
     def createBaseMaterial(self,matTemplateObj,name):
         CT = imageFromRelPath(matTemplateObj["colorTexture"]["DepotPath"]["$value"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)

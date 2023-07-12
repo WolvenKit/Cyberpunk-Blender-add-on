@@ -43,7 +43,7 @@ def imageFromPath(Img,image_format,isNormal = False):
             Im.colorspace_settings.name = 'Non-Color'
     return Im
 
-def imageFromRelPath(ImgPath,image_format,isNormal = False,DepotPath='',ProjPath=''):
+def imageFromRelPath(ImgPath, image_format='png', isNormal = False, DepotPath='',ProjPath=''):
     # The speedtree materials use the same name textures for different plants this code was loading the same leaves on all of them
     Im = bpy.data.images.get(os.path.basename(ImgPath)[:-4])    
     if Im:
@@ -200,6 +200,7 @@ def CreateShaderNodeNormalMap(curMat,path = None, x = 0, y = 0, name = None,imag
         curMat.links.new(NormalRebuildGroup.outputs[0],nMap.inputs[1])
 
     return nMap
+
 def CreateShaderNodeRGB(curMat, color,x = 0, y = 0,name = None, isVector = False):
     rgbNode = curMat.nodes.new("ShaderNodeRGB")
     rgbNode.location = (x, y)
@@ -213,12 +214,13 @@ def CreateShaderNodeRGB(curMat, color,x = 0, y = 0,name = None, isVector = False
         rgbNode.outputs[0].default_value = (float(color["Red"])/255,float(color["Green"])/255,float(color["Blue"])/255,float(color["Alpha"])/255)
 
     return rgbNode
+
 def CreateShaderNodeValue(curMat, value = 0,x = 0, y = 0,name = None):
     valNode = curMat.nodes.new("ShaderNodeValue")
     valNode.location = (x,y)
     valNode.outputs[0].default_value = float(value)
     valNode.hide = True
-    if name is not None:
+    if name :
         valNode.label = name
 
     return valNode
