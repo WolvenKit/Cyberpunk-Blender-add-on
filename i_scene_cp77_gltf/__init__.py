@@ -286,7 +286,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                 file = open(BasePath + ".Material.json",mode='r')
                 obj = json.loads(file.read())
                 if 'Header' not in obj.keys():
-                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="JSON is from old version of wkit not compatible with this Plugin version")
+                    self.report({'ERROR'}, "Incompatible Material.json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
                     break
                 DepotPath = str(obj["MaterialRepo"])  + "\\"
 
