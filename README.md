@@ -5,21 +5,32 @@
 
 The Cyberpunk Blender add-on is designed to fully automate the shader setup for Cyberpunk 2077 mesh files. The add-on integrates with files created by WolvenKit. To learn more about WolvenKit visit the [dedicated WolvenKit wiki.](https://wiki.redmodding.org/wolvenkit)
 
+# Features
+
+- Import Cyberpunk 2077 models and their complex shaders with just a few clicks
+
+- Import Cyberpunk 2077 entity files such as vehicles with mesh files correctly distributed to match their in game appearance
+
+- Import Cyberpunk 2077 level data (streaming sectors)
+
+- Export glTF models with optimized export options for use with WolvenKit for Cyberpunk 2077 
+
 ---
 
 # Requirements
 
-1) **Blender** version 3.1 or higher
+1) **Blender** version 3.6 or higher is *highly recommended*
+<br>**Blender** version 3.1 or higher is *required*
 <br>https://www.blender.org/<br/>
 
-2) **WolvenKit** version 8.8.1 or higher
+2) **WolvenKit** version 8.9.0 or higher
 <br>https://github.com/WolvenKit/WolvenKit<br/>
 
 ---
 
 # Usage
 
-The latest version of the Cyberpunk add-on requires Blender 3.1 or higher. Not all Cyberpunk shaders are currently supported by the add-on. If you're interested in adding support for a new shader please consider reaching out to us on our Discord, [Cyberpunk 2077 Modding Community.](https://discord.gg/Epkq79kd96)
+> Not all Cyberpunk shaders are currently supported by the add-on.
 
 ## Installation
 
@@ -33,11 +44,11 @@ The latest version of the Cyberpunk add-on requires Blender 3.1 or higher. Not a
 
 1) Export a mesh with materials using WolvenKit [Learn more](https://wiki.redmodding.org/wolvenkit/wolvenkit-app/usage/blender-integration)
 
-2) Navigate within Blender to **File \ Import \ Cyberpunk GLTF** and select the exported gLTF/glb file. Within the import options choose the same texture format as the WolvenKit export. (PNG is default)
+2) Navigate within Blender to **File \ Import \ Cyberpunk GLTF** and select the exported glTF/glb file. Within the import options choose the same texture format as the WolvenKit export. (PNG is default)
 
 ## Entity Import
 
-1) Convert the ent file to json and export all the meshes used using WolvenKit, a wscript to automate this is available on Discord in the wolvenkit-scripts channel.
+1) Convert the ent file to json and export all the meshes used using WolvenKit, a wscript to automate this is available on Discord in the #wolvenkit-scripts channel.
 
 2) Navigate within Blender to **File \ Import \ Cyberpunk Entity** and select the exported json file. You can enter the appearance you want in the import options, this requires the appearanceName from the entity appearances info. Enter ALL for all appearances.
 
@@ -55,7 +66,7 @@ The latest version of the Cyberpunk add-on requires Blender 3.1 or higher. Not a
 4) Select the desired file path and name
 5) Export
 
-The plugin will automatically apply the correct settings to ensure your mesh imports back into Wolvenkit for use with your mod.
+The plugin will automatically apply the correct settings to ensure your mesh imports back into WolvenKit for use with your mod.
 
 ## Export Animations For Photomode
 **Should work for all types of animation 
@@ -67,7 +78,13 @@ The plugin will automatically apply the correct settings to ensure your mesh imp
 5) Select the desired file path and name
 6) Export
 
-The plugin will apply the correct settings to ensure your animation imports back into Wolvenkit and is correct in game.
+The plugin will apply the correct settings to ensure your animation imports back into WolvenKit and is correct in game.
+
+---
+
+# Contributing
+
+Anybody is welcome contribute to the Cyberpunk Blender Add-on by opening a Pull Request with this repository. If you're interested in chatting or getting involved with the project please consider reaching out to us on our Discord, [Cyberpunk 2077 Modding Community.](https://discord.gg/Epkq79kd96)
 
 ---
 
