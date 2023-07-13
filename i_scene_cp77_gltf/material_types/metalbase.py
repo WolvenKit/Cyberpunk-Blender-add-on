@@ -3,8 +3,9 @@ import os
 from ..main.common import *
 
 class MetalBase:
-    def __init__(self, BasePath,image_format):
+    def __init__(self, BasePath,image_format, ProjPath):
         self.BasePath = BasePath
+        self.ProjPath = ProjPath
         self.image_format = image_format
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
@@ -20,7 +21,8 @@ class MetalBase:
         CurMat.links.new(mixRGB.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
 
         if "BaseColor" in Data:
-            bColNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["BaseColor"],-800,-450,'BaseColor',self.image_format)
+            bcolImg=imageFromRelPath(Data["BaseColor"],DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            bColNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,-450), label="BaseColor", image=bcolImg)
             CurMat.links.new(bColNode.outputs[0],mixRGB.inputs[2])
             CurMat.links.new(bColNode.outputs[1],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
 
@@ -48,7 +50,8 @@ class MetalBase:
             CurMat.links.new(emColor.outputs[0],mulNode.inputs[1])
 
         if "Emissive" in Data:
-            emTexNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["Emissive"],-800,100,'Emissive',self.image_format)
+            EmImg=imageFromRelPath(Data["Emissive"],DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            emTexNode =create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,100), label="Emissive", image=EmImg)
             CurMat.links.new(emTexNode.outputs[0],mulNode.inputs[2])
 
         CurMat.links.new(mulNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Emission'])

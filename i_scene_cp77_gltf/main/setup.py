@@ -44,6 +44,8 @@ class MaterialBuilder:
             verbose=True
 
             bpyMat = bpy.data.materials.new(rawMat["Name"])
+            bpyMat['DepotPath'] = self.BasePath
+            bpyMat['ProjPath']= self.ProjPath
             bpyMat.use_nodes = True
             match rawMat["MaterialTemplate"]:
                 case "engine\\materials\\multilayered.mt" :
@@ -83,7 +85,7 @@ class MaterialBuilder:
                     skin.create(rawMat["Data"],bpyMat)
 
                 case "engine\\materials\\metal_base.remt" | "engine\\materials\\metal_base_proxy.mt":
-                    metalBase = MetalBase(self.BasePath,self.image_format)
+                    metalBase = MetalBase(self.BasePath,self.image_format, self.ProjPath)
                     metalBase.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\hair.mt":

@@ -182,7 +182,7 @@ class Multilayered:
 
 
     def create(self,Data,Mat):
-
+        Mat['MLSetup']= Data["MultilayerSetup"]
         file = openJSON( Data["MultilayerSetup"] + ".json",mode='r',DepotPath=self.BasePath, ProjPath=self.ProjPath)
         mlsetup = json.loads(file.read())["Data"]["RootChunk"]
         file.close()
