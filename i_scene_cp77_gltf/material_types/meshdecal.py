@@ -3,11 +3,14 @@ import os
 from ..main.common import *
 
 class MeshDecal:
-    def __init__(self, BasePath,image_format):
+    def __init__(self, BasePath,image_format, ProjPath):
         self.BasePath = BasePath
-        self.image_format = image_format
+        self.ProjPath = ProjPath
+        self.img_format = image_format
+
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
+        Ns=CurMat.nodes
         CurMat.nodes['Principled BSDF'].inputs['Specular'].default_value = 0
 
 #Diffuse
@@ -18,9 +21,7 @@ class MeshDecal:
         mixRGB.inputs[0].default_value = 1
         CurMat.links.new(mixRGB.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
 
-        mulNode = CurMat.nodes.new("ShaderNodeMath")
-        mulNode.operation = 'MULTIPLY'
-        mulNode.location = (-500,450)
+        mulNode =create_node(Ns, "ShaderNodeMath", (-500,450), operation = 'MULTIPLY')
         if "DiffuseAlpha" in Data:
             mulNode.inputs[0].default_value = float(Data["DiffuseAlpha"])
         else:
@@ -32,7 +33,9 @@ class MeshDecal:
         dTexMapping.location = (-1000,300)
 
         if "DiffuseTexture" in Data:
-            dImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["DiffuseTexture"],-800,500,'DiffuseTexture',self.image_format)
+            dImg=imageFromRelPath(Data["DiffuseTexture"],DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            
+            dImgNode = create_node(Ns,"ShaderNodeTexImage",  (-800,500), label="DiffuseTexture", image=dImg, image_format=self.img_format)
             CurMat.links.new(dTexMapping.outputs[0],dImgNode.inputs[0])
             CurMat.links.new(dImgNode.outputs[0],mixRGB.inputs[2])
             CurMat.links.new(dImgNode.outputs[1],mulNode.inputs[1])
