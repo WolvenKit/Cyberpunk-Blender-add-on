@@ -89,7 +89,7 @@ class MaterialBuilder:
                     metalBase.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\hair.mt":
-                    hair = Hair(self.BasePath,self.image_format)
+                    hair = Hair(self.BasePath,self.image_format, self.ProjPath)
                     hair.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal_gradientmap_recolor.mt":
