@@ -9,7 +9,8 @@ class Multilayered:
         self.image_format = image_format
         self.ProjPath = str(ProjPath)
 
-    def createBaseMaterial(self,matTemplateObj,name):
+    def createBaseMaterial(self,matTemplateObj,mltemplate):
+        name=os.path.basename(mltemplate)
         CT = imageFromRelPath(matTemplateObj["colorTexture"]["DepotPath"]["$value"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
         NT = imageFromRelPath(matTemplateObj["normalTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True,DepotPath=self.BasePath, ProjPath=self.ProjPath)
         RT = imageFromRelPath(matTemplateObj["roughnessTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True,DepotPath=self.BasePath, ProjPath=self.ProjPath)
@@ -18,6 +19,7 @@ class Multilayered:
         TileMult = float(matTemplateObj.get("tilingMultiplier",1))
 
         NG = bpy.data.node_groups.new(name[:-11],"ShaderNodeTree")
+        NG['mlTemplate']=mltemplate
         TMI = NG.inputs.new('NodeSocketVector','Tile Multiplier')
         TMI.default_value = (1,1,1)
         NG.outputs.new('NodeSocketColor','Color')
@@ -188,7 +190,7 @@ class Multilayered:
         file.close()
         xllay = mlsetup.get("layers")
         if xllay is None:
-            xllay = x.get("Layers")
+            xllay = mlsetup.get("Layers")
         LayerCount = len(xllay)
     
         LayerIndex = 0
@@ -247,7 +249,7 @@ class Multilayered:
 
             if Microblend != "null":
                 MBI = imageFromPath(self.BasePath+Microblend,self.image_format,True)
-
+            
             file = openJSON( material + ".json",mode='r',DepotPath=self.BasePath, ProjPath=self.ProjPath)
             mltemplate = json.loads(file.read())["Data"]["RootChunk"]
             file.close()
@@ -284,7 +286,7 @@ class Multilayered:
             GroupOutN = create_node(NG.nodes, "NodeGroupOutput", (200,0))
 
             if not bpy.data.node_groups.get(os.path.basename(material)[:-11]):
-                self.createBaseMaterial(mltemplate,os.path.basename(material))
+                self.createBaseMaterial(mltemplate,material)
 
             BaseMat = bpy.data.node_groups.get(os.path.basename(material)[:-11])
             if BaseMat:
@@ -296,6 +298,7 @@ class Multilayered:
             
             if colorScale != None and colorScale in OverrideTable["ColorScale"].keys():
                 LayerGroupN.inputs[0].default_value = OverrideTable["ColorScale"][colorScale]
+                LayerGroupN['colorScale']=colorScale
             else:
                 LayerGroupN.inputs[0].default_value = (1.0,1.0,1.0,1)
             
