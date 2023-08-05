@@ -90,38 +90,38 @@ class Multilayered:
         return GNN.outputs[0]
 
     def createLayerMaterial(self,LayerName,LayerCount,CurMat,mlmaskpath,normalimgpath):
-        
+        NG = bpy.data.node_groups.new("Layer_Blend","ShaderNodeTree")#create layer's node group
+        NG.inputs.new('NodeSocketColor','Color A')
+        NG.inputs.new('NodeSocketColor','Metalness A')
+        NG.inputs.new('NodeSocketColor','Roughness A')
+        NG.inputs.new('NodeSocketColor','Normal A')
+        NG.inputs.new('NodeSocketColor','Color B')
+        NG.inputs.new('NodeSocketColor','Metalness B')
+        NG.inputs.new('NodeSocketColor','Roughness B')
+        NG.inputs.new('NodeSocketColor','Normal B')
+        NG.inputs.new('NodeSocketColor','Mask')
+        NG.outputs.new('NodeSocketColor','Color')
+        NG.outputs.new('NodeSocketColor','Metalness')
+        NG.outputs.new('NodeSocketColor','Roughness')
+        NG.outputs.new('NodeSocketColor','Normal')
+        GroupInN = create_node(NG.nodes,"NodeGroupInput", (-700,0), hide=False)
+    
+        GroupOutN = create_node(NG.nodes,"NodeGroupOutput",(200,0))
+    
+        ColorMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-300,100), label="Color Mix")
+    
+        MetalMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-300,50), label = "Metal Mix")
+    
+        RoughMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-300,0), label = "Rough Mix")
+    
+        NormalMixN = create_node(NG.nodes,"ShaderNodeMixRGB",(-300,-50), label = "Normal Mix")
         for x in range(LayerCount-1):
             if os.path.exists(os.path.splitext(self.ProjPath + mlmaskpath)[0]+'_layers\\'+mlmaskpath.split('\\')[-1:][0][:-7]+"_"+str(x+1)+".png"):
                 MaskTexture = imageFromPath(os.path.splitext(self.ProjPath+ mlmaskpath)[0]+'_layers\\'+mlmaskpath.split('\\')[-1:][0][:-7]+"_"+str(x+1)+".png",self.image_format,isNormal = True)
             else:
                 MaskTexture = imageFromPath(os.path.splitext(self.BasePath + mlmaskpath)[0]+"_"+str(x+1)+".png",self.image_format,isNormal = True)
-            NG = bpy.data.node_groups.new("Layer_Blend_"+str(x),"ShaderNodeTree")#create layer's node group
-            NG.inputs.new('NodeSocketColor','Color A')
-            NG.inputs.new('NodeSocketColor','Metalness A')
-            NG.inputs.new('NodeSocketColor','Roughness A')
-            NG.inputs.new('NodeSocketColor','Normal A')
-            NG.inputs.new('NodeSocketColor','Color B')
-            NG.inputs.new('NodeSocketColor','Metalness B')
-            NG.inputs.new('NodeSocketColor','Roughness B')
-            NG.inputs.new('NodeSocketColor','Normal B')
-            NG.inputs.new('NodeSocketColor','Mask')
-            NG.outputs.new('NodeSocketColor','Color')
-            NG.outputs.new('NodeSocketColor','Metalness')
-            NG.outputs.new('NodeSocketColor','Roughness')
-            NG.outputs.new('NodeSocketColor','Normal')
-        
-            GroupInN = create_node(NG.nodes,"NodeGroupInput", (-700,0), hide=False)
-        
-            GroupOutN = create_node(NG.nodes,"NodeGroupOutput",(200,0))
-        
-            ColorMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-300,100), label="Color Mix")
-        
-            MetalMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-300,50), label = "Metal Mix")
-        
-            RoughMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-300,0), label = "Rough Mix")
-        
-            NormalMixN = create_node(NG.nodes,"ShaderNodeMixRGB",(-300,-50), label = "Normal Mix")
+         
+            
         
             LayerGroupN = create_node(CurMat.nodes,"ShaderNodeGroup", (-1400,400-100*x))
             LayerGroupN.node_tree = NG
@@ -254,8 +254,9 @@ class Multilayered:
             mltemplate = json.loads(file.read())["Data"]["RootChunk"]
             file.close()
             OverrideTable = createOverrideTable(mltemplate)#get override info for colors and what not
+           # Mat[os.path.basename(material).split('.')[0]+'_cols']=OverrideTable["ColorScale"]
 
-            NG = bpy.data.node_groups.new(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#create layer's node group
+            NG = bpy.data.node_groups.new(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#crLAer's node group
             NG.inputs.new('NodeSocketColor','ColorScale')
             NG.inputs.new('NodeSocketFloat','MatTile')
             NG.inputs.new('NodeSocketFloat','MbTile')
@@ -284,7 +285,7 @@ class Multilayered:
             GroupInN = create_node(NG.nodes, "NodeGroupInput", (-2600,0))
             
             GroupOutN = create_node(NG.nodes, "NodeGroupOutput", (200,0))
-
+            LayerGroupN['mlTemplate']=material
             if not bpy.data.node_groups.get(os.path.basename(material)[:-11]):
                 self.createBaseMaterial(mltemplate,material)
 
