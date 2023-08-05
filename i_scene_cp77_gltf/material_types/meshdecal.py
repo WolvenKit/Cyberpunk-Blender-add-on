@@ -62,7 +62,7 @@ class MeshDecal:
             CurMat.links.new(dColor.outputs[0],mixRGB.inputs[1])
 
         if "NormalTexture" in Data:
-            nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["NormalTexture"],-200,-250,'NormalTexture',self.image_format)
+            nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["NormalTexture"],-200,-250,'NormalTexture',self.img_format)
             CurMat.links.new(nMap.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Normal'])
 
         if "NormalAlpha" in Data:

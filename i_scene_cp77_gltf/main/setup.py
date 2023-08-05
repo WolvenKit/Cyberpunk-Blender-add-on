@@ -65,7 +65,7 @@ class MaterialBuilder:
                     vehicleDestrBlendshape.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal.mt":
-                    meshDecal = MeshDecal(self.BasePath, self.image_format)
+                    meshDecal = MeshDecal(self.BasePath, self.image_format, self.ProjPath)
                     meshDecal.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal_double_diffuse.mt":
