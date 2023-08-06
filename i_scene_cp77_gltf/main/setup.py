@@ -121,7 +121,7 @@ class MaterialBuilder:
                     glass.create(rawMat["Data"],bpyMat)
                 
                 case "base\\materials\\glass_deferred.mt":
-                    glassdef = GlassDeferred(self.BasePath,self.image_format)
+                    glassdef = GlassDeferred(self.BasePath,self.image_format, self.ProjPath)
                     glassdef.create(rawMat["Data"],bpyMat)
 
                 case "base\\fx\\shaders\\signages.mt" :
