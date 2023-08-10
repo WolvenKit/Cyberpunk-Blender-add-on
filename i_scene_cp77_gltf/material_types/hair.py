@@ -13,9 +13,14 @@ class Hair:
     def create(self,hair,Mat):
 
         file = open(self.BasePath + hair["HairProfile"] + ".json",mode='r')
-        profile = json.loads(file.read())["Data"]["RootChunk"]
+        profile = json.loads(file.read())
         file.close()
-
+        valid_json=json_ver_validate(profile)
+        if not valid_json:
+            self.report({'ERROR'}, "Incompatible hair profile json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
+            return        
+        profile= profile["Data"]["RootChunk"]
+        
         Mat.blend_method = 'HASHED'
         Mat.shadow_method = 'HASHED'
 

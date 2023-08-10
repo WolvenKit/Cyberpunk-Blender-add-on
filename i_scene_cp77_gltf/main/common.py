@@ -1,6 +1,19 @@
 
 import bpy
 import os
+import pkg_resources
+
+def json_ver_validate( json_data):
+    if 'Header' not in json_data.keys():
+        return False
+    elif 'MaterialJsonVersion' in json_data['Header'].keys() and pkg_resources.parse_version(json_data['Header']['MaterialJsonVersion']) > pkg_resources.parse_version('1.0.0RC'):
+        return True
+    elif 'WKitJsonVersion' not in json_data['Header'].keys():
+        return False
+    elif pkg_resources.parse_version(json_data['Header']['WKitJsonVersion']) < pkg_resources.parse_version('0.0.8RC'):
+        return False
+    else:
+        return True
 
 def openJSON(path, mode='r',  ProjPath='', DepotPath=''):
     inproj=os.path.join(ProjPath,path)

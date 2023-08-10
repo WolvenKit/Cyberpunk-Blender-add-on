@@ -239,8 +239,13 @@ class VehicleDestrBlendshape:
     def create(self,Data,Mat):
 
         file = open(self.BasePath + Data["MultilayerSetup"] + ".json",mode='r')
-        mlsetup = json.loads(file.read())["Data"]["RootChunk"]
+        mlsetup = json.loads(file.read())
         file.close()
+        valid_json=json_ver_validate(mlsetup)
+        if not valid_json:
+            self.report({'ERROR'}, "Incompatible mlsetup json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
+            return
+        mlsetup = mlsetup["Data"]["RootChunk"]
         xllay = mlsetup.get("layers")
         if xllay is None:
             xllay = x.get("Layers")
@@ -297,8 +302,13 @@ class VehicleDestrBlendshape:
                 MBI = imageFromPath(self.BasePath+Microblend,self.image_format,True)
 
             file = open(self.BasePath + material + ".json",mode='r')
-            mltemplate = json.loads(file.read())["Data"]["RootChunk"]
+            mltemplate = json.loads(file.read())
             file.close()
+            valid_json=json_ver_validate(mltemplate)
+            if not valid_json:
+                self.report({'ERROR'}, "Incompatible mltemplate json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
+                return
+            mltemplate = mltemplate["Data"]["RootChunk"]
             OverrideTable = createOverrideTable(mltemplate)#get override info for colors and what not
 
             NG = bpy.data.node_groups.new(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#create layer's node group
