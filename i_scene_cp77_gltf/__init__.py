@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
     "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, The Magnificent Doctor Presto",
-    "version": (1, 4, 0),
+    "version": (1,4, 0),
     "blender": (3, 1, 0),
     "location": "File > Import-Export",
     "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
@@ -30,6 +30,7 @@ from .main.attribute_import import manage_garment_support
 from .main.sector_import import *
 from bpy_extras.io_utils import ExportHelper
 from .main.exporters import *
+from .main.common import json_ver_validate
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
@@ -73,8 +74,7 @@ class ShowMessageBox(bpy.types.Operator):
         for text in wList: 
             row = self.layout.row(align = True)
             row.alignment = 'EXPAND'
-            row.label(text=text)
-   #self.layout.label(text=self.message)           
+            row.label(text=text)     
         
 class CP77GLBExport(bpy.types.Operator,ExportHelper):
   ### cleaned this up and moved most code to exporters.py
@@ -121,9 +121,9 @@ class CP77EntityImport(bpy.types.Operator,ImportHelper):
                                 options={'HIDDEN'})
       
     update_gi: BoolProperty(name="Update Global Illumination",default=True,description="Update Cycles global illumination options for transparency fixes and higher quality renders")
-    with_materials: BoolProperty(name="With Materials",default=True,description="Import Wolvenkit-exported materials")
-
-
+    with_materials: BoolProperty(name="With Materials",default=True,description="Import Wolvenkit-exported materials")   
+    include_collisions: BoolProperty(name="Include Vehicle Collisions",default=False,description="Use this option if you want to include the .phys collision info for vehicle modding")
+     
     def execute(self, context):
         SetCyclesRenderer(self.update_gi)
 
@@ -132,7 +132,7 @@ class CP77EntityImport(bpy.types.Operator,ImportHelper):
         excluded=""
         bob=self.filepath
         #print('Bob - ',bob)
-        importEnt( bob, apps, excluded,self.with_materials)
+        importEnt( bob, apps, excluded,self.with_materials, self.include_collisions)
 
         return {'FINISHED'}
 
@@ -285,16 +285,19 @@ class CP77Import(bpy.types.Operator,ImportHelper):
             if self.import_garmentsupport:
                 manage_garment_support(existingMeshes, gltf_importer)
 
-            MeshPath = os.path.splitext(filepath)[0]
+            BasePath = os.path.splitext(filepath)[0]
             #Kwek: Gate this--do the block iff corresponding Material.json exist 
             #Kwek: was tempted to do a try-catch, but that is just La-Z
             #Kwek: Added another gate for materials
-            if self.with_materials and os.path.exists(MeshPath + ".Material.json"):
-                file = open(MeshPath + ".Material.json",mode='r')
+            if self.with_materials and os.path.exists(BasePath + ".Material.json"):
+                file = open(BasePath + ".Material.json",mode='r')
                 obj = json.loads(file.read())
-                if 'Header' not in obj.keys():
-                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="JSON is from old version of wkit not compatible with this Plugin version")
+                file.close()
+                valid_json=json_ver_validate(obj)
+                if not valid_json:
+                    self.report({'ERROR'}, "Incompatible material.json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")    
                     break
+
                 DepotPath = str(obj["MaterialRepo"])  + "\\"
 
                
@@ -343,7 +346,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                 MatImportList=[k for k in validmats.keys()]
                 
 
-                Builder = MaterialBuilder(obj, DepotPath, str(self.image_format), MeshPath)
+                Builder = MaterialBuilder(obj,DepotPath,str(self.image_format),BasePath)
                 
                 counter = 0
                 bpy_mats=bpy.data.materials
@@ -355,7 +358,8 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                                 if matname in validmats.keys():
                                     #print('matname: ',matname, validmats[matname])
                                     m=validmats[matname]
-                                    if matname in bpy_mats.keys() and matname[:5]!='Atlas' and 'BaseMaterial' in bpy_mats[matname].keys() and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['GlobalNormal']==m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask']==m['MultilayerMask'] :
+                                    # Should create a list of mis that dont play nice with this and just check if the mat is using one.
+                                    if matname in bpy_mats.keys() and 'glass' not in matname and matname[:5]!='Atlas' and 'BaseMaterial' in bpy_mats[matname].keys() and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['GlobalNormal']==m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask']==m['MultilayerMask'] :
                                         bpy.data.meshes[name].materials.append(bpy_mats[matname])
                                     elif matname in bpy_mats.keys() and matname[:5]=='Atlas' and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['DiffuseMap']==m['DiffuseMap'] :
                                         bpy.data.meshes[name].materials.append(bpy_mats[matname])
