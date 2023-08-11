@@ -513,7 +513,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
             print('No phys file JSONs found in path')
             return('FINISHED')
         else:
-            chassis_phys_j=os.path.basename(chassis_info['collisionResource']['Depotpath']['$value'])+'.json'
+            chassis_phys_j=os.path.basename(chassis_info['collisionResource']['DepotPath']['$value'])+'.json'
             for physJsonPath in physJsonPaths:
                 if os.path.basename(physJsonPath)==chassis_phys_j:
                     phys = open(physJsonPath)
