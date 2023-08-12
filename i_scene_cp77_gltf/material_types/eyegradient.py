@@ -13,8 +13,13 @@ class EyeGradient:
 
         # load the gradient profile from the depot
         file = open(self.BasePath + Data["IrisColorGradient"] + ".json",mode='r')
-        profile = json.loads(file.read())["Data"]["RootChunk"]
+        profile = json.loads(file.read())
         file.close()
+        valid_json=json_ver_validate(profile)
+        if not valid_json:
+            self.report({'ERROR'}, "Incompatible eye gradient json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
+            return
+        profile= profile["Data"]["RootChunk"]
         CurMat = Mat.node_tree
 
         if "RefractionIndex" in Data:

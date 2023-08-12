@@ -3,22 +3,19 @@ import os
 from ..main.common import *
 
 class Skin:
-    def __init__(self, BasePath,image_format):
-        self.BasePath = BasePath
+    def __init__(self, BasePath, image_format,ProjPath):
+        self.BasePath = str(BasePath)
+        self.ProjPath = str(ProjPath)
         self.image_format = image_format
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
 
 #SSS/s
-        sVcol = CurMat.nodes.new("ShaderNodeVertexColor")
-        sVcol.location = (-1400,250)
+        sVcol = create_node(CurMat.nodes,"ShaderNodeVertexColor", (-1400,250))
 
-        sSepRGB = CurMat.nodes.new("ShaderNodeSeparateRGB")
-        sSepRGB.location = (-1200,250)
+        sSepRGB = create_node(CurMat.nodes,"ShaderNodeSeparateRGB", (-1200,250))
 
-        sMultiply = CurMat.nodes.new("ShaderNodeMath")
-        sMultiply.location = (-800,250)
-        sMultiply.operation = 'MULTIPLY'
+        sMultiply = create_node(CurMat.nodes,"ShaderNodeMath", (-800,250), operation = 'MULTIPLY')
         sMultiply.inputs[1].default_value = (0.05)
 
         CurMat.links.new(sVcol.outputs[0],sSepRGB.inputs[0])
@@ -27,13 +24,11 @@ class Skin:
         CurMat.nodes['Principled BSDF'].inputs['Subsurface Color'].default_value = (0.8, 0.14908, 0.0825199, 1)
         
 #Albedo/a
-        mixRGB = CurMat.nodes.new("ShaderNodeMixRGB")
-        mixRGB.location = (-200,300)
-        mixRGB.hide = True
-        mixRGB.blend_type = 'MULTIPLY'
+        mixRGB = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-200,300), blend_type = 'MULTIPLY')
 
         if "Albedo" in Data:
-            aImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["Albedo"], -800,550, "Albedo",self.image_format)
+            aImg=imageFromRelPath(Data["Albedo"],DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            aImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,550), label="Albedo", image=aImg)
             CurMat.links.new(aImgNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
             CurMat.links.new(aImgNode.outputs[0],mixRGB.inputs[1])
 
@@ -42,7 +37,8 @@ class Skin:
             CurMat.links.new(tColor.outputs[0],mixRGB.inputs[2])
         
         if "TintColorMask" in Data:
-            tmaskNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["TintColorMask"], -500,550, "TintColorMask",self.image_format,True)
+            tImg=imageFromRelPath(Data["TintColorMask"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
+            tmaskNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-500,550), label="TintColorMask", image=tImg)
             CurMat.links.new(tmaskNode.outputs[0],mixRGB.inputs[0])
 
         CurMat.links.new(mixRGB.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
@@ -50,105 +46,68 @@ class Skin:
 #ROUGHNES+MASK/rm
 
         if "Roughness" in Data:
-            rImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["Roughness"], -1600,50, "Roughness",self.image_format,True)
+            rImg=imageFromRelPath(Data["Roughness"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
+            rImgNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-1600,50), label="Roughness", image=tImg)
 
-        rmSep = CurMat.nodes.new("ShaderNodeSeparateRGB")
-        rmSep.location = (-1300,50)
-        rmSep.hide = True
+        rmSep =  create_node(CurMat.nodes, "ShaderNodeSeparateRGB", (-1300,50))
 		
-        rmSub = CurMat.nodes.new("ShaderNodeMath")
-        rmSub.location = (-1100,0)
-        rmSub.hide = True
-        rmSub.operation = 'SUBTRACT'
+        rmSub =  create_node(CurMat.nodes, "ShaderNodeMath", (-1100,0), operation = 'SUBTRACT')
         rmSub.inputs[1].default_value = (0.5)
 
-        rmMul = CurMat.nodes.new("ShaderNodeMath")
-        rmMul.location = (-900,-100)
-        rmMul.hide = True
-        rmMul.operation = 'MULTIPLY'
+        rmMul =  create_node(CurMat.nodes, "ShaderNodeMath", (-900,-100), operation = 'MULTIPLY')
 		
 #NORMAL/n
-        nMDCoordinates = CurMat.nodes.new("ShaderNodeTexCoord")
-        nMDCoordinates.hide = True
-        nMDCoordinates.location =  (-2000,-850)
+        nMDCoordinates =  create_node(CurMat.nodes,"ShaderNodeTexCoord", (-2000,-850))
 
-        nVecMulAspectA = CurMat.nodes.new("ShaderNodeVectorMath")
-        nVecMulAspectA.hide = True
-        nVecMulAspectA.location =  (-1800,-1000)
-        nVecMulAspectA.operation = "MULTIPLY"
+        nVecMulAspectA =  create_node(CurMat.nodes,"ShaderNodeVectorMath", (-1800,-1000), operation = "MULTIPLY")
         nVecMulAspectA.inputs[1].default_value = (1, 2, 1)
 		
-        nVecMulAspectB = CurMat.nodes.new("ShaderNodeVectorMath")
-        nVecMulAspectB.hide = True
-        nVecMulAspectB.location =  (-1800,-1150)
-        nVecMulAspectB.operation = "MULTIPLY"
+        nVecMulAspectB =  create_node(CurMat.nodes,"ShaderNodeVectorMath",  (-1800,-1150), operation = "MULTIPLY")
         nVecMulAspectB.inputs[1].default_value = (1, 2, 1)
 
-        nVecMulA = CurMat.nodes.new("ShaderNodeVectorMath")
-        nVecMulA.hide = True
-        nVecMulA.location =  (-1600,-850)
-        nVecMulA.operation = "MULTIPLY"
+        nVecMulA =  create_node(CurMat.nodes,"ShaderNodeVectorMath", (-1600,-850), operation = "MULTIPLY")
 		
-        nVecMulB = CurMat.nodes.new("ShaderNodeVectorMath")
-        nVecMulB.hide = True
-        nVecMulB.location =  (-1600,-1150)
-        nVecMulB.operation = "MULTIPLY"
+        nVecMulB =  create_node(CurMat.nodes,"ShaderNodeVectorMath", (-1600,-1150), operation = "MULTIPLY")
 		
-        nVecModA = CurMat.nodes.new("ShaderNodeVectorMath")
-        nVecModA.hide = True
-        nVecModA.location =  (-1400,-850)
-        nVecModA.operation = "MODULO"
+        nVecModA =  create_node(CurMat.nodes,"ShaderNodeVectorMath", (-1400,-850), operation = "MODULO")
         nVecModA.inputs[1].default_value = (0.5, 1, 1)
 		
-        nVecModB = CurMat.nodes.new("ShaderNodeVectorMath")
-        nVecModB.hide = True
-        nVecModB.location =  (-1400,-1150)
-        nVecModB.operation = "MODULO"
+        nVecModB =  create_node(CurMat.nodes,"ShaderNodeVectorMath", (-1400,-1150), operation = "MODULO")
         nVecModB.inputs[1].default_value = (0.5, 1, 1)
 
-        nVecAdd = CurMat.nodes.new("ShaderNodeVectorMath")
-        nVecAdd.hide = True
-        nVecAdd.location =  (-1200,-1150)
-        nVecAdd.operation = "ADD"
+        nVecAdd =  create_node(CurMat.nodes,"ShaderNodeVectorMath", (-1200,-1150), operation = "ADD")
         nVecAdd.inputs[1].default_value = (0.5, 0, 0)
 
-        nOverlay1 = CurMat.nodes.new("ShaderNodeMixRGB")
-        nOverlay1.hide = True
-        nOverlay1.location =  (-1000,-300)
-        nOverlay1.blend_type ='OVERLAY'
+        nOverlay1 =  create_node(CurMat.nodes,"ShaderNodeMixRGB", (-1000,-300), blend_type ='OVERLAY')
 		
-        nOverlay2 = CurMat.nodes.new("ShaderNodeMixRGB")
-        nOverlay2.hide = True
-        nOverlay2.location =  (-700,-300)
-        nOverlay2.blend_type ='OVERLAY'
+        nOverlay2 =  create_node(CurMat.nodes,"ShaderNodeMixRGB", (-700,-300), blend_type ='OVERLAY')
 		
-        mdOverlay = CurMat.nodes.new("ShaderNodeMixRGB")
-        mdOverlay.hide = True
-        mdOverlay.location =  (-700,-450)
-        mdOverlay.blend_type ='OVERLAY'
+        mdOverlay =  create_node(CurMat.nodes,"ShaderNodeMixRGB", (-700,-450), blend_type ='OVERLAY')
         mdOverlay.inputs[0].default_value = (1)
 
-        nNormalMap = CurMat.nodes.new("ShaderNodeNormalMap")
-        nNormalMap.location = (-300, -300)
-        nNormalMap.hide = True
+        nNormalMap =  create_node(CurMat.nodes,"ShaderNodeNormalMap", (-300, -300))
 		
         nRebuildNormal = CreateRebildNormalGroup(CurMat)
         nRebuildNormal.hide = True
         nRebuildNormal.location =  (-500,-300)
 
         if "Normal" in Data:
-            nMap = CreateShaderNodeTexImage(CurMat, self.BasePath + Data["Normal"], -1800,-300, "Normal",self.image_format,True)
+            nImg = imageFromRelPath(Data["Normal"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
+            nMap = create_node(CurMat.nodes, "ShaderNodeTexImage", (-1800,-300), label="Normal", image=nImg)
             nMap.image.colorspace_settings.name='Non-Color'
 	
         if "DetailNormal" in Data:
-            dnMap = CreateShaderNodeTexImage(CurMat, self.BasePath + Data["DetailNormal"], -1800,-450, "DetailNormal",self.image_format,True)
+            dnImg = imageFromRelPath(Data["DetailNormal"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
+            dnMap = create_node(CurMat.nodes, "ShaderNodeTexImage", (-1800,-450), label="DetailNormal", image=dnImg)
+            dnMap.image.colorspace_settings.name='Non-Color'
 			
         if "DetailNormalInfluence" in Data:
             nDNInfluence = CreateShaderNodeValue(CurMat, Data["DetailNormalInfluence"],-1250,-200,"DetailNormalInfluence")
 
         if "MicroDetail" in Data:
-            mdMapA = CreateShaderNodeTexImage(CurMat, self.BasePath + Data["MicroDetail"], -1100,-450, "MicroDetail",self.image_format,True)
-            mdMapB = CreateShaderNodeTexImage(CurMat, self.BasePath + Data["MicroDetail"], -1100,-650, "MicroDetail",self.image_format,True)
+            mdMapAImg = imageFromRelPath(Data["MicroDetail"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
+            mdMapA =  create_node(CurMat.nodes, "ShaderNodeTexImage", (-1100,-450), label="MicroDetail", image=mdMapAImg)
+            mdMapB = create_node(CurMat.nodes, "ShaderNodeTexImage", (-1100,-650), label="MicroDetail", image=mdMapAImg)
 
         if "MicroDetailUVScale01" in Data:
             mdScale01 = CreateShaderNodeValue(CurMat, Data["MicroDetailUVScale01"],-2000,-1000,"MicroDetailUVScale01")
@@ -160,10 +119,12 @@ class Skin:
             mdInfluence = CreateShaderNodeValue(CurMat, Data["MicroDetailInfluence"],-1250,-100,"MicroDetailInfluence")
 
         if "Detailmap_Squash" in Data:
-            ndSqImgNode = CreateShaderNodeTexImage(CurMat, self.BasePath + Data["Detailmap_Squash"], -2000,50, "Detailmap_Squash",self.image_format,True)
+            sqshImg = imageFromRelPath(Data["Detailmap_Squash"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
+            ndSqImgNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-2000,50), label="Detailmap_Squash", image=sqshImg)
 
         if "Detailmap_Stretch" in Data:
-            ndStImg = CreateShaderNodeTexImage(CurMat, self.BasePath + Data["Detailmap_Stretch"], -2000,0, "Detailmap_Stretch",self.image_format,True)
+            strchImg =  imageFromRelPath(Data["Detailmap_Stretch"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
+            ndStImg = create_node(CurMat.nodes, "ShaderNodeTexImage", (-2000,0), label="Detailmap_Stretch", image=strchImg)
 
         CurMat.links.new(rImgNode.outputs[0],rmSep.inputs[0])
         CurMat.links.new(rmSep.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Roughness'])
@@ -203,4 +164,5 @@ class Skin:
             bfColor = CreateShaderNodeRGB(CurMat, Data["BloodColor"],-2000,300,"BloodColor")
 
         if "Bloodflow" in Data:
-            bfImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["Bloodflow"], -2000,350, "Bloodflow",self.image_format)
+            bldImg = imageFromRelPath(Data["Bloodflow"],DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            bfImgNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-2000,350), label="Bloodflow", image=bldImg)
