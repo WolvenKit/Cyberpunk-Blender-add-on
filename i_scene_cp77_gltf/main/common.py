@@ -1,6 +1,28 @@
 
 import bpy
 import os
+import pkg_resources
+
+def json_ver_validate( json_data):
+    if 'Header' not in json_data.keys():
+        return False
+    elif 'MaterialJsonVersion' in json_data['Header'].keys() and pkg_resources.parse_version(json_data['Header']['MaterialJsonVersion']) > pkg_resources.parse_version('1.0.0RC'):
+        return True
+    elif 'WKitJsonVersion' not in json_data['Header'].keys():
+        return False
+    elif pkg_resources.parse_version(json_data['Header']['WKitJsonVersion']) < pkg_resources.parse_version('0.0.8RC'):
+        return False
+    else:
+        return True
+
+def openJSON(path, mode='r',  ProjPath='', DepotPath=''):
+    inproj=os.path.join(ProjPath,path)
+    if os.path.exists(inproj):
+        file = open(inproj,mode)
+    else:
+        file = open(os.path.join(DepotPath,path),mode)
+    return file
+
 
 def imageFromPath(Img,image_format,isNormal = False):
     # The speedtree materials use the same name textures for different plants this code was loading the same leaves on all of them
@@ -34,13 +56,58 @@ def imageFromPath(Img,image_format,isNormal = False):
             Im.colorspace_settings.name = 'Non-Color'
     return Im
 
-def CreateShaderNodeTexImage(curMat,path = None, x = 0, y = 0, name = None,image_format = 'png', nonCol = False):
+def imageFromRelPath(ImgPath, image_format='png', isNormal = False, DepotPath='',ProjPath=''):
+    # The speedtree materials use the same name textures for different plants this code was loading the same leaves on all of them
+    Im = bpy.data.images.get(os.path.basename(ImgPath)[:-4])    
+    if Im:
+        before,mid,after=Im.filepath.partition('source\\raw')
+        path=mid+after
+        
+
+    if Im and path==ImgPath[:-3]+ image_format:
+        if Im.colorspace_settings.name != 'Non-Color':
+            if isNormal:
+                Im = None
+        else:
+            if not isNormal:
+                Im = None
+    else: 
+        Im=None
+    if not Im :
+        Im = bpy.data.images.get(os.path.basename(ImgPath)[:-4] + ".001")
+        if Im:
+            before,mid,after=Im.filepath.partition('source\\raw')
+            path=mid+after
+        if Im and path==ImgPath[:-3]+ image_format:
+            if Im.colorspace_settings.name != 'Non-Color':
+                if isNormal:
+                    Im = None
+            else:
+                if not isNormal:
+                    Im = None
+        else :
+            Im = None
+    
+    if not Im:
+        inProj=os.path.join(ProjPath,ImgPath)[:-3]+ image_format
+        inDepot=os.path.join(DepotPath,ImgPath)[:-3]+ image_format
+        Im = bpy.data.images.new(os.path.basename(ImgPath)[:-4],1,1)
+        Im.source = "FILE"
+        if os.path.exists(inProj):
+            Im.filepath = inProj
+        else:
+            Im.filepath = inDepot
+        if isNormal:
+            Im.colorspace_settings.name = 'Non-Color'
+    return Im
+
+def CreateShaderNodeTexImage(curMat,path = None, x = 0, y = 0, name = None, image_format = 'png', nonCol = False):
     ImgNode = curMat.nodes.new("ShaderNodeTexImage")
     ImgNode.location = (x, y)
     ImgNode.hide = True
-    if name is not None:
+    if name:
         ImgNode.label = name
-    if path is not None:
+    if path:
         Img = imageFromPath(path,image_format,nonCol)
         ImgNode.image = Img
 
@@ -146,6 +213,7 @@ def CreateShaderNodeNormalMap(curMat,path = None, x = 0, y = 0, name = None,imag
         curMat.links.new(NormalRebuildGroup.outputs[0],nMap.inputs[1])
 
     return nMap
+
 def CreateShaderNodeRGB(curMat, color,x = 0, y = 0,name = None, isVector = False):
     rgbNode = curMat.nodes.new("ShaderNodeRGB")
     rgbNode.location = (x, y)
@@ -159,12 +227,13 @@ def CreateShaderNodeRGB(curMat, color,x = 0, y = 0,name = None, isVector = False
         rgbNode.outputs[0].default_value = (float(color["Red"])/255,float(color["Green"])/255,float(color["Blue"])/255,float(color["Alpha"])/255)
 
     return rgbNode
+
 def CreateShaderNodeValue(curMat, value = 0,x = 0, y = 0,name = None):
     valNode = curMat.nodes.new("ShaderNodeValue")
     valNode.location = (x,y)
     valNode.outputs[0].default_value = float(value)
     valNode.hide = True
-    if name is not None:
+    if name :
         valNode.label = name
 
     return valNode
