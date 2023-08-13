@@ -166,7 +166,8 @@ def cp77_collision_export(filepath):
                 elif colliderType == "physicsColliderCapsule":
                     i['Data']['radius'] = obj.dimensions.x / 2  # Divided by 2 because blender dimensions are diameter
                     i['Data']['height'] = obj.dimensions.z 
-
+                
+            bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Succesfully Exported Collisions")
         with open(output, 'w') as f:
             json.dump(data, f, indent=2)
 
