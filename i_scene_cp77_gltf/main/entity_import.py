@@ -41,6 +41,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     #presto_stash.append(ent_components)    
     ent_complist=[]
     ent_rigs=[]
+    ent_colliderComps=[]
     chassis_info=[]  
     for comp in ent_components:
         ent_complist.append(comp['name'])
@@ -49,9 +50,11 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
             ent_rigs.append(os.path.join(path,comp['rig']['DepotPath']['$value']))
         if comp['name']['$value'] == 'Chassis':            
             chassis_info = comp
+        if comp['$type'] == 'entColliderComponent':
+            ent_colliderComps = comp
+        
         #    presto_stash.append(ent_rigs)
-       
-            
+                
     resolved=[]
     for res_p in j['Data']['RootChunk']['resolvedDependencies']:
         resolved.append(os.path.join(path,res_p['DepotPath']['$value']))
@@ -199,7 +202,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                             chunks= a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['compiledData']['Data']['Chunks']
                             print('Chunks found')
                 else:
-                    print('app file not found - ',filepath)
+                    print('app file not found -', filepath)
                               
             if len(comps)==0:      
                 print('falling back to rootchunk comps')
@@ -496,127 +499,128 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                 except:
                                     print("Failed on ",c['mesh']['DepotPath']['$value'])
         print('Exported' ,app_name)
-        if len(chassis_info) > 0:
-            chassis_z = chassis_info['localTransform']['Position']['z']['Bits'] / 131072
-            chassis = next((obj for obj in bpy.data.objects if obj.get('componentName') == 'chasis'), None)
-            if chassis is not None:
-                chassis_collection = chassis.users_collection[0]
-                chassis_armature = next((obj for obj in chassis_collection.objects if obj.type == 'ARMATURE'), None)           
-                if chassis_armature is not None:
-                    base_bone = chassis_armature.pose.bones.get('Base')  # get the bone named 'base'
-        else:
-            print("--- %s seconds ---" % (time.time() - start_time))
-    # find the .phys file jsons
+     
+              # find the .phys file jsons
     if include_collisions:
         physJsonPaths = glob.glob(path + "\**\*.phys.json", recursive=True)
         if len(physJsonPaths) == 0:
             print('No phys file JSONs found in path')
             return('FINISHED')
         else:
+            if len(chassis_info) > 0:
+                chassis_z = chassis_info['localTransform']['Position']['z']['Bits'] / 131072
+            else:
+                #this isn't really right, but the value seems to always be very close so it's better than 0
+                chassis_z = rig_j['boneTransforms'][2]['Translation']['Z']
+            print('colliders:', ent_colliderComps)
+  
             chassis_phys_j=os.path.basename(chassis_info['collisionResource']['DepotPath']['$value'])+'.json'
             for physJsonPath in physJsonPaths:
                 if os.path.basename(physJsonPath)==chassis_phys_j:
-                    phys = open(physJsonPath)
-                    physdata = json.load(phys)
-            if physdata:
-                # create a new collector named after the file
-                collection_name = os.path.splitext(os.path.basename(physJsonPath))[0]
-                new_collection = bpy.data.collections.new(collection_name)
-                bpy.context.scene.collection.children.link(new_collection)
+                    with open(physJsonPath, "r",) as phys:
+                        physdata = json.load(phys)
+                    if physdata:
+                        # create a new collector named after the file
+                        collection_name = os.path.splitext(os.path.basename(physJsonPath))[0]
+                        new_collection = bpy.data.collections.new(collection_name)
+                        bpy.context.scene.collection.children.link(new_collection)
 
-                # create the new objects
-                def create_new_object(name, transform):
-                    mesh = bpy.data.meshes.new(name)
-                    obj = bpy.data.objects.new(name, mesh)
-                    new_collection.objects.link(obj)  
-                    bpy.context.view_layer.objects.active = obj
-                    obj.select_set(True)
+                        # create the new objects
+                        def create_new_object(name, transform):
+                            mesh = bpy.data.meshes.new(name)
+                            obj = bpy.data.objects.new(name, mesh)
+                            new_collection.objects.link(obj)  
+                            bpy.context.view_layer.objects.active = obj
+                            obj.select_set(True)
+                            constraint = obj.constraints.new('CHILD_OF')
+                            constraint.target = rig
+                            constraint.subtarget = 'Base'
                     
-                    # If we found a chassis armature and base bone, set a "Child Of" constraint
-                    if chassis_armature is not None and base_bone is not None:
-                        constraint = obj.constraints.new('CHILD_OF')
-                        constraint.target=chassis_armature
-                        constraint.subtarget = 'Base'
-                        
-                        # Apply inverse
-                        bpy.context.view_layer.objects.active = obj
-                        bpy.ops.constraint.childof_set_inverse(constraint="Child Of", owner='OBJECT')
-                        # create dicts for position/orientation
-                    
-                    position = (transform['position']['X'], transform['position']['Y'], transform['position']['Z'])
-                    orientation = (transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i'])
-                    obj.location = position
-                    obj.delta_location[2] = chassis_z 
-                    obj.rotation_mode = 'QUATERNION'
-                    obj.rotation_quaternion = orientation
+                             # Apply inverse
+                            bpy.context.view_layer.objects.active = obj
+                            bpy.ops.constraint.childof_set_inverse(constraint="Child Of", owner='OBJECT')
+                                                    
+                            position = (transform['position']['X'], transform['position']['Y'], transform['position']['Z'])
+                            orientation = (transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i'])
+                            obj.location = position
+                            obj.delta_location[2] = chassis_z 
+                            obj.rotation_mode = 'QUATERNION'
+                            obj.rotation_quaternion = orientation
 
-                    return obj
+                            return obj
 
-                # Iterate through the collisionShapes array, creating submeshes in the collector named after the collider types
-                for index, i in enumerate(physdata['Data']['RootChunk']['bodies'][0]['Data']['collisionShapes']):
-                    # create dicts for later
-                        colliderType = i['Data']['$type']
-                        submeshName = str(index) + '_' + colliderType
-                        transform = i['Data']['localToBody']
-                        # If the type is "physicsColliderConvex", or "physicsColliderConcave" create meshes with vertices everywhere specified in the vertices array
-                        if colliderType == "physicsColliderConvex" or colliderType == "physicsColliderConcave":
-                            obj = create_new_object(submeshName, transform)
-                            if 'vertices' in i['Data']:
-                                verts = [(j['X'], j['Y'], j['Z']) for j in i['Data']['vertices']]
-                                bm = bmesh.new()
-                                for v in verts:
-                                    bm.verts.new(v)
-                                bm.to_mesh(obj.data)
-                                bm.free()
-
-                        # If the type is "physicsColliderBox", create a box centered at the object's location
-                        elif colliderType == "physicsColliderBox":
-                            half_extents = i['Data']['halfExtents']
-                            dimensions = (2 * half_extents['X'], 2 * half_extents['Y'], 2 * half_extents['Z'])
-                            bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0))
-                            box = bpy.context.object
-                            box.scale = dimensions
-                            box.name = submeshName
-                            box.location = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
-                            box.rotation_mode = 'QUATERNION'  # Set the rotation mode to QUATERNION first
-                            box.rotation_quaternion = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
-                            box.display_type = 'BOUNDS'
+                        # Iterate through the collisionShapes array, creating submeshes in the collector named after the collider types
+                        for index, i in enumerate(physdata['Data']['RootChunk']['bodies'][0]['Data']['collisionShapes']):
                             
-                            new_collection.objects.link(box)
-                            bpy.context.collection.objects.unlink(box) # Unlink from the current collection
+                            colliderType = i['Data']['$type']
+                            submeshName = str(index) + '_' + colliderType
+                            transform = i['Data']['localToBody']
+                        
+                            # If the type is "physicsColliderConvex", or "physicsColliderConcave" create meshes with vertices everywhere specified in the vertices array
+                            if colliderType == "physicsColliderConvex" or colliderType == "physicsColliderConcave":
+                                obj = create_new_object(submeshName, transform) 
+                                obj['collisionShape'] = colliderType
+                                obj['colliderResource'] = physJsonPath                               
+                                if 'vertices' in i['Data']:
+                                    verts = [(j['X'], j['Y'], j['Z']) for j in i['Data']['vertices']]
+                                    bm = bmesh.new()
+                                    for v in verts:
+                                        bm.verts.new(v)
+                                    bm.to_mesh(obj.data)
+                                    bm.free()
 
-                        # handle physicsColliderCapsule       
-                        elif colliderType == "physicsColliderCapsule":
-                            radius = i['Data']['radius']
-                            height = i['Data']['height']
-                            bpy.ops.mesh.primitive_cylinder_add(radius=radius, depth=height, location=(0, 0, 0))
-                            capsule = bpy.context.object
-                            capsule.name = submeshName
-                            capsule.rotation_mode = 'QUATERNION'
-                            capsule.location = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
-                            capsule.rotation_quaternion = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
-                            capsule.display_type = 'BOUNDS'
-                            new_collection.objects.link(capsule)
-                            bpy.context.collection.objects.unlink(capsule) 
+                            # If the type is "physicsColliderBox", create a box centered at the object's location
+                            elif colliderType == "physicsColliderBox":
+                                half_extents = i['Data']['halfExtents']
+                                dimensions = (2 * half_extents['X'], 2 * half_extents['Y'], 2 * half_extents['Z'])
+                                bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0))
+                                box = bpy.context.object
+                                box['collisionShape'] = colliderType
+                                box['colliderResource'] = physJsonPath  
+                                box.scale = dimensions
+                                box.name = submeshName
+                                box.location = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
+                                box.rotation_mode = 'QUATERNION'  # Set the rotation mode to QUATERNION first
+                                box.rotation_quaternion = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
+                                box.display_type = 'BOUNDS'
+                                
+                                new_collection.objects.link(box)
+                                bpy.context.collection.objects.unlink(box) # Unlink from the current collection
+
+                            # handle physicsColliderCapsule       
+                            elif colliderType == "physicsColliderCapsule":
+                                radius = i['Data']['radius']
+                                height = i['Data']['height']
+                                bpy.ops.mesh.primitive_cylinder_add(radius=radius, depth=height, location=(0, 0, 0))
+                                capsule = bpy.context.object
+                                capsule['collisionShape'] = colliderType
+                                capsule['colliderResource'] = physJsonPath  
+                                capsule.name = submeshName
+                                capsule.rotation_mode = 'QUATERNION'
+                                capsule.location = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
+                                capsule.rotation_quaternion = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
+                                capsule.display_type = 'WIRE'
+                                new_collection.objects.link(capsule)
+                                bpy.context.collection.objects.unlink(capsule) 
 
     print("--- %s seconds ---" % (time.time() - start_time))
 
 # The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
 
-    path = 'F:\\CPmod\\heist_hotel\\source\\raw'
-    ent_name = 'single_door.ent'
+   # path = 'F:\\CPmod\\heist_hotel\\source\\raw'
+   # ent_name = 'single_door.ent'
     # The list below needs to be the appearanceNames for each ent that you want to import 
     # NOT the name in appearances list, expand it and its the property inside, also its name in the app file
-    appearances =['kitsch_f']
+    # appearances =['kitsch_f']
 
-    jsonpath = glob.glob(path+"\**\*.ent.json", recursive = True)
-    if len(jsonpath)==0:
-        print('No jsons found')
+    # jsonpath = glob.glob(path+"\**\*.ent.json", recursive = True)
+    # if len(jsonpath)==0:
+        # print('No jsons found')
         
-    for i,e in enumerate(jsonpath):
-        if os.path.basename(e)== ent_name+'.json' :
-            filepath=e
+   # for i,e in enumerate(jsonpath):
+  #      if os.path.basename(e)== ent_name+'.json' :
+  #          filepath=e
             
-    importEnt( filepath, appearances )
+   # importEnt( filepath, appearances )
