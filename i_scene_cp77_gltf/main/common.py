@@ -263,3 +263,43 @@ def createOverrideTable(matTemplateObj):
                 tmpStrength1 = 1
             Output["MetalLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
         return Output
+
+def createParallaxGroup():
+    if 'CP77_Parallax' in bpy.data.node_groups.keys():
+        return bpy.data.node_groups['CP77_Parallax']
+    else:
+        CurMat = bpy.data.node_groups.new('CP77_Parallax', 'ShaderNodeTree')
+        CurMat.outputs.new('NodeSocketVector','Vector' )
+        CurMat.inputs.new('NodeSocketFloat','Distance' )
+        GroupOutput = create_node(CurMat.nodes,"NodeGroupOutput",(771.574462890625, 0.0), label="Group Output")
+        Tangent = create_node(CurMat.nodes,"ShaderNodeTangent",(-565., -136.), label="Tangent")
+        Tangent.direction_type='UV_MAP'
+        VectorMath = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-566., -342.), operation='CROSS_PRODUCT', label="Vector Math")
+        VectorMath002 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-227., -208.), operation='DOT_PRODUCT', label="Vector Math.002")
+        VectorMath004 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(361., 34.), operation='SCALE', label="Vector Math.004")
+        VectorMath005 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(581., 123.), operation='SUBTRACT', label="Vector Math.005")
+        UVMap = create_node(CurMat.nodes,"ShaderNodeUVMap",(299., 342.), label="UV Map")
+        VectorMath001 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-248., 37.), operation='DOT_PRODUCT', label="Vector Math.001")
+        VectorMath006 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-95., 332.), operation='DOT_PRODUCT', label="Vector Math.006")
+        Geometry = create_node(CurMat.nodes,"ShaderNodeNewGeometry",(-581., 222.), label="Geometry")
+        Math = create_node(CurMat.nodes,"ShaderNodeMath",(159., -230.), operation='DIVIDE', label="Math")
+        CombineXYZ = create_node(CurMat.nodes,"ShaderNodeCombineXYZ",(-13., 31.), label="Combine XYZ")
+        GroupInput = create_node(CurMat.nodes,"NodeGroupInput",(-781., 0.0), label="Group Input")
+        CurMat.links.new(VectorMath005.outputs['Vector'], GroupOutput.inputs[0])
+        CurMat.links.new(Geometry.outputs['Normal'], VectorMath.inputs[0])
+        CurMat.links.new(Tangent.outputs['Tangent'], VectorMath.inputs[1])
+        CurMat.links.new(Geometry.outputs['Incoming'], VectorMath002.inputs[0])
+        CurMat.links.new(VectorMath.outputs['Value'], VectorMath002.inputs[1])
+        CurMat.links.new(CombineXYZ.outputs['Vector'], VectorMath004.inputs[0])
+        CurMat.links.new(Math.outputs['Value'], VectorMath004.inputs[3])
+        CurMat.links.new(UVMap.outputs['UV'], VectorMath005.inputs[0])
+        CurMat.links.new(VectorMath004.outputs['Vector'], VectorMath005.inputs[1])
+        CurMat.links.new(Geometry.outputs['Incoming'], VectorMath001.inputs[0])
+        CurMat.links.new(Tangent.outputs['Tangent'], VectorMath001.inputs[1])
+        CurMat.links.new(Geometry.outputs['Incoming'], VectorMath006.inputs[0])
+        CurMat.links.new(Geometry.outputs['Normal'], VectorMath006.inputs[1])
+        CurMat.links.new(GroupInput.outputs['Distance'], Math.inputs[0])
+        CurMat.links.new(VectorMath006.outputs['Value'], Math.inputs[1])
+        CurMat.links.new(VectorMath001.outputs['Value'], CombineXYZ.inputs[0])
+        CurMat.links.new(VectorMath002.outputs['Value'], CombineXYZ.inputs[1])
+        return CurMat
