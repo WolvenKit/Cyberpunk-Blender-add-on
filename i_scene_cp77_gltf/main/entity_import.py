@@ -7,11 +7,14 @@ import bpy
 import time
 from math import sin,cos
 from mathutils import Vector, Matrix , Quaternion
+import bmesh
+from ..main.common import json_ver_validate
 
 # The appearance list needs to be the appearanceNames for each ent that you want to import, will import all if not specified
 # if you've already imported the body/head and set the rig up you can exclude them by putting them in the exclude_meshes list 
+#presto_stash=[]
 
-def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=True): 
+def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=True, include_collisions=False): 
     
     C = bpy.context
     coll_scene = C.scene.collection
@@ -24,24 +27,35 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
     print('Importing Entity', ent_name)
     with open(filepath,'r') as f: 
         j=json.load(f) 
-        
+    valid_json=json_ver_validate(j)
+    if not valid_json:
+        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Incompatible entity json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
+        return {'CANCELLED'}
+     
     ent_apps= j['Data']['RootChunk']['appearances']
     ent_applist=[]
     for app in ent_apps:
         ent_applist.append(app['appearanceName']['$value'])
-    
-    ent_components= j['Data']['RootChunk']['components']    
+        #presto_stash.append(ent_apps)
+    ent_components= j['Data']['RootChunk']['components'] 
+    #presto_stash.append(ent_components)    
     ent_complist=[]
     ent_rigs=[]
+    chassis_info=[]  
     for comp in ent_components:
         ent_complist.append(comp['name'])
         if 'rig' in comp.keys():
             print(comp['rig'])
             ent_rigs.append(os.path.join(path,comp['rig']['DepotPath']['$value']))
+        if comp['name']['$value'] == 'Chassis':            
+            chassis_info = comp
+        #    presto_stash.append(ent_rigs)
+       
+            
     resolved=[]
     for res_p in j['Data']['RootChunk']['resolvedDependencies']:
         resolved.append(os.path.join(path,res_p['DepotPath']['$value']))
-
+        
     # if no apps requested populate the list with all available.
     if len(appearances[0])==0:
         for app in ent_apps:
@@ -70,7 +84,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
     # then check for an anim in the project thats using the rig (some things like the arch bike dont ref the anim in the ent)
     # otherwise just skip this section
     #
-    anim_files = glob.glob(path+"\\base\\animations\\vehicle"+"\**\*.glb", recursive = True)
+    anim_files = glob.glob(path+"\\base\\animations\\"+"\**\*.glb", recursive = True)
     rig=None
     bones=None
     chunks=None
@@ -83,8 +97,13 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                     if os.path.exists(anim[:-3]+'anims.json'):
                         with open(anim[:-3]+'anims.json','r') as f: 
                             anm_j=json.load(f) 
+                        valid_json=json_ver_validate(anm_j)
+                        if not valid_json:
+                            bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Incompatible anim json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
+                            return {'CANCELLED'}
                         if os.path.join(path,anm_j['Data']['RootChunk']['rig']['DepotPath']['$value']) in ent_rigs:
                             animsinres.append(os.path.join(path,anim))
+                           # presto_stash.append(animsinres)
             
             if len(animsinres)>0:
                 bpy.ops.io_scene_gltf.cp77(filepath=animsinres[0])
@@ -93,11 +112,14 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                 rig=arms[0]
                 bones=rig.pose.bones
                 print('anim rig loaded')
-            
                 
-                
-                        
-
+                if animsinres[0].endswith(".glb"):
+                    anim_file_name = (animsinres[0])  
+                    rig_file_name = anim_file_name + ".rig.json"
+                    rig["animset"] = anim_file_name
+                    rig["rig"] = rig_file_name
+                    rig["ent"] = ent_name + ".ent.json"
+      
     else:
         print('no anim rig found')
 
@@ -108,7 +130,12 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
             entrigjsons=[x for x in rigjsons if x[:-5] in ent_rigs] 
             if len(entrigjsons)>0:
                 with open(entrigjsons[0],'r') as f: 
-                    rig_j=json.load(f)['Data']['RootChunk']
+                    rig_j=json.load(f)
+                    valid_json=json_ver_validate(rig_j)
+                    if not valid_json:
+                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Incompatible rig json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
+                        return {'CANCELLED'}
+                    rig_j=rig_j['Data']['RootChunk']
                     print('rig json loaded')
     else: 
         print('no rig json loaded')
@@ -153,6 +180,10 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                 if os.path.exists(appfilepath):
                     with open(appfilepath,'r') as a: 
                         a_j=json.load(a)
+                    valid_json=json_ver_validate(a_j)
+                    if not valid_json:
+                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Incompatible app json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
+                        return {'CANCELLED'}
                     apps=a_j['Data']['RootChunk']['appearances']
                     app_idx=0
                     for i,a in enumerate(apps):
@@ -169,11 +200,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                             print('Chunks found')
                 else:
                     print('app file not found - ',filepath)
-                    
-                
-                
-                    
-                        
+                              
             if len(comps)==0:      
                 print('falling back to rootchunk comps')
                 comps= j['Data']['RootChunk']['components']
@@ -194,12 +221,19 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                         #print(meshApp)
                                     try:
                                         bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=meshApp, with_materials=with_materials)
+                                        for obj in C.selected_objects:            
+                                            obj['componentName'] = c['name']['$value']
+                                            obj['sourcePath'] = meshpath
+                                            obj['meshAppearance'] = meshApp
+                                            obj['appResource'] = app_path[0]
+                                            obj['entAppearance'] = app_name
                                     except:
                                         print('import threw an error')
                                         continue
                                     objs = C.selected_objects
                                     if meshname=='v_sportbike2_arch_nemesis__ext01_axle_f_a_01':
                                         print('those annoying front forks')
+                                                                           
                                     # NEW parentTransform stuff - fixes vehicles being exploded
                                     x=None
                                     y=None
@@ -245,8 +279,12 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                                 #print("in the deformation rig bit",json_name)
                                                 if json_name in mesh_jsons:
                                                     with open(mesh_jsons[mesh_jsons.index(json_name)],'r') as f: 
-                                                        mesh_j=json.load(f)['Data']['RootChunk']
-                                                
+                                                        mesh_j=json.load(f)
+                                                    valid_json=json_ver_validate(mesh_j)
+                                                    if not valid_json:
+                                                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Incompatible anim json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
+                                                        return {'CANCELLED'}
+                                                    mesh_j=mesh_j['Data']['RootChunk']
                                                     #print('bindname from json ' ,mesh_j['boneNames'][0],bindname)
                                                     if 'boneRigMatrices' in mesh_j.keys():
                                                         bm= mesh_j['boneRigMatrices'][0]
@@ -414,9 +452,34 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                     if bindname:
                                         move_coll['bindname']=bindname
                                     ent_coll.children.link(move_coll) 
-                                    coll_scene.children.unlink(move_coll)
-                                    # New chunkMask reading 
-                                    # convert the value to a list of bools, then apply those statuses to the submeshes.
+                                    coll_scene.children.unlink(move_coll)                                    
+                            
+                                #can probably a better way to pull this from somewhere but this works for now.                             
+                                    license_plates = [obj for obj in bpy.data.objects if 'license_plate' in obj.get('componentName', '')]
+                                    bumper_f_objs = [obj for obj in bpy.data.objects if 'bumper_f' in obj.get('componentName', '')]
+                                    bumper_b_objs = [obj for obj in bpy.data.objects if 'bumper_b' in obj.get('componentName', '')]
+                                   
+                                    for obj in license_plates:
+                                        # use the component name to figure out if this supposed to be attached to the front or back bumper
+                                        componentName = obj.get('componentName', '')
+                                        bumper_type = 'bumper_f' if 'license_plate_f' in componentName else 'bumper_b'
+                                        # Find the correct bumper and match it to the license plate
+                                        potential_parents = bumper_f_objs if bumper_type == 'bumper_f' else bumper_b_objs
+                                        # Check if there's actually an object to parent the license plate to, if there is set it to obj.parent
+                                        if potential_parents:  
+                                            obj.parent = potential_parents[0]
+                                        # I'm pretty certain you have this stored somewhere else already - we should probably look at just adding all of the localTransforms 
+                                        # to a dict seperate from comp earlier on and just matching them by componnent name whenever we need to apply transforms    
+                                            lct = next((comp for comp in comps if comp["name"]["$value"] == componentName), None)
+                                            #print(lct["localTransform"])
+                                            if lct:
+                                                obj.location[0] = lct["localTransform"]["Position"]["x"]["Bits"]/ 131072
+                                                obj.location[1] = lct["localTransform"]["Position"]["y"]["Bits"]/ 131072
+                                                obj.location[2] = lct["localTransform"]["Position"]["z"]["Bits"]/ 131072                                        
+                                        else:
+                                            print('no bumper found to parent license plate to')
+                                   # New chunkMask reading
+                                    # convert the value to a list of bools, then apply those statuses to the submeshes.                                   
                                     if 'chunkMask' in c.keys():       
                                         cm= c['chunkMask']                              
                                         if isinstance(cm,str):
@@ -433,10 +496,110 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[] , with_materials=T
                                 except:
                                     print("Failed on ",c['mesh']['DepotPath']['$value'])
         print('Exported' ,app_name)
+        if len(chassis_info) > 0:
+            chassis_z = chassis_info['localTransform']['Position']['z']['Bits'] / 131072
+            chassis = next((obj for obj in bpy.data.objects if obj.get('componentName') == 'chasis'), None)
+            if chassis is not None:
+                chassis_collection = chassis.users_collection[0]
+                chassis_armature = next((obj for obj in chassis_collection.objects if obj.type == 'ARMATURE'), None)           
+                if chassis_armature is not None:
+                    base_bone = chassis_armature.pose.bones.get('Base')  # get the bone named 'base'
+        else:
+            print("--- %s seconds ---" % (time.time() - start_time))
+    # find the .phys file jsons
+    if include_collisions:
+        physJsonPaths = glob.glob(path + "\**\*.phys.json", recursive=True)
+        if len(physJsonPaths) == 0:
+            print('No phys file JSONs found in path')
+            return('FINISHED')
+        else:
+            chassis_phys_j=os.path.basename(chassis_info['collisionResource']['DepotPath']['$value'])+'.json'
+            for physJsonPath in physJsonPaths:
+                if os.path.basename(physJsonPath)==chassis_phys_j:
+                    phys = open(physJsonPath)
+                    physdata = json.load(phys)
+            if physdata:
+                # create a new collector named after the file
+                collection_name = os.path.splitext(os.path.basename(physJsonPath))[0]
+                new_collection = bpy.data.collections.new(collection_name)
+                bpy.context.scene.collection.children.link(new_collection)
+
+                # create the new objects
+                def create_new_object(name, transform):
+                    mesh = bpy.data.meshes.new(name)
+                    obj = bpy.data.objects.new(name, mesh)
+                    new_collection.objects.link(obj)  
+                    bpy.context.view_layer.objects.active = obj
+                    obj.select_set(True)
+                    
+                    # If we found a chassis armature and base bone, set a "Child Of" constraint
+                    if chassis_armature is not None and base_bone is not None:
+                        constraint = obj.constraints.new('CHILD_OF')
+                        constraint.target=chassis_armature
+                        constraint.subtarget = 'Base'
+                        
+                        # Apply inverse
+                        bpy.context.view_layer.objects.active = obj
+                        bpy.ops.constraint.childof_set_inverse(constraint="Child Of", owner='OBJECT')
+                        # create dicts for position/orientation
+                    
+                    position = (transform['position']['X'], transform['position']['Y'], transform['position']['Z'])
+                    orientation = (transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i'])
+                    obj.location = position
+                    obj.delta_location[2] = chassis_z 
+                    obj.rotation_mode = 'QUATERNION'
+                    obj.rotation_quaternion = orientation
+
+                    return obj
+
+                # Iterate through the collisionShapes array, creating submeshes in the collector named after the collider types
+                for index, i in enumerate(physdata['Data']['RootChunk']['bodies'][0]['Data']['collisionShapes']):
+                    # create dicts for later
+                        colliderType = i['Data']['$type']
+                        submeshName = str(index) + '_' + colliderType
+                        transform = i['Data']['localToBody']
+                        # If the type is "physicsColliderConvex", or "physicsColliderConcave" create meshes with vertices everywhere specified in the vertices array
+                        if colliderType == "physicsColliderConvex" or colliderType == "physicsColliderConcave":
+                            obj = create_new_object(submeshName, transform)
+                            if 'vertices' in i['Data']:
+                                verts = [(j['X'], j['Y'], j['Z']) for j in i['Data']['vertices']]
+                                bm = bmesh.new()
+                                for v in verts:
+                                    bm.verts.new(v)
+                                bm.to_mesh(obj.data)
+                                bm.free()
+
+                        # If the type is "physicsColliderBox", create a box centered at the object's location
+                        elif colliderType == "physicsColliderBox":
+                            half_extents = i['Data']['halfExtents']
+                            dimensions = (2 * half_extents['X'], 2 * half_extents['Y'], 2 * half_extents['Z'])
+                            bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0))
+                            box = bpy.context.object
+                            box.scale = dimensions
+                            box.name = submeshName
+                            box.location = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
+                            box.rotation_mode = 'QUATERNION'  # Set the rotation mode to QUATERNION first
+                            box.rotation_quaternion = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
+                            box.display_type = 'BOUNDS'
+                            
+                            new_collection.objects.link(box)
+                            bpy.context.collection.objects.unlink(box) # Unlink from the current collection
+
+                        # handle physicsColliderCapsule       
+                        elif colliderType == "physicsColliderCapsule":
+                            radius = i['Data']['radius']
+                            height = i['Data']['height']
+                            bpy.ops.mesh.primitive_cylinder_add(radius=radius, depth=height, location=(0, 0, 0))
+                            capsule = bpy.context.object
+                            capsule.name = submeshName
+                            capsule.rotation_mode = 'QUATERNION'
+                            capsule.location = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
+                            capsule.rotation_quaternion = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
+                            capsule.display_type = 'BOUNDS'
+                            new_collection.objects.link(capsule)
+                            bpy.context.collection.objects.unlink(capsule) 
+
     print("--- %s seconds ---" % (time.time() - start_time))
-
-
-
 
 # The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
 

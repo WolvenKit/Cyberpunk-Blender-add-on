@@ -2,7 +2,6 @@
 import bpy
 import os
 from ..material_types.multilayered import Multilayered
-from ..material_types.multilayeredTerrain import MultilayeredTerrain
 from ..material_types.multilayeredclearcoat import MultilayeredClearCoat
 from ..material_types.vehicledestrblendshape import VehicleDestrBlendshape
 from ..material_types.skin import Skin
@@ -32,6 +31,8 @@ class MaterialBuilder:
         self.image_format = image_format
         self.obj = Obj
         self.MeshPath= MeshPath
+        before,mid,after=MeshPath.partition('source\\raw\\')
+        self.ProjPath=before+mid
     
     def create(self,materialIndex):
         if self.obj.get("Materials"):
@@ -43,14 +44,16 @@ class MaterialBuilder:
             verbose=True
 
             bpyMat = bpy.data.materials.new(rawMat["Name"])
+            bpyMat['DepotPath'] = self.BasePath
+            bpyMat['ProjPath']= self.ProjPath
             bpyMat.use_nodes = True
             match rawMat["MaterialTemplate"]:
                 case "engine\\materials\\multilayered.mt" :
-                    multilayered = Multilayered(self.BasePath,self.image_format)
+                    multilayered = Multilayered(self.BasePath,self.image_format,self.ProjPath)
                     multilayered.create(rawMat["Data"],bpyMat)
 
                 case  "base\\materials\\multilayered_terrain.mt":
-                    multilayeredTerrain = MultilayeredTerrain(self.BasePath,self.image_format,self.MeshPath)
+                    multilayeredTerrain = Multilayered(self.BasePath,self.image_format, self.ProjPath)
                     multilayeredTerrain.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\multilayered_clear_coat.mt":
@@ -58,35 +61,35 @@ class MaterialBuilder:
                     multilayered.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\vehicle_destr_blendshape.mt":
-                    vehicleDestrBlendshape = VehicleDestrBlendshape(self.BasePath,self.image_format)
+                    vehicleDestrBlendshape = VehicleDestrBlendshape(self.BasePath, self.image_format)
                     vehicleDestrBlendshape.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal.mt":
-                    meshDecal = MeshDecal(self.BasePath,self.image_format)
+                    meshDecal = MeshDecal(self.BasePath, self.image_format, self.ProjPath)
                     meshDecal.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal_double_diffuse.mt":
-                    meshDecalDoubleDiffuse = MeshDecalDoubleDiffuse(self.BasePath,self.image_format)
+                    meshDecalDoubleDiffuse = MeshDecalDoubleDiffuse(self.BasePath, self.image_format)
                     meshDecalDoubleDiffuse.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\vehicle_mesh_decal.mt" :
-                    vehicleMeshDecal = VehicleMeshDecal(self.BasePath,self.image_format)
+                    vehicleMeshDecal = VehicleMeshDecal(self.BasePath, self.image_format)
                     vehicleMeshDecal.create(rawMat["Data"],bpyMat)
                 
                 case "base\\materials\\vehicle_lights.mt":
-                    vehicleLights = VehicleLights(self.BasePath,self.image_format)
+                    vehicleLights = VehicleLights(self.BasePath, self.image_format)
                     vehicleLights.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\skin.mt":
-                    skin = Skin(self.BasePath,self.image_format)
+                    skin = Skin(self.BasePath, self.image_format, self.ProjPath)
                     skin.create(rawMat["Data"],bpyMat)
 
                 case "engine\\materials\\metal_base.remt" | "engine\\materials\\metal_base_proxy.mt":
-                    metalBase = MetalBase(self.BasePath,self.image_format)
+                    metalBase = MetalBase(self.BasePath,self.image_format, self.ProjPath)
                     metalBase.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\hair.mt":
-                    hair = Hair(self.BasePath,self.image_format)
+                    hair = Hair(self.BasePath,self.image_format, self.ProjPath)
                     hair.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal_gradientmap_recolor.mt":
@@ -118,7 +121,7 @@ class MaterialBuilder:
                     glass.create(rawMat["Data"],bpyMat)
                 
                 case "base\\materials\\glass_deferred.mt":
-                    glassdef = GlassDeferred(self.BasePath,self.image_format)
+                    glassdef = GlassDeferred(self.BasePath,self.image_format, self.ProjPath)
                     glassdef.create(rawMat["Data"],bpyMat)
 
                 case "base\\fx\\shaders\\signages.mt" :

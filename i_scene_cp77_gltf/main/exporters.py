@@ -37,6 +37,9 @@ def pose_export_options():
 def export_cyberpunk_glb(context, filepath, export_poses):
     # Retrieve the selected objects
     objects = context.selected_objects
+    # apply transforms
+    for obj in objects:
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     #if for photomode, make sure there's an armature selected, if not use the message box to show an error
     if export_poses:
         armatures = [obj for obj in objects if obj.type == 'ARMATURE']
