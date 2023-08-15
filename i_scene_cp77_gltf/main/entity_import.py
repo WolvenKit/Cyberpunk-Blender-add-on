@@ -580,6 +580,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                 box.scale = dimensions
                                 box.name = submeshName
                                 box.location = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
+                                box.delta_location[2] = chassis_z 
                                 box.rotation_mode = 'QUATERNION'  # Set the rotation mode to QUATERNION first
                                 box.rotation_quaternion = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
                                 box.display_type = 'BOUNDS'
@@ -598,6 +599,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                 capsule.name = submeshName
                                 capsule.rotation_mode = 'QUATERNION'
                                 capsule.location = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
+                                capsule.delta_location[2] = chassis_z 
                                 capsule.rotation_quaternion = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
                                 capsule.display_type = 'WIRE'
                                 new_collection.objects.link(capsule)
