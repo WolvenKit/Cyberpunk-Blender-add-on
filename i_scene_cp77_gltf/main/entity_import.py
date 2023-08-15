@@ -607,20 +607,20 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
 
 # The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
 
-# if __name__ == "__main__":
+if __name__ == "__main__":
 
-   # path = 'F:\\CPmod\\heist_hotel\\source\\raw'
-   # ent_name = 'single_door.ent'
+    path = 'F:\\CPmod\\heist_hotel\\source\\raw'
+    ent_name = 'single_door.ent'
     # The list below needs to be the appearanceNames for each ent that you want to import 
     # NOT the name in appearances list, expand it and its the property inside, also its name in the app file
-    # appearances =['kitsch_f']
+    appearances =['kitsch_f']
 
-    # jsonpath = glob.glob(path+"\**\*.ent.json", recursive = True)
-    # if len(jsonpath)==0:
-        # print('No jsons found')
+    jsonpath = glob.glob(path+"\**\*.ent.json", recursive = True)
+    if len(jsonpath)==0:
+        print('No jsons found')
         
-   # for i,e in enumerate(jsonpath):
-  #      if os.path.basename(e)== ent_name+'.json' :
-  #          filepath=e
+    for i,e in enumerate(jsonpath):
+        if os.path.basename(e)== ent_name+'.json' :
+            filepath=e
             
-   # importEnt( filepath, appearances )
+    importEnt( filepath, appearances )
