@@ -358,7 +358,7 @@ def createParallaxGroup():
         CurMat.links.new(Geometry.outputs['Normal'], VectorMath.inputs[0])
         CurMat.links.new(Tangent.outputs['Tangent'], VectorMath.inputs[1])
         CurMat.links.new(Geometry.outputs['Incoming'], VectorMath002.inputs[0])
-        CurMat.links.new(VectorMath.outputs['Value'], VectorMath002.inputs[1])
+        CurMat.links.new(VectorMath.outputs['Vector'], VectorMath002.inputs[1])
         CurMat.links.new(CombineXYZ.outputs['Vector'], VectorMath004.inputs[0])
         CurMat.links.new(Math.outputs['Value'], VectorMath004.inputs[3])
         CurMat.links.new(UVMap.outputs['UV'], VectorMath005.inputs[0])
