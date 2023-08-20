@@ -142,7 +142,7 @@ class MaterialBuilder:
                     meshDecalParallax.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\speedtree_3d_v8_twosided.mt" |  "base\\materials\\speedtree_3d_v8_onesided.mt" |  "base\\materials\\speedtree_3d_v8_seams.mt":
-                    speedtree = SpeedTree(self.BasePath,self.image_format)
+                    speedtree = SpeedTree(self.BasePath,self.image_format, self.ProjPath)
                     speedtree.create(rawMat["Data"],bpyMat)
 
                 case _:

@@ -28,7 +28,7 @@ class ParallaxScreen:
         Parallax001 = create_node(CurMat.nodes,"ShaderNodeGroup",(-1100., 0.), label="Parallax.001")
         Parallax001.node_tree=Par
         par_val1 = create_node(CurMat.nodes,"ShaderNodeValue",(-1350, 0))
-        par_val1.outputs[0].default_value = 0.01
+        par_val1.outputs[0].default_value = Data['LayersSeparation']/10
         CurMat.links.new(Mix.outputs[2], PrincipledBSDF.inputs[0])
         CurMat.links.new(ImageTexture.outputs['Color'], Mix.inputs[6])
         CurMat.links.new(ImageTexture001.outputs['Color'], Mix.inputs[7])
