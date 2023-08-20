@@ -58,13 +58,23 @@ def imageFromPath(Img,image_format,isNormal = False):
 
 def imageFromRelPath(ImgPath, image_format='png', isNormal = False, DepotPath='',ProjPath=''):
     # The speedtree materials use the same name textures for different plants this code was loading the same leaves on all of them
-    Im = bpy.data.images.get(os.path.basename(ImgPath)[:-4])    
-    if Im:
-        before,mid,after=Im.filepath.partition('source\\raw')
-        path=mid+after
+    # Also copes with the fact that theres black.xbm in base and engine for instance
+    inProj=os.path.join(ProjPath,ImgPath)[:-3]+ image_format
+    inDepot=os.path.join(DepotPath,ImgPath)[:-3]+ image_format
+    img_names=[k for k in bpy.data.images.keys() if bpy.data.images[k].filepath==inProj]
+    img_name=None
+    if len(img_names)>0:
+        img_name=img_names[0]
+    if not img_name:
+        img_names=[k for k in bpy.data.images.keys() if bpy.data.images[k].filepath==inDepot]
+        if len(img_names)>0:
+            img_name=img_names[0]
+    if img_name:
+        Im = bpy.data.images.get(img_name)    
+    else:
+        Im = None
         
-
-    if Im and path==ImgPath[:-3]+ image_format:
+    if Im:
         if Im.colorspace_settings.name != 'Non-Color':
             if isNormal:
                 Im = None
@@ -73,24 +83,8 @@ def imageFromRelPath(ImgPath, image_format='png', isNormal = False, DepotPath=''
                 Im = None
     else: 
         Im=None
-    if not Im :
-        Im = bpy.data.images.get(os.path.basename(ImgPath)[:-4] + ".001")
-        if Im:
-            before,mid,after=Im.filepath.partition('source\\raw')
-            path=mid+after
-        if Im and path==ImgPath[:-3]+ image_format:
-            if Im.colorspace_settings.name != 'Non-Color':
-                if isNormal:
-                    Im = None
-            else:
-                if not isNormal:
-                    Im = None
-        else :
-            Im = None
-    
+   
     if not Im:
-        inProj=os.path.join(ProjPath,ImgPath)[:-3]+ image_format
-        inDepot=os.path.join(DepotPath,ImgPath)[:-3]+ image_format
         Im = bpy.data.images.new(os.path.basename(ImgPath)[:-4],1,1)
         Im.source = "FILE"
         if os.path.exists(inProj):

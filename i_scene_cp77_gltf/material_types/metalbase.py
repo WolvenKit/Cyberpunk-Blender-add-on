@@ -10,9 +10,7 @@ class MetalBase:
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
 
-        CurMat.nodes['Principled BSDF'].inputs['Specular'].default_value = 0
-
-        mixRGB = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-200,200) , blend_type = 'MULTIPLY')
+        mixRGB = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-450,400) , blend_type = 'MULTIPLY')
         mixRGB.inputs[0].default_value = 1
         CurMat.links.new(mixRGB.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
 
@@ -20,7 +18,7 @@ class MetalBase:
             bcolImg=imageFromRelPath(Data["BaseColor"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
             bColNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,-450), label="BaseColor", image=bcolImg)
             CurMat.links.new(bColNode.outputs[0],mixRGB.inputs[2])
-            CurMat.links.new(bColNode.outputs[1],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
+            
 
         if "Metalness" in Data:
             mImg=imageFromRelPath(Data["Metalness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
@@ -61,15 +59,15 @@ class MetalBase:
         mulNode = CurMat.nodes.new("ShaderNodeMixRGB")
         mulNode.inputs[0].default_value = 1
         mulNode.blend_type = 'MULTIPLY'
-        mulNode.location = (-450,100)
+        mulNode.location = (-450,0)
 
         if "EmissiveColor" in Data:
-            emColor = CreateShaderNodeRGB(CurMat, Data["EmissiveColor"],-700,150,"EmissiveColor")
+            emColor = CreateShaderNodeRGB(CurMat, Data["EmissiveColor"],-700,50,"EmissiveColor")
             CurMat.links.new(emColor.outputs[0],mulNode.inputs[1])
 
         if "Emissive" in Data:
             EmImg=imageFromRelPath(Data["Emissive"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
-            emTexNode =create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,100), label="Emissive", image=EmImg)
+            emTexNode =create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,0), label="Emissive", image=EmImg)
             CurMat.links.new(emTexNode.outputs[0],mulNode.inputs[2])
 
         CurMat.links.new(mulNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Emission'])
