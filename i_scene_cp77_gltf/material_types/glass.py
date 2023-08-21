@@ -3,9 +3,11 @@ import os
 if __name__ != "__main__":
     from ..main.common import *
 class Glass:
-    def __init__(self, BasePath,image_format):
+    def __init__(self, BasePath,image_format, ProjPath):
         self.BasePath = BasePath
+        self.ProjPath = ProjPath
         self.image_format = image_format
+
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
         pBDSF=CurMat.nodes['Principled BSDF']
@@ -25,7 +27,8 @@ class Glass:
             CurMat.links.new(IOR.outputs[0],pBDSF.inputs['IOR'])
 
         if "Roughness" in Data:
-            rImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["Roughness"],-800,50,'Roughness',self.image_format,True)
+            rImg = imageFromRelPath(Data["Roughness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            rImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,50), label="Roughness", image=rImg)
             CurMat.links.new(rImgNode.outputs[0],pBDSF.inputs['Roughness'])
 
         if "Normal" in Data:
@@ -33,25 +36,21 @@ class Glass:
             CurMat.links.new(nMap.outputs[0],pBDSF.inputs['Normal'])
         
         if "MaskTexture" in Data:
-            mImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["MaskTexture"],-1200,-350,'MaskTexture',self.image_format,True)
-            facNode = CurMat.nodes.new("ShaderNodeMath")
+            mImg = imageFromRelPath(Data["MaskTexture"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            mImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-1200,350), label="MaskTexture", image=rImg)
+            facNode = create_node(CurMat.nodes,"ShaderNodeMath", (-450,-100) ,operation = 'MULTIPLY')
             facNode.inputs[0].default_value = 1
-            facNode.operation = 'MULTIPLY'
-            facNode.location = (-450,-100)
             CurMat.links.new(facNode.outputs[0],pBDSF.inputs['Alpha'])
 
             if "MaskOpacity" in Data:
                 maskOpacity = CreateShaderNodeValue(CurMat,Data["MaskOpacity"],-1000, 0,"MaskOpacity")
                 
-                invNode = CurMat.nodes.new("ShaderNodeMath")
+                invNode = create_node(CurMat.nodes,"ShaderNodeMath", (-900,-50) ,operation = 'SUBTRACT')
                 invNode.inputs[0].default_value = 1
-                invNode.operation = 'SUBTRACT'
-                invNode.location = (-900,-50)
                 
-                mulNode = CurMat.nodes.new("ShaderNodeMath")
+                mulNode = create_node(CurMat.nodes,"ShaderNodeMath", (-650,-100) ,operation = 'MULTIPLY')
                 mulNode.inputs[0].default_value = 1
-                mulNode.operation = 'MULTIPLY'
-                mulNode.location = (-650,-100)
+                
                 CurMat.links.new(maskOpacity.outputs[0],invNode.inputs[1])
                 CurMat.links.new(invNode.outputs[0],mulNode.inputs[0])
                 CurMat.links.new(mImgNode.outputs[1],mulNode.inputs[1])
@@ -59,7 +58,7 @@ class Glass:
             else:
                 CurMat.links.new(mImgNode.outputs[1],facNode.inputs[1])
 
-        # need to add a multiply and the Mask Opacity (assume thats what that does.)
+       
 
 
 # The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something

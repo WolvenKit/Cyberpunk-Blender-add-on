@@ -38,7 +38,7 @@ class MeshDecal:
             dImgNode = create_node(Ns,"ShaderNodeTexImage",  (-800,500), label="DiffuseTexture", image=dImg)
             CurMat.links.new(dTexMapping.outputs[0],dImgNode.inputs[0])
             CurMat.links.new(dImgNode.outputs[0],mixRGB.inputs[2])
-            CurMat.links.new(dImgNode.outputs[1],mulNode.inputs[1])
+            CurMat.links.new(dImgNode.outputs[1],mulNode.inputs[0])
 
         if "UVOffsetX" in Data:
             dTexMapping.inputs[1].default_value[0] = Data["UVOffsetX"]
