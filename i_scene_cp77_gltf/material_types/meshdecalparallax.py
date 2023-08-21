@@ -3,19 +3,18 @@ import os
 from ..main.common import *
 
 class MeshDecalParallax:
-    def __init__(self, BasePath,image_format):
+    def __init__(self, BasePath,image_format, ProjPath):
         self.BasePath = BasePath
+        self.ProjPath = ProjPath
         self.image_format = image_format
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
-        CurMat.nodes['Principled BSDF'].inputs['Specular'].default_value = 0
-#Diffuse
-        mixRGB = CurMat.nodes.new("ShaderNodeMixRGB")
-        mixRGB.location = (-500,500)
-        mixRGB.hide = True
-        mixRGB.blend_type = 'MULTIPLY'
+        pBSDF=CurMat.nodes['Principled BSDF']
+        pBSDF.inputs['Specular'].default_value = 0
+        #Diffuse
+        mixRGB = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-500,500),blend_type = 'MULTIPLY')
         mixRGB.inputs[0].default_value = 1
-        CurMat.links.new(mixRGB.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
+        CurMat.links.new(mixRGB.outputs[0],pBSDF.inputs['Base Color'])
 
         mulNode = CurMat.nodes.new("ShaderNodeMath")
         mulNode.operation = 'MULTIPLY'
@@ -31,7 +30,8 @@ class MeshDecalParallax:
         dTexMapping.location = (-1000,300)
 
         if "DiffuseTexture" in Data:
-            dImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["DiffuseTexture"],-800,500,'DiffuseTexture',self.image_format)
+            dImg =  imageFromRelPath(Data["DiffuseMap"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            dImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,500), label="DiffuseTexture", image=dImg)
             CurMat.links.new(dTexMapping.outputs[0],dImgNode.inputs[0])
             CurMat.links.new(dImgNode.outputs[0],mixRGB.inputs[2])
             CurMat.links.new(dImgNode.outputs[1],mulNode.inputs[1])
@@ -50,9 +50,9 @@ class MeshDecalParallax:
 
         UVNode = CurMat.nodes.new("ShaderNodeTexCoord")
         UVNode.location = (-1200,300)
-        CurMat.links.new(UVNode.outputs[2],dTexMapping.inputs[0])
+        CurMat.links.new(UVNode.outputs[2], dTexMapping.inputs[0])
 
-        CurMat.links.new(mulNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
+        CurMat.links.new(mulNode.outputs[0], pBSDF.inputs['Alpha'])
 
         if "DiffuseColor" in Data:
             dColor = CreateShaderNodeRGB(CurMat, Data["DiffuseColor"], -700, 550, "DiffuseColor")
@@ -60,7 +60,7 @@ class MeshDecalParallax:
 
         if "NormalTexture" in Data:
             nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["NormalTexture"],-200,-250,'NormalTexture',self.image_format)
-            CurMat.links.new(nMap.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Normal'])
+            CurMat.links.new(nMap.outputs[0],pBSDF.inputs['Normal'])
 
         if "NormalAlpha" in Data:
             norAlphaVal = CreateShaderNodeValue(CurMat, Data["NormalAlpha"], -1200,-450, "NormalAlpha")
@@ -76,9 +76,10 @@ class MeshDecalParallax:
 
         mulNode1.operation = 'MULTIPLY'
         mulNode1.location = (-500,-100)
-        CurMat.links.new(mulNode1.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Roughness'])
+        CurMat.links.new(mulNode1.outputs[0],pBSDF.inputs['Roughness'])
         if "RoughnessTexture" in Data:
-            rImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["RoughnessTexture"],-800,100,'RoughnessTexture',self.image_format,True)
+            rImg = imageFromRelPath(Data["RoughnessTexture"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            rImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,100), label="RoughnessTexture", image=rImg, hide = False)
             CurMat.links.new(rImgNode.outputs[0],mulNode1.inputs[1])
 
 
@@ -91,7 +92,8 @@ class MeshDecalParallax:
         mulNode2.location = (-500,200)
         CurMat.links.new(mulNode2.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Metallic'])
         if "MetalnessTexture" in Data:
-            mImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["MetalnessTexture"],-800,200,'MetalnessTexture',self.image_format,True)
+            mImg=imageFromRelPath(Data["MetalnessTexture"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            mImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,200), label="MetalnessTexture", image=mImg)
             CurMat.links.new(mImgNode.outputs[0],mulNode2.inputs[1])
 '''     
         if "SecondaryMask"in Data:

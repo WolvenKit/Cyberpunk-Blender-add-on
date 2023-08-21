@@ -3,12 +3,15 @@ import os
 from ..main.common import *
 
 class Signages:
-    def __init__(self, BasePath,image_format):
+    def __init__(self, BasePath,image_format, ProjPath):
         self.BasePath = BasePath
+        self.ProjPath = ProjPath
         self.image_format = image_format
+    
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
-        CurMat.nodes['Principled BSDF'].inputs['Specular'].default_value = 0
+        pBSDF=CurMat.nodes['Principled BSDF']
+        pBSDF.inputs['Specular'].default_value = 0
         print('Creating neon sign')
         if "ColorOneStart" in Data:
             dCol = CreateShaderNodeRGB(CurMat, Data["ColorOneStart"], -800, 250, "ColorOneStart")    
@@ -16,9 +19,8 @@ class Signages:
             dCol = CreateShaderNodeRGB(CurMat,{'Red': 255, 'Green': 255, 'Blue': 255, 'Alpha': 255}, -800, 250, "ColorOneStart")
         CurMat.links.new(dCol.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
           
-        alphaNode = CurMat.nodes.new("ShaderNodeMath")
-        alphaNode.operation = 'MULTIPLY'
-        alphaNode.location = (-300, -250)
+        alphaNode = create_node(CurMat.nodes,"ShaderNodeMath", (-300, -250) ,operation = 'MULTIPLY')
+                                
         if "DiffuseAlpha" in Data:
             aThreshold = CreateShaderNodeValue(CurMat, Data["DiffuseAlpha"], -550, -400, "DiffuseAlpha")
             CurMat.links.new(aThreshold.outputs[0],alphaNode.inputs[1])
@@ -32,13 +34,14 @@ class Signages:
         CurMat.links.new(dCol.outputs[0],mulNode.inputs[1])
 
         if "MainTexture" in Data:
-            emTexNode = CreateShaderNodeTexImage(CurMat, self.BasePath + Data["MainTexture"], -700, -250,'MainTexture',self.image_format)
+            dImg = imageFromRelPath(Data["MainTexture"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            emTexNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-700,-250), label="MainTexture", image=dImg)
             CurMat.links.new(emTexNode.outputs[0],mulNode.inputs[2])
             CurMat.links.new(emTexNode.outputs[1],alphaNode.inputs[0])
 
 
-        CurMat.links.new(alphaNode.outputs[0], CurMat.nodes['Principled BSDF'].inputs['Alpha'])
-        CurMat.links.new(mulNode.outputs[0], CurMat.nodes['Principled BSDF'].inputs['Emission'])
+        CurMat.links.new(alphaNode.outputs[0], pBSDF.inputs['Alpha'])
+        CurMat.links.new(mulNode.outputs[0], pBSDF.inputs['Emission'])
         
         if "EmissiveEV" in Data:
             CurMat.nodes['Principled BSDF'].inputs['Emission Strength'].default_value =  Data["EmissiveEV"]*10

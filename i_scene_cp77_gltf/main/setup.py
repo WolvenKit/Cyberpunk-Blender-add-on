@@ -118,7 +118,7 @@ class MaterialBuilder:
                     meshDecal.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\glass.mt" | "base\\materials\\vehicle_glass.mt":
-                    glass = Glass(self.BasePath,self.image_format)
+                    glass = Glass(self.BasePath,self.image_format, self.ProjPath)
                     glass.create(rawMat["Data"],bpyMat)
                 
                 case "base\\materials\\glass_deferred.mt":
@@ -126,15 +126,15 @@ class MaterialBuilder:
                     glassdef.create(rawMat["Data"],bpyMat)
 
                 case "base\\fx\\shaders\\signages.mt" :
-                    signages= Signages(self.BasePath,self.image_format)
+                    signages= Signages(self.BasePath,self.image_format, self.ProjPath)
                     signages.create(rawMat["Data"],bpyMat)
                 
                 case "base\\materials\\glass_onesided.mt" | "base\\materials\\vehicle_glass_onesided.mt":
-                    glass = Glass(self.BasePath,self.image_format)
+                    glass = Glass(self.BasePath,self.image_format, self.ProjPath)
                     glass.create(rawMat["Data"],bpyMat)
                 
                 case "base\\materials\\mesh_decal_parallax.mt" :
-                    meshDecalParallax = MeshDecalParallax(self.BasePath,self.image_format)
+                    meshDecalParallax = MeshDecalParallax(self.BasePath,self.image_format, self.ProjPath)
                     meshDecalParallax.create(rawMat["Data"],bpyMat)
 
                 case  "base\\fx\\shaders\\parallaxscreen.mt" :
