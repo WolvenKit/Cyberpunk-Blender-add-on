@@ -58,7 +58,12 @@ class MetalBase:
         alphclamp = create_node(CurMat.nodes,"ShaderNodeClamp",(-740, 330))
         CurMat.links.new(aThreshold.outputs[0],alphclamp.inputs['Max'])
         CurMat.links.new(bColNode.outputs[1],alphclamp.inputs['Value'])
-        CurMat.links.new(alphclamp.outputs[0],mixRGB.inputs[0])
+        
+        Clamp2 = create_node(CurMat.nodes,"ShaderNodeClamp",(-538., 476.))
+        CurMat.links.new(alphclamp.outputs[0],Clamp2.inputs['Value'])
+        CurMat.links.new(dColScale.outputs[0],Clamp2.inputs['Min'])
+        CurMat.links.new(Clamp2.outputs[0],mixRGB.inputs['Fac'])
+        
 
         if "Normal" in Data:
             nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["Normal"],-200,-300,'Normal',self.image_format)
