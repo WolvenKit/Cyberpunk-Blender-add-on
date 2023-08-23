@@ -31,6 +31,7 @@ from .main.sector_import import *
 from bpy_extras.io_utils import ExportHelper
 from .main.exporters import *
 from .main.common import json_ver_validate
+from .main.collisions import CP77CollisionGen
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
@@ -53,6 +54,23 @@ def SetCyclesRenderer(set_gi_params=False):
         cycles.use_fast_gi = False
         cycles.ao_bounces = 1
         cycles.ao_bounces_render = 1
+
+class CP77CollisionGenerator(bpy.types.Operator):
+    bl_idname = "generate_cp77.collisions"
+    bl_label = "Generate Convex Collider"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "CP77 Modding"
+    bl_parent_id = "CP77_PT_CollisionTools"
+
+    def draw(self, context):
+        layout = self.layout
+
+    def execute(self, context):
+        props = context.scene.cp77_collision_tools_panel_props
+        CP77CollisionGen(context, props.sampleverts)
+        return {"FINISHED"}
+    
 
 class CP77CollisionExport(bpy.types.Operator):
     bl_idname = "export_scene.collisions"
