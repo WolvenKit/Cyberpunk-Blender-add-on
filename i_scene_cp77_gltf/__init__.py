@@ -55,6 +55,7 @@ def SetCyclesRenderer(set_gi_params=False):
         cycles.ao_bounces = 1
         cycles.ao_bounces_render = 1
 
+
 class CP77CollisionGenerator(bpy.types.Operator):
     bl_idname = "generate_cp77.collisions"
     bl_label = "Generate Convex Collider"
@@ -79,19 +80,28 @@ class CP77CollisionExport(bpy.types.Operator):
     bl_region_type = "UI"
     bl_category = "CP77 Modding"
     bl_parent_id = "CP77_PT_CollisionTools"
-    
-    filepath: bpy.props.StringProperty(subtype="FILE_PATH")
 
+    filepath: bpy.props.StringProperty(subtype="FILE_PATH")
+  
     def execute(self, context):
         cp77_collision_export(self.filepath)
-        return {'FINISHED'}
-        
+        return {"FINISHED"}
+
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
-        return {'RUNNING_MODAL'}
+        return {"RUNNING_MODAL"}
 
     def draw(self, context):
         layout = self.layout
+
+
+class CP77_PT_CollisionToolsPanelProps(bpy.types.PropertyGroup):
+    sampleverts: bpy.props.StringProperty(
+        name="Vertices to Sample",
+        description="This is the number of vertices in your new collider",
+        default="100",
+    )
+
 
 class CP77_PT_CollisionTools(bpy.types.Panel):
     bl_parent_id = "CP77_PT_ModTools"
@@ -103,7 +113,12 @@ class CP77_PT_CollisionTools(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        props = context.scene.cp77_collision_tools_panel_props
+        
+        layout.prop(props, "sampleverts")
         layout.operator("export_scene.collisions")
+        layout.operator("generate_cp77.collisions")
+
 
 class CP77_PT_ModTools(bpy.types.Panel):
     bl_label = "Cyberpunk Modding Tools"
@@ -496,6 +511,7 @@ def menu_func_import(self, context):
 def menu_func_export(self, context):
     self.layout.operator(CP77GLBExport.bl_idname, text="Export Selection to GLB for Cyberpunk", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
     
+    
 #kwekmaster - Minor Refactoring 
 classes = (
     CP77Import,
@@ -508,8 +524,11 @@ classes = (
     #CP77_PT_AnimsPanel,
     #CP77_PT_rigview,
     CP77_PT_CollisionTools,
-    CP77CollisionExport
-)
+    CP77CollisionExport,
+    CP77CollisionGenerator,
+    CP77_PT_CollisionToolsPanelProps,
+    )
+    
 
 def register():
     custom_icon = bpy.utils.previews.new()
@@ -522,9 +541,11 @@ def register():
         
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export) 
+    bpy.types.Scene.cp77_collision_tools_panel_props = bpy.props.PointerProperty(type=CP77_PT_CollisionToolsPanelProps) 
     
 def unregister():
     bpy.utils.previews.remove(custom_icon_col["import"])
+    
     
     #kwekmaster - Minor Refactoring 
     for cls in classes:
@@ -532,6 +553,6 @@ def unregister():
         
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
-                
+    bpy.types.Scene.cp77_collision_tools_panel_props = bpy.props.PointerProperty(type=CP77_PT_CollisionToolsPanelProps)            
 if __name__ == "__main__":
     register()
