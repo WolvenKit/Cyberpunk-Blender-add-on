@@ -102,7 +102,7 @@ def export_cyberpunk_glb(context, filepath, export_poses):
                 # Check for ungrouped vertices, throw an error if any are found
                 ungrouped_vertices = [v for v in obj.data.vertices if not v.groups]
                 if ungrouped_vertices:
-                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Some vertices are not assigned to any vertex group.")
+                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Export Cancelled: Ungrouped vertices found in mesh, please add these vertices to a group or delete them before exporting.")
                     return {'CANCELLED'}
 
     # Export the selected meshes to glb
