@@ -351,7 +351,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                 #print('o.name - ',o.name)
                 if 'Armature' in o.name:
                     o.hide_set(self.hide_armatures)
-                
+            collection['orig_filepath']=filepath
             for name in bpy.data.materials.keys():
                 if name not in existingMaterials:
                     bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)

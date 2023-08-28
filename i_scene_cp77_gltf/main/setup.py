@@ -47,6 +47,7 @@ class MaterialBuilder:
             bpyMat = bpy.data.materials.new(rawMat["Name"])
             bpyMat['DepotPath'] = self.BasePath
             bpyMat['ProjPath']= self.ProjPath
+            bpyMat['MaterialTemplate'] = rawMat["MaterialTemplate"]
             bpyMat.use_nodes = True
             match rawMat["MaterialTemplate"]:
                 case "engine\\materials\\multilayered.mt" :
@@ -110,7 +111,7 @@ class MaterialBuilder:
                     eyeShadow.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal_emissive.mt" :
-                    meshDecalEmissive = MeshDecalEmissive(self.BasePath,self.image_format)
+                    meshDecalEmissive = MeshDecalEmissive(self.BasePath,self.image_format, self.ProjPath)
                     meshDecalEmissive.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal_wet_character.mt":
@@ -170,7 +171,7 @@ class MaterialBuilder:
 
                 case "base\\materials\\decal_gradientmap_recolor.mt":
                     print('decal_gradientmap_recolor.mt')
-                    decalGradientMapRecolor = DecalGradientmapRecolor(self.BasePath,self.image_format)
+                    decalGradientMapRecolor = DecalGradientmapRecolor(self.BasePath,self.image_format, self.ProjPath)
                     decalGradientMapRecolor.create(self.obj["Data"]["RootChunk"],bpyMat)
 
                 case _:

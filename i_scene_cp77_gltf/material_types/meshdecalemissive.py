@@ -3,16 +3,19 @@ import os
 from ..main.common import *
 
 class MeshDecalEmissive:
-    def __init__(self, BasePath,image_format):
+    def __init__(self, BasePath,image_format, ProjPath):
         self.BasePath = BasePath
+        self.ProjPath = ProjPath
         self.image_format = image_format
+
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
-        CurMat.nodes['Principled BSDF'].inputs['Specular'].default_value = 0
+        pBSDF = CurMat.nodes['Principled BSDF']
+        pBSDF.inputs['Specular'].default_value = 0
 
         if "DiffuseColor2" in Data:
             dCol2 = CreateShaderNodeRGB(CurMat, Data["DiffuseColor2"], -160, 200, "DiffuseColor2")
-            CurMat.links.new(dCol2.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
+            CurMat.links.new(dCol2.outputs[0],pBSDF.inputs['Base Color'])
 
         alphaNode = CurMat.nodes.new("ShaderNodeMath")
         alphaNode.operation = 'MULTIPLY'
@@ -32,12 +35,13 @@ class MeshDecalEmissive:
             CurMat.links.new(emColor.outputs[0],mulNode.inputs[1])
 
         if "DiffuseTexture" in Data:
-            emTexNode = CreateShaderNodeTexImage(CurMat, self.BasePath + Data["DiffuseTexture"], -700, -250,'DiffuseTexture',self.image_format)
+            emImg = imageFromRelPath(Data["DiffuseTexture"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            emTexNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-700,-250), label="DiffuseTexture", image=emImg)
             CurMat.links.new(emTexNode.outputs[0],mulNode.inputs[2])
             CurMat.links.new(emTexNode.outputs[1],alphaNode.inputs[0])
 
-        CurMat.links.new(mulNode.outputs[0], CurMat.nodes['Principled BSDF'].inputs['Emission'])
-        CurMat.links.new(alphaNode.outputs[0], CurMat.nodes['Principled BSDF'].inputs['Alpha'])
+        CurMat.links.new(mulNode.outputs[0], pBSDF.inputs['Emission'])
+        CurMat.links.new(alphaNode.outputs[0], pBSDF.inputs['Alpha'])
 
         if "EmissiveEV" in Data:
-            CurMat.nodes['Principled BSDF'].inputs['Emission Strength'].default_value =  Data["EmissiveEV"]
+            pBSDF.inputs['Emission Strength'].default_value =  Data["EmissiveEV"]
