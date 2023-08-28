@@ -30,7 +30,7 @@ class MeshDecalParallax:
         dTexMapping.location = (-1000,300)
 
         if "DiffuseTexture" in Data:
-            dImg =  imageFromRelPath(Data["DiffuseMap"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            dImg =  imageFromRelPath(Data["DiffuseTexture"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
             dImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,500), label="DiffuseTexture", image=dImg)
             CurMat.links.new(dTexMapping.outputs[0],dImgNode.inputs[0])
             CurMat.links.new(dImgNode.outputs[0],mixRGB.inputs[2])
