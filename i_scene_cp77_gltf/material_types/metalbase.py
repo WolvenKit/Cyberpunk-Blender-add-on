@@ -18,7 +18,10 @@ class MetalBase:
             bcolImg=imageFromRelPath(Data["BaseColor"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
             bColNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,-450), label="BaseColor", image=bcolImg)
             CurMat.links.new(bColNode.outputs[0],mixRGB.inputs[2])
-            
+        
+        if "BaseColorScale" in Data:
+            dColScale = CreateShaderNodeRGB(CurMat, Data["BaseColorScale"],-700,500,'BaseColorScale',True)
+            CurMat.links.new(dColScale.outputs[0],mixRGB.inputs[1])    
 
         if "Metalness" in Data:
             mImg=imageFromRelPath(Data["Metalness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
@@ -43,12 +46,7 @@ class MetalBase:
             rScale = CreateShaderNodeValue(CurMat,Data["RoughnessScale"],-1000, -300,"RoughnessScale")
 
         if 'RoughnesssBias' in Data:
-            rBias = CreateShaderNodeValue(CurMat,Data["RoughnesssBias"],-1000, -400,"MetalnessBias")
-
-        if "BaseColorScale" in Data:
-            dColScale = CreateShaderNodeRGB(CurMat, Data["BaseColorScale"],-700,500,'BaseColorScale',True)
-            CurMat.links.new(dColScale.outputs[0],mixRGB.inputs[1])
-
+            rBias = CreateShaderNodeValue(CurMat,Data["RoughnesssBias"],-1000, -400,"RoughnesssBias")
 
         if "AlphaThreshold" in Data:
             aThreshold = CreateShaderNodeValue(CurMat,Data["AlphaThreshold"],-1000, 280,"AlphaThreshold")
@@ -87,7 +85,7 @@ class MetalBase:
         CurMat.links.new(mulNode.outputs[0],pBSDF.inputs['Emission'])
 
         if "EmissiveEV" in Data:
-            pBSDF.inputs['Emission Strength'].default_value =  Data["EmissiveEV"]-1 # everything is blown out and emmisive otherwise.
+            pBSDF.inputs['Emission Strength'].default_value =  Data["EmissiveEV"]
 
         #Setup a value node for the enableMask flag that turns off the alpha when 0 (false) and on when 1
         EnableMask = create_node(CurMat.nodes,"ShaderNodeValue",(-800., -800.), label="EnableMask")
@@ -97,13 +95,10 @@ class MetalBase:
         Math.inputs[0].default_value=1
         
         Clamp001 = create_node(CurMat.nodes,"ShaderNodeClamp",(-200., -450.), label="Clamp.001")
-        Clamp002 = create_node(CurMat.nodes,"ShaderNodeClamp",(-400., -450.), label="Clamp.002")
         
         CurMat.links.new(EnableMask.outputs['Value'], Math.inputs[1]) # Enablemask value into math which inverts it
         CurMat.links.new(Math.outputs['Value'], Clamp001.inputs[1]) # Inverted value into clamp min, so if 1 its always solic, if 0 will use BaseColor alpha
-        CurMat.links.new(bColNode.outputs['Alpha'], Clamp002.inputs[0])  # BaseColor alpha into clamp which clamps it by AlphaThreshold
-        CurMat.links.new(aThreshold.outputs['Value'], Clamp002.inputs[2]) # AlphaThreshold into clamp max slot
-        CurMat.links.new(Clamp002.outputs['Result'], Clamp001.inputs[0]) # Clamped alpha into one thats clamped by enableMask value        
+        CurMat.links.new(bColNode.outputs['Alpha'], Clamp001.inputs[0]) # alpha into one thats clamped by enableMask value        
         CurMat.links.new(Clamp001.outputs['Result'], pBSDF.inputs['Alpha'])
 
         
