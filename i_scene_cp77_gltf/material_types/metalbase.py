@@ -85,7 +85,7 @@ class MetalBase:
         CurMat.links.new(mulNode.outputs[0],pBSDF.inputs['Emission'])
 
         if "EmissiveEV" in Data:
-            pBSDF.inputs['Emission Strength'].default_value =  Data["EmissiveEV"]-1 # everything is blown out and emmisive otherwise.
+            pBSDF.inputs['Emission Strength'].default_value =  Data["EmissiveEV"]
 
         #Setup a value node for the enableMask flag that turns off the alpha when 0 (false) and on when 1
         EnableMask = create_node(CurMat.nodes,"ShaderNodeValue",(-800., -800.), label="EnableMask")

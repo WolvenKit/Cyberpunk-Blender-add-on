@@ -21,7 +21,7 @@
         "DepotPath": {
           "$type": "ResourcePath",
           "$storage": "string",
-          "$value": "engine\materials\metal_base.remt"
+          "$value": "engine\\materials\\metal_base.remt"
         },
         "Flags": "Default"
       },
@@ -109,6 +109,20 @@
               "$value": "emissive.xbm"
             },
             "Flags": "Default"
+          }
+        },
+        {
+          "$type": "Float",
+          "EmissiveEV": 3.951205
+        },
+        {
+          "$type": "Color",
+          "EmissiveColor": {
+            "$type": "Color",
+            "Alpha": 255,
+            "Blue": 212,
+            "Green": 183,
+            "Red": 79
           }
         }
       ]

@@ -75,11 +75,11 @@ class MaterialBuilder:
                     meshDecalDoubleDiffuse.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\vehicle_mesh_decal.mt" :
-                    vehicleMeshDecal = VehicleMeshDecal(self.BasePath, self.image_format)
+                    vehicleMeshDecal = VehicleMeshDecal(self.BasePath, self.image_format, self.ProjPath)
                     vehicleMeshDecal.create(rawMat["Data"],bpyMat)
                 
                 case "base\\materials\\vehicle_lights.mt":
-                    vehicleLights = VehicleLights(self.BasePath, self.image_format)
+                    vehicleLights = VehicleLights(self.BasePath, self.image_format, self.ProjPath)
                     vehicleLights.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\skin.mt":
