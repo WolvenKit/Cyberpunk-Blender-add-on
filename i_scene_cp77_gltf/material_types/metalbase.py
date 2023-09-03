@@ -24,7 +24,7 @@ class MetalBase:
             CurMat.links.new(dColScale.outputs[0],mixRGB.inputs[1])    
 
         if "Metalness" in Data:
-            mImg=imageFromRelPath(Data["Metalness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            mImg=imageFromRelPath(Data["Metalness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
             metNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,-550), label="Metalness", image=mImg)
             CurMat.links.new(metNode.outputs[0],pBSDF.inputs['Metallic'])
 
@@ -35,7 +35,7 @@ class MetalBase:
             mBias = CreateShaderNodeValue(CurMat,Data["MetalnessBias"],-1000, -200,"MetalnessBias")
 
         if "Roughness" in Data:
-            rImg=imageFromRelPath(Data["Roughness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            rImg=imageFromRelPath(Data["Roughness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
             rNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,-650), label="Roughness", image=rImg)
             CurMat.links.new(rNode.outputs[0],pBSDF.inputs['Roughness'])
             invr = create_node(CurMat.nodes,"ShaderNodeInvert",(-280., 90.))

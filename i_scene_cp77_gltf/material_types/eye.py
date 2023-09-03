@@ -3,27 +3,30 @@ import os
 from ..main.common import *
 
 class Eye:
-    def __init__(self, BasePath,image_format):
+    def __init__(self, BasePath, image_format, ProjPath):
         self.BasePath = BasePath
+        self.ProjPath = ProjPath
         self.image_format = image_format
 
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
+        pBSDF = CurMat.nodes['Principled BSDF']
 
         if "Specularity" in Data:
-            CurMat.nodes['Principled BSDF'].inputs["Specular"].default_value = Data["Specularity"]
+            pBSDF.inputs["Specular"].default_value = Data["Specularity"]
 
         if "RefractionIndex" in Data:
-            CurMat.nodes['Principled BSDF'].inputs['IOR'].default_value = Data["RefractionIndex"]
+            pBSDF.inputs['IOR'].default_value = Data["RefractionIndex"]
 
 #NORMAL/n
         if "Normal" in Data:
             nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["Normal"],-150,-250,'Normal',self.image_format)
-            CurMat.links.new(nMap.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Normal'])
+            CurMat.links.new(nMap.outputs[0],pBSDF.inputs['Normal'])
 
 #ROUGHNESS+SCALE/rs
         if "Roughness" in Data:
-            rImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["Roughness"],-450,0,'Roughness',self.image_format,True)
+            rImg=imageFromRelPath(Data["Roughness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
+            rImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-450,0), label="Roughness", image=rImg)
 
         if "RoughnessScale" in Data:
             rsNode = CreateShaderNodeValue(CurMat, Data["RoughnessScale"],-350,-50,"RoughnessScale")
@@ -38,9 +41,10 @@ class Eye:
             
             CurMat.links.new(rImgNode.outputs[0],rsVecNode.inputs[0])
             CurMat.links.new(rsNode.outputs[0],rsVecNode.inputs[3])
-            CurMat.links.new(rsVecNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Roughness'])
+            CurMat.links.new(rsVecNode.outputs[0],pBSDF.inputs['Roughness'])
 
 #ALBEDO/a
         if "Albedo" in Data:
-            aImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["Albedo"],-300,250,'Albedo',self.image_format)
-            CurMat.links.new(aImgNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
+            aImg = imageFromRelPath(Data["Albedo"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            aImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-300,250), label="Albedo", image=aImg)
+            CurMat.links.new(aImgNode.outputs[0],pBSDF.inputs['Base Color'])

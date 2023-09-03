@@ -4,20 +4,22 @@ from ..main.common import *
 
 
 class EyeShadow:
-    def __init__(self, BasePath,image_format):
+    def __init__(self, BasePath,image_format, ProjPath):
         self.BasePath = BasePath
+        self.ProjPath = ProjPath
         self.image_format = image_format
 
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
+        pBSDF = CurMat.nodes['Principled BSDF']
 
-        CurMat.nodes['Principled BSDF'].inputs['Roughness'].default_value = 0.01
-        CurMat.nodes['Principled BSDF'].inputs['Transmission'].default_value = 1
+        pBSDF.inputs['Roughness'].default_value = 0.01
+        pBSDF.inputs['Transmission'].default_value = 1
 
 #MASK+SHADOW COLOR/ms
         if "Mask" in Data:
-            mImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["Mask"],-500,250,'Mask',self.image_format)
-            mImgNode.image.colorspace_settings.name = 'Non-Color'
+            mImg = imageFromRelPath(Data["Mask"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
+            mImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-500,250), label="Mask", image=mImg)
 
         if "ShadowColor" in Data:
             msColorNode = CreateShaderNodeRGB(CurMat, Data["ShadowColor"],-400,150,'ShadowColor')
@@ -35,4 +37,4 @@ class EyeShadow:
             CurMat.links.new(mImgNode.outputs[1],mixNode.inputs[0])
             CurMat.links.new(msColorNode.outputs[0],mixNode.inputs[2])
             
-            CurMat.links.new(mixNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
+            CurMat.links.new(mixNode.outputs[0],pBSDF.inputs['Base Color'])
