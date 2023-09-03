@@ -9,7 +9,7 @@ class Skin:
         self.image_format = image_format
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
-
+        pBSDF = CurMat.nodes['Principled BSDF']
 #SSS/s
         sVcol = create_node(CurMat.nodes,"ShaderNodeVertexColor", (-1400,250))
 
@@ -20,8 +20,8 @@ class Skin:
 
         CurMat.links.new(sVcol.outputs[0],sSepRGB.inputs[0])
         CurMat.links.new(sSepRGB.outputs[1],sMultiply.inputs[0])
-        CurMat.links.new(sMultiply.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Subsurface'])
-        CurMat.nodes['Principled BSDF'].inputs['Subsurface Color'].default_value = (0.8, 0.14908, 0.0825199, 1)
+        CurMat.links.new(sMultiply.outputs[0],pBSDF.inputs['Subsurface'])
+        pBSDF.inputs['Subsurface Color'].default_value = (0.8, 0.14908, 0.0825199, 1)
         
 #Albedo/a
         mixRGB = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-200,300), blend_type = 'MULTIPLY')
@@ -29,7 +29,7 @@ class Skin:
         if "Albedo" in Data:
             aImg=imageFromRelPath(Data["Albedo"],DepotPath=self.BasePath, ProjPath=self.ProjPath)
             aImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,550), label="Albedo", image=aImg)
-            CurMat.links.new(aImgNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
+            CurMat.links.new(aImgNode.outputs[0],pBSDF.inputs['Base Color'])
             CurMat.links.new(aImgNode.outputs[0],mixRGB.inputs[1])
 
         if "TintColor" in Data:
@@ -41,7 +41,7 @@ class Skin:
             tmaskNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-500,550), label="TintColorMask", image=tImg)
             CurMat.links.new(tmaskNode.outputs[0],mixRGB.inputs[0])
 
-        CurMat.links.new(mixRGB.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
+        CurMat.links.new(mixRGB.outputs[0],pBSDF.inputs['Base Color'])
 
 #ROUGHNES+MASK/rm
 
@@ -127,7 +127,7 @@ class Skin:
             ndStImg = create_node(CurMat.nodes, "ShaderNodeTexImage", (-2000,0), label="Detailmap_Stretch", image=strchImg)
 
         CurMat.links.new(rImgNode.outputs[0],rmSep.inputs[0])
-        CurMat.links.new(rmSep.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Roughness'])
+        CurMat.links.new(rmSep.outputs[0],pBSDF.inputs['Roughness'])
         CurMat.links.new(rmSep.outputs[2],rmSub.inputs[0])
         CurMat.links.new(rmSub.outputs[0],rmMul.inputs[0])
         CurMat.links.new(rmMul.outputs[0],nOverlay2.inputs[0])
@@ -157,7 +157,7 @@ class Skin:
         CurMat.links.new(nOverlay2.outputs[0],nRebuildNormal.inputs[0])
         CurMat.links.new(nRebuildNormal.outputs[0],nNormalMap.inputs[1])
 
-        CurMat.links.new(nNormalMap.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Normal'])
+        CurMat.links.new(nNormalMap.outputs[0],pBSDF.inputs['Normal'])
 
 #OTHER
         if "BloodColor" in Data:

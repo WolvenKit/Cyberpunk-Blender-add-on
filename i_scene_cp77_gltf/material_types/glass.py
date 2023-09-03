@@ -27,7 +27,7 @@ class Glass:
             CurMat.links.new(IOR.outputs[0],pBDSF.inputs['IOR'])
 
         if "Roughness" in Data:
-            rImg = imageFromRelPath(Data["Roughness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            rImg = imageFromRelPath(Data["Roughness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
             rImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,50), label="Roughness", image=rImg)
             CurMat.links.new(rImgNode.outputs[0],pBDSF.inputs['Roughness'])
 
@@ -36,8 +36,8 @@ class Glass:
             CurMat.links.new(nMap.outputs[0],pBDSF.inputs['Normal'])
         
         if "MaskTexture" in Data:
-            mImg = imageFromRelPath(Data["MaskTexture"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
-            mImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-1200,350), label="MaskTexture", image=rImg)
+            mImg = imageFromRelPath(Data["MaskTexture"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
+            mImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-1200,350), label="MaskTexture", image=mImg)
             facNode = create_node(CurMat.nodes,"ShaderNodeMath", (-450,-100) ,operation = 'MULTIPLY')
             facNode.inputs[0].default_value = 1
             CurMat.links.new(facNode.outputs[0],pBDSF.inputs['Alpha'])

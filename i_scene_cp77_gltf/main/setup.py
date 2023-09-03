@@ -99,15 +99,15 @@ class MaterialBuilder:
                     meshDecalGradientMapReColor.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\eye.mt":
-                    eye = Eye(self.BasePath,self.image_format)
+                    eye = Eye(self.BasePath,self.image_format, self.ProjPath)
                     eye.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\eye_gradient.mt":
-                    eyeGradient = EyeGradient(self.BasePath,self.image_format)
+                    eyeGradient = EyeGradient(self.BasePath,self.image_format, self.ProjPath)
                     eyeGradient.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\eye_shadow.mt":
-                    eyeShadow = EyeShadow(self.BasePath,self.image_format)
+                    eyeShadow = EyeShadow(self.BasePath,self.image_format, self.ProjPath)
                     eyeShadow.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal_emissive.mt" :
