@@ -6,15 +6,17 @@ if __name__ != "__main__":
     from ..main.common import *
 
 class DecalGradientmapRecolor:
-    def __init__(self, BasePath,image_format):
+    def __init__(self, BasePath,image_format, ProjPath):
         self.BasePath = BasePath
+        self.ProjPath = ProjPath
         self.image_format = image_format
-
  
     def found(self,tex):
         result = os.path.exists(os.path.join(self.BasePath, tex))
         if not result:
-            print(f"Texture not found: {tex}")
+            result = os.path.exists(os.path.join(self.ProjPath, tex))
+            if not result:
+                print(f"Texture not found: {tex}")
         return result
 
     def create(self,Data,Mat):
@@ -38,9 +40,12 @@ class DecalGradientmapRecolor:
         Prin_BSDF=CurMat.nodes['Principled BSDF']
 
         if self.found(difftex) and self.found(gradmap):
-            diff_image_node = CreateShaderNodeTexImage(CurMat,os.path.join(self.BasePath, difftex),-800, 300,'DiffuseTexture',self.image_format)
+            diffImg = imageFromRelPath(Data["DiffuseTexture"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            diff_image_node = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,-300), label="DiffuseTexture", image=diffImg)
             diff_image_node.image.colorspace_settings.name = 'Linear'
-            grad_image_node = CreateShaderNodeTexImage(CurMat,os.path.join(self.BasePath , gradmap),-800, 0,'GradientMap',self.image_format)  
+            gradImg = imageFromRelPath(Data["GradientMap"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            grad_image_node = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,0), label="GradientMap", image=gradImg)
+            
             
             # Get image dimensions
             image_width = grad_image_node.image.size[0]
@@ -88,15 +93,13 @@ class DecalGradientmapRecolor:
                 #CurMat.links.new(dImgNode.outputs[1],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
             else:
                 if self.found(masktex):
-                    mask_image_node = CreateShaderNodeTexImage(CurMat,os.path.join(self.BasePath , masktex),-800, -300,'MaskTexture',self.image_format)
+                    maskImg = imageFromRelPath(Data["MaskTexture"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+                    mask_image_node = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,-100), label="MaskTexture", image=maskImg)
                     CurMat.links.new(mask_image_node.outputs[0], Prin_BSDF.inputs['Alpha'])
                 else:
                     CurMat.links.new(diff_image_node.outputs[1], Prin_BSDF.inputs['Alpha'])
-
-
-                   #CurMat.links.new(dImgNode.outputs[1],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
         else:
-            CurMat.nodes['Principled BSDF'].inputs['Alpha'].default_value = 0
+            Prin_BSDF.inputs['Alpha'].default_value = 0
 
 
 # The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
