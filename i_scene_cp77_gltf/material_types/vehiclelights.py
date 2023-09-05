@@ -26,12 +26,14 @@ from ..main.common import *
 # EmissionParallax
 
 class VehicleLights:
-    def __init__(self, BasePath,image_format):
+    def __init__(self, BasePath,image_format, ProjPath):
         self.BasePath = BasePath
+        self.ProjPath = ProjPath
         self.image_format = image_format
+
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
-
+        pBSDF = CurMat.nodes['Principled BSDF']
 
         CurMat.nodes['Principled BSDF'].inputs['Specular'].default_value = 0
 
@@ -40,12 +42,13 @@ class VehicleLights:
         mixRGB.hide = True
         mixRGB.blend_type = 'MULTIPLY'
         mixRGB.inputs[0].default_value = 1
-        CurMat.links.new(mixRGB.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
+        CurMat.links.new(mixRGB.outputs[0],pBSDF.inputs['Base Color'])
 
         if "BaseColor" in Data:
-            bColNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["BaseColor"],-800,-450,'BaseColor',self.image_format)
+            bcolImg=imageFromRelPath(Data["BaseColor"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            bColNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,-450), label="BaseColor", image=bcolImg)
             CurMat.links.new(bColNode.outputs[0],mixRGB.inputs[2])
-            CurMat.links.new(bColNode.outputs[1],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
+            CurMat.links.new(bColNode.outputs[1],pBSDF.inputs['Alpha'])
 
 
         if "BaseColorScale" in Data:
@@ -58,7 +61,7 @@ class VehicleLights:
 
         if "Normal" in Data:
             nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["Normal"],-200,-300,'Normal',self.image_format)
-            CurMat.links.new(nMap.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Normal'])
+            CurMat.links.new(nMap.outputs[0],pBSDF.inputs['Normal'])
 
 
         mulNode = CurMat.nodes.new("ShaderNodeMixRGB")
@@ -67,11 +70,12 @@ class VehicleLights:
         mulNode.location = (-450,100)
 
         if "Emissive" in Data:
-            emTexNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["Emissive"],-800,100,'Emissive',self.image_format)
+            EmImg=imageFromRelPath(Data["Emissive"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            emTexNode =create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,100), label="Emissive", image=EmImg)
             CurMat.links.new(emTexNode.outputs[0],mulNode.inputs[2])
-            CurMat.nodes['Principled BSDF'].inputs['Emission Strength'].default_value =  10
+            pBSDF.inputs['Emission Strength'].default_value =  10
 
-        CurMat.links.new(mulNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Emission'])
+        CurMat.links.new(mulNode.outputs[0],pBSDF.inputs['Emission'])
         
 
 
