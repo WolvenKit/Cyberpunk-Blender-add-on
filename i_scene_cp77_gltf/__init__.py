@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
     "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, The Magnificent Doctor Presto",
-    "version": (1,4,1)
+    "version": (1,4,0)
     "blender": (3, 1, 0),
     "location": "File > Import-Export",
     "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
@@ -118,7 +118,7 @@ class CP77Animset(bpy.types.Operator):
             if self.play:
                 # Pass the animation name to the play_anim function
                 play_anim(self, context, self.name)
-            return {'FINISHED'}5
+            return {'FINISHED'}
 
 ### Draw a panel within the modtools tree to store anims functions
 class CP77_PT_AnimsPanel(bpy.types.Panel):
