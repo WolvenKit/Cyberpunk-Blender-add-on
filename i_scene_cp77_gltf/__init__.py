@@ -113,11 +113,12 @@ class CP77Animset(bpy.types.Operator):
         return context.active_object and context.active_object.animation_data
     
     def execute(self, context):
-            obj = context.active_object
+        obj = context.active_object
+        if obj and obj.type == 'ARMATURE':
             if self.play:
-                play_anim(self, context)
-            return {'FINISHED'}
-
+                # Pass the animation name to the play_anim function
+                play_anim(self, context, self.name)
+            return {'FINISHED'}5
 
 ### Draw a panel within the modtools tree to store anims functions
 class CP77_PT_AnimsPanel(bpy.types.Panel):
