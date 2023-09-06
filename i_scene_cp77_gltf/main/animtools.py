@@ -15,22 +15,32 @@ def reset_armature(self, context):
             pose_bone.scale = Vector((1.0, 1.0, 1.0))
     else:
         return
-def play_anim(self, context):
-    if not self.name:
-        obj.animation_data.action = None
-        return {'FINISHED'}
 
-    action = bpy.data.actions.get(self.name, None)
 
-    if not action:
+def play_anim(self, context, anim_name):
+    obj = bpy.context.active_object
+
+    if not obj or obj.type != 'ARMATURE':
         return {'CANCELLED'}
-    
-    else:
-        action.use_fake_user = True
 
-        context.scene.frame_current = int(action.curve_frame_range[0])
+    if not obj.animation_data:
+        return {'CANCELLED'}
+
+    # Retrieve the action by name
+    active_action = bpy.data.actions.get(anim_name)
+
+    if active_action:
+        # Stop the currently playing animation
         bpy.ops.screen.animation_cancel(restore_frame=False)
+
+        # Set the active action
+        obj.animation_data.action = active_action
+
+        # Start playing the animation
+        context.scene.frame_current = int(active_action.frame_range[0])
         bpy.ops.screen.animation_play()
+
+    return {'FINISHED'}
 
 def rename_anim(self, context, event):
     if event.ctrl:
