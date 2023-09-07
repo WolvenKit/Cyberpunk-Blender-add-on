@@ -1,14 +1,3 @@
-bl_info = {
-    "name": "Cyberpunk 2077 IO Suite",
-    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, The Magnificent Doctor Presto",
-    "version": (1,4,0),
-    "blender": (3, 1, 0),
-    "location": "File > Import-Export",
-    "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
-    "warning": "",
-    "category": "Import-Export",}
-
-
 import bpy
 import bpy.utils.previews
 import json
@@ -32,6 +21,17 @@ from .main.exporters import *
 from .main.common import json_ver_validate
 from .main.collisions import CP77CollisionGen
 from .main.animtools import play_anim 
+
+
+bl_info = {
+    "name": "Cyberpunk 2077 IO Suite",
+    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, The Magnificent Doctor Presto",
+    "version": (1, 4, 0),
+    "blender": (3, 1, 0),
+    "location": "File > Import-Export",
+    "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
+    "warning": "",
+    "category": "Import-Export", }
 
 
 ### plugin preferences class to allow for personalized used settings - this needs to be commented out 
@@ -183,6 +183,25 @@ class CP77CollisionGenerator(bpy.types.Operator):
         return {"FINISHED"}
     
 
+class CollectionAppearancePanel(bpy.types.Panel):
+    bl_label = "Ent Appearances"
+    bl_idname = "PANEL_PT_appearance_variants"
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = "collection"
+
+    #only draw the if the collector has an appearanceName property
+    @classmethod
+    def poll(cls, context):
+        collection = context.collection
+        return hasattr(collection, "appearanceName")
+
+    def draw(self, context):
+        layout = self.layout
+        collection = context.collection
+        layout.prop(collection, "appearanceName")
+    
+
 class CP77CollisionExport(bpy.types.Operator):
     bl_idname = "export_scene.collisions"
     bl_label = "Export Collisions to .JSON"
@@ -205,12 +224,65 @@ class CP77CollisionExport(bpy.types.Operator):
         layout = self.layout
 
 
+# class CP77MassExport(bpy.types.Operator):
+#     bl_idname = "export_scene.all"
+#     bl_label = "Export Ent Meshes"
+#     bl_space_type = "VIEW_3D"
+#     bl_region_type = "UI"
+#     bl_category = "CP77 Modding"
+#     bl_parent_id = "CP77_PT_MeshTools"
+  
+#     def execute(self, context):
+#         ExportAll(self, context)
+#         return {"FINISHED"}
+
+#     def draw(self, context):
+#         layout = self.layout
+
+
+class CP77HairProfileExport(bpy.types.Operator):
+    bl_idname = "export_scene.hp"
+    bl_label = "Export Hair Profile"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "CP77 Modding"
+    bl_parent_id = "CP77_PT_MeshTools"
+
+    filepath: bpy.props.StringProperty(subtype="FILE_PATH")
+  
+    def execute(self, context):
+        cp77_hp_export(self.filepath)
+        return {"FINISHED"}
+
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {"RUNNING_MODAL"}
+
+    def draw(self, context):
+        layout = self.layout
+
+
 class CP77_PT_CollisionToolsPanelProps(bpy.types.PropertyGroup):
     sampleverts: bpy.props.StringProperty(
         name="Vertices to Sample",
         description="This is the number of vertices in your new collider",
         default="100",
     )
+
+
+class CP77_PT_MeshTools(bpy.types.Panel):
+    bl_parent_id = "CP77_PT_modtools"
+    bl_label = "Mesh Tools"
+    bl_idname = "CP77_PT_MeshTools"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "CP77 Modding"
+
+    def draw(self, context):
+        layout = self.layout
+        
+        layout.operator("export_scene.hp")
+        layout.operator("export_scene.all")
 
 
 class CP77_PT_CollisionTools(bpy.types.Panel):
@@ -613,6 +685,10 @@ classes = (
     CP77Animset,
     CP77AnimsDelete,
     CP77IOSuitePreferences,
+    CollectionAppearancePanel,
+    CP77HairProfileExport,
+    CP77_PT_MeshTools,
+#    CP77MassExport,
     )
     
 
@@ -634,16 +710,14 @@ def register():
 def unregister():
     bpy.utils.previews.remove(custom_icon_col["import"])
     del bpy.types.Scene.cp77_collision_tools_panel_props
-    
+    bpy.utils.unregister_class(CP77_PT_CollisionToolsPanelProps) 
+
     #kwekmaster - Minor Refactoring 
     for cls in classes:
         bpy.utils.unregister_class(cls)
-
         
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
-
-    bpy.utils.unregister_class(CP77_PT_CollisionToolsPanelProps)    
 
 if __name__ == "__main__":
     register()
