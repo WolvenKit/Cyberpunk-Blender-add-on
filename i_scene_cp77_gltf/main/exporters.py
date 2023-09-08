@@ -69,10 +69,12 @@ def export_cyberpunk_glb(context, filepath, export_poses):
                 if len(submesh.vertices) > 65000:
                     bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Each submesh must have less than 65,000 vertices")
                     return {'CANCELLED'}
-            #check that faces are triangulated, if not cancel and throw an error
+            #check that faces are triangulated, cancel export, switch to edit mode with the untriangulated faces selected and throw an error
             for face in mesh.data.polygons:
                 if len(face.vertices) != 3:
-                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="All faces must be triangulated before exporting to glb")
+                    bpy.ops.object.mode_set(mode='EDIT')
+                    bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)
+                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="All faces must be triangulated before exporting. Untriangulated faces have been selected for you")
                     return {'CANCELLED'}
         options = default_cp77_options()
         options.update(cp77_mesh_options())
@@ -99,11 +101,15 @@ def export_cyberpunk_glb(context, filepath, export_poses):
                 armature.hide_set(False)
                 armature.select_set(True)
 
-                # Check for ungrouped vertices, throw an error if any are found
+                # Check for ungrouped vertices, if any are found, switch to edit mode and select them before throwing an error
                 ungrouped_vertices = [v for v in obj.data.vertices if not v.groups]
                 if ungrouped_vertices:
-                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Export Cancelled: Ungrouped vertices found in mesh, please add these vertices to a group or delete them before exporting.")
+                    bpy.ops.object.mode_set(mode='EDIT')
+                    bpy.ops.mesh.select_ungrouped()
+                    armature.hide_set(True)
+                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Ungrouped vertices found and selected. Please assign them to a group or delete them beforebefore exporting.")
                     return {'CANCELLED'}
+                    
 
     # Export the selected meshes to glb
     bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
