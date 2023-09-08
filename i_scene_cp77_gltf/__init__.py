@@ -270,6 +270,30 @@ class CP77_PT_CollisionToolsPanelProps(bpy.types.PropertyGroup):
     )
 
 
+class CP77SetArmature(bpy.types.Operator):
+    bl_idname = "cp77.set_armature"
+    bl_label = "Change Armature Target"
+    
+    def execute(self, context):
+        target_armature_name = context.scene.selected_armature
+        target_armature = bpy.data.objects.get(target_armature_name)
+        if target_armature and target_armature.type == 'ARMATURE':
+            for obj in bpy.context.selected_objects:
+                if obj.type == 'MESH':
+                    for modifier in obj.modifiers:
+                        if modifier.type == 'ARMATURE':
+                            modifier.object = target_armature
+            return {'FINISHED'}
+    
+    
+def CP77ArmatureList(self, context):
+    items = []
+    for obj in bpy.data.objects:
+        if obj.type == 'ARMATURE':
+            items.append((obj.name, obj.name, ""))
+    return items
+
+
 class CP77_PT_MeshTools(bpy.types.Panel):
     bl_parent_id = "CP77_PT_modtools"
     bl_label = "Mesh Tools"
@@ -283,7 +307,9 @@ class CP77_PT_MeshTools(bpy.types.Panel):
         
         layout.operator("export_scene.hp")
         layout.operator("export_scene.all")
-
+        layout.prop(context.scene, "selected_armature", text="Target Armature")
+        layout.operator("cp77.set_armature", text="Change Armature Targets")
+        
 
 class CP77_PT_CollisionTools(bpy.types.Panel):
     bl_parent_id = "CP77_PT_modtools"
@@ -667,7 +693,7 @@ def menu_func_export(self, context):
     self.layout.operator(CP77GLBExport.bl_idname, text="Export Selection to GLB for Cyberpunk", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
     
 
-bpy.utils.register_class(CP77_PT_CollisionToolsPanelProps)
+
     
 #kwekmaster - Minor Refactoring 
 classes = (
@@ -689,20 +715,22 @@ classes = (
     CP77HairProfileExport,
     CP77_PT_MeshTools,
 #    CP77MassExport,
+    CP77SetArmature,
+    CP77_PT_CollisionToolsPanelProps,
     )
-    
 
 def register():
     custom_icon = bpy.utils.previews.new()
     custom_icon.load("WKIT", os.path.join(icons_dir, "wkit.png"), 'IMAGE')
     custom_icon_col["import"] = custom_icon
 
-    bpy.types.Scene.cp77_collision_tools_panel_props = bpy.props.PointerProperty(type=CP77_PT_CollisionToolsPanelProps) 
 
     #kwekmaster - Minor Refactoring 
     for cls in classes:
         bpy.utils.register_class(cls)
         
+    bpy.types.Scene.selected_armature = bpy.props.EnumProperty(items=CP77ArmatureList)
+    bpy.types.Scene.cp77_collision_tools_panel_props = bpy.props.PointerProperty(type=CP77_PT_CollisionToolsPanelProps)           
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export) 
 
@@ -710,7 +738,7 @@ def register():
 def unregister():
     bpy.utils.previews.remove(custom_icon_col["import"])
     del bpy.types.Scene.cp77_collision_tools_panel_props
-    bpy.utils.unregister_class(CP77_PT_CollisionToolsPanelProps) 
+    del bpy.types.Scene.selected_armature
 
     #kwekmaster - Minor Refactoring 
     for cls in classes:
