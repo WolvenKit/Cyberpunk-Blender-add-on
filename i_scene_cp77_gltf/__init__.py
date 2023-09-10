@@ -17,10 +17,14 @@ from .main.entity_import import *
 from .main.attribute_import import manage_garment_support
 from .main.sector_import import *
 from bpy_extras.io_utils import ExportHelper
-from .main.exporters import *
+from .exporters.glb_export import *
+from .exporters.hp_export import *
+from .exporters.collision_export import *
+from .exporters.mlsetup_export import *
 from .main.common import json_ver_validate
 from .main.collisions import CP77CollisionGen
 from .main.animtools import play_anim 
+#from . import addon_updater_ops
 
 
 bl_info = {
@@ -34,18 +38,53 @@ bl_info = {
     "category": "Import-Export", }
 
 
-### plugin preferences class to allow for personalized used settings - this needs to be commented out 
-### or hooked up to something
+### plugin preferences class to allow for personalized used settings
+#@addon_updater_ops.make_annotations
 class CP77IOSuitePreferences(bpy.types.AddonPreferences):
-    bl_idname = __package__
+    bl_idname = __name__
+
     experimental_features: bpy.props.BoolProperty(
     name= "Enable Experimental Features",
     description="Experimental Features for Mod Developers, may encounter bugs",
     default=False,
     )
+    
+ ## toggle the mod tools tab and its sub panels - default True
+    show_modtools: bpy.props.BoolProperty(
+    name= "Show the Mod Tools Panel",
+    description="Show the Mod tools Tab in the 3d viewport",
+    default=True,
+    )
+
+    show_meshtools: bpy.props.BoolProperty(
+    name= "Show the Mesh Tools Panel",
+    description="Show the mesh tools panel",
+    default=True,
+    )
+
+    show_collisiontools: bpy.props.BoolProperty(
+    name= "Show the Collision Tools Panel",
+    description="Show the Collision tools panel",
+    default=True,
+    )
+
+    show_animtools: bpy.props.BoolProperty(
+    name= "Show the Animation Tools Panel",
+    description="Show the anim tools panel",
+    default=True,
+    )
+
+
     def draw(self, context):
         layout = self.layout
         layout.prop(self, "experimental_features")
+        layout.prop(self, "show_modtools")
+        if self.show_modtools:
+            layout.use_property_split = True
+            layout.prop(self, "show_meshtools")
+            layout.prop(self, "show_collisiontools")
+            layout.prop(self, "show_animtools")
+        #addon_updater_ops.update_settings_ui(self,context)
 
 
 def SetCyclesRenderer(set_gi_params=False):
@@ -131,38 +170,47 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
 
     name: bpy.props.StringProperty(options={'HIDDEN'})
 
+    @classmethod
+    def poll(cls, context):
+        return context.active_object and context.active_object.type == 'ARMATURE'
+    
+
 ## make sure the context is unrestricted as possible, ensure there's an armature selected 
     def draw(self, context):
         layout = self.layout 
-        if bpy.context.mode in {'OBJECT', 'POSE', 'EDIT_ARMATURE'}:
-            obj = bpy.context.active_object
-            if obj and obj.type == 'ARMATURE':
-                available_anims = bpy.data.actions
-                active_action = obj.animation_data.action if obj.animation_data else None
 
-                box = layout.box()
-                row = box.row(align=True)
-                row.label(text='Animsets', icon_value=custom_icon_col["import"]['WKIT'].icon_id)
-                if available_anims:
-                    col = box.column(align=True)
-                    for action in available_anims:
-                        selected = action == active_action
-                        row = col.row(align=True)
-                        sub = row.column(align=True)
-                        sub.ui_units_x = 1.0
-                        if selected and context.screen.is_animation_playing:
-                            op = sub.operator('screen.animation_cancel', icon='PAUSE', text="", emboss=False)
-                            op.restore_frame = False
-                        else:
-                            icon = 'PLAY' if selected else 'TRIA_RIGHT'
-                            op = sub.operator('cp77.set_animset', icon=icon, text="", emboss=False)
-                            op.name = action.name
-                            op.play = True
+        cp77_addon_prefs = context.preferences.addons[__name__].preferences
 
-                            op = row.operator('cp77.set_animset', text=action.name)
-                            op.name = action.name
-                            op.play = False
-                            row.operator('cp77.delete_anims', icon='X', text="").name = action.name
+        if cp77_addon_prefs.show_animtools:
+            if bpy.context.mode in {'OBJECT', 'POSE', 'EDIT_ARMATURE'}:
+                obj = bpy.context.active_object
+                if obj and obj.type == 'ARMATURE':
+                    available_anims = bpy.data.actions
+                    active_action = obj.animation_data.action if obj.animation_data else None
+
+                    box = layout.box()
+                    row = box.row(align=True)
+                    row.label(text='Animsets', icon_value=custom_icon_col["import"]['WKIT'].icon_id)
+                    if available_anims:
+                        col = box.column(align=True)
+                        for action in available_anims:
+                            selected = action == active_action
+                            row = col.row(align=True)
+                            sub = row.column(align=True)
+                            sub.ui_units_x = 1.0
+                            if selected and context.screen.is_animation_playing:
+                                op = sub.operator('screen.animation_cancel', icon='PAUSE', text="", emboss=False)
+                                op.restore_frame = False
+                            else:
+                                icon = 'PLAY' if selected else 'TRIA_RIGHT'
+                                op = sub.operator('cp77.set_animset', icon=icon, text="", emboss=False)
+                                op.name = action.name
+                                op.play = True
+
+                                op = row.operator('cp77.set_animset', text=action.name)
+                                op.name = action.name
+                                op.play = False
+                                row.operator('cp77.delete_anims', icon='X', text="").name = action.name
 
 
 class CP77CollisionGenerator(bpy.types.Operator):
@@ -172,7 +220,7 @@ class CP77CollisionGenerator(bpy.types.Operator):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "CP77 Modding"
-
+    bl_options = {'REGISTER'}
 
     def draw(self, context):
         layout = self.layout
@@ -181,7 +229,7 @@ class CP77CollisionGenerator(bpy.types.Operator):
         props = context.scene.cp77_collision_tools_panel_props
         CP77CollisionGen(context, props.sampleverts)
         return {"FINISHED"}
-    
+        
 
 class CollectionAppearancePanel(bpy.types.Panel):
     bl_label = "Ent Appearances"
@@ -254,9 +302,22 @@ class CP77HairProfileExport(bpy.types.Operator):
         cp77_hp_export(self.filepath)
         return {"FINISHED"}
 
-    def invoke(self, context, event):
-        context.window_manager.fileselect_add(self)
-        return {"RUNNING_MODAL"}
+    def draw(self, context):
+        layout = self.layout
+
+class CP77MlSetupExport(bpy.types.Operator):
+    bl_idname = "export_scene.mlsetup"
+    bl_label = "Export MLSetup"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "CP77 Modding"
+    bl_parent_id = "CP77_PT_MeshTools"
+
+    filepath: bpy.props.StringProperty(subtype="FILE_PATH")
+  
+    def execute(self, context):
+        cp77_mlsetup_export(self, context)
+        return {"FINISHED"}
 
     def draw(self, context):
         layout = self.layout
@@ -267,6 +328,7 @@ class CP77_PT_CollisionToolsPanelProps(bpy.types.PropertyGroup):
         name="Vertices to Sample",
         description="This is the number of vertices in your new collider",
         default="100",
+        maxlen=3 
     )
 
 
@@ -301,14 +363,26 @@ class CP77_PT_MeshTools(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "CP77 Modding"
+   
+    @classmethod
+    def poll(cls, context):
+        return context.active_object and context.active_object.type == 'MESH'
 
     def draw(self, context):
         layout = self.layout
-        
-        layout.operator("export_scene.hp")
-        layout.operator("export_scene.all")
-        layout.prop(context.scene, "selected_armature", text="Target Armature")
-        layout.operator("cp77.set_armature", text="Change Armature Targets")
+
+        cp77_addon_prefs = context.preferences.addons[__name__].preferences
+
+        if cp77_addon_prefs.show_meshtools:
+            row = layout.row()
+            row.label(text="Target Armature:")
+            row.prop(context.scene, "selected_armature", text="")
+            layout.operator("cp77.set_armature", text="Change Armature Targets")
+            layout.label(text="Material Exporters", icon="MATERIAL")
+            box = layout.box()
+            box.operator("export_scene.hp")
+            if context.preferences.addons[__name__].preferences.experimental_features:
+                box.operator("export_scene.mlsetup")
         
 
 class CP77_PT_CollisionTools(bpy.types.Panel):
@@ -319,14 +393,22 @@ class CP77_PT_CollisionTools(bpy.types.Panel):
     bl_region_type = "UI"
     bl_category = "CP77 Modding"
 
+    @classmethod
+    def poll(cls, context):
+        return context.active_object and context.active_object.type == 'MESH'
+
     def draw(self, context):
         layout = self.layout
         props = context.scene.cp77_collision_tools_panel_props
-        
-        layout.prop(props, "sampleverts")
-        layout.operator("export_scene.collisions")
-        layout.operator("generate_cp77.collisions")
+        cp77_addon_prefs = context.preferences.addons[__name__].preferences
 
+        if cp77_addon_prefs.show_collisiontools:
+            layout.operator("export_scene.collisions")
+            if context.mode == 'EDIT_MESH':
+                row = layout.row()
+                row.label(text="Vertices to Sample:")
+                row.prop(props, "sampleverts", text="")
+                layout.operator("generate_cp77.collisions")
 
 
 class CP77_PT_ModTools(bpy.types.Panel):
@@ -336,6 +418,11 @@ class CP77_PT_ModTools(bpy.types.Panel):
     bl_region_type = "UI"
     bl_options = {"DEFAULT_CLOSED"}
     bl_category = "CP77Modding"
+
+    @classmethod
+    def poll(cls, context):
+        addon_prefs = context.preferences.addons[__name__].preferences
+        return addon_prefs.show_modtools
 
     def draw(self, context):
         layout = self.layout
@@ -683,18 +770,19 @@ class CP77Import(bpy.types.Operator,ImportHelper):
                         index = index + 1
                         
         return {'FINISHED'}
+    
+       
 
 def menu_func_import(self, context):
     self.layout.operator(CP77Import.bl_idname, text="Cyberpunk GLTF (.gltf/.glb)", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
     self.layout.operator(CP77EntityImport.bl_idname, text="Cyberpunk Entity (.json)", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
     self.layout.operator(CP77StreamingSectorImport.bl_idname, text="Cyberpunk StreamingSector", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
 
+
 def menu_func_export(self, context):
     self.layout.operator(CP77GLBExport.bl_idname, text="Export Selection to GLB for Cyberpunk", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
     
 
-
-    
 #kwekmaster - Minor Refactoring 
 classes = (
     CP77Import,
@@ -717,35 +805,42 @@ classes = (
 #    CP77MassExport,
     CP77SetArmature,
     CP77_PT_CollisionToolsPanelProps,
+    CP77MlSetupExport,
     )
+
 
 def register():
     custom_icon = bpy.utils.previews.new()
     custom_icon.load("WKIT", os.path.join(icons_dir, "wkit.png"), 'IMAGE')
     custom_icon_col["import"] = custom_icon
+    #addon_updater_ops.register(bl_info)
 
 
     #kwekmaster - Minor Refactoring 
     for cls in classes:
         bpy.utils.register_class(cls)
-        
+
     bpy.types.Scene.selected_armature = bpy.props.EnumProperty(items=CP77ArmatureList)
     bpy.types.Scene.cp77_collision_tools_panel_props = bpy.props.PointerProperty(type=CP77_PT_CollisionToolsPanelProps)           
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export) 
 
-
+  
 def unregister():
     bpy.utils.previews.remove(custom_icon_col["import"])
     del bpy.types.Scene.cp77_collision_tools_panel_props
     del bpy.types.Scene.selected_armature
+    
 
     #kwekmaster - Minor Refactoring 
     for cls in classes:
         bpy.utils.unregister_class(cls)
         
+    #addon_updater_ops.unregister()
+
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
+    
 
 if __name__ == "__main__":
     register()
