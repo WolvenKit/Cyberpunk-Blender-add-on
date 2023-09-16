@@ -105,38 +105,91 @@ def SetCyclesRenderer(set_gi_params=False):
         cycles.ao_bounces = 1
         cycles.ao_bounces_render = 1
 
+class CP77CollisionGenerator(bpy.types.Operator):
+    bl_idname = "generate_cp77.collisions"
+    bl_parent_id = "CP77_PT_collisions"
+    bl_label = "Generate Convex Collider"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "CP77 Modding"
+    bl_options = {'REGISTER'}
+
+    def draw(self, context):
+        layout = self.layout
+
+    def execute(self, context):
+        props = context.scene.cp77_collision_tools_panel_props
+        CP77CollisionGen(context, props.sampleverts)
+        return {"FINISHED"}
+
+
 class CP77CollisionExport(bpy.types.Operator):
     bl_idname = "export_scene.collisions"
     bl_label = "Export Collisions to .JSON"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "CP77 Modding"
-    bl_parent_id = "CP77_PT_CollisionTools"
-    
-    filepath: bpy.props.StringProperty(subtype="FILE_PATH")
+    bl_parent_id = "CP77_PT_collisions"
 
+    filepath: bpy.props.StringProperty(subtype="FILE_PATH")
+  
     def execute(self, context):
         cp77_collision_export(self.filepath)
-        return {'FINISHED'}
-        
+        return {"FINISHED"}
+
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
-        return {'RUNNING_MODAL'}
+        return {"RUNNING_MODAL"}
 
     def draw(self, context):
         layout = self.layout
 
+
+class CP77_PT_CollisionToolsPanelProps(bpy.types.PropertyGroup):
+    
+    collider_type: bpy.props.EnumProperty(
+        name="Collider Type",
+        items=[
+            ('CONVEX', "Convex Collider", "Generate a Convex Collider"),
+            ('BOX', "Box Collider", "Generate a Box Collider"),
+            ('CAPSULE', "Capsule Collider", "Generate a Capsule Collider")
+        ],
+        default='CONVEX'
+    )
+    
+    sampleverts: bpy.props.StringProperty(
+        name="Vertices to Sample",
+        description="This is the number of vertices in your new collider",
+        default="100",
+        maxlen=3 
+    )
+    
+    
 class CP77_PT_CollisionTools(bpy.types.Panel):
-    bl_parent_id = "CP77_PT_ModTools"
+    bl_parent_id = "CP77_PT_modtools"
     bl_label = "Collision Tools"
-    bl_idname = "CP77_PT_CollisionTools"
+    bl_idname = "CP77_PT_collisions"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "CP77 Modding"
 
+    @classmethod
+    def poll(cls, context):
+        return context.active_object and context.active_object.type == 'MESH'
+
     def draw(self, context):
         layout = self.layout
-        layout.operator("export_scene.collisions")
+        props = context.scene.cp77_collision_tools_panel_props
+        cp77_addon_prefs = context.preferences.addons[__name__].preferences
+
+        if cp77_addon_prefs.show_collisiontools:
+            layout.operator("export_scene.collisions")
+            if context.mode == 'EDIT_MESH':
+                row = layout.row()
+                row.label(text="Vertices to Sample:")
+                row.prop(props, "sampleverts", text="")
+                layout.operator("generate_cp77.collisions")
+
 
 class CP77_PT_ModTools(bpy.types.Panel):
     bl_label = "Cyberpunk Modding Tools"
@@ -148,35 +201,6 @@ class CP77_PT_ModTools(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-
-## these will be used later 
-# class CP77_PT_rigview(bpy.types.Panel):
-#     bl_parent_id = "CP77_PT_ModTools"
-#     bl_space_type = "VIEW_3D"
-#     bl_region_type = "UI"
-#     bl_label = "Cyberpunk Rigview"
-#     bl_category = "CP77 Modding"
-    
-    # def poll(cls, context):
-    #     return (context.active_object
-    #         and context.active_object.type == 'ARMATURE'
-    #         and context.mode in {'OBJECT', 'POSE', 'EDIT_ARMATURE'}
-    #         and cls.draw_funcs)
-
-#     def draw(self, context):
-#         layout = self.layout
-
-
-# class CP77_PT_AnimsPanel(bpy.types.Panel):
-#     bl_parent_id = "CP77_PT_ModTools"
-#     bl_idname = "CP77_PT_AnimsPanel"
-#     bl_space_type = "VIEW_3D"
-#     bl_label = "Animsets"
-#     bl_region_type = "UI"
-#     bl_category = "CP77 Modding"
-
-#     def draw(self, context):
-#         layout = self.layout
 
 
 ## adds a message box for the exporters to use for error notifications, will also be used later for redmod integration    
@@ -541,7 +565,8 @@ classes = (
     #CP77_PT_AnimsPanel,
     CP77IOSuitePreferences,
     CP77_PT_CollisionTools,
-    CP77CollisionExport
+    CP77CollisionExport,
+    CP77CollisionGenerator,
 )
 
 def register():
@@ -562,7 +587,8 @@ def unregister():
     #kwekmaster - Minor Refactoring 
     for cls in classes:
         bpy.utils.unregister_class(cls)
-        
+    
+    bpy.types.Scene.cp77_collision_tools_panel_props = bpy.props.PointerProperty(type=CP77_PT_CollisionToolsPanelProps)         
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
                 
