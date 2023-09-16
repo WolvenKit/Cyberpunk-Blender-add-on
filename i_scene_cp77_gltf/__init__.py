@@ -34,6 +34,7 @@ from .exporters.hp_export import *
 from .exporters.collision_export import *
 from .exporters.mlsetup_export import *
 from .main.common import json_ver_validate
+from .main.animtools import play_anim 
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
@@ -189,6 +190,107 @@ class CP77_PT_CollisionTools(bpy.types.Panel):
                 row.label(text="Vertices to Sample:")
                 row.prop(props, "sampleverts", text="")
                 layout.operator("generate_cp77.collisions")
+
+### allow deleting animations from the animset panel, regardless of editor context
+class CP77AnimsDelete(bpy.types.Operator):
+
+    bl_idname = 'cp77.delete_anims'
+    bl_label = "Delete an action from the animslist"
+    bl_options = {'INTERNAL', 'UNDO'}
+
+    name: bpy.props.StringProperty()
+
+    @classmethod
+    def poll(cls, context):
+        return context.active_object and context.active_object.animation_data
+
+    def execute(self, context):
+        obj = context.active_object
+        action = bpy.data.actions.get(self.name, None)
+        if not action:
+            return {'CANCELLED'}
+
+        bpy.data.actions.remove(action)
+
+        return {'FINISHED'}
+    
+
+## this class is where most of the function is so far - play/pause 
+## Todo: fix renaming actions from here
+class CP77Animset(bpy.types.Operator):
+
+    bl_idname = 'cp77.set_animset'
+    bl_label = "Available Animsets"
+    bl_options = {'INTERNAL', 'UNDO'}
+
+    name: bpy.props.StringProperty(options={'HIDDEN'})
+    new_name: bpy.props.StringProperty(name="New name", default="")
+    play: bpy.props.BoolProperty(options={'HIDDEN'}, default=False)
+
+    @classmethod
+    def poll(cls, context):
+        return context.active_object and context.active_object.animation_data
+    
+    def execute(self, context):
+        obj = context.active_object
+        if obj and obj.type == 'ARMATURE':
+            if self.play:
+                # Pass the animation name to the play_anim function
+                play_anim(self, context, self.name)
+            return {'FINISHED'}
+
+### Draw a panel within the modtools tree to store anims functions
+class CP77_PT_AnimsPanel(bpy.types.Panel):
+    bl_parent_id = "CP77_PT_modtools"
+    bl_idname = "CP77_PT_animspanel"
+    bl_space_type = "VIEW_3D"
+    bl_label = "Animation Tools"
+    bl_region_type = "UI"
+    bl_category = "CP77 Modding"
+
+    name: bpy.props.StringProperty(options={'HIDDEN'})
+
+    @classmethod
+    def poll(cls, context):
+        return context.active_object and context.active_object.type == 'ARMATURE'
+    
+
+## make sure the context is unrestricted as possible, ensure there's an armature selected 
+    def draw(self, context):
+        layout = self.layout 
+
+        cp77_addon_prefs = context.preferences.addons[__name__].preferences
+
+        if cp77_addon_prefs.show_animtools:
+            if bpy.context.mode in {'OBJECT', 'POSE', 'EDIT_ARMATURE'}:
+                obj = bpy.context.active_object
+                if obj and obj.type == 'ARMATURE':
+                    available_anims = bpy.data.actions
+                    active_action = obj.animation_data.action if obj.animation_data else None
+
+                    box = layout.box()
+                    row = box.row(align=True)
+                    row.label(text='Animsets', icon_value=custom_icon_col["import"]['WKIT'].icon_id)
+                    if available_anims:
+                        col = box.column(align=True)
+                        for action in available_anims:
+                            selected = action == active_action
+                            row = col.row(align=True)
+                            sub = row.column(align=True)
+                            sub.ui_units_x = 1.0
+                            if selected and context.screen.is_animation_playing:
+                                op = sub.operator('screen.animation_cancel', icon='PAUSE', text="", emboss=False)
+                                op.restore_frame = False
+                            else:
+                                icon = 'PLAY' if selected else 'TRIA_RIGHT'
+                                op = sub.operator('cp77.set_animset', icon=icon, text="", emboss=False)
+                                op.name = action.name
+                                op.play = True
+
+                                op = row.operator('cp77.set_animset', text=action.name)
+                                op.name = action.name
+                                op.play = False
+                                row.operator('cp77.delete_anims', icon='X', text="").name = action.name
 
 
 class CollectionAppearancePanel(bpy.types.Panel):
@@ -671,7 +773,9 @@ classes = (
     ShowMessageBox,
     CP77IOSuitePreferences,
     CP77_PT_ModTools,
-    #CP77_PT_AnimsPanel,
+    CP77_PT_AnimsPanel,
+    CP77Animset,
+    CP77AnimsDelete,
     CP77CollisionExport,
     CP77CollisionGenerator,
     CP77_PT_CollisionTools,
