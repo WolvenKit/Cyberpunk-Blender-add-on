@@ -191,6 +191,114 @@ class CP77_PT_CollisionTools(bpy.types.Panel):
                 layout.operator("generate_cp77.collisions")
 
 
+class CollectionAppearancePanel(bpy.types.Panel):
+    bl_label = "Ent Appearances"
+    bl_idname = "PANEL_PT_appearance_variants"
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = "collection"
+
+    #only draw the if the collector has an appearanceName property
+    @classmethod
+    def poll(cls, context):
+        collection = context.collection
+        return hasattr(collection, "appearanceName")
+
+    def draw(self, context):
+        layout = self.layout
+        collection = context.collection
+        layout.prop(collection, "appearanceName")
+
+
+class CP77HairProfileExport(bpy.types.Operator):
+    bl_idname = "export_scene.hp"
+    bl_label = "Export Hair Profile"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "CP77 Modding"
+    bl_parent_id = "CP77_PT_MeshTools"
+
+    filepath: bpy.props.StringProperty(subtype="FILE_PATH")
+  
+    def execute(self, context):
+        cp77_hp_export(self.filepath)
+        return {"FINISHED"}
+
+    def draw(self, context):
+        layout = self.layout
+
+
+class CP77MlSetupExport(bpy.types.Operator):
+    bl_idname = "export_scene.mlsetup"
+    bl_label = "Export MLSetup"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "CP77 Modding"
+    bl_parent_id = "CP77_PT_MeshTools"
+
+    filepath: bpy.props.StringProperty(subtype="FILE_PATH")
+  
+    def execute(self, context):
+        cp77_mlsetup_export(self, context)
+        return {"FINISHED"}
+
+    def draw(self, context):
+        layout = self.layout
+
+
+class CP77SetArmature(bpy.types.Operator):
+    bl_idname = "cp77.set_armature"
+    bl_label = "Change Armature Target"
+    
+    def execute(self, context):
+        target_armature_name = context.scene.selected_armature
+        target_armature = bpy.data.objects.get(target_armature_name)
+        if target_armature and target_armature.type == 'ARMATURE':
+            for obj in bpy.context.selected_objects:
+                if obj.type == 'MESH':
+                    for modifier in obj.modifiers:
+                        if modifier.type == 'ARMATURE':
+                            modifier.object = target_armature
+            return {'FINISHED'}
+    
+    
+def CP77ArmatureList(self, context):
+    items = []
+    for obj in bpy.data.objects:
+        if obj.type == 'ARMATURE':
+            items.append((obj.name, obj.name, ""))
+    return items
+
+
+class CP77_PT_MeshTools(bpy.types.Panel):
+    bl_parent_id = "CP77_PT_modtools"
+    bl_label = "Mesh Tools"
+    bl_idname = "CP77_PT_MeshTools"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "CP77 Modding"
+   
+    @classmethod
+    def poll(cls, context):
+        return context.active_object and context.active_object.type == 'MESH'
+
+    def draw(self, context):
+        layout = self.layout
+
+        cp77_addon_prefs = context.preferences.addons[__name__].preferences
+
+        if cp77_addon_prefs.show_meshtools:
+            row = layout.row()
+            row.label(text="Target Armature:")
+            row.prop(context.scene, "selected_armature", text="")
+            layout.operator("cp77.set_armature", text="Change Armature Targets")
+            layout.label(text="Material Exporters", icon="MATERIAL")
+            box = layout.box()
+            box.operator("export_scene.hp")
+            if context.preferences.addons[__name__].preferences.experimental_features:
+                box.operator("export_scene.mlsetup")
+        
+
 class CP77_PT_ModTools(bpy.types.Panel):
     bl_label = "Cyberpunk Modding Tools"
     bl_idname = "CP77_PT_ModTools"
@@ -561,12 +669,16 @@ classes = (
     CP77StreamingSectorImport,
     CP77GLBExport,
     ShowMessageBox,
+    CP77IOSuitePreferences,
     CP77_PT_ModTools,
     #CP77_PT_AnimsPanel,
-    CP77IOSuitePreferences,
-    CP77_PT_CollisionTools,
     CP77CollisionExport,
     CP77CollisionGenerator,
+    CP77_PT_CollisionTools,
+    CP77HairProfileExport,
+    CP77MlSetupExport,
+    CP77_PT_MeshTools,
+    CollectionAppearancePanel,
 )
 
 def register():
@@ -578,6 +690,8 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
         
+    bpy.types.Scene.cp77_collision_tools_panel_props = bpy.props.PointerProperty(type=CP77_PT_CollisionToolsPanelProps)   
+    bpy.types.Scene.selected_armature = bpy.props.EnumProperty(items=CP77ArmatureList)  
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export) 
     
@@ -587,8 +701,9 @@ def unregister():
     #kwekmaster - Minor Refactoring 
     for cls in classes:
         bpy.utils.unregister_class(cls)
-    
-    bpy.types.Scene.cp77_collision_tools_panel_props = bpy.props.PointerProperty(type=CP77_PT_CollisionToolsPanelProps)         
+        del bpy.types.Scene.cp77_collision_tools_panel_props
+        del bpy.types.Scene.selected_armature
+      
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
                 
