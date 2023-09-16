@@ -35,6 +35,54 @@ from .main.common import json_ver_validate
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
 
+
+class CP77IOSuitePreferences(bpy.types.AddonPreferences):
+    bl_idname = __name__
+
+    experimental_features: bpy.props.BoolProperty(
+    name= "Enable Experimental Features",
+    description="Experimental Features for Mod Developers, may encounter bugs",
+    default=False,
+    )
+    
+ ## toggle the mod tools tab and its sub panels - default True
+    show_modtools: bpy.props.BoolProperty(
+    name= "Show the Mod Tools Panel",
+    description="Show the Mod tools Tab in the 3d viewport",
+    default=True,
+    )
+
+    show_meshtools: bpy.props.BoolProperty(
+    name= "Show the Mesh Tools Panel",
+    description="Show the mesh tools panel",
+    default=True,
+    )
+
+    show_collisiontools: bpy.props.BoolProperty(
+    name= "Show the Collision Tools Panel",
+    description="Show the Collision tools panel",
+    default=True,
+    )
+
+    show_animtools: bpy.props.BoolProperty(
+    name= "Show the Animation Tools Panel",
+    description="Show the anim tools panel",
+    default=True,
+    )
+
+
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, "experimental_features")
+        layout.prop(self, "show_modtools")
+        if self.show_modtools:
+            layout.use_property_split = True
+            layout.prop(self, "show_meshtools")
+            layout.prop(self, "show_collisiontools")
+            layout.prop(self, "show_animtools")
+        #addon_updater_ops.update_settings_ui(self,context)
+
+
 def SetCyclesRenderer(set_gi_params=False):
     # set the render engine for all scenes to Cycles
     for scene in bpy.data.scenes:
@@ -488,7 +536,7 @@ classes = (
     ShowMessageBox,
     CP77_PT_ModTools,
     #CP77_PT_AnimsPanel,
-    #CP77_PT_rigview,
+    CP77IOSuitePreferences,
     CP77_PT_CollisionTools,
     CP77CollisionExport
 )
