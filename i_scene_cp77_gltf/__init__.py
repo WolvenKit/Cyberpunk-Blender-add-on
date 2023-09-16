@@ -29,7 +29,10 @@ from .main.entity_import import *
 from .main.attribute_import import manage_garment_support
 from .main.sector_import import *
 from bpy_extras.io_utils import ExportHelper
-from .main.exporters import *
+from .exporters.glb_export import *
+from .exporters.hp_export import *
+from .exporters.collision_export import *
+from .exporters.mlsetup_export import *
 from .main.common import json_ver_validate
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
