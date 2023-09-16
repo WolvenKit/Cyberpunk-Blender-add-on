@@ -148,14 +148,29 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
 
     else:
         for x,app_name in enumerate(appearances):
-            # Put each appearance in a collector with the ent name and app name
-            ent_coll=bpy.data.collections.new(ent_name+'_'+app_name)
+            ent_coll = bpy.data.collections.new(ent_name)
             # tag it with some custom properties.
-            ent_coll['appearanceName']=app_name
             ent_coll['depotPath']=ent_name
             #link it to the scene
             coll_scene.children.link(ent_coll)
-                  
+
+            enum_items = []
+            default_index = None 
+
+            for idx, variant in enumerate(ent_applist):
+                enum_items.append((str(idx), variant, f"appearanceName {idx + 1}"))
+                if variant == app_name:  # Check if the variant matches the passed app_name
+                    default_index = str(idx)  # Set the default index if found
+
+            if default_index is None:
+                default_index = '0'
+
+            bpy.types.Collection.appearanceName = bpy.props.EnumProperty(
+                name="Ent Appearances",
+                items=enum_items,
+                default=default_index,
+            )
+
             comps=[]
             
             if len(ent_apps)>0:
@@ -498,7 +513,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                 #else:
                                 except:
                                     print("Failed on ",c['mesh']['DepotPath']['$value'])
-        print('Exported' ,app_name)
+    print('Exported' ,app_name)
      
               # find the .phys file jsons
     if include_collisions:
@@ -592,7 +607,23 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                             elif colliderType == "physicsColliderCapsule":
                                 radius = i['Data']['radius']
                                 height = i['Data']['height']
-                                bpy.ops.mesh.primitive_cylinder_add(radius=radius, depth=height, location=(0, 0, 0))
+                                s_height = 2 * radius
+                                c_height = height - s_height
+                                bpy.ops.mesh.primitive_cylinder_add(radius=radius, depth=c_height, location=(0, 0, 0))
+                                cylinder  = bpy.context.object
+                                bpy.ops.mesh.primitive_uv_sphere_add(radius=radius, location=(0, 0, (c_height/2)))
+                                sphere0  = bpy.context.object
+                                bpy.ops.mesh.primitive_uv_sphere_add(radius=radius, location=(0, 0, -(c_height/2)))
+                                sphere1  = bpy.context.object
+                                # Convert spheres to meshes
+                                bpy.context.view_layer.objects.active = sphere0
+                                bpy.ops.object.convert(target='MESH')
+                                bpy.context.view_layer.objects.active = sphere1
+                                bpy.ops.object.convert(target='MESH')
+
+                                # Join the cylinder and spheres
+                                bpy.context.view_layer.objects.active = cylinder
+                                bpy.ops.object.join()
                                 capsule = bpy.context.object
                                 capsule['collisionShape'] = colliderType
                                 capsule['colliderResource'] = physJsonPath  
