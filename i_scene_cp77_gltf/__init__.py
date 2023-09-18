@@ -34,6 +34,7 @@ from .exporters.hp_export import *
 from .exporters.collision_export import *
 from .exporters.mlsetup_export import *
 from .main.common import json_ver_validate
+from .main.collisions import *
 from .main.animtools import play_anim 
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
@@ -167,7 +168,7 @@ class CP77_PT_CollisionToolsPanelProps(bpy.types.PropertyGroup):
     
     
 class CP77_PT_CollisionTools(bpy.types.Panel):
-    bl_parent_id = "CP77_PT_modtools"
+    bl_parent_id = "CP77_PT_ModTools"
     bl_label = "Collision Tools"
     bl_idname = "CP77_PT_collisions"
     bl_space_type = "VIEW_3D"
@@ -241,7 +242,7 @@ class CP77Animset(bpy.types.Operator):
 
 ### Draw a panel within the modtools tree to store anims functions
 class CP77_PT_AnimsPanel(bpy.types.Panel):
-    bl_parent_id = "CP77_PT_modtools"
+    bl_parent_id = "CP77_PT_ModTools"
     bl_idname = "CP77_PT_animspanel"
     bl_space_type = "VIEW_3D"
     bl_label = "Animation Tools"
@@ -373,7 +374,7 @@ def CP77ArmatureList(self, context):
 
 
 class CP77_PT_MeshTools(bpy.types.Panel):
-    bl_parent_id = "CP77_PT_modtools"
+    bl_parent_id = "CP77_PT_ModTools"
     bl_label = "Mesh Tools"
     bl_idname = "CP77_PT_MeshTools"
     bl_space_type = "VIEW_3D"
@@ -771,18 +772,21 @@ classes = (
     CP77StreamingSectorImport,
     CP77GLBExport,
     ShowMessageBox,
-    CP77IOSuitePreferences,
     CP77_PT_ModTools,
     CP77_PT_AnimsPanel,
-    CP77Animset,
-    CP77AnimsDelete,
+    CP77_PT_CollisionTools,
     CP77CollisionExport,
     CP77CollisionGenerator,
-    CP77_PT_CollisionTools,
-    CP77HairProfileExport,
-    CP77MlSetupExport,
-    CP77_PT_MeshTools,
+    CP77Animset,
+    CP77AnimsDelete,
+    CP77IOSuitePreferences,
     CollectionAppearancePanel,
+    CP77HairProfileExport,
+    CP77_PT_MeshTools,
+#    CP77MassExport,
+    CP77SetArmature,
+    CP77_PT_CollisionToolsPanelProps,
+    CP77MlSetupExport,
 )
 
 def register():
