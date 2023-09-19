@@ -49,7 +49,7 @@ The Cyberpunk Blender add-on is designed to fully automate the shader setup for 
 
 ## Entity Import
 
-1) Convert the ent file to json and export all the meshes used using WolvenKit, a wscript to automate this is available on Discord in the #wolvenkit-scripts channel.
+1) Convert the ent file to json and export all the meshes used using WolvenKit, a wscript to automate this is available in wolvenkit under Tools -> Script Manager.
 
 2) Navigate within Blender to **File \ Import \ Cyberpunk Entity** and select the exported json file. You can enter the appearance you want in the import options, this requires the appearanceName from the entity appearances info. Enter ALL for all appearances.
 
