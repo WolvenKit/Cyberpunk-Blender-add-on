@@ -43,7 +43,7 @@ custom_icon_col = {}
 
 class CP77IOSuitePreferences(bpy.types.AddonPreferences):
     bl_idname = __name__
-
+    
     experimental_features: bpy.props.BoolProperty(
     name= "Enable Experimental Features",
     description="Experimental Features for Mod Developers, may encounter bugs",
@@ -75,17 +75,19 @@ class CP77IOSuitePreferences(bpy.types.AddonPreferences):
     default=True,
     )
 
-
-    def draw(self, context):
-        layout = self.layout
-        layout.prop(self, "experimental_features")
-        layout.prop(self, "show_modtools")
+    def draw(self, context):           
+        layout = self.layout                    
+        box = layout.box()
+        row = box.row()
+        row.prop(self, "experimental_features")
+        row.prop(self, "show_modtools")                    
+        
         if self.show_modtools:
-            layout.use_property_split = True
-            layout.prop(self, "show_meshtools")
-            layout.prop(self, "show_collisiontools")
-            layout.prop(self, "show_animtools")
-        #addon_updater_ops.update_settings_ui(self,context)
+            box = layout.box()
+            row = box.row(align=True)
+            row.prop(self, "show_meshtools")
+            row.prop(self, "show_collisiontools")
+            row.prop(self, "show_animtools")
 
 
 def SetCyclesRenderer(set_gi_params=False):
