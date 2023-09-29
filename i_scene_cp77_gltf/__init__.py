@@ -190,9 +190,25 @@ class CP77_PT_CollisionTools(bpy.types.Panel):
                 row.prop(props, "sampleverts", text="")
                 layout.operator("generate_cp77.collisions")
 
+
+def CP77AnimsList(self, context):
+    for action in bpy.data.actions:
+        if action.library:
+            continue
+        yield action
+        
+
+class CP77_PT_AnimsProps(bpy.types.PropertyGroup):
+        
+    frameall: BoolProperty(
+        name="All Frames",
+        default=False,
+        description="Insert a keyframe on every frame of the active action"
+        )
+    
+
 ### allow deleting animations from the animset panel, regardless of editor context
 class CP77AnimsDelete(bpy.types.Operator):
-
     bl_idname = 'cp77.delete_anims'
     bl_label = "Delete an action from the animslist"
     bl_options = {'INTERNAL', 'UNDO'}
@@ -204,20 +220,12 @@ class CP77AnimsDelete(bpy.types.Operator):
         return context.active_object and context.active_object.animation_data
 
     def execute(self, context):
-        obj = context.active_object
-        action = bpy.data.actions.get(self.name, None)
-        if not action:
-            return {'CANCELLED'}
+        delete_anim(self, context)
 
-        bpy.data.actions.remove(action)
 
-        return {'FINISHED'}
-    
-
-## this class is where most of the function is so far - play/pause 
-## Todo: fix renaming actions from here
+# this class is where most of the function is so far - play/pause 
+# Todo: fix renaming actions from here
 class CP77Animset(bpy.types.Operator):
-
     bl_idname = 'cp77.set_animset'
     bl_label = "Available Animsets"
     bl_options = {'INTERNAL', 'UNDO'}
@@ -237,15 +245,52 @@ class CP77Animset(bpy.types.Operator):
                 # Pass the animation name to the play_anim function
                 play_anim(self, context, self.name)
             return {'FINISHED'}
+        
+        
+# inserts a keyframe on the current frame
+class CP77Keyframe(bpy.types.Operator):
+    bl_idname = "insert_keyframe.cp77"
+    bl_parent_id = "CP77_PT_animspanel"
+    bl_label = "Keyframe Pose"
+    bl_description = "Insert a Keyframe"
 
-### Draw a panel within the modtools tree to store anims functions
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        props = context.scene.cp77_anims_panel_props
+        cp77_keyframe(props, context, props.frameall)
+        return {"FINISHED"}
+    
+    def draw(self, context):
+        layout = self.layout
+        props = context.scene.cp77_anims_panel_props
+        box = layout.box()
+        box.prop(props, props.frameall, context)
+
+    
+class CP77ResetArmature(bpy.types.Operator):
+    bl_idname = "reset_armature.cp77"
+    bl_parent_id = "CP77_PT_animspanel"
+    bl_label = "Reset Pose"
+    bl_description = "Clear all transforms on current selected armature"
+
+    def draw(self, context):
+        layout = self.layout
+
+    def execute(self, context):
+        reset_armature(self, context)
+        return {"FINISHED"}
+
+
+### Draw a panel to store anims functions
 class CP77_PT_AnimsPanel(bpy.types.Panel):
-    bl_parent_id = "CP77_PT_ModTools"
     bl_idname = "CP77_PT_animspanel"
-    bl_space_type = "VIEW_3D"
     bl_label = "Animation Tools"
-    bl_region_type = "UI"
     bl_category = "CP77 Modding"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_options = {'DEFAULT_CLOSED'}
 
     name: bpy.props.StringProperty(options={'HIDDEN'})
 
@@ -262,23 +307,26 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
 
         if cp77_addon_prefs.show_animtools:
             if bpy.context.mode in {'OBJECT', 'POSE', 'EDIT_ARMATURE'}:
-                obj = bpy.context.active_object
+                obj = context.active_object
                 if obj and obj.type == 'ARMATURE':
-                    available_anims = bpy.data.actions
+                    available_anims = list(CP77AnimsList(context,obj))
+                    row = layout.row()
+                    row.operator('insert_keyframe.cp77')
                     active_action = obj.animation_data.action if obj.animation_data else None
-
                     box = layout.box()
                     row = box.row(align=True)
                     row.label(text='Animsets', icon_value=custom_icon_col["import"]['WKIT'].icon_id)
+                    row.operator('reset_armature.cp77')
                     if available_anims:
                         col = box.column(align=True)
                         for action in available_anims:
+                            action.use_fake_user:True
                             selected = action == active_action
                             row = col.row(align=True)
                             sub = row.column(align=True)
                             sub.ui_units_x = 1.0
                             if selected and context.screen.is_animation_playing:
-                                op = sub.operator('screen.animation_cancel', icon='PAUSE', text="", emboss=False)
+                                op = sub.operator('screen.animation_cancel', icon='PAUSE', text=action.name, emboss=False)
                                 op.restore_frame = False
                             else:
                                 icon = 'PLAY' if selected else 'TRIA_RIGHT'
