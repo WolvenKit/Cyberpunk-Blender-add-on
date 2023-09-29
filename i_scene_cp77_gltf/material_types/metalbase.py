@@ -3,10 +3,12 @@ import os
 from ..main.common import *
 
 class MetalBase:
-    def __init__(self, BasePath,image_format, ProjPath):
+    def __init__(self, BasePath,image_format, ProjPath, enableMask):
         self.BasePath = BasePath
         self.ProjPath = ProjPath
+        self.enableMask = enableMask
         self.image_format = image_format
+
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes['Principled BSDF']
@@ -89,7 +91,7 @@ class MetalBase:
 
         #Setup a value node for the enableMask flag that turns off the alpha when 0 (false) and on when 1
         EnableMask = create_node(CurMat.nodes,"ShaderNodeValue",(-800., -800.), label="EnableMask")
-        EnableMask.outputs[0].default_value=1
+        EnableMask.outputs[0].default_value=int(self.enableMask)
 
         Math = create_node(CurMat.nodes,"ShaderNodeMath",(-500., -750.), operation='SUBTRACT', label="Math")
         Math.inputs[0].default_value=1

@@ -58,7 +58,7 @@ class DecalGradientmapRecolor:
             if diffAsMask:
                 #CurMat.links.new(diff_image_node.outputs[0],mulNode1.inputs[1])
                 
-                alpha_ramp = create_node(CurMat.nodes," ShaderNodeValToRGB", (-400,-350),label='MaskRamp')
+                alpha_ramp = create_node(CurMat.nodes,"ShaderNodeValToRGB", (-400,-350),label='MaskRamp')
                 alpha_ramp.color_ramp.elements[0].position=0.004
                 CurMat.links.new(diff_image_node.outputs[0],alpha_ramp.inputs[0])
                 CurMat.links.new(alpha_ramp.outputs[0],pBSDF.inputs['Alpha'])

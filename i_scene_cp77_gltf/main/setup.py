@@ -67,7 +67,11 @@ class MaterialBuilder:
                     vehicleDestrBlendshape.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal.mt":
-                    meshDecal = MeshDecal(self.BasePath, self.image_format, self.ProjPath)
+                    if 'EnableMask' in rawMat.keys():
+                        enableMask=rawMat['EnableMask']
+                    else:
+                        enableMask=False
+                    meshDecal = MeshDecal(self.BasePath, self.image_format, self.ProjPath,enableMask)
                     meshDecal.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal_double_diffuse.mt":
@@ -75,7 +79,11 @@ class MaterialBuilder:
                     meshDecalDoubleDiffuse.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\vehicle_mesh_decal.mt" :
-                    vehicleMeshDecal = VehicleMeshDecal(self.BasePath, self.image_format, self.ProjPath)
+                    if 'EnableMask' in rawMat.keys():
+                        enableMask=rawMat['EnableMask']
+                    else:
+                        enableMask=False
+                    vehicleMeshDecal = VehicleMeshDecal(self.BasePath, self.image_format, self.ProjPath, enableMask)
                     vehicleMeshDecal.create(rawMat["Data"],bpyMat)
                 
                 case "base\\materials\\vehicle_lights.mt":
@@ -87,7 +95,11 @@ class MaterialBuilder:
                     skin.create(rawMat["Data"],bpyMat)
 
                 case "engine\\materials\\metal_base.remt" | "engine\\materials\\metal_base_proxy.mt":
-                    metalBase = MetalBase(self.BasePath,self.image_format, self.ProjPath)
+                    if 'EnableMask' in rawMat.keys():
+                        enableMask=rawMat['EnableMask']
+                    else:
+                        enableMask=False
+                    metalBase = MetalBase(self.BasePath,self.image_format, self.ProjPath, enableMask)
                     metalBase.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\hair.mt":

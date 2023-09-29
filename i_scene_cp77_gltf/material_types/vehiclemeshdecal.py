@@ -3,9 +3,10 @@ import os
 from ..main.common import *
 
 class VehicleMeshDecal:
-    def __init__(self, BasePath,image_format, ProjPath):
+    def __init__(self, BasePath,image_format, ProjPath, enableMask):
         self.BasePath = BasePath
         self.ProjPath = ProjPath
+        self.enableMask = enableMask
         self.image_format = image_format
 
     def create(self,Data,Mat):
@@ -21,7 +22,7 @@ class VehicleMeshDecal:
             dcolImg=imageFromRelPath(Data["DiffuseTexture"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
             dImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,-500), label="DiffuseTexture", image=dcolImg)
             
-            if "enableMask" in Data and Data["enableMask"==True]:
+            if self.enableMask:
                 CurMat.links.new(dImgNode.outputs[1],mulNode.inputs[1])
                 CurMat.links.new(mulNode.outputs[0],pBSDF.inputs['Alpha'])
             else:
