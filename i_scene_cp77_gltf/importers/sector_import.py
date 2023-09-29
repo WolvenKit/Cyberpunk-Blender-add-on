@@ -23,7 +23,7 @@ from mathutils import Vector, Matrix , Quaternion
 from pathlib import Path
 import time
 from pprint import pprint 
-from .setup import MaterialBuilder
+from ..main.setup import MaterialBuilder
 
 
 
