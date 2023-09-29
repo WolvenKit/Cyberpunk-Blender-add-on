@@ -165,11 +165,12 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
             if default_index is None:
                 default_index = '0'
 
-            bpy.types.Collection.appearanceName = bpy.props.EnumProperty(
-                name="Ent Appearances",
-                items=enum_items,
-                default=default_index,
-            )
+            if len(enum_items)>0:
+                bpy.types.Collection.appearanceName = bpy.props.EnumProperty(
+                    name="Ent Appearances",
+                    items=enum_items,
+                    default=default_index,
+                )
 
             comps=[]
             
