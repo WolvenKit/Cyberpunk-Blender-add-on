@@ -1,0 +1,23 @@
+{
+    "Header": {
+      "WolvenKitVersion": "8.9.1-nightly.2023-09-05",
+      "WKitJsonVersion": "0.0.8",
+      "GameVersion": 1630,
+      "ExportedDateTime": "2023-09-07T02:18:09.7844253Z",
+      "DataType": "CR2W"
+    },
+    "Data": {
+      "Version": 195,
+      "BuildVersion": 0,
+      "RootChunk": {
+        "$type": "CHairProfile",
+        "cookingPlatform": "PLATFORM_PC",
+        "gradientEntriesID": [
+        ],
+        "gradientEntriesRootToTip": [
+        ],
+        "sampleCount": 127
+      },
+      "EmbeddedFiles": []
+    }
+  }
