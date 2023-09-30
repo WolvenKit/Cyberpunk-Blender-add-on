@@ -25,7 +25,7 @@ class Multilayered:
         NG.outputs.new('NodeSocketColor','Color')
         NG.outputs.new('NodeSocketColor','Metalness')
         NG.outputs.new('NodeSocketColor','Roughness')
-        NG.outputs.new('NodeSocketVector','Normal')
+        NG.outputs.new('NodeSocketColor','Normal')
     
         CTN = create_node( NG.nodes, "ShaderNodeTexImage",(0,0),image = CT)
     
