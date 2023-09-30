@@ -107,7 +107,7 @@ class MaterialBuilder:
                     hair.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal_gradientmap_recolor.mt":
-                    meshDecalGradientMapReColor = MeshDecalGradientMapReColor(self.BasePath,self.image_format)
+                    meshDecalGradientMapReColor = MeshDecalGradientMapReColor(self.BasePath,self.image_format, self.ProjPath)
                     meshDecalGradientMapReColor.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\eye.mt":
