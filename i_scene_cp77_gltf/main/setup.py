@@ -10,6 +10,7 @@ from ..material_types.meshdecaldoublediffuse import MeshDecalDoubleDiffuse
 from ..material_types.vehiclemeshdecal import VehicleMeshDecal
 from ..material_types.vehiclelights import VehicleLights
 from ..material_types.metalbase import MetalBase
+from ..material_types.metalbasedet import MetalBaseDet
 from ..material_types.hair import Hair
 from ..material_types.meshdecalgradientmaprecolor import MeshDecalGradientMapReColor
 from ..material_types.eye import Eye
@@ -90,12 +91,16 @@ class MaterialBuilder:
                     metalBase = MetalBase(self.BasePath,self.image_format, self.ProjPath)
                     metalBase.create(rawMat["Data"],bpyMat)
 
+                case "base\\materials\\metal_base_det.mt":
+                    metalBaseDet = MetalBaseDet(self.BasePath,self.image_format, self.ProjPath)
+                    metalBaseDet.create(rawMat["Data"],bpyMat)
+
                 case "base\\materials\\hair.mt":
                     hair = Hair(self.BasePath,self.image_format, self.ProjPath)
                     hair.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal_gradientmap_recolor.mt":
-                    meshDecalGradientMapReColor = MeshDecalGradientMapReColor(self.BasePath,self.image_format)
+                    meshDecalGradientMapReColor = MeshDecalGradientMapReColor(self.BasePath,self.image_format, self.ProjPath)
                     meshDecalGradientMapReColor.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\eye.mt":
