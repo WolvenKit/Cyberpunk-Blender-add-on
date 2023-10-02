@@ -175,14 +175,20 @@ class Multilayered:
             NG.links.new(RoughMixN.outputs[0],GroupOutN.inputs[2])
             NG.links.new(MetalMixN.outputs[0],GroupOutN.inputs[1])
         
-        CurMat.links.new(CurMat.nodes["Layer_"+str(LayerCount-2)].outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
+        if LayerCount>1:
+            targetLayer="Layer_"+str(LayerCount-2)
+        else:
+            targetLayer="Mat_Mod_Layer_0"
+
+        CurMat.links.new(CurMat.nodes[targetLayer].outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
         if normalimgpath:
-            yoink = self.setGlobNormal(normalimgpath,CurMat,CurMat.nodes["Layer_"+str(LayerCount-2)].outputs[3])
+            yoink = self.setGlobNormal(normalimgpath,CurMat,CurMat.nodes[targetLayer].outputs[3])
             CurMat.links.new(yoink,CurMat.nodes['Principled BSDF'].inputs['Normal'])
         else:
-            CurMat.links.new(CurMat.nodes["Layer_"+str(LayerCount-2)].outputs[3],CurMat.nodes['Principled BSDF'].inputs['Normal'])
-        CurMat.links.new(CurMat.nodes["Layer_"+str(LayerCount-2)].outputs[2],CurMat.nodes['Principled BSDF'].inputs['Roughness'])
-        CurMat.links.new(CurMat.nodes["Layer_"+str(LayerCount-2)].outputs[1],CurMat.nodes['Principled BSDF'].inputs['Metallic'])
+            CurMat.links.new(CurMat.nodes[targetLayer].outputs[3],CurMat.nodes['Principled BSDF'].inputs['Normal'])
+        CurMat.links.new(CurMat.nodes[targetLayer].outputs[2],CurMat.nodes['Principled BSDF'].inputs['Roughness'])
+        CurMat.links.new(CurMat.nodes[targetLayer].outputs[1],CurMat.nodes['Principled BSDF'].inputs['Metallic'])
+
         return
 
 
