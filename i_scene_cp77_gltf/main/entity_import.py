@@ -60,7 +60,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
         resolved.append(os.path.join(path,res_p['DepotPath']['$value']))
         
     # if no apps requested populate the list with all available.
-    if len(appearances[0])==0:
+    if len(appearances[0])==0 or appearances[0]=='ALL':
+        appearances=[]
         for app in ent_apps:
             appearances.append(app['appearanceName']['$value'])
 

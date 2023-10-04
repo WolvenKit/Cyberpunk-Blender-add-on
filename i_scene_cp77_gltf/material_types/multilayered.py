@@ -342,7 +342,7 @@ class Multilayered:
             else:
                 LayerGroupN.inputs[4].default_value = 1
             
-            if normalStrength != None:
+            if normalStrength != None and normalStrength in OverrideTable["NormalStrength"]:
                 LayerGroupN.inputs[5].default_value = OverrideTable["NormalStrength"][normalStrength]
             else:
                 LayerGroupN.inputs[5].default_value = 1
