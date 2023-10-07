@@ -21,6 +21,7 @@ class DecalGradientmapRecolor:
 
     def create(self,Data,Mat):
         masktex=''
+        difftex=''
         diffAsMask = 0
 
         for i in range(len(Data["values"])):

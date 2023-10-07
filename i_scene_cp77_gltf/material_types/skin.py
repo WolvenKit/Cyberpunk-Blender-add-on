@@ -26,7 +26,7 @@ class Skin:
 #Albedo/a
         mixRGB = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-200,300), blend_type = 'MULTIPLY')
 
-        if "Albedo" in Data:
+        if "Albedo" in Data: # should always be param has a value in the skin.mt
             aImg=imageFromRelPath(Data["Albedo"],DepotPath=self.BasePath, ProjPath=self.ProjPath)
             aImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-1400,550), label="Albedo", image=aImg)
             CurMat.links.new(aImgNode.outputs[0],pBSDF.inputs['Base Color'])
@@ -36,7 +36,7 @@ class Skin:
             tColor = CreateShaderNodeRGB(CurMat, Data["TintColor"],-1550,610,"TintColor")
             CurMat.links.new(tColor.outputs[0],mixRGB.inputs[2])
         
-        if "TintColorMask" in Data:
+        if "TintColorMask" in Data: # should always be param has a value in the skin.mt
             tImg=imageFromRelPath(Data["TintColorMask"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
             tmaskNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-1840,680), label="TintColorMask", image=tImg)
             CurMat.links.new(tmaskNode.outputs[0],mixRGB.inputs[0])
@@ -59,20 +59,24 @@ class Skin:
         CurMat.links.new(tmaskNode.outputs['Color'], SeparateColor.inputs[0])
         CurMat.links.new(SeparateColor.outputs['Green'], Mix001.inputs[0])
         CurMat.links.new(Mix003.outputs[2], Mix001.inputs[6])
-        CurMat.links.new(tColor.outputs['Color'], Mix001.inputs[7])
+        
         CurMat.links.new(SeparateColor.outputs['Blue'], Mix002.inputs[0])
         CurMat.links.new(Mix001.outputs[2], Mix002.inputs[6])
-        CurMat.links.new(tColor.outputs['Color'], Mix002.inputs[7])
         CurMat.links.new(SeparateColor.outputs['Red'], Mix003.inputs[0])
         CurMat.links.new(aImgNode.outputs['Color'], Mix003.inputs[6])
-        CurMat.links.new(tColor.outputs['Color'], Mix003.inputs[7])
         CurMat.links.new(tintScale.outputs['Value'], Mix.inputs[0])
-        CurMat.links.new(aImgNode.outputs['Color'], Mix.inputs[7])
-        CurMat.links.new(Mix002.outputs[2], Mix.inputs[6])
-
+        CurMat.links.new(aImgNode.outputs['Color'], Mix.inputs[6])
+        CurMat.links.new(Mix002.outputs[2], Mix.inputs[7])
         CurMat.links.new(Mix.outputs[2],pBSDF.inputs['Base Color'])
 
-#ROUGHNES+MASK/rm
+        if "TintColor" in Data:
+            CurMat.links.new(tColor.outputs['Color'], Mix001.inputs[7])
+            CurMat.links.new(tColor.outputs['Color'], Mix002.inputs[7])        
+            CurMat.links.new(tColor.outputs['Color'], Mix003.inputs[7])
+
+
+
+#ROUGHNESS+MASK/rm
 
         if "Roughness" in Data:
             rImg=imageFromRelPath(Data["Roughness"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
