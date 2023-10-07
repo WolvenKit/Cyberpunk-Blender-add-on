@@ -25,6 +25,8 @@ import time
 from pprint import pprint 
 from .setup import MaterialBuilder
 
+scale_factor=1
+
 
 
 
@@ -60,27 +62,27 @@ def get_pos(inst):
     pos=[0,0,0]
     if 'Position' in inst.keys():
         if 'Properties' in inst['Position'].keys():
-            pos[0] = inst['Position']['Properties']['X'] /100
-            pos[1] = inst['Position']['Properties']['Y'] /100
-            pos[2] = inst['Position']['Properties']['Z'] /100          
+            pos[0] = inst['Position']['Properties']['X'] /scale_factor
+            pos[1] = inst['Position']['Properties']['Y'] /scale_factor
+            pos[2] = inst['Position']['Properties']['Z'] /scale_factor          
         else:
             if 'X' in inst['Position'].keys():
-                pos[0] = inst['Position']['X'] /100
-                pos[1] = inst['Position']['Y'] /100
-                pos[2] = inst['Position']['Z'] /100
+                pos[0] = inst['Position']['X'] /scale_factor
+                pos[1] = inst['Position']['Y'] /scale_factor
+                pos[2] = inst['Position']['Z'] /scale_factor
             else:
-                pos[0] = inst['Position']['x'] /100
-                pos[1] = inst['Position']['y'] /100
-                pos[2] = inst['Position']['z'] /100
+                pos[0] = inst['Position']['x'] /scale_factor
+                pos[1] = inst['Position']['y'] /scale_factor
+                pos[2] = inst['Position']['z'] /scale_factor
     elif 'position' in inst.keys():
         if 'X' in inst['position'].keys():
-                pos[0] = inst['position']['X'] /100
-                pos[1] = inst['position']['Y'] /100
-                pos[2] = inst['position']['Z'] /100
+                pos[0] = inst['position']['X'] /scale_factor
+                pos[1] = inst['position']['Y'] /scale_factor
+                pos[2] = inst['position']['Z'] /scale_factor
     elif 'translation' in inst.keys():
-        pos[0] = inst['translation']['X'] /100
-        pos[1] = inst['translation']['Y'] /100
-        pos[2] = inst['translation']['Z'] /100
+        pos[0] = inst['translation']['X'] /scale_factor
+        pos[1] = inst['translation']['Y'] /scale_factor
+        pos[2] = inst['translation']['Z'] /scale_factor
     return pos
 
 def get_rot(inst):
@@ -117,17 +119,17 @@ def get_scale(inst):
     scale=[0,0,0]
     if 'Scale' in inst.keys():
         if 'Properties' in inst['Scale'].keys():
-            scale[0] = inst['Scale']['Properties']['X'] /100
-            scale[1] = inst['Scale']['Properties']['Y'] /100
-            scale[2] = inst['Scale']['Properties']['Z'] /100
+            scale[0] = inst['Scale']['Properties']['X'] /scale_factor
+            scale[1] = inst['Scale']['Properties']['Y'] /scale_factor
+            scale[2] = inst['Scale']['Properties']['Z'] /scale_factor
         else:
-            scale[0] = inst['Scale']['X'] /100
-            scale[1] = inst['Scale']['Y'] /100
-            scale[2] = inst['Scale']['Z'] /100
+            scale[0] = inst['Scale']['X'] /scale_factor
+            scale[1] = inst['Scale']['Y'] /scale_factor
+            scale[2] = inst['Scale']['Z'] /scale_factor
     elif 'scale' in inst.keys():
-        scale[0] = inst['scale']['X'] /100
-        scale[1] = inst['scale']['Y'] /100
-        scale[2] = inst['scale']['Z'] /100
+        scale[0] = inst['scale']['X'] /scale_factor
+        scale[1] = inst['scale']['Y'] /scale_factor
+        scale[2] = inst['scale']['Z'] /scale_factor
     return scale
 
 def importSectors( filepath='', want_collisions=False, am_modding=False, with_materials=True ):
@@ -136,7 +138,15 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
     print('path is ',path)
     # If your importing to edit the sectors and want to add stuff then set the am_modding to True and it will auto create the _new collectors
     # want_collisions when True will import/generate the box and capsule collisions
- 
+    
+    if scale_factor==1:
+        # Set the view clip to 10000 so you can actually see the models were imported (used to scale down by 100)
+        for a in bpy.context.screen.areas:
+            if a.type == 'VIEW_3D':
+                for s in a.spaces:
+                    if s.type == 'VIEW_3D':
+                        s.clip_end = 50000
+
     jsonpath = glob.glob(path+"\**\*.streamingsector.json", recursive = True)
     
     meshes=[]
@@ -287,7 +297,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                             print('Importing ',entpath, ' using app ',app)
                             bpy.ops.io_scene_gltf.cp77entity(filepath=entpath, appearances=app,with_materials=with_materials)
                             objs = C.selected_objects
-                            move_coll= coll_scene.children.get( ent_groupname )
+                            move_coll= coll_scene.children.get( objs[0].users_collection[0].name )
                             Masters.children.link(move_coll) 
                             coll_scene.children.unlink(move_coll)
                             imported=True
@@ -481,7 +491,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 if obj.location.x == 0:
                                                     print('Mesh - ',meshname, ' - ',i,'HandleId - ', e['HandleId'])      
                                                 curse=bpy.context.scene.cursor.location
-                                                bpy.context.scene.cursor.location=Vector((inst['Pivot']['X'] /100,inst['Pivot']['Y'] /100,inst['Pivot']['Z'] /100))
+                                                bpy.context.scene.cursor.location=Vector((inst['Pivot']['X'] /scale_factor,inst['Pivot']['Y'] /scale_factor,inst['Pivot']['Z'] /scale_factor))
                                                 with bpy.context.temp_override(selected_editable_objects=obj):
                                                     bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
                                             
@@ -622,9 +632,9 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                         Actors=e['Data']['compiledData']['Data']['Actors']
                         for idx,act in enumerate(Actors):
                             #print(len(act['Shapes']))
-                            x=act['Position']['x']['Bits']/13107200  # this has /100 built in
-                            y=act['Position']['y']['Bits']/13107200
-                            z=act['Position']['z']['Bits']/13107200
+                            x=act['Position']['x']['Bits']/131072*scale_factor  
+                            y=act['Position']['y']['Bits']/131072*scale_factor
+                            z=act['Position']['z']['Bits']/131072*scale_factor
                             arot=get_rot(act)
                             for s,shape in enumerate(act['Shapes']):
                                 if shape['ShapeType']=='Box':
@@ -637,7 +647,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     srot_q = Quaternion((srot[0],srot[1],srot[2],srot[3]))
                                     rot= arot_q @ srot_q
                                     loc=(spos[0]+x,spos[1]+y,spos[2]+z)
-                                    bpy.ops.mesh.primitive_cube_add(size=.01, scale=(ssize['X'],ssize['Y'],ssize['Z']),location=loc)
+                                    bpy.ops.mesh.primitive_cube_add(size=1/scale_factor, scale=(ssize['X'],ssize['Y'],ssize['Z']),location=loc)
                                     cube=C.selected_objects[0]
                                     sector_Collisions_coll.objects.link(cube)
                                     cube['nodeIndex']=i
@@ -655,7 +665,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     srot_q = Quaternion((srot[0],srot[1],srot[2],srot[3]))
                                     rot= arot_q @ srot_q
                                     loc=(spos[0]+x,spos[1]+y,spos[2]+z)
-                                    bpy.ops.mesh.primitive_cylinder_add(radius=.005, depth=0.01, scale=(ssize['X'],ssize['Y'],ssize['Z']),location=loc)
+                                    bpy.ops.mesh.primitive_cylinder_add(radius=5/scale_factor, depth=1/scale_factor, scale=(ssize['X'],ssize['Y'],ssize['Z']),location=loc)
                                     capsule=C.selected_objects[0]
                                     sector_Collisions_coll.objects.link(capsule)
                                     capsule['nodeIndex']=i
