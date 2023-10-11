@@ -105,31 +105,101 @@ def SetCyclesRenderer(set_gi_params=False):
         cycles.ao_bounces = 1
         cycles.ao_bounces_render = 1
 
+class CP77_PT_CollisionToolsPanelProps(bpy.types.PropertyGroup):
+    collider_type: bpy.props.EnumProperty(
+        name="Collision Type",
+        items=[
+        ('VEHICLE', "Vehicle Collision", "Generate .phys formatted collisions for a vehicle mod"),
+        ('ENTITY', "Entity Collision", "Generate entCollisionComponents"),
+        ],
+        default='VEHICLE'
+    ) 
+
+    collision_shape: bpy.props.EnumProperty(
+        name="Collision Shape",
+        items=[
+        ('CONVEX', "Convex Collider", "Generate a Convex Collider"),
+        ('BOX', "Box Collider", "Generate a Box Collider"),
+        ('CAPSULE', "Capsule Collider", "Generate a Capsule Collider")
+        ],
+        default='CONVEX'
+    )
+
+    matchSize: bpy.props.BoolProperty(        
+        name="Match the Shape of Existing Mesh",
+        description="Match the size of the selected Mesh",
+        default=True,
+
+    )
+
+    radius: bpy.props.FloatProperty(
+        name="Radius",
+        description="Enter the Radius value of the capsule",
+        default=0,
+        min=0,
+        max=100,
+        step=1,
+    )
+
+    height: bpy.props.FloatProperty(
+        name="height",
+        description="Enter the height of the capsule",
+        default=0,
+        min=0,
+        max=1000,
+        step=1,
+    )
+
+    sampleverts: bpy.props.IntProperty(
+        name="Vertices to Sample",
+        description="This is the number of vertices in your new collider",
+        default=0,
+        min=0,
+        max=100,
+    )
+
+
 class CP77CollisionGenerator(bpy.types.Operator):
     bl_idname = "generate_cp77.collisions"
-    bl_parent_id = "CP77_PT_collisions"
-    bl_label = "Generate Convex Collider"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_category = "CP77 Modding"
-    bl_options = {'REGISTER'}
+    bl_label = "Generate Collider"
+    bl_options = {'REGISTER', "UNDO"}
 
-    def draw(self, context):
-        layout = self.layout
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
         props = context.scene.cp77_collision_tools_panel_props
-        CP77CollisionGen(context, props.sampleverts)
+        CP77CollisionGen(self, context,props.matchSize, props.collision_shape, props.sampleverts, props.radius, props.height)
         return {"FINISHED"}
+    
+    def draw(self, context):
+        props = context.scene.cp77_collision_tools_panel_props
+        layout = self.layout
+        row = layout.row(align=True)
+        split = row.split(factor=0.5,align=True)
+        split.label(text="Collision Shape:")
+        split.prop(props, 'collision_shape', text="")
+        row = layout.row(align=True)
+        
+        if props.collision_shape == 'CONVEX':
+            row.label(text="Vertices to Sample:")
+            row.prop(props,"sampleverts", text="")
 
+        if props.collision_shape == 'CAPSULE':
+            row.prop(props, "matchSize", text="Match the size of the selected mesh")
+            if not props.matchSize:
+                row = layout.row(align=True)
+                row.label(text="Radius:")
+                row.prop(props, "radius", text="")
+                row.label(text="Height:")
+                row.prop(props, "height", text="")
+            
 
 class CP77CollisionExport(bpy.types.Operator):
     bl_idname = "export_scene.collisions"
     bl_label = "Export Collisions to .JSON"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_category = "CP77 Modding"
     bl_parent_id = "CP77_PT_collisions"
+    bl_description = "Export these collisions to .phys.json"
 
     filepath: bpy.props.StringProperty(subtype="FILE_PATH")
   
@@ -141,37 +211,14 @@ class CP77CollisionExport(bpy.types.Operator):
         context.window_manager.fileselect_add(self)
         return {"RUNNING_MODAL"}
 
-    def draw(self, context):
-        layout = self.layout
 
-
-class CP77_PT_CollisionToolsPanelProps(bpy.types.PropertyGroup):
-    
-    collider_type: bpy.props.EnumProperty(
-        name="Collider Type",
-        items=[
-            ('CONVEX', "Convex Collider", "Generate a Convex Collider"),
-            ('BOX', "Box Collider", "Generate a Box Collider"),
-            ('CAPSULE', "Capsule Collider", "Generate a Capsule Collider")
-        ],
-        default='CONVEX'
-    )
-    
-    sampleverts: bpy.props.StringProperty(
-        name="Vertices to Sample",
-        description="This is the number of vertices in your new collider",
-        default="100",
-        maxlen=3 
-    )
-    
-    
 class CP77_PT_CollisionTools(bpy.types.Panel):
-    bl_parent_id = "CP77_PT_ModTools"
     bl_label = "Collision Tools"
     bl_idname = "CP77_PT_collisions"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "CP77 Modding"
+    bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
@@ -179,16 +226,14 @@ class CP77_PT_CollisionTools(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        props = context.scene.cp77_collision_tools_panel_props
         cp77_addon_prefs = context.preferences.addons[__name__].preferences
 
-        if cp77_addon_prefs.show_collisiontools:
-            layout.operator("export_scene.collisions")
-            if context.mode == 'EDIT_MESH':
-                row = layout.row()
-                row.label(text="Vertices to Sample:")
-                row.prop(props, "sampleverts", text="")
-                layout.operator("generate_cp77.collisions")
+        if cp77_addon_prefs.show_modtools:
+            if cp77_addon_prefs.show_collisiontools:
+                box = layout.box()
+                if context.mode == 'EDIT_MESH':
+                    box.operator("generate_cp77.collisions")
+                box.operator("export_scene.collisions")
 
 
 def CP77AnimsList(self, context):
