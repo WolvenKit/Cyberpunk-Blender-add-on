@@ -475,30 +475,45 @@ class CollectionAppearancePanel(bpy.types.Panel):
         layout.prop(collection, "appearanceName")
 
 
+class CP77WeightTransfer(bpy.types.Operator):
+    bl_idname = 'cp77.trans_weights'
+    bl_label = "Transfer weights from one mesh to another"
+    bl_description = "Transfer weights from source mesh to target mesh"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        # Call the trans_weights function with the provided arguments
+        result = trans_weights(self, context)
+        return {"FINISHED"}
+
+
+class CP77UVTool(bpy.types.Operator):
+    bl_idname = 'cp77.uv_checker'
+    bl_label = "UV Checker"
+    bl_description = "Apply a texture to assist with UV coordinate mapping"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        CP77UvChecker(self, context)
+        return {"FINISHED"}
+        
+        
 class CP77HairProfileExport(bpy.types.Operator):
     bl_idname = "export_scene.hp"
     bl_label = "Export Hair Profile"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_category = "CP77 Modding"
+    bl_description ="Generates a new .hp.json in your mod project folder which can be imported in Wolvenkit"
     bl_parent_id = "CP77_PT_MeshTools"
 
     filepath: bpy.props.StringProperty(subtype="FILE_PATH")
-  
+
     def execute(self, context):
         cp77_hp_export(self.filepath)
         return {"FINISHED"}
-
-    def draw(self, context):
-        layout = self.layout
 
 
 class CP77MlSetupExport(bpy.types.Operator):
     bl_idname = "export_scene.mlsetup"
     bl_label = "Export MLSetup"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_category = "CP77 Modding"
     bl_parent_id = "CP77_PT_MeshTools"
 
     filepath: bpy.props.StringProperty(subtype="FILE_PATH")
@@ -507,13 +522,11 @@ class CP77MlSetupExport(bpy.types.Operator):
         cp77_mlsetup_export(self, context)
         return {"FINISHED"}
 
-    def draw(self, context):
-        layout = self.layout
-
 
 class CP77SetArmature(bpy.types.Operator):
     bl_idname = "cp77.set_armature"
     bl_label = "Change Armature Target"
+    bl_parent_id = "CP77_PT_MeshTools"
     
     def execute(self, context):
         target_armature_name = context.scene.selected_armature
@@ -525,23 +538,26 @@ class CP77SetArmature(bpy.types.Operator):
                         if modifier.type == 'ARMATURE':
                             modifier.object = target_armature
             return {'FINISHED'}
-    
-    
-def CP77ArmatureList(self, context):
-    items = []
-    for obj in bpy.data.objects:
-        if obj.type == 'ARMATURE':
-            items.append((obj.name, obj.name, ""))
-    return items
+
+
+class CP77GroupVerts(bpy.types.Operator):
+    bl_idname = "cp77.group_verts"
+    bl_parent_id = "CP77_PT_MeshTools"
+    bl_label = "Assign to Nearest Group"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        CP77GroupUngroupedVerts(self, context)
+        return {'FINISHED'}
 
 
 class CP77_PT_MeshTools(bpy.types.Panel):
-    bl_parent_id = "CP77_PT_ModTools"
     bl_label = "Mesh Tools"
     bl_idname = "CP77_PT_MeshTools"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "CP77 Modding"
+    bl_options = {'DEFAULT_CLOSED'}
    
     @classmethod
     def poll(cls, context):
@@ -549,32 +565,41 @@ class CP77_PT_MeshTools(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-
         cp77_addon_prefs = context.preferences.addons[__name__].preferences
-
-        if cp77_addon_prefs.show_meshtools:
-            row = layout.row()
-            row.label(text="Target Armature:")
-            row.prop(context.scene, "selected_armature", text="")
-            layout.operator("cp77.set_armature", text="Change Armature Targets")
-            layout.label(text="Material Exporters", icon="MATERIAL")
-            box = layout.box()
-            box.operator("export_scene.hp")
-            if context.preferences.addons[__name__].preferences.experimental_features:
-                box.operator("export_scene.mlsetup")
+        if cp77_addon_prefs.show_modtools:
+            if cp77_addon_prefs.show_meshtools:
+                box = layout.box()
+                box.label(text="Mesh Cleanup", icon_value=custom_icon_col["trauma"]["TRAUMA"].icon_id)
+                row = box.row(align=True)
+                row.operator("cp77.group_verts", text="Group Ungrouped Verts")
+                row = box.row(align=True)
+                box.operator("cp77.uv_checker", text="UV Checker")
+                box = layout.box()
+                box.label(icon_value=custom_icon_col["sculpt"]["SCULPT"].icon_id, text="Modelling:")
+                row = box.row(align=True)
+                split = row.split(factor=0.5,align=True)
+                split.label(text="Source Mesh:")
+                split.prop(context.scene, "mesh_source", text="")
+                row = box.row(align=True)
+                split = row.split(factor=0.5,align=True)
+                split.label(text="Target Mesh:")
+                split.prop(context.scene, "mesh_target", text="")
+                row = box.row(align=True)
+                box.operator("cp77.trans_weights", text="Transfer Vertex Weights")
+                box = layout.box()
+                box.label(icon_value=custom_icon_col["tech"]["TECH"].icon_id, text="Modifiers:")
+                row = box.row(align=True)
+                split = row.split(factor=0.35,align=True)
+                split.label(text="Target:")
+                split.prop(context.scene, "selected_armature", text="")
+                row = box.row(align=True)
+                row.operator("cp77.set_armature", text="Change Armature Target")
+                box = layout.box()
+                box.label(text="Material Export", icon="MATERIAL")
+                box.operator("export_scene.hp")
+                if context.preferences.addons[__name__].preferences.experimental_features:
+                    box.operator("export_scene.mlsetup")
         
-
-class CP77_PT_ModTools(bpy.types.Panel):
-    bl_label = "Cyberpunk Modding Tools"
-    bl_idname = "CP77_PT_ModTools"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_options = {"DEFAULT_CLOSED"}
-    bl_category = "CP77 Modding"
-
-    def draw(self, context):
-        layout = self.layout
-
 
 ## adds a message box for the exporters to use for error notifications, will also be used later for redmod integration    
 class ShowMessageBox(bpy.types.Operator):
