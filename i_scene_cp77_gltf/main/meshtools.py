@@ -1,6 +1,6 @@
 import bpy
 import math
-
+import os
 
 def find_nearest_vertex_group(obj, vertex):
     min_distance = math.inf
@@ -58,3 +58,56 @@ def trans_weights(self, context):
 
             source_obj.select_set(False)
             target_obj.select_set(False)
+
+
+def CP77UvChecker(self, context):
+    existing_material = bpy.data.materials.get("UV_Checker")
+    if existing_material is not None:
+        uvchecker = existing_material
+    else:
+        plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        resources_dir = os.path.join(plugin_dir, "resources")
+        image_path = os.path.join(resources_dir, "uvchecker.png")
+        # Load the image texture
+        image = bpy.data.images.load(image_path)
+        # Create a new material if it doesn't exist
+        uvchecker = bpy.data.materials.new(name="UV_Checker")
+        uvchecker.use_nodes = True
+        # Create a new texture node
+        texture_node = uvchecker.node_tree.nodes.new(type='ShaderNodeTexImage')
+        texture_node.location = (-200, 0)
+        texture_node.image = image
+        # Connect the texture node to the shader node
+        shader_node = uvchecker.node_tree.nodes["Principled BSDF"]
+        uvchecker.node_tree.links.new(texture_node.outputs['Color'], shader_node.inputs['Base Color'])
+    # Apply the material to selected objects without replacing existing materials
+    selected_objects = context.selected_objects
+    for obj in selected_objects:
+        if obj.type == 'MESH':
+            if len(obj.material_slots) == 0:
+                obj.data.materials.append(uvchecker)
+            else:
+                obj.material_slots[0].material = uvchecker  # Use the first material slot
+    # Update the UI to reflect the changes
+    bpy.context.view_layer.update()
+    return {'FINISHED'}
+
+# def cp77riglist(context):
+#     cp77rigs = []
+#     plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+#     resources_dir = os.path.join(plugin_dir, "resources")
+    
+#     man_base = os.path.join(resources_dir, "man_base_full.glb")
+#     woman_base = os.path.join(resources_dir, "woman_base_full.glb")
+#     man_big = os.path.join(resources_dir, "man_big_full.glb")
+#     man_fat = os.path.join(resources_dir, "man_fat_full.glb")
+#     Rhino = os.path.join(resources_dir, "rhino_full.glb")
+#     Judy = os.path.join(resources_dir, "Judy_full.glb")
+#     Panam = os.path.join(resources_dir, "Panam_full.glb")
+    
+#     cp77rigs.append(man_base)
+#     cp77rigs.append(woman_base)
+#     cp77rigs.append(man_big)
+#     cp77rigs.append(man_fat)
+#     cp77rigs.append(Rhino)
+#     return cp77rigs
