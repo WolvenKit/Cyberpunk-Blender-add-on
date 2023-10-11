@@ -12,94 +12,67 @@ class DecalGradientmapRecolor:
         self.image_format = image_format
  
     def found(self,tex):
-        result = os.path.exists(os.path.join(self.BasePath, tex))
+        result = os.path.exists(os.path.join(self.BasePath, tex)[:-3]+ self.image_format)
         if not result:
-            result = os.path.exists(os.path.join(self.ProjPath, tex))
+            result = os.path.exists(os.path.join(self.ProjPath, tex)[:-3]+ self.image_format)
             if not result:
                 print(f"Texture not found: {tex}")
         return result
 
     def create(self,Data,Mat):
         masktex=''
+        difftex=''
         diffAsMask = 0
 
         for i in range(len(Data["values"])):
             for value in Data["values"][i]:
                 #print(value)
                 if value == "DiffuseTexture":
-                    difftex = Data["values"][i]["DiffuseTexture"]["DepotPath"]['$value'][:-3]+self.image_format
+                    difftex = Data["values"][i]["DiffuseTexture"]["DepotPath"]['$value']
                    # print(f"Diffuse Texture path is:  {difftex}")
                 if value == "GradientMap":
-                    gradmap = Data["values"][i]["GradientMap"]["DepotPath"]['$value'][:-3]+self.image_format
+                    gradmap = Data["values"][i]["GradientMap"]["DepotPath"]['$value']
                 if value == "MaskTexture":
-                    masktex = Data["values"][i]["MaskTexture"]["DepotPath"]['$value'][:-3]+self.image_format
+                    masktex = Data["values"][i]["MaskTexture"]["DepotPath"]['$value']
                 if value == "DiffuseTextureAsMaskTexture":
                     diffAsMask = Data["values"][i]["DiffuseTextureAsMaskTexture"]
 
         CurMat = Mat.node_tree
-        Prin_BSDF=CurMat.nodes['Principled BSDF']
+        pBSDF=CurMat.nodes['Principled BSDF']
 
         if self.found(difftex) and self.found(gradmap):
-            diffImg = imageFromRelPath(Data["DiffuseTexture"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            diffImg = imageFromRelPath(difftex,self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
             diff_image_node = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,-300), label="DiffuseTexture", image=diffImg)
             diff_image_node.image.colorspace_settings.name = 'Linear'
-            gradImg = imageFromRelPath(Data["GradientMap"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            gradImg = imageFromRelPath(gradmap,self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
             grad_image_node = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,0), label="GradientMap", image=gradImg)
             
             
-            # Get image dimensions
-            image_width = grad_image_node.image.size[0]
-            
-            # Calculate stop positions
-            stop_positions = [i / (image_width) for i in range(image_width)]
-            print(len(stop_positions))
-            row_index = 0
-            # Get colors from the row
-            colors = []
-            for x in range(image_width):
-                pixel_data = grad_image_node.image.pixels[(row_index * image_width + x) * 4: (row_index * image_width + x) * 4 + 3]
-                color = Color()
-                color.r, color.g, color.b = pixel_data
-                colors.append(color)
-                # Create ColorRamp node
-            color_ramp_node = CurMat.nodes.new('ShaderNodeValToRGB')
-            color_ramp_node.location = (-400, 250)
-            print(len(colors))
-            step=1
-            if len(colors)>32:
-                step=math.ceil(len(colors)/32)
-            # Set the stops
-            color_ramp_node.color_ramp.elements.remove(color_ramp_node.color_ramp.elements[1])
-            for i, color in enumerate(colors):
-                if i%step==0:
-                    if i>0:
-                        element = color_ramp_node.color_ramp.elements.new(i / (len(colors) ))
-                    else:
-                        element = color_ramp_node.color_ramp.elements[0]
-                    element.color = (color.r, color.g, color.b, 1.0)
-                    element.position = stop_positions[i]
-                
-            color_ramp_node.color_ramp.interpolation = 'CONSTANT' 
+            color_ramp_node=CreateGradMapRamp(CurMat, grad_image_node)
 
             CurMat.links.new(diff_image_node.outputs[0], color_ramp_node.inputs[0])
-            CurMat.links.new(color_ramp_node.outputs[0], Prin_BSDF.inputs['Base Color'])
+            CurMat.links.new(color_ramp_node.outputs[0], pBSDF.inputs['Base Color'])
 
             #if 'alpha' in Data.keys():
              #   mulNode1.inputs[0].default_value = float(Data["alpha"])
 
             if diffAsMask:
                 #CurMat.links.new(diff_image_node.outputs[0],mulNode1.inputs[1])
-                CurMat.links.new(diff_image_node.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
-                #CurMat.links.new(dImgNode.outputs[1],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
+                
+                alpha_ramp = create_node(CurMat.nodes,"ShaderNodeValToRGB", (-400,-350),label='MaskRamp')
+                alpha_ramp.color_ramp.elements[0].position=0.004
+                CurMat.links.new(diff_image_node.outputs[0],alpha_ramp.inputs[0])
+                CurMat.links.new(alpha_ramp.outputs[0],pBSDF.inputs['Alpha'])
+                #CurMat.links.new(dImgNode.outputs[1],pBSDF.inputs['Alpha'])
             else:
                 if self.found(masktex):
-                    maskImg = imageFromRelPath(Data["MaskTexture"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+                    maskImg = imageFromRelPath(masktex,self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
                     mask_image_node = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,-100), label="MaskTexture", image=maskImg)
-                    CurMat.links.new(mask_image_node.outputs[0], Prin_BSDF.inputs['Alpha'])
+                    CurMat.links.new(mask_image_node.outputs[0], pBSDF.inputs['Alpha'])
                 else:
-                    CurMat.links.new(diff_image_node.outputs[1], Prin_BSDF.inputs['Alpha'])
+                    CurMat.links.new(diff_image_node.outputs[1], pBSDF.inputs['Alpha'])
         else:
-            Prin_BSDF.inputs['Alpha'].default_value = 0
+            pBSDF.inputs['Alpha'].default_value = 0
 
 
 # The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
@@ -111,16 +84,17 @@ if __name__ == "__main__":
     from common import *
     import os
     import json
-    filepath="F:\\CPmod\\bottles\\source\\raw\\base\\surfaces\\textures\\decals\\graffiti\\tyger_claws\\tyger_claws_07.mi.json"
+    filepath="F:\\CPmod\\deleteme4\\source\\raw\\base\\surfaces\\textures\\decals\\graffiti\\tyger_claws\\tyger_claws_08.mi.json"
     fileBasePath = os.path.splitext(filepath)[0]
     file = open(filepath,mode='r')
     obj = json.loads(file.read())
-    BasePath = "F:\\CPmod\\bottles\\source\\raw"
+    BasePath = "F:\\MaterialDepots\\source\\raw"
+    ProjPath = "F:\\CPmod\\deleteme4\\source\\raw\\"
 
     bpyMat = bpy.data.materials.new("TestMat")
     bpyMat.use_nodes = True
     bpyMat.blend_method='HASHED'
     rawMat=obj["Data"]["RootChunk"]
-    vehicleLights = DecalGradientmapRecolor(BasePath,"png")
+    vehicleLights = DecalGradientmapRecolor(BasePath,"png",ProjPath)
     vehicleLights.create(rawMat,bpyMat)
 
