@@ -92,22 +92,22 @@ def CP77UvChecker(self, context):
     bpy.context.view_layer.update()
     return {'FINISHED'}
 
-# def cp77riglist(context):
-#     cp77rigs = []
-#     plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-#     resources_dir = os.path.join(plugin_dir, "resources")
+def cp77riglist(context):
+    cp77rigs = []
+    plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    resources_dir = os.path.join(plugin_dir, "resources")
     
-#     man_base = os.path.join(resources_dir, "man_base_full.glb")
-#     woman_base = os.path.join(resources_dir, "woman_base_full.glb")
-#     man_big = os.path.join(resources_dir, "man_big_full.glb")
-#     man_fat = os.path.join(resources_dir, "man_fat_full.glb")
-#     Rhino = os.path.join(resources_dir, "rhino_full.glb")
-#     Judy = os.path.join(resources_dir, "Judy_full.glb")
-#     Panam = os.path.join(resources_dir, "Panam_full.glb")
+    man_base = os.path.join(resources_dir, "man_base_full.glb")
+    woman_base = os.path.join(resources_dir, "woman_base_full.glb")
+    man_big = os.path.join(resources_dir, "man_big_full.glb")
+    man_fat = os.path.join(resources_dir, "man_fat_full.glb")
+    Rhino = os.path.join(resources_dir, "rhino_full.glb")
+    Judy = os.path.join(resources_dir, "Judy_full.glb")
+    Panam = os.path.join(resources_dir, "Panam_full.glb")
     
-#     cp77rigs.append(man_base)
-#     cp77rigs.append(woman_base)
-#     cp77rigs.append(man_big)
-#     cp77rigs.append(man_fat)
-#     cp77rigs.append(Rhino)
-#     return cp77rigs
+    # Store the variable names in a list
+    cp77rigs = [man_base, woman_base, man_big, man_fat, Rhino, Judy, Panam]
+    cp77rig_names = ['man_base', 'woman_base', 'man_big', 'man_fat', 'Rhino', 'Judy', 'Panam']
+    
+    # Return the list of variable names
+    return cp77rigs, cp77rig_names
