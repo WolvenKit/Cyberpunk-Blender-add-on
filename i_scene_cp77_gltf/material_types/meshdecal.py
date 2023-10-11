@@ -3,9 +3,10 @@ import os
 from ..main.common import *
 
 class MeshDecal:
-    def __init__(self, BasePath,image_format, ProjPath):
+    def __init__(self, BasePath,image_format, ProjPath, enableMask):
         self.BasePath = BasePath
         self.ProjPath = ProjPath
+        self.enableMask = enableMask
         self.img_format = image_format
 
     def create(self,Data,Mat):

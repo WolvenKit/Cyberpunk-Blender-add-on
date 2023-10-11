@@ -3,10 +3,12 @@ import os
 from ..main.common import *
 
 class MetalBase:
-    def __init__(self, BasePath,image_format, ProjPath):
+    def __init__(self, BasePath,image_format, ProjPath, enableMask):
         self.BasePath = BasePath
         self.ProjPath = ProjPath
+        self.enableMask = enableMask
         self.image_format = image_format
+
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes['Principled BSDF']
@@ -24,7 +26,7 @@ class MetalBase:
             CurMat.links.new(dColScale.outputs[0],mixRGB.inputs[1])    
 
         if "Metalness" in Data:
-            mImg=imageFromRelPath(Data["Metalness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            mImg=imageFromRelPath(Data["Metalness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
             metNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,-550), label="Metalness", image=mImg)
             CurMat.links.new(metNode.outputs[0],pBSDF.inputs['Metallic'])
 
@@ -35,7 +37,7 @@ class MetalBase:
             mBias = CreateShaderNodeValue(CurMat,Data["MetalnessBias"],-1000, -200,"MetalnessBias")
 
         if "Roughness" in Data:
-            rImg=imageFromRelPath(Data["Roughness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            rImg=imageFromRelPath(Data["Roughness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
             rNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,-650), label="Roughness", image=rImg)
             CurMat.links.new(rNode.outputs[0],pBSDF.inputs['Roughness'])
             invr = create_node(CurMat.nodes,"ShaderNodeInvert",(-280., 90.))
@@ -89,7 +91,7 @@ class MetalBase:
 
         #Setup a value node for the enableMask flag that turns off the alpha when 0 (false) and on when 1
         EnableMask = create_node(CurMat.nodes,"ShaderNodeValue",(-800., -800.), label="EnableMask")
-        EnableMask.outputs[0].default_value=1
+        EnableMask.outputs[0].default_value=int(self.enableMask)
 
         Math = create_node(CurMat.nodes,"ShaderNodeMath",(-500., -750.), operation='SUBTRACT', label="Math")
         Math.inputs[0].default_value=1

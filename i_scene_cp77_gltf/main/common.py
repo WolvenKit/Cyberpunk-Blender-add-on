@@ -1,6 +1,8 @@
 
 import bpy
 import os
+import math
+from mathutils import Color
 import pkg_resources
 
 def json_ver_validate( json_data):
@@ -366,3 +368,39 @@ def createParallaxGroup():
         CurMat.links.new(VectorMath001.outputs['Value'], CombineXYZ.inputs[0])
         CurMat.links.new(VectorMath002.outputs['Value'], CombineXYZ.inputs[1])
         return CurMat
+
+def CreateGradMapRamp(CurMat, grad_image_node, location=(-400, 250)):
+    # Get image dimensions
+    image_width = grad_image_node.image.size[0]
+    
+    # Calculate stop positions
+    stop_positions = [i / (image_width) for i in range(image_width)]
+    print(len(stop_positions))
+    row_index = 0
+    # Get colors from the row
+    colors = []
+    for x in range(image_width):
+        pixel_data = grad_image_node.image.pixels[(row_index * image_width + x) * 4: (row_index * image_width + x) * 4 + 3]
+        color = Color()
+        color.r, color.g, color.b = pixel_data
+        colors.append(color)
+        # Create ColorRamp node
+    color_ramp_node = CurMat.nodes.new('ShaderNodeValToRGB')
+    color_ramp_node.location = location
+    print(len(colors))
+    step=1
+    if len(colors)>32:
+        step=math.ceil(len(colors)/32)
+    # Set the stops
+    color_ramp_node.color_ramp.elements.remove(color_ramp_node.color_ramp.elements[1])
+    for i, color in enumerate(colors):
+        if i%step==0:
+            if i>0:
+                element = color_ramp_node.color_ramp.elements.new(i / (len(colors) ))
+            else:
+                element = color_ramp_node.color_ramp.elements[0]
+            element.color = (color.r, color.g, color.b, 1.0)
+            element.position = stop_positions[i]
+        
+    color_ramp_node.color_ramp.interpolation = 'CONSTANT' 
+    return color_ramp_node

@@ -94,16 +94,16 @@ class Multilayered:
         NG.inputs.new('NodeSocketColor','Color A')
         NG.inputs.new('NodeSocketColor','Metalness A')
         NG.inputs.new('NodeSocketColor','Roughness A')
-        NG.inputs.new('NodeSocketColor','Normal A')
+        NG.inputs.new('NodeSocketVector','Normal A')
         NG.inputs.new('NodeSocketColor','Color B')
         NG.inputs.new('NodeSocketColor','Metalness B')
         NG.inputs.new('NodeSocketColor','Roughness B')
-        NG.inputs.new('NodeSocketColor','Normal B')
+        NG.inputs.new('NodeSocketVector','Normal B')
         NG.inputs.new('NodeSocketColor','Mask')
         NG.outputs.new('NodeSocketColor','Color')
         NG.outputs.new('NodeSocketColor','Metalness')
         NG.outputs.new('NodeSocketColor','Roughness')
-        NG.outputs.new('NodeSocketColor','Normal')
+        NG.outputs.new('NodeSocketVector','Normal')
         GroupInN = create_node(NG.nodes,"NodeGroupInput", (-700,0), hide=False)
     
         GroupOutN = create_node(NG.nodes,"NodeGroupOutput",(200,0))
@@ -114,7 +114,10 @@ class Multilayered:
     
         RoughMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-300,0), label = "Rough Mix")
     
-        NormalMixN = create_node(NG.nodes,"ShaderNodeMixRGB",(-300,-50), label = "Normal Mix")
+        NormalMixN = create_node(NG.nodes,"ShaderNodeMix",(-300,-50), label = "Normal Mix")
+        NormalMixN.data_type='VECTOR'
+        NormalMixN.clamp_factor=False
+
         for x in range(LayerCount-1):
             if os.path.exists(os.path.splitext(self.ProjPath + mlmaskpath)[0]+'_layers\\'+mlmaskpath.split('\\')[-1:][0][:-7]+"_"+str(x+1)+".png"):
                 MaskTexture = imageFromPath(os.path.splitext(self.ProjPath+ mlmaskpath)[0]+'_layers\\'+mlmaskpath.split('\\')[-1:][0][:-7]+"_"+str(x+1)+".png",self.image_format,isNormal = True)
@@ -157,29 +160,35 @@ class Multilayered:
             NG.links.new(GroupInN.outputs[0],ColorMixN.inputs[1])
             NG.links.new(GroupInN.outputs[1],MetalMixN.inputs[1])
             NG.links.new(GroupInN.outputs[2],RoughMixN.inputs[1])
-            NG.links.new(GroupInN.outputs[3],NormalMixN.inputs[1])
+            NG.links.new(GroupInN.outputs['Normal A'],NormalMixN.inputs[4])
             NG.links.new(GroupInN.outputs[4],ColorMixN.inputs[2])
             NG.links.new(GroupInN.outputs[5],MetalMixN.inputs[2])
             NG.links.new(GroupInN.outputs[6],RoughMixN.inputs[2])
-            NG.links.new(GroupInN.outputs[7],NormalMixN.inputs[2])
+            NG.links.new(GroupInN.outputs['Normal B'],NormalMixN.inputs[5])
             NG.links.new(GroupInN.outputs[8],ColorMixN.inputs[0])
-            NG.links.new(GroupInN.outputs[8],NormalMixN.inputs[0])
+            NG.links.new(GroupInN.outputs['Mask'],NormalMixN.inputs['Factor'])
             NG.links.new(GroupInN.outputs[8],RoughMixN.inputs[0])
             NG.links.new(GroupInN.outputs[8],MetalMixN.inputs[0])
         
             NG.links.new(ColorMixN.outputs[0],GroupOutN.inputs[0])
-            NG.links.new(NormalMixN.outputs[0],GroupOutN.inputs[3])
+            NG.links.new(NormalMixN.outputs[1],GroupOutN.inputs[3])
             NG.links.new(RoughMixN.outputs[0],GroupOutN.inputs[2])
             NG.links.new(MetalMixN.outputs[0],GroupOutN.inputs[1])
         
-        CurMat.links.new(CurMat.nodes["Layer_"+str(LayerCount-2)].outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
+        if LayerCount>1:
+            targetLayer="Layer_"+str(LayerCount-2)
+        else:
+            targetLayer="Mat_Mod_Layer_0"
+
+        CurMat.links.new(CurMat.nodes[targetLayer].outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
         if normalimgpath:
-            yoink = self.setGlobNormal(normalimgpath,CurMat,CurMat.nodes["Layer_"+str(LayerCount-2)].outputs[3])
+            yoink = self.setGlobNormal(normalimgpath,CurMat,CurMat.nodes[targetLayer].outputs[3])
             CurMat.links.new(yoink,CurMat.nodes['Principled BSDF'].inputs['Normal'])
         else:
-            CurMat.links.new(CurMat.nodes["Layer_"+str(LayerCount-2)].outputs[3],CurMat.nodes['Principled BSDF'].inputs['Normal'])
-        CurMat.links.new(CurMat.nodes["Layer_"+str(LayerCount-2)].outputs[2],CurMat.nodes['Principled BSDF'].inputs['Roughness'])
-        CurMat.links.new(CurMat.nodes["Layer_"+str(LayerCount-2)].outputs[1],CurMat.nodes['Principled BSDF'].inputs['Metallic'])
+            CurMat.links.new(CurMat.nodes[targetLayer].outputs[3],CurMat.nodes['Principled BSDF'].inputs['Normal'])
+        CurMat.links.new(CurMat.nodes[targetLayer].outputs[2],CurMat.nodes['Principled BSDF'].inputs['Roughness'])
+        CurMat.links.new(CurMat.nodes[targetLayer].outputs[1],CurMat.nodes['Principled BSDF'].inputs['Metallic'])
+
         return
 
 
@@ -278,7 +287,7 @@ class Multilayered:
             NG.outputs.new('NodeSocketColor','Color')
             NG.outputs.new('NodeSocketColor','Metalness')
             NG.outputs.new('NodeSocketColor','Roughness')
-            NG.outputs.new('NodeSocketColor','Normal')
+            NG.outputs.new('NodeSocketVector','Normal')
             NG.outputs.new('NodeSocketColor','Layer Mask')
 
             NG.inputs[4].min_value = 0
@@ -333,7 +342,7 @@ class Multilayered:
             else:
                 LayerGroupN.inputs[4].default_value = 1
             
-            if normalStrength != None:
+            if normalStrength != None and normalStrength in OverrideTable["NormalStrength"]:
                 LayerGroupN.inputs[5].default_value = OverrideTable["NormalStrength"][normalStrength]
             else:
                 LayerGroupN.inputs[5].default_value = 1
