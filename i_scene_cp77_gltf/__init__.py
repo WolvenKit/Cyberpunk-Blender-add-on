@@ -475,6 +475,27 @@ class CollectionAppearancePanel(bpy.types.Panel):
         layout.prop(collection, "appearanceName")
 
 
+bpy.types.Scene.rig_glb = bpy.props.EnumProperty(
+    items=[(name, name, '') for name in cp77riglist(None)[1]],
+    name="Rig GLB"
+)
+
+class CP77RigLoader(bpy.types.Operator):
+    bl_idname = "cp77.rig_loader"
+    bl_label = "Load rigs from .glb"
+
+    def execute(self, context):
+        selected_rig_name = context.scene.rig_glb
+        rig_files, rig_names = cp77riglist(context)
+
+        if selected_rig_name in rig_names:
+            # Find the corresponding .glb file and load it
+            selected_rig = rig_files[rig_names.index(selected_rig_name)]
+            bpy.ops.import_scene.gltf(filepath=selected_rig)
+
+        return {'FINISHED'}
+
+
 class CP77WeightTransfer(bpy.types.Operator):
     bl_idname = 'cp77.trans_weights'
     bl_label = "Transfer weights from one mesh to another"
@@ -564,6 +585,7 @@ class CP77_PT_MeshTools(bpy.types.Panel):
         return context.active_object and context.active_object.type == 'MESH'
 
     def draw(self, context):
+        rig_files, rig_names = cp77riglist(context)
         layout = self.layout
         cp77_addon_prefs = context.preferences.addons[__name__].preferences
         if cp77_addon_prefs.show_modtools:
@@ -573,7 +595,7 @@ class CP77_PT_MeshTools(bpy.types.Panel):
                 row = box.row(align=True)
                 row.operator("cp77.group_verts", text="Group Ungrouped Verts")
                 row = box.row(align=True)
-                box.operator("cp77.uv_checker", text="UV Checker")
+                row.operator("cp77.uv_checker", text="UV Checker")
                 box = layout.box()
                 box.label(icon_value=custom_icon_col["sculpt"]["SCULPT"].icon_id, text="Modelling:")
                 row = box.row(align=True)
@@ -588,6 +610,12 @@ class CP77_PT_MeshTools(bpy.types.Panel):
                 box.operator("cp77.trans_weights", text="Transfer Vertex Weights")
                 box = layout.box()
                 box.label(icon_value=custom_icon_col["tech"]["TECH"].icon_id, text="Modifiers:")
+                row = box.row(align=True)
+                split = row.split(factor=0.375,align=True)
+                split.label(text="Animrig:")
+                split.prop(context.scene, "rig_glb", text="")
+                row = box.row(align=True)
+                row.operator("cp77.rig_loader", text="Load Rig")
                 row = box.row(align=True)
                 split = row.split(factor=0.35,align=True)
                 split.label(text="Target:")
@@ -836,6 +864,7 @@ classes = (
     CP77IOSuitePreferences,
     CollectionAppearancePanel,
     CP77HairProfileExport,
+    CP77RigLoader
     CP77_PT_MeshTools,
 #    CP77MassExport,
     CP77NewAction,
