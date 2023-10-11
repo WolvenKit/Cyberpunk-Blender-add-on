@@ -864,7 +864,7 @@ classes = (
     CP77IOSuitePreferences,
     CollectionAppearancePanel,
     CP77HairProfileExport,
-    CP77RigLoader
+    CP77RigLoader,
     CP77_PT_MeshTools,
 #    CP77MassExport,
     CP77NewAction,
