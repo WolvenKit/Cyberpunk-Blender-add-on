@@ -236,12 +236,29 @@ class CP77_PT_CollisionTools(bpy.types.Panel):
                 box.operator("export_scene.collisions")
 
 
+def CP77ArmatureList(self, context):
+    items = []
+    for obj in bpy.data.objects:
+        if obj.type == 'ARMATURE':
+            items.append((obj.name, obj.name, ""))
+    return items
+    
+
+
+def CP77MeshList(self, context):
+    items = []
+    for obj in bpy.data.objects:
+        if obj.type == 'MESH':
+            items.append((obj.name, obj.name, ""))
+    return items
+
+
 def CP77AnimsList(self, context):
     for action in bpy.data.actions:
         if action.library:
             continue
         yield action
-        
+
 
 class CP77_PT_AnimsProps(bpy.types.PropertyGroup):
         
@@ -250,13 +267,32 @@ class CP77_PT_AnimsProps(bpy.types.PropertyGroup):
         default=False,
         description="Insert a keyframe on every frame of the active action"
         )
+
+### idk how to get this working, it used to so if you're reading this blzficks
+class CP77Rename(bpy.types.Operator):
+    bl_idname = 'cp77.rename_anims'
+    bl_label = "rename an action in the animslist"
+    bl_options = {'INTERNAL', 'UNDO'}
     
+    name: bpy.props.StringProperty()
+   
+    def invoke(self, context, event):
+        ctrl = event.ctrl
+        shift = event.shift
+        if ctrl:
+            new_name = bpy.props.StringProperty()
+            return context.window_manager.invoke_props_dialog(self, width=200)
+
+                
+        return self.execute(context, event)
+
 
 ### allow deleting animations from the animset panel, regardless of editor context
 class CP77AnimsDelete(bpy.types.Operator):
     bl_idname = 'cp77.delete_anims'
-    bl_label = "Delete an action from the animslist"
+    bl_label = "Delete action"
     bl_options = {'INTERNAL', 'UNDO'}
+    bl_description = "Delete this action"
 
     name: bpy.props.StringProperty()
 
@@ -266,6 +302,7 @@ class CP77AnimsDelete(bpy.types.Operator):
 
     def execute(self, context):
         delete_anim(self, context)
+        return{'FINISHED'}
 
 
 # this class is where most of the function is so far - play/pause 
@@ -282,15 +319,19 @@ class CP77Animset(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         return context.active_object and context.active_object.animation_data
-    
+       
     def execute(self, context):
         obj = context.active_object
         if obj and obj.type == 'ARMATURE':
+            if self.new_name:
+                rename_anim(self, context, self.name)
             if self.play:
                 # Pass the animation name to the play_anim function
                 play_anim(self, context, self.name)
             return {'FINISHED'}
-        
+    
+    def draw(self, context):
+        self.layout = layout.row()
         
 # inserts a keyframe on the current frame
 class CP77Keyframe(bpy.types.Operator):
@@ -310,8 +351,10 @@ class CP77Keyframe(bpy.types.Operator):
     def draw(self, context):
         layout = self.layout
         props = context.scene.cp77_anims_panel_props
-        box = layout.box()
-        box.prop(props, props.frameall, context)
+        row = layout.row(align=True)
+        row.label(text="Insert a keyframe for every bone at every from of the animation")
+        row = layout.row(align=True)
+        row.prop(props, "frameall", text="")
 
     
 class CP77ResetArmature(bpy.types.Operator):
@@ -321,12 +364,39 @@ class CP77ResetArmature(bpy.types.Operator):
     bl_description = "Clear all transforms on current selected armature"
 
     def draw(self, context):
-        layout = self.layout
+        layout = self.layout.row()
 
     def execute(self, context):
         reset_armature(self, context)
         return {"FINISHED"}
 
+
+class CP77NewAction(bpy.types.Operator):
+
+    bl_idname = 'cp77.new_action'
+    bl_label = "Add Action"
+    bl_options = {'INTERNAL', 'UNDO'}
+
+    name: bpy.props.StringProperty(default="New action")
+
+    @classmethod
+    def poll(cls, context):
+        return context.active_object is not None
+
+    def execute(self, context):
+        obj = context.active_object
+
+        if not obj.animation_data:
+            obj.animation_data_create()
+        new_action = bpy.data.actions.new(self.name)
+        new_action.use_fake_user = True
+        reset_armature(obj, context)
+        obj.animation_data.action = new_action
+
+        return {'FINISHED'}
+    
+    def draw(self, context):
+        layout=self.layout
 
 ### Draw a panel to store anims functions
 class CP77_PT_AnimsPanel(bpy.types.Panel):
@@ -342,7 +412,6 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
     @classmethod
     def poll(cls, context):
         return context.active_object and context.active_object.type == 'ARMATURE'
-    
 
 ## make sure the context is unrestricted as possible, ensure there's an armature selected 
     def draw(self, context):
@@ -355,13 +424,15 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
                 obj = context.active_object
                 if obj and obj.type == 'ARMATURE':
                     available_anims = list(CP77AnimsList(context,obj))
-                    row = layout.row()
-                    row.operator('insert_keyframe.cp77')
                     active_action = obj.animation_data.action if obj.animation_data else None
                     box = layout.box()
                     row = box.row(align=True)
-                    row.label(text='Animsets', icon_value=custom_icon_col["import"]['WKIT'].icon_id)
                     row.operator('reset_armature.cp77')
+                    row = box.row(align=True)
+                    row.operator('insert_keyframe.cp77')
+                    row = box.row(align=True)
+                    row.label(text='Animsets', icon_value=custom_icon_col["import"]['WKIT'].icon_id)
+                    row.operator('cp77.new_action',icon='ADD', text="")
                     if available_anims:
                         col = box.column(align=True)
                         for action in available_anims:
@@ -371,11 +442,11 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
                             sub = row.column(align=True)
                             sub.ui_units_x = 1.0
                             if selected and context.screen.is_animation_playing:
-                                op = sub.operator('screen.animation_cancel', icon='PAUSE', text=action.name, emboss=False)
+                                op = sub.operator('screen.animation_cancel', icon='PAUSE', text=action.name, emboss=True)
                                 op.restore_frame = False
                             else:
                                 icon = 'PLAY' if selected else 'TRIA_RIGHT'
-                                op = sub.operator('cp77.set_animset', icon=icon, text="", emboss=False)
+                                op = sub.operator('cp77.set_animset', icon=icon, text="", emboss=True)
                                 op.name = action.name
                                 op.play = True
 
@@ -737,6 +808,9 @@ classes = (
     CP77CollisionGenerator,
     CP77Animset,
     CP77AnimsDelete,
+    CP77NewAction,
+    CP77_PT_AnimsProps,
+    CP77ResetArmature,
     CP77IOSuitePreferences,
     CollectionAppearancePanel,
     CP77HairProfileExport,
@@ -755,20 +829,22 @@ def register():
     #kwekmaster - Minor Refactoring 
     for cls in classes:
         bpy.utils.register_class(cls)
-        
+   
+    bpy.types.Scene.cp77_anims_panel_props = bpy.props.PointerProperty(type=CP77_PT_AnimsProps)   
     bpy.types.Scene.cp77_collision_tools_panel_props = bpy.props.PointerProperty(type=CP77_PT_CollisionToolsPanelProps)   
     bpy.types.Scene.selected_armature = bpy.props.EnumProperty(items=CP77ArmatureList)  
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export) 
     
 def unregister():
+    del bpy.types.Scene.cp77_collision_tools_panel_props
+    del bpy.types.Scene.cp77_anims_panel_props
+    del bpy.types.Scene.selected_armature
     bpy.utils.previews.remove(custom_icon_col["import"])
     
     #kwekmaster - Minor Refactoring 
     for cls in classes:
-        bpy.utils.unregister_class(cls)
-        del bpy.types.Scene.cp77_collision_tools_panel_props
-        del bpy.types.Scene.selected_armature
+        bpy.utils.unregister_class(cls)        
       
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)

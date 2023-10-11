@@ -31,9 +31,8 @@ def reset_armature(self, context):
 
     return {'FINISHED'}
 
-    return {'FINISHED'}
 
-def cp77_keyframe(self, context, frameall):
+def cp77_keyframe(self, context, frameall=False):
 
     ##Check the current context of the scene
     current_context = bpy.context.mode
@@ -44,12 +43,7 @@ def cp77_keyframe(self, context, frameall):
         bpy.ops.object.mode_set(mode='POSE')
 
     if not frameall:
-        # Select all bones in the armature
-        for bone in armature.pose_bones:
-            bone.bone_select = True
-            
-        # Insert a keyframe for the selected bones
-        bpy.ops.anim.keyframe_insert(type='BUILTIN_KSI_LocRot', confirm_success=True)
+        bpy.ops.anim.keyframe_insert_by_name(type="WholeCharacter")
         return {'FINISHED'}
     
     else:
@@ -59,14 +53,10 @@ def cp77_keyframe(self, context, frameall):
             bpy.context.view_layer.objects.active = armature
             bpy.ops.object.mode_set(mode='POSE')
 
-            # Select all bones in the armature
-            for bone in armature.pose.bones:
-                bone.bone_select = True
-
             # Insert a keyframe for each frame in the action
             for frame in range(int(action.frame_range[0]), int(action.frame_range[1]) + 1):
                 bpy.context.scene.frame_set(frame)
-                bpy.ops.anim.keyframe_insert(type='BUILTIN_KSI_LocRot', confirm_success=True)
+                bpy.ops.anim.keyframe_insert_by_name(type="WholeCharacter")
             bpy.ops.object.mode_set(current_context)
 
         return {'FINISHED'}
@@ -107,16 +97,8 @@ def rename_anim(self, context, event):
         return self.execute(context)
 
 def delete_anim(self, context):
-    if obj.type == 'ARMATURE':
-        obj = context.active_object 
-    else:
-        obj = None
     action = bpy.data.actions.get(self.name, None)
-
-    for obj in obj:
-        if not action:
-            return {'CANCELLED'}
-        else:
-            bpy.data.actions.remove(action)
-
-        return {'FINISHED'}
+    if not action:
+        return {'CANCELLED'}
+    else:
+        bpy.data.actions.remove(action)
