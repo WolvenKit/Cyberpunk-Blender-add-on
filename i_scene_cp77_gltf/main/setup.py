@@ -67,7 +67,11 @@ class MaterialBuilder:
                     vehicleDestrBlendshape.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal.mt":
-                    meshDecal = MeshDecal(self.BasePath, self.image_format, self.ProjPath)
+                    if 'EnableMask' in rawMat.keys():
+                        enableMask=rawMat['EnableMask']
+                    else:
+                        enableMask=False
+                    meshDecal = MeshDecal(self.BasePath, self.image_format, self.ProjPath,enableMask)
                     meshDecal.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal_double_diffuse.mt":
@@ -75,7 +79,11 @@ class MaterialBuilder:
                     meshDecalDoubleDiffuse.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\vehicle_mesh_decal.mt" :
-                    vehicleMeshDecal = VehicleMeshDecal(self.BasePath, self.image_format, self.ProjPath)
+                    if 'EnableMask' in rawMat.keys():
+                        enableMask=rawMat['EnableMask']
+                    else:
+                        enableMask=False
+                    vehicleMeshDecal = VehicleMeshDecal(self.BasePath, self.image_format, self.ProjPath, enableMask)
                     vehicleMeshDecal.create(rawMat["Data"],bpyMat)
                 
                 case "base\\materials\\vehicle_lights.mt":
@@ -87,7 +95,11 @@ class MaterialBuilder:
                     skin.create(rawMat["Data"],bpyMat)
 
                 case "engine\\materials\\metal_base.remt" | "engine\\materials\\metal_base_proxy.mt":
-                    metalBase = MetalBase(self.BasePath,self.image_format, self.ProjPath)
+                    if 'EnableMask' in rawMat.keys():
+                        enableMask=rawMat['EnableMask']
+                    else:
+                        enableMask=False
+                    metalBase = MetalBase(self.BasePath,self.image_format, self.ProjPath, enableMask)
                     metalBase.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\hair.mt":
@@ -95,19 +107,19 @@ class MaterialBuilder:
                     hair.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal_gradientmap_recolor.mt":
-                    meshDecalGradientMapReColor = MeshDecalGradientMapReColor(self.BasePath,self.image_format)
+                    meshDecalGradientMapReColor = MeshDecalGradientMapReColor(self.BasePath,self.image_format, self.ProjPath)
                     meshDecalGradientMapReColor.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\eye.mt":
-                    eye = Eye(self.BasePath,self.image_format)
+                    eye = Eye(self.BasePath,self.image_format, self.ProjPath)
                     eye.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\eye_gradient.mt":
-                    eyeGradient = EyeGradient(self.BasePath,self.image_format)
+                    eyeGradient = EyeGradient(self.BasePath,self.image_format, self.ProjPath)
                     eyeGradient.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\eye_shadow.mt":
-                    eyeShadow = EyeShadow(self.BasePath,self.image_format)
+                    eyeShadow = EyeShadow(self.BasePath,self.image_format, self.ProjPath)
                     eyeShadow.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal_emissive.mt" :
