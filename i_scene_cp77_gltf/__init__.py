@@ -826,38 +826,57 @@ classes = (
     CP77StreamingSectorImport,
     CP77GLBExport,
     ShowMessageBox,
-    CP77_PT_ModTools,
     CP77_PT_AnimsPanel,
+    CP77Keyframe,
     CP77_PT_CollisionTools,
     CP77CollisionExport,
     CP77CollisionGenerator,
     CP77Animset,
     CP77AnimsDelete,
-    CP77NewAction,
-    CP77_PT_AnimsProps,
-    CP77ResetArmature,
     CP77IOSuitePreferences,
     CollectionAppearancePanel,
     CP77HairProfileExport,
     CP77_PT_MeshTools,
 #    CP77MassExport,
+    CP77NewAction,
     CP77SetArmature,
     CP77_PT_CollisionToolsPanelProps,
+    CP77_PT_AnimsProps,
+    CP77GroupVerts,
+    CP77UVTool,
     CP77MlSetupExport,
+    CP77WeightTransfer,
+    CP77ResetArmature,
 )
 
 def register():
     custom_icon = bpy.utils.previews.new()
     custom_icon.load("WKIT", os.path.join(icons_dir, "wkit.png"), 'IMAGE')
+
+    sculpt_icon = bpy.utils.previews.new()
+    sculpt_icon.load("SCULPT", os.path.join(icons_dir, "sculpt.png"), 'IMAGE')
+
+    cleanup_icon = bpy.utils.previews.new()
+    cleanup_icon.load("TRAUMA", os.path.join(icons_dir, "trauma.png"), 'IMAGE')
+
+    tech_icon = bpy.utils.previews.new()
+    tech_icon.load("TECH", os.path.join(icons_dir, "tech.png"), 'IMAGE')
+
+
     custom_icon_col["import"] = custom_icon
-    
+    custom_icon_col["trauma"] = cleanup_icon
+    custom_icon_col["tech"] = tech_icon
+    custom_icon_col["sculpt"] = sculpt_icon
+
     #kwekmaster - Minor Refactoring 
     for cls in classes:
         bpy.utils.register_class(cls)
-   
-    bpy.types.Scene.cp77_anims_panel_props = bpy.props.PointerProperty(type=CP77_PT_AnimsProps)   
+
+    bpy.types.Scene.cp77_anims_panel_props = bpy.props.PointerProperty(type=CP77_PT_AnimsProps)
     bpy.types.Scene.cp77_collision_tools_panel_props = bpy.props.PointerProperty(type=CP77_PT_CollisionToolsPanelProps)   
-    bpy.types.Scene.selected_armature = bpy.props.EnumProperty(items=CP77ArmatureList)  
+    bpy.types.Scene.selected_armature = bpy.props.EnumProperty(items=CP77ArmatureList)
+    bpy.types.Scene.mesh_source = bpy.props.EnumProperty(items=CP77MeshList) 
+    bpy.types.Scene.mesh_target = bpy.props.EnumProperty(items=CP77MeshList)    
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export) 
     
@@ -865,14 +884,21 @@ def unregister():
     del bpy.types.Scene.cp77_collision_tools_panel_props
     del bpy.types.Scene.cp77_anims_panel_props
     del bpy.types.Scene.selected_armature
-    bpy.utils.previews.remove(custom_icon_col["import"])
-    
+    del bpy.types.Scene.mesh_source
+    del bpy.types.Scene.mesh_target
+    for icon_key in custom_icon_col.keys():
+        bpy.utils.previews.remove(custom_icon_col[icon_key])
+
+
     #kwekmaster - Minor Refactoring 
     for cls in classes:
-        bpy.utils.unregister_class(cls)        
-      
+        bpy.utils.unregister_class(cls)
+
+    
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
+    custom_icon_col.clear()
                 
 if __name__ == "__main__":
     register()
+
