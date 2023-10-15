@@ -35,7 +35,7 @@ class VehicleLights:
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes['Principled BSDF']
 
-        CurMat.nodes['Principled BSDF'].inputs['Specular'].default_value = 0
+        pBSDF.inputs['Specular'].default_value = 0
 
         mixRGB = CurMat.nodes.new("ShaderNodeMixRGB")
         mixRGB.location = (-200,200)

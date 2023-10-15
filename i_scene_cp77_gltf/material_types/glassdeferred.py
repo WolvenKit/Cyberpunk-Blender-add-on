@@ -25,7 +25,7 @@ class GlassDeferred:
         CurMat.links.new(mixShader.outputs[0],MatOutput.inputs[0])
 #
         if "GlassTint" in Data:
-            gtImg=imageFromRelPath(Data["GlassTint"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            gtImg=imageFromRelPath(Data["GlassTint"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
             gtImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,50), label="GlassTint", image=gtImg)
             CurMat.links.new(gtImgNode.outputs[0],glassBSDF.inputs['Color'])
 
@@ -44,7 +44,7 @@ class GlassDeferred:
             CurMat.links.new(IOR.outputs[0],pBSDF.inputs['IOR'])
 #
         if "Roughness" in Data:
-            rImg=imageFromRelPath(Data["Roughness"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            rImg=imageFromRelPath(Data["Roughness"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
             rImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,150), label="Roughness", image=rImg)
             CurMat.links.new(rImgNode.outputs[0],pBSDF.inputs['Roughness'])
 #
@@ -55,7 +55,7 @@ class GlassDeferred:
      
 #  
         if "MaskTexture" in Data:
-            mImg=imageFromRelPath(Data["MaskTexture"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            mImg=imageFromRelPath(Data["MaskTexture"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
             mImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-1200,-350), label="MaskTexture", image=mImg)
             facNode = CurMat.nodes.new("ShaderNodeMath")
             facNode.inputs[0].default_value = 1
