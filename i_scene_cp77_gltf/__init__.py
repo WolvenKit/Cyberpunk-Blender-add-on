@@ -32,7 +32,7 @@ from .exporters.mlsetup_export import *
 from .main.collisions import *
 from .main.animtools import *
 from .main.meshtools import *
-from .main.math import *
+from .main.prestomath import *
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
