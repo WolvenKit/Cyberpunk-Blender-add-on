@@ -10,8 +10,8 @@ class ParallaxScreen:
 
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
-        PrincipledBSDF=CurMat.nodes['Principled BSDF']
-        PrincipledBSDF.inputs['Specular'].default_value = 0
+        pBSDF=CurMat.nodes['Principled BSDF']
+        pBSDF.inputs['Specular'].default_value = 0
         Par=createParallaxGroup()
         Mix = create_node(CurMat.nodes,"ShaderNodeMix",(-100., 250.), blend_type='MIX', label="Mix")
         Mix.data_type='RGBA'
@@ -20,7 +20,6 @@ class ParallaxScreen:
         ImageTexture.extension='CLIP'
         ImageTexture001 = create_node(CurMat.nodes,"ShaderNodeTexImage",(-750.,0.), label="Image Texture.001", image=parImg)
         ImageTexture001.extension='CLIP'
-        ImageTexture002 = create_node(CurMat.nodes,"ShaderNodeTexImage",(-750., -500.), label="Image Texture.002", image=parImg)
         Parallax = create_node(CurMat.nodes,"ShaderNodeGroup",(-1100., 400.), label="Parallax")
         Parallax.node_tree=Par
         par_val = create_node(CurMat.nodes,"ShaderNodeValue",(-1350, 400))
@@ -29,7 +28,7 @@ class ParallaxScreen:
         Parallax001.node_tree=Par
         par_val1 = create_node(CurMat.nodes,"ShaderNodeValue",(-1350, 0))
         par_val1.outputs[0].default_value = Data['LayersSeparation']/10
-        CurMat.links.new(Mix.outputs[2], PrincipledBSDF.inputs[0])
+        CurMat.links.new(Mix.outputs[2], pBSDF.inputs[0])
         CurMat.links.new(ImageTexture.outputs['Color'], Mix.inputs[6])
         CurMat.links.new(ImageTexture001.outputs['Color'], Mix.inputs[7])
         CurMat.links.new(Parallax.outputs['Vector'], ImageTexture.inputs[0])

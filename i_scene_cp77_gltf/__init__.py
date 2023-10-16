@@ -32,6 +32,7 @@ from .exporters.mlsetup_export import *
 from .main.collisions import *
 from .main.animtools import *
 from .main.meshtools import *
+from .main.math import *
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
@@ -46,6 +47,7 @@ class CP77IOSuitePreferences(bpy.types.AddonPreferences):
     default=False,
     )
     
+
  ## toggle the mod tools tab and its sub panels - default True
     show_modtools: bpy.props.BoolProperty(
     name= "Show the Mod Tools Panel",
@@ -105,7 +107,10 @@ def SetCyclesRenderer(set_gi_params=False):
         cycles.ao_bounces = 1
         cycles.ao_bounces_render = 1
 
-class CP77_PT_CollisionToolsPanelProps(bpy.types.PropertyGroup):
+
+class CP77_PT_PanelProps(bpy.types.PropertyGroup):
+   
+# collision panel props:
     collider_type: bpy.props.EnumProperty(
         name="Collision Type",
         items=[
@@ -158,6 +163,41 @@ class CP77_PT_CollisionToolsPanelProps(bpy.types.PropertyGroup):
         max=100,
     )
 
+# anims props"
+    frameall: BoolProperty(
+        name="All Frames",
+        default=False,
+        description="Insert a keyframe on every frame of the active action"
+    )
+    
+    body_list: bpy.props.EnumProperty(
+        items=[(name, name, '') for name in cp77riglist(None)[1]],
+        name="Rig GLB"
+    )
+    
+# mesh props
+    fbx_rot: BoolProperty(
+        name="",
+        default=False,
+        description="Rotate for an fbx orientated mesh"
+    )
+
+    refit_json: bpy.props.EnumProperty(
+        items=[(target_body_names, target_body_names, '') for target_body_names in CP77RefitList(None)[1]],
+        name="Body Shape"
+    )
+
+    selected_armature: bpy.props.EnumProperty(
+        items=CP77ArmatureList
+    )
+
+    mesh_source: bpy.props.EnumProperty(
+        items=CP77MeshList
+    ) 
+
+    mesh_target: bpy.props.EnumProperty(
+        items=CP77MeshList
+    )   
 
 class CP77CollisionGenerator(bpy.types.Operator):
     bl_idname = "generate_cp77.collisions"
@@ -168,12 +208,12 @@ class CP77CollisionGenerator(bpy.types.Operator):
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
-        props = context.scene.cp77_collision_tools_panel_props
+        props = context.scene.cp77_panel_props
         CP77CollisionGen(self, context,props.matchSize, props.collision_shape, props.sampleverts, props.radius, props.height)
         return {"FINISHED"}
     
     def draw(self, context):
-        props = context.scene.cp77_collision_tools_panel_props
+        props = context.scene.cp77_panel_props
         layout = self.layout
         row = layout.row(align=True)
         split = row.split(factor=0.5,align=True)
@@ -236,55 +276,11 @@ class CP77_PT_CollisionTools(bpy.types.Panel):
                 box.operator("export_scene.collisions")
 
 
-def CP77ArmatureList(self, context):
-    items = []
-    for obj in bpy.data.objects:
-        if obj.type == 'ARMATURE':
-            items.append((obj.name, obj.name, ""))
-    return items
-    
-
-
-def CP77MeshList(self, context):
-    items = []
-    for obj in bpy.data.objects:
-        if obj.type == 'MESH':
-            items.append((obj.name, obj.name, ""))
-    return items
-
-
 def CP77AnimsList(self, context):
     for action in bpy.data.actions:
         if action.library:
             continue
         yield action
-
-
-class CP77_PT_AnimsProps(bpy.types.PropertyGroup):
-        
-    frameall: BoolProperty(
-        name="All Frames",
-        default=False,
-        description="Insert a keyframe on every frame of the active action"
-        )
-
-### idk how to get this working, it used to so if you're reading this blzficks
-class CP77Rename(bpy.types.Operator):
-    bl_idname = 'cp77.rename_anims'
-    bl_label = "rename an action in the animslist"
-    bl_options = {'INTERNAL', 'UNDO'}
-    
-    name: bpy.props.StringProperty()
-   
-    def invoke(self, context, event):
-        ctrl = event.ctrl
-        shift = event.shift
-        if ctrl:
-            new_name = bpy.props.StringProperty()
-            return context.window_manager.invoke_props_dialog(self, width=200)
-
-                
-        return self.execute(context, event)
 
 
 ### allow deleting animations from the animset panel, regardless of editor context
@@ -319,20 +315,45 @@ class CP77Animset(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         return context.active_object and context.active_object.animation_data
-       
+
     def execute(self, context):
         obj = context.active_object
-        if obj and obj.type == 'ARMATURE':
-            if self.new_name:
-                rename_anim(self, context, self.name)
-            if self.play:
-                # Pass the animation name to the play_anim function
-                play_anim(self, context, self.name)
+        if not self.name:
+            obj.animation_data.action = None
             return {'FINISHED'}
-    
-    def draw(self, context):
-        self.layout = layout.row()
-        
+
+        action = bpy.data.actions.get(self.name, None)
+        if not action:
+            return {'CANCELLED'}
+
+        # Always save it, just in case
+        action.use_fake_user = True
+
+        if self.new_name:
+            # Rename
+            action.name = self.new_name
+        elif not self.play and obj.animation_data.action == action:
+            # Action was already active, stop editing
+            obj.animation_data.action = None
+        else:
+            reset_armature(self,context)
+            obj.animation_data.action = action
+
+            if self.play:
+                context.scene.frame_current = int(action.curve_frame_range[0])
+                bpy.ops.screen.animation_cancel(restore_frame=False)
+                play_anim(self,context,action.name)
+
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        if event.ctrl:
+            self.new_name = self.name
+            return context.window_manager.invoke_props_dialog(self)
+        else:
+            self.new_name = ""
+            return self.execute(context)
+
 # inserts a keyframe on the current frame
 class CP77Keyframe(bpy.types.Operator):
     bl_idname = "insert_keyframe.cp77"
@@ -344,13 +365,13 @@ class CP77Keyframe(bpy.types.Operator):
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
-        props = context.scene.cp77_anims_panel_props
+        props = context.scene.cp77_panel_props
         cp77_keyframe(props, context, props.frameall)
         return {"FINISHED"}
     
     def draw(self, context):
         layout = self.layout
-        props = context.scene.cp77_anims_panel_props
+        props = context.scene.cp77_panel_props
         row = layout.row(align=True)
         row.label(text="Insert a keyframe for every bone at every from of the animation")
         row = layout.row(align=True)
@@ -362,9 +383,6 @@ class CP77ResetArmature(bpy.types.Operator):
     bl_parent_id = "CP77_PT_animspanel"
     bl_label = "Reset Pose"
     bl_description = "Clear all transforms on current selected armature"
-
-    def draw(self, context):
-        layout = self.layout.row()
 
     def execute(self, context):
         reset_armature(self, context)
@@ -386,17 +404,35 @@ class CP77NewAction(bpy.types.Operator):
     def execute(self, context):
         obj = context.active_object
 
+
+    def invoke(self, context, event):
+        obj = context.active_object
         if not obj.animation_data:
             obj.animation_data_create()
         new_action = bpy.data.actions.new(self.name)
         new_action.use_fake_user = True
         reset_armature(obj, context)
         obj.animation_data.action = new_action
-
         return {'FINISHED'}
     
-    def draw(self, context):
-        layout=self.layout
+
+class CP77RigLoader(bpy.types.Operator):
+    bl_idname = "cp77.rig_loader"
+    bl_label = "Load rigs from .glb"
+
+    def execute(self, context):
+        props = context.scene.cp77_panel_props
+        selected_rig_name = props.body_list
+        rig_files, rig_names = cp77riglist(context)
+
+        if selected_rig_name in rig_names:
+            # Find the corresponding .glb file and load it
+            selected_rig = rig_files[rig_names.index(selected_rig_name)]
+            bpy.ops.import_scene.gltf(filepath=selected_rig)
+            if props.fbx_rot:
+                rotate_quat_180(self,context)
+        return {'FINISHED'}
+
 
 ### Draw a panel to store anims functions
 class CP77_PT_AnimsPanel(bpy.types.Panel):
@@ -409,10 +445,6 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
 
     name: bpy.props.StringProperty(options={'HIDDEN'})
 
-    @classmethod
-    def poll(cls, context):
-        return context.active_object and context.active_object.type == 'ARMATURE'
-
 ## make sure the context is unrestricted as possible, ensure there's an armature selected 
     def draw(self, context):
         layout = self.layout 
@@ -420,16 +452,26 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
         cp77_addon_prefs = context.preferences.addons[__name__].preferences
 
         if cp77_addon_prefs.show_animtools:
-            if bpy.context.mode in {'OBJECT', 'POSE', 'EDIT_ARMATURE'}:
+            props = context.scene.cp77_panel_props
+            if bpy.context.mode in {'OBJECT', 'POSE', 'EDIT'}:
+                box = layout.box()
+                box.label(text='Rigs', icon_value=custom_icon_col["import"]['WKIT'].icon_id)
+                row = box.row(align=True)
+                row.label(text='Rig:')
+                row.prop(props, 'body_list', text="",)
+                row = box.row(align=True)
+                row.operator('cp77.rig_loader',icon='ADD', text="load selected rig")
+                row.prop(props, 'fbx_rot', text="", icon='LOOP_BACK', toggle=1)
+                row = box.row(align=True)
+                row = box.row(align=True)
+                row.operator('insert_keyframe.cp77')
+                row.operator('reset_armature.cp77')
+
                 obj = context.active_object
                 if obj and obj.type == 'ARMATURE':
                     available_anims = list(CP77AnimsList(context,obj))
                     active_action = obj.animation_data.action if obj.animation_data else None
                     box = layout.box()
-                    row = box.row(align=True)
-                    row.operator('reset_armature.cp77')
-                    row = box.row(align=True)
-                    row.operator('insert_keyframe.cp77')
                     row = box.row(align=True)
                     row.label(text='Animsets', icon_value=custom_icon_col["import"]['WKIT'].icon_id)
                     row.operator('cp77.new_action',icon='ADD', text="")
@@ -474,26 +516,22 @@ class CollectionAppearancePanel(bpy.types.Panel):
         collection = context.collection
         layout.prop(collection, "appearanceName")
 
-
-bpy.types.Scene.rig_glb = bpy.props.EnumProperty(
-    items=[(name, name, '') for name in cp77riglist(None)[1]],
-    name="Rig GLB"
-)
-
-class CP77RigLoader(bpy.types.Operator):
-    bl_idname = "cp77.rig_loader"
-    bl_label = "Load rigs from .glb"
+    
+class CP77Autofitter(bpy.types.Operator):
+    bl_idname = "cp77.auto_fitter"
+    bl_label = "Auto Fit"
 
     def execute(self, context):
-        selected_rig_name = context.scene.rig_glb
-        rig_files, rig_names = cp77riglist(context)
+        props = context.scene.cp77_panel_props
+        target_body_name = props.refit_json
+        target_body_paths, target_body_names = CP77RefitList(context)
+        refitter = CP77RefitChecker(self, context)  
 
-        if selected_rig_name in rig_names:
-            # Find the corresponding .glb file and load it
-            selected_rig = rig_files[rig_names.index(selected_rig_name)]
-            bpy.ops.import_scene.gltf(filepath=selected_rig)
+        if target_body_name in target_body_names:          
+            target_body_path = target_body_paths[target_body_names.index(target_body_name)]
+            CP77Refit(context, refitter, target_body_path, target_body_name, props.fbx_rot)
 
-        return {'FINISHED'}
+            return {'FINISHED'}
 
 
 class CP77WeightTransfer(bpy.types.Operator):
@@ -550,15 +588,8 @@ class CP77SetArmature(bpy.types.Operator):
     bl_parent_id = "CP77_PT_MeshTools"
     
     def execute(self, context):
-        target_armature_name = context.scene.selected_armature
-        target_armature = bpy.data.objects.get(target_armature_name)
-        if target_armature and target_armature.type == 'ARMATURE':
-            for obj in bpy.context.selected_objects:
-                if obj.type == 'MESH':
-                    for modifier in obj.modifiers:
-                        if modifier.type == 'ARMATURE':
-                            modifier.object = target_armature
-            return {'FINISHED'}
+        CP77ArmatureSet(self,context)
+        return {'FINISHED'}
 
 
 class CP77GroupVerts(bpy.types.Operator):
@@ -585,8 +616,8 @@ class CP77_PT_MeshTools(bpy.types.Panel):
         return context.active_object and context.active_object.type == 'MESH'
 
     def draw(self, context):
-        rig_files, rig_names = cp77riglist(context)
         layout = self.layout
+        props = context.scene.cp77_panel_props
         cp77_addon_prefs = context.preferences.addons[__name__].preferences
         if cp77_addon_prefs.show_modtools:
             if cp77_addon_prefs.show_meshtools:
@@ -601,25 +632,28 @@ class CP77_PT_MeshTools(bpy.types.Panel):
                 row = box.row(align=True)
                 split = row.split(factor=0.5,align=True)
                 split.label(text="Source Mesh:")
-                split.prop(context.scene, "mesh_source", text="")
+                split.prop(props, "mesh_source", text="")
                 row = box.row(align=True)
                 split = row.split(factor=0.5,align=True)
                 split.label(text="Target Mesh:")
-                split.prop(context.scene, "mesh_target", text="")
+                split.prop(props, "mesh_target", text="")
                 row = box.row(align=True)
                 box.operator("cp77.trans_weights", text="Transfer Vertex Weights")
                 box = layout.box()
+                box.label(icon_value=custom_icon_col["refit"]["REFIT"].icon_id, text="Autofitter:")
+                row = box.row(align=True)
+                split = row.split(factor=0.29,align=True)
+                split.label(text="Shape:")
+                split.prop(props, 'refit_json', text="")
+                row = box.row(align=True)
+                row.operator("cp77.auto_fitter", text="Refit Selected Mesh")
+                row.prop(props, 'fbx_rot', text="", icon='LOOP_BACK', toggle=1)
+                box = layout.box()
                 box.label(icon_value=custom_icon_col["tech"]["TECH"].icon_id, text="Modifiers:")
-                row = box.row(align=True)
-                split = row.split(factor=0.375,align=True)
-                split.label(text="Animrig:")
-                split.prop(context.scene, "rig_glb", text="")
-                row = box.row(align=True)
-                row.operator("cp77.rig_loader", text="Load Rig")
                 row = box.row(align=True)
                 split = row.split(factor=0.35,align=True)
                 split.label(text="Target:")
-                split.prop(context.scene, "selected_armature", text="")
+                split.prop(props, "selected_armature", text="")
                 row = box.row(align=True)
                 row.operator("cp77.set_armature", text="Change Armature Target")
                 box = layout.box()
@@ -864,13 +898,12 @@ classes = (
     CP77IOSuitePreferences,
     CollectionAppearancePanel,
     CP77HairProfileExport,
-    CP77RigLoader,
     CP77_PT_MeshTools,
-#    CP77MassExport,
+    CP77Autofitter,
     CP77NewAction,
+    CP77RigLoader,
     CP77SetArmature,
-    CP77_PT_CollisionToolsPanelProps,
-    CP77_PT_AnimsProps,
+    CP77_PT_PanelProps,
     CP77GroupVerts,
     CP77UVTool,
     CP77MlSetupExport,
@@ -891,30 +924,26 @@ def register():
     tech_icon = bpy.utils.previews.new()
     tech_icon.load("TECH", os.path.join(icons_dir, "tech.png"), 'IMAGE')
 
+    refit_icon = bpy.utils.previews.new()
+    refit_icon.load("REFIT", os.path.join(icons_dir, "refit.png"), 'IMAGE')
+
 
     custom_icon_col["import"] = custom_icon
     custom_icon_col["trauma"] = cleanup_icon
     custom_icon_col["tech"] = tech_icon
     custom_icon_col["sculpt"] = sculpt_icon
+    custom_icon_col["refit"] = refit_icon
 
     #kwekmaster - Minor Refactoring 
     for cls in classes:
         bpy.utils.register_class(cls)
 
-    bpy.types.Scene.cp77_anims_panel_props = bpy.props.PointerProperty(type=CP77_PT_AnimsProps)
-    bpy.types.Scene.cp77_collision_tools_panel_props = bpy.props.PointerProperty(type=CP77_PT_CollisionToolsPanelProps)   
-    bpy.types.Scene.selected_armature = bpy.props.EnumProperty(items=CP77ArmatureList)
-    bpy.types.Scene.mesh_source = bpy.props.EnumProperty(items=CP77MeshList) 
-    bpy.types.Scene.mesh_target = bpy.props.EnumProperty(items=CP77MeshList)    
+    bpy.types.Scene.cp77_panel_props = bpy.props.PointerProperty(type=CP77_PT_PanelProps) 
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export) 
     
 def unregister():
-    del bpy.types.Scene.cp77_collision_tools_panel_props
-    del bpy.types.Scene.cp77_anims_panel_props
-    del bpy.types.Scene.selected_armature
-    del bpy.types.Scene.mesh_source
-    del bpy.types.Scene.mesh_target
+    del bpy.types.Scene.cp77_panel_props
     for icon_key in custom_icon_col.keys():
         bpy.utils.previews.remove(custom_icon_col[icon_key])
 
