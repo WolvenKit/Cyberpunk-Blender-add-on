@@ -87,18 +87,10 @@ def play_anim(self, context, anim_name):
 
     return {'FINISHED'}
 
-def rename_anim(self, context, event):
-    if event.ctrl:
-    # Rename
-        self.new_name = self.name
-        return context.window_manager.invoke_props_dialog(self)
-    else:
-        self.new_name = ""
-        return self.execute(context)
-
 def delete_anim(self, context):
     action = bpy.data.actions.get(self.name, None)
     if not action:
         return {'CANCELLED'}
     else:
         bpy.data.actions.remove(action)
+

@@ -10,6 +10,7 @@ from ..material_types.meshdecaldoublediffuse import MeshDecalDoubleDiffuse
 from ..material_types.vehiclemeshdecal import VehicleMeshDecal
 from ..material_types.vehiclelights import VehicleLights
 from ..material_types.metalbase import MetalBase
+from ..material_types.metalbasedet import MetalBaseDet
 from ..material_types.hair import Hair
 from ..material_types.meshdecalgradientmaprecolor import MeshDecalGradientMapReColor
 from ..material_types.eye import Eye
@@ -24,7 +25,7 @@ from ..material_types.parallaxscreen import ParallaxScreen
 from ..material_types.speedtree import SpeedTree
 from ..material_types.decal import Decal
 from ..material_types.decal_gradientmap_recolor import DecalGradientmapRecolor
-
+from ..material_types.televisionad import TelevisionAd
 
 class MaterialBuilder:
     def __init__(self,Obj,BasePath,image_format,MeshPath):
@@ -102,6 +103,10 @@ class MaterialBuilder:
                     metalBase = MetalBase(self.BasePath,self.image_format, self.ProjPath, enableMask)
                     metalBase.create(rawMat["Data"],bpyMat)
 
+                case "base\\materials\\metal_base_det.mt":
+                    metalBaseDet = MetalBaseDet(self.BasePath,self.image_format, self.ProjPath)
+                    metalBaseDet.create(rawMat["Data"],bpyMat)
+
                 case "base\\materials\\hair.mt":
                     hair = Hair(self.BasePath,self.image_format, self.ProjPath)
                     hair.create(rawMat["Data"],bpyMat)
@@ -157,6 +162,10 @@ class MaterialBuilder:
                 case "base\\materials\\speedtree_3d_v8_twosided.mt" |  "base\\materials\\speedtree_3d_v8_onesided.mt" |  "base\\materials\\speedtree_3d_v8_seams.mt":
                     speedtree = SpeedTree(self.BasePath,self.image_format, self.ProjPath)
                     speedtree.create(rawMat["Data"],bpyMat)
+
+                case  "base\\fx\\shaders\\television_ad.mt" :
+                    televisionAd = TelevisionAd(self.BasePath,self.image_format,self.ProjPath)
+                    televisionAd.create(rawMat["Data"],bpyMat)
 
                 case _:
                     print('Unhandled mt - ', rawMat["MaterialTemplate"])

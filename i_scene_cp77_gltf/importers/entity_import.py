@@ -116,12 +116,12 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                 bones=rig.pose.bones
                 print('anim rig loaded')
                 
-                if animsinres[0].endswith(".glb"):
-                    anim_file_name = (animsinres[0])  
-                    rig_file_name = anim_file_name + ".rig.json"
-                    rig["animset"] = anim_file_name
-                    rig["rig"] = rig_file_name
-                    rig["ent"] = ent_name + ".ent.json"
+            if animsinres[0].endswith(".glb"):
+                anim_file_name = (animsinres[0])  
+                rig_file_name = anim_file_name + ".rig.json"
+                rig["animset"] = anim_file_name
+                rig["rig"] = rig_file_name
+                rig["ent"] = ent_name + ".ent.json"
       
     else:
         print('no anim rig found')

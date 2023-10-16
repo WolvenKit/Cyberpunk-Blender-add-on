@@ -45,9 +45,6 @@ def export_cyberpunk_glb(context, filepath, export_poses):
 
     # Retrieve the selected objects
     objects = context.selected_objects
-    # apply transforms
-    for obj in objects:
-        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     #if for photomode, make sure there's an armature selected, if not use the message box to show an error
     if export_poses:
         armatures = [obj for obj in objects if obj.type == 'ARMATURE']
@@ -66,6 +63,8 @@ def export_cyberpunk_glb(context, filepath, export_poses):
             return {'CANCELLED'}
         #check that meshes include UVs and have less than 65000 verts, throw an error if not
         for mesh in meshes:
+            # apply transforms
+            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
             if not mesh.data.uv_layers:
                 bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Meshes must have UV layers in order to import in Wolvenkit")
                 return {'CANCELLED'}
@@ -80,6 +79,14 @@ def export_cyberpunk_glb(context, filepath, export_poses):
                     bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)
                     bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="All faces must be triangulated before exporting. Untriangulated faces have been selected for you")
                     return {'CANCELLED'}
+                     # Check for ungrouped vertices, if any are found, switch to edit mode and select them before throwing an error
+            ungrouped_vertices = [v for v in obj.data.vertices if not v.groups]
+            if ungrouped_vertices:
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.select_ungrouped()
+                armature.hide_set(True)
+                bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Ungrouped vertices found and selected. Please assign them to a group or delete them beforebefore exporting.")
+                return {'CANCELLED'}  
         options = default_cp77_options()
         options.update(cp77_mesh_options())
 
@@ -87,7 +94,7 @@ def export_cyberpunk_glb(context, filepath, export_poses):
     # if exporting meshes, iterate through any connected armatures, store their currebt state. if hidden, unhide them and select them for export
     armature_states = {}
 
-    for obj in objects: 
+    for obj in objects:
         if obj.type == 'MESH' and obj.select_get():
             armature_modifier = None
             for modifier in obj.modifiers:
@@ -105,14 +112,7 @@ def export_cyberpunk_glb(context, filepath, export_poses):
                 armature.hide_set(False)
                 armature.select_set(True)
 
-                # Check for ungrouped vertices, if any are found, switch to edit mode and select them before throwing an error
-                ungrouped_vertices = [v for v in obj.data.vertices if not v.groups]
-                if ungrouped_vertices:
-                    bpy.ops.object.mode_set(mode='EDIT')
-                    bpy.ops.mesh.select_ungrouped()
-                    armature.hide_set(True)
-                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Ungrouped vertices found and selected. Please assign them to a group or delete them beforebefore exporting.")
-                    return {'CANCELLED'}
+
                     
 
     # Export the selected meshes to glb
