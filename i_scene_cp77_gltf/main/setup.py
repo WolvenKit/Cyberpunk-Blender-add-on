@@ -25,6 +25,7 @@ from ..material_types.parallaxscreen import ParallaxScreen
 from ..material_types.speedtree import SpeedTree
 from ..material_types.decal import Decal
 from ..material_types.decal_gradientmap_recolor import DecalGradientmapRecolor
+from ..material_types.televisionad import TelevisionAd
 
 
 class MaterialBuilder:
@@ -162,6 +163,10 @@ class MaterialBuilder:
                 case "base\\materials\\speedtree_3d_v8_twosided.mt" |  "base\\materials\\speedtree_3d_v8_onesided.mt" |  "base\\materials\\speedtree_3d_v8_seams.mt":
                     speedtree = SpeedTree(self.BasePath,self.image_format, self.ProjPath)
                     speedtree.create(rawMat["Data"],bpyMat)
+
+                case  "base\\fx\\shaders\\television_ad.mt" :
+                    televisionAd = TelevisionAd(self.BasePath,self.image_format,self.ProjPath)
+                    televisionAd.create(rawMat["Data"],bpyMat)
 
                 case _:
                     print('Unhandled mt - ', rawMat["MaterialTemplate"])
