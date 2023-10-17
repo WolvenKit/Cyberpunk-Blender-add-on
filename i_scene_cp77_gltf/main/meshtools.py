@@ -63,7 +63,7 @@ def CP77ArmatureSet(self, context):
                 else:
                     if modifier.type == 'ARMATURE' and modifier.object is target_armature:
                         continue
-            armature = obj.modifiers.new('Armature', 'ARMATURE')
+            armature = mesh.modifiers.new('Armature', 'ARMATURE')
             armature.object = target_armature
 
 
