@@ -14,7 +14,7 @@ from ..main.common import json_ver_validate
 # if you've already imported the body/head and set the rig up you can exclude them by putting them in the exclude_meshes list 
 #presto_stash=[]
 
-def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=True, include_collisions=False): 
+def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=True, include_collisions=False, inColl=None): 
     
     C = bpy.context
     coll_scene = C.scene.collection
@@ -117,12 +117,12 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                 bones=rig.pose.bones
                 print('anim rig loaded')
                 
-                if animsinres[0].endswith(".glb"):
-                    anim_file_name = (animsinres[0])  
-                    rig_file_name = anim_file_name + ".rig.json"
-                    rig["animset"] = anim_file_name
-                    rig["rig"] = rig_file_name
-                    rig["ent"] = ent_name + ".ent.json"
+            if animsinres[0].endswith(".glb"):
+                anim_file_name = (animsinres[0])  
+                rig_file_name = anim_file_name + ".rig.json"
+                rig["animset"] = anim_file_name
+                rig["rig"] = rig_file_name
+                rig["ent"] = ent_name + ".ent.json"
       
     else:
         print('no anim rig found')
@@ -149,11 +149,17 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
 
     else:
         for x,app_name in enumerate(appearances):
+            
             ent_coll = bpy.data.collections.new(ent_name)
+            if inColl and inColl in coll_scene.children.keys():
+                par_coll=bpy.data.collections.get(inColl)
+                par_coll.children.link(ent_coll)
+            else:
+                #link it to the scene
+                coll_scene.children.link(ent_coll)  
             # tag it with some custom properties.
             ent_coll['depotPath']=ent_name
-            #link it to the scene
-            coll_scene.children.link(ent_coll)
+            
 
             enum_items = []
             default_index = None 
@@ -165,6 +171,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
 
             if default_index is None:
                 default_index = '0'
+
             if len(enum_items)>0:
                 bpy.types.Collection.appearanceName = bpy.props.EnumProperty(
                     name="Ent Appearances",
