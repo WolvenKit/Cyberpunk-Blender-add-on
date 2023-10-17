@@ -17,6 +17,7 @@ def default_cp77_options():
         'export_apply': False
     }
     return options
+
 #make sure meshes are exported with tangents, morphs and vertex colors
 def cp77_mesh_options():
     options = {
@@ -79,14 +80,7 @@ def export_cyberpunk_glb(context, filepath, export_poses):
                     bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)
                     bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="All faces must be triangulated before exporting. Untriangulated faces have been selected for you")
                     return {'CANCELLED'}
-                     # Check for ungrouped vertices, if any are found, switch to edit mode and select them before throwing an error
-            ungrouped_vertices = [v for v in obj.data.vertices if not v.groups]
-            if ungrouped_vertices:
-                bpy.ops.object.mode_set(mode='EDIT')
-                bpy.ops.mesh.select_ungrouped()
-                armature.hide_set(True)
-                bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Ungrouped vertices found and selected. Please assign them to a group or delete them beforebefore exporting.")
-                return {'CANCELLED'}  
+                
         options = default_cp77_options()
         options.update(cp77_mesh_options())
 
@@ -94,7 +88,7 @@ def export_cyberpunk_glb(context, filepath, export_poses):
     # if exporting meshes, iterate through any connected armatures, store their currebt state. if hidden, unhide them and select them for export
     armature_states = {}
 
-    for obj in objects:
+    for obj in objects: 
         if obj.type == 'MESH' and obj.select_get():
             armature_modifier = None
             for modifier in obj.modifiers:
@@ -112,8 +106,14 @@ def export_cyberpunk_glb(context, filepath, export_poses):
                 armature.hide_set(False)
                 armature.select_set(True)
 
-
-                    
+                # Check for ungrouped vertices, throw an error if any are found
+                ungrouped_vertices = [v for v in mesh.data.vertices if not v.groups]
+                if ungrouped_vertices:
+                    bpy.ops.object.mode_set(mode='EDIT')
+                    bpy.ops.mesh.select_ungrouped()
+                    armature.hide_set(True)
+                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Ungrouped vertices found and selected. Please assign them to a group or delete them beforebefore exporting.")
+                    return {'CANCELLED'}
 
     # Export the selected meshes to glb
     bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
@@ -124,14 +124,16 @@ def export_cyberpunk_glb(context, filepath, export_poses):
         armature.hide_set(state["hide"])
 
 # def ExportAll(self, context):
-# # Iterate through all objects in the scene
-#     for obj in bpy.context.scene.objects:
-#         if obj.type == 'MESH':
-#             # Check if the object has a sourcePath property
-#             if 'sourcePath' in obj:
-#                 source_path = obj['sourcePath']
-#                 # Set the active object to the current mesh
-#                 bpy.context.view_layer.objects.active = obj
-#                 # Export the meshes
-#                 bpy.ops.CP77GLBExport(filepath=source_path)
+#     #Iterate through all objects in the scene
+def ExportAll(self, context):
+    # Iterate through all objects in the scene
+    to_exp = [obj for obj in context.scene.objects if obj.type == 'MESH' and ('sourcePath' in obj or 'projPath' in obj)]
+
+    if len(to_exp) > 0:
+        for obj in to_exp:
+            filepath = obj.get('projPath', '')  # Use 'projPath' property or empty string if it doesn't exist
+            export_cyberpunk_glb(filepath=filepath, export_poses=False)
+
+
+
 

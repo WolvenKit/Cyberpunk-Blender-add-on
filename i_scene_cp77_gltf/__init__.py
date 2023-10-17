@@ -618,7 +618,9 @@ class CP77_PT_MeshTools(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        box = layout.box()
         props = context.scene.cp77_panel_props
+
         cp77_addon_prefs = context.preferences.addons[__name__].preferences
         if cp77_addon_prefs.show_modtools:
             if cp77_addon_prefs.show_meshtools:
