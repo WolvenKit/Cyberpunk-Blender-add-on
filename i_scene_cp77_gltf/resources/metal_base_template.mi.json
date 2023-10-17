@@ -1,9 +1,9 @@
 {
   "Header": {
-    "WolvenKitVersion": "8.9.1-nightly.2023-08-14",
+    "WolvenKitVersion": "8.11.1-nightly.2023-10-15",
     "WKitJsonVersion": "0.0.8",
-    "GameVersion": 1630,
-    "ExportedDateTime": "2023-08-27T21:15:49.5493700Z",
+    "GameVersion": 2000,
+    "ExportedDateTime": "2023-10-16T08:30:59.0747987Z",
     "DataType": "CR2W",
     "ArchiveFileName": "\\materials\\metal_base_template.mi"
   },
