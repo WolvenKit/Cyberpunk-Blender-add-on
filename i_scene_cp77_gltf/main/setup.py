@@ -27,6 +27,7 @@ from ..material_types.decal import Decal
 from ..material_types.decal_gradientmap_recolor import DecalGradientmapRecolor
 from ..material_types.televisionad import TelevisionAd
 
+
 class MaterialBuilder:
     def __init__(self,Obj,BasePath,image_format,MeshPath):
         self.BasePath = BasePath
