@@ -643,7 +643,7 @@ class CP77_PT_MeshTools(bpy.types.Panel):
                 row = box.row(align=True)
                 box.operator("cp77.trans_weights", text="Transfer Vertex Weights")
                 box = layout.box()
-                box.label(icon_value=custom_icon_col["refit"]["REFIT"].icon_id, text="Autofitter:")
+                box.label(icon_value=custom_icon_col["refit"]["REFIT"].icon_id, text="AKL Autofitter:")
                 row = box.row(align=True)
                 split = row.split(factor=0.29,align=True)
                 split.label(text="Shape:")
