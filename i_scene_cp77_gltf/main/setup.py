@@ -68,7 +68,7 @@ class MaterialBuilder:
                     vehicleDestrBlendshape = VehicleDestrBlendshape(self.BasePath, self.image_format)
                     vehicleDestrBlendshape.create(rawMat["Data"],bpyMat)
 
-                case "base\\materials\\mesh_decal.mt":
+                case "base\\materials\\mesh_decal.mt" | "base\\materials\\mesh_decal_wet_character.mt":
                     if 'EnableMask' in rawMat.keys():
                         enableMask=rawMat['EnableMask']
                     else:
@@ -131,10 +131,6 @@ class MaterialBuilder:
                 case "base\\materials\\mesh_decal_emissive.mt" :
                     meshDecalEmissive = MeshDecalEmissive(self.BasePath,self.image_format, self.ProjPath)
                     meshDecalEmissive.create(rawMat["Data"],bpyMat)
-
-                case "base\\materials\\mesh_decal_wet_character.mt":
-                    meshDecal = MeshDecal(self.BasePath,self.image_format)
-                    meshDecal.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\glass.mt" | "base\\materials\\vehicle_glass.mt":
                     glass = Glass(self.BasePath,self.image_format, self.ProjPath)
