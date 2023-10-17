@@ -455,7 +455,7 @@ class Multilayered:
             # Mix the microblend against the original mlmask
             MaskMBMix = create_node(NG.nodes,"ShaderNodeMix", (-900,-800), label = "MICROBLEND MIXER")
             MaskMBMix.data_type ='RGBA'
-            MaskMBMix.clamp_factor = False
+            MaskMBMix.clamp_factor = True
 
             # Raise the contrast of the microblend as mbcontrast approaches zero by increasing `From Min` value
             # Smoother Step setting appears to disable clamp in the UI? Not sure if this matters
