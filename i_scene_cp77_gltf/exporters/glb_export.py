@@ -133,7 +133,3 @@ def ExportAll(self, context):
         for obj in to_exp:
             filepath = obj.get('projPath', '')  # Use 'projPath' property or empty string if it doesn't exist
             export_cyberpunk_glb(filepath=filepath, export_poses=False)
-
-
-
-
