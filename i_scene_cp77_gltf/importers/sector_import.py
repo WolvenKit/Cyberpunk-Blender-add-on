@@ -296,14 +296,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     else:
                         try:
                             print('Importing ',entpath, ' using app ',app)
-                            bpy.ops.io_scene_gltf.cp77entity(filepath=entpath, appearances=app,with_materials=with_materials)
-                            objs = C.selected_objects
-                            move_coll= bpy.data.collections.get( objs[0].users_collection[0].name )
-                            top_col=[col for col in C.scene.collection.children if col.user_of_id(move_coll)][0]
-                            if top_col:
-                                Masters.children.link(top_col) 
-                                coll_scene.children.unlink(top_col)
-                                imported=True
+                            bpy.ops.io_scene_gltf.cp77entity(filepath=entpath, appearances=app,with_materials=with_materials, inColl='Masters')
+                            imported=True
                         except:
                             print(traceback.print_exc())
                             print('Failed during Entity import on ',os.path.basename(entpath))
