@@ -1,15 +1,3 @@
-bl_info = {
-    "name": "Cyberpunk 2077 IO Suite",
-    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, Doctor Presto",
-    "version": (1, 4, 1),
-    "blender": (3, 1, 0),
-    "location": "File > Import-Export",
-    "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
-    "warning": "",
-    "category": "Import-Export",
-}
-
-
 import bpy
 import bpy.utils.previews
 import os
@@ -32,7 +20,20 @@ from .exporters.mlsetup_export import *
 from .main.collisions import *
 from .main.animtools import *
 from .main.meshtools import *
-from .main.prestomath import *
+from .main.bartmoss_functions import *
+
+
+bl_info = {
+    "name": "Cyberpunk 2077 IO Suite",
+    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, Doctor Presto, shotlastc",
+    "version": (1, 4, 1),
+    "blender": (3, 1, 0),
+    "location": "File > Import-Export",
+    "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
+    "warning": "",
+    "category": "Import-Export",
+}
+
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
