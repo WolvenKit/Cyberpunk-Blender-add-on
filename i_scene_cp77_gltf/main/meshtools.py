@@ -57,14 +57,18 @@ def CP77ArmatureSet(self, context):
     target_armature = bpy.data.objects.get(target_armature_name)
     if target_armature and target_armature.type == 'ARMATURE':
         for mesh in selected_meshes:
+            retargeted=False
             for modifier in mesh.modifiers:
                 if modifier.type == 'ARMATURE' and modifier.object is not target_armature:
-                        modifier.object = target_armature
+                    modifier.object = target_armature
+                    retargeted=True
                 else:
                     if modifier.type == 'ARMATURE' and modifier.object is target_armature:
+                        retargeted=True
                         continue
-            armature = mesh.modifiers.new('Armature', 'ARMATURE')
-            armature.object = target_armature
+            if not retargeted:
+                armature = mesh.modifiers.new('Armature', 'ARMATURE')
+                armature.object = target_armature
 
 
 def trans_weights(self, context):
@@ -188,32 +192,36 @@ def CP77RefitChecker(self, context):
 
 
 def CP77Refit(context, refitter, target_body_path, target_body_name, fbx_rot):
-    selected_meshes = []
+    selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
     scene = context.scene
-    r_c = None
     refitter_obj = None
+    r_c = None
     print(fbx_rot)
+    print(refitter)
 
     if len(refitter) != 0:
         for obj in refitter:
+            print('refitter object:', obj.name)
             if obj['refitter_type'] == target_body_name:
-                refitter_obj = obj 
-                if refitter_obj is not None:
-                    print('theres a refitter')
-                    for mesh in selected_meshes:
-                        if refitter_obj.name in mesh.modifiers:
-                            print(mesh.name, 'already fitted to:', refitter_obj["refitter_type"])
-                            continue 
-                        else:            
-                            print('refitting:', mesh.name, 'to:', refitter_obj["refitter_type"])
-                            lattice_modifier = mesh.modifiers.new(refitter_obj.name, 'LATTICE')
-                            lattice_modifier.object = refitter_obj
+                print(obj['refitter_type'], 'refitter found')
+                refitter_obj = obj
+            
+        if refitter_obj:
+            print('theres a refitter:', refitter_obj.name, 'type:', refitter_obj['refitter_type'])
+            for mesh in selected_meshes:
+                print('checking for refits:', mesh.name)
+                refit = False
+                for modifier in mesh.modifiers:
+                    if modifier.type == 'LATTICE' and modifier.object == refitter_obj:
+                        refit = True
+                        print(mesh.name, 'is already refit for', target_body_name)
 
-                    print('all done')
-                    return{'FINISHED'}
-            else:
-                print('lets generate something ')
-                continue
+                if not refit:
+                    print('refitting:', mesh.name, 'to:', target_body_name)
+                    lattice_modifier = mesh.modifiers.new(refitter_obj.name, 'LATTICE')
+                    lattice_modifier.object = refitter_obj
+            return{'FINISHED'}    
+        
 
     for collection in scene.collection.children:
         if collection.name == 'Refitters':
@@ -232,7 +240,6 @@ def CP77Refit(context, refitter, target_body_path, target_body_name, fbx_rot):
                 data = json.loads(data)
 
         if data:
-            selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
             control_points = data.get("deformed_control_points", [])
 
             # Create a new lattice object
@@ -275,8 +282,8 @@ def CP77Refit(context, refitter, target_body_path, target_body_name, fbx_rot):
             if new_lattice:
                 bpy.context.object.hide_viewport = True
     
-            for obj in selected_meshes:
-                lattice_modifier = obj.modifiers.new(new_lattice.name,'LATTICE')
-                for obj in selected_meshes:
-                    print('refitting:', obj.name, 'to:', new_lattice["refitter_type"])
+            for mesh in selected_meshes:
+                lattice_modifier = mesh.modifiers.new(new_lattice.name,'LATTICE')
+                for mesh in selected_meshes:
+                    print('refitting:', mesh.name, 'to:', new_lattice["refitter_type"])
                     lattice_modifier.object = new_lattice
