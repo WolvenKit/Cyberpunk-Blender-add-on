@@ -52,7 +52,7 @@ class MaterialBuilder:
             bpyMat['MaterialTemplate'] = rawMat["MaterialTemplate"]
             bpyMat.use_nodes = True
             match rawMat["MaterialTemplate"]:
-                case "engine\\materials\\multilayered.mt" :
+                case "engine\\materials\\multilayered.mt" | "base\\materials\\vehicle_destr_blendshape.mt":
                     multilayered = Multilayered(self.BasePath,self.image_format,self.ProjPath)
                     multilayered.create(rawMat["Data"],bpyMat)
 
@@ -64,9 +64,10 @@ class MaterialBuilder:
                     multilayered = MultilayeredClearCoat(self.BasePath,self.image_format)
                     multilayered.create(rawMat["Data"],bpyMat)
 
-                case "base\\materials\\vehicle_destr_blendshape.mt":
-                    vehicleDestrBlendshape = VehicleDestrBlendshape(self.BasePath, self.image_format)
-                    vehicleDestrBlendshape.create(rawMat["Data"],bpyMat)
+                # This material should be handled within the main multilayered.py file. Commenting this out for now in case I broke something - jato
+                #case "base\\materials\\vehicle_destr_blendshape.mt":
+                    #vehicleDestrBlendshape = VehicleDestrBlendshape(self.BasePath, self.image_format)
+                    #vehicleDestrBlendshape.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal.mt" | "base\\materials\\mesh_decal_wet_character.mt":
                     if 'EnableMask' in rawMat.keys():

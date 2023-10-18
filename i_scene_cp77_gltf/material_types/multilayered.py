@@ -292,6 +292,8 @@ class Multilayered:
 
             NG.inputs[4].min_value = 0
             NG.inputs[4].max_value = 1
+            NG.inputs[5].min_value = 0 # No reason to invert these maps, not detail maps.
+            NG.inputs[5].max_value = 10 # This value is arbitrary, but more than adequate.
             NG.inputs[6].min_value = 0
             NG.inputs[6].max_value = 1
             
@@ -399,7 +401,7 @@ class Multilayered:
             
             NormSubN = create_node(NG.nodes,"ShaderNodeVectorMath", (-550, -200), operation = 'SUBTRACT')
 
-            GeoN = create_node(NG.nodes,"ShaderNodeNewGeometry", (-550, -450))
+            GeoN = create_node(NG.nodes,"ShaderNodeNewGeometry", (-550, -350))
 
             # Sets mltemplate normal strength
             NormStrengthN = create_node(NG.nodes,"ShaderNodeNormalMap", (-1400,-100), label = "NormalStrength")
@@ -532,5 +534,12 @@ class Multilayered:
             NG.links.new(RoughRampN.outputs[0],GroupOutN.inputs[2]) #Roughness output
             NG.links.new(NormalizeN.outputs[0],GroupOutN.inputs[3]) #Normal output
             NG.links.new(MaskRange.outputs[0],GroupOutN.inputs[4]) #Mask Layer output
+        
+        # Data for vehicledestrblendshape.mt
+        # Instead of maintaining two material py files we should setup the main multilayered shader to handle variants such as the vehicle material
+        if "BakedNormal" in Data.keys():
+            LayerNormal=Data["BakedNormal"]
+        else:
+            LayerNormal=Data["GlobalNormal"]
         
         self.createLayerMaterial(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_",LayerCount,CurMat,Data["MultilayerMask"],Data["GlobalNormal"])
