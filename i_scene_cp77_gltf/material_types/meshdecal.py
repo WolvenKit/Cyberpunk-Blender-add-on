@@ -59,8 +59,12 @@ class MeshDecal:
         CurMat.links.new(mulNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
 
         if "DiffuseColor" in Data:
-            dColor = CreateShaderNodeRGB(CurMat, Data["DiffuseColor"], -700, 550, "DiffuseColor")
-            CurMat.links.new(dColor.outputs[0],mixRGB.inputs[1])
+            dColor = CreateShaderNodeRGB(CurMat, Data["DiffuseColor"], -800, 650, "DiffuseColor")
+            Gamma = create_node(Ns,"ShaderNodeGamma",  (-600,600), label="Gamma")
+            Gamma.inputs[1].default_value = 2.2
+            
+            CurMat.links.new(dColor.outputs[0],Gamma.inputs[0])
+            CurMat.links.new(Gamma.outputs[0],mixRGB.inputs[1])
 
         if "NormalTexture" in Data:
             nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["NormalTexture"],-200,-250,'NormalTexture',self.img_format)
