@@ -51,6 +51,7 @@ class MaterialBuilder:
             bpyMat['ProjPath']= self.ProjPath
             bpyMat['MaterialTemplate'] = rawMat["MaterialTemplate"]
             bpyMat.use_nodes = True
+            no_shadows=False
             match rawMat["MaterialTemplate"]:
                 case "engine\\materials\\multilayered.mt" | "base\\materials\\vehicle_destr_blendshape.mt" | "base\\materials\\multilayered_clear_coat.mt":
                     multilayered = Multilayered(self.BasePath,self.image_format,self.ProjPath)
@@ -75,14 +76,17 @@ class MaterialBuilder:
                         enableMask=rawMat['EnableMask']
                     else:
                         enableMask=False
+                    no_shadows=True
                     meshDecal = MeshDecal(self.BasePath, self.image_format, self.ProjPath,enableMask)
                     meshDecal.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal_double_diffuse.mt":
+                    no_shadows=True
                     meshDecalDoubleDiffuse = MeshDecalDoubleDiffuse(self.BasePath, self.image_format)
                     meshDecalDoubleDiffuse.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\vehicle_mesh_decal.mt" :
+                    no_shadows=True
                     if 'EnableMask' in rawMat.keys():
                         enableMask=rawMat['EnableMask']
                     else:
@@ -115,6 +119,7 @@ class MaterialBuilder:
                     hair.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal_gradientmap_recolor.mt":
+                    no_shadows=True
                     meshDecalGradientMapReColor = MeshDecalGradientMapReColor(self.BasePath,self.image_format, self.ProjPath)
                     meshDecalGradientMapReColor.create(rawMat["Data"],bpyMat)
 
@@ -131,6 +136,7 @@ class MaterialBuilder:
                     eyeShadow.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\mesh_decal_emissive.mt" :
+                    no_shadows=True
                     meshDecalEmissive = MeshDecalEmissive(self.BasePath,self.image_format, self.ProjPath)
                     meshDecalEmissive.create(rawMat["Data"],bpyMat)
 
@@ -151,6 +157,7 @@ class MaterialBuilder:
                     glass.create(rawMat["Data"],bpyMat)
                 
                 case "base\\materials\\mesh_decal_parallax.mt" :
+                    no_shadows=True
                     meshDecalParallax = MeshDecalParallax(self.BasePath,self.image_format, self.ProjPath)
                     meshDecalParallax.create(rawMat["Data"],bpyMat)
 
@@ -171,6 +178,7 @@ class MaterialBuilder:
 
             #set the viewport blend mode to hashed - no more black tattoos and cybergear
             bpyMat.blend_method='HASHED'
+            bpyMat['no_shadows']=no_shadows
             return bpyMat
         
         elif self.obj["Data"]["RootChunk"].get("baseMaterial"):
