@@ -433,8 +433,9 @@ class Multilayered:
             MBCSubtract.inputs[0].default_value = 1.0
             
             # Doubles mlmask levels as mbcontrast approaches 1
-            MBCAdd = create_node(NG.nodes,"ShaderNodeMath", (-1400,-700), operation = 'ADD')
-            MBCAdd.inputs[1].default_value = 1.0
+            # Updated formula so 0.5 microblendcontrast yields 1.0x mask instead of 1.5x mask. Mid-values will skew heavier towards the MB alpha instead of the layer mask. - jato
+            MBCMultiply = create_node(NG.nodes,"ShaderNodeMath", (-1400,-700), operation = 'MULTIPLY')
+            MBCMultiply.inputs[1].default_value = 2.0
             
             # Doubles mlmask levels as mbcontrast approaches 1
             MaskMultiply = create_node(NG.nodes,"ShaderNodeMath", (-1200,-700), operation = 'MULTIPLY')
@@ -487,7 +488,7 @@ class Multilayered:
             NG.links.new(GroupInN.outputs[7],MBNormSubtractMask.inputs[1])
             
             NG.links.new(MBCMicroOffset.outputs[0],MBCSubtract.inputs[1])
-            NG.links.new(MBCMicroOffset.outputs[0],MBCAdd.inputs[0])
+            NG.links.new(MBCMicroOffset.outputs[0],MBCMultiply.inputs[0])
             NG.links.new(MBCMicroOffset.outputs[0],MBNormMultiply.inputs[1])
 
             NG.links.new(MBTexCord.outputs[2],MBMapping.inputs[0])
@@ -498,7 +499,7 @@ class Multilayered:
 
             NG.links.new(MBCSubtract.outputs[0],MaskMBMix.inputs[0])
             NG.links.new(MBCSubtract.outputs[0],MaskRange.inputs[1])
-            NG.links.new(MBCAdd.outputs[0],MaskMultiply.inputs[1])
+            NG.links.new(MBCMultiply.outputs[0],MaskMultiply.inputs[1])
 
             NG.links.new(MaskLinearBurnAdd.outputs[0],MaskLinearBurnSubtract.inputs[1])
             NG.links.new(MaskLinearBurnSubtract.outputs[0],MaskLinearBurnInvert.inputs[1])
