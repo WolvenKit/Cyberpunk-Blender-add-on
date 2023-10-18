@@ -80,7 +80,7 @@ class Skin:
 
         if "Roughness" in Data:
             rImg=imageFromRelPath(Data["Roughness"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
-            rImgNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-1600,50), label="Roughness", image=tImg)
+            rImgNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-1600,50), label="Roughness", image=rImg)
 
         rmSep =  create_node(CurMat.nodes, "ShaderNodeSeparateRGB", (-1300,50))
 		
