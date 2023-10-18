@@ -14,7 +14,7 @@ class MeshDecalDoubleDiffuse:
         mixRGB = CurMat.nodes.new("ShaderNodeMixRGB")
         mixRGB.location = (-500,500)
         mixRGB.hide = True
-        mixRGB.blend_type = 'MULTIPLY'
+        mixRGB.blend_type = 'OVERLAY'
         mixRGB.inputs[0].default_value = 1
         CurMat.links.new(mixRGB.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
 
@@ -56,8 +56,14 @@ class MeshDecalDoubleDiffuse:
         CurMat.links.new(mulNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
 
         if "DiffuseColor" in Data:
-            dColor = CreateShaderNodeRGB(CurMat, Data["DiffuseColor"], -700, 550, "DiffuseColor")
-            CurMat.links.new(dColor.outputs[0],mixRGB.inputs[1])
+            dColor = CreateShaderNodeRGB(CurMat, Data["DiffuseColor"], -500, 700, "DiffuseColor")
+
+            diffuseColorGamma = CurMat.nodes.new("ShaderNodeGamma")
+            diffuseColorGamma.location = (-500,650)
+            diffuseColorGamma.inputs[1].default_value = 2.2
+
+            CurMat.links.new(dColor.outputs[0],diffuseColorGamma.inputs[0])
+            CurMat.links.new(diffuseColorGamma.outputs[0],mixRGB.inputs[1])
 
         if "NormalTexture" in Data:
             nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["NormalTexture"],-200,-250,'NormalTexture',self.image_format)
