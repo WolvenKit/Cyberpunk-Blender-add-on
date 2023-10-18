@@ -52,7 +52,7 @@ class MaterialBuilder:
             bpyMat['MaterialTemplate'] = rawMat["MaterialTemplate"]
             bpyMat.use_nodes = True
             match rawMat["MaterialTemplate"]:
-                case "engine\\materials\\multilayered.mt" | "base\\materials\\vehicle_destr_blendshape.mt":
+                case "engine\\materials\\multilayered.mt" | "base\\materials\\vehicle_destr_blendshape.mt" | "base\\materials\\multilayered_clear_coat.mt":
                     multilayered = Multilayered(self.BasePath,self.image_format,self.ProjPath)
                     multilayered.create(rawMat["Data"],bpyMat)
 
@@ -60,9 +60,10 @@ class MaterialBuilder:
                     multilayeredTerrain = Multilayered(self.BasePath,self.image_format, self.ProjPath)
                     multilayeredTerrain.create(rawMat["Data"],bpyMat)
 
-                case "base\\materials\\multilayered_clear_coat.mt":
-                    multilayered = MultilayeredClearCoat(self.BasePath,self.image_format)
-                    multilayered.create(rawMat["Data"],bpyMat)
+                # This material should be handled within the main multilayered.py file. Commenting this out for now in case I broke something - jato
+                #case "base\\materials\\multilayered_clear_coat.mt":
+                    #multilayered = MultilayeredClearCoat(self.BasePath,self.image_format)
+                    #multilayered.create(rawMat["Data"],bpyMat)
 
                 # This material should be handled within the main multilayered.py file. Commenting this out for now in case I broke something - jato
                 #case "base\\materials\\vehicle_destr_blendshape.mt":
