@@ -92,17 +92,17 @@ class Multilayered:
     def createLayerMaterial(self,LayerName,LayerCount,CurMat,mlmaskpath,normalimgpath):
         NG = bpy.data.node_groups.new("Layer_Blend","ShaderNodeTree")#create layer's node group
         NG.inputs.new('NodeSocketColor','Color A')
-        NG.inputs.new('NodeSocketColor','Metalness A')
-        NG.inputs.new('NodeSocketColor','Roughness A')
+        NG.inputs.new('NodeSocketFloat','Metalness A')
+        NG.inputs.new('NodeSocketFloat','Roughness A')
         NG.inputs.new('NodeSocketVector','Normal A')
         NG.inputs.new('NodeSocketColor','Color B')
-        NG.inputs.new('NodeSocketColor','Metalness B')
-        NG.inputs.new('NodeSocketColor','Roughness B')
+        NG.inputs.new('NodeSocketFloat','Metalness B')
+        NG.inputs.new('NodeSocketFloat','Roughness B')
         NG.inputs.new('NodeSocketVector','Normal B')
-        NG.inputs.new('NodeSocketColor','Mask')
+        NG.inputs.new('NodeSocketFloat','Mask')
         NG.outputs.new('NodeSocketColor','Color')
-        NG.outputs.new('NodeSocketColor','Metalness')
-        NG.outputs.new('NodeSocketColor','Roughness')
+        NG.outputs.new('NodeSocketFloat','Metalness')
+        NG.outputs.new('NodeSocketFloat','Roughness')
         NG.outputs.new('NodeSocketVector','Normal')
         GroupInN = create_node(NG.nodes,"NodeGroupInput", (-700,0), hide=False)
     
@@ -283,12 +283,12 @@ class Multilayered:
             NG.inputs.new('NodeSocketFloat','MicroblendContrast')
             NG.inputs.new('NodeSocketFloat','NormalStrength')
             NG.inputs.new('NodeSocketFloat','Opacity')
-            NG.inputs.new('NodeSocketColor','Mask')
+            NG.inputs.new('NodeSocketFloat','Mask')
             NG.outputs.new('NodeSocketColor','Color')
-            NG.outputs.new('NodeSocketColor','Metalness')
-            NG.outputs.new('NodeSocketColor','Roughness')
+            NG.outputs.new('NodeSocketFloat','Metalness')
+            NG.outputs.new('NodeSocketFloat','Roughness')
             NG.outputs.new('NodeSocketVector','Normal')
-            NG.outputs.new('NodeSocketColor','Layer Mask')
+            NG.outputs.new('NodeSocketFloat','Layer Mask')
 
             NG.inputs[4].min_value = 0
             NG.inputs[4].max_value = 1
@@ -303,7 +303,7 @@ class Multilayered:
             
             GroupInN = create_node(NG.nodes, "NodeGroupInput", (-2600,0))
             
-            GroupOutN = create_node(NG.nodes, "NodeGroupOutput", (200,0))
+            GroupOutN = create_node(NG.nodes, "NodeGroupOutput", (200,-100))
             LayerGroupN['mlTemplate']=material
             if not bpy.data.node_groups.get(os.path.basename(material)[:-11]):
                 self.createBaseMaterial(mltemplate,material)
@@ -358,11 +358,11 @@ class Multilayered:
             # Node for blending colorscale color with diffuse texture of mltemplate
             # Changed from multiply to overlay because multiply is a darkening blend mode, and colors appear too dark. Overlay is still probably wrong - jato
             if colorScale != "null":
-                ColorScaleMixN = create_node(NG.nodes,"ShaderNodeMixRGB",(-1500,50),blend_type='OVERLAY')
+                ColorScaleMixN = create_node(NG.nodes,"ShaderNodeMixRGB",(-1400,100),blend_type='OVERLAY')
                 ColorScaleMixN.inputs[0].default_value=1
             
             # Microblend texture node
-            MBN = create_node(NG.nodes,"ShaderNodeTexImage",(-2050,-600),image = MBI,label = "Microblend")
+            MBN = create_node(NG.nodes,"ShaderNodeTexImage",(-2300,-800),image = MBI,label = "Microblend")
             
             # Flips normal map when mb normal strength is negative - invert RG channels
             MBRGBCurveN = create_node(NG.nodes,"ShaderNodeRGBCurve",(-1700,-350))
@@ -370,6 +370,7 @@ class Multilayered:
             MBRGBCurveN.mapping.curves[0].points[1].location = (1,0)
             MBRGBCurveN.mapping.curves[1].points[0].location = (0,1)
             MBRGBCurveN.mapping.curves[1].points[1].location = (1,0)
+            MBRGBCurveN.width = 150
             
             # Flips normal map when mb normal strength is negative - returns 0 or 1 based on positive or negative mb normal strength value
             MBGrtrThanN = create_node(NG.nodes,"ShaderNodeMath", (-1400,-300),operation = 'GREATER_THAN')
@@ -378,47 +379,45 @@ class Multilayered:
             # Flips normal map when mb normal strength is negative - mix node uses greater than node like a bool for positive/negative
             MBMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-1400,-350), blend_type ='MIX', label = "MB+- Norm Mix")
             
-            # Uses mlmask layer to mask off microblend normal
-            MBMixNormalMask = create_node(NG.nodes,"ShaderNodeMixRGB", (-1200,-350),blend_type ='MIX', label = "MB Norm Mask")
-            MBMixNormalMask.inputs[1].default_value = (0.5,0.5,1.0,1.0)
-            MBMixNormalMask.inputs[2].default_value = (0.5,0.5,1.0,1.0)
-            
-            # Mixes microblend normal against empty normal color using the finished microblend alpha mask as a factor
-            MBMixNormalMB = create_node(NG.nodes,"ShaderNodeMixRGB", (-1000,-350),blend_type ='MIX', label = "MB Norm Contrast")
-            MBMixNormalMB.inputs[1].default_value = (0.5,0.5,1.0,1.0)
-            
-            # Hides microblend normal as microblend contrast approaches 0
-            # This is definitely wrong. The interaction is more complex, needs more work but this is close enough for initial implementation -jato
-            MBNormalRange = create_node(NG.nodes,"ShaderNodeMapRange", (-1000,-450))
-            MBNormalRange.clamp = True
-            
             MBMapping = create_node(NG.nodes,"ShaderNodeMapping", (-2300,-650))
             
             MBTexCord = create_node(NG.nodes,"ShaderNodeTexCoord", (-2300,-600))
             
+            # Multiply normal strength against microblend contrast
+            # Results in hidden mb-normals when mbcontrast = 0. This is almost certainly wrong but it's good enough for now -jato
+            MBNormMultiply = create_node(NG.nodes,"ShaderNodeMath", (-1600,-200),operation = 'MULTIPLY')
+
             # Absolute value is necessary because Blender does not support negative normal map values in this node
-            MBNormAbsN = create_node(NG.nodes,"ShaderNodeMath", (-750,-300),operation = 'ABSOLUTE')
+            MBNormAbsN = create_node(NG.nodes,"ShaderNodeMath", (-1400,-200),operation = 'ABSOLUTE')
             
-            MBNormalN = create_node(NG.nodes,"ShaderNodeNormalMap", (-750,-350))
+            # Hides mb normal map where mask is fully opaque/white/1
+            MBNormSubtractMask = create_node(NG.nodes, "ShaderNodeMath", (-1200, -250), operation = 'SUBTRACT')
+            MBNormSubtractMask.use_clamp = True
             
-            NormalCombineN = create_node(NG.nodes,"ShaderNodeVectorMath", (-550,-250))
+            # Final microblend normal map node
+            MBNormalN = create_node(NG.nodes,"ShaderNodeNormalMap", (-750,-200))
             
-            NormSubN = create_node(NG.nodes,"ShaderNodeVectorMath", (-550, -350), operation = 'SUBTRACT')
+            NormSubN = create_node(NG.nodes,"ShaderNodeVectorMath", (-550, -200), operation = 'SUBTRACT')
+
+            GeoN = create_node(NG.nodes,"ShaderNodeNewGeometry", (-550, -450))
+
+            # Sets mltemplate normal strength
+            NormStrengthN = create_node(NG.nodes,"ShaderNodeNormalMap", (-1400,-100), label = "NormalStrength")
+
+            # Adds microblend normal map to mltemplate normal map. This works because both maps have been vectorized to -1 --> +1 range
+            NormalCombineN = create_node(NG.nodes,"ShaderNodeVectorMath", (-550,-100), operation = 'ADD')
             
-            NormalizeN =create_node(NG.nodes,"ShaderNodeVectorMath", (-350,-200), operation = 'NORMALIZE')
-            
-            GeoN = create_node(NG.nodes,"ShaderNodeNewGeometry", (-750, -450))
-            
-            NormStrengthN = create_node(NG.nodes,"ShaderNodeNormalMap", (-1200,-200), label = "NormalStrength")
+            NormalizeN =create_node(NG.nodes,"ShaderNodeVectorMath", (-350,-100), operation = 'NORMALIZE')
             
             # Roughness
-            RoughRampN = create_node(NG.nodes,"ShaderNodeMapRange", (-1400,-100), label = "Roughness Ramp")
+            RoughRampN = create_node(NG.nodes,"ShaderNodeMapRange", (-1400,0), label = "Roughness Ramp")
             if roughLevelsOut in OverrideTable["RoughLevelsOut"].keys():
                 RoughRampN.inputs['To Min'].default_value = (OverrideTable["RoughLevelsOut"][roughLevelsOut][1][0])
                 RoughRampN.inputs['To Max'].default_value = (OverrideTable["RoughLevelsOut"][roughLevelsOut][0][0])
             
             # Metalness
-            MetalRampN = create_node(NG.nodes,"ShaderNodeValToRGB", (-1400,-50),label = "Metal Ramp")
+            MetalRampN = create_node(NG.nodes,"ShaderNodeValToRGB", (-1400,50),label = "Metal Ramp")
+            MetalRampN.width = 150
             if metalLevelsOut in OverrideTable["MetalLevelsOut"].keys():
                 MetalRampN.color_ramp.elements[1].color = (OverrideTable["MetalLevelsOut"][metalLevelsOut][0])
                 MetalRampN.color_ramp.elements[0].color = (OverrideTable["MetalLevelsOut"][metalLevelsOut][1])
@@ -426,7 +425,7 @@ class Multilayered:
             # --- Mask Layer ---
 
             # MicroOffset prevents shader error when microblend contrast is exactly zero
-            MBCMicroOffset = create_node(NG.nodes,"ShaderNodeMath", (-2300,-400), operation = 'ADD', label = "Micro-offset")
+            MBCMicroOffset = create_node(NG.nodes,"ShaderNodeMath", (-2000,-200), operation = 'ADD', label = "Micro-offset")
             MBCMicroOffset.inputs[1].default_value = 0.0001
 
             # Invert microblend contrast so mbcontrast value of 1 = 0, and 0 = 1
@@ -453,27 +452,24 @@ class Multilayered:
             MaskLinearBurnInvert.inputs[0].default_value = 1.0
 
             # Mix the microblend against the original mlmask
-            MaskMBMix = create_node(NG.nodes,"ShaderNodeMix", (-900,-800), label = "MICROBLEND MIXER")
+            MaskMBMix = create_node(NG.nodes,"ShaderNodeMix", (-900,-750), label = "MICROBLEND MIXER")
             MaskMBMix.data_type ='RGBA'
             MaskMBMix.clamp_factor = True
+            MaskMBMix.clamp_result = True
 
             # Raise the contrast of the microblend as mbcontrast approaches zero by increasing `From Min` value
             # Smoother Step setting appears to disable clamp in the UI? Not sure if this matters
-            MaskRange = create_node(NG.nodes,"ShaderNodeMapRange", (-600,-800))
+            MaskRange = create_node(NG.nodes,"ShaderNodeMapRange", (-600,-650))
             MaskRange.inputs['From Min'].default_value = (0)
             MaskRange.inputs['From Max'].default_value = (1)
             MaskRange.inputs['To Min'].default_value = (0)
             MaskRange.inputs['To Max'].default_value = (1)
             MaskRange.interpolation_type = 'SMOOTHERSTEP'
             MaskRange.clamp = True
+            MaskRange.hide = False
             
             MaskOpReroute = create_node(NG.nodes,"NodeReroute", (-1500,-750))
             
-            # Mix the complete mlmask with microblend against the opacity value
-            MaskOpMix = create_node(NG.nodes,"ShaderNodeMixRGB", (-300,-750), label = "OPACITY MIX")
-            MaskOpMix.blend_type ='MIX'
-            MaskOpMix.inputs[1].default_value = (0,0,0,1)
-
             # --- End Mask Layer ---
             
             
@@ -482,17 +478,17 @@ class Multilayered:
             NG.links.new(GroupInN.outputs[1],BMN.inputs[0])
             NG.links.new(GroupInN.outputs[2],MBMapping.inputs[3])
             NG.links.new(GroupInN.outputs[3],MBGrtrThanN.inputs[0])
-            NG.links.new(GroupInN.outputs[3],MBNormAbsN.inputs[0])
+            NG.links.new(GroupInN.outputs[3],MBNormMultiply.inputs[0])
             NG.links.new(GroupInN.outputs[4],MBCMicroOffset.inputs[0])
-            NG.links.new(GroupInN.outputs[4],MBNormalRange.inputs[2])
             NG.links.new(GroupInN.outputs[5],NormStrengthN.inputs[0])
             NG.links.new(GroupInN.outputs[6],MaskOpReroute.inputs[0])
             NG.links.new(GroupInN.outputs[7],MaskMultiply.inputs[0])
             NG.links.new(GroupInN.outputs[7],MaskLinearBurnAdd.inputs[0])
-            NG.links.new(GroupInN.outputs[7],MBMixNormalMask.inputs[0])
+            NG.links.new(GroupInN.outputs[7],MBNormSubtractMask.inputs[1])
             
             NG.links.new(MBCMicroOffset.outputs[0],MBCSubtract.inputs[1])
             NG.links.new(MBCMicroOffset.outputs[0],MBCAdd.inputs[0])
+            NG.links.new(MBCMicroOffset.outputs[0],MBNormMultiply.inputs[1])
 
             NG.links.new(MBTexCord.outputs[2],MBMapping.inputs[0])
             NG.links.new(MBMapping.outputs[0],MBN.inputs[0])
@@ -517,17 +513,14 @@ class Multilayered:
             
             NG.links.new(NormStrengthN.outputs[0],NormalCombineN.inputs[0])
             
-            NG.links.new(MaskOpReroute.outputs[0],MaskOpMix.inputs[0])
-            NG.links.new(MaskRange.outputs[0],MaskOpMix.inputs[2])
-            NG.links.new(MaskRange.outputs[0],MBNormalRange.inputs[0])
-            NG.links.new(MBNormalRange.outputs[0],MBMixNormalMB.inputs[0])
+            NG.links.new(MaskOpReroute.outputs[0],MaskRange.inputs[4])
 
             NG.links.new(MBGrtrThanN.outputs[0],MBMixN.inputs[0])
             NG.links.new(MBRGBCurveN.outputs[0],MBMixN.inputs[1])
-            NG.links.new(MBMixN.outputs[0],MBMixNormalMask.inputs[2])
-            NG.links.new(MBMixNormalMask.outputs[0],MBMixNormalMB.inputs[2])
-            NG.links.new(MBMixNormalMB.outputs[0],MBNormalN.inputs[1])
-            NG.links.new(MBNormAbsN.outputs[0],MBNormalN.inputs[0])
+            NG.links.new(MBMixN.outputs[0],MBNormalN.inputs[1])
+            NG.links.new(MBNormMultiply.outputs[0],MBNormAbsN.inputs[0])
+            NG.links.new(MBNormAbsN.outputs[0],MBNormSubtractMask.inputs[0])
+            NG.links.new(MBNormSubtractMask.outputs[0],MBNormalN.inputs[0])
             NG.links.new(MBNormalN.outputs[0],NormSubN.inputs[0])
             NG.links.new(GeoN.outputs['Normal'],NormSubN.inputs[1])
             NG.links.new(NormSubN.outputs[0],NormalCombineN.inputs[1])			
@@ -537,6 +530,6 @@ class Multilayered:
             NG.links.new(MetalRampN.outputs[0],GroupOutN.inputs[1]) #Metalness output
             NG.links.new(RoughRampN.outputs[0],GroupOutN.inputs[2]) #Roughness output
             NG.links.new(NormalizeN.outputs[0],GroupOutN.inputs[3]) #Normal output
-            NG.links.new(MaskOpMix.outputs[0],GroupOutN.inputs[4]) #Mask Layer output
+            NG.links.new(MaskRange.outputs[0],GroupOutN.inputs[4]) #Mask Layer output
         
         self.createLayerMaterial(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_",LayerCount,CurMat,Data["MultilayerMask"],Data["GlobalNormal"])
