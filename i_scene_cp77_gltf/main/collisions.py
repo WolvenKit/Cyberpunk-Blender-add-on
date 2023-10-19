@@ -36,6 +36,8 @@ def CP77CollisionGen(self, context, matchSize, collision_shape, sampleverts, rad
         center = (min_vertex + max_vertex) / 2
 
     if collision_shape == 'CONVEX':
+        if not is_edit_mode:
+            bpy.ops.object.mode_set(mode='EDIT') 
         # Get the bmesh linked to the active object
         obj = bpy.context.edit_object
         bm = bmesh.from_edit_mesh(obj.data)
@@ -68,6 +70,9 @@ def CP77CollisionGen(self, context, matchSize, collision_shape, sampleverts, rad
             colliderCollection.objects.link(convcol)
             context.view_layer.objects.active = convcol
             convcol.select_set(True)
+
+            if not is_edit_mode:
+                bpy.ops.object.mode_set(mode='OBJECT')
                   
   
     if collision_shape == "BOX":
