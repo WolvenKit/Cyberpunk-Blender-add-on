@@ -101,13 +101,17 @@ def trans_weights(self, context):
 def CP77UvChecker(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
     bpy_mats=bpy.data.materials
-    existing_materials = bpy_mats.keys()
     current_mode = context.mode
-    if 'UV_Checker' not in existing_materials:
+    uv_checker = None
+    for mat in bpy_mats:
+        if mat.name == 'UV_Checker':
+            uvchecker = mat
+            uv_checker = True
+    if uv_checker == None:
         image_path = os.path.join(resources_dir, "uvchecker.png")
         # Load the image texture
         image = bpy.data.images.load(image_path)
-        # Create a new material if it doesn't exist
+        # Create a new material
         uvchecker = bpy_mats.new(name="UV_Checker")
         uvchecker.use_nodes = True
         # Create a new texture node
@@ -118,21 +122,22 @@ def CP77UvChecker(self, context):
         shader_node = uvchecker.node_tree.nodes["Principled BSDF"]
         uvchecker.node_tree.links.new(texture_node.outputs['Color'], shader_node.inputs['Base Color'])
     for mesh in selected_meshes:
+        mat_assigned = False
         for mat in context.object.material_slots:
             if mat.name == 'UV_Checker':
                 uvchecker = mat
-        if 'UV_Checker' not in context.object.material_slots.keys():
+                mat_assigned = True
+        if not mat_assigned:
             bpy.data.meshes[mesh.name].materials.append(bpy_mats['UV_Checker'])
             i = context.object.active_material_index + 1
             bpy.context.object.active_material_index = i
-        else:
-            uvchecker = mat in context.object.material_slots if mat.name == 'UV_Checker' else None
             if current_mode is not 'EDIT':
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.object.material_slot_assign()
                 print(current_mode)
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.object.material_slot_assign()
-        print(current_mode)
-    bpy.ops.object.mode_set(mode=current_mode)
+        
+        if context.mode is not current_mode:
+            bpy.ops.object.mode_set(mode=current_mode)
 
     return {'FINISHED'}
 
