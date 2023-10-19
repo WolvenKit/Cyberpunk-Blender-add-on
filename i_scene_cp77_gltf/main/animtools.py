@@ -83,7 +83,6 @@ def play_anim(self, context, anim_name):
         obj.animation_data.action = active_action
 
         # Start playing the animation
-        context.scene.frame_current = int(active_action.frame_range[0])
         bpy.ops.screen.animation_play()
 
     return {'FINISHED'}

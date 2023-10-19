@@ -464,14 +464,37 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
                 row.operator('cp77.rig_loader',icon='ADD', text="load selected rig")
                 row.prop(props, 'fbx_rot', text="", icon='LOOP_BACK', toggle=1)
                 row = box.row(align=True)
-                row = box.row(align=True)
-                row.operator('insert_keyframe.cp77')
-                row.operator('reset_armature.cp77')
 
                 obj = context.active_object
                 if obj and obj.type == 'ARMATURE':
                     available_anims = list(CP77AnimsList(context,obj))
                     active_action = obj.animation_data.action if obj.animation_data else None
+                    box = layout.box()
+                    row = box.row(align=True)
+                    row.operator('insert_keyframe.cp77')
+                    if available_anims:
+                        for action in available_anims:
+                            action.use_fake_user:True
+                            selected = action == active_action
+                            if selected:
+                                row = box.row(align=True)
+                                row.operator("screen.frame_jump", text="", icon='REW').end = False
+                                row.operator("screen.keyframe_jump", text="", icon='PREV_KEYFRAME').next = False
+                                row.operator("screen.animation_play", text="", icon='PLAY_REVERSE').reverse = True
+                                row.operator("screen.keyframe_jump", text="", icon='NEXT_KEYFRAME').next = True
+                                row.operator("screen.frame_jump", text="", icon='FF').end = True
+                                row = box.row(align=True)
+                                row.operator('reset_armature.cp77')
+                                row.prop(active_action, 'use_frame_range', text="Set Range",toggle=1)
+                                if active_action.use_frame_range:
+                                    row = box.row(align=True)
+                                    row.prop(active_action, 'frame_start', text="")
+                                    row.prop(active_action, 'frame_end', text="")
+                                row.operator('bpy.ops.action.push_down', text="")
+                    else:
+                        row.separator()
+                        row.operator('reset_armature.cp77')
+
                     box = layout.box()
                     row = box.row(align=True)
                     row.label(text='Animsets', icon_value=custom_icon_col["import"]['WKIT'].icon_id)
@@ -487,6 +510,8 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
                             if selected and context.screen.is_animation_playing:
                                 op = sub.operator('screen.animation_cancel', icon='PAUSE', text=action.name, emboss=True)
                                 op.restore_frame = False
+                                if active_action.use_frame_range:
+                                    row.prop(active_action, 'use_cyclic', icon='CON_FOLLOWPATH', text="")
                             else:
                                 icon = 'PLAY' if selected else 'TRIA_RIGHT'
                                 op = sub.operator('cp77.set_animset', icon=icon, text="", emboss=True)
@@ -697,7 +722,7 @@ class CP77GLBExport(bpy.types.Operator,ExportHelper):
    ### adds a checkbox for anim export settings
     filter_glob: StringProperty(default="*.glb", options={'HIDDEN'})
     export_poses: BoolProperty(
-        name="As Photomode Pose",
+        name="Animations",
         default=False,
         description="Use this option if you are exporting anims to be imported into wkit as .anim"
     )
