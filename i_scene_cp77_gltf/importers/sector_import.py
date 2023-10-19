@@ -329,7 +329,14 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                 scale =Vector((1/scale_factor,1/scale_factor,1/scale_factor))
                                 rot =Quaternion(get_rot(inst))
                                 inst_trans_mat=Matrix.LocRotScale(pos,rot,scale)
-                                for old_obj in group.all_objects:                            
+                                for child in group.children:
+                                    newchild=bpy.data.collections.new(child.name)
+                                    new.children.link(newchild)
+                                    for old_obj in child.objects:                            
+                                        obj=old_obj.copy()  
+                                        newchild.objects.link(obj)                                     
+                                        obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
+                                for old_obj in group.objects:                            
                                     obj=old_obj.copy()  
                                     new.objects.link(obj)                                     
                                     obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
