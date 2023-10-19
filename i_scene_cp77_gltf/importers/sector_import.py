@@ -336,10 +336,14 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         obj=old_obj.copy()  
                                         newchild.objects.link(obj)                                     
                                         obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
+                                        if 'Armature' in obj.name:
+                                            obj.hide_set(True)
                                 for old_obj in group.objects:                            
                                     obj=old_obj.copy()  
                                     new.objects.link(obj)                                     
                                     obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
+                                    if 'Armature' in obj.name:
+                                        obj.hide_set(True)
 
  
                 case 'worldInstancedMeshNode' :
