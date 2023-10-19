@@ -522,6 +522,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 obj.location = get_pos(inst)
                                                 obj.rotation_quaternion = get_rot(inst)
                                                 obj.scale = get_scale(inst)
+                                                if 'Armature' in obj.name:
+                                                    obj.hide_set(True)
                                     else:
                                         print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
                                   
@@ -599,6 +601,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                     new.objects.link(obj)   
                                                     obj.matrix_local= tm   
                                                     obj.scale=get_scale(inst)
+                                                    if 'Armature' in obj.name:
+                                                        obj.hide_set(True)  
                                     else:
                                         print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
                 case 'worldCollisionNode':
