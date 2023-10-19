@@ -210,7 +210,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
         coll_target=bpy.data.collections.get("MasterInstances")
 
     Masters=coll_target
-    Masters.hide_viewport=True
+    #Masters.hide_viewport=True # this breaks the entity positioning for some reason?!?
 
     # could take this out but its useful in edge cases.
     from_mesh_no=0
@@ -296,7 +296,9 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     else:
                         try:
                             print('Importing ',entpath, ' using app ',app)
-                            bpy.ops.io_scene_gltf.cp77entity(filepath=entpath, appearances=app,with_materials=with_materials, inColl='Masters')
+                            incoll='MasterInstances'
+                            bpy.ops.io_scene_gltf.cp77entity(filepath=entpath, appearances=app,with_materials=with_materials, inColl=incoll)
+                            move_coll=Masters.children.get(ent_groupname)
                             imported=True
                         except:
                             print(traceback.print_exc())
@@ -305,9 +307,9 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                         instances = [x for x in t if x['NodeIndex'] == i]
                         for idx,inst in enumerate(instances):
                             #print(inst)
-                            group=move_coll
-                            groupname=move_coll.name
+                            group=move_coll                            
                             if (group):
+                                groupname=move_coll.name
                                 #print('Group found for ',groupname)     
                                 new=bpy.data.collections.new(groupname)
                                 Sector_coll.children.link(new)
@@ -322,26 +324,15 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                 new['pivot']=inst['Pivot']
                                 if len(group.all_objects)>0:
                                     new['matrix']=group.all_objects[0].matrix_local
+                                pos = Vector(get_pos(inst))
+                                rot=[0,0,0,0]
+                                scale =Vector((1/scale_factor,1/scale_factor,1/scale_factor))
+                                rot =Quaternion(get_rot(inst))
+                                inst_trans_mat=Matrix.LocRotScale(pos,rot,scale)
                                 for old_obj in group.all_objects:                            
                                     obj=old_obj.copy()  
-                                    new.objects.link(obj)  
-                                    pos =Vector(get_pos(inst))
-                                    rot=[0,0,0,0]
-                                    rot =get_rot(inst)
-                                    scale =Vector((.01,.01,.01))
-                                    rot =Quaternion(get_rot(inst))
-                                    #print(rot)
-                                    inst_trans_mat=Matrix.LocRotScale(pos,rot,scale)
+                                    new.objects.link(obj)                                     
                                     obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
-                                    #curse=bpy.context.scene.cursor.location
-                                    #with bpy.context.temp_override(selected_editable_objects=obj):
-                                    #    bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
-                                    #pos=get_pos(inst)
-                                 # objects may already be offset by the entity import, need to preserve that.
-                                    #obj.location = (obj.location.x*.01+pos[0],obj.location.y*.01+pos[1],obj.location.z*.01+pos[2])
-                                    #obj.rotation_quaternion = get_rot(inst)
-                                    #obj.scale = get_scale(inst)
-                                    #bpy.context.scene.cursor.location=curse 
 
  
                 case 'worldInstancedMeshNode' :
@@ -680,6 +671,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     pass
 
         print('Finished with ',filepath)
+    # doing this earlier in the file was breaking the entity postitioning. NO idea how that works, but be warned.    
+    Masters.hide_viewport=True
     print('Finished Importing Sectors')
 
 

@@ -14,7 +14,7 @@ from ..main.common import json_ver_validate
 # if you've already imported the body/head and set the rig up you can exclude them by putting them in the exclude_meshes list 
 #presto_stash=[]
 
-def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=True, include_collisions=False, inColl=None): 
+def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=True, include_collisions=False,inColl=''): 
     
     C = bpy.context
     coll_scene = C.scene.collection
@@ -150,7 +150,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     else:
         for x,app_name in enumerate(appearances):
             
-            ent_coll = bpy.data.collections.new(ent_name)
+            ent_coll = bpy.data.collections.new(ent_name+'_'+app_name)
             if inColl and inColl in coll_scene.children.keys():
                 par_coll=bpy.data.collections.get(inColl)
                 par_coll.children.link(ent_coll)

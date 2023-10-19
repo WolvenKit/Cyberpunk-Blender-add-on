@@ -735,7 +735,11 @@ class CP77EntityImport(bpy.types.Operator,ImportHelper):
     update_gi: BoolProperty(name="Update Global Illumination",default=True,description="Update Cycles global illumination options for transparency fixes and higher quality renders")
     with_materials: BoolProperty(name="With Materials",default=True,description="Import Wolvenkit-exported materials")   
     include_collisions: BoolProperty(name="Include Vehicle Collisions",default=False,description="Use this option if you want to include the .phys collision info for vehicle modding")
-     
+    inColl: StringProperty(name= "Collector to put the imported entity in",
+                                description="Collector to put the imported entity in",
+                                default='',
+                                options={'HIDDEN'}) 
+    
     def execute(self, context):
         SetCyclesRenderer(self.update_gi)
 
@@ -743,8 +747,9 @@ class CP77EntityImport(bpy.types.Operator,ImportHelper):
         print('apps - ',apps)
         excluded=""
         bob=self.filepath
+        inColl=self.inColl
         #print('Bob - ',bob)
-        importEnt( bob, apps, excluded,self.with_materials, self.include_collisions)
+        importEnt( bob, apps, excluded,self.with_materials, self.include_collisions,inColl)
 
         return {'FINISHED'}
 
