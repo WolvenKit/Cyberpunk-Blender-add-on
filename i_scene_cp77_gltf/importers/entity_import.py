@@ -197,7 +197,20 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                             ent_app_idx=i
                             app_name=a['appearanceName']['$value']
 
-                if ent_app_idx<0:
+                if ent_app_idx<0 and app_name =='default':
+                    ent_default=j['Data']['RootChunk']['defaultAppearance']['$value']
+                    for i,a in enumerate(ent_apps):
+                        if a['name']['$value']==ent_default:
+                            print('appearance matched, id = ',i)
+                            ent_app_idx=i
+                            app_name=a['appearanceName']['$value']
+                            continue
+                        if a['name']['$value']==ent_default:
+                            print('appearance matched, id = ',i)
+                            ent_app_idx=i
+                            app_name=a['appearanceName']['$value']
+                            continue
+                else:
                     ent_app_idx=0
 
                 app_file = ent_apps[ent_app_idx]['appearanceResource']['DepotPath']['$value']
