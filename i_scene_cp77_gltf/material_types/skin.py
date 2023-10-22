@@ -10,73 +10,56 @@ class Skin:
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes['Principled BSDF']
-#SSS/s
-        sVcol = create_node(CurMat.nodes,"ShaderNodeVertexColor", (-1400,250))
+        
+        #SSS/s
 
-        sSepRGB = create_node(CurMat.nodes,"ShaderNodeSeparateRGB", (-1200,250))
+        sVcol = create_node(CurMat.nodes,"ShaderNodeVertexColor", (-1400,150))
 
-        sMultiply = create_node(CurMat.nodes,"ShaderNodeMath", (-800,250), operation = 'MULTIPLY')
-        sMultiply.inputs[1].default_value = (0.05)
+        sSepRGB = create_node(CurMat.nodes,"ShaderNodeSeparateRGB", (-1200,150))
+
+        # This value is completely arbitary in Blender 3.6 and lower. However it's tied to the assets physical size in Blender. SSS is refactored completely in upcoming Blender 4.0
+        sMultiply = create_node(CurMat.nodes,"ShaderNodeMath", (-800,150), operation = 'MULTIPLY')
+        sMultiply.inputs[1].default_value = (0.025)
 
         CurMat.links.new(sVcol.outputs[0],sSepRGB.inputs[0])
         CurMat.links.new(sSepRGB.outputs[1],sMultiply.inputs[0])
         CurMat.links.new(sMultiply.outputs[0],pBSDF.inputs['Subsurface'])
         pBSDF.inputs['Subsurface Color'].default_value = (0.8, 0.14908, 0.0825199, 1)
         
-#Albedo/a
-        mixRGB = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-200,300), blend_type = 'MULTIPLY')
+        #Albedo/a
 
         if "Albedo" in Data: # should always be param has a value in the skin.mt
             aImg=imageFromRelPath(Data["Albedo"],DepotPath=self.BasePath, ProjPath=self.ProjPath)
-            aImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-1400,550), label="Albedo", image=aImg)
-            CurMat.links.new(aImgNode.outputs[0],pBSDF.inputs['Base Color'])
-            CurMat.links.new(aImgNode.outputs[0],mixRGB.inputs[1])
+            aImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-900,450), label="Albedo", image=aImg)
 
         if "TintColor" in Data:
-            tColor = CreateShaderNodeRGB(CurMat, Data["TintColor"],-1550,610,"TintColor")
-            CurMat.links.new(tColor.outputs[0],mixRGB.inputs[2])
+            tColor = CreateShaderNodeRGB(CurMat, Data["TintColor"],-700,300,"TintColor")
         
         if "TintColorMask" in Data: # should always be param has a value in the skin.mt
             tImg=imageFromRelPath(Data["TintColorMask"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
             tmaskNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-1840,680), label="TintColorMask", image=tImg)
-            CurMat.links.new(tmaskNode.outputs[0],mixRGB.inputs[0])
 
         if "TintScale" in Data:
-            tintScale = CreateShaderNodeValue(CurMat, Data["TintScale"],-1044,445,"TintScale")
+            tintScale = CreateShaderNodeValue(CurMat, Data["TintScale"],-300,550,"TintScale")
         else:
             tintScale = CreateShaderNodeValue(CurMat, 1.0,-1045,445,"TintScale")
+
+        tintColorGamma = CurMat.nodes.new("ShaderNodeGamma")
+        tintColorGamma.location = (-500,300)
+        tintColorGamma.inputs[1].default_value = 2.2
+
+        albedoTintMix = create_node(CurMat.nodes,"ShaderNodeMix",(-300, 350), blend_type='MULTIPLY', label="Mix")
+        albedoTintMix.data_type='RGBA'
+        albedoTintMix.inputs[0].default_value = 1.0
+
+        CurMat.links.new(tColor.outputs[0],tintColorGamma.inputs[0])
+        CurMat.links.new(tintScale.outputs[0],albedoTintMix.inputs[0])
+        CurMat.links.new(aImgNode.outputs[0],albedoTintMix.inputs[6])
+        CurMat.links.new(tintColorGamma.outputs[0],albedoTintMix.inputs[7])
+        CurMat.links.new(albedoTintMix.outputs[2],pBSDF.inputs['Base Color'])
         
-        ## Thanks Surr for helping work this bit out.
-        SeparateColor = create_node(CurMat.nodes,"ShaderNodeSeparateColor",(-1400, 800), label="Separate Color")
-        Mix = create_node(CurMat.nodes,"ShaderNodeMix",(-400, 600), blend_type='MULTIPLY', label="Mix")
-        Mix.data_type='RGBA'
-        Mix001 = create_node(CurMat.nodes,"ShaderNodeMix",(-805,740), blend_type='MULTIPLY', label="Mix_G")
-        Mix001.data_type='RGBA'
-        Mix002 = create_node(CurMat.nodes,"ShaderNodeMix",(-631,672), blend_type='MULTIPLY', label="Mix_B")
-        Mix002.data_type='RGBA'
-        Mix003 = create_node(CurMat.nodes,"ShaderNodeMix",(-980, 810), blend_type='MULTIPLY', label="Mix_R")
-        Mix003.data_type='RGBA'
-        CurMat.links.new(tmaskNode.outputs['Color'], SeparateColor.inputs[0])
-        CurMat.links.new(SeparateColor.outputs['Green'], Mix001.inputs[0])
-        CurMat.links.new(Mix003.outputs[2], Mix001.inputs[6])
-        
-        CurMat.links.new(SeparateColor.outputs['Blue'], Mix002.inputs[0])
-        CurMat.links.new(Mix001.outputs[2], Mix002.inputs[6])
-        CurMat.links.new(SeparateColor.outputs['Red'], Mix003.inputs[0])
-        CurMat.links.new(aImgNode.outputs['Color'], Mix003.inputs[6])
-        CurMat.links.new(tintScale.outputs['Value'], Mix.inputs[0])
-        CurMat.links.new(aImgNode.outputs['Color'], Mix.inputs[6])
-        CurMat.links.new(Mix002.outputs[2], Mix.inputs[7])
-        CurMat.links.new(Mix.outputs[2],pBSDF.inputs['Base Color'])
 
-        if "TintColor" in Data:
-            CurMat.links.new(tColor.outputs['Color'], Mix001.inputs[7])
-            CurMat.links.new(tColor.outputs['Color'], Mix002.inputs[7])        
-            CurMat.links.new(tColor.outputs['Color'], Mix003.inputs[7])
-
-
-
-#ROUGHNESS+MASK/rm
+        #ROUGHNESS+MASK/rm
 
         if "Roughness" in Data:
             rImg=imageFromRelPath(Data["Roughness"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
@@ -89,7 +72,9 @@ class Skin:
 
         rmMul =  create_node(CurMat.nodes, "ShaderNodeMath", (-900,-100), operation = 'MULTIPLY')
 		
-#NORMAL/n
+
+        #NORMAL/n
+
         nMDCoordinates =  create_node(CurMat.nodes,"ShaderNodeTexCoord", (-2000,-850))
 
         nVecMulAspectA =  create_node(CurMat.nodes,"ShaderNodeVectorMath", (-1800,-1000), operation = "MULTIPLY")
@@ -159,6 +144,7 @@ class Skin:
             strchImg =  imageFromRelPath(Data["Detailmap_Stretch"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
             ndStImg = create_node(CurMat.nodes, "ShaderNodeTexImage", (-2000,0), label="Detailmap_Stretch", image=strchImg)
 
+
         CurMat.links.new(rImgNode.outputs[0],rmSep.inputs[0])
         CurMat.links.new(rmSep.outputs[0],pBSDF.inputs['Roughness'])
         CurMat.links.new(rmSep.outputs[2],rmSub.inputs[0])
@@ -192,7 +178,8 @@ class Skin:
 
         CurMat.links.new(nNormalMap.outputs[0],pBSDF.inputs['Normal'])
 
-#OTHER
+
+        #OTHER
         if "BloodColor" in Data:
             bfColor = CreateShaderNodeRGB(CurMat, Data["BloodColor"],-2000,300,"BloodColor")
 

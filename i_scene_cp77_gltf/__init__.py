@@ -26,12 +26,14 @@ from .main.bartmoss_functions import *
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
     "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, Doctor Presto, shotlastc",
-    "version": (1, 4, 1),
+    "version": (1, 5, 0),
     "blender": (3, 1, 0),
     "location": "File > Import-Export",
     "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
     "warning": "",
     "category": "Import-Export",
+    "doc_url": "https://github.com/WolvenKit/Cyberpunk-Blender-add-on#readme",
+    "tracker_url": "https://github.com/WolvenKit/Cyberpunk-Blender-add-on/issues/new/choose",
 }
 
 
@@ -41,19 +43,26 @@ custom_icon_col = {}
 
 class CP77IOSuitePreferences(bpy.types.AddonPreferences):
     bl_idname = __name__
-    
+
     experimental_features: bpy.props.BoolProperty(
     name= "Enable Experimental Features",
     description="Experimental Features for Mod Developers, may encounter bugs",
     default=False,
     )
-    
 
- ## toggle the mod tools tab and its sub panels - default True
+
+# toggle the mod tools tab and its sub panels - default True
     show_modtools: bpy.props.BoolProperty(
-    name= "Show the Mod Tools Panel",
+    name= "Show Mod Tools",
     description="Show the Mod tools Tab in the 3d viewport",
     default=True,
+    )
+
+# only display the panels based on context
+    context_only: bpy.props.BoolProperty(
+    name= "Only Show Mod Tools in Context",
+    description="Show the Mod tools Tab in the 3d viewport",
+    default=False,
     )
 
     show_meshtools: bpy.props.BoolProperty(
@@ -74,19 +83,32 @@ class CP77IOSuitePreferences(bpy.types.AddonPreferences):
     default=True,
     )
 
+    show_modtools: bpy.props.BoolProperty(
+    name= "Show Mod Tools",
+    description="Show the Mod tools Tab in the 3d viewport",
+    default=True,
+    )
+
     def draw(self, context):           
-        layout = self.layout                    
+        layout = self.layout
         box = layout.box()
+
         row = box.row()
-        row.prop(self, "experimental_features")
-        row.prop(self, "show_modtools")                    
-        
+        row.prop(self, "show_modtools",toggle=1) 
+        row.prop(self, "experimental_features",toggle=1)         
         if self.show_modtools:
+            row.alignment = 'LEFT'
             box = layout.box()
-            row = box.row(align=True)
-            row.prop(self, "show_meshtools")
-            row.prop(self, "show_collisiontools")
-            row.prop(self, "show_animtools")
+            box.label(text="Mod Tools Properties")
+            split = row.split(factor=0.5,align=True)
+            col = split.column(align=True)
+            row.alignment = 'LEFT'
+            row = box.row()
+            col = row.column(align=True)
+            col.prop(self, "context_only")
+            col.prop(self, "show_meshtools")
+            col.prop(self, "show_collisiontools")
+            col.prop(self, "show_animtools")
 
 
 def SetCyclesRenderer(set_gi_params=False):
@@ -160,7 +182,7 @@ class CP77_PT_PanelProps(bpy.types.PropertyGroup):
         name="Vertices to Sample",
         description="This is the number of vertices in your new collider",
         default=0,
-        min=0,
+        min=1,
         max=100,
     )
 
@@ -193,11 +215,11 @@ class CP77_PT_PanelProps(bpy.types.PropertyGroup):
     )
 
     mesh_source: bpy.props.EnumProperty(
-        items=CP77MeshList
+        items=CP77CollectionList
     ) 
 
     mesh_target: bpy.props.EnumProperty(
-        items=CP77MeshList
+        items=CP77CollectionList
     )   
 
 class CP77CollisionGenerator(bpy.types.Operator):
@@ -263,7 +285,11 @@ class CP77_PT_CollisionTools(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object and context.active_object.type == 'MESH'
+        cp77_addon_prefs = context.preferences.addons[__name__].preferences
+        if cp77_addon_prefs.context_only:
+            return context.active_object and context.active_object.type == 'MESH' 
+        else:
+            return context.active_object
 
     def draw(self, context):
         layout = self.layout
@@ -272,8 +298,7 @@ class CP77_PT_CollisionTools(bpy.types.Panel):
         if cp77_addon_prefs.show_modtools:
             if cp77_addon_prefs.show_collisiontools:
                 box = layout.box()
-                if context.mode == 'EDIT_MESH':
-                    box.operator("generate_cp77.collisions")
+                box.operator("generate_cp77.collisions")
                 box.operator("export_scene.collisions")
 
 
@@ -446,6 +471,14 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
 
     name: bpy.props.StringProperty(options={'HIDDEN'})
 
+    @classmethod
+    def poll(cls, context):
+        cp77_addon_prefs = context.preferences.addons[__name__].preferences
+        if cp77_addon_prefs.context_only:
+            return context.active_object and context.active_object.type == 'ARMATURE' 
+        else:
+            return context.active_object
+        
 ## make sure the context is unrestricted as possible, ensure there's an armature selected 
     def draw(self, context):
         layout = self.layout 
@@ -461,7 +494,7 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
                 row.label(text='Rig:')
                 row.prop(props, 'body_list', text="",)
                 row = box.row(align=True)
-                row.operator('cp77.rig_loader',icon='ADD', text="load selected rig")
+                row.operator('cp77.rig_loader',icon='ADD', text="Load Selected Rig")
                 row.prop(props, 'fbx_rot', text="", icon='LOOP_BACK', toggle=1)
                 row = box.row(align=True)
 
@@ -478,6 +511,7 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
                             selected = action == active_action
                             if selected:
                                 row = box.row(align=True)
+                                row.alignment='CENTER'
                                 row.operator("screen.frame_jump", text="", icon='REW').end = False
                                 row.operator("screen.keyframe_jump", text="", icon='PREV_KEYFRAME').next = False
                                 row.operator("screen.animation_play", text="", icon='PLAY_REVERSE').reverse = True
@@ -581,7 +615,22 @@ class CP77UVTool(bpy.types.Operator):
     def execute(self, context):
         CP77UvChecker(self, context)
         return {"FINISHED"}
+
+
+class CP77UVCheckRemover(bpy.types.Operator):
+    bl_idname = 'cp77.uv_unchecker'
+    bl_label = "UV Checker"
+    bl_description = "revert back to original material"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.object.active_material.name and context.object.active_material.name == 'UV_Checker'
         
+    def execute(self, context):
+        CP77UvUnChecker(self, context)
+        return {"FINISHED"}
+
         
 class CP77HairProfileExport(bpy.types.Operator):
     bl_idname = "export_scene.hp"
@@ -639,7 +688,11 @@ class CP77_PT_MeshTools(bpy.types.Panel):
    
     @classmethod
     def poll(cls, context):
-        return context.active_object and context.active_object.type == 'MESH'
+        cp77_addon_prefs = context.preferences.addons[__name__].preferences
+        if cp77_addon_prefs.context_only:
+            return context.active_object and context.active_object.type == 'MESH'
+        else:
+            return context.active_object    
 
     def draw(self, context):
         layout = self.layout
@@ -649,12 +702,14 @@ class CP77_PT_MeshTools(bpy.types.Panel):
         cp77_addon_prefs = context.preferences.addons[__name__].preferences
         if cp77_addon_prefs.show_modtools:
             if cp77_addon_prefs.show_meshtools:
-                box = layout.box()
                 box.label(text="Mesh Cleanup", icon_value=custom_icon_col["trauma"]["TRAUMA"].icon_id)
                 row = box.row(align=True)
                 row.operator("cp77.group_verts", text="Group Ungrouped Verts")
                 row = box.row(align=True)
-                row.operator("cp77.uv_checker", text="UV Checker")
+                if context.object.active_material and context.object.active_material.name == 'UV_Checker':
+                    row.operator("cp77.uv_unchecker",  text="Remove UV Checker")
+                else:
+                    row.operator("cp77.uv_checker", text="UV Checker")
                 box = layout.box()
                 box.label(icon_value=custom_icon_col["sculpt"]["SCULPT"].icon_id, text="Modelling:")
                 row = box.row(align=True)
@@ -942,6 +997,7 @@ classes = (
     CP77MlSetupExport,
     CP77WeightTransfer,
     CP77ResetArmature,
+    CP77UVCheckRemover,
 )
 
 def register():
