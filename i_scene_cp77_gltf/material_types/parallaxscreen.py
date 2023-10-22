@@ -972,7 +972,7 @@ class ParallaxScreen:
             m3Group.links.new(m3GroupI.outputs[0],vecSub5.inputs[1])
             m3Group.links.new(m3GroupI.outputs[1],vecSub6.inputs[1])
             m3Group.links.new(vecSub5.outputs[0],vecMul19.inputs[0])
-            m3Group.links.new(vecSub5.outputs[0],vecMul19.inputs[1])
+            m3Group.links.new(vecSub6.outputs[0],vecMul19.inputs[1])
             m3Group.links.new(vecMul19.outputs[0],vecSub7.inputs[1])
             m3Group.links.new(vecSub7.outputs[0],m3GroupO.inputs[0])
         m3 = create_node(CurMat.nodes,"ShaderNodeGroup",(-500,-25), label="m3")
