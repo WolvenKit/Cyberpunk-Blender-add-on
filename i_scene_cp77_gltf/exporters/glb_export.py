@@ -43,6 +43,10 @@ def export_cyberpunk_glb(context, filepath, export_poses):
 
     if bpy.context.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
+    
+    # If no objects are selected, select all objects in the scene
+    if not context.selected_objects:
+        bpy.ops.object.select_all(action='SELECT')
 
     # Retrieve the selected objects
     objects = context.selected_objects
@@ -117,7 +121,6 @@ def export_cyberpunk_glb(context, filepath, export_poses):
 
     # Export the selected meshes to glb
     bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
-
     # Restore original armature visibility and selection states
     for armature, state in armature_states.items():
         armature.select_set(state["select"])
