@@ -1080,11 +1080,11 @@ class ParallaxScreen:
             vecLerp4.node_tree = vecLerpG                      
             finalScrollUVGroup.links.new(finalScrollUVGroupI.outputs[0],vecLerp2.inputs[0])
             finalScrollUVGroup.links.new(finalScrollUVGroupI.outputs[1],vecLerp2.inputs[1])
-            finalScrollUVGroup.links.new(separate9.outputs[1],vecLerp2.inputs[2])
+            finalScrollUVGroup.links.new(separate9.outputs[0],vecLerp2.inputs[2])
             finalScrollUVGroup.links.new(finalScrollUVGroupI.outputs[2],separate9.inputs[0])
             finalScrollUVGroup.links.new(finalScrollUVGroupI.outputs[3],vecLerp3.inputs[0])
             finalScrollUVGroup.links.new(finalScrollUVGroupI.outputs[4],vecLerp3.inputs[1])
-            finalScrollUVGroup.links.new(separate9.outputs[1],vecLerp3.inputs[2])
+            finalScrollUVGroup.links.new(separate9.outputs[0],vecLerp3.inputs[2])
             finalScrollUVGroup.links.new(vecLerp2.outputs[0],vecLerp4.inputs[0])
             finalScrollUVGroup.links.new(vecLerp3.outputs[0],vecLerp4.inputs[1])
             finalScrollUVGroup.links.new(finalScrollUVGroupI.outputs[5],vecLerp4.inputs[2])
