@@ -182,7 +182,7 @@ class CP77_PT_PanelProps(bpy.types.PropertyGroup):
         name="Vertices to Sample",
         description="This is the number of vertices in your new collider",
         default=0,
-        min=0,
+        min=1,
         max=100,
     )
 
