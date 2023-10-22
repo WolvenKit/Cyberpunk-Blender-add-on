@@ -226,6 +226,7 @@ class CP77CollisionGenerator(bpy.types.Operator):
     bl_idname = "generate_cp77.collisions"
     bl_label = "Generate Collider"
     bl_options = {'REGISTER', "UNDO"}
+    bl_description = "Generate Colliders for use with Cyberpunk 2077" 
 
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
@@ -262,7 +263,7 @@ class CP77CollisionExport(bpy.types.Operator):
     bl_idname = "export_scene.collisions"
     bl_label = "Export Collisions to .JSON"
     bl_parent_id = "CP77_PT_collisions"
-    bl_description = "Export these collisions to .phys.json"
+    bl_description = "Export project collisions to .phys.json"
 
     filepath: bpy.props.StringProperty(subtype="FILE_PATH")
   
@@ -420,6 +421,7 @@ class CP77NewAction(bpy.types.Operator):
     bl_idname = 'cp77.new_action'
     bl_label = "Add Action"
     bl_options = {'INTERNAL', 'UNDO'}
+    bl_description = "Add a new action to the list" 
 
     name: bpy.props.StringProperty(default="New action")
 
@@ -445,6 +447,7 @@ class CP77NewAction(bpy.types.Operator):
 class CP77RigLoader(bpy.types.Operator):
     bl_idname = "cp77.rig_loader"
     bl_label = "Load rigs from .glb"
+    bl_description = "Load Cyberpunk 2077 deform rigs from plugin resources" 
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
@@ -580,6 +583,7 @@ class CollectionAppearancePanel(bpy.types.Panel):
 class CP77Autofitter(bpy.types.Operator):
     bl_idname = "cp77.auto_fitter"
     bl_label = "Auto Fit"
+    bl_description = "Use to automatically fit your mesh to a selection of modified bodies" 
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
@@ -649,6 +653,7 @@ class CP77MlSetupExport(bpy.types.Operator):
     bl_idname = "export_scene.mlsetup"
     bl_label = "Export MLSetup"
     bl_parent_id = "CP77_PT_MeshTools"
+    bl_description = "EXPERIMENTAL: Export material changes to mlsetup files" 
 
     filepath: bpy.props.StringProperty(subtype="FILE_PATH")
   
@@ -661,6 +666,7 @@ class CP77SetArmature(bpy.types.Operator):
     bl_idname = "cp77.set_armature"
     bl_label = "Change Armature Target"
     bl_parent_id = "CP77_PT_MeshTools"
+    bl_description = "Change the armature modifier on selected meshes to the target" 
     
     def execute(self, context):
         CP77ArmatureSet(self,context)
@@ -672,6 +678,7 @@ class CP77GroupVerts(bpy.types.Operator):
     bl_parent_id = "CP77_PT_MeshTools"
     bl_label = "Assign to Nearest Group"
     bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Assign ungrouped vertices to their nearest group" 
 
     def execute(self, context):
         CP77GroupUngroupedVerts(self, context)
@@ -773,6 +780,7 @@ class CP77GLBExport(bpy.types.Operator,ExportHelper):
     bl_idname = "export_scene.cp77_glb"
     bl_label = "Export for Cyberpunk"
     bl_options = {'REGISTER','UNDO'}
+    bl_description = "Export to GLB with optimized settings for use with Wolvenkit for Cyberpunk 2077" 
     filename_ext = ".glb"
    ### adds a checkbox for anim export settings
     filter_glob: StringProperty(default="*.glb", options={'HIDDEN'})
@@ -794,6 +802,7 @@ class CP77EntityImport(bpy.types.Operator,ImportHelper):
 
     bl_idname = "io_scene_gltf.cp77entity"
     bl_label = "Import Ent from JSON"
+    bl_description = "Import Characters and Vehicles from Cyberpunk 2077 Entity Files" 
     
     filter_glob: StringProperty(
         default="*.json",
@@ -837,6 +846,7 @@ class CP77StreamingSectorImport(bpy.types.Operator,ImportHelper):
 
     bl_idname = "io_scene_gltf.cp77sector"
     bl_label = "Import All StreamingSectors from project"
+    bl_description = "Load Cyberpunk 2077 Streaming Sectors" 
     
     filter_glob: StringProperty(
         default="*.cpmodproj",
