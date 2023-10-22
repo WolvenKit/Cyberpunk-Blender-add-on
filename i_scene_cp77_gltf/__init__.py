@@ -494,7 +494,7 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
                 row.label(text='Rig:')
                 row.prop(props, 'body_list', text="",)
                 row = box.row(align=True)
-                row.operator('cp77.rig_loader',icon='ADD', text="load selected rig")
+                row.operator('cp77.rig_loader',icon='ADD', text="Load Selected Rig")
                 row.prop(props, 'fbx_rot', text="", icon='LOOP_BACK', toggle=1)
                 row = box.row(align=True)
 
@@ -702,13 +702,12 @@ class CP77_PT_MeshTools(bpy.types.Panel):
         cp77_addon_prefs = context.preferences.addons[__name__].preferences
         if cp77_addon_prefs.show_modtools:
             if cp77_addon_prefs.show_meshtools:
-                box = layout.box()
                 box.label(text="Mesh Cleanup", icon_value=custom_icon_col["trauma"]["TRAUMA"].icon_id)
                 row = box.row(align=True)
                 row.operator("cp77.group_verts", text="Group Ungrouped Verts")
                 row = box.row(align=True)
                 if context.object.active_material and context.object.active_material.name == 'UV_Checker':
-                    row.operator("cp77.uv_unchecker",  text="Remove UV Checker", icon='REMOVE')
+                    row.operator("cp77.uv_unchecker",  text="Remove UV Checker")
                 else:
                     row.operator("cp77.uv_checker", text="UV Checker")
                 box = layout.box()
