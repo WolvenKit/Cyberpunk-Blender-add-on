@@ -32,6 +32,8 @@ bl_info = {
     "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
     "warning": "",
     "category": "Import-Export",
+    "doc_url": "https://github.com/WolvenKit/Cyberpunk-Blender-add-on#readme",
+    "tracker_url": "https://github.com/WolvenKit/Cyberpunk-Blender-add-on/issues/new/choose",
 }
 
 
@@ -41,19 +43,26 @@ custom_icon_col = {}
 
 class CP77IOSuitePreferences(bpy.types.AddonPreferences):
     bl_idname = __name__
-    
+
     experimental_features: bpy.props.BoolProperty(
     name= "Enable Experimental Features",
     description="Experimental Features for Mod Developers, may encounter bugs",
     default=False,
     )
-    
 
- ## toggle the mod tools tab and its sub panels - default True
+
+# toggle the mod tools tab and its sub panels - default True
     show_modtools: bpy.props.BoolProperty(
-    name= "Show the Mod Tools Panel",
+    name= "Show Mod Tools",
     description="Show the Mod tools Tab in the 3d viewport",
     default=True,
+    )
+
+# only display the panels based on context
+    context_only: bpy.props.BoolProperty(
+    name= "Only Show Mod Tools in Context",
+    description="Show the Mod tools Tab in the 3d viewport",
+    default=False,
     )
 
     show_meshtools: bpy.props.BoolProperty(
@@ -74,19 +83,32 @@ class CP77IOSuitePreferences(bpy.types.AddonPreferences):
     default=True,
     )
 
+    show_modtools: bpy.props.BoolProperty(
+    name= "Show Mod Tools",
+    description="Show the Mod tools Tab in the 3d viewport",
+    default=True,
+    )
+
     def draw(self, context):           
-        layout = self.layout                    
+        layout = self.layout
         box = layout.box()
+
         row = box.row()
-        row.prop(self, "experimental_features")
-        row.prop(self, "show_modtools")                    
-        
+        row.prop(self, "show_modtools",toggle=1) 
+        row.prop(self, "experimental_features",toggle=1)         
         if self.show_modtools:
+            row.alignment = 'LEFT'
             box = layout.box()
-            row = box.row(align=True)
-            row.prop(self, "show_meshtools")
-            row.prop(self, "show_collisiontools")
-            row.prop(self, "show_animtools")
+            box.label(text="Mod Tools Properties")
+            split = row.split(factor=0.5,align=True)
+            col = split.column(align=True)
+            row.alignment = 'LEFT'
+            row = box.row()
+            col = row.column(align=True)
+            col.prop(self, "context_only")
+            col.prop(self, "show_meshtools")
+            col.prop(self, "show_collisiontools")
+            col.prop(self, "show_animtools")
 
 
 def SetCyclesRenderer(set_gi_params=False):
