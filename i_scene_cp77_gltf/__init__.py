@@ -603,7 +603,22 @@ class CP77UVTool(bpy.types.Operator):
     def execute(self, context):
         CP77UvChecker(self, context)
         return {"FINISHED"}
+
+
+class CP77UVCheckRemover(bpy.types.Operator):
+    bl_idname = 'cp77.uv_unchecker'
+    bl_label = "UV Checker"
+    bl_description = "revert back to original material"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.object.active_material.name and context.object.active_material.name == 'UV_Checker'
         
+    def execute(self, context):
+        CP77UvUnChecker(self, context)
+        return {"FINISHED"}
+
         
 class CP77HairProfileExport(bpy.types.Operator):
     bl_idname = "export_scene.hp"
@@ -964,6 +979,7 @@ classes = (
     CP77MlSetupExport,
     CP77WeightTransfer,
     CP77ResetArmature,
+    CP77UVCheckRemover,
 )
 
 def register():
