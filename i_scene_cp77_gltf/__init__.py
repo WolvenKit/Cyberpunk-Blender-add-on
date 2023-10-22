@@ -500,6 +500,7 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
                             selected = action == active_action
                             if selected:
                                 row = box.row(align=True)
+                                row.alignment='CENTER'
                                 row.operator("screen.frame_jump", text="", icon='REW').end = False
                                 row.operator("screen.keyframe_jump", text="", icon='PREV_KEYFRAME').next = False
                                 row.operator("screen.animation_play", text="", icon='PLAY_REVERSE').reverse = True
