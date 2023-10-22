@@ -298,8 +298,7 @@ class CP77_PT_CollisionTools(bpy.types.Panel):
         if cp77_addon_prefs.show_modtools:
             if cp77_addon_prefs.show_collisiontools:
                 box = layout.box()
-                if context.mode == 'EDIT_MESH':
-                    box.operator("generate_cp77.collisions")
+                box.operator("generate_cp77.collisions")
                 box.operator("export_scene.collisions")
 
 
