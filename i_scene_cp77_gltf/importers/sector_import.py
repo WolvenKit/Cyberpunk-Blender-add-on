@@ -165,7 +165,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
             data = e['Data']
             type = data['$type']
             match type:
-                case 'worldEntityNode': 
+                case 'worldEntityNode'|'worldDeviceNode': 
                     #print('worldEntityNode',i)
                     meshname = data['entityTemplate']['DepotPath']['$value']
                     if(meshname != 0):
@@ -210,7 +210,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
         coll_target=bpy.data.collections.get("MasterInstances")
 
     Masters=coll_target
-    #Masters.hide_viewport=True # this breaks the entity positioning for some reason?!?
+    Masters.hide_viewport=False #if its hidden it breaks entity positioning for some reason?!?
 
     # could take this out but its useful in edge cases.
     from_mesh_no=0
@@ -282,7 +282,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
             type = data['$type']
 
             match type:
-                case 'worldEntityNode': 
+                case 'worldEntityNode' | 'worldDeviceNode': 
                     #print('worldEntityNode',i)
                     app=data['appearanceName']["$value"]
                     entpath=os.path.join(path,data['entityTemplate']['DepotPath']['$value'])+'.json'

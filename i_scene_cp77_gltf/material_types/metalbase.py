@@ -22,8 +22,12 @@ class MetalBase:
             CurMat.links.new(bColNode.outputs[0],mixRGB.inputs[2])
         
         if "BaseColorScale" in Data:
-            dColScale = CreateShaderNodeRGB(CurMat, Data["BaseColorScale"],-700,500,'BaseColorScale',True)
-            CurMat.links.new(dColScale.outputs[0],mixRGB.inputs[1])    
+            dColScale = CreateShaderNodeRGB(CurMat, Data["BaseColorScale"],-800,500,'BaseColorScale',True)              
+            baseColorGamma = CurMat.nodes.new("ShaderNodeGamma")
+            baseColorGamma.location = (-700,500)
+            baseColorGamma.inputs[1].default_value = 2.2
+            CurMat.links.new(dColScale.outputs[0],baseColorGamma.inputs[0]) 
+            CurMat.links.new(baseColorGamma.outputs[0],mixRGB.inputs[1]) 
 
         if "Metalness" in Data:
             mImg=imageFromRelPath(Data["Metalness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
@@ -56,13 +60,19 @@ class MetalBase:
             aThreshold = CreateShaderNodeValue(CurMat,1.0,-1000, 280,"AlphaThreshold")
 
         alphclamp = create_node(CurMat.nodes,"ShaderNodeClamp",(-740, 330))
-        CurMat.links.new(aThreshold.outputs[0],alphclamp.inputs['Max'])
-        CurMat.links.new(bColNode.outputs[1],alphclamp.inputs['Value'])
+        CurMat.links.new(aThreshold.outputs[0],alphclamp.inputs['Min'])
+        if self.enableMask:
+            CurMat.links.new(bColNode.outputs[1],alphclamp.inputs['Value'])
+        else:
+            CurMat.links.new(bColNode.outputs[0],alphclamp.inputs['Value'])
+
         
         Clamp2 = create_node(CurMat.nodes,"ShaderNodeClamp",(-538., 476.))
-        CurMat.links.new(alphclamp.outputs[0],Clamp2.inputs['Value'])
-        CurMat.links.new(dColScale.outputs[0],Clamp2.inputs['Min'])
+        
+        CurMat.links.new(baseColorGamma.outputs[0],Clamp2.inputs['Min'])
         CurMat.links.new(Clamp2.outputs[0],mixRGB.inputs['Fac'])
+       
+        CurMat.links.new(alphclamp.outputs[0],Clamp2.inputs['Value'])
         
 
         if "Normal" in Data:
