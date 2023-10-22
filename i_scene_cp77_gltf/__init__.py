@@ -215,11 +215,11 @@ class CP77_PT_PanelProps(bpy.types.PropertyGroup):
     )
 
     mesh_source: bpy.props.EnumProperty(
-        items=CP77MeshList
+        items=CP77CollectionList
     ) 
 
     mesh_target: bpy.props.EnumProperty(
-        items=CP77MeshList
+        items=CP77CollectionList
     )   
 
 class CP77CollisionGenerator(bpy.types.Operator):
