@@ -285,7 +285,11 @@ class CP77_PT_CollisionTools(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object and context.active_object.type == 'MESH'
+        cp77_addon_prefs = context.preferences.addons[__name__].preferences
+        if cp77_addon_prefs.context_only:
+            return context.active_object and context.active_object.type == 'MESH' 
+        else:
+            return context.active_object
 
     def draw(self, context):
         layout = self.layout
@@ -468,6 +472,14 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
 
     name: bpy.props.StringProperty(options={'HIDDEN'})
 
+    @classmethod
+    def poll(cls, context):
+        cp77_addon_prefs = context.preferences.addons[__name__].preferences
+        if cp77_addon_prefs.context_only:
+            return context.active_object and context.active_object.type == 'ARMATURE' 
+        else:
+            return context.active_object
+        
 ## make sure the context is unrestricted as possible, ensure there's an armature selected 
     def draw(self, context):
         layout = self.layout 
@@ -677,7 +689,11 @@ class CP77_PT_MeshTools(bpy.types.Panel):
    
     @classmethod
     def poll(cls, context):
-        return context.active_object and context.active_object.type == 'MESH'
+        cp77_addon_prefs = context.preferences.addons[__name__].preferences
+        if cp77_addon_prefs.context_only:
+            return context.active_object and context.active_object.type == 'MESH'
+        else:
+            return context.active_object    
 
     def draw(self, context):
         layout = self.layout
@@ -692,7 +708,10 @@ class CP77_PT_MeshTools(bpy.types.Panel):
                 row = box.row(align=True)
                 row.operator("cp77.group_verts", text="Group Ungrouped Verts")
                 row = box.row(align=True)
-                row.operator("cp77.uv_checker", text="UV Checker")
+                if context.object.active_material and context.object.active_material.name == 'UV_Checker':
+                    row.operator("cp77.uv_unchecker",  text="Remove UV Checker", icon='REMOVE')
+                else:
+                    row.operator("cp77.uv_checker", text="UV Checker")
                 box = layout.box()
                 box.label(icon_value=custom_icon_col["sculpt"]["SCULPT"].icon_id, text="Modelling:")
                 row = box.row(align=True)
