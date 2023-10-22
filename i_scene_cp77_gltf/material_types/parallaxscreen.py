@@ -830,12 +830,9 @@ class ParallaxScreen:
             floor3.use_clamp = True
             vecMul10 = create_node(bl1Group.nodes,"ShaderNodeVectorMath",(-200,100),operation = "MULTIPLY") 
             vecAdd8 = create_node(bl1Group.nodes,"ShaderNodeVectorMath",(-150,50),operation = "ADD") 
-            greaterThan = create_node(bl1Group.nodes,"ShaderNodeMath",(0,150),operation = "GREATER_THAN") 
-            greaterThan.inputs[1].default_value = 0
             mixRGB = create_node(bl1Group.nodes,"ShaderNodeMixRGB",(200,50)) 
             bl1Group.links.new(bl1GroupI.outputs[1],mul10.inputs[0])
             bl1Group.links.new(bl1GroupI.outputs[0],mul10.inputs[1])
-            bl1Group.links.new(bl1GroupI.outputs[0],greaterThan.inputs[0])
             bl1Group.links.new(mul10.outputs[0],sin.inputs[0])
             bl1Group.links.new(sin.outputs[0],mul11.inputs[0])
             bl1Group.links.new(bl1GroupI.outputs[2],separate6.inputs[0])
@@ -845,8 +842,8 @@ class ParallaxScreen:
             bl1Group.links.new(vecMul10.outputs[0],vecAdd8.inputs[0])
             bl1Group.links.new(mul11.outputs[0],vecAdd8.inputs[1])
 
-            bl1Group.links.new(greaterThan.outputs[0],mixRGB.inputs[0])
-            bl1Group.links.new(vecAdd8.outputs[0],mixRGB.inputs[2])
+            bl1Group.links.new(vecAdd8.outputs[0],mixRGB.inputs[0])
+            bl1Group.links.new(vecMul10.outputs[0],mixRGB.inputs[2])
             bl1Group.links.new(bl1GroupI.outputs[3],mixRGB.inputs[1])
             bl1Group.links.new(mixRGB.outputs[0],bl1GroupO.inputs[0])
 
