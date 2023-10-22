@@ -976,7 +976,7 @@ def menu_func_import(self, context):
     self.layout.operator(CP77StreamingSectorImport.bl_idname, text="Cyberpunk StreamingSector", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
 
 def menu_func_export(self, context):
-    self.layout.operator(CP77GLBExport.bl_idname, text="Export Selection to GLB for Cyberpunk", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
+    self.layout.operator(CP77GLBExport.bl_idname, text="Cyberpunk GLB", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
     
 #kwekmaster - Minor Refactoring 
 classes = (
