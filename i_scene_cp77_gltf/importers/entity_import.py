@@ -89,6 +89,9 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     # otherwise just skip this section
     #
     anim_files = glob.glob(path+"\\base\\animations\\"+"\**\*.glb", recursive = True)
+    ep1_anim_files = glob.glob(path+"\\ep1\\animations\\"+"\**\*.glb", recursive = True)
+    anim_files = anim_files + ep1_anim_files
+
     rig=None
     bones=None
     chunks=None
