@@ -9,12 +9,17 @@ plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 resources_dir = os.path.join(plugin_dir, "resources")
 refit_dir = os.path.join(resources_dir, "refitters")
 
-def CP77MeshList(self, context):
+
+def CP77CollectionList(self, context):
     items = []
-    for obj in bpy.data.objects:
-        if obj.type == 'MESH':
-            items.append((obj.name, obj.name, ""))
+    ## don't include these as their not useful
+    excluded_names = ["Collection", "Scene Collection"]
+
+    for collection in bpy.data.collections:
+        if collection.name not in excluded_names:
+            items.append((collection.name, collection.name, ""))
     return items
+
 
 def CP77ArmatureList(self, context):
     items = []
@@ -22,6 +27,7 @@ def CP77ArmatureList(self, context):
         if obj.type == 'ARMATURE':
             items.append((obj.name, obj.name, ""))
     return items
+
 
 def find_nearest_vertex_group(obj, vertex):
     min_distance = math.inf
@@ -75,17 +81,31 @@ def trans_weights(self, context):
     props = context.scene.cp77_panel_props
     source_mesh_name = props.mesh_source
     target_mesh_name = props.mesh_target
-    source_obj = bpy.data.objects.get(source_mesh_name)
-    target_obj = bpy.data.objects.get(target_mesh_name)
+    # Get the source collection
+    source_mesh = bpy.data.collections.get(source_mesh_name)
+    
+    # Get the target collection
+    target_mesh = bpy.data.collections.get(target_mesh_name)
 
-    if source_obj and target_obj:
-        bpy.context.view_layer.objects.active = target_obj
-        bpy.ops.object.mode_set(mode='OBJECT')
+    if source_mesh and target_mesh:
+        # Deselect all objects in the scene
         bpy.ops.object.select_all(action='DESELECT')
-        target_obj.select_set(True)
+        
+        # Iterate through objects in the source collection
+        for source_obj in source_mesh.objects:
+            source_obj.select_set(True)
+            
+        # Set the active object to the last selected source object
         bpy.context.view_layer.objects.active = source_obj
-        source_obj.select_set(True)
 
+        # Switch to OBJECT mode
+        bpy.ops.object.mode_set(mode='OBJECT')
+        
+        # Iterate through objects in the target collection
+        for target_obj in target_mesh.objects:
+            target_obj.select_set(True)
+        
+        # Perform the data transfer
         bpy.ops.object.data_transfer(
             use_reverse_transfer=False,
             vert_mapping='POLYINTERP_NEAREST',
@@ -94,14 +114,15 @@ def trans_weights(self, context):
             layers_select_src='ALL'
         )
 
-        source_obj.select_set(False)
-        target_obj.select_set(False)
-
+        # Deselect all objects again
+        bpy.ops.object.select_all(action='DESELECT')
+        
 
 def CP77UvChecker(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
     bpy_mats=bpy.data.materials
     current_mode = context.mode
+    current_mat = None
     uv_checker = None
     for mat in bpy_mats:
         if mat.name == 'UV_Checker':
@@ -128,19 +149,46 @@ def CP77UvChecker(self, context):
                 uvchecker = mat
                 mat_assigned = True
         if not mat_assigned:
+            current_mat = context.object.active_material.name
+            mesh['uvCheckedMat'] = current_mat
             bpy.data.meshes[mesh.name].materials.append(bpy_mats['UV_Checker'])
-            i = context.object.active_material_index + 1
-            bpy.context.object.active_material_index = i
-            if current_mode is not 'EDIT':
+            i = mesh.data.materials.find('UV_Checker')
+            if i >= 0:
+                mesh.active_material_index = i
+            if current_mode != 'EDIT':
                 bpy.ops.object.mode_set(mode='EDIT')
                 bpy.ops.object.material_slot_assign()
+                
                 print(current_mode)
         
-        if context.mode is not current_mode:
+        if context.mode != current_mode:
             bpy.ops.object.mode_set(mode=current_mode)
 
     return {'FINISHED'}
 
+
+def CP77UvUnChecker(self, context):
+    selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
+    current_mode = context.mode
+    uvchecker = 'UV_Checker'
+    for mesh in selected_meshes:
+        if 'uvCheckedMat' in mesh:
+            original_mat_name = mesh['uvCheckedMat']
+        if uvchecker in mesh.data.materials:
+            # Find the index of the material slot with the specified name
+            material_index = mesh.data.materials.find(uvchecker)
+            mesh.data.materials.pop(index=material_index)
+            i = mesh.data.materials.find(original_mat_name)
+            if i >= 0:
+                mesh.active_material_index = i
+            if current_mode != 'EDIT':
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.object.material_slot_assign()
+        if context.mode != current_mode:
+            bpy.ops.object.mode_set(mode=current_mode)
+
+    return {'FINISHED'}
+                
 
 def cp77riglist(context):
     cp77rigs = []
