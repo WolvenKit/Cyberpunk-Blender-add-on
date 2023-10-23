@@ -789,6 +789,13 @@ class CP77GLBExport(bpy.types.Operator,ExportHelper):
     
     filter_glob: StringProperty(default="*.glb", options={'HIDDEN'})
    
+    
+    limit_selected: BoolProperty(
+        name="Limit to Selected Meshes",
+        default=True,
+        description="Only Export the Selected Meshes"
+    )
+
     export_poses: BoolProperty(
         name="Animations",
         default=False,
@@ -806,10 +813,13 @@ class CP77GLBExport(bpy.types.Operator,ExportHelper):
         row = layout.row(align=True) 
         row.prop(self, "export_poses")
         row = layout.row(align=True)
-        row.prop(self, "export_visible")
+        row.prop(self, "limit_selected")
+        if not self.limit_selected:
+            row = layout.row(align=True)
+            row.prop(self, "export_visible")
         
     def execute(self, context):
-        export_cyberpunk_glb(context, self.filepath, self.export_poses, self.export_visible)
+        export_cyberpunk_glb(context, self.filepath, self.export_poses, self.export_visible, self.limit_selected)
         return {'FINISHED'}
 
 

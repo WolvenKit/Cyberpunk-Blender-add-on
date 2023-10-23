@@ -38,16 +38,16 @@ def pose_export_options():
         'export_anim_single_armature': True       
     }
     return options
+
 #setup the actual exporter - rewrote almost all of this, much quicker now
-def export_cyberpunk_glb(context, filepath, export_poses, export_visible):
+def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_selected):
 
     #check if the scene is in object mode, if it's not, switch to object mode
     if bpy.context.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
     
     #add export visible as a bool - if toggled, all objects will be exported 
-    if export_visible:
-        
+    if not limit_selected:
         for obj in bpy.data.objects:
             if obj.type == 'MESH':
                 obj.select_set(True)
@@ -74,9 +74,10 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible):
         meshes = [obj for obj in objects if obj.type == 'MESH']
 
         #throw an error in the message box if you haven't selected a mesh to export
-        if not meshes:
-            bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="No meshes selected, please select at least one mesh")
-            return {'CANCELLED'}
+        if limit_selected:
+            if not meshes:
+                bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="No meshes selected, please select at least one mesh")
+                return {'CANCELLED'}
         
         #check that meshes include UVs and have less than 65000 verts, throw an error if not
         for mesh in meshes:
@@ -138,12 +139,18 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible):
                         bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Ungrouped vertices found and selected. Please assign them to a group or delete them beforebefore exporting.")
                         return {'CANCELLED'}
 
-        if export_visible:
-            bpy.ops.export_scene.gltf(filepath=filepath, use_visible=True, **options)
-            armature.hide_set(True)
-        else:
+        if limit_selected:
             bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
             armature.hide_set(True)
+
+        else:
+            if export_visible:
+                bpy.ops.export_scene.gltf(filepath=filepath, use_visible=True, **options)
+                armature.hide_set(True)
+            else:
+                bpy.ops.export_scene.gltf(filepath=filepath, **options)
+                armature.hide_set(True)
+
 
         # Restore original armature visibility and selection states
         # for armature, state in armature_states.items():
