@@ -111,24 +111,26 @@ class CP77IOSuitePreferences(bpy.types.AddonPreferences):
             col.prop(self, "show_animtools")
 
 
-def SetCyclesRenderer(set_gi_params=False):
+def SetCyclesRenderer(use_cycles=True, set_gi_params=False):
     # set the render engine for all scenes to Cycles
-    for scene in bpy.data.scenes:
-        scene.render.engine = 'CYCLES'
 
-    if set_gi_params:
-        cycles = bpy.context.scene.cycles
-        cycles.max_bounces = 32
-        cycles.caustics_reflective = True
-        cycles.caustics_refractive = True
-        cycles.diffuse_bounces = 32
-        cycles.glossy_bounces = 32
-        cycles.transmission_bounces = 32
-        cycles.volume_bounces = 32
-        cycles.transparent_max_bounces = 32
-        cycles.use_fast_gi = False
-        cycles.ao_bounces = 1
-        cycles.ao_bounces_render = 1
+    if use_cycles:
+        for scene in bpy.data.scenes:
+            scene.render.engine = 'CYCLES'
+
+        if set_gi_params:
+            cycles = bpy.context.scene.cycles
+            cycles.max_bounces = 32
+            cycles.caustics_reflective = True
+            cycles.caustics_refractive = True
+            cycles.diffuse_bounces = 32
+            cycles.glossy_bounces = 32
+            cycles.transmission_bounces = 32
+            cycles.volume_bounces = 32
+            cycles.transparent_max_bounces = 32
+            cycles.use_fast_gi = False
+            cycles.ao_bounces = 1
+            cycles.ao_bounces_render = 1
 
 
 class CP77_PT_PanelProps(bpy.types.PropertyGroup):
@@ -523,6 +525,7 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
                                 row = box.row(align=True)
                                 row.operator('reset_armature.cp77')
                                 row.prop(active_action, 'use_frame_range', text="Set Range",toggle=1)
+                                active_action.use_frame_range: True
                                 if active_action.use_frame_range:
                                     row = box.row(align=True)
                                     row.prop(active_action, 'frame_start', text="")
@@ -783,18 +786,40 @@ class CP77GLBExport(bpy.types.Operator,ExportHelper):
     bl_description = "Export to GLB with optimized settings for use with Wolvenkit for Cyberpunk 2077" 
     filename_ext = ".glb"
    ### adds a checkbox for anim export settings
+    
     filter_glob: StringProperty(default="*.glb", options={'HIDDEN'})
+   
+    
+    limit_selected: BoolProperty(
+        name="Limit to Selected Meshes",
+        default=True,
+        description="Only Export the Selected Meshes"
+    )
+
     export_poses: BoolProperty(
         name="Animations",
         default=False,
         description="Use this option if you are exporting anims to be imported into wkit as .anim"
     )
+
+    export_visible: BoolProperty(
+        name="Export Visible Meshes",
+        default=False,
+        description="Use this option to export all visible objects"
+    )
+
     def draw(self, context):
         layout = self.layout
-        layout.prop(self, "export_poses")
+        row = layout.row(align=True) 
+        row.prop(self, "export_poses")
+        row = layout.row(align=True)
+        row.prop(self, "limit_selected")
+        if not self.limit_selected:
+            row = layout.row(align=True)
+            row.prop(self, "export_visible")
         
     def execute(self, context):
-        export_cyberpunk_glb(context, self.filepath, self.export_poses)
+        export_cyberpunk_glb(context, self.filepath, self.export_poses, self.export_visible, self.limit_selected)
         return {'FINISHED'}
 
 
@@ -820,17 +845,35 @@ class CP77EntityImport(bpy.types.Operator,ImportHelper):
                                 description="Meshes to skip during import",
                                 default="",
                                 options={'HIDDEN'})
-      
-    update_gi: BoolProperty(name="Update Global Illumination",default=True,description="Update Cycles global illumination options for transparency fixes and higher quality renders")
+
+    use_cycles: BoolProperty(name="Use Cycles",default=True,description="Use Cycles")  
+    update_gi: BoolProperty(name="Update Global Illumination",default=False,description="Update Cycles global illumination options for transparency fixes and higher quality renders")
     with_materials: BoolProperty(name="With Materials",default=True,description="Import Wolvenkit-exported materials")   
     include_collisions: BoolProperty(name="Include Vehicle Collisions",default=False,description="Use this option if you want to include the .phys collision info for vehicle modding")
     inColl: StringProperty(name= "Collector to put the imported entity in",
                                 description="Collector to put the imported entity in",
                                 default='',
-                                options={'HIDDEN'}) 
+                                options={'HIDDEN'})
     
+    def draw(self, context):
+        layout = self.layout
+        row = layout.row(align=True)
+        split = row.split(factor=0.45,align=True)
+        split.label(text="Ent Appearance:")
+        split.prop(self, "appearances", text="")
+        row = layout.row(align=True)
+        row.prop(self, "use_cycles")
+        if self.use_cycles:
+            row = layout.row(align=True)
+            row.prop(self, "update_gi")
+        row = layout.row(align=True)
+        row.prop(self, "with_materials")
+        row = layout.row(align=True)
+        row.prop(self, "include_collisions")
+
+
     def execute(self, context):
-        SetCyclesRenderer(self.update_gi)
+        SetCyclesRenderer(self.use_cycles, self.update_gi)
 
         apps=self.appearances.split(",")
         print('apps - ',apps)
@@ -859,6 +902,16 @@ class CP77StreamingSectorImport(bpy.types.Operator,ImportHelper):
     want_collisions: BoolProperty(name="Import Collisions",default=False,description="Import Box and Capsule Collision objects (mesh not yet supported)")
     am_modding: BoolProperty(name="Generate New Collectors",default=False,description="Generate _new collectors for sectors to allow modifications to be saved back to game")
     with_materials: BoolProperty(name="With Materials",default=False,description="Import Wolvenkit-exported materials")
+
+    def draw(self, context):
+        layout = self.layout
+        box = layout.box()
+        row = box.row(align=True) 
+        row.prop(self, "want_collisions",)
+        row = layout.row(align=True)
+        row.prop(self, "am_modding")
+        row = layout.row(align=True)
+        row.prop(self, "with_materials")
 
     def execute(self, context):
         bob=self.filepath
@@ -889,7 +942,9 @@ class CP77_PT_ImportWithMaterial(bpy.types.Panel):
         layout.prop(operator, 'exclude_unused_mats')
         layout.prop(operator, 'image_format')
         layout.prop(operator, 'hide_armatures')
-        layout.prop(operator, 'update_gi')
+        layout.prop(operator, 'use_cycles')
+        if operator.use_cycles:
+            layout.prop(operator, 'update_gi')
         layout.prop(operator, 'import_garmentsupport')
 
 
@@ -916,7 +971,9 @@ class CP77_PT_ImportWithMaterial(bpy.types.Panel):
         layout.prop(operator, 'exclude_unused_mats')
         layout.prop(operator, 'image_format')
         layout.prop(operator, 'hide_armatures')
-        layout.prop(operator, 'update_gi')
+        layout.prop(operator, 'use_cycles')
+        if operator.use_cycles:
+            layout.prop(operator, 'update_gi')
         layout.prop(operator, 'import_garmentsupport')
 
 
@@ -945,7 +1002,9 @@ class CP77Import(bpy.types.Operator,ImportHelper):
 
     hide_armatures: BoolProperty(name="Hide Armatures",default=True,description="Hide the armatures on imported meshes")
 
-    update_gi: BoolProperty(name="Update Global Illumination",default=True,description="Update Cycles global illumination options for transparency fixes and higher quality renders")
+    use_cycles: BoolProperty(name="Use Cycles",default=True,description="Use Cycles higher quality renders")
+
+    update_gi: BoolProperty(name="Update Global Illumination",default=False,description="Update Cycles global illumination options for transparency fixes and higher quality renders")
 
     import_garmentsupport: BoolProperty(name="Import Garment Support (Experimental)",default=True,description="Imports Garment Support mesh data as color attributes")
     
@@ -965,7 +1024,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
         pass
 
     def execute(self, context):
-        SetCyclesRenderer(self.update_gi)
+        SetCyclesRenderer(self.use_cycles, self.update_gi)
         CP77GLBimport(self, self.exclude_unused_mats, self.image_format, self.with_materials, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, self.appearances)
 
         return {'FINISHED'}
@@ -976,7 +1035,7 @@ def menu_func_import(self, context):
     self.layout.operator(CP77StreamingSectorImport.bl_idname, text="Cyberpunk StreamingSector", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
 
 def menu_func_export(self, context):
-    self.layout.operator(CP77GLBExport.bl_idname, text="Export Selection to GLB for Cyberpunk", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
+    self.layout.operator(CP77GLBExport.bl_idname, text="Cyberpunk GLB", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
     
 #kwekmaster - Minor Refactoring 
 classes = (
