@@ -2,7 +2,12 @@
 
 ![blender add-on banner panam](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/assets/65016231/a0489b07-68af-4a90-b53e-1ad3ef271f4a)
 
-The Cyberpunk Blender add-on is designed to fully automate the shader setup for Cyberpunk 2077 mesh files. The add-on integrates with files created by WolvenKit. To learn more about WolvenKit visit the [dedicated WolvenKit wiki.](https://wiki.redmodding.org/wolvenkit)
+The Cyberpunk IO Suite integrates with files created by WolvenKit to streamline the import/export and modifcation of assets from Cyberpunm 2077. 
+
+To learn more about modding Cyberpunk 2077 visit [the Cyberpunk Modding wiki.](https://wiki.redmodding.org/cyberpunk-2077-modding)
+
+
+To learn more about WolvenKit visit the [dedicated WolvenKit wiki.](https://wiki.redmodding.org/wolvenkit)
 
 # Features
 
