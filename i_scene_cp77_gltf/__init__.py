@@ -520,6 +520,7 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
                                 row.operator("screen.frame_jump", text="", icon='REW').end = False
                                 row.operator("screen.keyframe_jump", text="", icon='PREV_KEYFRAME').next = False
                                 row.operator("screen.animation_play", text="", icon='PLAY_REVERSE').reverse = True
+                                row.operator("screen.animation_play", text="", icon='PLAY')
                                 row.operator("screen.keyframe_jump", text="", icon='NEXT_KEYFRAME').next = True
                                 row.operator("screen.frame_jump", text="", icon='FF').end = True
                                 row = box.row(align=True)
@@ -530,7 +531,6 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
                                     row = box.row(align=True)
                                     row.prop(active_action, 'frame_start', text="")
                                     row.prop(active_action, 'frame_end', text="")
-                                row.operator('bpy.ops.action.push_down', text="")
                     else:
                         row.separator()
                         row.operator('reset_armature.cp77')
@@ -812,11 +812,12 @@ class CP77GLBExport(bpy.types.Operator,ExportHelper):
         layout = self.layout
         row = layout.row(align=True) 
         row.prop(self, "export_poses")
-        row = layout.row(align=True)
-        row.prop(self, "limit_selected")
-        if not self.limit_selected:
+        if not self.export_poses:
             row = layout.row(align=True)
-            row.prop(self, "export_visible")
+            row.prop(self, "limit_selected")
+            if not self.limit_selected:
+                row = layout.row(align=True)
+                row.prop(self, "export_visible")
         
     def execute(self, context):
         export_cyberpunk_glb(context, self.filepath, self.export_poses, self.export_visible, self.limit_selected)
@@ -919,34 +920,6 @@ class CP77StreamingSectorImport(bpy.types.Operator,ImportHelper):
         importSectors( bob, self.want_collisions, self.am_modding, self.with_materials)
         return {'FINISHED'}
 
-# Material Sub-panel
-class CP77_PT_ImportWithMaterial(bpy.types.Panel):
-    bl_space_type = 'FILE_BROWSER'
-    bl_region_type = 'TOOL_PROPS'
-    bl_label = "With Materials"
-
-    @classmethod
-    def poll(cls, context):
-        operator = context.space_data.active_operator
-        return operator.bl_idname == "IO_SCENE_GLTF_OT_cp77"
-
-    def draw_header(self, context):
-        operator = context.space_data.active_operator
-        self.layout.prop(operator, "with_materials", text="")
-
-    def draw(self, context):
-        operator = context.space_data.active_operator
-        layout = self.layout
-        layout.enabled = operator.with_materials
-        layout.use_property_split = True
-        layout.prop(operator, 'exclude_unused_mats')
-        layout.prop(operator, 'image_format')
-        layout.prop(operator, 'hide_armatures')
-        layout.prop(operator, 'use_cycles')
-        if operator.use_cycles:
-            layout.prop(operator, 'update_gi')
-        layout.prop(operator, 'import_garmentsupport')
-
 
 # Material Sub-panel
 class CP77_PT_ImportWithMaterial(bpy.types.Panel):
@@ -966,15 +939,20 @@ class CP77_PT_ImportWithMaterial(bpy.types.Panel):
     def draw(self, context):
         operator = context.space_data.active_operator
         layout = self.layout
+        row = layout.row(align=True)
         layout.enabled = operator.with_materials
-        layout.use_property_split = True
-        layout.prop(operator, 'exclude_unused_mats')
-        layout.prop(operator, 'image_format')
-        layout.prop(operator, 'hide_armatures')
-        layout.prop(operator, 'use_cycles')
+        row.prop(operator, 'exclude_unused_mats')
+        row = layout.row(align=True)
+        row.prop(operator, 'image_format')
+        row = layout.row(align=True)
+        row.prop(operator, 'hide_armatures')
+        row = layout.row(align=True)
+        row.prop(operator, 'use_cycles')
         if operator.use_cycles:
-            layout.prop(operator, 'update_gi')
-        layout.prop(operator, 'import_garmentsupport')
+            row = layout.row(align=True)
+            row.prop(operator, 'update_gi')
+        row = layout.row(align=True)
+        row.prop(operator, 'import_garmentsupport')
 
 
 class CP77Import(bpy.types.Operator,ImportHelper):

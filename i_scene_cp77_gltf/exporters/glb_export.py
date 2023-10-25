@@ -1,7 +1,5 @@
-import json
-import os
-import mathutils
 import bpy
+from ..main.animtools import reset_armature
 
 #setup the default options to be applied to all export types
 def default_cp77_options():
@@ -27,7 +25,8 @@ def cp77_mesh_options():
         'export_morph_tangent': True,
         'export_morph_normal': True,
         'export_morph': True,
-        'export_colors': True
+        'export_colors': True,
+        'export_attributes': True
     }
     return options
 #the options for anims
@@ -35,6 +34,7 @@ def pose_export_options():
     options = {
         'export_animations': True,
         'export_frame_range': False,
+        'export_animation_mode': 'NLA_TRACKS',
         'export_anim_single_armature': True       
     }
     return options
@@ -45,13 +45,6 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
     #check if the scene is in object mode, if it's not, switch to object mode
     if bpy.context.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
-    
-    #add export visible as a bool - if toggled, all objects will be exported 
-    if not limit_selected:
-        for obj in bpy.data.objects:
-            if obj.type == 'MESH':
-                obj.select_set(True)
-
         # # Select only the mesh objects
         # for obj in context.scene.objects:
         #     if obj.type == 'MESH':
@@ -69,12 +62,20 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
         #if the export poses value is True, set the export options to ensure the armature is exported properly with the animations
         options = default_cp77_options()
         options.update(pose_export_options())
+        for armature in armatures:
+            reset_armature(armature, context)
+            bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
+            return{'FINISHED'}
     else:
+        if not limit_selected:
+            for obj in bpy.data.objects:
+                if obj.type == 'MESH':
+                    obj.select_set(True) 
         #if export_poses option isn't used, check to make sure there are meshes selected and throw an error if not
         meshes = [obj for obj in objects if obj.type == 'MESH']
 
         #throw an error in the message box if you haven't selected a mesh to export
-        if limit_selected:
+        if not export_poses:
             if not meshes:
                 bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="No meshes selected, please select at least one mesh")
                 return {'CANCELLED'}
@@ -139,17 +140,17 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
                         bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Ungrouped vertices found and selected. Please assign them to a group or delete them beforebefore exporting.")
                         return {'CANCELLED'}
 
-        if limit_selected:
-            bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
-            armature.hide_set(True)
+    if limit_selected:
+        bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
+        armature.hide_set(True)
 
+    else:
+        if export_visible:
+            bpy.ops.export_scene.gltf(filepath=filepath, use_visible=True, **options)
+            armature.hide_set(True)
         else:
-            if export_visible:
-                bpy.ops.export_scene.gltf(filepath=filepath, use_visible=True, **options)
-                armature.hide_set(True)
-            else:
-                bpy.ops.export_scene.gltf(filepath=filepath, **options)
-                armature.hide_set(True)
+            bpy.ops.export_scene.gltf(filepath=filepath, **options)
+            armature.hide_set(True)
 
 
         # Restore original armature visibility and selection states
