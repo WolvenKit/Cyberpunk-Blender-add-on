@@ -154,7 +154,7 @@ class Multilayered:
                 CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].outputs[1],LayerGroupN.inputs[5])
                 CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].outputs[2],LayerGroupN.inputs[6])
                 CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].outputs[3],LayerGroupN.inputs[7])
-            CurMat.links.new(MaskN.outputs[0],CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].inputs[7])
+            CurMat.links.new(MaskN.outputs[0],CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].inputs[9])
             CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].outputs[4],CurMat.nodes["Layer_"+str(x)].inputs[8])
             
             NG.links.new(GroupInN.outputs[0],ColorMixN.inputs[1])
@@ -235,6 +235,14 @@ class Multilayered:
             if microblendNormalStrength is None:
                 microblendNormalStrength = x.get("MicroblendNormalStrength")
 
+            MicroblendOffsetU = x.get("microblendOffsetU")
+            if MicroblendOffsetU is None:
+                MicroblendOffsetU = x.get("MicroblendOffsetU")
+
+            MicroblendOffsetV = x.get("microblendOffsetV")
+            if MicroblendOffsetV is None:
+                MicroblendOffsetV = x.get("MicroblendOffsetV")
+
             opacity = x.get("opacity")
             if opacity is None:
                 opacity = x.get("Opacity")
@@ -281,6 +289,8 @@ class Multilayered:
             NG.inputs.new('NodeSocketFloat','MbTile')
             NG.inputs.new('NodeSocketFloat','MicroblendNormalStrength')
             NG.inputs.new('NodeSocketFloat','MicroblendContrast')
+            NG.inputs.new('NodeSocketFloat','MicroblendOffsetU')
+            NG.inputs.new('NodeSocketFloat','MicroblendOffsetV')
             NG.inputs.new('NodeSocketFloat','NormalStrength')
             NG.inputs.new('NodeSocketFloat','Opacity')
             NG.inputs.new('NodeSocketFloat','Mask')
@@ -292,10 +302,10 @@ class Multilayered:
 
             NG.inputs[4].min_value = 0
             NG.inputs[4].max_value = 1
-            NG.inputs[5].min_value = 0 # No reason to invert these maps, not detail maps.
-            NG.inputs[5].max_value = 10 # This value is arbitrary, but more than adequate.
-            NG.inputs[6].min_value = 0
-            NG.inputs[6].max_value = 1
+            NG.inputs[7].min_value = 0 # No reason to invert these maps, not detail maps.
+            NG.inputs[7].max_value = 10 # This value is arbitrary, but more than adequate.
+            NG.inputs[8].min_value = 0
+            NG.inputs[8].max_value = 1
             
             LayerGroupN = create_node(CurMat.nodes, "ShaderNodeGroup", (-2000,500-100*LayerIndex))
             LayerGroupN.width = 400
@@ -343,16 +353,26 @@ class Multilayered:
                 LayerGroupN.inputs[4].default_value = float(MicroblendContrast)
             else:
                 LayerGroupN.inputs[4].default_value = 1
+
+            if MicroblendOffsetU != None:
+                LayerGroupN.inputs[5].default_value = float(MicroblendOffsetU)
+            else:
+                LayerGroupN.inputs[5].default_value = 0
+
+            if MicroblendOffsetV != None:
+                LayerGroupN.inputs[6].default_value = float(MicroblendOffsetV)
+            else:
+                LayerGroupN.inputs[6].default_value = 0
             
             if normalStrength != None and normalStrength in OverrideTable["NormalStrength"]:
-                LayerGroupN.inputs[5].default_value = OverrideTable["NormalStrength"][normalStrength]
+                LayerGroupN.inputs[7].default_value = OverrideTable["NormalStrength"][normalStrength]
             else:
-                LayerGroupN.inputs[5].default_value = 1
+                LayerGroupN.inputs[7].default_value = 1
             
             if opacity != None:
-                LayerGroupN.inputs[6].default_value = float(opacity)
+                LayerGroupN.inputs[8].default_value = float(opacity)
             else:
-                LayerGroupN.inputs[6].default_value = 1
+                LayerGroupN.inputs[8].default_value = 1
             
             
             # DEFINES MAIN MULTILAYERED PROPERTIES
@@ -382,8 +402,10 @@ class Multilayered:
             MBMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-1400,-350), blend_type ='MIX', label = "MB+- Norm Mix")
             
             MBMapping = create_node(NG.nodes,"ShaderNodeMapping", (-2300,-650))
+
+            MBUVCombine = create_node(NG.nodes,"ShaderNodeCombineXYZ", (-2300,-550))
             
-            MBTexCord = create_node(NG.nodes,"ShaderNodeTexCoord", (-2300,-600))
+            MBTexCord = create_node(NG.nodes,"ShaderNodeTexCoord", (-2300,-500))
             
             # Multiply normal strength against microblend contrast
             # Results in hidden mb-normals when mbcontrast = 0. This is almost certainly wrong but it's good enough for now -jato
@@ -483,17 +505,20 @@ class Multilayered:
             NG.links.new(GroupInN.outputs[3],MBGrtrThanN.inputs[0])
             NG.links.new(GroupInN.outputs[3],MBNormMultiply.inputs[0])
             NG.links.new(GroupInN.outputs[4],MBCMicroOffset.inputs[0])
-            NG.links.new(GroupInN.outputs[5],NormStrengthN.inputs[0])
-            NG.links.new(GroupInN.outputs[6],MaskOpReroute.inputs[0])
-            NG.links.new(GroupInN.outputs[7],MaskMultiply.inputs[0])
-            NG.links.new(GroupInN.outputs[7],MaskLinearBurnAdd.inputs[0])
-            NG.links.new(GroupInN.outputs[7],MBNormSubtractMask.inputs[1])
+            NG.links.new(GroupInN.outputs[5],MBUVCombine.inputs[0])
+            NG.links.new(GroupInN.outputs[6],MBUVCombine.inputs[1])
+            NG.links.new(GroupInN.outputs[7],NormStrengthN.inputs[0])
+            NG.links.new(GroupInN.outputs[8],MaskOpReroute.inputs[0])
+            NG.links.new(GroupInN.outputs[9],MaskMultiply.inputs[0])
+            NG.links.new(GroupInN.outputs[9],MaskLinearBurnAdd.inputs[0])
+            NG.links.new(GroupInN.outputs[9],MBNormSubtractMask.inputs[1])
             
             NG.links.new(MBCMicroOffset.outputs[0],MBCSubtract.inputs[1])
             NG.links.new(MBCMicroOffset.outputs[0],MBCMultiply.inputs[0])
             NG.links.new(MBCMicroOffset.outputs[0],MBNormMultiply.inputs[1])
 
             NG.links.new(MBTexCord.outputs[2],MBMapping.inputs[0])
+            NG.links.new(MBUVCombine.outputs[0],MBMapping.inputs[1])
             NG.links.new(MBMapping.outputs[0],MBN.inputs[0])
             NG.links.new(MBN.outputs[0],MBRGBCurveN.inputs[1])
             NG.links.new(MBN.outputs[0],MBMixN.inputs[2])
