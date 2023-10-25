@@ -140,17 +140,17 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
                         bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Ungrouped vertices found and selected. Please assign them to a group or delete them beforebefore exporting.")
                         return {'CANCELLED'}
 
-    if limit_selected:
-        bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
-        armature.hide_set(True)
+        if limit_selected:
+            bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
+            armature.hide_set(True)
 
-    else:
-        if export_visible:
-            bpy.ops.export_scene.gltf(filepath=filepath, use_visible=True, **options)
-            armature.hide_set(True)
         else:
-            bpy.ops.export_scene.gltf(filepath=filepath, **options)
-            armature.hide_set(True)
+            if export_visible:
+                bpy.ops.export_scene.gltf(filepath=filepath, use_visible=True, **options)
+                armature.hide_set(True)
+            else:
+                bpy.ops.export_scene.gltf(filepath=filepath, **options)
+                armature.hide_set(True)
 
 
         # Restore original armature visibility and selection states
