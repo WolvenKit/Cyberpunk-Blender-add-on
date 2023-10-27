@@ -63,7 +63,7 @@ To learn more about WolvenKit visit the [dedicated WolvenKit wiki.](https://wiki
 <br>**Blender** version 3.1 or higher is *required*
 <br>https://www.blender.org/<br/>
 
-2) **WolvenKit** version 8.9.0 or higher
+2) **WolvenKit** version 8.11 or higher
 <br>https://github.com/WolvenKit/WolvenKit<br/>
 
 ---
