@@ -23,8 +23,8 @@ class Multilayered:
         TMI = NG.inputs.new('NodeSocketVector','Tile Multiplier')
         TMI.default_value = (1,1,1)
         NG.outputs.new('NodeSocketColor','Color')
-        NG.outputs.new('NodeSocketColor','Metalness')
-        NG.outputs.new('NodeSocketColor','Roughness')
+        NG.outputs.new('NodeSocketFloat','Metalness')
+        NG.outputs.new('NodeSocketFloat','Roughness')
         NG.outputs.new('NodeSocketColor','Normal')
     
         CTN = create_node( NG.nodes, "ShaderNodeTexImage",(0,0),image = CT)
@@ -45,11 +45,14 @@ class Multilayered:
         GroupInN = create_node( NG.nodes, "NodeGroupInput", (-700,-45*4))
     
         VecMathN = create_node( NG.nodes, "ShaderNodeVectorMath", (-500,-45*3), operation = 'MULTIPLY')
-    
-        NormSepN = create_node( NG.nodes, "ShaderNodeSeparateRGB", (300,-150))
-    
-        NormCombN = create_node( NG.nodes, "ShaderNodeCombineRGB", (500,-150))
-        NormCombN.inputs[2].default_value = 1
+
+        RGBCurvesConvert = create_node( NG.nodes, "ShaderNodeRGBCurve", (400,-150))
+        RGBCurvesConvert.label = "Convert DX to OpenGL Normal"
+        RGBCurvesConvert.hide = True
+        RGBCurvesConvert.mapping.curves[1].points[0].location = (0,1)
+        RGBCurvesConvert.mapping.curves[1].points[1].location = (1,0)
+        RGBCurvesConvert.mapping.curves[2].points[0].location = (0,1)
+        RGBCurvesConvert.mapping.curves[2].points[1].location = (1,1)
     
         GroupOutN = create_node( NG.nodes, "NodeGroupOutput", (700,0))
     
@@ -64,10 +67,8 @@ class Multilayered:
         NG.links.new(CTN.outputs[0],GroupOutN.inputs[0])
         NG.links.new(MTN.outputs[0],GroupOutN.inputs[1])
         NG.links.new(RTN.outputs[0],GroupOutN.inputs[2])
-        NG.links.new(NTN.outputs[0],NormSepN.inputs[0])
-        NG.links.new(NormSepN.outputs[0],NormCombN.inputs[0])
-        NG.links.new(NormSepN.outputs[1],NormCombN.inputs[1])
-        NG.links.new(NormCombN.outputs[0],GroupOutN.inputs[3])
+        NG.links.new(NTN.outputs[0],RGBCurvesConvert.inputs[1])
+        NG.links.new(RGBCurvesConvert.outputs[0],GroupOutN.inputs[3])
     
         return
 
@@ -106,15 +107,18 @@ class Multilayered:
         NG.outputs.new('NodeSocketVector','Normal')
         GroupInN = create_node(NG.nodes,"NodeGroupInput", (-700,0), hide=False)
     
-        GroupOutN = create_node(NG.nodes,"NodeGroupOutput",(200,0))
+        GroupOutN = create_node(NG.nodes,"NodeGroupOutput",(200,0), hide=False)
     
-        ColorMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-300,100), label="Color Mix")
+        ColorMixN = create_node(NG.nodes,"ShaderNodeMix", (-300,100), label="Color Mix")
+        ColorMixN.data_type='RGBA'
     
-        MetalMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-300,50), label = "Metal Mix")
+        MetalMixN = create_node(NG.nodes,"ShaderNodeMix", (-300,0), label = "Metal Mix")
+        MetalMixN.data_type='FLOAT'
     
-        RoughMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-300,0), label = "Rough Mix")
+        RoughMixN = create_node(NG.nodes,"ShaderNodeMix", (-300,-100), label = "Rough Mix")
+        RoughMixN.data_type='FLOAT'
     
-        NormalMixN = create_node(NG.nodes,"ShaderNodeMix",(-300,-50), label = "Normal Mix")
+        NormalMixN = create_node(NG.nodes,"ShaderNodeMix",(-300,-200), label = "Normal Mix")
         NormalMixN.data_type='VECTOR'
         NormalMixN.clamp_factor=False
 
@@ -157,23 +161,23 @@ class Multilayered:
             CurMat.links.new(MaskN.outputs[0],CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].inputs[9])
             CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].outputs[4],CurMat.nodes["Layer_"+str(x)].inputs[8])
             
-            NG.links.new(GroupInN.outputs[0],ColorMixN.inputs[1])
-            NG.links.new(GroupInN.outputs[1],MetalMixN.inputs[1])
-            NG.links.new(GroupInN.outputs[2],RoughMixN.inputs[1])
+            NG.links.new(GroupInN.outputs[0],ColorMixN.inputs[6])
+            NG.links.new(GroupInN.outputs[1],MetalMixN.inputs[2])
+            NG.links.new(GroupInN.outputs[2],RoughMixN.inputs[2])
             NG.links.new(GroupInN.outputs['Normal A'],NormalMixN.inputs[4])
-            NG.links.new(GroupInN.outputs[4],ColorMixN.inputs[2])
-            NG.links.new(GroupInN.outputs[5],MetalMixN.inputs[2])
-            NG.links.new(GroupInN.outputs[6],RoughMixN.inputs[2])
+            NG.links.new(GroupInN.outputs[4],ColorMixN.inputs[7])
+            NG.links.new(GroupInN.outputs[5],MetalMixN.inputs[3])
+            NG.links.new(GroupInN.outputs[6],RoughMixN.inputs[3])
             NG.links.new(GroupInN.outputs['Normal B'],NormalMixN.inputs[5])
             NG.links.new(GroupInN.outputs[8],ColorMixN.inputs[0])
             NG.links.new(GroupInN.outputs['Mask'],NormalMixN.inputs['Factor'])
             NG.links.new(GroupInN.outputs[8],RoughMixN.inputs[0])
             NG.links.new(GroupInN.outputs[8],MetalMixN.inputs[0])
         
-            NG.links.new(ColorMixN.outputs[0],GroupOutN.inputs[0])
-            NG.links.new(NormalMixN.outputs[1],GroupOutN.inputs[3])
-            NG.links.new(RoughMixN.outputs[0],GroupOutN.inputs[2])
+            NG.links.new(ColorMixN.outputs[2],GroupOutN.inputs[0])
             NG.links.new(MetalMixN.outputs[0],GroupOutN.inputs[1])
+            NG.links.new(RoughMixN.outputs[0],GroupOutN.inputs[2])
+            NG.links.new(NormalMixN.outputs[1],GroupOutN.inputs[3])
         
         if LayerCount>1:
             targetLayer="Layer_"+str(LayerCount-2)
