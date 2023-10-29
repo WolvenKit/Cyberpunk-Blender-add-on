@@ -1,1 +1,21 @@
+#Simple build to run on merge to main and on change of PR on any branch.
+#Can be also triggered manually from the Actions tab.
+#Build is available as artifact once action finishes.
 
+name: simple_build
+on:
+  push:
+    branches: [ 'main' ]
+  pull_request:
+    branches: [ '**' ]
+  workflow_dispatch:
+  
+jobs:
+  Build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: vimtor/action-zip@v1.1
+        with:
+          files: i_scene_cp77_gltf/ 
+          dest: latest_build.zip
