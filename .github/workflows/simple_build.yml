@@ -19,3 +19,7 @@ jobs:
         with:
           files: i_scene_cp77_gltf/ 
           dest: latest_build.zip
+      - uses: actions/upload-artifact@v1.1
+        with:
+          name: my-artifact
+          path: ${{ github.workspace }}/latest_build.zip
