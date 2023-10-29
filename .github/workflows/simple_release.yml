@@ -1,0 +1,36 @@
+# Simple release job example which build the addon and creates draft for the release.
+# Job has to be started manually.
+
+name: simple_release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'version'
+        required: true
+        default: '1.5.0dev'
+
+permissions:
+  contents: write
+
+jobs:
+  Build:
+    runs-on: ubuntu-latest
+    steps:        
+      - name: Build addon
+        uses: blenderkit/blender-addon-build@main
+        with:
+          name: Cyberpunk-Blender-Add-on-
+          build-location: "./i_scene_cp77_gltf/"
+          exclude-files: ".git;.github;README.md"
+
+  Release:
+    runs-on: ubuntu-latest
+    needs: Build
+    steps:
+      - name: Release addon
+        uses: blenderkit/blender-addon-release@main
+        with:
+          artifact_name: Cyberpunk-Blender-Add-on-
+          release_name: Cyberpunk Blender Add on 
+          version: ${{github.event.inputs.version}}
