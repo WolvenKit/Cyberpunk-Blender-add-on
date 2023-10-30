@@ -135,6 +135,14 @@ def get_scale(inst):
         scale[2] = inst['scale']['Z'] /scale_factor
     return scale
 
+def get_col(color):
+    col=[0,0,0]
+    col[0] = color['Red']/255
+    col[1] = color['Green']/255
+    col[2] = color['Blue']/255    
+    return col
+
+
 def get_tan_pos(inst):
     pos=[[0,0,0],[0,0,0]]
     if 'Elements' in inst.keys():
@@ -684,6 +692,40 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                         obj.hide_set(True)  
                                     else:
                                         print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
+
+                case 'worldStaticLightNode':
+                    print('worldStaticLightNode',i)
+                    
+                    instances = [x for x in t if x['NodeIndex'] == i]
+                    for inst in instances:
+                        light_node=e['Data']
+                        light_ndata=inst
+                        color= light_node['color']  
+                        intensity=light_node['intensity']        
+                        flicker=light_node['flicker'] 
+                        area_shape=light_node['areaShape']
+                        pos=get_pos(light_ndata)
+                        rot=get_rot(light_ndata)
+                        
+                        A_Light=bpy.data.lights.new('worldStaticLightNode_'+str(i),'AREA')
+                        light_obj=bpy.data.objects.new('worldStaticLightNode_'+str(i), A_Light)
+                        Sector_coll.objects.link(light_obj)
+                        light_obj.location=pos
+                        light_obj.rotation_mode='QUATERNION'
+                        light_obj.rotation_quaternion=rot
+                        A_Light.energy = intensity
+                        A_Light.color = get_col(color)
+                        
+                        if area_shape=='ALS_Capsule':                        
+                            A_Light.shape='ELLIPSE'
+                            A_Light.size= light_node['capsuleLength']
+                            A_Light.size_y= light_node['radius']*2
+                        elif area_shape=='ALS_Sphere':                        
+                            A_Light.shape='DISK'
+                            A_Light.size= light_node['radius']*2
+
+                    pass
+
                 case 'worldCollisionNode':
                 
     #   ______      _____      _                 
