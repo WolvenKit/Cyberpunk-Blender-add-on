@@ -20,13 +20,21 @@ class Multilayered:
 
         NG = bpy.data.node_groups.new(name[:-11],"ShaderNodeTree")
         NG['mlTemplate']=mltemplate
-        TMI = NG.inputs.new('NodeSocketVector','Tile Multiplier')
+        vers=bpy.app.version
+        if vers[0]<4:
+            TMI = NG.inputs.new('NodeSocketVector','Tile Multiplier')
+            NG.outputs.new('NodeSocketColor','Color')
+            NG.outputs.new('NodeSocketFloat','Metalness')
+            NG.outputs.new('NodeSocketFloat','Roughness')
+            NG.outputs.new('NodeSocketColor','Normal')
+        else:
+            TMI = CurMat.interface.new_socket(name="Tile Multiplier",socket_type='NodeSocketVector', in_out='INPUT')
+            CurMat.interface.new_socket(name="Color", socket_type='NodeSocketColor', in_out='OUTPUT')
+            CurMat.interface.new_socket(name="Metalness", socket_type='NodeSocketFloat', in_out='OUTPUT')
+            CurMat.interface.new_socket(name="Roughness", socket_type='NodeSocketFloat', in_out='OUTPUT')
+            CurMat.interface.new_socket(name="Normal", socket_type='NodeSocketColor', in_out='OUTPUT')
+
         TMI.default_value = (1,1,1)
-        NG.outputs.new('NodeSocketColor','Color')
-        NG.outputs.new('NodeSocketFloat','Metalness')
-        NG.outputs.new('NodeSocketFloat','Roughness')
-        NG.outputs.new('NodeSocketColor','Normal')
-    
         CTN = create_node( NG.nodes, "ShaderNodeTexImage",(0,0),image = CT)
     
         MTN = create_node( NG.nodes, "ShaderNodeTexImage",(0,-50*1),image = MT)
@@ -92,19 +100,36 @@ class Multilayered:
 
     def createLayerMaterial(self,LayerName,LayerCount,CurMat,mlmaskpath,normalimgpath):
         NG = bpy.data.node_groups.new("Layer_Blend","ShaderNodeTree")#create layer's node group
-        NG.inputs.new('NodeSocketColor','Color A')
-        NG.inputs.new('NodeSocketFloat','Metalness A')
-        NG.inputs.new('NodeSocketFloat','Roughness A')
-        NG.inputs.new('NodeSocketVector','Normal A')
-        NG.inputs.new('NodeSocketColor','Color B')
-        NG.inputs.new('NodeSocketFloat','Metalness B')
-        NG.inputs.new('NodeSocketFloat','Roughness B')
-        NG.inputs.new('NodeSocketVector','Normal B')
-        NG.inputs.new('NodeSocketFloat','Mask')
-        NG.outputs.new('NodeSocketColor','Color')
-        NG.outputs.new('NodeSocketFloat','Metalness')
-        NG.outputs.new('NodeSocketFloat','Roughness')
-        NG.outputs.new('NodeSocketVector','Normal')
+        vers=bpy.app.version
+        if vers[0]<4:
+            NG.inputs.new('NodeSocketColor','Color A')
+            NG.inputs.new('NodeSocketFloat','Metalness A')
+            NG.inputs.new('NodeSocketFloat','Roughness A')
+            NG.inputs.new('NodeSocketVector','Normal A')
+            NG.inputs.new('NodeSocketColor','Color B')
+            NG.inputs.new('NodeSocketFloat','Metalness B')
+            NG.inputs.new('NodeSocketFloat','Roughness B')
+            NG.inputs.new('NodeSocketVector','Normal B')
+            NG.inputs.new('NodeSocketFloat','Mask')
+            NG.outputs.new('NodeSocketColor','Color')
+            NG.outputs.new('NodeSocketFloat','Metalness')
+            NG.outputs.new('NodeSocketFloat','Roughness')
+            NG.outputs.new('NodeSocketVector','Normal')
+        else:
+            NG.interface.new_socket(name="Color A", socket_type='NodeSocketColor', in_out='INPUT')
+            NG.interface.new_socket(name="Metalness A", socket_type='NodeSocketFloat', in_out='INPUT')
+            NG.interface.new_socket(name="Roughness A", socket_type='NodeSocketFloat', in_out='INPUT')
+            NG.interface.new_socket(name="Normal A", socket_type='NodeSocketVector', in_out='INPUT')
+            NG.interface.new_socket(name="Color B", socket_type='NodeSocketColor', in_out='INPUT')
+            NG.interface.new_socket(name="Metalness B", socket_type='NodeSocketFloat', in_out='INPUT')
+            NG.interface.new_socket(name="Roughness B", socket_type='NodeSocketFloat', in_out='INPUT')
+            NG.interface.new_socket(name="Normal B", socket_type='NodeSocketVector', in_out='INPUT')
+            NG.interface.new_socket(name="Mask", socket_type='NodeSocketFloat', in_out='INPUT')
+            NG.interface.new_socket(name="Color", socket_type='NodeSocketColor', in_out='OUTPUT')
+            NG.interface.new_socket(name="Metalness", socket_type='NodeSocketFloat', in_out='OUTPUT')
+            NG.interface.new_socket(name="Roughness", socket_type='NodeSocketFloat', in_out='OUTPUT')
+            NG.interface.new_socket(name="Normal", socket_type='NodeSocketVector', in_out='OUTPUT')
+
         GroupInN = create_node(NG.nodes,"NodeGroupInput", (-700,0), hide=False)
     
         GroupOutN = create_node(NG.nodes,"NodeGroupOutput",(200,0), hide=False)
@@ -288,21 +313,40 @@ class Multilayered:
            # Mat[os.path.basename(material).split('.')[0]+'_cols']=OverrideTable["ColorScale"]
 
             NG = bpy.data.node_groups.new(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#crLAer's node group
-            NG.inputs.new('NodeSocketColor','ColorScale')
-            NG.inputs.new('NodeSocketFloat','MatTile')
-            NG.inputs.new('NodeSocketFloat','MbTile')
-            NG.inputs.new('NodeSocketFloat','MicroblendNormalStrength')
-            NG.inputs.new('NodeSocketFloat','MicroblendContrast')
-            NG.inputs.new('NodeSocketFloat','MicroblendOffsetU')
-            NG.inputs.new('NodeSocketFloat','MicroblendOffsetV')
-            NG.inputs.new('NodeSocketFloat','NormalStrength')
-            NG.inputs.new('NodeSocketFloat','Opacity')
-            NG.inputs.new('NodeSocketFloat','Mask')
-            NG.outputs.new('NodeSocketColor','Color')
-            NG.outputs.new('NodeSocketFloat','Metalness')
-            NG.outputs.new('NodeSocketFloat','Roughness')
-            NG.outputs.new('NodeSocketVector','Normal')
-            NG.outputs.new('NodeSocketFloat','Layer Mask')
+            vers=bpy.app.version
+            if vers[0]<4:
+                NG.inputs.new('NodeSocketColor','ColorScale')
+                NG.inputs.new('NodeSocketFloat','MatTile')
+                NG.inputs.new('NodeSocketFloat','MbTile')
+                NG.inputs.new('NodeSocketFloat','MicroblendNormalStrength')
+                NG.inputs.new('NodeSocketFloat','MicroblendContrast')
+                NG.inputs.new('NodeSocketFloat','MicroblendOffsetU')
+                NG.inputs.new('NodeSocketFloat','MicroblendOffsetV')
+                NG.inputs.new('NodeSocketFloat','NormalStrength')
+                NG.inputs.new('NodeSocketFloat','Opacity')
+                NG.inputs.new('NodeSocketFloat','Mask')
+                NG.outputs.new('NodeSocketColor','Color')
+                NG.outputs.new('NodeSocketFloat','Metalness')
+                NG.outputs.new('NodeSocketFloat','Roughness')
+                NG.outputs.new('NodeSocketVector','Normal')
+                NG.outputs.new('NodeSocketFloat','Layer Mask')
+            else:
+                NG.interface.new_socket(name="ColorScale", socket_type='NodeSocketColor', in_out='INPUT')
+                NG.interface.new_socket(name="MatTile", socket_type='NodeSocketFloat', in_out='INPUT')
+                NG.interface.new_socket(name="MbTile", socket_type='NodeSocketFloat', in_out='INPUT')
+                NG.interface.new_socket(name="MicroblendNormalStrength", socket_type='NodeSocketFloat', in_out='INPUT')
+                NG.interface.new_socket(name="MicroblendContrast", socket_type='NodeSocketFloat', in_out='INPUT')
+                NG.interface.new_socket(name="MicroblendOffsetU", socket_type='NodeSocketFloat', in_out='INPUT')
+                NG.interface.new_socket(name="MicroblendOffsetV", socket_type='NodeSocketFloat', in_out='INPUT')
+                NG.interface.new_socket(name="NormalStrength", socket_type='NodeSocketFloat', in_out='INPUT')
+                NG.interface.new_socket(name="Opacity", socket_type='NodeSocketFloat', in_out='INPUT')
+                NG.interface.new_socket(name="Mask", socket_type='NodeSocketFloat', in_out='INPUT')
+                NG.interface.new_socket(name="Color", socket_type='NodeSocketColor', in_out='OUTPUT')
+                NG.interface.new_socket(name="Metalness", socket_type='NodeSocketFloat', in_out='OUTPUT')
+                NG.interface.new_socket(name="Roughness", socket_type='NodeSocketFloat', in_out='OUTPUT')
+                NG.interface.new_socket(name="Normal", socket_type='NodeSocketVector', in_out='OUTPUT')
+                NG.interface.new_socket(name="Layer Mask", socket_type='NodeSocketFloat', in_out='OUTPUT')
+
 
             NG.inputs[4].min_value = 0
             NG.inputs[4].max_value = 1
