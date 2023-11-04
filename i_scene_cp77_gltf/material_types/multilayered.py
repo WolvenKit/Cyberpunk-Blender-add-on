@@ -330,6 +330,8 @@ class Multilayered:
                 NG.outputs.new('NodeSocketFloat','Roughness')
                 NG.outputs.new('NodeSocketVector','Normal')
                 NG.outputs.new('NodeSocketFloat','Layer Mask')
+                NG_inputs=NG.inputs
+
             else:
                 NG.interface.new_socket(name="ColorScale", socket_type='NodeSocketColor', in_out='INPUT')
                 NG.interface.new_socket(name="MatTile", socket_type='NodeSocketFloat', in_out='INPUT')
@@ -346,6 +348,7 @@ class Multilayered:
                 NG.interface.new_socket(name="Roughness", socket_type='NodeSocketFloat', in_out='OUTPUT')
                 NG.interface.new_socket(name="Normal", socket_type='NodeSocketVector', in_out='OUTPUT')
                 NG.interface.new_socket(name="Layer Mask", socket_type='NodeSocketFloat', in_out='OUTPUT')
+                NG_inputs=get_inputs(NG)
 
 
             NG.inputs[4].min_value = 0

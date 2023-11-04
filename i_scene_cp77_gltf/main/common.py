@@ -5,6 +5,12 @@ import math
 from mathutils import Color
 import pkg_resources
 
+def get_inputs(tree):
+  return ([x for x in tree.interface.items_tree if (x.item_type == 'SOCKET' and x.in_out == 'INPUT')])
+
+def get_outputs(tree):
+  return ([x for x in tree.interface.items_tree if (x.item_type == 'SOCKET' and x.in_out == 'OUTPUT')])
+
 def bsdf_socket_names():
     socket_names={}
     vers=bpy.app.version
