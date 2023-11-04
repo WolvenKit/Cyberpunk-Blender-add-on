@@ -11,9 +11,10 @@ class Eye:
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes['Principled BSDF']
+        sockets=bsdf_socket_names()
 
         if "Specularity" in Data:
-            pBSDF.inputs["Specular"].default_value = Data["Specularity"]
+            pBSDF.inputs[sockets["Specular"]].default_value = Data["Specularity"]
 
         if "RefractionIndex" in Data:
             pBSDF.inputs['IOR'].default_value = Data["RefractionIndex"]

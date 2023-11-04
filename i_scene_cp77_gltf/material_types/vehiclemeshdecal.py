@@ -12,7 +12,8 @@ class VehicleMeshDecal:
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes['Principled BSDF']
-        pBSDF.inputs['Specular'].default_value = 0
+        sockets=bsdf_socket_names()
+        pBSDF.inputs[sockets['Specular']].default_value = 0
         
 #Diffuse
         mulNode = CurMat.nodes.new("ShaderNodeMath")
