@@ -5,6 +5,33 @@ import math
 from mathutils import Color
 import pkg_resources
 
+def get_inputs(tree):
+  return ([x for x in tree.interface.items_tree if (x.item_type == 'SOCKET' and x.in_out == 'INPUT')])
+
+def get_outputs(tree):
+  return ([x for x in tree.interface.items_tree if (x.item_type == 'SOCKET' and x.in_out == 'OUTPUT')])
+
+def bsdf_socket_names():
+    socket_names={}
+    vers=bpy.app.version
+    if vers[0]<4:
+        socket_names['Subsurface']= 'Subsurface'
+        socket_names['Subsurface Color']= 'Subsurface Color'
+        socket_names['Specular']= 'Specular'
+        socket_names['Transmission']= 'Transmission' 
+        socket_names['Coat']= 'Coat'
+        socket_names['Sheen']= 'Sheen'
+        socket_names['Emission']= 'Emission'
+    else:
+        socket_names['Subsurface Color']= 'Base Color'
+        socket_names['Subsurface']= 'Subsurface Weight'
+        socket_names['Specular']= 'Specular IOR Level'
+        socket_names['Transmission']= 'Transmission Weight' 
+        socket_names['Coat']= 'Coat Weight'
+        socket_names['Sheen']= 'Sheen Weight'
+        socket_names['Emission']= 'Emission Color'
+    return socket_names    
+
 def json_ver_validate( json_data):
     if 'Header' not in json_data.keys():
         return False
@@ -120,9 +147,13 @@ def CreateRebildNormalGroup(curMat, x = 0, y = 0,name = 'Rebuild Normal Z'):
     
         GroupOutN = group.nodes.new("NodeGroupOutput")
         GroupOutN.location = (200,0)
-    
-        group.inputs.new('NodeSocketColor','Image')
-        group.outputs.new('NodeSocketColor','Image')
+        vers=bpy.app.version
+        if vers[0]<4:
+            group.inputs.new('NodeSocketColor','Image')
+            group.outputs.new('NodeSocketColor','Image')
+        else:
+            group.interface.new_socket(name="Image", socket_type='NodeSocketColor', in_out='OUTPUT')
+            group.interface.new_socket(name="Image",socket_type='NodeSocketColor', in_out='INPUT')
     
         VMup = group.nodes.new("ShaderNodeVectorMath")
         VMup.location = (-1200,-200)
@@ -334,8 +365,13 @@ def createParallaxGroup():
         return bpy.data.node_groups['CP77_Parallax']
     else:
         CurMat = bpy.data.node_groups.new('CP77_Parallax', 'ShaderNodeTree')
-        CurMat.outputs.new('NodeSocketVector','Vector' )
-        CurMat.inputs.new('NodeSocketFloat','Distance' )
+        vers=bpy.app.version
+        if vers[0]<4:
+            CurMat.outputs.new('NodeSocketVector','Vector' )
+            CurMat.inputs.new('NodeSocketFloat','Distance' )
+        else:
+            CurMat.interface.new_socket(name="Vector", socket_type='NodeSocketVector', in_out='OUTPUT')
+            CurMat.interface.new_socket(name="Distance",socket_type='NodeSocketFloat', in_out='INPUT')
         GroupOutput = create_node(CurMat.nodes,"NodeGroupOutput",(771.574462890625, 0.0), label="Group Output")
         Tangent = create_node(CurMat.nodes,"ShaderNodeTangent",(-565., -136.), label="Tangent")
         Tangent.direction_type='UV_MAP'
@@ -411,10 +447,17 @@ def createLerpGroup():
         return bpy.data.node_groups['lerp']
     else:
         CurMat = bpy.data.node_groups.new('lerp', 'ShaderNodeTree')
-        CurMat.inputs.new('NodeSocketFloat','A' )
-        CurMat.inputs.new('NodeSocketFloat','B' )
-        CurMat.inputs.new('NodeSocketFloat','t' )
-        CurMat.outputs.new('NodeSocketFloat','result' )
+        vers=bpy.app.version
+        if vers[0]<4:
+            CurMat.inputs.new('NodeSocketFloat','A' )
+            CurMat.inputs.new('NodeSocketFloat','B' )
+            CurMat.inputs.new('NodeSocketFloat','t' )
+            CurMat.outputs.new('NodeSocketFloat','result' )
+        else:
+            CurMat.interface.new_socket(name="A",socket_type='NodeSocketFloat', in_out='INPUT')
+            CurMat.interface.new_socket(name="B",socket_type='NodeSocketFloat', in_out='INPUT')
+            CurMat.interface.new_socket(name="t",socket_type='NodeSocketFloat', in_out='INPUT')
+            CurMat.interface.new_socket(name="result", socket_type='NodeSocketFloat', in_out='OUTPUT')
         GroupInput = create_node(CurMat.nodes,"NodeGroupInput",(0, 0), label="Group Input")
         GroupOutput = create_node(CurMat.nodes,"NodeGroupOutput",(700, 0), label="Group Output")
         sub = create_node(CurMat.nodes,"ShaderNodeMath", (200,100) , operation = 'SUBTRACT')
@@ -439,10 +482,17 @@ def createVecLerpGroup():
         return bpy.data.node_groups['vecLerp']
     else:
         CurMat = bpy.data.node_groups.new('vecLerp', 'ShaderNodeTree')
-        CurMat.inputs.new('NodeSocketVector','A' )
-        CurMat.inputs.new('NodeSocketVector','B' )
-        CurMat.inputs.new('NodeSocketVector','t' )
-        CurMat.outputs.new('NodeSocketVector','result' )
+        vers=bpy.app.version
+        if vers[0]<4:
+            CurMat.inputs.new('NodeSocketVector','A' )
+            CurMat.inputs.new('NodeSocketVector','B' )
+            CurMat.inputs.new('NodeSocketVector','t' )
+            CurMat.outputs.new('NodeSocketVector','result' )
+        else:
+            CurMat.interface.new_socket(name="A",socket_type='NodeSocketVector', in_out='INPUT')
+            CurMat.interface.new_socket(name="B",socket_type='NodeSocketVector', in_out='INPUT')
+            CurMat.interface.new_socket(name="t",socket_type='NodeSocketVector', in_out='INPUT')
+            CurMat.interface.new_socket(name="result", socket_type='NodeSocketVector', in_out='OUTPUT')
         GroupInput = create_node(CurMat.nodes,"NodeGroupInput",(0, 0), label="Group Input")
         GroupOutput = create_node(CurMat.nodes,"NodeGroupOutput",(700, 0), label="Group Output")
         sub = create_node(CurMat.nodes,"ShaderNodeVectorMath", (200,100) , operation = 'SUBTRACT')
@@ -466,8 +516,13 @@ def createHash12Group():
         return bpy.data.node_groups['hash12']
     else:     
         CurMat = bpy.data.node_groups.new('hash12', 'ShaderNodeTree')
-        CurMat.inputs.new('NodeSocketVector','vector' )
-        CurMat.outputs.new('NodeSocketFloat','result' )
+        vers=bpy.app.version
+        if vers[0]<4:
+            CurMat.inputs.new('NodeSocketVector','vector' )
+            CurMat.outputs.new('NodeSocketFloat','result' )
+        else:
+            CurMat.interface.new_socket(name="vector",socket_type='NodeSocketVector', in_out='INPUT')
+            CurMat.interface.new_socket(name="result", socket_type='NodeSocketFloat', in_out='OUTPUT')
         GroupInput = create_node(CurMat.nodes,"NodeGroupInput",(-500, 0), label="Group Input")
         GroupOutput = create_node(CurMat.nodes,"NodeGroupOutput",(1350, 0), label="Group Output")
         separate = create_node(CurMat.nodes,"ShaderNodeSeparateXYZ",  (-350,0))      

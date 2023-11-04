@@ -76,7 +76,8 @@ class ParallaxScreen:
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
         pBSDF=CurMat.nodes['Principled BSDF']
-        pBSDF.inputs['Specular'].default_value = 0
+        sockets=bsdf_socket_names()
+        pBSDF.inputs[sockets['Specular']].default_value = 0
 
         if "BlinkingSpeed" in Data:
             blinkingSpeed = CreateShaderNodeValue(CurMat,Data["BlinkingSpeed"],-2000, 450,"BlinkingSpeed") 
@@ -1248,7 +1249,7 @@ class ParallaxScreen:
 
         # links to pBSDF
         CurMat.links.new(vecAdd13.outputs[0],pBSDF.inputs["Base Color"])
-        CurMat.links.new(vecAdd13.outputs[0],pBSDF.inputs["Emission"])
+        CurMat.links.new(vecAdd13.outputs[0],pBSDF.inputs[sockets["Emission"]])
 
         # metalness
         CurMat.links.new(roughness.outputs[0],pBSDF.inputs["Metallic"])

@@ -12,6 +12,8 @@ class MetalBase:
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes['Principled BSDF']
+        sockets=bsdf_socket_names()
+
         mixRGB = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-450,400) , blend_type = 'MULTIPLY')
         mixRGB.inputs[0].default_value = 1
         CurMat.links.new(mixRGB.outputs[0],pBSDF.inputs['Base Color'])
@@ -46,7 +48,7 @@ class MetalBase:
             CurMat.links.new(rNode.outputs[0],pBSDF.inputs['Roughness'])
             invr = create_node(CurMat.nodes,"ShaderNodeInvert",(-280., 90.))
             CurMat.links.new(rNode.outputs[0],invr.inputs['Color'])
-            CurMat.links.new(invr.outputs[0],pBSDF.inputs['Specular'])
+            CurMat.links.new(invr.outputs[0],pBSDF.inputs[sockets['Specular']])
         
         if 'RoughnessScale' in Data:
             rScale = CreateShaderNodeValue(CurMat,Data["RoughnessScale"],-1000, -300,"RoughnessScale")
@@ -94,7 +96,7 @@ class MetalBase:
             emTexNode =create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,0), label="Emissive", image=EmImg)
             CurMat.links.new(emTexNode.outputs[0],mulNode.inputs[2])
 
-        CurMat.links.new(mulNode.outputs[0],pBSDF.inputs['Emission'])
+        CurMat.links.new(mulNode.outputs[0],pBSDF.inputs[sockets['Emission']])
 
         if "EmissiveEV" in Data:
             pBSDF.inputs['Emission Strength'].default_value =  Data["EmissiveEV"]

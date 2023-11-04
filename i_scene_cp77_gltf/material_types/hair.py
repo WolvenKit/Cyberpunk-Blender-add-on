@@ -26,11 +26,13 @@ class Hair:
 
         CurMat = Mat.node_tree
         Ns=CurMat.nodes
+        sockets=bsdf_socket_names()
+
         aImg=imageFromRelPath(hair["Strand_Alpha"],DepotPath=self.BasePath, ProjPath=self.ProjPath, image_format=self.image_format)            
         aImgNode = create_node(Ns,"ShaderNodeTexImage",  (-300,-150), label="Strand_Alpha", image=aImg)
         CurMat.links.new(aImgNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
 
-        CurMat.nodes['Principled BSDF'].inputs['Specular'].default_value = 0
+        CurMat.nodes['Principled BSDF'].inputs[sockets['Specular']].default_value = 0
 
         gImg=imageFromRelPath(hair["Strand_Gradient"],DepotPath=self.BasePath, ProjPath=self.ProjPath, image_format=self.image_format)            
         gImgNode = create_node(Ns,"ShaderNodeTexImage",  (-1100,50), label="Strand_Gradient", image=gImg)

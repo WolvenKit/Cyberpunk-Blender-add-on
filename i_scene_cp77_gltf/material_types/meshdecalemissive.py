@@ -11,7 +11,8 @@ class MeshDecalEmissive:
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes['Principled BSDF']
-        pBSDF.inputs['Specular'].default_value = 0
+        sockets=bsdf_socket_names()
+        pBSDF.inputs[sockets['Specular']].default_value = 0
 
         if "DiffuseColor2" in Data:
             dCol2 = CreateShaderNodeRGB(CurMat, Data["DiffuseColor2"], -160, 200, "DiffuseColor2")
@@ -40,7 +41,7 @@ class MeshDecalEmissive:
             CurMat.links.new(emTexNode.outputs[0],mulNode.inputs[2])
             CurMat.links.new(emTexNode.outputs[1],alphaNode.inputs[0])
 
-        CurMat.links.new(mulNode.outputs[0], pBSDF.inputs['Emission'])
+        CurMat.links.new(mulNode.outputs[0], pBSDF.inputs[sockets['Emission']])
         CurMat.links.new(alphaNode.outputs[0], pBSDF.inputs['Alpha'])
 
         if "EmissiveEV" in Data:
