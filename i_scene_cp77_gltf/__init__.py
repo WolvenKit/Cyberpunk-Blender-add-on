@@ -670,9 +670,9 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
                                     row = box.row(align=True)
                                     row.prop(active_action, 'frame_start', text="")
                                     row.prop(active_action, 'frame_end', text="")
-                   
-                    row.separator()
-                    row.operator('reset_armature.cp77')
+                    else:
+                        row.separator()
+                        row.operator('reset_armature.cp77')
 
                     box = layout.box()
                     row = box.row(align=True)
