@@ -349,8 +349,7 @@ class Multilayered:
                 NG.interface.new_socket(name="Normal", socket_type='NodeSocketVector', in_out='OUTPUT')
                 NG.interface.new_socket(name="Layer Mask", socket_type='NodeSocketFloat', in_out='OUTPUT')
                 NG_inputs=get_inputs(NG)
-
-            
+          
             NG_inputs[4].min_value = 0
             NG_inputs[4].max_value = 1
             NG_inputs[7].min_value = 0 # No reason to invert these maps, not detail maps.
