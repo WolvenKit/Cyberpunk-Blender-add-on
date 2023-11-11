@@ -8,6 +8,9 @@ from ..main.common import json_ver_validate
 from ..main.common import UV_by_bounds
 from .attribute_import import manage_garment_support
 
+def objs_in_col(top_coll, objtype):
+    return sum([len([o for o in col.objects if o.type==objtype]) for col in top_coll.children_recursive])+len([o for o in top_coll.objects if o.type==objtype])
+
 def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_materials=True, filepath='', hide_armatures=True, update_gi=True, import_garmentsupport=False, files=[], directory='', appearances=[]):
     
     context=bpy.context
@@ -55,6 +58,9 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
             if 'Armature' in o.name:
                 o.hide_set(hide_armatures)
         collection['orig_filepath']=filepath
+        collection['numMeshChildren']=objs_in_col(collection, 'MESH')
+        collection['numArmatureChildren']=objs_in_col(collection, 'ARMATURE')
+
         for name in bpy.data.materials.keys():
             if name not in existingMaterials:
                 bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
