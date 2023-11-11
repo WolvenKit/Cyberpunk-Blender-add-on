@@ -4,6 +4,41 @@ import os
 import math
 from mathutils import Color
 import pkg_resources
+import bpy
+import bmesh
+from mathutils import Vector
+
+def UV_by_bounds(selected_objects):
+    current_mode = bpy.context.object.mode
+    min_vertex = Vector((float('inf'), float('inf'), float('inf')))
+    max_vertex = Vector((float('-inf'), float('-inf'), float('-inf')))
+    for obj in selected_objects:
+        if obj.type == 'MESH':
+            matrix = obj.matrix_world
+            mesh = obj.data
+            for vertex in mesh.vertices:
+                vertex_world = matrix @ vertex.co
+                min_vertex = Vector(min(min_vertex[i], vertex_world[i]) for i in range(3))
+                max_vertex = Vector(max(max_vertex[i], vertex_world[i]) for i in range(3))
+
+    for obj in selected_objects:
+        if  len(obj.data.uv_layers)<1:
+            me = obj.data
+            bpy.ops.object.mode_set(mode='EDIT', toggle=False)
+            bm = bmesh.from_edit_mesh(me)
+            
+            uv_layer = bm.loops.layers.uv.verify()
+            
+            # adjust uv coordinates
+            for face in bm.faces:
+                for loop in face.loops:
+                    loop_uv = loop[uv_layer]
+                    # use xy position of the vertex as a uv coordinate
+                    loop_uv.uv[0]=(loop.vert.co.x-min_vertex[0])/(max_vertex[0]-min_vertex[0])
+                    loop_uv.uv[1]=(loop.vert.co.y-min_vertex[1])/(max_vertex[1]-min_vertex[1])
+
+            bmesh.update_edit_mesh(me)
+    bpy.ops.object.mode_set(mode=current_mode)
 
 def get_inputs(tree):
   return ([x for x in tree.interface.items_tree if (x.item_type == 'SOCKET' and x.in_out == 'INPUT')])
