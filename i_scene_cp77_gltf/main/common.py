@@ -65,6 +65,33 @@ def bsdf_socket_names():
         socket_names['Emission']= 'Emission Color'
     return socket_names    
 
+def get_inputs(tree):
+  return ([x for x in tree.interface.items_tree if (x.item_type == 'SOCKET' and x.in_out == 'INPUT')])
+
+def get_outputs(tree):
+  return ([x for x in tree.interface.items_tree if (x.item_type == 'SOCKET' and x.in_out == 'OUTPUT')])
+
+def bsdf_socket_names():
+    socket_names={}
+    vers=bpy.app.version
+    if vers[0]<4:
+        socket_names['Subsurface']= 'Subsurface'
+        socket_names['Subsurface Color']= 'Subsurface Color'
+        socket_names['Specular']= 'Specular'
+        socket_names['Transmission']= 'Transmission' 
+        socket_names['Coat']= 'Coat'
+        socket_names['Sheen']= 'Sheen'
+        socket_names['Emission']= 'Emission'
+    else:
+        socket_names['Subsurface Color']= 'Base Color'
+        socket_names['Subsurface']= 'Subsurface Weight'
+        socket_names['Specular']= 'Specular IOR Level'
+        socket_names['Transmission']= 'Transmission Weight' 
+        socket_names['Coat']= 'Coat Weight'
+        socket_names['Sheen']= 'Sheen Weight'
+        socket_names['Emission']= 'Emission Color'
+    return socket_names    
+
 def json_ver_validate( json_data):
     if 'Header' not in json_data.keys():
         return False
