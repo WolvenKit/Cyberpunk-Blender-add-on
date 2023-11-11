@@ -5,6 +5,7 @@ from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
 from ..main.setup import MaterialBuilder
 from ..main.common import json_ver_validate
+from ..main.common import UV_by_bounds
 from .attribute_import import manage_garment_support
 
 def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_materials=True, filepath='', hide_armatures=True, update_gi=True, import_garmentsupport=False, files=[], directory='', appearances=[]):
@@ -42,6 +43,8 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
         existingMaterials = bpy.data.materials.keys()
         BlenderGlTF.create(gltf_importer)
         imported= context.selected_objects #the new stuff should be selected 
+        if f['name'][:7]=='terrain':
+            UV_by_bounds(imported)
         collection = bpy.data.collections.new(os.path.splitext(f['name'])[0])
         bpy.context.scene.collection.children.link(collection)
         for o in imported:
