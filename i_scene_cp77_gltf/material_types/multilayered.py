@@ -28,11 +28,11 @@ class Multilayered:
             NG.outputs.new('NodeSocketFloat','Roughness')
             NG.outputs.new('NodeSocketColor','Normal')
         else:
-            TMI = CurMat.interface.new_socket(name="Tile Multiplier",socket_type='NodeSocketVector', in_out='INPUT')
-            CurMat.interface.new_socket(name="Color", socket_type='NodeSocketColor', in_out='OUTPUT')
-            CurMat.interface.new_socket(name="Metalness", socket_type='NodeSocketFloat', in_out='OUTPUT')
-            CurMat.interface.new_socket(name="Roughness", socket_type='NodeSocketFloat', in_out='OUTPUT')
-            CurMat.interface.new_socket(name="Normal", socket_type='NodeSocketColor', in_out='OUTPUT')
+            TMI = NG.interface.new_socket(name="Tile Multiplier",socket_type='NodeSocketVector', in_out='INPUT')
+            NG.interface.new_socket(name="Color", socket_type='NodeSocketColor', in_out='OUTPUT')
+            NG.interface.new_socket(name="Metalness", socket_type='NodeSocketFloat', in_out='OUTPUT')
+            NG.interface.new_socket(name="Roughness", socket_type='NodeSocketFloat', in_out='OUTPUT')
+            NG.interface.new_socket(name="Normal", socket_type='NodeSocketColor', in_out='OUTPUT')
 
         TMI.default_value = (1,1,1)
         CTN = create_node( NG.nodes, "ShaderNodeTexImage",(0,0),image = CT)
@@ -349,14 +349,13 @@ class Multilayered:
                 NG.interface.new_socket(name="Normal", socket_type='NodeSocketVector', in_out='OUTPUT')
                 NG.interface.new_socket(name="Layer Mask", socket_type='NodeSocketFloat', in_out='OUTPUT')
                 NG_inputs=get_inputs(NG)
-
-
-            NG.inputs[4].min_value = 0
-            NG.inputs[4].max_value = 1
-            NG.inputs[7].min_value = 0 # No reason to invert these maps, not detail maps.
-            NG.inputs[7].max_value = 10 # This value is arbitrary, but more than adequate.
-            NG.inputs[8].min_value = 0
-            NG.inputs[8].max_value = 1
+          
+            NG_inputs[4].min_value = 0
+            NG_inputs[4].max_value = 1
+            NG_inputs[7].min_value = 0 # No reason to invert these maps, not detail maps.
+            NG_inputs[7].max_value = 10 # This value is arbitrary, but more than adequate.
+            NG_inputs[8].min_value = 0
+            NG_inputs[8].max_value = 1
             
             LayerGroupN = create_node(CurMat.nodes, "ShaderNodeGroup", (-2000,500-100*LayerIndex))
             LayerGroupN.width = 400
