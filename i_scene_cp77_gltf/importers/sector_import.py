@@ -246,11 +246,12 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                 print(len(apps))
             impapps=','.join(apps)
             #print(os.path.join(path, m[:-4]+'glb'),impapps)
-            meshpath=os.path.join(path, m[:-4]+'glb')
+
+            meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb')
             groupname = os.path.splitext(os.path.split(meshpath)[-1])[0]
             while len(groupname) > 63:
                 groupname = groupname[:-1]
-            if groupname not in Masters.children.keys():
+            if groupname not in Masters.children.keys() and os.path.exists(meshpath):
                 try:
                     bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=impapps, update_gi=False, with_materials=with_materials)
                     objs = C.selected_objects
@@ -259,6 +260,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     coll_scene.children.unlink(move_coll)
                 except:
                     print('failed on ',os.path.basename(meshpath))
+            elif not os.path.exists(meshpath):
+                print('Mesh ', meshpath, ' does not exist')
     empty=[]
     for child in Masters.children:
         if len(child.objects)<1:

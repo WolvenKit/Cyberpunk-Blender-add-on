@@ -110,6 +110,145 @@ class CP77IOSuitePreferences(bpy.types.AddonPreferences):
             col.prop(self, "show_meshtools")
             col.prop(self, "show_collisiontools")
             col.prop(self, "show_animtools")
+            
+            
+class CP77ScriptManager(bpy.types.Panel):
+    bl_label = "Script Manager"
+    bl_idname = "CP77_PT_ScriptManagerPanel"
+    bl_space_type = 'TEXT_EDITOR'
+    bl_region_type = 'UI'
+    bl_category = "CP77 Modding"
+
+    def draw(self, context):
+        layout = self.layout
+        box = layout.box()
+        col = box.column()
+        # Get the path to the "scripts" folder in the add-on's root directory
+        script_dir = os.path.join(os.path.dirname(__file__), "scripts")
+
+        # List available scripts
+        script_files = [f for f in os.listdir(script_dir) if f.endswith(".py")]
+
+        
+        for script_file in script_files:
+            row = col.row(align=True)
+            row.operator("script_manager.save_script", text="", icon="APPEND_BLEND").script_file = script_file
+            row.operator("script_manager.load_script", text=script_file).script_file = script_file
+            row.operator("script_manager.delete_script", text="", icon="X").script_file = script_file
+
+        row = box.row(align=True)
+        row.operator("script_manager.create_script")
+
+
+class CP77CreateScript(bpy.types.Operator):
+    bl_idname = "script_manager.create_script"
+    bl_label = "Create New Script"
+    bl_description = "create a new script in the cp77 modding scripts directory"
+
+    def execute(self, context):
+        script_dir = os.path.join(os.path.dirname(__file__), "scripts")
+        base_name = "new_script"
+        script_name = base_name + ".py"
+
+        # Check if a script with the default name already exists
+        i = 1
+        while os.path.exists(os.path.join(script_dir, script_name)):
+            script_name = f"{base_name}_{i}.py"
+            i += 1
+
+        script_path = os.path.join(script_dir, script_name)
+
+        with open(script_path, 'w') as f:
+            f.write("# New Script")
+
+        return {'FINISHED'}
+        
+
+class CP77LoadScript(bpy.types.Operator):
+    bl_idname = "script_manager.load_script"
+    bl_label = "Load Script"
+    bl_description = "Click to load or switch to this script, ctrl+click to rename"
+    
+    script_file: bpy.props.StringProperty()
+    new_name: bpy.props.StringProperty(name="New name", default=".py")
+
+    def execute(self, context):
+        script_name = self.script_file
+
+        if self.new_name:
+            # Rename the script
+            script_path = os.path.join(os.path.dirname(__file__), "scripts", script_name)
+            new_script_path = os.path.join(os.path.dirname(__file__), "scripts", self.new_name)
+
+            if os.path.exists(script_path):
+                if not os.path.exists(new_script_path):
+                    os.rename(script_path, new_script_path)
+                    self.report({'INFO'}, f"Renamed '{script_name}' to '{self.new_name}'")
+                else:
+                    self.report({'ERROR'}, f"A script with the name '{self.new_name}' already exists.")
+        else:
+            # Check if the script is already loaded
+            script_text = bpy.data.texts.get(script_name)
+            # Switch to the loaded script if present
+            if script_text is not None:
+                context.space_data.text = script_text  
+            else:
+                # If the script is not loaded, load it
+                script_path = os.path.join(os.path.dirname(__file__), "scripts", script_name)
+
+                if os.path.exists(script_path):
+                    with open(script_path, 'r') as f:
+                        text_data = bpy.data.texts.new(name=script_name)
+                        text_data.from_string(f.read())
+                        # Set the loaded script as active
+                        context.space_data.text = text_data  
+        
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        if event.ctrl:
+            # Ctrl+Click to rename
+            return context.window_manager.invoke_props_dialog(self)
+        else:
+            self.new_name = ""
+            return self.execute(context)
+
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, "new_name")
+
+
+class CP77SaveScript(bpy.types.Operator):
+    bl_idname = "script_manager.save_script"
+    bl_label = "Save Script"
+    bl_description = "Press to save this script"
+    
+    script_file: bpy.props.StringProperty()
+
+    def execute(self, context):
+        script_text = context.space_data.text
+        if script_text:
+            script_path = os.path.join(os.path.dirname(__file__), "scripts", self.script_file)
+            with open(script_path, 'w') as f:
+                f.write(script_text.as_string())
+
+        return {'FINISHED'}
+
+
+class CP77DeleteScript(bpy.types.Operator):
+    bl_idname = "script_manager.delete_script"
+    bl_label = "Delete Script"
+    bl_description = "Press to delete this script"
+    
+    script_file: bpy.props.StringProperty()
+
+    def execute(self, context):
+        script_path = os.path.join(os.path.dirname(__file__), "scripts", self.script_file)
+
+        if os.path.exists(script_path):
+            os.remove(script_path)
+
+        return {'FINISHED'}
 
 
 def SetCyclesRenderer(use_cycles=True, set_gi_params=False):
@@ -532,9 +671,9 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
                                     row = box.row(align=True)
                                     row.prop(active_action, 'frame_start', text="")
                                     row.prop(active_action, 'frame_end', text="")
-                    else:
-                        row.separator()
-                        row.operator('reset_armature.cp77')
+                   
+                    row.separator()
+                    row.operator('reset_armature.cp77')
 
                     box = layout.box()
                     row = box.row(align=True)

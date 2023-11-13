@@ -12,6 +12,7 @@ class EyeGradient:
 
     def create(self,Data,Mat):
 
+
         # load the gradient profile from the depot
         file = openJSON(Data["IrisColorGradient"] + ".json",mode='r', DepotPath=self.BasePath, ProjPath=self.ProjPath)
         profile = json.loads(file.read())
@@ -23,12 +24,13 @@ class EyeGradient:
         profile= profile["Data"]["RootChunk"]
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes['Principled BSDF']
+        sockets=bsdf_socket_names()
 
         if "RefractionIndex" in Data:
             pBSDF.inputs['IOR'].default_value = Data["RefractionIndex"]
 
         if "Specularity" in Data:
-            pBSDF.inputs["Specular"].default_value = Data["Specularity"]
+            pBSDF.inputs[sockets["Specular"]].default_value = Data["Specularity"]
 
 #NORMAL/n
         if "Normal" in Data:
