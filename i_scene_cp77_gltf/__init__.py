@@ -21,6 +21,7 @@ from .main.collisions import *
 from .main.animtools import *
 from .main.meshtools import *
 from .main.bartmoss_functions import *
+from .main.scripts import *
 
 
 bl_info = {
@@ -825,7 +826,16 @@ class CP77GroupVerts(bpy.types.Operator):
     def execute(self, context):
         CP77GroupUngroupedVerts(self, context)
         return {'FINISHED'}
-
+    
+class CP77RotateObj(bpy.types.Operator):
+    bl_label = "Mesh Tools"
+    bl_idname = "cp77.rotate_obj"
+    bl_description = "rotate the selected object"
+    
+    def execute(self, context):
+        rotate_quat_180(self, context)
+        return {'FINISHED'}
+    
 
 class CP77_PT_MeshTools(bpy.types.Panel):
     bl_label = "Mesh Tools"
@@ -853,6 +863,7 @@ class CP77_PT_MeshTools(bpy.types.Panel):
             if cp77_addon_prefs.show_meshtools:
                 box.label(text="Mesh Cleanup", icon_value=custom_icon_col["trauma"]["TRAUMA"].icon_id)
                 row = box.row(align=True)
+                row.operator("cp77.rotate_obj")
                 row.operator("cp77.group_verts", text="Group Ungrouped Verts")
                 row = box.row(align=True)
                 if context.object.active_material and context.object.active_material.name == 'UV_Checker':
@@ -1177,6 +1188,7 @@ classes = (
     CP77IOSuitePreferences,
     CollectionAppearancePanel,
     CP77HairProfileExport,
+    CP77RotateObj,
     CP77_PT_MeshTools,
     CP77Autofitter,
     CP77NewAction,

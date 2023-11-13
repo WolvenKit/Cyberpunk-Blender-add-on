@@ -8,7 +8,7 @@ def rotate_quat_180(self,context):
 
         rotation_quat = Quaternion((0, 0, 1), radians(180))
         active_obj.rotation_quaternion = rotation_quat @ active_obj.rotation_quaternion
-        
+        bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
         # Update the object to reflect the changes
         active_obj.update_tag()
         active_obj.update_from_editmode()
@@ -18,4 +18,5 @@ def rotate_quat_180(self,context):
 
     else:
         return{'FINISHED'}
+    J!ELd1!@#    
     
