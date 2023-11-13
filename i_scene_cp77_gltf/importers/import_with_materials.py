@@ -133,7 +133,7 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
                                 #print('matname: ',matname, validmats[matname])
                                 m=validmats[matname]
                                 # Should create a list of mis that dont play nice with this and just check if the mat is using one.
-                                if matname in bpy_mats.keys() and 'glass' not in matname and 'Window' not in matname and matname[:5]!='Atlas' and 'BaseMaterial' in bpy_mats[matname].keys() and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['GlobalNormal']==m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask']==m['MultilayerMask'] :
+                                if matname in bpy_mats.keys() and 'glass' not in matname and 'MaterialTemplate' not in matname and 'Window' not in matname and matname[:5]!='Atlas' and 'BaseMaterial' in bpy_mats[matname].keys() and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['GlobalNormal']==m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask']==m['MultilayerMask'] :
                                     bpy.data.meshes[name].materials.append(bpy_mats[matname])
                                 elif matname in bpy_mats.keys() and matname[:5]=='Atlas' and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['DiffuseMap']==m['DiffuseMap'] :
                                     bpy.data.meshes[name].materials.append(bpy_mats[matname])
