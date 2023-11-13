@@ -152,9 +152,9 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
                                                         bpy.data.meshes[name].materials.append(bpymat)
                                                         if 'no_shadows' in bpymat.keys() and bpymat['no_shadows']:
                                                             bpy.data.objects[name].visible_shadow=False
-                                                except FileNotFoundError as fnfe:
+                                                except: 
                                                     #Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
-                                                    #print(str(fnfe))
+                                                    print(traceback.print_exc())                                                    
                                                     pass                                            
                                             index = index + 1
                             else:
