@@ -249,10 +249,11 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
 
             for c in comps:
                 if 'mesh' in c.keys():
-                    print(c['mesh']['DepotPath']['$value'])
-                    if isinstance( c['mesh']['DepotPath']['$value'], str):
-                        meshname=os.path.basename(c['mesh']['DepotPath']['$value'])
-                        meshpath=os.path.join(path, c['mesh']['DepotPath']['$value'][:-4]+'glb')
+                    m=c['mesh']['DepotPath']['$value']
+                    print(m)
+                    if isinstance( m, str):
+                        meshname=os.path.basename(m)
+                        meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb')
                         if meshname not in exclude_meshes:      
                             if os.path.exists(meshpath):
                                 #if True:
