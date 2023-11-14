@@ -32,5 +32,6 @@ jobs:
         uses: blenderkit/blender-addon-release@main
         with:
           artifact_name: Cyberpunk-Blender-Add-on-
+          build-location: "./"
           release_name: Cyberpunk Blender Add on 
           version: ${{github.event.inputs.version}}
