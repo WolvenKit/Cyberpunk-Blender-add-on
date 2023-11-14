@@ -59,7 +59,8 @@ To learn more about WolvenKit visit the [dedicated WolvenKit wiki.](https://wiki
 
 # Requirements
 
-1) **Blender** version 3.6 or higher is *highly recommended*
+1) **Blender** version 4.0 is supported
+<br>**Blender** version 3.6 or higher is *highly recommended*
 <br>**Blender** version 3.1 or higher is *required*
 <br>https://www.blender.org/<br/>
 
