@@ -21,7 +21,7 @@ jobs:
         uses: blenderkit/blender-addon-build@main
         with:
           name: Cyberpunk-Blender-Add-on-
-          build-location: "./"
+          build-location: "./i_scene_cp77_gltf/"
           exclude-files: ".git;.github;README.md"
 
   Release:
@@ -32,6 +32,5 @@ jobs:
         uses: Simarilius-uk/blender-addon-release@main
         with:
           artifact_name: Cyberpunk-Blender-Add-on-
-          build-location: "./"
           release_name: Cyberpunk Blender Add on 
           version: ${{github.event.inputs.version}}
