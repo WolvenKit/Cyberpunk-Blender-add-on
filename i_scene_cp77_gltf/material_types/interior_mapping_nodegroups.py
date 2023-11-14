@@ -1048,14 +1048,15 @@ def andrew_willmotts_plane_interior_mapping_node_group():
         andrew_willmotts_interior_mapping.links.new(group_input_002.outputs[2], math_014.inputs[0])
         #group_input_002.Flip Y UVs? -> math_015.Value
         andrew_willmotts_interior_mapping.links.new(group_input_002.outputs[3], math_015.inputs[0])
-        AR_group_input = create_node(andrew_willmotts_interior_mapping.nodes,"NodeGroupInput",(-131.2041015625, 615.6461791992188))
-        AR_div = create_node(andrew_willmotts_interior_mapping.nodes,"ShaderNodeMath",(96.85089111328125, 581.0361938476562), operation='DIVIDE')
-        AR_div.inputs[1].default_value = 2.0
-        AR_sub = create_node(andrew_willmotts_interior_mapping.nodes,"ShaderNodeMath",(293.109130859375, 572.5521850585938), operation='SUBTRACT')
-        AR_sub.inputs[0].default_value = 1.0
-        andrew_willmotts_interior_mapping.links.new(AR_group_input.outputs[4], AR_div.inputs[0])
-        andrew_willmotts_interior_mapping.links.new(AR_div.outputs[0], AR_sub.inputs[1])
-        andrew_willmotts_interior_mapping.links.new(AR_sub.outputs[0], math_007.inputs[1])
+
+        #Sims bodges for Aspect Ratio
+        AR_group_input = create_node(andrew_willmotts_interior_mapping.nodes,"NodeGroupInput",(-131.2041015625, 100.))
+        AR_div = create_node(andrew_willmotts_interior_mapping.nodes,"ShaderNodeMath",(96.85089111328125, 100.), operation='DIVIDE')
+        AR_div.inputs[0].default_value = 0.5
+        andrew_willmotts_interior_mapping.links.new(AR_group_input.outputs[1], AR_div.inputs[0])
+        andrew_willmotts_interior_mapping.links.new(AR_group_input.outputs[4], AR_div.inputs[1])
+        andrew_willmotts_interior_mapping.links.new(AR_div.outputs[0], math_006.inputs[1])
+        andrew_willmotts_interior_mapping.links.new(AR_div.outputs[0], math_007.inputs[1])
 
         AddGI = create_node(andrew_willmotts_interior_mapping.nodes,"NodeGroupInput",(2379., 840.))
         AddCXYZ = create_node(andrew_willmotts_interior_mapping.nodes,"ShaderNodeCombineXYZ",(2677., 774.))
@@ -1064,7 +1065,7 @@ def andrew_willmotts_plane_interior_mapping_node_group():
         Add_VM.inputs[0].default_value=(0.5,0,0.5)
         andrew_willmotts_interior_mapping.links.new(AddGI.outputs[4], AddCXYZ.inputs[2])
         andrew_willmotts_interior_mapping.links.new(AddCXYZ.outputs[0], Add_VM.inputs[1])
-        andrew_willmotts_interior_mapping.links.new(Add_VM.outputs[0], vector_math_011.inputs[1])
+        #andrew_willmotts_interior_mapping.links.new(Add_VM.outputs[0], vector_math_011.inputs[1])
 
 
         return andrew_willmotts_interior_mapping
