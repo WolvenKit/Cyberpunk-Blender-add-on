@@ -43,7 +43,11 @@ class DecalGradientmapRecolor:
         if self.found(difftex) and self.found(gradmap):
             diffImg = imageFromRelPath(difftex,self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
             diff_image_node = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,-300), label="DiffuseTexture", image=diffImg)
-            diff_image_node.image.colorspace_settings.name = 'Linear'
+            vers=bpy.app.version
+            if vers[0]<4:
+                diff_image_node.image.colorspace_settings.name = 'Linear'
+            else:
+                diff_image_node.image.colorspace_settings.name = 'Linear Rec.709'
             gradImg = imageFromRelPath(gradmap,self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
             grad_image_node = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,0), label="GradientMap", image=gradImg)
             

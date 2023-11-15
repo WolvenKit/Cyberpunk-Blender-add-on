@@ -13,7 +13,8 @@ class TelevisionAd:
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes['Principled BSDF']
-        pBSDF.inputs["Specular"].default_value = 0
+        sockets=bsdf_socket_names()
+        pBSDF.inputs[sockets["Specular"]].default_value = 0
 
         # PARAMETERS
         if "TilesWidth" in Data:
@@ -612,7 +613,7 @@ class TelevisionAd:
             CurMat.links.new(dirtNode.outputs[0],vecLerp.inputs[1])
             CurMat.links.new(mul12.outputs[0],vecLerp.inputs[2])
             CurMat.links.new(vecLerp.outputs[0],pBSDF.inputs["Base Color"])
-            CurMat.links.new(combine10.outputs[0],pBSDF.inputs["Emission"]) # it will be like this before i implement the blackDots
+            CurMat.links.new(combine10.outputs[0],pBSDF.inputs[sockets["Emission"]]) # it will be like this before i implement the blackDots
 
         # metalness
         CurMat.links.new(m.outputs[0],pBSDF.inputs["Metallic"])

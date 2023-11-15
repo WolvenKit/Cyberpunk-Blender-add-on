@@ -13,7 +13,8 @@ class MeshDecalGradientMapReColor:
         Mat.shadow_method = 'HASHED'
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes['Principled BSDF']
-        pBSDF.inputs['Specular'].default_value = 0
+        sockets=bsdf_socket_names()
+        pBSDF.inputs[sockets['Specular']].default_value = 0
 
         if "MaskTexture" in Data:
             aImg = imageFromRelPath(Data["MaskTexture"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
