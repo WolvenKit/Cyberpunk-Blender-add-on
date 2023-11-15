@@ -252,11 +252,13 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                    # print(c['mesh']['DepotPath']['$value'])
                     meshname=''
                     if 'mesh' in c.keys() and isinstance( c['mesh']['DepotPath']['$value'], str):
-                        meshname=os.path.basename(c['mesh']['DepotPath']['$value'])
-                        meshpath=os.path.join(path, c['mesh']['DepotPath']['$value'][:-4]+'glb')
+                        m=c['mesh']['DepotPath']['$value']
+                        meshname=os.path.basename(m)
+                        meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb')
                     elif 'graphicsMesh' in c.keys() and isinstance( c['graphicsMesh']['DepotPath']['$value'], str):
-                        meshname=os.path.basename(c['graphicsMesh']['DepotPath']['$value'])
-                        meshpath=os.path.join(path, c['graphicsMesh']['DepotPath']['$value'][:-4]+'glb')
+                        m=c['graphicsMesh']['DepotPath']['$value']
+                        meshname=os.path.basename(m)
+                        meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb')
                     if meshname:
                         if meshname not in exclude_meshes:      
                             if os.path.exists(meshpath):

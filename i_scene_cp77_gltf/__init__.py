@@ -21,12 +21,13 @@ from .main.collisions import *
 from .main.animtools import *
 from .main.meshtools import *
 from .main.bartmoss_functions import *
+from .main.scripts import *
 
 
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
     "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, Doctor Presto, shotlastc",
-    "version": (1, 5, 0),
+    "version": (1, 5, 1),
     "blender": (3, 1, 0),
     "location": "File > Import-Export",
     "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
@@ -109,120 +110,8 @@ class CP77IOSuitePreferences(bpy.types.AddonPreferences):
             col.prop(self, "show_meshtools")
             col.prop(self, "show_collisiontools")
             col.prop(self, "show_animtools")
-
-
-def SetCyclesRenderer(use_cycles=True, set_gi_params=False):
-    # set the render engine for all scenes to Cycles
-
-    if use_cycles:
-        for scene in bpy.data.scenes:
-            scene.render.engine = 'CYCLES'
-
-        if set_gi_params:
-            cycles = bpy.context.scene.cycles
-            cycles.max_bounces = 32
-            cycles.caustics_reflective = True
-            cycles.caustics_refractive = True
-            cycles.diffuse_bounces = 32
-            cycles.glossy_bounces = 32
-            cycles.transmission_bounces = 32
-            cycles.volume_bounces = 32
-            cycles.transparent_max_bounces = 32
-            cycles.use_fast_gi = False
-            cycles.ao_bounces = 1
-            cycles.ao_bounces_render = 1
-
-
-class CP77_PT_PanelProps(bpy.types.PropertyGroup):
-   
-# collision panel props:
-    collider_type: bpy.props.EnumProperty(
-        name="Collision Type",
-        items=[
-        ('VEHICLE', "Vehicle Collision", "Generate .phys formatted collisions for a vehicle mod"),
-        ('ENTITY', "Entity Collision", "Generate entCollisionComponents"),
-        ],
-        default='VEHICLE'
-    ) 
-
-    collision_shape: bpy.props.EnumProperty(
-        name="Collision Shape",
-        items=[
-        ('CONVEX', "Convex Collider", "Generate a Convex Collider"),
-        ('BOX', "Box Collider", "Generate a Box Collider"),
-        ('CAPSULE', "Capsule Collider", "Generate a Capsule Collider")
-        ],
-        default='CONVEX'
-    )
-
-    matchSize: bpy.props.BoolProperty(        
-        name="Match the Shape of Existing Mesh",
-        description="Match the size of the selected Mesh",
-        default=True,
-
-    )
-
-    radius: bpy.props.FloatProperty(
-        name="Radius",
-        description="Enter the Radius value of the capsule",
-        default=0,
-        min=0,
-        max=100,
-        step=1,
-    )
-
-    height: bpy.props.FloatProperty(
-        name="height",
-        description="Enter the height of the capsule",
-        default=0,
-        min=0,
-        max=1000,
-        step=1,
-    )
-
-    sampleverts: bpy.props.IntProperty(
-        name="Vertices to Sample",
-        description="This is the number of vertices in your new collider",
-        default=0,
-        min=1,
-        max=100,
-    )
-
-# anims props"
-    frameall: BoolProperty(
-        name="All Frames",
-        default=False,
-        description="Insert a keyframe on every frame of the active action"
-    )
-    
-    body_list: bpy.props.EnumProperty(
-        items=[(name, name, '') for name in cp77riglist(None)[1]],
-        name="Rig GLB"
-    )
-    
-# mesh props
-    fbx_rot: BoolProperty(
-        name="",
-        default=False,
-        description="Rotate for an fbx orientated mesh"
-    )
-
-    refit_json: bpy.props.EnumProperty(
-        items=[(target_body_names, target_body_names, '') for target_body_names in CP77RefitList(None)[1]],
-        name="Body Shape"
-    )
-
-    selected_armature: bpy.props.EnumProperty(
-        items=CP77ArmatureList
-    )
-
-    mesh_source: bpy.props.EnumProperty(
-        items=CP77CollectionList
-    ) 
-
-    mesh_target: bpy.props.EnumProperty(
-        items=CP77CollectionList
-    )   
+            
+            
 class CP77ScriptManager(bpy.types.Panel):
     bl_label = "Script Manager"
     bl_idname = "CP77_PT_ScriptManagerPanel"
@@ -361,6 +250,119 @@ class CP77DeleteScript(bpy.types.Operator):
 
         return {'FINISHED'}
 
+
+def SetCyclesRenderer(use_cycles=True, set_gi_params=False):
+    # set the render engine for all scenes to Cycles
+
+    if use_cycles:
+        for scene in bpy.data.scenes:
+            scene.render.engine = 'CYCLES'
+
+        if set_gi_params:
+            cycles = bpy.context.scene.cycles
+            cycles.max_bounces = 32
+            cycles.caustics_reflective = True
+            cycles.caustics_refractive = True
+            cycles.diffuse_bounces = 32
+            cycles.glossy_bounces = 32
+            cycles.transmission_bounces = 32
+            cycles.volume_bounces = 32
+            cycles.transparent_max_bounces = 32
+            cycles.use_fast_gi = False
+            cycles.ao_bounces = 1
+            cycles.ao_bounces_render = 1
+
+
+class CP77_PT_PanelProps(bpy.types.PropertyGroup):
+   
+# collision panel props:
+    collider_type: bpy.props.EnumProperty(
+        name="Collision Type",
+        items=[
+        ('VEHICLE', "Vehicle Collision", "Generate .phys formatted collisions for a vehicle mod"),
+        ('ENTITY', "Entity Collision", "Generate entCollisionComponents"),
+        ],
+        default='VEHICLE'
+    ) 
+
+    collision_shape: bpy.props.EnumProperty(
+        name="Collision Shape",
+        items=[
+        ('CONVEX', "Convex Collider", "Generate a Convex Collider"),
+        ('BOX', "Box Collider", "Generate a Box Collider"),
+        ('CAPSULE', "Capsule Collider", "Generate a Capsule Collider")
+        ],
+        default='CONVEX'
+    )
+
+    matchSize: bpy.props.BoolProperty(        
+        name="Match the Shape of Existing Mesh",
+        description="Match the size of the selected Mesh",
+        default=True,
+
+    )
+
+    radius: bpy.props.FloatProperty(
+        name="Radius",
+        description="Enter the Radius value of the capsule",
+        default=0,
+        min=0,
+        max=100,
+        step=1,
+    )
+
+    height: bpy.props.FloatProperty(
+        name="height",
+        description="Enter the height of the capsule",
+        default=0,
+        min=0,
+        max=1000,
+        step=1,
+    )
+
+    sampleverts: bpy.props.IntProperty(
+        name="Vertices to Sample",
+        description="This is the number of vertices in your new collider",
+        default=0,
+        min=1,
+        max=100,
+    )
+
+# anims props"
+    frameall: BoolProperty(
+        name="All Frames",
+        default=False,
+        description="Insert a keyframe on every frame of the active action"
+    )
+    
+    body_list: bpy.props.EnumProperty(
+        items=[(name, name, '') for name in cp77riglist(None)[1]],
+        name="Rig GLB"
+    )
+    
+# mesh props
+    fbx_rot: BoolProperty(
+        name="",
+        default=False,
+        description="Rotate for an fbx orientated mesh"
+    )
+
+    refit_json: bpy.props.EnumProperty(
+        items=[(target_body_names, target_body_names, '') for target_body_names in CP77RefitList(None)[1]],
+        name="Body Shape"
+    )
+
+    selected_armature: bpy.props.EnumProperty(
+        items=CP77ArmatureList
+    )
+
+    mesh_source: bpy.props.EnumProperty(
+        items=CP77CollectionList
+    ) 
+
+    mesh_target: bpy.props.EnumProperty(
+        items=CP77CollectionList
+    )   
 
 class CP77CollisionGenerator(bpy.types.Operator):
     bl_idname = "generate_cp77.collisions"
@@ -515,11 +517,11 @@ class CP77Animset(bpy.types.Operator):
 
     def invoke(self, context, event):
         if event.ctrl:
-            self.new_name = self.name
             return context.window_manager.invoke_props_dialog(self)
         else:
             self.new_name = ""
             return self.execute(context)
+            
 
 # inserts a keyframe on the current frame
 class CP77Keyframe(bpy.types.Operator):
@@ -669,9 +671,9 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
                                     row = box.row(align=True)
                                     row.prop(active_action, 'frame_start', text="")
                                     row.prop(active_action, 'frame_end', text="")
-                    else:
-                        row.separator()
-                        row.operator('reset_armature.cp77')
+                   
+                    row.separator()
+                    row.operator('reset_armature.cp77')
 
                     box = layout.box()
                     row = box.row(align=True)
@@ -824,7 +826,16 @@ class CP77GroupVerts(bpy.types.Operator):
     def execute(self, context):
         CP77GroupUngroupedVerts(self, context)
         return {'FINISHED'}
-
+    
+class CP77RotateObj(bpy.types.Operator):
+    bl_label = "Mesh Tools"
+    bl_idname = "cp77.rotate_obj"
+    bl_description = "rotate the selected object"
+    
+    def execute(self, context):
+        rotate_quat_180(self, context)
+        return {'FINISHED'}
+    
 
 class CP77_PT_MeshTools(bpy.types.Panel):
     bl_label = "Mesh Tools"
@@ -852,6 +863,7 @@ class CP77_PT_MeshTools(bpy.types.Panel):
             if cp77_addon_prefs.show_meshtools:
                 box.label(text="Mesh Cleanup", icon_value=custom_icon_col["trauma"]["TRAUMA"].icon_id)
                 row = box.row(align=True)
+                row.operator("cp77.rotate_obj")
                 row.operator("cp77.group_verts", text="Group Ungrouped Verts")
                 row = box.row(align=True)
                 if context.object.active_material and context.object.active_material.name == 'UV_Checker':
@@ -1167,16 +1179,18 @@ classes = (
     CP77CollisionExport,
     CP77CollisionGenerator,
     CP77Animset,
-    CP77AnimsDelete,
-    CP77IOSuitePreferences,
-    CollectionAppearancePanel,
-    CP77HairProfileExport,
-    CP77_PT_MeshTools,
-    CP77Autofitter,
     CP77ScriptManager,
     CP77DeleteScript,
     CP77CreateScript,
     CP77LoadScript,
+    CP77AnimsDelete,
+    CP77SaveScript,
+    CP77IOSuitePreferences,
+    CollectionAppearancePanel,
+    CP77HairProfileExport,
+    CP77RotateObj,
+    CP77_PT_MeshTools,
+    CP77Autofitter,
     CP77NewAction,
     CP77RigLoader,
     CP77SetArmature,
