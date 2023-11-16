@@ -1058,14 +1058,25 @@ def andrew_willmotts_plane_interior_mapping_node_group():
         andrew_willmotts_interior_mapping.links.new(AR_div.outputs[0], math_006.inputs[1])
         andrew_willmotts_interior_mapping.links.new(AR_div.outputs[0], math_007.inputs[1])
 
-        AddGI = create_node(andrew_willmotts_interior_mapping.nodes,"NodeGroupInput",(2379., 840.))
-        AddCXYZ = create_node(andrew_willmotts_interior_mapping.nodes,"ShaderNodeCombineXYZ",(2677., 774.))
-        AddCXYZ.inputs[0].default_value=1.0
-        Add_VM = create_node(andrew_willmotts_interior_mapping.nodes,"ShaderNodeVectorMath",(2967., 803.), operation='DIVIDE')
-        Add_VM.inputs[0].default_value=(0.5,0,0.5)
-        andrew_willmotts_interior_mapping.links.new(AddGI.outputs[4], AddCXYZ.inputs[2])
-        andrew_willmotts_interior_mapping.links.new(AddCXYZ.outputs[0], Add_VM.inputs[1])
-        #andrew_willmotts_interior_mapping.links.new(Add_VM.outputs[0], vector_math_011.inputs[1])
+        AddGI = create_node(andrew_willmotts_interior_mapping.nodes,"NodeGroupInput",(10., 10.))        
+        AR_div2 = create_node(andrew_willmotts_interior_mapping.nodes,"ShaderNodeMath",(10, 10.), operation='DIVIDE')
+        AR_div2.inputs[0].default_value = -1
+        AddCXYZ = create_node(andrew_willmotts_interior_mapping.nodes,"ShaderNodeCombineXYZ",(10., 10.))
+        AddCXYZ.inputs[0].default_value=-1.0
+        AddCXYZ.inputs[1].default_value=-1.0
+        AddCXYZ.inputs[2].default_value=-1.0
+        AddGI.parent = frame_001
+        AR_div2.parent = frame_001
+        AddCXYZ.parent = frame_001
+        AddGI.location=(7080., 1490.)
+        AR_div2.location=(7245, 1490.)
+        AddCXYZ.location= (7429., 1490.)
+
+        andrew_willmotts_interior_mapping.links.new(AddGI.outputs[4], AR_div2.inputs[1])
+        andrew_willmotts_interior_mapping.links.new(AR_div2.outputs[0], AddCXYZ.inputs[0])
+        andrew_willmotts_interior_mapping.links.new(AR_div2.outputs[0], AddCXYZ.inputs[1])
+        andrew_willmotts_interior_mapping.links.new(AR_div2.outputs[0], AddCXYZ.inputs[2])
+        andrew_willmotts_interior_mapping.links.new(AddCXYZ.outputs[0], vector_math_001.inputs[1])
 
 
         return andrew_willmotts_interior_mapping
