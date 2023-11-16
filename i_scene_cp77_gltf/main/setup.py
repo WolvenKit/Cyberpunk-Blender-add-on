@@ -175,7 +175,7 @@ class MaterialBuilder:
                     televisionAd = TelevisionAd(self.BasePath,self.image_format,self.ProjPath)
                     televisionAd.create(rawMat["Data"],bpyMat)
                 
-                case "base\\materials\\window_parallax_interior_proxy.mt":
+                case "base\\materials\\window_parallax_interior_proxy.mt" | "base\\materials\\window_parallax_interior.mt":
                     window = windowParallaxIntProx(self.BasePath,self.image_format,self.ProjPath)
                     window.create(rawMat["Data"],bpyMat)
                 

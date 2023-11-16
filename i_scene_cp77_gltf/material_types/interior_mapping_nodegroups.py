@@ -1065,17 +1065,22 @@ def andrew_willmotts_plane_interior_mapping_node_group():
         AddCXYZ.inputs[0].default_value=-1.0
         AddCXYZ.inputs[1].default_value=-1.0
         AddCXYZ.inputs[2].default_value=-1.0
+        MultAdd = create_node(andrew_willmotts_interior_mapping.nodes,"ShaderNodeMath",(10., 10), operation='MULTIPLY_ADD')
+        MultAdd.inputs[0].default_value=0.25
+        MultAdd.inputs[2].default_value=-1.25
+        MultAdd.parent = frame_001
         AddGI.parent = frame_001
         AR_div2.parent = frame_001
         AddCXYZ.parent = frame_001
+        MultAdd.location=(7058., 1401.)
         AddGI.location=(7080., 1490.)
         AR_div2.location=(7245, 1490.)
         AddCXYZ.location= (7429., 1490.)
-
         andrew_willmotts_interior_mapping.links.new(AddGI.outputs[4], AR_div2.inputs[1])
+        andrew_willmotts_interior_mapping.links.new(AddGI.outputs[4], MultAdd.inputs[1])
         andrew_willmotts_interior_mapping.links.new(AR_div2.outputs[0], AddCXYZ.inputs[0])
         andrew_willmotts_interior_mapping.links.new(AR_div2.outputs[0], AddCXYZ.inputs[1])
-        andrew_willmotts_interior_mapping.links.new(AR_div2.outputs[0], AddCXYZ.inputs[2])
+        andrew_willmotts_interior_mapping.links.new(MultAdd.outputs[0], AddCXYZ.inputs[2])
         andrew_willmotts_interior_mapping.links.new(AddCXYZ.outputs[0], vector_math_001.inputs[1])
 
 
