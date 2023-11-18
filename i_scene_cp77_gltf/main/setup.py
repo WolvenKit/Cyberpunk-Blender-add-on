@@ -27,6 +27,7 @@ from ..material_types.decal import Decal
 from ..material_types.decal_gradientmap_recolor import DecalGradientmapRecolor
 from ..material_types.televisionad import TelevisionAd
 from ..material_types.window_parallax_interior_proxy import windowParallaxIntProx
+from ..material_types.unknown import unknownMaterial
 
 
 class MaterialBuilder:
@@ -181,6 +182,10 @@ class MaterialBuilder:
                 
                 case _:
                     print('Unhandled mt - ', rawMat["MaterialTemplate"])
+                    context=bpy.context
+                    if context.preferences.addons[__name__.split('.')[0]].preferences.experimental_features:
+                        unkown = unknownMaterial(self.BasePath,self.image_format,self.ProjPath)
+                        unkown.create(rawMat["Data"],bpyMat)
 
             #set the viewport blend mode to hashed - no more black tattoos and cybergear
             bpyMat.blend_method='HASHED'
