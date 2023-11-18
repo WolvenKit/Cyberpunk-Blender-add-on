@@ -12,7 +12,9 @@ def default_cp77_options():
         'export_materials': 'NONE',
         'export_all_influences': True,
         'export_lights': False,
-        'export_apply': False
+        'export_apply': False,
+        'export_extras': True 
+        'export_try_sparse_sk': False
     }
     return options
 
@@ -35,7 +37,7 @@ def pose_export_options():
         'export_animations': True,
         'export_frame_range': False,
         'export_animation_mode': 'NLA_TRACKS',
-        'export_anim_single_armature': True       
+        'export_anim_single_armature': True     
     }
     return options
 
