@@ -31,13 +31,13 @@ class windowParallaxIntProx:
         # AtlasGridUvRatio
         # roomWidth
         if 'roomWidth' in Data:
-            roomWidth = CreateShaderNodeValue(CurMat,Data["roomWidth"],-800, -100,"roomWidth")
+            roomWidth = CreateShaderNodeValue(CurMat,Data["roomWidth"],-1200, 100,"roomWidth")
         # roomHeight
         if 'roomHeight' in Data:
-            roomHeight = CreateShaderNodeValue(CurMat,Data["roomHeight"],-8000, -200,"roomHeight")
+            roomHeight = CreateShaderNodeValue(CurMat,Data["roomHeight"],-1200, 150,"roomHeight")
         # roomDepth
         if 'roomDepth' in Data:
-            roomDepth = CreateShaderNodeValue(CurMat,Data["roomDepth"],-800, -300,"roomDepth")
+            roomDepth = CreateShaderNodeValue(CurMat,Data["roomDepth"],-1200, 200,"roomDepth")
 
         par=createParallaxGroup() 
         AW_Int_Map = andrew_willmotts_plane_interior_mapping_node_group()
@@ -70,6 +70,41 @@ class windowParallaxIntProx:
         CurMat.links.new(InteriorMapping.outputs[0],flipbook.inputs[0])
         CurMat.links.new(flipbook.outputs[0],bColNode.inputs[0])
         CurMat.links.new(bColNode.outputs[0],CurMat.nodes['Material Output'].inputs[0])
+
+        #Randomise Rooms
+        WhiteNoiseTexture = create_node(CurMat.nodes,"ShaderNodeTexWhiteNoise",(-1077.558349609375, 946.2904052734375), label="White Noise Texture")
+        WhiteNoiseTexture.noise_dimensions='1D'
+        SeparateXYZ = create_node(CurMat.nodes,"ShaderNodeSeparateXYZ",(-1434.1156005859375, 899.5537719726562), label="Separate XYZ")
+        Math = create_node(CurMat.nodes,"ShaderNodeMath",(-1245.8779296875, 950.3339233398438), operation='FLOOR', label="Math")
+        Mathb = create_node(CurMat.nodes,"ShaderNodeMath",(-1245.8779296875, 930.3339233398438), operation='FLOOR', label="Mathb")
+        Mathc = create_node(CurMat.nodes,"ShaderNodeMath",(-1205.8779296875, 930.3339233398438), operation='MULTIPLY', label="Mathc")
+        Math002 = create_node(CurMat.nodes,"ShaderNodeMath",(-891.7330322265625, 936.3861694335938), operation='MULTIPLY', label="Math.002")
+        Math002.inputs[1].default_value=5
+        Math001 = create_node(CurMat.nodes,"ShaderNodeMath",(-715.7330322265625, 918.6345825195312), operation='FLOOR', label="Math.001")
+
+       # Window properties
+        if 'WindowTexture' in Data:
+            wcolImg=imageFromRelPath(Data["WindowTexture"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            wColNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-600,-150), label="WindowTexture", image=wcolImg)
+            if 'Normal' in Data:
+                wNormImg=imageFromRelPath(Data["Normal"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
+                wNormNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-600,-200), label="Normal", image=wNormImg)
+            if 'NormalStrength' in Data:
+                NormalStrength = CreateShaderNodeValue(CurMat,Data["NormalStrength"],-600, -250,"NormalStrength")
+            if 'Roughness' in Data:
+                wRoughImg=imageFromRelPath(Data["Roughness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
+                wRoughNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-600,-300), label="Roughness", image=wRoughImg)
+
+
+        CurMat.links.new(UV.outputs['UV'], SeparateXYZ.inputs[0])
+        CurMat.links.new(SeparateXYZ.outputs['X'], Math.inputs[0])
+        CurMat.links.new(SeparateXYZ.outputs['Y'], Mathb.inputs[0])
+        CurMat.links.new(Math.outputs['Value'], Mathc.inputs[0])
+        CurMat.links.new(Mathb.outputs['Value'], Mathc.inputs[1])
+        CurMat.links.new(Mathc.outputs['Value'], WhiteNoiseTexture.inputs[1])
+        CurMat.links.new(WhiteNoiseTexture.outputs['Value'], Math002.inputs[0])
+        CurMat.links.new(Math002.outputs['Value'], Math001.inputs[0])
+        CurMat.links.new(Math001.outputs['Value'], flipbook.inputs[1])
        # LightsTempVariationAtNight
        # AmountTurnOffAtNight
        # TintColorAtNight
@@ -88,4 +123,14 @@ class windowParallaxIntProx:
        # CurtainMaxCover
        # CurtainCoverRandomize
        # CurtainAlpha
-    
+
+
+        
+
+       # stuff in room 
+        #LayerAtlas
+        #LayerDepth
+
+        
+
+
