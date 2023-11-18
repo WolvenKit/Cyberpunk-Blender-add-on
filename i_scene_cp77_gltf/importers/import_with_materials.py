@@ -7,6 +7,7 @@ from ..main.setup import MaterialBuilder
 from ..main.common import json_ver_validate
 from ..main.common import UV_by_bounds
 from .attribute_import import manage_garment_support
+import traceback
 
 def objs_in_col(top_coll, objtype):
     return sum([len([o for o in col.objects if o.type==objtype]) for col in top_coll.children_recursive])+len([o for o in top_coll.objects if o.type==objtype])
