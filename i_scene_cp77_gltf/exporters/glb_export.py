@@ -13,7 +13,7 @@ def default_cp77_options():
         'export_all_influences': True,
         'export_lights': False,
         'export_apply': False,
-        'export_extras': True 
+        'export_extras': True,
         'export_try_sparse_sk': False
     }
     return options
