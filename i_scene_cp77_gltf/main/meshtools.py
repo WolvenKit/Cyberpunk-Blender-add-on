@@ -220,10 +220,13 @@ def CP77RefitList(context):
     Hyst_EBB_RB = os.path.join(refit_dir, "hyst_ebb_rb.zip")
     Flat_Chest = os.path.join(refit_dir, "flat_chest.zip")
     Solo_Ultimate = os.path.join(refit_dir, "solo_ultimate.zip")
+    Gymfiend = os.path.join(refit_dir, "gymfiend.zip")
+    Freyja = os.path.join(refit_dir, "freyja.zip")
+    Hyst_EBBP_Addon = os.path.join(refit_dir, "hyst_ebbp_addon.zip")
     
     # Convert the dictionary to a list of tuples
-    target_body_paths = [SoloArmsAddon, Solo_Ultimate, Adonis, Flat_Chest, Hyst_EBB_RB, Hyst_EBB, Hyst_RB, Lush, VanillaFemToMasc, VanillaMascToFem ]
-    target_body_names = ['SoloArmsAddon', 'Solo_Ultimate', 'Adonis', 'Flat_Chest', 'Hyst_EBB_RB', 'Hyst_EBB', 'Hyst_RB', 'Lush', 'VanillaFemToMasc', 'VanillaMascToFem' ]
+    target_body_paths = [SoloArmsAddon, Hyst_EBBP_Addon, Freyja, Gymfiend, Solo_Ultimate, Adonis, Flat_Chest, Hyst_EBB_RB, Hyst_EBB, Hyst_RB, Lush, VanillaFemToMasc, VanillaMascToFem ]
+    target_body_names = ['Hyst_EBBP_Addon', 'Freyja', 'Gymfiend','SoloArmsAddon', 'Solo_Ultimate', 'Adonis', 'Flat_Chest', 'Hyst_EBB_RB', 'Hyst_EBB', 'Hyst_RB', 'Lush', 'VanillaFemToMasc', 'VanillaMascToFem' ]
 
     # Return the list of tuples
     return target_body_paths, target_body_names

@@ -8,6 +8,23 @@ import bpy
 import bmesh
 from mathutils import Vector
 
+
+def get_plugin_dir():
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def get_resources_dir():
+    plugin_dir = get_plugin_dir()
+    return os.path.join(plugin_dir, "resources")
+
+def get_refit_dir():
+    resources_dir = get_resources_dir()
+    return os.path.join(resources_dir, "refitters")
+
+def get_script_dir():
+    resources_dir = get_resources_dir()
+    return os.path.join(resources_dir, "scripts")
+    
+
 def UV_by_bounds(selected_objects):
     current_mode = bpy.context.object.mode
     min_vertex = Vector((float('inf'), float('inf'), float('inf')))
