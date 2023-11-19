@@ -7,6 +7,7 @@ from ..main.setup import MaterialBuilder
 from ..main.common import json_ver_validate
 from ..main.common import UV_by_bounds
 from .attribute_import import manage_garment_support
+from ..main.animtools import get_anim_info
 import traceback
 
 def objs_in_col(top_coll, objtype):
@@ -55,9 +56,17 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
             for parent in o.users_collection:
                     parent.objects.unlink(o)
             collection.objects.link(o)  
+            
+            # if animations exist, don't hide the armature and get the extras properties
+            # We should probably break the base import out into a separate function, have it check the gltf file and then send the info either to anim import or import with materials, but this works too
+            animations = gltf_importer.data.animations
+            if animations:
+                get_anim_info(animations)
+            else:    
             #print('o.name - ',o.name)
-            if 'Armature' in o.name:
-                o.hide_set(hide_armatures)
+                if 'Armature' in o.name:
+                    o.hide_set(hide_armatures)
+            
         collection['orig_filepath']=filepath
         collection['numMeshChildren']=objs_in_col(collection, 'MESH')
         collection['numArmatureChildren']=objs_in_col(collection, 'ARMATURE')
