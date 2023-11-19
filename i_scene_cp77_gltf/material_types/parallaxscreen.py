@@ -610,7 +610,7 @@ class ParallaxScreen:
                 rndColorIGroup.interface.new_socket(name="rndColorIndex", socket_type='NodeSocketFloat', in_out='OUTPUT')
     
             rndColorIGroupI = create_node(rndColorIGroup.nodes, "NodeGroupInput",(-1400,0))
-            rndColorIGroupO = create_node(rndColorIGroup.nodes, "NodeGroupOutput",(200,0))  
+            rndColorIGroupO = create_node(rndColorIGroup.nodes, "NodeGroupOutput",(400,0))  
             separate2 = create_node(rndColorIGroup.nodes,"ShaderNodeSeparateXYZ", (-1250,0))
             combine5 = create_node(rndColorIGroup.nodes,"ShaderNodeCombineXYZ", (-1100,0))
             vecMul = create_node(rndColorIGroup.nodes,"ShaderNodeVectorMath", (-950,0), operation="MULTIPLY")
@@ -625,6 +625,7 @@ class ParallaxScreen:
             hash12_2.node_tree = hash12G
             mul9 = create_node(rndColorIGroup.nodes,"ShaderNodeMath", (100,-25), operation="MULTIPLY")
             mul9.inputs[1].default_value = 4
+            round1 = create_node(rndColorIGroup.nodes,"ShaderNodeMath", (250,-25), operation="ROUND")
             rndColorIGroup.links.new(rndColorIGroupI.outputs[2],separate2.inputs[0])
             rndColorIGroup.links.new(separate2.outputs[0],combine5.inputs[0])
             rndColorIGroup.links.new(separate2.outputs[0],combine5.inputs[1])
@@ -639,7 +640,8 @@ class ParallaxScreen:
             rndColorIGroup.links.new(vecMul2.outputs[0],vecSub.inputs[0])
             rndColorIGroup.links.new(vecSub.outputs[0],hash12_2.inputs[0])
             rndColorIGroup.links.new(hash12_2.outputs[0],mul9.inputs[0])
-            rndColorIGroup.links.new(mul9.outputs[0],rndColorIGroupO.inputs[0])
+            rndColorIGroup.links.new(mul9.outputs[0],round1.inputs[0])
+            rndColorIGroup.links.new(round1.outputs[0],rndColorIGroupO.inputs[0])
                 
         rndColorIndex = create_node(CurMat.nodes,"ShaderNodeGroup",(-900, -475), label="rndColorIndex")
         rndColorIndex.node_tree = rndColorIGroup
