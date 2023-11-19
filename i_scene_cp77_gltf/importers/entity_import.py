@@ -149,6 +149,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                 
     if len(meshes)<1 or len(app_path)<1:
         print("You need to export the meshes and convert app and ent to json")
+        return
 
     else:
         for x,app_name in enumerate(appearances):
@@ -544,7 +545,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                 #else:
                                 except:
                                     print("Failed on ",meshname)
-    print('Exported' ,app_name)
+    if app_name:
+        print('Exported' ,app_name)
      
               # find the .phys file jsons
     if include_collisions:
