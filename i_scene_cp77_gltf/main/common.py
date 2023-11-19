@@ -496,7 +496,7 @@ def CreateGradMapRamp(CurMat, grad_image_node, location=(-400, 250)):
     
     # Calculate stop positions
     stop_positions = [i / (image_width) for i in range(image_width)]
-    print(len(stop_positions))
+    #print(len(stop_positions))
     row_index = 0
     # Get colors from the row
     colors = []
@@ -508,7 +508,7 @@ def CreateGradMapRamp(CurMat, grad_image_node, location=(-400, 250)):
         # Create ColorRamp node
     color_ramp_node = CurMat.nodes.new('ShaderNodeValToRGB')
     color_ramp_node.location = location
-    print(len(colors))
+    #print(len(colors))
     step=1
     if len(colors)>32:
         step=math.ceil(len(colors)/32)
