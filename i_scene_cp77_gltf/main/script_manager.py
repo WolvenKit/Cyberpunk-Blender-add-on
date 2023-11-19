@@ -1,6 +1,6 @@
 import bpy 
 import os
-from .common import get_script_dir()
+from .common import get_script_dir
 
 script_dir = get_script_dir()
 
