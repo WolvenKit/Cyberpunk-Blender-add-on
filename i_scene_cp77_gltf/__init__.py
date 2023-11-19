@@ -21,7 +21,7 @@ from .main.collisions import *
 from .main.animtools import *
 from .main.meshtools import *
 from .main.bartmoss_functions import *
-from .main.scripts import *
+from .main.script_manager import *
 
 
 bl_info = {
