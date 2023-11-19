@@ -42,7 +42,7 @@ def pose_export_options():
     return options
 
 #setup the actual exporter - rewrote almost all of this, much quicker now
-def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_selected):
+def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_selected, static_prop):
 
     #check if the scene is in object mode, if it's not, switch to object mode
     if bpy.context.mode != 'OBJECT':
@@ -116,22 +116,23 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
         armature_states = {}
 
         for obj in objects: 
-            if obj.type == 'MESH' and obj.select_get():
-                armature_modifier = None
-                for modifier in obj.modifiers:
-                    if modifier.type == 'ARMATURE' and modifier.object:
-                        armature_modifier = modifier
-                        break
+            if not static_prop:
+                if obj.type == 'MESH' and obj.select_get():
+                    armature_modifier = None
+                    for modifier in obj.modifiers:
+                        if modifier.type == 'ARMATURE' and modifier.object:
+                           armature_modifier = modifier
+                           break
 
-                if armature_modifier:
+                    if armature_modifier:
                     # Store original visibility and selection state
-                    armature = armature_modifier.object
-                    armature_states[armature] = {"hide": armature.hide_get(),
-                                                "select": armature.select_get()}
+                        armature = armature_modifier.object
+                        armature_states[armature] = {"hide": armature.hide_get(),
+                                                    "select": armature.select_get()}
 
-                    # Make necessary to armature visibility and selection state for export
-                    armature.hide_set(False)
-                    armature.select_set(True)
+                        # Make necessary to armature visibility and selection state for export
+                        armature.hide_set(False)
+                        armature.select_set(True)
 
                     # Check for ungrouped vertices, if they're found, switch to edit mode and select them
                     ungrouped_vertices = [v for v in mesh.data.vertices if not v.groups]
@@ -144,15 +145,18 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
 
         if limit_selected:
             bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
-            armature.hide_set(True)
+            if armature:
+                armature.hide_set(True)
 
         else:
             if export_visible:
                 bpy.ops.export_scene.gltf(filepath=filepath, use_visible=True, **options)
-                armature.hide_set(True)
+                if armature:
+                    armature.hide_set(True)
             else:
                 bpy.ops.export_scene.gltf(filepath=filepath, **options)
-                armature.hide_set(True)
+                if armature:
+                    armature.hide_set(True)
 
 
         # Restore original armature visibility and selection states

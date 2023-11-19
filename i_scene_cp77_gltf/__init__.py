@@ -838,7 +838,7 @@ class CP77GroupVerts(bpy.types.Operator):
         return {'FINISHED'}
     
 class CP77RotateObj(bpy.types.Operator):
-    bl_label = "Rotate Object"
+    bl_label = "Change Orientation"
     bl_idname = "cp77.rotate_obj"
     bl_description = "rotate the selected object"
     
@@ -873,8 +873,9 @@ class CP77_PT_MeshTools(bpy.types.Panel):
             if cp77_addon_prefs.show_meshtools:
                 box.label(text="Mesh Cleanup", icon_value=custom_icon_col["trauma"]["TRAUMA"].icon_id)
                 row = box.row(align=True)
-                row.operator("cp77.rotate_obj")
                 row.operator("cp77.group_verts", text="Group Ungrouped Verts")
+                row = box.row(align=True)
+                row.operator("cp77.rotate_obj")
                 row = box.row(align=True)
                 if context.object.active_material and context.object.active_material.name == 'UV_Checker':
                     row.operator("cp77.uv_unchecker",  text="Remove UV Checker")
@@ -953,7 +954,13 @@ class CP77GLBExport(bpy.types.Operator,ExportHelper):
     limit_selected: BoolProperty(
         name="Limit to Selected Meshes",
         default=True,
-        description="Only Export the Selected Meshes"
+        description="Only Export the Selected Meshes. This is probably the setting you want to use"
+    )
+    
+    static_prop: BoolProperty(
+        name="Export as Static Prop",
+        default=False,
+        description="No armature export, only use this for exporting props and objects which do not need to move"
     )
 
     export_poses: BoolProperty(
@@ -965,7 +972,7 @@ class CP77GLBExport(bpy.types.Operator,ExportHelper):
     export_visible: BoolProperty(
         name="Export Visible Meshes",
         default=False,
-        description="Use this option to export all visible objects"
+        description="Use this option to export all visible objects. Only use this if you know why you're using this"
     )
 
     def draw(self, context):
@@ -978,9 +985,12 @@ class CP77GLBExport(bpy.types.Operator,ExportHelper):
             if not self.limit_selected:
                 row = layout.row(align=True)
                 row.prop(self, "export_visible")
+            else: 
+                row = layout.row(align=True)
+                row.prop(self, "static_prop")
         
     def execute(self, context):
-        export_cyberpunk_glb(context, self.filepath, self.export_poses, self.export_visible, self.limit_selected)
+        export_cyberpunk_glb(context, self.filepath, self.export_poses, self.export_visible, self.limit_selected, self.static_prop)
         return {'FINISHED'}
 
 
