@@ -83,10 +83,18 @@ def bsdf_socket_names():
     return socket_names    
 
 def get_inputs(tree):
-  return ([x for x in tree.interface.items_tree if (x.item_type == 'SOCKET' and x.in_out == 'INPUT')])
+    vers=bpy.app.version
+    if vers[0]<4:
+        return tree.inputs
+    else:
+        return ([x for x in tree.interface.items_tree if (x.item_type == 'SOCKET' and x.in_out == 'INPUT')])
 
 def get_outputs(tree):
-  return ([x for x in tree.interface.items_tree if (x.item_type == 'SOCKET' and x.in_out == 'OUTPUT')])
+    vers=bpy.app.version
+    if vers[0]<4:
+        return tree.inputs
+    else:
+        return ([x for x in tree.interface.items_tree if (x.item_type == 'SOCKET' and x.in_out == 'OUTPUT')])
 
 def bsdf_socket_names():
     socket_names={}
