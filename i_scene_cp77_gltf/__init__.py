@@ -7,7 +7,9 @@ from bpy.props import (
     StringProperty,
     EnumProperty,
     BoolProperty,
-    CollectionProperty)
+    CollectionProperty,
+    FloatProperty,
+    IntProperty)
 from bpy_extras.io_utils import ImportHelper
 from .importers.entity_import import *
 from .importers.sector_import import *
@@ -22,7 +24,7 @@ from .main.animtools import *
 from .main.meshtools import *
 from .main.bartmoss_functions import *
 from .main.script_manager import *
-
+from .main.physmat_data import physmat_list
 
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
@@ -272,20 +274,27 @@ def SetCyclesRenderer(use_cycles=True, set_gi_params=False):
             cycles.ao_bounces = 1
             cycles.ao_bounces_render = 1
 
-
+physmats_data = physmat_list()
+enum_items = [(mat.get("Name", ""), mat.get("Name", ""), "") for mat in physmats_data]
 class CP77_PT_PanelProps(bpy.types.PropertyGroup):
-   
 # collision panel props:
-    collider_type: bpy.props.EnumProperty(
+    collider_type: EnumProperty(
         name="Collision Type",
         items=[
         ('VEHICLE', "Vehicle Collision", "Generate .phys formatted collisions for a vehicle mod"),
         ('ENTITY', "Entity Collision", "Generate entCollisionComponents"),
+        ('WORLD', "Streaming Sector Collision", "Generate worldCollisionNode")
         ],
         default='VEHICLE'
     ) 
 
-    collision_shape: bpy.props.EnumProperty(
+    physics_material = EnumProperty(
+        items= enum_items,
+        name="Physics Material",
+        description="Select the physics material for the object"
+    )
+
+    collision_shape: EnumProperty(
         name="Collision Shape",
         items=[
         ('CONVEX', "Convex Collider", "Generate a Convex Collider"),
@@ -295,14 +304,14 @@ class CP77_PT_PanelProps(bpy.types.PropertyGroup):
         default='CONVEX'
     )
 
-    matchSize: bpy.props.BoolProperty(        
+    matchSize: BoolProperty(        
         name="Match the Shape of Existing Mesh",
         description="Match the size of the selected Mesh",
         default=True,
 
     )
 
-    radius: bpy.props.FloatProperty(
+    radius: FloatProperty(
         name="Radius",
         description="Enter the Radius value of the capsule",
         default=0,
@@ -311,7 +320,7 @@ class CP77_PT_PanelProps(bpy.types.PropertyGroup):
         step=1,
     )
 
-    height: bpy.props.FloatProperty(
+    height: FloatProperty(
         name="height",
         description="Enter the height of the capsule",
         default=0,
@@ -320,7 +329,7 @@ class CP77_PT_PanelProps(bpy.types.PropertyGroup):
         step=1,
     )
 
-    sampleverts: bpy.props.IntProperty(
+    sampleverts: IntProperty(
         name="Vertices to Sample",
         description="This is the number of vertices in your new collider",
         default=0,
@@ -335,7 +344,7 @@ class CP77_PT_PanelProps(bpy.types.PropertyGroup):
         description="Insert a keyframe on every frame of the active action"
     )
     
-    body_list: bpy.props.EnumProperty(
+    body_list: EnumProperty(
         items=[(name, name, '') for name in cp77riglist(None)[1]],
         name="Rig GLB"
     )
@@ -347,22 +356,23 @@ class CP77_PT_PanelProps(bpy.types.PropertyGroup):
         description="Rotate for an fbx orientated mesh"
     )
 
-    refit_json: bpy.props.EnumProperty(
+    refit_json: EnumProperty(
         items=[(target_body_names, target_body_names, '') for target_body_names in CP77RefitList(None)[1]],
         name="Body Shape"
     )
 
-    selected_armature: bpy.props.EnumProperty(
+    selected_armature: EnumProperty(
         items=CP77ArmatureList
     )
 
-    mesh_source: bpy.props.EnumProperty(
+    mesh_source: EnumProperty(
         items=CP77CollectionList
     ) 
 
-    mesh_target: bpy.props.EnumProperty(
+    mesh_target: EnumProperty(
         items=CP77CollectionList
     )   
+
 
 class CP77CollisionGenerator(bpy.types.Operator):
     bl_idname = "generate_cp77.collisions"
@@ -828,7 +838,7 @@ class CP77GroupVerts(bpy.types.Operator):
         return {'FINISHED'}
     
 class CP77RotateObj(bpy.types.Operator):
-    bl_label = "Mesh Tools"
+    bl_label = "Rotate Object"
     bl_idname = "cp77.rotate_obj"
     bl_description = "rotate the selected object"
     
