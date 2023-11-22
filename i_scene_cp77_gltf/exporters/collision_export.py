@@ -1,3 +1,5 @@
+import json
+
 def cp77_collision_export(filepath):
     with open(filepath, 'r') as phys:
         data = json.load(phys)
