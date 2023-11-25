@@ -2,21 +2,30 @@ import bpy
 import bmesh
 from mathutils import Vector, Euler, Quaternion
 
-def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, sampleverts, radius, height):
+def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, sampleverts, radius, height, physics_material):
     is_edit_mode = bpy.context.object.mode == 'EDIT'
     selected_objects = context.selected_objects
-
+    bpy.context.space_data.shading.wireframe_color_type = 'OBJECT'
     colliderCollection = None
 
     # Check for a collection ending with ".phys"
     for collection in bpy.data.collections:
-        if collection.name.endswith(".phys"):
-            colliderCollection = collection
+        if collider_type == "VEHICLE":
+            if collection.name.endswith(".phys"):
+                colliderCollection = collection
 
     # If colliderCollection is still None, create a new collection
     if colliderCollection is None:
-        colliderCollection = bpy.data.collections.new("collisions.phys")
-        bpy.context.scene.collection.children.link(colliderCollection)
+        if collider_type == 'VEHICLE':
+            colliderCollection = bpy.data.collections.new("collisions.phys")
+            bpy.context.scene.collection.children.link(colliderCollection)
+        elif collider_type == 'ENTITY':
+            colliderCollection = bpy.data.collections.new("entColliderComponent")
+            bpy.context.scene.collection.children.link(colliderCollection)
+        elif collider_type == 'WORLD':
+            colliderCollection = bpy.data.collections.new("worldCollisionNode")
+            bpy.context.scene.collection.children.link(colliderCollection)
+    
 
     min_vertex = Vector((float('inf'), float('inf'), float('inf')))
     max_vertex = Vector((float('-inf'), float('-inf'), float('-inf')))
@@ -48,7 +57,9 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
 
             # Check if we have enough vertices
             if len(selected_verts) < verts_to_sample:
-                print("Sample number is higher than selected vertices count !")
+                print("Sample number is higher than selected vertices count!")
+                bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Sample number is higher than selected vertices count!")
+                return {'CANCELLED'}
             else:
                 # sample the vertices
                 step_size = len(selected_verts) // verts_to_sample
@@ -61,13 +72,17 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
                 mesh = bpy.data.meshes.new(name="physicsColliderConvex")
                 mesh.from_pydata(coords, [], [])
 
+
                 # Link it to scene
                 convcol = bpy.data.objects.new("physicsColliderConvex", mesh)
                 convcol.rotation_mode = 'QUATERNION'
                 convcol.matrix_world = matrix
                 convcol['collisionType'] = collider_type
                 convcol['collisionShape'] = 'physicsColliderConvex'
+                convcol['physics_material'] = physics_material
                 colliderCollection.objects.link(convcol)
+                convcol.display_type = 'WIRE'
+                convcol.color = (0.005, 0.79105, 1, 1)
                 context.view_layer.objects.active = convcol
                 convcol.select_set(True)
 
@@ -86,8 +101,10 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
             box.name = "physicsColliderBox"
             box['collisionType'] = collider_type
             box['collisionShape'] = 'physicsColliderBox'
+            box['physics_material'] = physics_material
             context.collection.objects.unlink(box)
             box.display_type = 'WIRE'
+            box.color = (0.005, 0.79105, 1, 1)
 
             size = max_vertex - min_vertex
 
@@ -132,10 +149,18 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
 
             capsule = bpy.data.objects.new(name, mesh)
             capsule.display_type = 'WIRE'
+            capsule.color = (0.005, 0.79105, 1, 1)
+
+            capsule.show_wire = True
+            capsule.show_in_front = True
+            capsule.display.show_shadows = False
             capsule.location = center
             capsule.rotation_mode = 'QUATERNION'
             capsule['collisionType'] = collider_type
             capsule['collisionShape'] = 'physicsColliderCapsule'
+            capsule['physics_material'] = physics_material
+            capsule.rotation_quaternion[1] = 1
+            bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
             if is_edit_mode:
                 bpy.ops.object.mode_set(mode='OBJECT')
             capsule.dimensions.z = float(h)
@@ -144,3 +169,31 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
             # Re-enter Edit mode
             if is_edit_mode:
                 bpy.ops.object.mode_set(mode='EDIT')
+
+        if collision_shape == 'SPHERE':
+            if matchSize:
+                # Calculate the size of the capsule based on the bounding box
+                r = (max_vertex - min_vertex).x / 2
+            else: 
+                r = float(radius)
+            bm = bmesh.new()
+            bmesh.ops.create_uvsphere(bm, u_segments=8, v_segments=9, radius=r)
+            name = 'physicsColliderSphere'
+            mesh = bpy.data.meshes.new(name)
+            bm.to_mesh(mesh)
+            mesh.update()
+            bm.free()
+
+            sphere = bpy.data.objects.new(name, mesh)
+            sphere.display_type = 'WIRE'
+            sphere.color = (0.005, 0.79105, 1, 1)
+            sphere.show_wire = True
+            sphere.show_in_front = True
+            sphere.display.show_shadows = False
+            sphere.location = center
+            sphere.rotation_mode = 'QUATERNION'
+            sphere['collisionType'] = collider_type
+            sphere['collisionShape'] = 'physicsColliderSphere'
+            sphere['physics_material'] = physics_material
+            colliderCollection.objects.link(sphere)
+
