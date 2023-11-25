@@ -196,10 +196,10 @@ class ParallaxScreenTransparent:
         CurMat.links.new(color.outputs[0], gamma.inputs[0])
 
         # n
-        if 'n' in bpy.data.node_groups.keys():
-            ngroup = bpy.data.node_groups['n']
+        if 'n_ps_t' in bpy.data.node_groups.keys():
+            ngroup = bpy.data.node_groups['n_ps_t']
         else:
-            ngroup = bpy.data.node_groups.new("n","ShaderNodeTree")   
+            ngroup = bpy.data.node_groups.new("n_ps_t","ShaderNodeTree")   
             if vers[0]<4:
                 ngroup.inputs.new('NodeSocketFloat','TilesWidth')
                 ngroup.inputs.new('NodeSocketFloat','TilesHeight')
@@ -234,7 +234,7 @@ class ParallaxScreenTransparent:
             ngroup.links.new(GroupInput.outputs['TilesHeight'],mul3.inputs[1])
             ngroup.links.new(mul3.outputs[0],GroupOutput.inputs[0])
             
-        n = create_node(CurMat.nodes,"ShaderNodeGroup",(-1700, 75), label="n")
+        n = create_node(CurMat.nodes,"ShaderNodeGroup",(-1700, 75), label="n_ps_t")
         n.node_tree = ngroup
 
         CurMat.links.new(tilesW.outputs[0],n.inputs[0])
