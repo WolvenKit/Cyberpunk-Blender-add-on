@@ -149,6 +149,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                 
     if len(meshes)<1 or len(app_path)<1:
         print("You need to export the meshes and convert app and ent to json")
+        return
 
     else:
         for x,app_name in enumerate(appearances):
@@ -248,11 +249,18 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                 comps= j['Data']['RootChunk']['components']
 
             for c in comps:
-                if 'mesh' in c.keys():
-                    print(c['mesh']['DepotPath']['$value'])
-                    if isinstance( c['mesh']['DepotPath']['$value'], str):
-                        meshname=os.path.basename(c['mesh']['DepotPath']['$value'])
-                        meshpath=os.path.join(path, c['mesh']['DepotPath']['$value'][:-4]+'glb')
+                if 'mesh' in c.keys() or 'graphicsMesh' in c.keys():
+                   # print(c['mesh']['DepotPath']['$value'])
+                    meshname=''
+                    if 'mesh' in c.keys() and isinstance( c['mesh']['DepotPath']['$value'], str):
+                        m=c['mesh']['DepotPath']['$value']
+                        meshname=os.path.basename(m)
+                        meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb')
+                    elif 'graphicsMesh' in c.keys() and isinstance( c['graphicsMesh']['DepotPath']['$value'], str):
+                        m=c['graphicsMesh']['DepotPath']['$value']
+                        meshname=os.path.basename(m)
+                        meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb')
+                    if meshname:
                         if meshname not in exclude_meshes:      
                             if os.path.exists(meshpath):
                                 #if True:
@@ -536,8 +544,9 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                             obj.hide_set(not cm_list[subnum])
                                 #else:
                                 except:
-                                    print("Failed on ",c['mesh']['DepotPath']['$value'])
-    print('Exported' ,app_name)
+                                    print("Failed on ",meshname)
+    if app_name:
+        print('Exported' ,app_name)
      
               # find the .phys file jsons
     if include_collisions:

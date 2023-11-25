@@ -11,7 +11,8 @@ class Glass:
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
         pBDSF=CurMat.nodes['Principled BSDF']
-        pBDSF.inputs['Transmission'].default_value = 1
+        sockets=bsdf_socket_names()
+        pBDSF.inputs[sockets['Transmission']].default_value = 1
 
         if "TintColor" in Data:
             Color = CreateShaderNodeRGB(CurMat, Data["TintColor"],-400,200,'TintColor')

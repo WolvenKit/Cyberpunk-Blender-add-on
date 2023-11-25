@@ -19,12 +19,14 @@ import json
 import glob
 import os
 import bpy
+import math
 from mathutils import Vector, Matrix , Quaternion
 from pathlib import Path
 import time
 import traceback
 from pprint import pprint 
 from ..main.setup import MaterialBuilder
+from operator import add
 
 scale_factor=1
 
@@ -133,6 +135,25 @@ def get_scale(inst):
         scale[2] = inst['scale']['Z'] /scale_factor
     return scale
 
+def get_col(color):
+    col=[0,0,0]
+    col[0] = color['Red']/255
+    col[1] = color['Green']/255
+    col[2] = color['Blue']/255    
+    return col
+
+
+def get_tan_pos(inst):
+    pos=[[0,0,0],[0,0,0]]
+    if 'Elements' in inst.keys():
+        pos[0][0] = inst['Elements'][0]['X'] 
+        pos[0][1] = inst['Elements'][0]['Y'] 
+        pos[0][2] = inst['Elements'][0]['Z'] 
+        pos[1][0] = inst['Elements'][1]['X'] 
+        pos[1][1] = inst['Elements'][1]['Y'] 
+        pos[1][2] = inst['Elements'][1]['Z'] 
+    return pos
+
 def importSectors( filepath='', want_collisions=False, am_modding=False, with_materials=True ):
     # Enter the path to your projects source\raw\base folder below, needs double slashes between folder names.
     path = os.path.join( os.path.dirname(filepath),'source\\raw\\base')
@@ -174,7 +195,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     meshname = data['mesh']['DepotPath']['$value'] 
                     if(meshname != 0):
                         meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
-                case 'worldStaticMeshNode' | 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode': 
+                case 'worldStaticMeshNode' |'worldRotatingMeshNode'|'worldAdvertisingNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode': 
                     if isinstance(e, dict) and 'mesh' in data.keys():
                         meshname = data['mesh']['DepotPath']['$value']
                         #print('Mesh name is - ',meshname, e['HandleId'])
@@ -221,13 +242,16 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
             apps=[]
             for meshApp in meshes_w_apps[m]['apps']:
                 apps.append(meshApp['$value'])
+            if len(apps)>1:
+                print(len(apps))
             impapps=','.join(apps)
             #print(os.path.join(path, m[:-4]+'glb'),impapps)
-            meshpath=os.path.join(path, m[:-4]+'glb')
+
+            meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb')
             groupname = os.path.splitext(os.path.split(meshpath)[-1])[0]
             while len(groupname) > 63:
                 groupname = groupname[:-1]
-            if groupname not in Masters.children.keys():
+            if groupname not in Masters.children.keys() and os.path.exists(meshpath):
                 try:
                     bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=impapps, update_gi=False, with_materials=with_materials)
                     objs = C.selected_objects
@@ -236,6 +260,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     coll_scene.children.unlink(move_coll)
                 except:
                     print('failed on ',os.path.basename(meshpath))
+            elif not os.path.exists(meshpath):
+                print('Mesh ', meshpath, ' does not exist')
     empty=[]
     for child in Masters.children:
         if len(child.objects)<1:
@@ -445,7 +471,34 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                 case 'XworldStaticOccluderMeshNode':
                     #print('worldStaticOccluderMeshNode',i)
                     pass
-
+                
+                case 'worldSplineNode':
+                    print('worldSplineNode',i)
+                    
+                    instances = [x for x in t if x['NodeIndex'] == i]
+                    if len(instances)>0:
+                        spline_node=e
+                        spline_ndata=instances[0]
+                        pos=get_pos(spline_ndata)
+                        splineData=spline_node['Data']['splineData']
+                        curve=bpy.data.curves.new('worldSplineNode_'+str(i),'CURVE')
+                        curve_obj = bpy.data.objects.new('worldSplineNode_'+str(i), curve)
+                        coll_scene.objects.link(curve_obj)
+                        curve_obj['nodeType']='worldSplineNode'
+                        curve_obj['nodeIndex']=i
+                        curve_obj['sectorName']=sectorName
+                        curve.splines.new('BEZIER')
+                        bzps=curve.splines[0].bezier_points
+                        bzps.add(len(splineData['Data']['points'])-1)
+                        for p_no,point in enumerate(splineData['Data']['points']):
+                            point_pos=list(map(add, pos, get_pos(point)))
+                            bzps[p_no].co=point_pos
+                            bzps[p_no].handle_left_type='AUTO'
+                            bzps[p_no].handle_right_type='AUTO'
+                            tans=get_tan_pos(point['tangents'])
+                            bzps[p_no].handle_right=list(map(add, point_pos,tans[0]))
+                            bzps[p_no].handle_left=list(map(add, point_pos,tans[1]))                     
+                    pass
 
                 case 'worldRoadProxyMeshNode' : 
                     if isinstance(e, dict) and 'mesh' in data.keys():
@@ -502,10 +555,11 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     else:
                                         print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
 
-                case 'worldStaticMeshNode' | 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode': 
+                case 'worldStaticMeshNode' |'worldRotatingMeshNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldAdvertismentNode' | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode': 
                     if isinstance(e, dict) and 'mesh' in data.keys():
                         meshname = data['mesh']['DepotPath']['$value']
                         #print('Mesh name is - ',meshname, e['HandleId'])
+                        meshAppearance = data['meshAppearance']['$value'] # Need to actually use this
                         if(meshname != 0):
                                     #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
                                     groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
@@ -514,6 +568,17 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     group=Masters.children.get(groupname)
                                     if (group):
                                         #print('Group found for ',groupname) 
+                                        if type=='worldRotatingMeshNode':
+                                            rot_axis=data['rotationAxis']
+                                            axis_no=0
+                                            if rot_axis=='Z':
+                                                axis_no=1
+                                            elif rot_axis=='Y': #y & z are swapped
+                                                axis_no=2
+                                            
+                                            rot_time=data['fullRotationTime']
+                                            reverse=data['reverseDirection']
+
                                         instances = [x for x in t if x['NodeIndex'] == i]
                                         for idx,inst in enumerate(instances):
                                             new=bpy.data.collections.new(groupname)
@@ -535,6 +600,20 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 obj.scale = get_scale(inst)
                                                 if 'Armature' in obj.name:
                                                     obj.hide_set(True)
+                                                if type=='worldRotatingMeshNode':
+                                                    orig_rot= obj.rotation_quaternion
+                                                    obj.rotation_mode='XYZ'
+                                                    obj.keyframe_insert('rotation_euler', index=axis_no ,frame=1)
+                                                    obj.rotation_euler[axis_no] = obj.rotation_euler[axis_no] +math.radians(360)
+                                                    obj.keyframe_insert('rotation_euler', index=axis_no ,frame=rot_time*24)
+                                                    if obj.animation_data.action:
+                                                        obj_action = bpy.data.actions.get(obj.animation_data.action.name)
+                                                        obj_fcu = obj_action.fcurves[0]
+                                                        for pt in obj_fcu.keyframe_points:
+                                                            pt.interpolation = 'LINEAR'   
+
+
+                                                    
                                     else:
                                         print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
                                   
@@ -616,6 +695,40 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                         obj.hide_set(True)  
                                     else:
                                         print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
+
+                case 'worldStaticLightNode':
+                    print('worldStaticLightNode',i)
+                    
+                    instances = [x for x in t if x['NodeIndex'] == i]
+                    for inst in instances:
+                        light_node=e['Data']
+                        light_ndata=inst
+                        color= light_node['color']  
+                        intensity=light_node['intensity']        
+                        flicker=light_node['flicker'] 
+                        area_shape=light_node['areaShape']
+                        pos=get_pos(light_ndata)
+                        rot=get_rot(light_ndata)
+                        
+                        A_Light=bpy.data.lights.new('worldStaticLightNode_'+str(i),'AREA')
+                        light_obj=bpy.data.objects.new('worldStaticLightNode_'+str(i), A_Light)
+                        Sector_coll.objects.link(light_obj)
+                        light_obj.location=pos
+                        light_obj.rotation_mode='QUATERNION'
+                        light_obj.rotation_quaternion=rot
+                        A_Light.energy = intensity
+                        A_Light.color = get_col(color)
+                        
+                        if area_shape=='ALS_Capsule':                        
+                            A_Light.shape='ELLIPSE'
+                            A_Light.size= light_node['capsuleLength']
+                            A_Light.size_y= light_node['radius']*2
+                        elif area_shape=='ALS_Sphere':                        
+                            A_Light.shape='DISK'
+                            A_Light.size= light_node['radius']*2
+
+                    pass
+
                 case 'worldCollisionNode':
                 
     #   ______      _____      _                 

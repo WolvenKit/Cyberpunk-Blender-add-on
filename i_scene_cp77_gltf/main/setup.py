@@ -27,6 +27,8 @@ from ..material_types.speedtree import SpeedTree
 from ..material_types.decal import Decal
 from ..material_types.decal_gradientmap_recolor import DecalGradientmapRecolor
 from ..material_types.televisionad import TelevisionAd
+from ..material_types.window_parallax_interior_proxy import windowParallaxIntProx
+from ..material_types.unknown import unknownMaterial
 
 
 class MaterialBuilder:
@@ -54,13 +56,14 @@ class MaterialBuilder:
             bpyMat.use_nodes = True
             no_shadows=False
             match rawMat["MaterialTemplate"]:
-                case "engine\\materials\\multilayered.mt" | "base\\materials\\vehicle_destr_blendshape.mt" | "base\\materials\\multilayered_clear_coat.mt":
+                case "engine\\materials\\multilayered.mt" | "base\\materials\\vehicle_destr_blendshape.mt" | "base\\materials\\multilayered_clear_coat.mt" |  "base\\materials\\multilayered_terrain.mt":
                     multilayered = Multilayered(self.BasePath,self.image_format,self.ProjPath)
                     multilayered.create(rawMat["Data"],bpyMat)
 
-                case  "base\\materials\\multilayered_terrain.mt":
-                    multilayeredTerrain = Multilayered(self.BasePath,self.image_format, self.ProjPath)
-                    multilayeredTerrain.create(rawMat["Data"],bpyMat)
+                
+                #case  "base\\materials\\multilayered_terrain.mt":
+                 #   multilayeredTerrain = Multilayered(self.BasePath,self.image_format, self.ProjPath)
+                  #  multilayeredTerrain.create(rawMat["Data"],bpyMat)
 
                 # This material should be handled within the main multilayered.py file. Commenting this out for now in case I broke something - jato
                 #case "base\\materials\\multilayered_clear_coat.mt":
@@ -177,9 +180,17 @@ class MaterialBuilder:
                 case  "base\\fx\\shaders\\television_ad.mt" :
                     televisionAd = TelevisionAd(self.BasePath,self.image_format,self.ProjPath)
                     televisionAd.create(rawMat["Data"],bpyMat)
-
+                
+                case "base\\materials\\window_parallax_interior_proxy.mt" | "base\\materials\\window_parallax_interior.mt":
+                    window = windowParallaxIntProx(self.BasePath,self.image_format,self.ProjPath)
+                    window.create(rawMat["Data"],bpyMat)
+                
                 case _:
                     print('Unhandled mt - ', rawMat["MaterialTemplate"])
+                    context=bpy.context
+                    if context.preferences.addons[__name__.split('.')[0]].preferences.experimental_features:
+                        unkown = unknownMaterial(self.BasePath,self.image_format,self.ProjPath)
+                        unkown.create(rawMat["Data"],bpyMat)
 
             #set the viewport blend mode to hashed - no more black tattoos and cybergear
             bpyMat.blend_method='HASHED'
@@ -206,6 +217,7 @@ class MaterialBuilder:
                     print('decal_gradientmap_recolor.mt')
                     decalGradientMapRecolor = DecalGradientmapRecolor(self.BasePath,self.image_format, self.ProjPath)
                     decalGradientMapRecolor.create(self.obj["Data"]["RootChunk"],bpyMat)
+                
 
                 case _:
                     print(self.obj["Data"]["RootChunk"]["baseMaterial"]["DepotPath"]['$value']," | unimplemented yet")

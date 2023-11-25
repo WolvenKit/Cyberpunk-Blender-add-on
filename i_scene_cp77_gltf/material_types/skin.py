@@ -10,7 +10,7 @@ class Skin:
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes['Principled BSDF']
-        
+        sockets=bsdf_socket_names()
         #SSS/s
 
         sVcol = create_node(CurMat.nodes,"ShaderNodeVertexColor", (-1400,150))
@@ -23,8 +23,8 @@ class Skin:
 
         CurMat.links.new(sVcol.outputs[0],sSepRGB.inputs[0])
         CurMat.links.new(sSepRGB.outputs[1],sMultiply.inputs[0])
-        CurMat.links.new(sMultiply.outputs[0],pBSDF.inputs['Subsurface'])
-        pBSDF.inputs['Subsurface Color'].default_value = (0.8, 0.14908, 0.0825199, 1)
+        CurMat.links.new(sMultiply.outputs[0],pBSDF.inputs[sockets['Subsurface']])
+        pBSDF.inputs[sockets['Subsurface Color']].default_value = (0.8, 0.14908, 0.0825199, 1)
         
         #Albedo/a
 

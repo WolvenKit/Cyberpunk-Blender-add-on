@@ -5,7 +5,13 @@ from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
 from ..main.setup import MaterialBuilder
 from ..main.common import json_ver_validate
+from ..main.common import UV_by_bounds
 from .attribute_import import manage_garment_support
+from ..main.animtools import get_anim_info
+import traceback
+
+def objs_in_col(top_coll, objtype):
+    return sum([len([o for o in col.objects if o.type==objtype]) for col in top_coll.children_recursive])+len([o for o in top_coll.objects if o.type==objtype])
 
 def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_materials=True, filepath='', hide_armatures=True, update_gi=True, import_garmentsupport=False, files=[], directory='', appearances=[]):
     
@@ -42,16 +48,29 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
         existingMaterials = bpy.data.materials.keys()
         BlenderGlTF.create(gltf_importer)
         imported= context.selected_objects #the new stuff should be selected 
+        if f['name'][:7]=='terrain':
+            UV_by_bounds(imported)
         collection = bpy.data.collections.new(os.path.splitext(f['name'])[0])
         bpy.context.scene.collection.children.link(collection)
         for o in imported:
             for parent in o.users_collection:
                     parent.objects.unlink(o)
             collection.objects.link(o)  
+            
+            # if animations exist, don't hide the armature and get the extras properties
+            # We should probably break the base import out into a separate function, have it check the gltf file and then send the info either to anim import or import with materials, but this works too
+            animations = gltf_importer.data.animations
+            if animations:
+                get_anim_info(animations)
+            else:    
             #print('o.name - ',o.name)
-            if 'Armature' in o.name:
-                o.hide_set(hide_armatures)
+                if 'Armature' in o.name:
+                    o.hide_set(hide_armatures)
+            
         collection['orig_filepath']=filepath
+        collection['numMeshChildren']=objs_in_col(collection, 'MESH')
+        collection['numArmatureChildren']=objs_in_col(collection, 'ARMATURE')
+
         for name in bpy.data.materials.keys():
             if name not in existingMaterials:
                 bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
@@ -124,7 +143,9 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
                                 #print('matname: ',matname, validmats[matname])
                                 m=validmats[matname]
                                 # Should create a list of mis that dont play nice with this and just check if the mat is using one.
-                                if matname in bpy_mats.keys() and 'glass' not in matname and matname[:5]!='Atlas' and 'BaseMaterial' in bpy_mats[matname].keys() and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['GlobalNormal']==m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask']==m['MultilayerMask'] :
+
+                                if matname in bpy_mats.keys() and 'glass' not in matname and 'MaterialTemplate' not in matname and 'Window' not in matname and matname[:5]!='Atlas' and 'BaseMaterial' in bpy_mats[matname].keys() and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['GlobalNormal']==m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask']==m['MultilayerMask'] :
+
                                     bpy.data.meshes[name].materials.append(bpy_mats[matname])
                                 elif matname in bpy_mats.keys() and matname[:5]=='Atlas' and bpy_mats[matname]['BaseMaterial']==m['BaseMaterial'] and bpy_mats[matname]['DiffuseMap']==m['DiffuseMap'] :
                                     bpy.data.meshes[name].materials.append(bpy_mats[matname])
@@ -143,9 +164,9 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
                                                         bpy.data.meshes[name].materials.append(bpymat)
                                                         if 'no_shadows' in bpymat.keys() and bpymat['no_shadows']:
                                                             bpy.data.objects[name].visible_shadow=False
-                                                except FileNotFoundError as fnfe:
+                                                except: 
                                                     #Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
-                                                    #print(str(fnfe))
+                                                    print(traceback.print_exc())                                                    
                                                     pass                                            
                                             index = index + 1
                             else:
