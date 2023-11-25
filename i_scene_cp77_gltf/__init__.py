@@ -38,6 +38,7 @@ bl_info = {
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
+script_dir = get_script_dir()
 
 
 class CP77IOSuitePreferences(AddonPreferences):
@@ -266,7 +267,8 @@ def SetCyclesRenderer(use_cycles=True, set_gi_params=False):
             cycles.ao_bounces = 1
             cycles.ao_bounces_render = 1
 
-
+physmats_data = physmat_list()
+enum_items = [(mat.get("Name", ""), mat.get("Name", ""), "") for mat in physmats_data]
 class CP77_PT_PanelProps(PropertyGroup):
 # collision panel props:
     collider_type: EnumProperty(
@@ -279,12 +281,19 @@ class CP77_PT_PanelProps(PropertyGroup):
         default='VEHICLE'
     ) 
 
+    physics_material: EnumProperty(
+        items= enum_items,
+        name="Physics Material",
+        description="Select the physics material for the object"
+    )
+
     collision_shape: EnumProperty(
         name="Collision Shape",
         items=[
         ('CONVEX', "Convex Collider", "Generate a Convex Collider"),
         ('BOX', "Box Collider", "Generate a Box Collider"),
-        ('CAPSULE', "Capsule Collider", "Generate a Capsule Collider")
+        ('CAPSULE', "Capsule Collider", "Generate a Capsule Collider"),
+        ('SPHERE', "Sphere Collider", "Generate a Sphere Collider")
         ],
         default='CONVEX'
     )
@@ -368,26 +377,20 @@ class CP77_PT_PanelProps(PropertyGroup):
         items=CP77CollectionList
     )   
 
-physmats_data = physmat_list()
-enum_items = [(mat.get("Name", ""), mat.get("Name", ""), "") for mat in physmats_data]
-Object.physics_material = EnumProperty(
-        items= enum_items,
-        name="Physics Material",
-        description="Select the physics material for the object"
-    )
-
 class CP77CollisionGenerator(Operator):
     bl_idname = "generate_cp77.collisions"
     bl_label = "Generate Collider"
     bl_options = {'REGISTER', "UNDO"}
     bl_description = "Generate Colliders for use with Cyberpunk 2077" 
 
+
+
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
-        CP77CollisionGen(self, context,props.matchSize, props.collider_type, props.collision_shape, props.sampleverts, props.radius, props.height)
+        CP77CollisionGen(self, context,props.matchSize, props.collider_type, props.collision_shape, props.sampleverts, props.radius, props.height, props.physics_material)
         return {"FINISHED"}
     
     def draw(self, context):
@@ -402,7 +405,11 @@ class CP77CollisionGenerator(Operator):
         split.label(text="Collision Shape:")
         split.prop(props, 'collision_shape', text="")
         row = layout.row(align=True)
-        
+        split = row.split(factor=0.5,align=True)
+        split.label(text="Material:")
+        split.prop(props, 'physics_material', text="")
+        row = layout.row(align=True)
+        split = row.split(factor=0.5,align=True)
         if props.collision_shape == 'CONVEX':
             row.label(text="Vertices to Sample:")
             row.prop(props,"sampleverts", text="")
@@ -415,7 +422,7 @@ class CP77CollisionGenerator(Operator):
                 row.prop(props, "radius", text="")
                 row.label(text="Height:")
                 row.prop(props, "height", text="")
-            
+
 
 class CP77CollisionExport(Operator):
     bl_idname = "export_scene.collisions"
@@ -454,7 +461,7 @@ class CP77PhysMatAssign(Operator):
     bl_label = "Set Physics Properties"
 
     def execute(self, context):
-        selected_physmat = context.object.physics_material
+        selected_physmat = context.object["physics_material"]
 
         # Find the corresponding material data
         physmat_data = next((mat for mat in physmats_data if mat["Name"] == selected_physmat), None)
@@ -463,12 +470,13 @@ class CP77PhysMatAssign(Operator):
         
             # Set custom properties on the object
             obj = context.object
+            props = context.scene.cp77_panel_props
+            obj["physics_material"] = props.physics_material
             obj["Density"] = physmat_data.get("Density", 0)
             obj["staticFriction"] = physmat_data.get("staticFriction", 0)
             obj["dynamicFriction"] = physmat_data.get("dynamicFriction", 0)
             obj["restitution"] = physmat_data.get("restitution", 0)
-            props = context.scene.cp77_panel_props
-            volume = calculate_mesh_volume(self, context)
+            volume = calculate_mesh_volume(obj)
             # Calculate mass based on density and mesh volume
             mass = obj["Density"] * volume
             obj["Mass"] = mass
@@ -529,8 +537,8 @@ class CP77_PT_CollisionTools(Panel):
                     split.prop(props, 'simulation_type', text="")
                     row = box.row()
                     split = row.split(factor=0.3,align=True)
-                    split.label(text='Physmat:')
-                    split.prop(obj, 'physics_material', text="")
+                    split.label(text='Material:')
+                    split.prop(props, 'physics_material', text="")
                     row = box.row()
                     row.label(text=f"Mass: {obj.get('Mass', 0):.2f}")
                     row = box.row()
@@ -1288,7 +1296,6 @@ classes = (
     ShowMessageBox,
     CP77_PT_AnimsPanel,
     CP77Keyframe,
-    CP77_PT_CollisionTools,
     CP77CollisionExport,
     CP77CollisionGenerator,
     CP77Animset,
@@ -1316,6 +1323,7 @@ classes = (
     CP77UVCheckRemover,
     CP7PhysImport,
     CP77PhysMatAssign,
+    CP77_PT_CollisionTools,
 )
 
 def register():
@@ -1345,7 +1353,7 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
 
-    Scene.cp77_panel_props = PointerProperty(type=CP77_PT_PanelProps) 
+    Scene.cp77_panel_props = PointerProperty(type=CP77_PT_PanelProps)
     TOPBAR_MT_file_import.append(menu_func_import)
     TOPBAR_MT_file_export.append(menu_func_export) 
     
