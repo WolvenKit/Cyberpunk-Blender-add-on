@@ -20,13 +20,21 @@ class Multilayered:
 
         NG = bpy.data.node_groups.new(name[:-11],"ShaderNodeTree")
         NG['mlTemplate']=mltemplate
-        TMI = NG.inputs.new('NodeSocketVector','Tile Multiplier')
+        vers=bpy.app.version
+        if vers[0]<4:
+            TMI = NG.inputs.new('NodeSocketVector','Tile Multiplier')
+            NG.outputs.new('NodeSocketColor','Color')
+            NG.outputs.new('NodeSocketFloat','Metalness')
+            NG.outputs.new('NodeSocketFloat','Roughness')
+            NG.outputs.new('NodeSocketColor','Normal')
+        else:
+            TMI = NG.interface.new_socket(name="Tile Multiplier",socket_type='NodeSocketVector', in_out='INPUT')
+            NG.interface.new_socket(name="Color", socket_type='NodeSocketColor', in_out='OUTPUT')
+            NG.interface.new_socket(name="Metalness", socket_type='NodeSocketFloat', in_out='OUTPUT')
+            NG.interface.new_socket(name="Roughness", socket_type='NodeSocketFloat', in_out='OUTPUT')
+            NG.interface.new_socket(name="Normal", socket_type='NodeSocketColor', in_out='OUTPUT')
+
         TMI.default_value = (1,1,1)
-        NG.outputs.new('NodeSocketColor','Color')
-        NG.outputs.new('NodeSocketColor','Metalness')
-        NG.outputs.new('NodeSocketColor','Roughness')
-        NG.outputs.new('NodeSocketColor','Normal')
-    
         CTN = create_node( NG.nodes, "ShaderNodeTexImage",(0,0),image = CT)
     
         MTN = create_node( NG.nodes, "ShaderNodeTexImage",(0,-50*1),image = MT)
@@ -45,11 +53,14 @@ class Multilayered:
         GroupInN = create_node( NG.nodes, "NodeGroupInput", (-700,-45*4))
     
         VecMathN = create_node( NG.nodes, "ShaderNodeVectorMath", (-500,-45*3), operation = 'MULTIPLY')
-    
-        NormSepN = create_node( NG.nodes, "ShaderNodeSeparateRGB", (300,-150))
-    
-        NormCombN = create_node( NG.nodes, "ShaderNodeCombineRGB", (500,-150))
-        NormCombN.inputs[2].default_value = 1
+
+        RGBCurvesConvert = create_node( NG.nodes, "ShaderNodeRGBCurve", (400,-150))
+        RGBCurvesConvert.label = "Convert DX to OpenGL Normal"
+        RGBCurvesConvert.hide = True
+        RGBCurvesConvert.mapping.curves[1].points[0].location = (0,1)
+        RGBCurvesConvert.mapping.curves[1].points[1].location = (1,0)
+        RGBCurvesConvert.mapping.curves[2].points[0].location = (0,1)
+        RGBCurvesConvert.mapping.curves[2].points[1].location = (1,1)
     
         GroupOutN = create_node( NG.nodes, "NodeGroupOutput", (700,0))
     
@@ -64,10 +75,8 @@ class Multilayered:
         NG.links.new(CTN.outputs[0],GroupOutN.inputs[0])
         NG.links.new(MTN.outputs[0],GroupOutN.inputs[1])
         NG.links.new(RTN.outputs[0],GroupOutN.inputs[2])
-        NG.links.new(NTN.outputs[0],NormSepN.inputs[0])
-        NG.links.new(NormSepN.outputs[0],NormCombN.inputs[0])
-        NG.links.new(NormSepN.outputs[1],NormCombN.inputs[1])
-        NG.links.new(NormCombN.outputs[0],GroupOutN.inputs[3])
+        NG.links.new(NTN.outputs[0],RGBCurvesConvert.inputs[1])
+        NG.links.new(RGBCurvesConvert.outputs[0],GroupOutN.inputs[3])
     
         return
 
@@ -91,30 +100,50 @@ class Multilayered:
 
     def createLayerMaterial(self,LayerName,LayerCount,CurMat,mlmaskpath,normalimgpath):
         NG = bpy.data.node_groups.new("Layer_Blend","ShaderNodeTree")#create layer's node group
-        NG.inputs.new('NodeSocketColor','Color A')
-        NG.inputs.new('NodeSocketFloat','Metalness A')
-        NG.inputs.new('NodeSocketFloat','Roughness A')
-        NG.inputs.new('NodeSocketVector','Normal A')
-        NG.inputs.new('NodeSocketColor','Color B')
-        NG.inputs.new('NodeSocketFloat','Metalness B')
-        NG.inputs.new('NodeSocketFloat','Roughness B')
-        NG.inputs.new('NodeSocketVector','Normal B')
-        NG.inputs.new('NodeSocketFloat','Mask')
-        NG.outputs.new('NodeSocketColor','Color')
-        NG.outputs.new('NodeSocketFloat','Metalness')
-        NG.outputs.new('NodeSocketFloat','Roughness')
-        NG.outputs.new('NodeSocketVector','Normal')
+        vers=bpy.app.version
+        if vers[0]<4:
+            NG.inputs.new('NodeSocketColor','Color A')
+            NG.inputs.new('NodeSocketFloat','Metalness A')
+            NG.inputs.new('NodeSocketFloat','Roughness A')
+            NG.inputs.new('NodeSocketVector','Normal A')
+            NG.inputs.new('NodeSocketColor','Color B')
+            NG.inputs.new('NodeSocketFloat','Metalness B')
+            NG.inputs.new('NodeSocketFloat','Roughness B')
+            NG.inputs.new('NodeSocketVector','Normal B')
+            NG.inputs.new('NodeSocketFloat','Mask')
+            NG.outputs.new('NodeSocketColor','Color')
+            NG.outputs.new('NodeSocketFloat','Metalness')
+            NG.outputs.new('NodeSocketFloat','Roughness')
+            NG.outputs.new('NodeSocketVector','Normal')
+        else:
+            NG.interface.new_socket(name="Color A", socket_type='NodeSocketColor', in_out='INPUT')
+            NG.interface.new_socket(name="Metalness A", socket_type='NodeSocketFloat', in_out='INPUT')
+            NG.interface.new_socket(name="Roughness A", socket_type='NodeSocketFloat', in_out='INPUT')
+            NG.interface.new_socket(name="Normal A", socket_type='NodeSocketVector', in_out='INPUT')
+            NG.interface.new_socket(name="Color B", socket_type='NodeSocketColor', in_out='INPUT')
+            NG.interface.new_socket(name="Metalness B", socket_type='NodeSocketFloat', in_out='INPUT')
+            NG.interface.new_socket(name="Roughness B", socket_type='NodeSocketFloat', in_out='INPUT')
+            NG.interface.new_socket(name="Normal B", socket_type='NodeSocketVector', in_out='INPUT')
+            NG.interface.new_socket(name="Mask", socket_type='NodeSocketFloat', in_out='INPUT')
+            NG.interface.new_socket(name="Color", socket_type='NodeSocketColor', in_out='OUTPUT')
+            NG.interface.new_socket(name="Metalness", socket_type='NodeSocketFloat', in_out='OUTPUT')
+            NG.interface.new_socket(name="Roughness", socket_type='NodeSocketFloat', in_out='OUTPUT')
+            NG.interface.new_socket(name="Normal", socket_type='NodeSocketVector', in_out='OUTPUT')
+
         GroupInN = create_node(NG.nodes,"NodeGroupInput", (-700,0), hide=False)
     
-        GroupOutN = create_node(NG.nodes,"NodeGroupOutput",(200,0))
+        GroupOutN = create_node(NG.nodes,"NodeGroupOutput",(200,0), hide=False)
     
-        ColorMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-300,100), label="Color Mix")
+        ColorMixN = create_node(NG.nodes,"ShaderNodeMix", (-300,100), label="Color Mix")
+        ColorMixN.data_type='RGBA'
     
-        MetalMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-300,50), label = "Metal Mix")
+        MetalMixN = create_node(NG.nodes,"ShaderNodeMix", (-300,0), label = "Metal Mix")
+        MetalMixN.data_type='FLOAT'
     
-        RoughMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-300,0), label = "Rough Mix")
+        RoughMixN = create_node(NG.nodes,"ShaderNodeMix", (-300,-100), label = "Rough Mix")
+        RoughMixN.data_type='FLOAT'
     
-        NormalMixN = create_node(NG.nodes,"ShaderNodeMix",(-300,-50), label = "Normal Mix")
+        NormalMixN = create_node(NG.nodes,"ShaderNodeMix",(-300,-200), label = "Normal Mix")
         NormalMixN.data_type='VECTOR'
         NormalMixN.clamp_factor=False
 
@@ -154,26 +183,26 @@ class Multilayered:
                 CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].outputs[1],LayerGroupN.inputs[5])
                 CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].outputs[2],LayerGroupN.inputs[6])
                 CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].outputs[3],LayerGroupN.inputs[7])
-            CurMat.links.new(MaskN.outputs[0],CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].inputs[7])
+            CurMat.links.new(MaskN.outputs[0],CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].inputs[9])
             CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].outputs[4],CurMat.nodes["Layer_"+str(x)].inputs[8])
             
-            NG.links.new(GroupInN.outputs[0],ColorMixN.inputs[1])
-            NG.links.new(GroupInN.outputs[1],MetalMixN.inputs[1])
-            NG.links.new(GroupInN.outputs[2],RoughMixN.inputs[1])
+            NG.links.new(GroupInN.outputs[0],ColorMixN.inputs[6])
+            NG.links.new(GroupInN.outputs[1],MetalMixN.inputs[2])
+            NG.links.new(GroupInN.outputs[2],RoughMixN.inputs[2])
             NG.links.new(GroupInN.outputs['Normal A'],NormalMixN.inputs[4])
-            NG.links.new(GroupInN.outputs[4],ColorMixN.inputs[2])
-            NG.links.new(GroupInN.outputs[5],MetalMixN.inputs[2])
-            NG.links.new(GroupInN.outputs[6],RoughMixN.inputs[2])
+            NG.links.new(GroupInN.outputs[4],ColorMixN.inputs[7])
+            NG.links.new(GroupInN.outputs[5],MetalMixN.inputs[3])
+            NG.links.new(GroupInN.outputs[6],RoughMixN.inputs[3])
             NG.links.new(GroupInN.outputs['Normal B'],NormalMixN.inputs[5])
             NG.links.new(GroupInN.outputs[8],ColorMixN.inputs[0])
             NG.links.new(GroupInN.outputs['Mask'],NormalMixN.inputs['Factor'])
             NG.links.new(GroupInN.outputs[8],RoughMixN.inputs[0])
             NG.links.new(GroupInN.outputs[8],MetalMixN.inputs[0])
         
-            NG.links.new(ColorMixN.outputs[0],GroupOutN.inputs[0])
-            NG.links.new(NormalMixN.outputs[1],GroupOutN.inputs[3])
-            NG.links.new(RoughMixN.outputs[0],GroupOutN.inputs[2])
+            NG.links.new(ColorMixN.outputs[2],GroupOutN.inputs[0])
             NG.links.new(MetalMixN.outputs[0],GroupOutN.inputs[1])
+            NG.links.new(RoughMixN.outputs[0],GroupOutN.inputs[2])
+            NG.links.new(NormalMixN.outputs[1],GroupOutN.inputs[3])
         
         if LayerCount>1:
             targetLayer="Layer_"+str(LayerCount-2)
@@ -235,6 +264,14 @@ class Multilayered:
             if microblendNormalStrength is None:
                 microblendNormalStrength = x.get("MicroblendNormalStrength")
 
+            MicroblendOffsetU = x.get("microblendOffsetU")
+            if MicroblendOffsetU is None:
+                MicroblendOffsetU = x.get("MicroblendOffsetU")
+
+            MicroblendOffsetV = x.get("microblendOffsetV")
+            if MicroblendOffsetV is None:
+                MicroblendOffsetV = x.get("MicroblendOffsetV")
+
             opacity = x.get("opacity")
             if opacity is None:
                 opacity = x.get("Opacity")
@@ -276,26 +313,49 @@ class Multilayered:
            # Mat[os.path.basename(material).split('.')[0]+'_cols']=OverrideTable["ColorScale"]
 
             NG = bpy.data.node_groups.new(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#crLAer's node group
-            NG.inputs.new('NodeSocketColor','ColorScale')
-            NG.inputs.new('NodeSocketFloat','MatTile')
-            NG.inputs.new('NodeSocketFloat','MbTile')
-            NG.inputs.new('NodeSocketFloat','MicroblendNormalStrength')
-            NG.inputs.new('NodeSocketFloat','MicroblendContrast')
-            NG.inputs.new('NodeSocketFloat','NormalStrength')
-            NG.inputs.new('NodeSocketFloat','Opacity')
-            NG.inputs.new('NodeSocketFloat','Mask')
-            NG.outputs.new('NodeSocketColor','Color')
-            NG.outputs.new('NodeSocketFloat','Metalness')
-            NG.outputs.new('NodeSocketFloat','Roughness')
-            NG.outputs.new('NodeSocketVector','Normal')
-            NG.outputs.new('NodeSocketFloat','Layer Mask')
+            vers=bpy.app.version
+            if vers[0]<4:
+                NG.inputs.new('NodeSocketColor','ColorScale')
+                NG.inputs.new('NodeSocketFloat','MatTile')
+                NG.inputs.new('NodeSocketFloat','MbTile')
+                NG.inputs.new('NodeSocketFloat','MicroblendNormalStrength')
+                NG.inputs.new('NodeSocketFloat','MicroblendContrast')
+                NG.inputs.new('NodeSocketFloat','MicroblendOffsetU')
+                NG.inputs.new('NodeSocketFloat','MicroblendOffsetV')
+                NG.inputs.new('NodeSocketFloat','NormalStrength')
+                NG.inputs.new('NodeSocketFloat','Opacity')
+                NG.inputs.new('NodeSocketFloat','Mask')
+                NG.outputs.new('NodeSocketColor','Color')
+                NG.outputs.new('NodeSocketFloat','Metalness')
+                NG.outputs.new('NodeSocketFloat','Roughness')
+                NG.outputs.new('NodeSocketVector','Normal')
+                NG.outputs.new('NodeSocketFloat','Layer Mask')
+                NG_inputs=NG.inputs
 
-            NG.inputs[4].min_value = 0
-            NG.inputs[4].max_value = 1
-            NG.inputs[5].min_value = 0 # No reason to invert these maps, not detail maps.
-            NG.inputs[5].max_value = 10 # This value is arbitrary, but more than adequate.
-            NG.inputs[6].min_value = 0
-            NG.inputs[6].max_value = 1
+            else:
+                NG.interface.new_socket(name="ColorScale", socket_type='NodeSocketColor', in_out='INPUT')
+                NG.interface.new_socket(name="MatTile", socket_type='NodeSocketFloat', in_out='INPUT')
+                NG.interface.new_socket(name="MbTile", socket_type='NodeSocketFloat', in_out='INPUT')
+                NG.interface.new_socket(name="MicroblendNormalStrength", socket_type='NodeSocketFloat', in_out='INPUT')
+                NG.interface.new_socket(name="MicroblendContrast", socket_type='NodeSocketFloat', in_out='INPUT')
+                NG.interface.new_socket(name="MicroblendOffsetU", socket_type='NodeSocketFloat', in_out='INPUT')
+                NG.interface.new_socket(name="MicroblendOffsetV", socket_type='NodeSocketFloat', in_out='INPUT')
+                NG.interface.new_socket(name="NormalStrength", socket_type='NodeSocketFloat', in_out='INPUT')
+                NG.interface.new_socket(name="Opacity", socket_type='NodeSocketFloat', in_out='INPUT')
+                NG.interface.new_socket(name="Mask", socket_type='NodeSocketFloat', in_out='INPUT')
+                NG.interface.new_socket(name="Color", socket_type='NodeSocketColor', in_out='OUTPUT')
+                NG.interface.new_socket(name="Metalness", socket_type='NodeSocketFloat', in_out='OUTPUT')
+                NG.interface.new_socket(name="Roughness", socket_type='NodeSocketFloat', in_out='OUTPUT')
+                NG.interface.new_socket(name="Normal", socket_type='NodeSocketVector', in_out='OUTPUT')
+                NG.interface.new_socket(name="Layer Mask", socket_type='NodeSocketFloat', in_out='OUTPUT')
+                NG_inputs=get_inputs(NG)
+          
+            NG_inputs[4].min_value = 0
+            NG_inputs[4].max_value = 1
+            NG_inputs[7].min_value = 0 # No reason to invert these maps, not detail maps.
+            NG_inputs[7].max_value = 10 # This value is arbitrary, but more than adequate.
+            NG_inputs[8].min_value = 0
+            NG_inputs[8].max_value = 1
             
             LayerGroupN = create_node(CurMat.nodes, "ShaderNodeGroup", (-2000,500-100*LayerIndex))
             LayerGroupN.width = 400
@@ -343,16 +403,26 @@ class Multilayered:
                 LayerGroupN.inputs[4].default_value = float(MicroblendContrast)
             else:
                 LayerGroupN.inputs[4].default_value = 1
+
+            if MicroblendOffsetU != None:
+                LayerGroupN.inputs[5].default_value = float(MicroblendOffsetU)
+            else:
+                LayerGroupN.inputs[5].default_value = 0
+
+            if MicroblendOffsetV != None:
+                LayerGroupN.inputs[6].default_value = float(MicroblendOffsetV)
+            else:
+                LayerGroupN.inputs[6].default_value = 0
             
             if normalStrength != None and normalStrength in OverrideTable["NormalStrength"]:
-                LayerGroupN.inputs[5].default_value = OverrideTable["NormalStrength"][normalStrength]
+                LayerGroupN.inputs[7].default_value = OverrideTable["NormalStrength"][normalStrength]
             else:
-                LayerGroupN.inputs[5].default_value = 1
+                LayerGroupN.inputs[7].default_value = 1
             
             if opacity != None:
-                LayerGroupN.inputs[6].default_value = float(opacity)
+                LayerGroupN.inputs[8].default_value = float(opacity)
             else:
-                LayerGroupN.inputs[6].default_value = 1
+                LayerGroupN.inputs[8].default_value = 1
             
             
             # DEFINES MAIN MULTILAYERED PROPERTIES
@@ -382,8 +452,10 @@ class Multilayered:
             MBMixN = create_node(NG.nodes,"ShaderNodeMixRGB", (-1400,-350), blend_type ='MIX', label = "MB+- Norm Mix")
             
             MBMapping = create_node(NG.nodes,"ShaderNodeMapping", (-2300,-650))
+
+            MBUVCombine = create_node(NG.nodes,"ShaderNodeCombineXYZ", (-2300,-550))
             
-            MBTexCord = create_node(NG.nodes,"ShaderNodeTexCoord", (-2300,-600))
+            MBTexCord = create_node(NG.nodes,"ShaderNodeTexCoord", (-2300,-500))
             
             # Multiply normal strength against microblend contrast
             # Results in hidden mb-normals when mbcontrast = 0. This is almost certainly wrong but it's good enough for now -jato
@@ -483,17 +555,20 @@ class Multilayered:
             NG.links.new(GroupInN.outputs[3],MBGrtrThanN.inputs[0])
             NG.links.new(GroupInN.outputs[3],MBNormMultiply.inputs[0])
             NG.links.new(GroupInN.outputs[4],MBCMicroOffset.inputs[0])
-            NG.links.new(GroupInN.outputs[5],NormStrengthN.inputs[0])
-            NG.links.new(GroupInN.outputs[6],MaskOpReroute.inputs[0])
-            NG.links.new(GroupInN.outputs[7],MaskMultiply.inputs[0])
-            NG.links.new(GroupInN.outputs[7],MaskLinearBurnAdd.inputs[0])
-            NG.links.new(GroupInN.outputs[7],MBNormSubtractMask.inputs[1])
+            NG.links.new(GroupInN.outputs[5],MBUVCombine.inputs[0])
+            NG.links.new(GroupInN.outputs[6],MBUVCombine.inputs[1])
+            NG.links.new(GroupInN.outputs[7],NormStrengthN.inputs[0])
+            NG.links.new(GroupInN.outputs[8],MaskOpReroute.inputs[0])
+            NG.links.new(GroupInN.outputs[9],MaskMultiply.inputs[0])
+            NG.links.new(GroupInN.outputs[9],MaskLinearBurnAdd.inputs[0])
+            NG.links.new(GroupInN.outputs[9],MBNormSubtractMask.inputs[1])
             
             NG.links.new(MBCMicroOffset.outputs[0],MBCSubtract.inputs[1])
             NG.links.new(MBCMicroOffset.outputs[0],MBCMultiply.inputs[0])
             NG.links.new(MBCMicroOffset.outputs[0],MBNormMultiply.inputs[1])
 
             NG.links.new(MBTexCord.outputs[2],MBMapping.inputs[0])
+            NG.links.new(MBUVCombine.outputs[0],MBMapping.inputs[1])
             NG.links.new(MBMapping.outputs[0],MBN.inputs[0])
             NG.links.new(MBN.outputs[0],MBRGBCurveN.inputs[1])
             NG.links.new(MBN.outputs[0],MBMixN.inputs[2])

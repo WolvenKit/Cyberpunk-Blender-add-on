@@ -2,7 +2,7 @@
 
 ![blender add-on banner panam](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/assets/65016231/a0489b07-68af-4a90-b53e-1ad3ef271f4a)
 
-The Cyberpunk IO Suite integrates with files created by WolvenKit to streamline the import/export and modifcation of assets from Cyberpunm 2077. 
+The Cyberpunk IO Suite integrates with files created by WolvenKit to streamline the import/export and modifcation of assets from Cyberpunk 2077. 
 
 To learn more about modding Cyberpunk 2077 visit [the Cyberpunk Modding wiki.](https://wiki.redmodding.org/cyberpunk-2077-modding)
 
@@ -59,11 +59,12 @@ To learn more about WolvenKit visit the [dedicated WolvenKit wiki.](https://wiki
 
 # Requirements
 
-1) **Blender** version 3.6 or higher is *highly recommended*
+1) **Blender** version 4.0 is supported
+<br>**Blender** version 3.6 or higher is *highly recommended*
 <br>**Blender** version 3.1 or higher is *required*
 <br>https://www.blender.org/<br/>
 
-2) **WolvenKit** version 8.9.0 or higher
+2) **WolvenKit** version 8.11 or higher
 <br>https://github.com/WolvenKit/WolvenKit<br/>
 
 ---
@@ -73,6 +74,8 @@ To learn more about WolvenKit visit the [dedicated WolvenKit wiki.](https://wiki
 > Not all Cyberpunk shaders are currently supported by the add-on.
 
 ## Installation
+
+> **_NOTE:_** You can find step-by-step instructions on the [Cyberpunk 2077 Modding Wiki](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/installing-the-wolvenkit-blender-plugin).
 
 1) Download the .ZIP file from the [*Releases*](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/releases) section
 

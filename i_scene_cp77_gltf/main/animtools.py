@@ -114,3 +114,51 @@ def hide_extra_bones(self, context):
     for bone in armature.edit_bones:
         if bone.name not in animBones:
             bone.hide = True
+
+def add_anim_props(animation, action):
+
+    extras = getattr(animation, 'extras', {})
+    if not extras:
+        return
+    # Extract properties from animation
+    schema = extras.get("schema", "")
+    animation_type = extras.get("animationType", "")
+    frame_clamping = extras.get("frameClamping", False)
+    frame_clamping_start_frame = extras.get("frameClampingStartFrame", -1)
+    frame_clamping_end_frame = extras.get("frameClampingEndFrame", -1)
+    prefer_lossless_linear_rotation_encoding = extras.get("preferLosslessLinearRotationEncoding", False)
+    num_extra_joints = extras.get("numExtraJoints", 0)
+    num_extra_tracks = extras.get("numExtraTracks", 0)  # Corrected typo in the key name
+    const_track_keys = extras.get("constTrackKeys", [])
+    track_keys = extras.get("trackKeys", [])
+    fallback_frame_indices = extras.get("fallbackFrameIndices", [])
+
+    # Add properties to the action
+    action["schema"] = schema
+    action["animationType"] = animation_type
+    action["frameClamping"] = frame_clamping
+    action["frameClampingStartFrame"] = frame_clamping_start_frame
+    action["frameClampingEndFrame"] = frame_clamping_end_frame
+    action["preferLosslessLinearRotationEncoding"] = prefer_lossless_linear_rotation_encoding
+    action["numExtraJoints"] = num_extra_joints
+    action["numeExtraTracks"] = num_extra_tracks
+    action["constTrackKeys"] = const_track_keys
+    action["trackKeys"] = track_keys
+    action["fallbackFrameIndices"] = fallback_frame_indices
+
+
+def get_anim_info(animations):
+    # Get animations
+    #animations = gltf_importer.data.animations
+
+    for animation in animations:
+        print(f"Processing animation: {animation.name}")
+
+        # Find an action whose name contains the animation name
+        action = next((act for act in bpy.data.actions if animation.name in act.name), None)
+
+        if action:
+            add_anim_props(animation, action)
+            print("Properties added to action.")
+        else:
+            print("No action found for animation.")
