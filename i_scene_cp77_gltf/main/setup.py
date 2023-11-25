@@ -22,6 +22,7 @@ from ..material_types.glassdeferred import GlassDeferred
 from ..material_types.signages import Signages
 from ..material_types.meshdecalparallax import MeshDecalParallax
 from ..material_types.parallaxscreen import ParallaxScreen
+from ..material_types.parallaxscreentransparent import ParallaxScreenTransparent
 from ..material_types.speedtree import SpeedTree
 from ..material_types.decal import Decal
 from ..material_types.decal_gradientmap_recolor import DecalGradientmapRecolor
@@ -162,8 +163,12 @@ class MaterialBuilder:
                     meshDecalParallax.create(rawMat["Data"],bpyMat)
 
                 case  "base\\fx\\shaders\\parallaxscreen.mt" :
-                    meshDecalParallax = ParallaxScreen(self.BasePath,self.image_format,self.ProjPath)
-                    meshDecalParallax.create(rawMat["Data"],bpyMat)
+                    parallaxScreen = ParallaxScreen(self.BasePath,self.image_format,self.ProjPath)
+                    parallaxScreen.create(rawMat["Data"],bpyMat)
+
+                case  "base\\fx\\shaders\\parallaxscreen_transparent.mt" :
+                    parallaxScreenTransparent = ParallaxScreenTransparent(self.BasePath,self.image_format,self.ProjPath)
+                    parallaxScreenTransparent.create(rawMat["Data"],bpyMat)
 
                 case "base\\materials\\speedtree_3d_v8_twosided.mt" |  "base\\materials\\speedtree_3d_v8_onesided.mt" |  "base\\materials\\speedtree_3d_v8_seams.mt":
                     speedtree = SpeedTree(self.BasePath,self.image_format, self.ProjPath)

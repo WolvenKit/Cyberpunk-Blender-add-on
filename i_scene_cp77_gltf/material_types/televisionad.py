@@ -288,7 +288,7 @@ class TelevisionAd:
                 subUVGroup.links.new(frac5.outputs[0],combine.inputs[1])            
                 subUVGroup.links.new(combine.outputs[0],subUVGroupO.inputs[0])
 
-            subUV = create_node(CurMat.nodes,"ShaderNodeGroup",(-1500, 875), label="subUV")
+            subUV = create_node(CurMat.nodes,"ShaderNodeGroup",(-1350, 75), label="subUV")
             subUV.node_tree = subUVGroup
             subUV.name = "subUV"
 
