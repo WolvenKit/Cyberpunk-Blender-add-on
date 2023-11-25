@@ -243,10 +243,10 @@ class ParallaxScreenTransparent:
         CurMat.links.new(time.outputs[0],n.inputs[3])
 
         # frameAdd	
-        if 'frameAdd' in bpy.data.node_groups.keys():
-            frameGroup = bpy.data.node_groups['frameAdd']
+        if 'frameAdd_ps_t' in bpy.data.node_groups.keys():
+            frameGroup = bpy.data.node_groups['frameAdd_ps_t']
         else:
-            frameGroup = bpy.data.node_groups.new("frameAdd","ShaderNodeTree") 
+            frameGroup = bpy.data.node_groups.new("frameAdd_ps_t","ShaderNodeTree") 
             if vers[0]<4:
                 frameGroup.inputs.new('NodeSocketVector','UV')
                 frameGroup.inputs.new('NodeSocketFloat','n')
@@ -289,7 +289,7 @@ class ParallaxScreenTransparent:
             frameGroup.links.new(add3.outputs[0],fGroupOutput.inputs[0])
 
 
-        frameAdd = create_node(CurMat.nodes,"ShaderNodeGroup",(-1500, 75), label="frameAdd")
+        frameAdd = create_node(CurMat.nodes,"ShaderNodeGroup",(-1500, 75), label="frameAdd_ps_t")
         frameAdd.node_tree = frameGroup
 
         CurMat.links.new(iLines.outputs[0],frameAdd.inputs["InterlaceLines"])
