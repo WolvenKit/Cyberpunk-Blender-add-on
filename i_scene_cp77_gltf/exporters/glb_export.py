@@ -16,6 +16,7 @@ def default_cp77_options():
             'export_lights': False,
             'export_apply': False,
             'export_extras': True,
+            'export_attributes': True,
         }
     else:
         options = {
@@ -29,6 +30,7 @@ def default_cp77_options():
             'export_lights': False,
             'export_apply': False,
             'export_extras': True,
+            'export_attributes': True,
             'export_try_sparse_sk': False,
         }
     return options
@@ -44,9 +46,10 @@ def cp77_mesh_options():
         'export_morph_normal': True,
         'export_morph': True,
         'export_colors': True,
-        'export_attributes': True
+        
     }
     return options
+
 #the options for anims
 def pose_export_options():
     options = {
@@ -63,11 +66,7 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
     #check if the scene is in object mode, if it's not, switch to object mode
     if bpy.context.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
-        # # Select only the mesh objects
-        # for obj in context.scene.objects:
-        #     if obj.type == 'MESH':
-        #         obj.select_set(True)
-    
+
     objects = context.selected_objects
 
     #if for photomode, make sure there's an armature selected, if not use the message box to show an error
@@ -132,52 +131,59 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
         armature_states = {}
 
         for obj in objects:
-            try: 
-                if not static_prop:
-                    if obj.type == 'MESH' and obj.select_get():
-                        armature_modifier = None
-                        for modifier in obj.modifiers:
-                            if modifier.type == 'ARMATURE' and modifier.object:
-                                armature_modifier = modifier
-                                break
+            if not static_prop:
+                if obj.type == 'MESH' and obj.select_get():
+                    armature_modifier = None
+                    for modifier in obj.modifiers:
+                        if modifier.type == 'ARMATURE' and modifier.object:
+                            armature_modifier = modifier
+                            break
 
-                        if not armature_modifier:
-                            bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=(f"Armature missing from: (obj.name) armatures are required for movement. If this is intentional, try 'export as static prop'"))
-                            return {'CANCELLED'}
-                        # Store original visibility and selection state
-                            armature = armature_modifier.object
-                            armature_states[armature] = {"hide": armature.hide_get(),
-                                                        "select": armature.select_get()}
+                    if not static_prop and not armature_modifier:
+                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=(f"Armature missing from: (obj.name) armatures are required for movement. If this is intentional, try 'export as static prop'"))
+                        return {'CANCELLED'}
+                    # Store original visibility and selection state
+                    armature = armature_modifier.object
+                    armature_states[armature] = {"hide": armature.hide_get(),
+                                                "select": armature.select_get()}
 
-                            # Make necessary to armature visibility and selection state for export
-                            armature.hide_set(False)
-                            armature.select_set(True)
+                    # Make necessary to armature visibility and selection state for export
+                    armature.hide_set(False)
+                    armature.select_set(True)
 
-                        # Check for ungrouped vertices, if they're found, switch to edit mode and select them
-                        ungrouped_vertices = [v for v in mesh.data.vertices if not v.groups]
-                        if ungrouped_vertices:
-                            bpy.ops.object.mode_set(mode='EDIT')
-                            bpy.ops.mesh.select_ungrouped()
-                            armature.hide_set(True)
-                            bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Ungrouped vertices found and selected. Please assign them to a group or delete them beforebefore exporting.")
-                            return {'CANCELLED'}
-            
-            except Exception as e:
-                print('error:', e)
+                    # Check for ungrouped vertices, if they're found, switch to edit mode and select them
+                    ungrouped_vertices = [v for v in mesh.data.vertices if not v.groups]
+                    if ungrouped_vertices:
+                        bpy.ops.object.mode_set(mode='EDIT')
+                        bpy.ops.mesh.select_ungrouped()
+                        armature.hide_set(True)
+                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Ungrouped vertices found and selected. Please assign them to a group or delete them beforebefore exporting.")
+                        return {'CANCELLED'}
 
-                if limit_selected:
+            if limit_selected:
+                try:
                     bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
                     if not static_prop:
                         armature.hide_set(True)
-                else:
-                    if export_visible:
+                except Exception as e:
+                    print(e)
+               
+            else:
+                if export_visible:
+                    try:
                         bpy.ops.export_scene.gltf(filepath=filepath, use_visible=True, **options)
                         if not static_prop:
                             armature.hide_set(True)
-                    else:
+                    except Exception as e:
+                        print(e)
+
+                else:
+                    try:
                         bpy.ops.export_scene.gltf(filepath=filepath, **options)
                         if not static_prop:
                             armature.hide_set(True)
+                    except Exception as e:
+                        print(e)
 
 
         # Restore original armature visibility and selection states
