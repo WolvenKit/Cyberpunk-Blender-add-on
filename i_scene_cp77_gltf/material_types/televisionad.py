@@ -315,7 +315,7 @@ class TelevisionAd:
                 subUVGroup.links.new(frac5.outputs[0],combine.inputs[1])            
                 subUVGroup.links.new(combine.outputs[0],subUVGroupO.inputs[0])
 
-            subUV = create_node(CurMat.nodes,"ShaderNodeGroup",(-1350, 75), label="subUV")
+            subUV = create_node(CurMat.nodes,"ShaderNodeGroup",(-1350, 875), label="subUV")
             subUV.node_tree = subUVGroup
             subUV.name = "subUV"
 
@@ -633,7 +633,7 @@ class TelevisionAd:
             CurMat.links.new(adNode.outputs[0],mixRGB2.inputs[1])
             CurMat.links.new(vecAdd6.outputs[0],mixRGB2.inputs[2])
 
-            # HUE
+            # HSV
             separate4 = create_node(CurMat.nodes,"ShaderNodeSeparateColor",(300,975))
             separate4.mode = "HSV"
             mul11 = create_node(CurMat.nodes,"ShaderNodeMath",(0,925),operation="MULTIPLY")
@@ -651,15 +651,132 @@ class TelevisionAd:
             CurMat.links.new(separate4.outputs[1],combine10.inputs[1])
             CurMat.links.new(separate4.outputs[2],combine10.inputs[2])
 
-            # lerp(adTex, dirtTex, dirtOpacity) and link to pBSFD
+            # blackDots
+            if 'blackDots' in bpy.data.node_groups.keys():
+                blackDotsGroup = bpy.data.node_groups['blackDots']
+            else:
+                blackDotsGroup = bpy.data.node_groups.new("blackDots","ShaderNodeTree") 
+                if vers[0]<4:
+                    blackDotsGroup.inputs.new('NodeSocketVector','UV')
+                    blackDotsGroup.inputs.new('NodeSocketFloat','PixelsHeight')
+                    blackDotsGroup.inputs.new('NodeSocketFloat','BlackLinesRatio')
+                    blackDotsGroup.inputs.new('NodeSocketFloat','BlackLinesSize')
+                    blackDotsGroup.inputs.new('NodeSocketFloat','TilesHeight')
+                    blackDotsGroup.inputs.new('NodeSocketFloat','LinesOrDots')
+                    blackDotsGroup.inputs.new('NodeSocketFloat','BlackLinesIntensity')
+                    blackDotsGroup.inputs.new('NodeSocketFloat','DistanceDivision')
+                    blackDotsGroup.outputs.new('NodeSocketFloat','blackDots')
+                else: 
+                    blackDotsGroup.interface.new_socket(name="UV", socket_type='NodeSocketVector', in_out='INPUT')
+                    blackDotsGroup.interface.new_socket(name="PixelsHeight", socket_type='NodeSocketFloat', in_out='INPUT')
+                    blackDotsGroup.interface.new_socket(name="BlackLinesRatio", socket_type='NodeSocketFloat', in_out='INPUT')
+                    blackDotsGroup.interface.new_socket(name="BlackLinesSize", socket_type='NodeSocketFloat', in_out='INPUT')
+                    blackDotsGroup.interface.new_socket(name="TilesHeight", socket_type='NodeSocketFloat', in_out='INPUT')
+                    blackDotsGroup.interface.new_socket(name="LinesOrDots", socket_type='NodeSocketFloat', in_out='INPUT')
+                    blackDotsGroup.interface.new_socket(name="BlackLinesIntensity", socket_type='NodeSocketFloat', in_out='INPUT')
+                    blackDotsGroup.interface.new_socket(name="DistanceDivision", socket_type='NodeSocketFloat', in_out='INPUT')
+                    blackDotsGroup.interface.new_socket(name="blackDots", socket_type='NodeSocketFloat', in_out='OUTPUT')
+                blackDotsGroupI = create_node(blackDotsGroup.nodes, "NodeGroupInput",(-1400,0))
+                blackDotsGroupO = create_node(blackDotsGroup.nodes, "NodeGroupOutput",(1000,0))  
+
+                # lines
+                separate = create_node(blackDotsGroup.nodes, "ShaderNodeSeparateXYZ",(-1250,50))
+                add = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-1100,50))
+                add.inputs[1].default_value = .5
+                mul = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-950,50),operation="MULTIPLY")
+                div = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-800,50),operation="DIVIDE")
+                frac = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-650,50),operation="FRACT")
+                add2 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-500,50))
+                add2.inputs[1].default_value = .4
+                floor = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-350,50),operation="FLOOR")
+                floor.use_clamp = True
+                blackDotsGroup.links.new(blackDotsGroupI.outputs[0],separate.inputs[0])
+                blackDotsGroup.links.new(separate.outputs[0],add.inputs[0])
+                blackDotsGroup.links.new(add.outputs[0],mul.inputs[0])
+                blackDotsGroup.links.new(blackDotsGroupI.outputs[1],mul.inputs[1])
+                blackDotsGroup.links.new(mul.outputs[0],div.inputs[0])
+                blackDotsGroup.links.new(blackDotsGroupI.outputs[2],div.inputs[1])
+                blackDotsGroup.links.new(div.outputs[0],frac.inputs[0])
+                blackDotsGroup.links.new(frac.outputs[0],add2.inputs[0])
+                blackDotsGroup.links.new(add2.outputs[0],floor.inputs[0])
+
+                # dots
+                vecMul = create_node(blackDotsGroup.nodes, "ShaderNodeVectorMath",(-1250,-50),operation="MULTIPLY")
+                vecMul2 = create_node(blackDotsGroup.nodes, "ShaderNodeVectorMath",(-1100,-50),operation="MULTIPLY")
+                vecMul3 = create_node(blackDotsGroup.nodes, "ShaderNodeVectorMath",(-950,-50),operation="MULTIPLY")
+                blackDotsGroup.links.new(blackDotsGroupI.outputs[0],vecMul.inputs[0])
+                blackDotsGroup.links.new(blackDotsGroupI.outputs[3],vecMul.inputs[1])
+                blackDotsGroup.links.new(vecMul.outputs[0],vecMul2.inputs[0])
+                blackDotsGroup.links.new(blackDotsGroupI.outputs[4],vecMul2.inputs[1])
+                blackDotsGroup.links.new(vecMul2.outputs[0],vecMul3.inputs[0])
+                blackDotsGroup.links.new(blackDotsGroupI.outputs[2],vecMul3.inputs[1])
+
+                separate2 = create_node(blackDotsGroup.nodes, "ShaderNodeSeparateXYZ",(-800,-50))
+                mul2 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-650,-50),operation="MULTIPLY")
+                mul2.inputs[1].default_value = 3.1415926
+                add3 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-500,-50))
+                add3.inputs[1].default_value = 3.1415926/2
+                cos = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-350,-50),operation="COSINE")
+
+                mul3 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-650,-150),operation="MULTIPLY")
+                mul3.inputs[1].default_value = 3.1415926
+                add4 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-500,-150))
+                add4.inputs[1].default_value = 3.1415926/2
+                cos2 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-350,-150),operation="COSINE")
+
+                mul4 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-200,-100),operation="MULTIPLY")
+                mul5 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-50,-100),operation="MULTIPLY")
+                mul5.inputs[0].default_value = 2
+                mul6 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(100,-100),operation="MULTIPLY")
+                mul6.inputs[1].default_value = .5
+                blackDotsGroup.links.new(vecMul3.outputs[0],separate2.inputs[0])
+                blackDotsGroup.links.new(separate2.outputs[1],mul2.inputs[0])
+                blackDotsGroup.links.new(mul2.outputs[0],add3.inputs[0])
+                blackDotsGroup.links.new(add3.outputs[0],cos.inputs[0])
+                blackDotsGroup.links.new(separate2.outputs[0],mul3.inputs[0])
+                blackDotsGroup.links.new(mul3.outputs[0],add4.inputs[0])
+                blackDotsGroup.links.new(add4.outputs[0],cos2.inputs[0])
+                blackDotsGroup.links.new(cos.outputs[0],mul4.inputs[0])
+                blackDotsGroup.links.new(cos2.outputs[0],mul4.inputs[1])
+                blackDotsGroup.links.new(mul4.outputs[0],mul5.inputs[1])
+                blackDotsGroup.links.new(mul5.outputs[0],mul6.inputs[0])
+
+                mix = create_node(blackDotsGroup.nodes, "ShaderNodeMix",(250,0))
+                blackDotsGroup.links.new(blackDotsGroupI.outputs[5],mix.inputs[0])
+                blackDotsGroup.links.new(floor.outputs[0],mix.inputs[4])
+                blackDotsGroup.links.new(mul6.outputs[0],mix.inputs[3])
+
+                sub = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(250,-50),operation="SUBTRACT")
+                sub.inputs[0].default_value = 1
+                add5 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(400,-50))
+                add5.use_clamp = True
+                blackDotsGroup.links.new(blackDotsGroupI.outputs[6],sub.inputs[1])
+                blackDotsGroup.links.new(mix.outputs[0],add5.inputs[0])
+                blackDotsGroup.links.new(sub.outputs[0],add5.inputs[1])
+                blackDotsGroup.links.new(add5.outputs[0],blackDotsGroupO.inputs[0])
+
+            blackDots = create_node(CurMat.nodes,"ShaderNodeGroup",(-650,200), label="blackDots")
+            blackDots.node_tree = blackDotsGroup
+            CurMat.links.new(UVNode.outputs[2],blackDots.inputs[0])
+            CurMat.links.new(pixH.outputs[0],blackDots.inputs[1])
+            CurMat.links.new(blRatio.outputs[0],blackDots.inputs[2])
+            CurMat.links.new(blSize.outputs[0],blackDots.inputs[3])
+            CurMat.links.new(tilesH.outputs[0],blackDots.inputs[4])
+            CurMat.links.new(lOrDots.outputs[0],blackDots.inputs[5])
+            CurMat.links.new(blIntensity.outputs[0],blackDots.inputs[6])
+
+            # lerp(adTex * blackDots, dirtTex, dirtOpacity) and link to pBSFD
             vecLerpG = createVecLerpGroup()
             vecLerp = create_node(CurMat.nodes,"ShaderNodeGroup",(-200,200), label="vecLerp")
             vecLerp.node_tree = vecLerpG   
-            CurMat.links.new(combine10.outputs[0],vecLerp.inputs[0])
+            vecMul10 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-350,200),operation="MULTIPLY")
+            CurMat.links.new(combine10.outputs[0],vecMul10.inputs[0])
+            CurMat.links.new(blackDots.outputs[0],vecMul10.inputs[1])
+            CurMat.links.new(vecMul10.outputs[0],vecLerp.inputs[0])
             CurMat.links.new(dirtNode.outputs[0],vecLerp.inputs[1])
             CurMat.links.new(mul12.outputs[0],vecLerp.inputs[2])
             CurMat.links.new(vecLerp.outputs[0],pBSDF.inputs["Base Color"])
-            CurMat.links.new(combine10.outputs[0],pBSDF.inputs[sockets["Emission"]]) # it will be like this before i implement the blackDots
+            CurMat.links.new(vecLerp.outputs[0],pBSDF.inputs[sockets["Emission"]])
 
         # metalness
         CurMat.links.new(m.outputs[0],pBSDF.inputs["Metallic"])
