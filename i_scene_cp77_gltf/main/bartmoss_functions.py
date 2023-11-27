@@ -18,5 +18,16 @@ def rotate_quat_180(self,context):
 
     else:
         return{'FINISHED'}
- 
     
+def select_object(obj):
+    for o in bpy.context.selected_objects:
+        o.select_set(False)
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    
+def calculate_mesh_volume(obj):
+    select_object(obj)
+    bpy.ops.rigidbody.object_add()
+    bpy.ops.rigidbody.mass_calculate(material='Custom', density=1) # density in kg/m^3
+    volume = obj.rigid_body.mass
+    return volume

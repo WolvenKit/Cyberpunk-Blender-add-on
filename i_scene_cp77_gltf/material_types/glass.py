@@ -20,7 +20,7 @@ class Glass:
 
         if "IOR" in Data:
             safeIOR = (Data['IOR'])
-            if safeIOR == 0:
+            if safeIOR < 1:
                 safeIOR = 1
             else:
                 safeIOR = (Data['IOR'])

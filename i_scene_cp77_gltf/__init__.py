@@ -3,13 +3,8 @@ import bpy.utils.previews
 import os
 import textwrap
 
-from bpy.props import (
-    StringProperty,
-    EnumProperty,
-    BoolProperty,
-    CollectionProperty,
-    FloatProperty,
-    IntProperty)
+from bpy.props import (StringProperty, EnumProperty, BoolProperty, CollectionProperty, FloatProperty, IntProperty, PointerProperty)
+from bpy.types import (Scene, Operator, PropertyGroup, Object, OperatorFileListElement, Panel, AddonPreferences, TOPBAR_MT_file_import, TOPBAR_MT_file_export)
 from bpy_extras.io_utils import ImportHelper
 from .importers.entity_import import *
 from .importers.sector_import import *
@@ -24,7 +19,8 @@ from .main.animtools import *
 from .main.meshtools import *
 from .main.bartmoss_functions import *
 from .main.script_manager import *
-from .main.physmat_data import physmat_list
+from .main.physmat_lib import physmat_list
+from .importers.phys_import import *
 
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
@@ -42,12 +38,13 @@ bl_info = {
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
+script_dir = get_script_dir()
 
 
-class CP77IOSuitePreferences(bpy.types.AddonPreferences):
+class CP77IOSuitePreferences(AddonPreferences):
     bl_idname = __name__
 
-    experimental_features: bpy.props.BoolProperty(
+    experimental_features: BoolProperty(
     name= "Enable Experimental Features",
     description="Experimental Features for Mod Developers, may encounter bugs",
     default=False,
@@ -55,38 +52,38 @@ class CP77IOSuitePreferences(bpy.types.AddonPreferences):
 
 
 # toggle the mod tools tab and its sub panels - default True
-    show_modtools: bpy.props.BoolProperty(
+    show_modtools: BoolProperty(
     name= "Show Mod Tools",
     description="Show the Mod tools Tab in the 3d viewport",
     default=True,
     )
 
 # only display the panels based on context
-    context_only: bpy.props.BoolProperty(
+    context_only: BoolProperty(
     name= "Only Show Mod Tools in Context",
     description="Show the Mod tools Tab in the 3d viewport",
     default=False,
     )
 
-    show_meshtools: bpy.props.BoolProperty(
+    show_meshtools: BoolProperty(
     name= "Show the Mesh Tools Panel",
     description="Show the mesh tools panel",
     default=True,
     )
 
-    show_collisiontools: bpy.props.BoolProperty(
+    show_collisiontools: BoolProperty(
     name= "Show the Collision Tools Panel",
     description="Show the Collision tools panel",
     default=True,
     )
 
-    show_animtools: bpy.props.BoolProperty(
+    show_animtools: BoolProperty(
     name= "Show the Animation Tools Panel",
     description="Show the anim tools panel",
     default=True,
     )
 
-    show_modtools: bpy.props.BoolProperty(
+    show_modtools: BoolProperty(
     name= "Show Mod Tools",
     description="Show the Mod tools Tab in the 3d viewport",
     default=True,
@@ -114,7 +111,7 @@ class CP77IOSuitePreferences(bpy.types.AddonPreferences):
             col.prop(self, "show_animtools")
             
             
-class CP77ScriptManager(bpy.types.Panel):
+class CP77ScriptManager(Panel):
     bl_label = "Script Manager"
     bl_idname = "CP77_PT_ScriptManagerPanel"
     bl_space_type = 'TEXT_EDITOR'
@@ -125,9 +122,6 @@ class CP77ScriptManager(bpy.types.Panel):
         layout = self.layout
         box = layout.box()
         col = box.column()
-        # Get the path to the "scripts" folder in the add-on's root directory
-        script_dir = os.path.join(os.path.dirname(__file__), "scripts")
-
         # List available scripts
         script_files = [f for f in os.listdir(script_dir) if f.endswith(".py")]
 
@@ -142,13 +136,12 @@ class CP77ScriptManager(bpy.types.Panel):
         row.operator("script_manager.create_script")
 
 
-class CP77CreateScript(bpy.types.Operator):
+class CP77CreateScript(Operator):
     bl_idname = "script_manager.create_script"
     bl_label = "Create New Script"
     bl_description = "create a new script in the cp77 modding scripts directory"
 
     def execute(self, context):
-        script_dir = os.path.join(os.path.dirname(__file__), "scripts")
         base_name = "new_script"
         script_name = base_name + ".py"
 
@@ -166,21 +159,21 @@ class CP77CreateScript(bpy.types.Operator):
         return {'FINISHED'}
         
 
-class CP77LoadScript(bpy.types.Operator):
+class CP77LoadScript(Operator):
     bl_idname = "script_manager.load_script"
     bl_label = "Load Script"
     bl_description = "Click to load or switch to this script, ctrl+click to rename"
     
-    script_file: bpy.props.StringProperty()
-    new_name: bpy.props.StringProperty(name="New name", default=".py")
+    script_file: StringProperty()
+    new_name: StringProperty(name="New name", default=".py")
 
     def execute(self, context):
         script_name = self.script_file
 
         if self.new_name:
             # Rename the script
-            script_path = os.path.join(os.path.dirname(__file__), "scripts", script_name)
-            new_script_path = os.path.join(os.path.dirname(__file__), "scripts", self.new_name)
+            script_path = os.path.join(script_dir, script_file)
+            new_script_path = os.path.join(s, self.new_name)
 
             if os.path.exists(script_path):
                 if not os.path.exists(new_script_path):
@@ -196,7 +189,7 @@ class CP77LoadScript(bpy.types.Operator):
                 context.space_data.text = script_text  
             else:
                 # If the script is not loaded, load it
-                script_path = os.path.join(os.path.dirname(__file__), "scripts", script_name)
+                script_path = os.path.join(script_dir, script_name)
 
                 if os.path.exists(script_path):
                     with open(script_path, 'r') as f:
@@ -220,32 +213,32 @@ class CP77LoadScript(bpy.types.Operator):
         layout.prop(self, "new_name")
 
 
-class CP77SaveScript(bpy.types.Operator):
+class CP77SaveScript(Operator):
     bl_idname = "script_manager.save_script"
     bl_label = "Save Script"
     bl_description = "Press to save this script"
     
-    script_file: bpy.props.StringProperty()
+    script_file: StringProperty()
 
     def execute(self, context):
         script_text = context.space_data.text
         if script_text:
-            script_path = os.path.join(os.path.dirname(__file__), "scripts", self.script_file)
+            script_path = os.path.join(script_dir, self.script_file)
             with open(script_path, 'w') as f:
                 f.write(script_text.as_string())
 
         return {'FINISHED'}
 
 
-class CP77DeleteScript(bpy.types.Operator):
+class CP77DeleteScript(Operator):
     bl_idname = "script_manager.delete_script"
     bl_label = "Delete Script"
     bl_description = "Press to delete this script"
     
-    script_file: bpy.props.StringProperty()
+    script_file: StringProperty()
 
     def execute(self, context):
-        script_path = os.path.join(os.path.dirname(__file__), "scripts", self.script_file)
+        script_path = os.path.join(script_dir, self.script_file)
 
         if os.path.exists(script_path):
             os.remove(script_path)
@@ -276,19 +269,19 @@ def SetCyclesRenderer(use_cycles=True, set_gi_params=False):
 
 physmats_data = physmat_list()
 enum_items = [(mat.get("Name", ""), mat.get("Name", ""), "") for mat in physmats_data]
-class CP77_PT_PanelProps(bpy.types.PropertyGroup):
+class CP77_PT_PanelProps(PropertyGroup):
 # collision panel props:
     collider_type: EnumProperty(
         name="Collision Type",
         items=[
-        ('VEHICLE', "Vehicle Collision", "Generate .phys formatted collisions for a vehicle mod"),
-        ('ENTITY', "Entity Collision", "Generate entCollisionComponents"),
-        ('WORLD', "Streaming Sector Collision", "Generate worldCollisionNode")
+        ('VEHICLE', ".phys", "Generate .phys formatted collisions for a vehicle mod"),
+        ('ENTITY', "entColliderComponent", "Generate entCollisionComponents"),
+        ('WORLD', "worldCollisionNode", "Generate worldCollisionNode")
         ],
         default='VEHICLE'
     ) 
 
-    physics_material = EnumProperty(
+    physics_material: EnumProperty(
         items= enum_items,
         name="Physics Material",
         description="Select the physics material for the object"
@@ -299,9 +292,20 @@ class CP77_PT_PanelProps(bpy.types.PropertyGroup):
         items=[
         ('CONVEX', "Convex Collider", "Generate a Convex Collider"),
         ('BOX', "Box Collider", "Generate a Box Collider"),
-        ('CAPSULE', "Capsule Collider", "Generate a Capsule Collider")
+        ('CAPSULE', "Capsule Collider", "Generate a Capsule Collider"),
+        ('SPHERE', "Sphere Collider", "Generate a Sphere Collider")
         ],
         default='CONVEX'
+    )
+    
+    simulation_type: EnumProperty(
+        name="Simulation Type",
+        items=[
+        ('Static', "Static", ""),
+        ('Dynamic', "Dynamic", ""),
+        ('Kinematic', "Kinematic", "")
+        ],
+        default='Kinematic'
     )
 
     matchSize: BoolProperty(        
@@ -332,7 +336,7 @@ class CP77_PT_PanelProps(bpy.types.PropertyGroup):
     sampleverts: IntProperty(
         name="Vertices to Sample",
         description="This is the number of vertices in your new collider",
-        default=0,
+        default=1,
         min=1,
         max=100,
     )
@@ -373,19 +377,20 @@ class CP77_PT_PanelProps(bpy.types.PropertyGroup):
         items=CP77CollectionList
     )   
 
-
-class CP77CollisionGenerator(bpy.types.Operator):
+class CP77CollisionGenerator(Operator):
     bl_idname = "generate_cp77.collisions"
     bl_label = "Generate Collider"
     bl_options = {'REGISTER', "UNDO"}
     bl_description = "Generate Colliders for use with Cyberpunk 2077" 
+
+
 
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
-        CP77CollisionGen(self, context,props.matchSize, props.collision_shape, props.sampleverts, props.radius, props.height)
+        CP77CollisionGen(self, context,props.matchSize, props.collider_type, props.collision_shape, props.sampleverts, props.radius, props.height, props.physics_material)
         return {"FINISHED"}
     
     def draw(self, context):
@@ -393,10 +398,18 @@ class CP77CollisionGenerator(bpy.types.Operator):
         layout = self.layout
         row = layout.row(align=True)
         split = row.split(factor=0.5,align=True)
+        split.label(text="Collision Type:")
+        split.prop(props, 'collider_type', text="")
+        row = layout.row(align=True)
+        split = row.split(factor=0.5,align=True)
         split.label(text="Collision Shape:")
         split.prop(props, 'collision_shape', text="")
         row = layout.row(align=True)
-        
+        split = row.split(factor=0.5,align=True)
+        split.label(text="Material:")
+        split.prop(props, 'physics_material', text="")
+        row = layout.row(align=True)
+        split = row.split(factor=0.5,align=True)
         if props.collision_shape == 'CONVEX':
             row.label(text="Vertices to Sample:")
             row.prop(props,"sampleverts", text="")
@@ -409,15 +422,15 @@ class CP77CollisionGenerator(bpy.types.Operator):
                 row.prop(props, "radius", text="")
                 row.label(text="Height:")
                 row.prop(props, "height", text="")
-            
 
-class CP77CollisionExport(bpy.types.Operator):
+
+class CP77CollisionExport(Operator):
     bl_idname = "export_scene.collisions"
     bl_label = "Export Collisions to .JSON"
     bl_parent_id = "CP77_PT_collisions"
     bl_description = "Export project collisions to .phys.json"
 
-    filepath: bpy.props.StringProperty(subtype="FILE_PATH")
+    filepath: StringProperty(subtype="FILE_PATH")
   
     def execute(self, context):
         cp77_collision_export(self.filepath)
@@ -427,8 +440,60 @@ class CP77CollisionExport(bpy.types.Operator):
         context.window_manager.fileselect_add(self)
         return {"RUNNING_MODAL"}
 
+class CP7PhysImport(Operator):
+    bl_idname = "import_scene.phys"
+    bl_label = "Import .phys Collisions"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Import collisions from an exported .phys.json"
 
-class CP77_PT_CollisionTools(bpy.types.Panel):
+    filepath: StringProperty(subtype="FILE_PATH")
+
+    def execute(self, context):
+        cp77_phys_import(self.filepath)
+        return {"FINISHED"}
+
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {"RUNNING_MODAL"}
+        
+class CP77PhysMatAssign(Operator):
+    bl_idname = "object.set_physics_material"
+    bl_label = "Set Physics Properties"
+
+    def execute(self, context):
+        selected_physmat = context.object["physics_material"]
+
+        # Find the corresponding material data
+        physmat_data = next((mat for mat in physmats_data if mat["Name"] == selected_physmat), None)
+
+        if physmat_data is not None:
+        
+            # Set custom properties on the object
+            obj = context.object
+            props = context.scene.cp77_panel_props
+            obj["physics_material"] = props.physics_material
+            obj["Density"] = physmat_data.get("Density", 0)
+            obj["staticFriction"] = physmat_data.get("staticFriction", 0)
+            obj["dynamicFriction"] = physmat_data.get("dynamicFriction", 0)
+            obj["restitution"] = physmat_data.get("restitution", 0)
+            volume = calculate_mesh_volume(obj)
+            # Calculate mass based on density and mesh volume
+            mass = obj["Density"] * volume
+            obj["Mass"] = mass
+            obj['collisionType'] = props.collider_type
+            a, b, c = obj.dimensions
+            Ix = (1 / 12) * obj["Density"] * volume * (b**2 + c**2)
+            Iy = (1 / 12) * obj["Density"] * volume * (a**2 + c**2)
+            Iz = (1 / 12) * obj["Density"] * volume * (a**2 + b**2)
+
+            # Set the inertia
+            obj["inertia_X"] = Ix
+            obj["inertia_Y"] = Iy
+            obj["inertia_Z"] = Iz
+            
+        return {'FINISHED'}
+
+class CP77_PT_CollisionTools(Panel):
     bl_label = "Collision Tools"
     bl_idname = "CP77_PT_collisions"
     bl_space_type = "VIEW_3D"
@@ -450,10 +515,46 @@ class CP77_PT_CollisionTools(bpy.types.Panel):
 
         if cp77_addon_prefs.show_modtools:
             if cp77_addon_prefs.show_collisiontools:
+                props = context.scene.cp77_panel_props
                 box = layout.box()
-                box.operator("generate_cp77.collisions")
-                box.operator("export_scene.collisions")
-
+                row = box.row(align=True)
+                row.operator("generate_cp77.collisions")
+                row = box.row(align=True)
+                row.operator("import_scene.phys")
+                row = box.row(align=True)
+                row.operator("export_scene.collisions")
+                obj = context.active_object
+                if obj and "collisionType" in obj:
+                    box = layout.box()
+                    box.label(text='Collision Properties')
+                    row = box.row()
+                    split = row.split(factor=0.3,align=True)
+                    split.label(text='Type:')
+                    split.prop(props, 'collider_type', text="")
+                    row = box.row()
+                    split = row.split(factor=0.5,align=True)
+                    split.label(text="simulationType")
+                    split.prop(props, 'simulation_type', text="")
+                    row = box.row()
+                    split = row.split(factor=0.3,align=True)
+                    split.label(text='Material:')
+                    split.prop(props, 'physics_material', text="")
+                    row = box.row()
+                    row.label(text=f"Mass: {obj.get('Mass', 0):.2f}")
+                    row = box.row()
+                    row.alignment = 'LEFT'
+                    col = row.column(align=True)
+                    col.label(text='Inertia:')
+                    row = box.row()
+                    row.alignment = 'CENTER'
+                    col = row.column(align=True)
+                    split = col.split(factor=0.33,align=True)
+                    split.label(text=f"X: {obj.get('inertia_X', 0):.0f}")
+                    split.label(text=f"Y: {obj.get('inertia_Y', 0):.0f}")
+                    split.label(text=f"Z: {obj.get('inertia_Z', 0):.0f}")
+                    row = box.row()
+                    row.operator('object.set_physics_material')
+                    
 
 def CP77AnimsList(self, context):
     for action in bpy.data.actions:
@@ -463,13 +564,13 @@ def CP77AnimsList(self, context):
 
 
 ### allow deleting animations from the animset panel, regardless of editor context
-class CP77AnimsDelete(bpy.types.Operator):
+class CP77AnimsDelete(Operator):
     bl_idname = 'cp77.delete_anims'
     bl_label = "Delete action"
     bl_options = {'INTERNAL', 'UNDO'}
     bl_description = "Delete this action"
 
-    name: bpy.props.StringProperty()
+    name: StringProperty()
 
     @classmethod
     def poll(cls, context):
@@ -482,14 +583,14 @@ class CP77AnimsDelete(bpy.types.Operator):
 
 # this class is where most of the function is so far - play/pause 
 # Todo: fix renaming actions from here
-class CP77Animset(bpy.types.Operator):
+class CP77Animset(Operator):
     bl_idname = 'cp77.set_animset'
     bl_label = "Available Animsets"
     bl_options = {'INTERNAL', 'UNDO'}
 
-    name: bpy.props.StringProperty(options={'HIDDEN'})
-    new_name: bpy.props.StringProperty(name="New name", default="")
-    play: bpy.props.BoolProperty(options={'HIDDEN'}, default=False)
+    name: StringProperty(options={'HIDDEN'})
+    new_name: StringProperty(name="New name", default="")
+    play: BoolProperty(options={'HIDDEN'}, default=False)
 
     @classmethod
     def poll(cls, context):
@@ -534,7 +635,7 @@ class CP77Animset(bpy.types.Operator):
             
 
 # inserts a keyframe on the current frame
-class CP77Keyframe(bpy.types.Operator):
+class CP77Keyframe(Operator):
     bl_idname = "insert_keyframe.cp77"
     bl_parent_id = "CP77_PT_animspanel"
     bl_label = "Keyframe Pose"
@@ -557,7 +658,7 @@ class CP77Keyframe(bpy.types.Operator):
         row.prop(props, "frameall", text="")
 
     
-class CP77ResetArmature(bpy.types.Operator):
+class CP77ResetArmature(Operator):
     bl_idname = "reset_armature.cp77"
     bl_parent_id = "CP77_PT_animspanel"
     bl_label = "Reset Pose"
@@ -568,14 +669,14 @@ class CP77ResetArmature(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class CP77NewAction(bpy.types.Operator):
+class CP77NewAction(Operator):
 
     bl_idname = 'cp77.new_action'
     bl_label = "Add Action"
     bl_options = {'INTERNAL', 'UNDO'}
     bl_description = "Add a new action to the list" 
 
-    name: bpy.props.StringProperty(default="New action")
+    name: StringProperty(default="New action")
 
     @classmethod
     def poll(cls, context):
@@ -596,7 +697,7 @@ class CP77NewAction(bpy.types.Operator):
         return {'FINISHED'}
     
 
-class CP77RigLoader(bpy.types.Operator):
+class CP77RigLoader(Operator):
     bl_idname = "cp77.rig_loader"
     bl_label = "Load rigs from .glb"
     bl_description = "Load Cyberpunk 2077 deform rigs from plugin resources" 
@@ -616,7 +717,7 @@ class CP77RigLoader(bpy.types.Operator):
 
 
 ### Draw a panel to store anims functions
-class CP77_PT_AnimsPanel(bpy.types.Panel):
+class CP77_PT_AnimsPanel(Panel):
     bl_idname = "CP77_PT_animspanel"
     bl_label = "Animation Tools"
     bl_category = "CP77 Modding"
@@ -624,7 +725,7 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
     bl_region_type = "UI"
     bl_options = {'DEFAULT_CLOSED'}
 
-    name: bpy.props.StringProperty(options={'HIDDEN'})
+    name: StringProperty(options={'HIDDEN'})
 
     @classmethod
     def poll(cls, context):
@@ -714,7 +815,7 @@ class CP77_PT_AnimsPanel(bpy.types.Panel):
                                 row.operator('cp77.delete_anims', icon='X', text="").name = action.name
 
 
-class CollectionAppearancePanel(bpy.types.Panel):
+class CollectionAppearancePanel(Panel):
     bl_label = "Ent Appearances"
     bl_idname = "PANEL_PT_appearance_variants"
     bl_space_type = 'PROPERTIES'
@@ -733,7 +834,7 @@ class CollectionAppearancePanel(bpy.types.Panel):
         layout.prop(collection, "appearanceName")
 
     
-class CP77Autofitter(bpy.types.Operator):
+class CP77Autofitter(Operator):
     bl_idname = "cp77.auto_fitter"
     bl_label = "Auto Fit"
     bl_description = "Use to automatically fit your mesh to a selection of modified bodies" 
@@ -751,7 +852,7 @@ class CP77Autofitter(bpy.types.Operator):
             return {'FINISHED'}
 
 
-class CP77WeightTransfer(bpy.types.Operator):
+class CP77WeightTransfer(Operator):
     bl_idname = 'cp77.trans_weights'
     bl_label = "Transfer weights from one mesh to another"
     bl_description = "Transfer weights from source mesh to target mesh"
@@ -763,7 +864,7 @@ class CP77WeightTransfer(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class CP77UVTool(bpy.types.Operator):
+class CP77UVTool(Operator):
     bl_idname = 'cp77.uv_checker'
     bl_label = "UV Checker"
     bl_description = "Apply a texture to assist with UV coordinate mapping"
@@ -774,7 +875,7 @@ class CP77UVTool(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class CP77UVCheckRemover(bpy.types.Operator):
+class CP77UVCheckRemover(Operator):
     bl_idname = 'cp77.uv_unchecker'
     bl_label = "UV Checker"
     bl_description = "revert back to original material"
@@ -789,33 +890,33 @@ class CP77UVCheckRemover(bpy.types.Operator):
         return {"FINISHED"}
 
         
-class CP77HairProfileExport(bpy.types.Operator):
+class CP77HairProfileExport(Operator):
     bl_idname = "export_scene.hp"
     bl_label = "Export Hair Profile"
     bl_description ="Generates a new .hp.json in your mod project folder which can be imported in Wolvenkit"
     bl_parent_id = "CP77_PT_MeshTools"
 
-    filepath: bpy.props.StringProperty(subtype="FILE_PATH")
+    filepath: StringProperty(subtype="FILE_PATH")
 
     def execute(self, context):
         cp77_hp_export(self.filepath)
         return {"FINISHED"}
 
 
-class CP77MlSetupExport(bpy.types.Operator):
+class CP77MlSetupExport(Operator):
     bl_idname = "export_scene.mlsetup"
     bl_label = "Export MLSetup"
     bl_parent_id = "CP77_PT_MeshTools"
     bl_description = "EXPERIMENTAL: Export material changes to mlsetup files" 
 
-    filepath: bpy.props.StringProperty(subtype="FILE_PATH")
+    filepath: StringProperty(subtype="FILE_PATH")
   
     def execute(self, context):
         cp77_mlsetup_export(self, context)
         return {"FINISHED"}
 
 
-class CP77SetArmature(bpy.types.Operator):
+class CP77SetArmature(Operator):
     bl_idname = "cp77.set_armature"
     bl_label = "Change Armature Target"
     bl_parent_id = "CP77_PT_MeshTools"
@@ -826,7 +927,7 @@ class CP77SetArmature(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class CP77GroupVerts(bpy.types.Operator):
+class CP77GroupVerts(Operator):
     bl_idname = "cp77.group_verts"
     bl_parent_id = "CP77_PT_MeshTools"
     bl_label = "Assign to Nearest Group"
@@ -837,7 +938,7 @@ class CP77GroupVerts(bpy.types.Operator):
         CP77GroupUngroupedVerts(self, context)
         return {'FINISHED'}
     
-class CP77RotateObj(bpy.types.Operator):
+class CP77RotateObj(Operator):
     bl_label = "Change Orientation"
     bl_idname = "cp77.rotate_obj"
     bl_description = "rotate the selected object"
@@ -847,7 +948,7 @@ class CP77RotateObj(bpy.types.Operator):
         return {'FINISHED'}
     
 
-class CP77_PT_MeshTools(bpy.types.Panel):
+class CP77_PT_MeshTools(Panel):
     bl_label = "Mesh Tools"
     bl_idname = "CP77_PT_MeshTools"
     bl_space_type = "VIEW_3D"
@@ -918,11 +1019,11 @@ class CP77_PT_MeshTools(bpy.types.Panel):
         
 
 ## adds a message box for the exporters to use for error notifications, will also be used later for redmod integration    
-class ShowMessageBox(bpy.types.Operator):
+class ShowMessageBox(Operator):
     bl_idname = "cp77.message_box"
     bl_label = "Message"
 
-    message: bpy.props.StringProperty(default="")
+    message: StringProperty(default="")
 
     def execute(self, context):
         self.report({'INFO'}, self.message)
@@ -939,7 +1040,7 @@ class ShowMessageBox(bpy.types.Operator):
             row.alignment = 'EXPAND'
             row.label(text=text)     
         
-class CP77GLBExport(bpy.types.Operator,ExportHelper):
+class CP77GLBExport(Operator,ExportHelper):
   ### cleaned this up and moved most code to exporters.py
     bl_idname = "export_scene.cp77_glb"
     bl_label = "Export for Cyberpunk"
@@ -994,7 +1095,7 @@ class CP77GLBExport(bpy.types.Operator,ExportHelper):
         return {'FINISHED'}
 
 
-class CP77EntityImport(bpy.types.Operator,ImportHelper):
+class CP77EntityImport(Operator,ImportHelper):
 
     bl_idname = "io_scene_gltf.cp77entity"
     bl_label = "Import Ent from JSON"
@@ -1056,7 +1157,7 @@ class CP77EntityImport(bpy.types.Operator,ImportHelper):
 
         return {'FINISHED'}
 
-class CP77StreamingSectorImport(bpy.types.Operator,ImportHelper):
+class CP77StreamingSectorImport(Operator,ImportHelper):
 
     bl_idname = "io_scene_gltf.cp77sector"
     bl_label = "Import All StreamingSectors from project"
@@ -1092,7 +1193,7 @@ class CP77StreamingSectorImport(bpy.types.Operator,ImportHelper):
 
 
 # Material Sub-panel
-class CP77_PT_ImportWithMaterial(bpy.types.Panel):
+class CP77_PT_ImportWithMaterial(Panel):
     bl_space_type = 'FILE_BROWSER'
     bl_region_type = 'TOOL_PROPS'
     bl_label = "With Materials"
@@ -1125,7 +1226,7 @@ class CP77_PT_ImportWithMaterial(bpy.types.Panel):
         row.prop(operator, 'import_garmentsupport')
 
 
-class CP77Import(bpy.types.Operator,ImportHelper):
+class CP77Import(Operator,ImportHelper):
     bl_idname = "io_scene_gltf.cp77"
     bl_label = "Import glTF"
     bl_description = "Load glTF 2.0 files with Cyberpunk 2077 materials" #Kwek: tooltips towards a more polished UI.
@@ -1158,7 +1259,7 @@ class CP77Import(bpy.types.Operator,ImportHelper):
     
     filepath: StringProperty(subtype = 'FILE_PATH')
 
-    files: CollectionProperty(type=bpy.types.OperatorFileListElement)
+    files: CollectionProperty(type=OperatorFileListElement)
     directory: StringProperty()
     
     appearances: StringProperty(name= "Appearances",
@@ -1195,7 +1296,6 @@ classes = (
     ShowMessageBox,
     CP77_PT_AnimsPanel,
     CP77Keyframe,
-    CP77_PT_CollisionTools,
     CP77CollisionExport,
     CP77CollisionGenerator,
     CP77Animset,
@@ -1221,6 +1321,9 @@ classes = (
     CP77WeightTransfer,
     CP77ResetArmature,
     CP77UVCheckRemover,
+    CP7PhysImport,
+    CP77PhysMatAssign,
+    CP77_PT_CollisionTools,
 )
 
 def register():
@@ -1250,12 +1353,12 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
 
-    bpy.types.Scene.cp77_panel_props = bpy.props.PointerProperty(type=CP77_PT_PanelProps) 
-    bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
-    bpy.types.TOPBAR_MT_file_export.append(menu_func_export) 
+    Scene.cp77_panel_props = PointerProperty(type=CP77_PT_PanelProps)
+    TOPBAR_MT_file_import.append(menu_func_import)
+    TOPBAR_MT_file_export.append(menu_func_export) 
     
 def unregister():
-    del bpy.types.Scene.cp77_panel_props
+    del Scene.cp77_panel_props
     for icon_key in custom_icon_col.keys():
         bpy.utils.previews.remove(custom_icon_col[icon_key])
 
@@ -1265,8 +1368,8 @@ def unregister():
         bpy.utils.unregister_class(cls)
 
     
-    bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
-    bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
+    TOPBAR_MT_file_import.remove(menu_func_import)
+    TOPBAR_MT_file_export.remove(menu_func_export)
     custom_icon_col.clear()
                 
 if __name__ == "__main__":
