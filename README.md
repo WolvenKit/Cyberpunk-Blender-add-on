@@ -2,19 +2,58 @@
 
 ![blender add-on banner panam](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/assets/65016231/a0489b07-68af-4a90-b53e-1ad3ef271f4a)
 
-The Cyberpunk Blender add-on is designed to fully automate the shader setup for Cyberpunk 2077 mesh files. The add-on integrates with files created by WolvenKit. To learn more about WolvenKit visit the [dedicated WolvenKit wiki.](https://wiki.redmodding.org/wolvenkit)
+The Cyberpunk IO Suite integrates with files created by WolvenKit to streamline the import/export and modifcation of assets from Cyberpunk 2077. 
+
+To learn more about modding Cyberpunk 2077 visit [the Cyberpunk Modding wiki.](https://wiki.redmodding.org/cyberpunk-2077-modding)
+
+
+To learn more about WolvenKit visit the [dedicated WolvenKit wiki.](https://wiki.redmodding.org/wolvenkit)
 
 # Features
 
 ![blender add-on yaiba exampe](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/assets/65016231/fffb9aab-c5f0-4f77-9a63-bdbee941708e)
 
-- Import Cyberpunk 2077 models and their complex shaders with just a few clicks
+## Import functions:
 
-- Import Cyberpunk 2077 entity files such as vehicles with mesh files correctly distributed to match their in game appearance
+- Import Cyberpunk 2077 models with materials for fully automated setup of the games complex shaders in just a few clicks
+
+- Import characters and vehicles from Wolvenkit exported .ent.json files. The plugin will automatically import the meshes and materials from your project and correctly distribute them to match the specified in game appearance
+
+- Import colliders from Wolvenkit exported .phys files for easy visualization and editing
+
+- Import Cyberpunk 2077 animations to play on your models exported with rigs, or take advantage of the bundled rig resources conveniently available at the press of a button in the Cyberpunk Animations Panel
 
 - Import Cyberpunk 2077 level data (streaming sectors)
 
-- Export glTF models with optimized export options for use with WolvenKit for Cyberpunk 2077 
+## Export Functions:
+
+- Export meshes to glb with optimized export options to ensure compatibility with Wolvenkit. Our exporter supports shapekey and garmentsupport attribute export and checks for common editing issues which cause Wolvenkit import to fail. Where issues are found, the plugin provides automatic or simplified solutions to speed up your workflow. 
+
+- Export modified collision shapes to .phys.json
+
+- Export new and edited animations to GLB
+
+## Tools and Shortcuts:
+
+- Animation Tools Panel
+    - shortcuts for playing, renaming and deleting existing animations
+    - add new actions and insert keyframes 
+    - all from outside Blender's animations tab
+
+- Mesh Tools Panel
+    - Auto refit clothing meshes to a variety of different modded and vanilla body shapes. this functionality is based on research and work by AllKnowingLion
+    - Simplified weight transfer shortcut applies the usual best settings and makes this process much easier to understand 
+    - Mesh clean up panel includes automatically assigning ungrouped vertices to their nearest group
+    - UV Checker: toggle a coloured, labelled grid as the active material on your mesh to make texturing and troubleshooting easier. If the currently selected mesh is currently using the UV checker, the button will change to easily allow you to restore the original material and remove the UV checker from your meshes material slots
+
+- Collision Tools and Generator
+    - Automatic generation of convex colliders matched perfectly to the shape of your mesh, the number of vertices to sample should be set to match the number set in the .phys file in order to ensure successful export.
+    - Generate box and capsule colliders with either user specified sizing or sized automatically to match the selected mesh
+    - Export edited collision bodies back to .phys ***currently requires a wolvenkit converted .phys.json file
+
+- Material Exports
+    - export custom and edited hair profiles to .hp.json which can be imported to wolvenkit. supports both edited vanilla files and totally custom setups based on the same node structure. the .hp.json will be named after the material in blender and will be automatically deposited in the raw folder of the project that the hair mesh was exported from. The material name in blender must end with _cards to match the setup of imported vanilla hair profiles (_cards will not be part of the .hp.json export)
+    - export some changes to .mlsetup files. This is an experimental feature which must be toggled on in the plugins preferences. Currently only some changes are supported. For indepth editing of .mlsetup files, you should use the fantastic MlSetup builder software by Neurolinked
 
 ---
 
@@ -24,7 +63,7 @@ The Cyberpunk Blender add-on is designed to fully automate the shader setup for 
 <br>**Blender** version 3.1 or higher is *required*
 <br>https://www.blender.org/<br/>
 
-2) **WolvenKit** version 8.9.0 or higher
+2) **WolvenKit** version 8.11 or higher
 <br>https://github.com/WolvenKit/WolvenKit<br/>
 
 ---
@@ -34,6 +73,8 @@ The Cyberpunk Blender add-on is designed to fully automate the shader setup for 
 > Not all Cyberpunk shaders are currently supported by the add-on.
 
 ## Installation
+
+> **_NOTE:_** You can find step-by-step instructions on the [Cyberpunk 2077 Modding Wiki](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/installing-the-wolvenkit-blender-plugin).
 
 1) Download the .ZIP file from the [*Releases*](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/releases) section
 
