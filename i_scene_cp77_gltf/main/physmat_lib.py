@@ -3,11 +3,10 @@ def physmat_list():
     return [
             {
             "Name": "None",
-            "Density": 0,
-            "staticFriction": 0.0,
-            "dynamicFriction": 0.0,
-            "restitution": 0.0,
-            "restitution": 0.0
+            "Density": 1,
+            "staticFriction": 1.0,
+            "dynamicFriction": 1.0,
+            "restitution": 1.0,
         },
         {
             "Name": "meatbag.physmat",
