@@ -1,7 +1,5 @@
-import json
-import os
-import mathutils
 import bpy
+from ..main.animtools import reset_armature
 
 #setup the default options to be applied to all export types
 def default_cp77_options():
@@ -27,7 +25,8 @@ def cp77_mesh_options():
         'export_morph_tangent': True,
         'export_morph_normal': True,
         'export_morph': True,
-        'export_colors': True
+        'export_colors': True,
+        'export_attributes': True
     }
     return options
 #the options for anims
@@ -35,48 +34,67 @@ def pose_export_options():
     options = {
         'export_animations': True,
         'export_frame_range': False,
+        'export_animation_mode': 'NLA_TRACKS',
         'export_anim_single_armature': True       
     }
     return options
-#setup the actual exporter - rewrote almost all of this, much quicker now
-def export_cyberpunk_glb(context, filepath, export_poses):
 
+#setup the actual exporter - rewrote almost all of this, much quicker now
+def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_selected):
+
+    #check if the scene is in object mode, if it's not, switch to object mode
     if bpy.context.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
+        # # Select only the mesh objects
+        # for obj in context.scene.objects:
+        #     if obj.type == 'MESH':
+        #         obj.select_set(True)
     
-    # If no objects are selected, select all objects in the scene
-    if not context.selected_objects:
-        bpy.ops.object.select_all(action='SELECT')
-
-    # Retrieve the selected objects
     objects = context.selected_objects
+
     #if for photomode, make sure there's an armature selected, if not use the message box to show an error
     if export_poses:
         armatures = [obj for obj in objects if obj.type == 'ARMATURE']
         if not armatures:
-            bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="No armature selected, please select an armature")
+            bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="No armature objects are selected, please select an armature")
             return {'CANCELLED'}
+        
         #if the export poses value is True, set the export options to ensure the armature is exported properly with the animations
         options = default_cp77_options()
         options.update(pose_export_options())
+        for armature in armatures:
+            reset_armature(armature, context)
+            bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
+            return{'FINISHED'}
     else:
+        if not limit_selected:
+            for obj in bpy.data.objects:
+                if obj.type == 'MESH':
+                    obj.select_set(True) 
         #if export_poses option isn't used, check to make sure there are meshes selected and throw an error if not
         meshes = [obj for obj in objects if obj.type == 'MESH']
-        if not meshes:
-            #throw an error in the message box if you haven't selected a mesh to export
-            bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="No meshes selected, please select at least one mesh")
-            return {'CANCELLED'}
+
+        #throw an error in the message box if you haven't selected a mesh to export
+        if not export_poses:
+            if not meshes:
+                bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="No meshes selected, please select at least one mesh")
+                return {'CANCELLED'}
+        
         #check that meshes include UVs and have less than 65000 verts, throw an error if not
         for mesh in meshes:
+
             # apply transforms
             bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
             if not mesh.data.uv_layers:
                 bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Meshes must have UV layers in order to import in Wolvenkit")
                 return {'CANCELLED'}
+            
+            #check submesh vertex count to ensure it's less than the maximum for import
             for submesh in mesh.data.polygons:
                 if len(submesh.vertices) > 65000:
                     bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Each submesh must have less than 65,000 vertices")
                     return {'CANCELLED'}
+                
             #check that faces are triangulated, cancel export, switch to edit mode with the untriangulated faces selected and throw an error
             for face in mesh.data.polygons:
                 if len(face.vertices) != 3:
@@ -85,47 +103,62 @@ def export_cyberpunk_glb(context, filepath, export_poses):
                     bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="All faces must be triangulated before exporting. Untriangulated faces have been selected for you")
                     return {'CANCELLED'}
                 
+        # set the export options for meshes
         options = default_cp77_options()
         options.update(cp77_mesh_options())
 
-    print(options)  
-    # if exporting meshes, iterate through any connected armatures, store their currebt state. if hidden, unhide them and select them for export
-    armature_states = {}
+        #print the options to the console
+        print(options)
 
-    for obj in objects: 
-        if obj.type == 'MESH' and obj.select_get():
-            armature_modifier = None
-            for modifier in obj.modifiers:
-                if modifier.type == 'ARMATURE' and modifier.object:
-                    armature_modifier = modifier
-                    break
+    # if exporting meshes, iterate through any connected armatures, store their current state. if hidden, unhide them and select them for export
+        armature_states = {}
 
-            if armature_modifier:
-                # Store original visibility and selection state
-                armature = armature_modifier.object
-                armature_states[armature] = {"hide": armature.hide_get(),
-                                            "select": armature.select_get()}
+        for obj in objects: 
+            if obj.type == 'MESH' and obj.select_get():
+                armature_modifier = None
+                for modifier in obj.modifiers:
+                    if modifier.type == 'ARMATURE' and modifier.object:
+                        armature_modifier = modifier
+                        break
 
-                # Make necessary to armature visibility and selection state for export
-                armature.hide_set(False)
-                armature.select_set(True)
+                if armature_modifier:
+                    # Store original visibility and selection state
+                    armature = armature_modifier.object
+                    armature_states[armature] = {"hide": armature.hide_get(),
+                                                "select": armature.select_get()}
 
-                # Check for ungrouped vertices, throw an error if any are found
-                ungrouped_vertices = [v for v in mesh.data.vertices if not v.groups]
-                if ungrouped_vertices:
-                    bpy.ops.object.mode_set(mode='EDIT')
-                    bpy.ops.mesh.select_ungrouped()
-                    armature.hide_set(True)
-                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Ungrouped vertices found and selected. Please assign them to a group or delete them beforebefore exporting.")
-                    return {'CANCELLED'}
+                    # Make necessary to armature visibility and selection state for export
+                    armature.hide_set(False)
+                    armature.select_set(True)
 
-    # Export the selected meshes to glb
-    bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
-    # Restore original armature visibility and selection states
-    for armature, state in armature_states.items():
-        armature.select_set(state["select"])
-        armature.hide_set(state["hide"])
+                    # Check for ungrouped vertices, if they're found, switch to edit mode and select them
+                    ungrouped_vertices = [v for v in mesh.data.vertices if not v.groups]
+                    if ungrouped_vertices:
+                        bpy.ops.object.mode_set(mode='EDIT')
+                        bpy.ops.mesh.select_ungrouped()
+                        armature.hide_set(True)
+                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Ungrouped vertices found and selected. Please assign them to a group or delete them beforebefore exporting.")
+                        return {'CANCELLED'}
 
+        if limit_selected:
+            bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
+            armature.hide_set(True)
+
+        else:
+            if export_visible:
+                bpy.ops.export_scene.gltf(filepath=filepath, use_visible=True, **options)
+                armature.hide_set(True)
+            else:
+                bpy.ops.export_scene.gltf(filepath=filepath, **options)
+                armature.hide_set(True)
+
+
+        # Restore original armature visibility and selection states
+        # for armature, state in armature_states.items():
+            # armature.select_set(state["select"])
+            # armature.hide_set(state["hide"])
+            
+        
 # def ExportAll(self, context):
 #     #Iterate through all objects in the scene
 def ExportAll(self, context):

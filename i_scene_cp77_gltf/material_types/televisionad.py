@@ -9,115 +9,7 @@ class TelevisionAd:
         self.BasePath = BasePath
         self.ProjPath = ProjPath
         self.image_format = image_format
-
-    # (1-t)a+tb
-    def createLerpNode(self):
-        if 'lerp' in bpy.data.node_groups.keys():
-            return bpy.data.node_groups['lerp']
-        else:
-            CurMat = bpy.data.node_groups.new('lerp', 'ShaderNodeTree')
-            CurMat.inputs.new('NodeSocketFloat','A' )
-            CurMat.inputs.new('NodeSocketFloat','B' )
-            CurMat.inputs.new('NodeSocketFloat','t' )
-            CurMat.outputs.new('NodeSocketFloat','result' )
-            GroupInput = create_node(CurMat.nodes,"NodeGroupInput",(0, 0), label="Group Input")
-            GroupOutput = create_node(CurMat.nodes,"NodeGroupOutput",(700, 0), label="Group Output")
-            sub = create_node(CurMat.nodes,"ShaderNodeMath", (200,100) , operation = 'SUBTRACT')
-            mul = create_node(CurMat.nodes,"ShaderNodeMath", (350,50) , operation = 'MULTIPLY')
-            mul2 =create_node(CurMat.nodes,"ShaderNodeMath", (350,-50) , operation = 'MULTIPLY')
-            add = create_node(CurMat.nodes,"ShaderNodeMath", (500,0) , operation = 'ADD')
-            sub.inputs[0].default_value = 1.0
-            CurMat.links.new(GroupInput.outputs[2],sub.inputs[1])
-            CurMat.links.new(sub.outputs[0],mul.inputs[0])
-            CurMat.links.new(GroupInput.outputs[0],mul.inputs[1])
-            CurMat.links.new(GroupInput.outputs[2],mul2.inputs[0])
-            CurMat.links.new(GroupInput.outputs[1],mul2.inputs[1])
-            CurMat.links.new(GroupInput.outputs[1],mul2.inputs[1])
-            CurMat.links.new(mul.outputs[0],add.inputs[0])
-            CurMat.links.new(mul2.outputs[0],add.inputs[1])
-            CurMat.links.new(add.outputs[0],GroupOutput.inputs[0])
-
-            return CurMat
         
-    def createVecLerpNode(self):
-        if 'vecLerp' in bpy.data.node_groups.keys():
-            return bpy.data.node_groups['vecLerp']
-        else:
-            CurMat = bpy.data.node_groups.new('vecLerp', 'ShaderNodeTree')
-            CurMat.inputs.new('NodeSocketVector','A' )
-            CurMat.inputs.new('NodeSocketVector','B' )
-            CurMat.inputs.new('NodeSocketVector','t' )
-            CurMat.outputs.new('NodeSocketVector','result' )
-            GroupInput = create_node(CurMat.nodes,"NodeGroupInput",(0, 0), label="Group Input")
-            GroupOutput = create_node(CurMat.nodes,"NodeGroupOutput",(700, 0), label="Group Output")
-            sub = create_node(CurMat.nodes,"ShaderNodeVectorMath", (200,100) , operation = 'SUBTRACT')
-            mul = create_node(CurMat.nodes,"ShaderNodeVectorMath", (350,50) , operation = 'MULTIPLY')
-            mul2 =create_node(CurMat.nodes,"ShaderNodeVectorMath", (350,-50) , operation = 'MULTIPLY')
-            add = create_node(CurMat.nodes,"ShaderNodeVectorMath", (500,0) , operation = 'ADD')
-            sub.inputs[0].default_value = (1,1,1)
-            CurMat.links.new(GroupInput.outputs[2],sub.inputs[1])
-            CurMat.links.new(sub.outputs[0],mul.inputs[0])
-            CurMat.links.new(GroupInput.outputs[0],mul.inputs[1])
-            CurMat.links.new(GroupInput.outputs[2],mul2.inputs[0])
-            CurMat.links.new(GroupInput.outputs[1],mul2.inputs[1])
-            CurMat.links.new(GroupInput.outputs[1],mul2.inputs[1])
-            CurMat.links.new(mul.outputs[0],add.inputs[0])
-            CurMat.links.new(mul2.outputs[0],add.inputs[1])
-            CurMat.links.new(add.outputs[0],GroupOutput.inputs[0])
-
-            return CurMat
-
-        
-    def createHash12Node(self):
-        if 'hash12' in bpy.data.node_groups.keys():
-            return bpy.data.node_groups['hash12']
-        else:     
-            CurMat = bpy.data.node_groups.new('hash12', 'ShaderNodeTree')
-            CurMat.inputs.new('NodeSocketVector','vector' )
-            CurMat.outputs.new('NodeSocketFloat','result' )
-            GroupInput = create_node(CurMat.nodes,"NodeGroupInput",(-500, 0), label="Group Input")
-            GroupOutput = create_node(CurMat.nodes,"NodeGroupOutput",(1350, 0), label="Group Output")
-            separate = create_node(CurMat.nodes,"ShaderNodeSeparateXYZ",  (-350,0))      
-            combine = create_node(CurMat.nodes,"ShaderNodeCombineXYZ",  (-200,0)) 
-            combine2 = create_node(CurMat.nodes,"ShaderNodeCombineXYZ",  (-200,-50)) 
-            vecMul = create_node(CurMat.nodes,"ShaderNodeVectorMath",  (0,0), operation = "MULTIPLY") 
-            frac = create_node(CurMat.nodes,"ShaderNodeVectorMath",  (150,0), operation = "FRACTION") 
-            vecMul.inputs[1].default_value = (.1031,.1031,.1031)
-            dot = create_node(CurMat.nodes,"ShaderNodeVectorMath",  (300,-50), operation = "DOT_PRODUCT") 
-            vecAdd = create_node(CurMat.nodes,"ShaderNodeVectorMath",  (0,-50), operation = "ADD") 
-            vecAdd2 = create_node(CurMat.nodes,"ShaderNodeVectorMath",  (600,0), operation = "ADD")
-            combine3 = create_node(CurMat.nodes,"ShaderNodeCombineXYZ",  (450,-50))
-            separate2 = create_node(CurMat.nodes,"ShaderNodeSeparateXYZ",  (750,0)) 
-            add = create_node(CurMat.nodes,"ShaderNodeMath",  (900,0), operation = "ADD")
-            mul = create_node(CurMat.nodes,"ShaderNodeMath",  (1050,0), operation = "MULTIPLY")
-            frac2 = create_node(CurMat.nodes,"ShaderNodeMath",  (1200,0), operation = "FRACT")
-            CurMat.links.new(GroupInput.outputs[0],separate.inputs[0])
-            CurMat.links.new(separate.outputs[0],combine.inputs[0])
-            CurMat.links.new(separate.outputs[1],combine.inputs[1])
-            CurMat.links.new(separate.outputs[0],combine.inputs[2])
-            CurMat.links.new(combine.outputs[0],vecMul.inputs[0])
-            CurMat.links.new(vecMul.outputs[0],frac.inputs[0])
-            CurMat.links.new(separate.outputs[1],combine2.inputs[0])
-            CurMat.links.new(separate.outputs[2],combine2.inputs[1])
-            CurMat.links.new(separate.outputs[0],combine2.inputs[2])
-            CurMat.links.new(combine2.outputs[0],vecAdd.inputs[0])
-            vecAdd.inputs[1].default_value = (33.33,33.33,33.33)
-            CurMat.links.new(frac.outputs[0],dot.inputs[0])
-            CurMat.links.new(vecAdd.outputs[0],dot.inputs[1])
-            CurMat.links.new(dot.outputs["Value"],combine3.inputs[0])
-            CurMat.links.new(dot.outputs["Value"],combine3.inputs[1])
-            CurMat.links.new(dot.outputs["Value"],combine3.inputs[2])
-            CurMat.links.new(frac.outputs[0],vecAdd2.inputs[0])
-            CurMat.links.new(combine3.outputs[0],vecAdd2.inputs[1])
-            CurMat.links.new(vecAdd2.outputs[0],separate2.inputs[0])
-            CurMat.links.new(separate2.outputs[0],add.inputs[0])
-            CurMat.links.new(separate2.outputs[1],add.inputs[1])
-            CurMat.links.new(add.outputs[0],mul.inputs[0])
-            CurMat.links.new(separate2.outputs[2],mul.inputs[1])
-            CurMat.links.new(mul.outputs[0],frac2.inputs[0])
-            CurMat.links.new(frac2.outputs[0],GroupOutput.inputs[0])
-            return CurMat   
-
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes['Principled BSDF']
@@ -410,7 +302,7 @@ class TelevisionAd:
             CurMat.links.new(subUV.outputs[0],adNode.inputs[0])
 
             # rndBlocks  
-            lerpG = self.createLerpNode()
+            lerpG = createLerpGroup()
             lerp = create_node(CurMat.nodes,"ShaderNodeGroup",(-1400, 675), label="lerp")
             lerp.node_tree = lerpG 
             lerp.inputs[0].default_value = 2
@@ -434,7 +326,7 @@ class TelevisionAd:
                 brokenUVGroup.outputs.new('NodeSocketVector','brokenUV')
                 brokenUVGroupI = create_node(brokenUVGroup.nodes, "NodeGroupInput",(-1400,0))
                 brokenUVGroupO = create_node(brokenUVGroup.nodes, "NodeGroupOutput",(200,0))
-                hash12G = self.createHash12Node()
+                hash12G = createHash12Group()
                 hash12 = create_node(brokenUVGroup.nodes,"ShaderNodeGroup",(-650,-50), label="hash12")
                 hash12.node_tree = hash12G
                 add8 = create_node(brokenUVGroup.nodes,"ShaderNodeMath", (-1250,0) , operation = 'ADD')
@@ -512,7 +404,7 @@ class TelevisionAd:
                 vecMul2 = create_node(rndColorIGroup.nodes,"ShaderNodeVectorMath", (-350,-25), operation="MULTIPLY")
                 vecSub = create_node(rndColorIGroup.nodes,"ShaderNodeVectorMath", (-200,-25), operation="SUBTRACT")
                 vecSub.inputs[1].default_value = (0.1625,0.1625,0.1625)
-                hash12G = self.createHash12Node()
+                hash12G = createHash12Group()
                 hash12_2 = create_node(rndColorIGroup.nodes,"ShaderNodeGroup",(-50,-25), label="hash12")
                 hash12_2.node_tree = hash12G
                 mul9 = create_node(rndColorIGroup.nodes,"ShaderNodeMath", (100,-25), operation="MULTIPLY")
@@ -713,7 +605,7 @@ class TelevisionAd:
             CurMat.links.new(separate4.outputs[2],combine10.inputs[2])
 
             # lerp(adTex, dirtTex, dirtOpacity) and link to pBSFD
-            vecLerpG = self.createVecLerpNode()
+            vecLerpG = createVecLerpGroup()
             vecLerp = create_node(CurMat.nodes,"ShaderNodeGroup",(-200,200), label="vecLerp")
             vecLerp.node_tree = vecLerpG   
             CurMat.links.new(combine10.outputs[0],vecLerp.inputs[0])
@@ -726,7 +618,7 @@ class TelevisionAd:
         CurMat.links.new(m.outputs[0],pBSDF.inputs["Metallic"])
 
         # lerp(Roughness, DirtRoughness, dirtOpacity) and link to pBSFD
-        lerpG = self.createLerpNode()
+        lerpG = createLerpGroup()
         lerp3 = create_node(CurMat.nodes,"ShaderNodeGroup",(-200,0), label="lerp")
         lerp3.node_tree = lerpG
         CurMat.links.new(r.outputs[0],lerp3.inputs[0])

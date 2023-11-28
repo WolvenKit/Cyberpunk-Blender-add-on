@@ -89,6 +89,9 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     # otherwise just skip this section
     #
     anim_files = glob.glob(path+"\\base\\animations\\"+"\**\*.glb", recursive = True)
+    ep1_anim_files = glob.glob(path+"\\ep1\\animations\\"+"\**\*.glb", recursive = True)
+    anim_files = anim_files + ep1_anim_files
+
     rig=None
     bones=None
     chunks=None
@@ -245,11 +248,16 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                 comps= j['Data']['RootChunk']['components']
 
             for c in comps:
-                if 'mesh' in c.keys():
-                    print(c['mesh']['DepotPath']['$value'])
-                    if isinstance( c['mesh']['DepotPath']['$value'], str):
+                if 'mesh' in c.keys() or 'graphicsMesh' in c.keys():
+                   # print(c['mesh']['DepotPath']['$value'])
+                    meshname=''
+                    if 'mesh' in c.keys() and isinstance( c['mesh']['DepotPath']['$value'], str):
                         meshname=os.path.basename(c['mesh']['DepotPath']['$value'])
                         meshpath=os.path.join(path, c['mesh']['DepotPath']['$value'][:-4]+'glb')
+                    elif 'graphicsMesh' in c.keys() and isinstance( c['graphicsMesh']['DepotPath']['$value'], str):
+                        meshname=os.path.basename(c['graphicsMesh']['DepotPath']['$value'])
+                        meshpath=os.path.join(path, c['graphicsMesh']['DepotPath']['$value'][:-4]+'glb')
+                    if meshname:
                         if meshname not in exclude_meshes:      
                             if os.path.exists(meshpath):
                                 #if True:
@@ -533,7 +541,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                             obj.hide_set(not cm_list[subnum])
                                 #else:
                                 except:
-                                    print("Failed on ",c['mesh']['DepotPath']['$value'])
+                                    print("Failed on ",meshname)
     print('Exported' ,app_name)
      
               # find the .phys file jsons

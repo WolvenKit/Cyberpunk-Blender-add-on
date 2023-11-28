@@ -1,0 +1,23 @@
+#Simple build to run on merge to main and on change of PR on any branch.
+#Can be also triggered manually from the Actions tab.
+#Build is available as artifact once action finishes.
+
+name: simple_build
+on:
+  push:
+    branches: [ 'main' ]
+  pull_request:
+    branches: [ '**' ]
+  workflow_dispatch:
+  
+jobs:
+  Build:
+    runs-on: ubuntu-latest
+    steps:        
+      - name: Build addon
+        uses: blenderkit/blender-addon-build@main
+        with:
+          name: Cyberpunk Blender Plugin
+          name-suffix: "PR-time"
+          build-location: "./i_scene_cp77_gltf/"
+          exclude-files: ".git;.github;README.md"
