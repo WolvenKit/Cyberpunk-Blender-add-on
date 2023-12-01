@@ -9,6 +9,7 @@ from math import sin,cos
 from mathutils import Vector, Matrix , Quaternion
 import bmesh
 from ..main.common import json_ver_validate
+from .phys_import import cp77_phys_import
 
 # The appearance list needs to be the appearanceNames for each ent that you want to import, will import all if not specified
 # if you've already imported the body/head and set the rig up you can exclude them by putting them in the exclude_meshes list 
@@ -545,8 +546,6 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                 #else:
                                 except:
                                     print("Failed on ",meshname)
-    if app_name:
-        print('Exported' ,app_name)
      
               # find the .phys file jsons
     if include_collisions:
@@ -557,101 +556,18 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
         else:
             if len(chassis_info) > 0:
                 chassis_z = chassis_info['localTransform']['Position']['z']['Bits'] / 131072
+                chassis_phys_j=os.path.basename(chassis_info['collisionResource']['DepotPath']['$value'])+'.json'
             else:
                 #this isn't really right, but the value seems to always be very close so it's better than 0
                 chassis_z = rig_j['boneTransforms'][2]['Translation']['Z']
-            print('colliders:', ent_colliderComps)
-  
-            chassis_phys_j=os.path.basename(chassis_info['collisionResource']['DepotPath']['$value'])+'.json'
+            #print('colliders:', ent_colliderComps)
             for physJsonPath in physJsonPaths:
                 if os.path.basename(physJsonPath)==chassis_phys_j:
-                    with open(physJsonPath, "r",) as phys:
-                        physdata = json.load(phys)
-                    if physdata:
-                        # create a new collector named after the file
-                        collection_name = os.path.splitext(os.path.basename(physJsonPath))[0]
-                        new_collection = bpy.data.collections.new(collection_name)
-                        bpy.context.scene.collection.children.link(new_collection)
-
-                        # create the new objects
-                        def create_new_object(name, transform):
-                            mesh = bpy.data.meshes.new(name)
-                            obj = bpy.data.objects.new(name, mesh)
-                            new_collection.objects.link(obj)  
-                            bpy.context.view_layer.objects.active = obj
-                            obj.select_set(True)
-                            constraint = obj.constraints.new('CHILD_OF')
-                            constraint.target = rig
-                            constraint.subtarget = 'Base'
-                    
-                             # Apply inverse
-                            bpy.context.view_layer.objects.active = obj
-                            bpy.ops.constraint.childof_set_inverse(constraint="Child Of", owner='OBJECT')
-                                                    
-                            position = (transform['position']['X'], transform['position']['Y'], transform['position']['Z'])
-                            orientation = (transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i'])
-                            obj.location = position
-                            obj.delta_location[2] = chassis_z 
-                            obj.rotation_mode = 'QUATERNION'
-                            obj.rotation_quaternion = orientation
-
-                            return obj
-
-                        # Iterate through the collisionShapes array, creating submeshes in the collector named after the collider types
-                        for index, i in enumerate(physdata['Data']['RootChunk']['bodies'][0]['Data']['collisionShapes']):
-                            
-                            colliderType = i['Data']['$type']
-                            submeshName = str(index) + '_' + colliderType
-                            transform = i['Data']['localToBody']
-                        
-                            # If the type is "physicsColliderConvex", or "physicsColliderConcave" create meshes with vertices everywhere specified in the vertices array
-                            if colliderType == "physicsColliderConvex" or colliderType == "physicsColliderConcave":
-                                obj = create_new_object(submeshName, transform) 
-                                obj['collisionShape'] = colliderType
-                                obj['colliderResource'] = physJsonPath                               
-                                if 'vertices' in i['Data']:
-                                    verts = [(j['X'], j['Y'], j['Z']) for j in i['Data']['vertices']]
-                                    bm = bmesh.new()
-                                    for v in verts:
-                                        bm.verts.new(v)
-                                    bm.to_mesh(obj.data)
-                                    bm.free()
-
-                            # If the type is "physicsColliderBox", create a box centered at the object's location
-                            elif colliderType == "physicsColliderBox":
-                                half_extents = i['Data']['halfExtents']
-                                dimensions = (2 * half_extents['X'], 2 * half_extents['Y'], 2 * half_extents['Z'])
-                                bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0))
-                                box = bpy.context.object
-                                box['collisionShape'] = colliderType
-                                box['colliderResource'] = physJsonPath  
-                                box.scale = dimensions
-                                box.name = submeshName
-                                box.location = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
-                                box.delta_location[2] = chassis_z 
-                                box.rotation_mode = 'QUATERNION'  # Set the rotation mode to QUATERNION first
-                                box.rotation_quaternion = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
-                                box.display_type = 'BOUNDS'
-                                
-                                new_collection.objects.link(box)
-                                bpy.context.collection.objects.unlink(box) # Unlink from the current collection
-
-                            # handle physicsColliderCapsule       
-                            elif colliderType == "physicsColliderCapsule":
-                                radius = i['Data']['radius']
-                                height = i['Data']['height']
-                                bpy.ops.mesh.primitive_cylinder_add(radius=radius, depth=height, location=(0, 0, 0))
-                                capsule = bpy.context.object
-                                capsule['collisionShape'] = colliderType
-                                capsule['colliderResource'] = physJsonPath  
-                                capsule.name = submeshName
-                                capsule.rotation_mode = 'QUATERNION'
-                                capsule.location = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
-                                capsule.delta_location[2] = chassis_z 
-                                capsule.rotation_quaternion = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
-                                capsule.display_type = 'WIRE'
-                                new_collection.objects.link(capsule)
-                                bpy.context.collection.objects.unlink(capsule) 
+                    cp77_phys_import(physJsonPath, rig, chassis_z)
+ 
+ 
+    if app_name:
+        print('Exported' ,app_name)
 
     print("--- %s seconds ---" % (time.time() - start_time))
 

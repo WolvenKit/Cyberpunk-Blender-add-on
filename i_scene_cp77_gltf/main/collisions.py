@@ -2,6 +2,56 @@ import bpy
 import bmesh
 from mathutils import Vector, Euler, Quaternion
 
+def create_new_object(name, transform, collision_collection):
+    mesh = bpy.data.meshes.new(name)
+    obj = bpy.data.objects.new(name, mesh)
+    collision_collection.objects.link(obj)  
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+    # create dicts for position/orientation
+    position = (transform['position']['X'], transform['position']['Y'], transform['position']['Z'])
+    #orientation = (transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i'])
+    obj.location = position
+    return obj
+
+def set_collider_props(obj, collision_shape, physmat, collision_type):
+    obj['collisionType'] = collision_type
+    obj['collisionShape'] = collision_shape
+    obj['physics_material'] = physmat
+    obj.display_type = 'WIRE'
+    obj.color = (0.005, 0.79105, 1, 1)
+    obj.show_wire = True
+    obj.show_in_front = True
+    obj.display.show_shadows = False
+    obj.rotation_mode = 'QUATERNION'
+
+                
+def draw_convex_collider(name, collision_collection, vertices, physmat, transform, collision_type):
+    collision_shape = "physicsColliderConvex"
+    obj = create_new_object(name, transform, collision_collection)
+    set_collider_props(obj, collision_shape, physmat, collision_type)
+    if vertices:
+        verts = [(j['X'], j['Y'], j['Z']) for j in vertices]
+        bm = bmesh.new()
+        for v in verts:
+            bm.verts.new(v)
+        bm.to_mesh(obj.data)
+        bm.free()
+
+def draw_box_collider(name, collision_collection, half_extents, transform, physmat, collision_type):
+    collision_shape = "physicsColliderBox"
+    bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0))
+    box = bpy.context.object
+    set_collider_props(box, collision_shape, physmat, collision_type)
+    dimensions = (2 * half_extents['X'], 2 * half_extents['Y'], 2 * half_extents['Z'])          
+    box.scale = dimensions
+    box.name = name
+    set_collider_props(box, collision_shape, physmat, collision_type)
+    box.location = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
+    box.rotation_quaternion = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
+    collision_collection.objects.link(box)
+    bpy.context.collection.objects.unlink(box) # Unlink from the current collection
+
 def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, sampleverts, radius, height, physics_material):
     is_edit_mode = bpy.context.object.mode == 'EDIT'
     selected_objects = context.selected_objects
@@ -75,14 +125,10 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
 
                 # Link it to scene
                 convcol = bpy.data.objects.new("physicsColliderConvex", mesh)
-                convcol.rotation_mode = 'QUATERNION'
                 convcol.matrix_world = matrix
-                convcol['collisionType'] = collider_type
-                convcol['collisionShape'] = 'physicsColliderConvex'
-                convcol['physics_material'] = physics_material
+                shape = "physicsColliderConvex"
+                set_collider_props(convcol, shape, physics_material, collider_type)
                 colliderCollection.objects.link(convcol)
-                convcol.display_type = 'WIRE'
-                convcol.color = (0.005, 0.79105, 1, 1)
                 context.view_layer.objects.active = convcol
                 convcol.select_set(True)
 
@@ -98,20 +144,14 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
             # Create a new mesh object
             bpy.ops.mesh.primitive_cube_add(size=1, enter_editmode=False, align='WORLD', location=(0, 0, 0))
             box = context.object
-            box.name = "physicsColliderBox"
-            box['collisionType'] = collider_type
-            box['collisionShape'] = 'physicsColliderBox'
-            box['physics_material'] = physics_material
+            shape = "physicsColliderBox"
+            box.name = shape
+            set_collider_props(box, shape, physics_material, collider_type)
             context.collection.objects.unlink(box)
-            box.display_type = 'WIRE'
-            box.color = (0.005, 0.79105, 1, 1)
-
             size = max_vertex - min_vertex
-
             # Set the position and scale of the bounding box
             box.location = center
             box.scale = size 
-            box.rotation_mode = 'QUATERNION'
             bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
             colliderCollection.objects.link(box)
             context.view_layer.objects.active = box
@@ -141,24 +181,15 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
                 elif vert.co[2] > 0:
                     vert.co[2] += delta_Z
 
-            name = 'physicsColliderCapsule'
+            shape = 'physicsColliderCapsule'
+            name = shape
             mesh = bpy.data.meshes.new(name)
             bm.to_mesh(mesh)
             mesh.update()
             bm.free()
-
             capsule = bpy.data.objects.new(name, mesh)
-            capsule.display_type = 'WIRE'
-            capsule.color = (0.005, 0.79105, 1, 1)
-
-            capsule.show_wire = True
-            capsule.show_in_front = True
-            capsule.display.show_shadows = False
+            set_collider_props(capsule, collision_shape, physics_material, collider_type)
             capsule.location = center
-            capsule.rotation_mode = 'QUATERNION'
-            capsule['collisionType'] = collider_type
-            capsule['collisionShape'] = 'physicsColliderCapsule'
-            capsule['physics_material'] = physics_material
             capsule.rotation_quaternion[1] = 1
             bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
             if is_edit_mode:
@@ -178,22 +209,13 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
                 r = float(radius)
             bm = bmesh.new()
             bmesh.ops.create_uvsphere(bm, u_segments=8, v_segments=9, radius=r)
-            name = 'physicsColliderSphere'
+            shape = 'physicsColliderSphere'
+            name = shape
             mesh = bpy.data.meshes.new(name)
             bm.to_mesh(mesh)
             mesh.update()
             bm.free()
-
             sphere = bpy.data.objects.new(name, mesh)
-            sphere.display_type = 'WIRE'
-            sphere.color = (0.005, 0.79105, 1, 1)
-            sphere.show_wire = True
-            sphere.show_in_front = True
-            sphere.display.show_shadows = False
-            sphere.location = center
-            sphere.rotation_mode = 'QUATERNION'
-            sphere['collisionType'] = collider_type
-            sphere['collisionShape'] = 'physicsColliderSphere'
-            sphere['physics_material'] = physics_material
+            set_collider_props(sphere, collision_shape, physics_material, collider_type)
             colliderCollection.objects.link(sphere)
 
