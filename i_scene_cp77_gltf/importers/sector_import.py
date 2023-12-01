@@ -31,6 +31,38 @@ import bmesh
 
 scale_factor=1
 
+def apply_transform(ob, use_location=True, use_rotation=True, use_scale=True):
+    mb = ob.matrix_basis
+    I = Matrix()
+    loc, rot, scale = mb.decompose()
+
+    # rotation
+    T = Matrix.Translation(loc)
+    #R = rot.to_matrix().to_4x4()
+    R = mb.to_3x3().normalized().to_4x4()
+    S = Matrix.Diagonal(scale).to_4x4()
+
+    transform = [I, I, I]
+    basis = [T, R, S]
+
+    def swap(i):
+        transform[i], basis[i] = basis[i], transform[i]
+
+    if use_location:
+        swap(0)
+    if use_rotation:
+        swap(1)
+    if use_scale:
+        swap(2)
+        
+    M = transform[0] @ transform[1] @ transform[2]
+    if hasattr(ob.data, "transform"):
+        ob.data.transform(M)
+    for c in ob.children:
+        c.matrix_local = M @ c.matrix_local
+        
+    ob.matrix_basis = basis[0] @ basis[1] @ basis[2]
+
 def ext_row(rowdata):
     row=[0,0,0,0]
     row[0]=rowdata['X']
@@ -326,7 +358,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
             #   continue
             data = e['Data']
             type = data['$type']
-            if True:# type=='worldBendedMeshNode' :#or type=='worldCableMeshNode':
+            if True:# type=='worldBendedMeshNode' :#or type=='worldCableMeshNode': # can add a filter for dev here
                 match type:
                     case 'worldEntityNode' | 'worldDeviceNode': 
                         #print('worldEntityNode',i)
@@ -390,49 +422,57 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
                                         if 'Armature' in obj.name:
                                             obj.hide_set(True)
-
-                    case 'worldCableMeshNode' :
+                       
+                    case 'worldBendedMeshNode' | 'worldCableMeshNode' :
                         print(type)
                         meshname = data['mesh']['DepotPath']['$value'] 
                         instances = [x for x in t if x['NodeIndex'] == i]
                         if len(instances)>1:
                             print('Multiple Instances of node ',i)
                         if len(instances)>0 and (meshname != 0):
-                            pos=get_pos(instances[0])
-                            rot =(1,0,0,0)
-                            scale = get_scale(instances[0])
-                            #inst_m=Matrix.LocRotScale(pos,rot,scale)
-                            defData=data['deformationData']
+                            node=nodes[i]
+                            defData=node['Data']['deformationData']
+                            coll_scene = C.scene.collection
+
+                            inst_pos=(0,0,0)
+                            inst_rot =Quaternion((0.707,0,.707,0))
+                            inst_scale =Vector((1,1,1))
+                            inst_m=Matrix.LocRotScale(inst_pos,inst_rot,inst_scale)
+
                             joints=[]
-                            for idx,tt in enumerate(defData):
-                                o = bpy.data.objects.new( "jnt"+str(idx), None )
-                               # uncomment these if you want to see the deform data empties
-                               # bpy.context.scene.collection.objects.link( o )
-                               # o.empty_display_size = 1
-                               # o.empty_display_type = 'SINGLE_ARROW' 
+                            mesh_name = "bendable_"+str(i)
+                            mesh_data = bpy.data.meshes.new(mesh_name)
+
+                            for idx,tt in enumerate(defData):   
                                 M=Matrix((ext_row(defData[idx]['X']),ext_row(defData[idx]['Y']),ext_row(defData[idx]['Z']),ext_row(defData[idx]['W'])))
                                 M=M.transposed()
-                                #Need to add the pos to the matrix here.                                
-                                M[0][3]+=pos[0]
-                                M[1][3]+=pos[1]
-                                M[2][3]+=pos[2]
-                                o.matrix_world=M
-                                joints.append(o.name)
-                            splinePoints=[]
-                            for jnt in joints:
-                                point=bpy.data.objects[jnt].location
-                                splinePoints.append(point)
-                            curve=bpy.data.curves.new('worldSplineNode_'+str(i),'CURVE')    
+                                joints.append(M.to_translation())
+                            mesh_data.from_pydata(joints,[],[])
+                            mesh_obj = bpy.data.objects.new(mesh_data.name, mesh_data)
+                            #coll_scene.objects.link(mesh_obj)  
+
+                            inst=[n for n in t if n['NodeIndex']==i][0]
+                            
+                            mesh_obj.rotation_mode='QUATERNION'
+                            mesh_obj.rotation_quaternion=get_rot(inst)
+                            pos=get_pos(inst)
+                            mesh_obj.location=pos
+                            apply_transform(mesh_obj)
+                               
+                            curve=bpy.data.curves.new('worldSplineNode_','CURVE')    
                             curve.splines.new('BEZIER')
                             bzps=curve.splines[0].bezier_points
-                            bzps.add(len(splinePoints)-1)
-                            for p_no,point in enumerate(splinePoints):                        
-                                bzps[p_no].co=point
+                            bzps.add(len(mesh_obj.data.vertices)-1)
+                            for p_no,v in enumerate(mesh_obj.data.vertices):    
+                                bzps[p_no].co=v.co
                                 bzps[p_no].handle_left_type='AUTO'
                                 bzps[p_no].handle_right_type='AUTO'
-                            curve_obj = bpy.data.objects.new('worldSplineNode_'+str(i), curve)
+                                
+                            curve_obj = bpy.data.objects.new('worldSplineNode_', curve)
+                            
                             coll_scene.objects.link(curve_obj)
                             curvelength=get_curve_length(curve_obj)
+
                             groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
                             while len(groupname) > 63:
                                 groupname = groupname[:-1]
@@ -445,9 +485,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                 new['mesh']=meshname
                                 new['debugName']=e['Data']['debugName']
                                 new['sectorName']=sectorName 
-                                #curve_obj.location=pos
-                                #curve_obj.rotation_quaternion=rot
-                                #curve_obj.scale = scale
+
                                 min_vertex = Vector((float('inf'), float('inf'), float('inf')))
                                 max_vertex = Vector((float('-inf'), float('-inf'), float('-inf')))
                                 for obj in group.all_objects:
@@ -460,94 +498,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                             max_vertex = Vector(max(max_vertex[i], vertex_world[i]) for i in range(3))
                                 meshxLength=min_vertex[0]-max_vertex[0]
                                 meshXScale=curvelength/meshxLength
-
-                               
-                                for old_obj in group.all_objects:                            
-                                    obj=old_obj.copy()  
-                                    new.objects.link(obj) 
-                                    if obj.type=='MESH':
-                                        curveMod=obj.modifiers.new('Curve','CURVE')
-                                        if curveMod:
-                                            curveMod.object=curve_obj
-                                            curveMod.deform_axis='NEG_X'
-                                            obj.scale.x=abs(meshXScale)
-                                    
-                    case 'xworldBendedMeshNode':
-                        print(type)
-                        meshname = data['mesh']['DepotPath']['$value'] 
-                        instances = [x for x in t if x['NodeIndex'] == i]
-                        if len(instances)>1:
-                            print('Multiple Instances of node ',i)
-                        if len(instances)>0 and (meshname != 0):
-                            inst=instances[0]
-                            pos=get_pos(inst)
-                            p=(0,0,0)
-                            rot =Quaternion(get_rot(inst))
-                            scl=(1,1,1)
-                            scale = get_scale(inst)
-                            inst_m=Matrix.LocRotScale(p,rot,scl)
-                            defData=data['deformationData']
-                            joints=[]
-                            for idx,tt in enumerate(defData):
-                                o = bpy.data.objects.new( "jnt"+str(idx), None )
-                                bpy.context.scene.collection.objects.link( o )
-                                o.empty_display_size = 1
-                                o.empty_display_type = 'SINGLE_ARROW' 
-                                M=Matrix((ext_row(defData[idx]['X']),ext_row(defData[idx]['Y']),ext_row(defData[idx]['Z']),ext_row(defData[idx]['W'])))
-                                M=M.transposed()
-                                #Need to add the pos to the matrix here.                                
-                                M[0][3]+=pos[0]
-                                M[1][3]+=pos[1]
-                                M[2][3]+=pos[2]
-                                #M= inst_m @ M
-                                o.matrix_world=M
-                                joints.append(o.name)
-                            splinePoints=[]
-                            for jnt in joints:
-                                point=bpy.data.objects[jnt].location
-                                splinePoints.append(point)
-                            curve=bpy.data.curves.new('worldSplineNode_'+str(i),'CURVE')    
-                            curve.splines.new('BEZIER')
-                            bzps=curve.splines[0].bezier_points
-                            bzps.add(len(splinePoints)-1)
-                            for p_no,point in enumerate(splinePoints):                        
-                                bzps[p_no].co=point
-                                bzps[p_no].handle_left_type='AUTO'
-                                bzps[p_no].handle_right_type='AUTO'
-                            curve_obj = bpy.data.objects.new('worldSplineNode_'+str(i), curve)
-                            curve_obj.rotation_mode='QUATERNION'
-
-                            coll_scene.objects.link(curve_obj)
-                            curvelength=get_curve_length(curve_obj)
-                            groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
-                            while len(groupname) > 63:
-                                groupname = groupname[:-1]
-                            group=Masters.children.get(groupname)
-                            if False: # (group):
-                                new=bpy.data.collections.new(groupname)
-                                Sector_coll.children.link(new)
-                                new['nodeType']=type
-                                new['nodeIndex']=i
-                                new['mesh']=meshname
-                                new['debugName']=e['Data']['debugName']
-                                new['sectorName']=sectorName 
-                                #curve_obj.location=pos
-                                #curve_obj.rotation_quaternion=rot
-                                #curve_obj.scale = scale
-                                min_vertex = Vector((float('inf'), float('inf'), float('inf')))
-                                max_vertex = Vector((float('-inf'), float('-inf'), float('-inf')))
-                                for obj in group.all_objects:
-                                    if obj.type == 'MESH':
-                                        matrix = obj.matrix_world
-                                        mesh = obj.data
-                                        for vertex in mesh.vertices:
-                                            vertex_world = matrix @ vertex.co
-                                            min_vertex = Vector(min(min_vertex[i], vertex_world[i]) for i in range(3))
-                                            max_vertex = Vector(max(max_vertex[i], vertex_world[i]) for i in range(3))
                                 meshyLength=min_vertex[1]-max_vertex[1]
                                 meshYScale=curvelength/meshyLength
-
-                               
                                 for old_obj in group.all_objects:                            
                                     obj=old_obj.copy()  
                                     new.objects.link(obj) 
@@ -555,12 +507,14 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         curveMod=obj.modifiers.new('Curve','CURVE')
                                         if curveMod:
                                             curveMod.object=curve_obj
-                                            curveMod.deform_axis='POS_Y'
-                                            obj.scale.x=abs(meshYScale)
-                                   
-
-                                
-
+                                            if type=='worldCableMeshNode':
+                                                curveMod.deform_axis='NEG_X'
+                                                obj.scale.x=abs(meshXScale)
+                                            if type=='worldBendedMeshNode':
+                                                curveMod.deform_axis='POS_Y'
+                                                obj.scale.y=abs(meshYScale)
+                                                obj.rotation_mode='QUATERNION'
+                                                obj.rotation_quaternion = Quaternion((0.707,0,0.707,0))
     
                     case 'worldInstancedMeshNode' :
                         #print('worldInstancedMeshNode')
