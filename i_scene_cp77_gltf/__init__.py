@@ -271,10 +271,10 @@ physmats_data = physmat_list()
 enum_items = [(mat.get("Name", ""), mat.get("Name", ""), "") for mat in physmats_data]
 class CP77_PT_PanelProps(PropertyGroup):
 # collision panel props:
-    collider_type: EnumProperty(
+    collision_type: EnumProperty(
         name="Collision Type",
         items=[
-        ('VEHICLE', ".phys", "Generate .phys formatted collisions for a vehicle mod"),
+        ('VEHICLE', "Vehicle", "Generate .phys formatted collisions for a vehicle mod"),
         ('ENTITY', "entColliderComponent", "Generate entCollisionComponents"),
         ('WORLD', "worldCollisionNode", "Generate worldCollisionNode")
         ],
@@ -390,7 +390,7 @@ class CP77CollisionGenerator(Operator):
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
-        CP77CollisionGen(self, context,props.matchSize, props.collider_type, props.collision_shape, props.sampleverts, props.radius, props.height, props.physics_material)
+        CP77CollisionGen(self, context,props.matchSize, props.collision_type, props.collision_shape, props.sampleverts, props.radius, props.height, props.physics_material)
         return {"FINISHED"}
     
     def draw(self, context):
@@ -399,7 +399,7 @@ class CP77CollisionGenerator(Operator):
         row = layout.row(align=True)
         split = row.split(factor=0.5,align=True)
         split.label(text="Collision Type:")
-        split.prop(props, 'collider_type', text="")
+        split.prop(props, 'collision_type', text="")
         row = layout.row(align=True)
         split = row.split(factor=0.5,align=True)
         split.label(text="Collision Shape:")
@@ -471,16 +471,18 @@ class CP77PhysMatAssign(Operator):
             # Set custom properties on the object
             obj = context.object
             props = context.scene.cp77_panel_props
+            obj['simulationType'] = props.simulation_type
             obj["physics_material"] = props.physics_material
             obj["Density"] = physmat_data.get("Density", 0)
             obj["staticFriction"] = physmat_data.get("staticFriction", 0)
             obj["dynamicFriction"] = physmat_data.get("dynamicFriction", 0)
             obj["restitution"] = physmat_data.get("restitution", 0)
             volume = calculate_mesh_volume(obj)
+            obj['volume'] = volume
             # Calculate mass based on density and mesh volume
             mass = obj["Density"] * volume
             obj["Mass"] = mass
-            obj['collisionType'] = props.collider_type
+            obj['collisionType'] = props.collision_type
             a, b, c = obj.dimensions
             Ix = (1 / 12) * obj["Density"] * volume * (b**2 + c**2)
             Iy = (1 / 12) * obj["Density"] * volume * (a**2 + c**2)
@@ -530,7 +532,7 @@ class CP77_PT_CollisionTools(Panel):
                     row = box.row()
                     split = row.split(factor=0.3,align=True)
                     split.label(text='Type:')
-                    split.prop(props, 'collider_type', text="")
+                    split.prop(props, 'collision_type', text="")
                     row = box.row()
                     split = row.split(factor=0.5,align=True)
                     split.label(text="simulationType")

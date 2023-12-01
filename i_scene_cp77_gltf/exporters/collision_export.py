@@ -1,6 +1,10 @@
 import json
+import os 
+import bpy
+from mathutils import Vector, Euler, Quaternion
 
 def cp77_collision_export(filepath):
+    selected_collection = bpy.context.collection
     with open(filepath, 'r') as phys:
         data = json.load(phys)
         physJsonPath = filepath
@@ -9,8 +13,7 @@ def cp77_collision_export(filepath):
         new_file_name = 'new_' + file_name
         output = os.path.join(dir_name, new_file_name)
 
-        collection_name = os.path.splitext(os.path.basename(physJsonPath))[0]
-        collection = bpy.data.collections.get(collection_name)
+        collection = selected_collection
 
         if collection is not None:
             for index, obj in enumerate(collection.objects):
@@ -35,10 +38,10 @@ def cp77_collision_export(filepath):
 
                 elif colliderType == "physicsColliderBox":
                     # Calculate world-space bounding box vertices
-                    world_bounds = [obj.matrix_world @ mathutils.Vector(coord) for coord in obj.bound_box]
+                    world_bounds = [obj.matrix_world @ Vector(coord) for coord in obj.bound_box]
 
                     # Get center of the box in world space
-                    center = sum(world_bounds, mathutils.Vector()) / 8
+                    center = sum(world_bounds, Vector()) / 8
 
                     # Update position in the json based on the center of the cube in world space
                     i['Data']['localToBody']['position']['X'] = center.x
