@@ -60,9 +60,13 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
             # if animations exist, don't hide the armature and get the extras properties
             # We should probably break the base import out into a separate function, have it check the gltf file and then send the info either to anim import or import with materials, but this works too
             animations = gltf_importer.data.animations
+            meshes = gltf_importer.data.animations
             if animations:
                 get_anim_info(animations)
-            else:    
+                if meshes:
+                    if 'Armature' in o.name:
+                        o.hide_set(hide_armatures)
+            else:
             #print('o.name - ',o.name)
                 if 'Armature' in o.name:
                     o.hide_set(hide_armatures)
