@@ -3,11 +3,11 @@ import bpy
 import math
 import json
 import os
+from .common import get_plugin_dir, get_resources_dir, get_refit_dir
 
-
-plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-resources_dir = os.path.join(plugin_dir, "resources")
-refit_dir = os.path.join(resources_dir, "refitters")
+plugin_dir = get_plugin_dir()
+resources_dir = get_resources_dir()
+refit_dir = get_refit_dir()
 
 
 def CP77CollectionList(self, context):
@@ -42,19 +42,41 @@ def find_nearest_vertex_group(obj, vertex):
 
 
 def CP77GroupUngroupedVerts(self, context):
-    """Main function to assign unassigned vertices to nearest vertex group."""
-    obj = bpy.context.object
+    C = bpy.context
+    obj = C.object
+    current_mode = C.mode
+
     if obj.type != 'MESH':
         bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="The active object is not a mesh.")
         return {'CANCELLED'}
-    
-    ungrouped_vertices = [v for v in obj.data.vertices if not v.groups]  
-    for v in ungrouped_vertices:
-        nearest_vertex = find_nearest_vertex_group(obj, v)
-        if nearest_vertex:
-            for g in nearest_vertex.groups:
-                group_name = obj.vertex_groups[g.group].name
-                obj.vertex_groups[group_name].add([v.index], 1.0, 'ADD')
+    else:
+        if current_mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+        ungrouped_vertices = [v for v in obj.data.vertices if not v.groups]
+
+        if ungrouped_vertices:
+            try:
+                for v in ungrouped_vertices:
+                    nearest_vertex = find_nearest_vertex_group(obj, v)
+                    if nearest_vertex:
+                        for g in nearest_vertex.groups:
+                            group_name = obj.vertex_groups[g.group].name
+                            obj.vertex_groups[group_name].add([v.index], 1.0, 'ADD')
+            except Exception as e:
+                print(e)
+
+        # Return to the mode the user was in edit_mesh was giving me a lot of trouble and is probably 
+        # the most common it will be here so special handling for it
+        if C.mode != current_mode:
+            try:
+                if current_mode == 'EDIT_MESH':
+                    bpy.ops.object.mode_set(mode='EDIT')
+                else:
+                    bpy.ops.object.mode_set(mode=current_mode)
+            except Exception as e:
+                print(e)
+    return {'FINISHED'}
 
 def CP77ArmatureSet(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
@@ -292,8 +314,8 @@ def CP77Refit(context, refitter, target_body_path, target_body_name, fbx_rot):
         filename=z.namelist()[0]
         print(filename)
         with z.open(filename) as f:
-                data = f.read()
-                data = json.loads(data)
+            data = f.read()
+            data = json.loads(data)
 
         if data:
             control_points = data.get("deformed_control_points", [])
