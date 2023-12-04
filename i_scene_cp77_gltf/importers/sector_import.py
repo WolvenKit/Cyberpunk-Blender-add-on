@@ -244,7 +244,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     if(meshname != 0):
                         meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
                 case 'worldStaticMeshNode' |'worldRotatingMeshNode'|'worldAdvertisingNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' \
-                    | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode': 
+                    | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode': 
                     if isinstance(e, dict) and 'mesh' in data.keys():
                         meshname = data['mesh']['DepotPath']['$value']
                         #print('Mesh name is - ',meshname, e['HandleId'])
@@ -699,7 +699,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         else:
                                             print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
 
-                    case 'worldStaticMeshNode' |'worldRotatingMeshNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldAdvertismentNode' | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode': 
+                    case 'worldStaticMeshNode' |'worldRotatingMeshNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldAdvertismentNode' | \
+                'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldClothMeshNode': 
                         if isinstance(e, dict) and 'mesh' in data.keys():
                             meshname = data['mesh']['DepotPath']['$value']
                             #print('Mesh name is - ',meshname, e['HandleId'])
