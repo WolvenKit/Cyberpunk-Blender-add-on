@@ -1,3 +1,6 @@
+# Download from Releases >>>
+Not the source above
+
 # Cyberpunk Blender Add-on
 
 ![blender add-on banner panam](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/assets/65016231/a0489b07-68af-4a90-b53e-1ad3ef271f4a)
