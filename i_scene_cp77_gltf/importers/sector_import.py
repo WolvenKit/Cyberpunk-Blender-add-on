@@ -222,7 +222,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
     meshes=[]
     C = bpy.context
 
-    for filepath in jsonpath:    
+    for filepath in jsonpath:
         with open(filepath,'r') as f: 
                 j=json.load(f) 
         sectorName=os.path.basename(filepath)[:-5]
@@ -258,7 +258,6 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                         #print('Mesh name is - ',meshname, e['HandleId'])
                         if(meshname != 0):
                             meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
-
     basenames=[]
     for m in meshes:
          if m['basename'] not in basenames:
@@ -328,6 +327,10 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
               j=json.load(f) 
           
         t=j['Data']['RootChunk']['nodeData']['Data']
+
+        # save node data indices
+        node_data_indices = {obj['NodeIndex']: index for index, obj in enumerate(t)}
+
         sectorName=os.path.basename(filepath)[:-5]
     
         if sectorName in coll_scene.children.keys():
@@ -393,6 +396,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     Sector_coll.children.link(new)
                                     new['nodeType']=type
                                     new['nodeIndex']=i
+                                    new['nodeDataIndex']=node_data_indices[i] if i in node_data_indices else None
                                     new['instance_idx']=idx
                                     new['debugName']=e['Data']['debugName']
                                     new['sectorName']=sectorName 
@@ -424,7 +428,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                             obj.hide_set(True)
                        
                     case 'worldBendedMeshNode' | 'worldCableMeshNode' :
-                        print(type)
+                        #print(type)
                         meshname = data['mesh']['DepotPath']['$value'] 
                         instances = [x for x in t if x['NodeIndex'] == i]
                         if len(instances)>1:
@@ -482,6 +486,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                 Sector_coll.children.link(new)
                                 new['nodeType']=type
                                 new['nodeIndex']=i
+                                new['nodeDataIndex']=node_data_indices[i] if i in node_data_indices else None
                                 new['mesh']=meshname
                                 new['debugName']=e['Data']['debugName']
                                 new['sectorName']=sectorName 
@@ -536,6 +541,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     Sector_coll.children.link(new)
                                     new['nodeType']=type
                                     new['nodeIndex']=i
+                                    new['nodeDataIndex']=node_data_indices[i] if i in node_data_indices else None
                                     new['instance_idx']=idx
                                     new['mesh']=meshname
                                     new['debugName']=e['Data']['debugName']
@@ -559,8 +565,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         obj.location = get_pos(inst_trans)                                         
                                         obj.rotation_quaternion=get_rot(inst_trans)
                                         obj.scale = get_scale(inst_trans)
-                                        if obj.location.x == 0:
-                                            print('Location @ 0 for Mesh - ',meshname, ' - ',i,'HandleId - ', e['HandleId'])      
+                                        #if obj.location.x == 0:
+                                        #    print('Location @ 0 for Mesh - ',meshname, ' - ',i,'HandleId - ', e['HandleId'])
 
                             else:
                                 print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
@@ -598,7 +604,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                             #o.empty_display_type = 'IMAGE'
                             mipath = o['decal']
                             jsonpath = os.path.join(path,mipath)+".json"
-                            print(jsonpath)
+                            #print(jsonpath)
                             try:
                                 with open(jsonpath,'r') as jsonpath:
                                     obj=json.load(jsonpath)
@@ -610,15 +616,14 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                 o.data.materials.append(bpymat)
                             except FileNotFoundError:
                                 name = os.path.basename(jsonpath)
-                                print(f'File not found {name}, you need to export .mi files')   
+                                print(f'File not found {name} ({jsonpath}), you need to export .mi files')
 
                     case 'XworldStaticOccluderMeshNode':
                         #print('worldStaticOccluderMeshNode',i)
                         pass
                     
                     case 'worldSplineNode':
-                        print('worldSplineNode',i)
-                        
+                        #print('worldSplineNode',i)
                         instances = [x for x in t if x['NodeIndex'] == i]
                         if len(instances)>0:
                             spline_node=e
@@ -667,13 +672,14 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                             print("Failed on ",meshpath)
                                     
                                         if (imported):
-                                            #print('Group found for ',groupname) 
+                                            #print('Group found for ',groupname)
                                             instances = [x for x in t if x['NodeIndex'] == i]
                                             for inst in instances:
                                                 new=bpy.data.collections.new(groupname)
                                                 Sector_coll.children.link(new)
                                                 new['nodeType']=type
                                                 new['nodeIndex']=i
+                                                new['nodeDataIndex']=node_data_indices[i] if i in node_data_indices else None
                                                 new['mesh']=meshname
                                                 new['debugName']=e['Data']['debugName']
                                                 new['sectorName']=sectorName
@@ -685,8 +691,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
 
                                                     obj.location = get_pos(inst)
                                                 
-                                                    if obj.location.x == 0:
-                                                        print('Mesh - ',meshname, ' - ',i,'HandleId - ', e['HandleId'])      
+                                                    # if obj.location.x == 0:
+                                                    #    print('Mesh - ',meshname, ' - ',i,'HandleId - ', e['HandleId'])
                                                     curse=bpy.context.scene.cursor.location
                                                     bpy.context.scene.cursor.location=Vector((inst['Pivot']['X'] /scale_factor,inst['Pivot']['Y'] /scale_factor,inst['Pivot']['Z'] /scale_factor))
                                                     with bpy.context.temp_override(selected_editable_objects=obj):
@@ -712,7 +718,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                             groupname = groupname[:-1]
                                         group=Masters.children.get(groupname)
                                         if (group):
-                                            #print('Group found for ',groupname) 
+                                            #print('Group found for ',groupname)
                                             if type=='worldRotatingMeshNode':
                                                 rot_axis=data['rotationAxis']
                                                 axis_no=0
@@ -730,6 +736,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 Sector_coll.children.link(new)
                                                 new['nodeType']=type
                                                 new['nodeIndex']=i
+                                                new['nodeDataIndex']=node_data_indices[i] if i in node_data_indices else None
                                                 new['instance_idx']=idx
                                                 new['mesh']=meshname
                                                 new['debugName']=e['Data']['debugName']
@@ -776,7 +783,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                             groupname = groupname[:-1]
                                         group=Masters.children.get(groupname)
                                         if (group):
-                                            #print('Glb found - ',glbfoundname)     
+                                            #print('Glb found - ',glbfoundname)
                                             #print('Glb found, looking for instances of ',i)
                                             instances = [x for x in t if x['NodeIndex'] == i]
                                             for instidx, inst in enumerate(instances):
@@ -785,7 +792,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                     new=bpy.data.collections.new(groupname)
                                                     Sector_coll.children.link(new)
                                                     new['nodeType']=type
-                                                    new['nodeIndex']=i    
+                                                    new['nodeIndex']=i
+                                                    new['nodeDataIndex']=node_data_indices[i] if i in node_data_indices else None
                                                     new['tl_instance_idx']=instidx
                                                     new['sub_instance_idx']=idx
                                                     new['mesh']=meshname
@@ -842,7 +850,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                             print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
 
                     case 'worldStaticLightNode':
-                        print('worldStaticLightNode',i)
+                        #print('worldStaticLightNode',i)
                         
                         instances = [x for x in t if x['NodeIndex'] == i]
                         for inst in instances:
@@ -884,7 +892,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
         #                                            
         # Collisions are only partially supported, cant get the mesh object ones out of the geomCache from wkit enmasse currently so only box and capsule ones
                         if want_collisions:
-                            print('worldCollisionNode',i)
+                            #print('worldCollisionNode',i)
                             sector_Collisions=sectorName+'_colls'
                             if sector_Collisions in coll_scene.children.keys():
                                 sector_Collisions_coll=bpy.data.collections.get(sector_Collisions)
@@ -900,7 +908,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                 arot=get_rot(act)
                                 for s,shape in enumerate(act['Shapes']):
                                     if shape['ShapeType']=='Box':
-                                        print('Box Collision Node')
+                                        #print('Box Collision Node')
                                         #pprint(act['Shapes'])
                                         ssize=shape['Size']
                                         spos=get_pos(shape)
@@ -919,7 +927,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         cube['sectorName']=sectorName
                                 
                                     elif shape['ShapeType']=='Capsule':
-                                        print('Capsule Collision Node')
+                                        #print('Capsule Collision Node')
                                         ssize=shape['Size']
                                         spos=get_pos(shape)
                                         srot=get_rot(shape)
@@ -936,8 +944,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         capsule['ActorIdx']=idx
                                         capsule['sectorName']=sectorName
                                     else: 
-                                        print(shape['ShapeType'], ' not supported yet')
-                            
+                                        print(f"skipping unsuppored shape {shape['ShapeType']}")
+
                 
                     case _:
                         #print('None of the above',i)
