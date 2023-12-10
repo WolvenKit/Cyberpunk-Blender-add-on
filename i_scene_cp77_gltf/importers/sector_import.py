@@ -290,8 +290,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
             apps=[]
             for meshApp in meshes_w_apps[m]['apps']:
                 apps.append(meshApp['$value'])
-            if len(apps)>1:
-                print(len(apps))
+            #if len(apps)>1:
+            #    print(len(apps))
             impapps=','.join(apps)
             #print(os.path.join(path, m[:-4]+'glb'),impapps)
 
@@ -322,23 +322,22 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
     inst_scale =Vector((1,1,1))
     inst_m=Matrix.LocRotScale(inst_pos,inst_rot,inst_scale)
 
-    for fpn,filepath in enumerate(jsonpath):    
+    for fpn,filepath in enumerate(jsonpath):
         with open(filepath,'r') as f: 
               j=json.load(f) 
           
         t=j['Data']['RootChunk']['nodeData']['Data']
 
-        # save node data indices
-        node_data_indices = {obj['NodeIndex']: index for index, obj in enumerate(t)}
-
+        numExpectedNodes = len(t)
         sectorName=os.path.basename(filepath)[:-5]
     
         if sectorName in coll_scene.children.keys():
             Sector_coll=bpy.data.collections.get(sectorName)
         else:
             Sector_coll=bpy.data.collections.new(sectorName)
-            coll_scene.children.link(Sector_coll)       
+            coll_scene.children.link(Sector_coll)
         Sector_coll['filepath']=filepath
+        Sector_coll['expectedNodes']=numExpectedNodes
     
         if am_modding==True:
             if sectorName+'_new' in coll_scene.children.keys():
@@ -376,14 +375,14 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                             imported=True
                         else:
                             try:
-                                print('Importing ',entpath, ' using app ',app)
+                                #print('Importing ',entpath, ' using app ',app)
                                 incoll='MasterInstances'
                                 bpy.ops.io_scene_gltf.cp77entity(filepath=entpath, appearances=app,with_materials=with_materials, inColl=incoll)
                                 move_coll=Masters.children.get(ent_groupname)
                                 imported=True
                             except:
                                 print(traceback.print_exc())
-                                print('Failed during Entity import on ',os.path.basename(entpath))
+                                print(f"Failed during Entity import on {entpath} from app {app}")
                         if imported:
                             instances = [x for x in t if x['NodeIndex'] == i]
                             for idx,inst in enumerate(instances):
@@ -396,7 +395,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     Sector_coll.children.link(new)
                                     new['nodeType']=type
                                     new['nodeIndex']=i
-                                    new['nodeDataIndex']=node_data_indices[i] if i in node_data_indices else None
+                                    new['nodeDataIndex']=next((index for index, obj in enumerate(t) if obj['NodeIndex'] == i), None)
                                     new['instance_idx']=idx
                                     new['debugName']=e['Data']['debugName']
                                     new['sectorName']=sectorName 
@@ -404,6 +403,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     new['entityTemplate']=os.path.basename(data['entityTemplate']['DepotPath']['$value'])
                                     new['appearanceName']=data['appearanceName']
                                     new['pivot']=inst['Pivot']
+
                                     if len(group.all_objects)>0:
                                         new['matrix']=group.all_objects[0].matrix_local
                                     pos = Vector(get_pos(inst))
@@ -431,8 +431,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                         #print(type)
                         meshname = data['mesh']['DepotPath']['$value'] 
                         instances = [x for x in t if x['NodeIndex'] == i]
-                        if len(instances)>1:
-                            print('Multiple Instances of node ',i)
+                        #if len(instances)>1:
+                        #    print('Multiple Instances of node ',i)
                         if len(instances)>0 and (meshname != 0):
                             node=nodes[i]
                             defData=node['Data']['deformationData']
@@ -486,7 +486,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                 Sector_coll.children.link(new)
                                 new['nodeType']=type
                                 new['nodeIndex']=i
-                                new['nodeDataIndex']=node_data_indices[i] if i in node_data_indices else None
+                                new['nodeDataIndex']=next((index for index, obj in enumerate(t) if obj['NodeIndex'] == i), None)
                                 new['mesh']=meshname
                                 new['debugName']=e['Data']['debugName']
                                 new['sectorName']=sectorName 
@@ -541,7 +541,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     Sector_coll.children.link(new)
                                     new['nodeType']=type
                                     new['nodeIndex']=i
-                                    new['nodeDataIndex']=node_data_indices[i] if i in node_data_indices else None
+                                    new['nodeDataIndex']=next((index for index, obj in enumerate(t) if obj['NodeIndex'] == i), None)
                                     new['instance_idx']=idx
                                     new['mesh']=meshname
                                     new['debugName']=e['Data']['debugName']
@@ -679,7 +679,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 Sector_coll.children.link(new)
                                                 new['nodeType']=type
                                                 new['nodeIndex']=i
-                                                new['nodeDataIndex']=node_data_indices[i] if i in node_data_indices else None
+                                                new['nodeDataIndex']=next((index for index, obj in enumerate(t) if obj['NodeIndex'] == i), None)
                                                 new['mesh']=meshname
                                                 new['debugName']=e['Data']['debugName']
                                                 new['sectorName']=sectorName
@@ -736,12 +736,15 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 Sector_coll.children.link(new)
                                                 new['nodeType']=type
                                                 new['nodeIndex']=i
-                                                new['nodeDataIndex']=node_data_indices[i] if i in node_data_indices else None
+                                                new['nodeDataIndex']=next((index for index, obj in enumerate(t) if obj['NodeIndex'] == i), None)
                                                 new['instance_idx']=idx
                                                 new['mesh']=meshname
                                                 new['debugName']=e['Data']['debugName']
                                                 new['sectorName']=sectorName
                                                 new['pivot']=inst['Pivot']
+
+
+                                                print(new['nodeDataIndex'])
                                             
                                                 for old_obj in group.all_objects:                            
                                                     obj=old_obj.copy()  
@@ -762,7 +765,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                             obj_action = bpy.data.actions.get(obj.animation_data.action.name)
                                                             obj_fcu = obj_action.fcurves[0]
                                                             for pt in obj_fcu.keyframe_points:
-                                                                pt.interpolation = 'LINEAR'   
+                                                                pt.interpolation = 'LINEAR'
 
 
                                                         
@@ -793,13 +796,13 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                     Sector_coll.children.link(new)
                                                     new['nodeType']=type
                                                     new['nodeIndex']=i
-                                                    new['nodeDataIndex']=node_data_indices[i] if i in node_data_indices else None
+                                                    new['nodeDataIndex']=next((index for index, obj in enumerate(t) if obj['NodeIndex'] == i), None)
                                                     new['tl_instance_idx']=instidx
                                                     new['sub_instance_idx']=idx
                                                     new['mesh']=meshname
                                                     new['debugName']=e['Data']['debugName']
                                                     new['sectorName']=sectorName  
-                                                    new['pivot']=inst['Pivot']                     
+                                                    new['pivot']=inst['Pivot']
                                                     
                                                 
                                                     if 'Data' in data['cookedInstanceTransforms']['sharedDataBuffer'].keys():
