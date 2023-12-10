@@ -1,62 +1,63 @@
-# Download from Releases >>>
-Not the source above
+# Download from [Releases](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/releases) >>>
+Download the latest version from [Releases](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/releases), unless you specifically want the source code.
 
 # Cyberpunk Blender Add-on
 
 ![blender add-on banner panam](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/assets/65016231/a0489b07-68af-4a90-b53e-1ad3ef271f4a)
 
-The Cyberpunk IO Suite integrates with files created by WolvenKit to streamline the import/export and modifcation of assets from Cyberpunk 2077. 
+The Cyberpunk IO Suite is part of the Cyberpunk 2077 modding toolchain, bridging the gap between [WolvenKit](https://wiki.redmodding.org/wolvenkit) and Blender.
 
-To learn more about modding Cyberpunk 2077 visit [the Cyberpunk Modding wiki.](https://wiki.redmodding.org/cyberpunk-2077-modding)
-
-
-To learn more about WolvenKit visit the [dedicated WolvenKit wiki.](https://wiki.redmodding.org/wolvenkit)
+You can find detailed documentation (and much else) on the [Cyberpunk 2077 modding wiki](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite).
 
 # Features
 
 ![blender add-on yaiba exampe](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/assets/65016231/fffb9aab-c5f0-4f77-9a63-bdbee941708e)
 
-## Import functions:
+## Import:
+- [Meshes](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export): Import Cyberpunk 2077 meshes from Wovlenkit with a fully automated setup of the game's complex shaders — in just a few clicks.
+  > Hint: The add-on doesn't support all Cyberpunk shaders yet, but we're working on it!
 
-- Import Cyberpunk 2077 models with materials for fully automated setup of the games complex shaders in just a few clicks
+- [Characters](https://wiki.redmodding.org/wolvenkit/modding-community/exporting-to-blender) and [vehicles](https://wiki.redmodding.org/wolvenkit/modding-community/exporting-vehicles): Point the plugin at the Wolvenkit export and it will include all meshes and materials from your project, setting them up to match the in-game appearance you specified.
 
-- Import characters and vehicles from Wolvenkit exported .ent.json files. The plugin will automatically import the meshes and materials from your project and correctly distribute them to match the specified in game appearance
+- Colliders (phys.json): Import colliders from Wolvenkit exported .phys files for easy visualization and editing
 
-- Import colliders from Wolvenkit exported .phys files for easy visualization and editing
+- Cyberpunk 2077 [animations](https://wiki.redmodding.org/wolvenkit/modding-community/exporting-to-blender/exporting-rigs-and-anims): Play animations directly on your exported models — either by [importing them from file](https://wiki.redmodding.org/wolvenkit/modding-community/exporting-to-blender/exporting-rigs-and-anims), or by using the bundled rig resources via the Cyberpunk Animations Panel
 
-- Import Cyberpunk 2077 animations to play on your models exported with rigs, or take advantage of the bundled rig resources conveniently available at the press of a button in the Cyberpunk Animations Panel
+- [Level data (streamingsectors)](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-guides/world-editing): Import the Cyberpunk 2077 into Blender and change the world — literally.
 
-- Import Cyberpunk 2077 level data (streaming sectors)
+## Export:
 
-## Export Functions:
+- [Mesh to .glb](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export): The plugin's export functions aims for maximum compatibility with Wolvenkit. Our exporter supports shapekeys and GarmentSupport and checks for common things that will cause the Wolvenkit export to fail. Where issues are found, the plugin provides simplified solutions to speed up your workflow.
 
-- Export meshes to glb with optimized export options to ensure compatibility with Wolvenkit. Our exporter supports shapekey and garmentsupport attribute export and checks for common editing issues which cause Wolvenkit import to fail. Where issues are found, the plugin provides automatic or simplified solutions to speed up your workflow. 
+- [Animations](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#animations-1): Export new and edited animations to GLB
 
-- Export modified collision shapes to .phys.json
-
-- Export new and edited animations to GLB
+- Collisions: Export modified collision shapes to .phys.json
 
 ## Tools and Shortcuts:
+> Hint: You can find more detailed documentation on the [Cyberpunk 2077 Modding Wiki](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite)
 
-- Animation Tools Panel
-    - shortcuts for playing, renaming and deleting existing animations
-    - add new actions and insert keyframes 
-    - all from outside Blender's animations tab
+### Animation Tools Panel
+- shortcuts for playing, renaming and deleting existing animations
+- add new actions and insert keyframes
+- all from outside Blender's animations tab
 
-- Mesh Tools Panel
-    - Auto refit clothing meshes to a variety of different modded and vanilla body shapes. this functionality is based on research and work by AllKnowingLion
-    - Simplified weight transfer shortcut applies the usual best settings and makes this process much easier to understand 
-    - Mesh clean up panel includes automatically assigning ungrouped vertices to their nearest group
-    - UV Checker: toggle a coloured, labelled grid as the active material on your mesh to make texturing and troubleshooting easier. If the currently selected mesh is currently using the UV checker, the button will change to easily allow you to restore the original material and remove the UV checker from your meshes material slots
+### Mesh Tools Panel
+- [Auto refit clothing meshes](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-akl-autofitter) to a variety of different modded and vanilla body shapes.  
+*This functionality is based on research and work by AllKnowingLion*
+- Simplified weight transfer shortcut with the best settings - no more hassle for you
+- Mesh clean up panel can automatically assign ungrouped vertices to the nearest bone
+- UV Checker: switch the currently active material for a coloured grid with numbers for easier UV editing - and back!
 
-- Collision Tools and Generator
-    - Automatic generation of convex colliders matched perfectly to the shape of your mesh, the number of vertices to sample should be set to match the number set in the .phys file in order to ensure successful export.
-    - Generate box and capsule colliders with either user specified sizing or sized automatically to match the selected mesh
-    - Export edited collision bodies back to .phys ***currently requires a wolvenkit converted .phys.json file
+### Collision Tools and Generator
+- Automatic generation of convex colliders matched perfectly to the shape of your mesh, the number of vertices to sample should be set to match the number set in the .phys file in order to ensure successful export.
+- Generate box and capsule colliders with either user specified sizing or sized automatically to match the selected mesh
+- Export edited collision bodies back to .phys ***currently requires a wolvenkit converted .phys.json file
 
-- Material Exports
-    - export custom and edited hair profiles to .hp.json which can be imported to wolvenkit. supports both edited vanilla files and totally custom setups based on the same node structure. the .hp.json will be named after the material in blender and will be automatically deposited in the raw folder of the project that the hair mesh was exported from. The material name in blender must end with _cards to match the setup of imported vanilla hair profiles (_cards will not be part of the .hp.json export)
-    - export some changes to .mlsetup files. This is an experimental feature which must be toggled on in the plugins preferences. Currently only some changes are supported. For indepth editing of .mlsetup files, you should use the fantastic MlSetup builder software by Neurolinked
+### Material Exports
+- [Hair profiles](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#hair-profiles-.hp): export custom hair profiles to `.hp.json` for easy import with Wolvenkit.  
+*The .hp.json will be named after the material in blender and will be automatically deposited in the raw folder of the project that the hair mesh was exported from. The material name in blender must end with _cards to match the setup of imported vanilla hair profiles (_cards will not be part of the .hp.json export)*
+- .mlsetup (experimental/WIP): After activating this feature in the plugin's preferences, write changes back to .mlsetup files. This feature is currently in development.
+*For in-depth editing of .mlsetup files, you should use Neurolinked's fantastic [MlSetup builder}(https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/mlsetup-builder) software.*
 
 ---
 
@@ -74,37 +75,27 @@ To learn more about WolvenKit visit the [dedicated WolvenKit wiki.](https://wiki
 
 # Usage
 
-> Not all Cyberpunk shaders are currently supported by the add-on.
-
 ## Installation
 
 > **_NOTE:_** You can find step-by-step instructions on the [Cyberpunk 2077 Modding Wiki](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/installing-the-wolvenkit-blender-plugin).
 
 1) Download the .ZIP file from the [*Releases*](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/releases) section
 
-2) Install the Cyberpunk add-on for Blender by navigating within Blender to **Edit \ Preferences \ Add-ons \ Install...** and locating the downloaded .ZIP file. Be sure the add-on is enabled by marking the checkbox within the installed add-on list.
+2) Install the downloaded zip from Blender's preferences (**Edit \ Preferences \ Add-ons \ Install...**).
+
+3) Be sure the add-on is **enabled** (filter the list of installed add-ons and ).
 
 3) When installed Cyberpunk options should be available under **File \ Import** and **File \ Export**
 
-## Mesh Import
+# Meshes and animations
 
-1) Export a mesh with materials using WolvenKit [Learn more](https://wiki.redmodding.org/wolvenkit/wolvenkit-app/usage/blender-integration)
+### [Mesh Import](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export)
 
-2) Navigate within Blender to **File \ Import \ Cyberpunk GLTF** and select the exported glTF/glb file. Within the import options choose the same texture format as the WolvenKit export. (PNG is default)
+1) [Export a mesh with materials](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#export-from-wolvenkit) from WolvenKit
 
-## Entity Import
+2) [Import it into Blender](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#importing-into-blender) from the menu (**File \ Import \ Cyberpunk GLTF**) by selecting the exported glTF/glb file. Within the import options, choose the same texture format as the WolvenKit export. (PNG is default)
 
-1) Convert the ent file to json and export all the meshes used using WolvenKit, a wscript to automate this is available in wolvenkit under Tools -> Script Manager.
-
-2) Navigate within Blender to **File \ Import \ Cyberpunk Entity** and select the exported json file. You can enter the appearance you want in the import options, this requires the appearanceName from the entity appearances info. Enter ALL for all appearances.
-
-## Streaming Sector Import
-
-1) Convert the streaming sectors you want to import from WolvenKit as json, and export all the meshes used using WolvenKit, a wscript to automate this is available on Discord in the wolvenkit-scripts channel.
-
-2) Navigate within Blender to **File \ Import \ Cyberpunk StreamingSectors** and select the wkit project file for the project they were added to. All sector file jsons found in the project raw folders will be imported.
-
-## Mesh Export as GLB
+### [Mesh Export as GLB](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#exporting-from-blender)
 
 1) Follow the steps above to import and edit your meshes.
 2) Select the mesh you want to export
@@ -114,27 +105,50 @@ To learn more about WolvenKit visit the [dedicated WolvenKit wiki.](https://wiki
 
 The plugin will automatically apply the correct settings to ensure your mesh imports back into WolvenKit for use with your mod.
 
-## Export Animations For Photomode
-**Should work for all types of animation 
+### [Animation import](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#export-from-wolvenkit-1)
 
-1) Follow the community guides in order to import your anims to Blender and make the necessary edits
-2) Select the armature which contains the animations you'd like to export
-3) Navigate within Blender to **File \ Export \ Export Selection to GLB for Cyberpunk
+1) [Export the animation from Wolvenkit](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#export-from-wolvenkit-1). The default settings are fine.
+
+2) [Import it into Blender](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#importing-into-blender) from the menu (**File \ Import \ Cyberpunk GLTF**) and select the exported glTF/glb file. You can ignore materials.
+
+### Animation export
+
+1) Follow the [community guides](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-guides/animations/poses-animations-make-your-own) in order to import your anims to Blender and make the necessary edits
+2) Select the armature that you want to export
+3) Export it via menu (**File \ Export \ Export Selection to GLB for Cyberpunk)
 4) Check the "Export as Photomode Pose" box
 5) Select the desired file path and name
 6) Export
 
 The plugin will apply the correct settings to ensure your animation imports back into WolvenKit and is correct in game.
 
+## Entity Import
+
+1) [Export your .ent from Wolvenkit](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#export-from-wolvenkit-2) by running the correct script from Wolvenkit's script manager
+
+2) [Import the `.ent.json`](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#importing-into-blender-2) from the menu (**File \ Import \ Cyberpunk Entity**).
+
+> Hint: You can enter the appearance you want in the import options, this requires the appearanceName from the entity appearances info. Enter ALL for all appearances.
+
+## Streaming Sector Import
+
+1) [Export your .streamingsector](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#export-from-wolvenkit-3) by running the correct script from Wolvenkit's script manager.
+
+2) [Import the `.cpmodproj`](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#importing-into-blender-3) from the menu (**File \ Import \ Cyberpunk StreamingSectors**). All sector file jsons found in the project raw folders will be imported.
+
+## Streaming Sector Export
+To export changes in streaming sectors, you have to run a Python script as of version 1.5.1. Detailed documentation can be found [on the wiki](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#exporting-from-blender-3).
+
 ---
 
 # Contributing
 
-Anybody is welcome contribute to the Cyberpunk Blender Add-on by opening a Pull Request with this repository. If you're interested in chatting or getting involved with the project please consider reaching out to us on our Discord, [Cyberpunk 2077 Modding Community.](https://discord.gg/Epkq79kd96)
+Anybody is welcome contribute to the Cyberpunk Blender Add-on by opening a [pull request](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/pulls) with this repository. If you're interested in chatting or getting involved with the project please consider reaching out to us on our Discord, [Cyberpunk 2077 Modding Community.](https://discord.gg/Epkq79kd96)
 
 ---
 
 # About the add-on
 
-This repository was originally created by [@HitmanHimself](https://github.com/HitmanHimself) as [CP77research](https://github.com/HitmanHimself/cp77research)
- to help study and reverse engineer elements of Cyberpunk 2077. HitmanHimself's cp77research contained various modding-related projects and documentation, including the Cyberpunk add-on for Blender. The add-on HitmanHimself created was based on research and initial python implementation by [@Turk645](https://github.com/Turk645). The add-on is now maintained here by the RED Modding GitHub organization to continue support and centralize development.
+This add-on was originally created by [@HitmanHimself](https://github.com/HitmanHimself) as [CP77research](https://github.com/HitmanHimself/cp77research) as one of multiple projects to study and reverse-engineer elements of Cyberpunk 2077. It was originally based on [@Turk645](https://github.com/Turk645)'s research and implementation.  
+
+As of 2023, it is now maintained by the RED Modding GitHub community to continue support and centralize development.
