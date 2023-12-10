@@ -23,7 +23,7 @@ You can find detailed documentation (and much else) on the [Cyberpunk 2077 moddi
 
 - Cyberpunk 2077 [animations](https://wiki.redmodding.org/wolvenkit/modding-community/exporting-to-blender/exporting-rigs-and-anims): Play animations directly on your exported models — either by [importing them from file](https://wiki.redmodding.org/wolvenkit/modding-community/exporting-to-blender/exporting-rigs-and-anims), or by using the bundled rig resources via the Cyberpunk Animations Panel
 
-- [Level data (streamingsectors)](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-guides/world-editing): Import the Cyberpunk 2077 into Blender and change the world — literally.
+- [Level data (streamingsectors)](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-guides/world-editing): Import the map(.streamingsector) from Cyberpunk 2077 into Blender and change the world — literally.
 
 ## Export:
 
