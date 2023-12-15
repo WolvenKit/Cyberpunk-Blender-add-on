@@ -38,6 +38,61 @@ def draw_convex_collider(name, collision_collection, vertices, physmat, transfor
         bm.to_mesh(obj.data)
         bm.free()
 
+
+def draw_sphere_collider(name, collision_collection, radius, physmat, transform, collision_type):
+    shape = 'physicsColliderSphere'
+    is_edit_mode = bpy.context.object.mode == 'EDIT'
+    r = float(radius)
+    bm = bmesh.new()
+    position = (transform['position']['X'], transform['position']['Y'], transform['position']['Z'])
+    bmesh.ops.create_uvsphere(bm, u_segments=8, v_segments=9, radius=r)
+    shape = 'physicsColliderSphere'
+    name = shape
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    mesh.update()
+    bm.free()
+    sphere = bpy.data.objects.new(name, mesh)
+    sphere.location = position
+    set_collider_props(sphere, collision_shape, physics_material, collider_type)
+    collision_collection.objects.link(sphere)
+
+def draw_capsule_collider(name, collision_collection, radius, height, physmat, transform, collision_type):
+    shape = 'physicsColliderCapsule'
+    is_edit_mode = bpy.context.object.mode == 'EDIT'
+    r = float(radius) 
+    h = height   
+    bm = bmesh.new()
+    bmesh.ops.create_uvsphere(bm, u_segments=8, v_segments=9, radius=r)
+    position = (transform['position']['X'], transform['position']['Y'], transform['position']['Z'])
+    delta_Z = float(h)
+    bm.verts.ensure_lookup_table()
+    for vert in bm.verts:
+        if vert.co[2] < 0:
+            vert.co[2] -= delta_Z
+        elif vert.co[2] > 0:
+            vert.co[2] += delta_Z
+    name = shape
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    mesh.update()
+    bm.free()
+    capsule = bpy.data.objects.new(name, mesh)
+    set_collider_props(capsule, collision_shape, physics_material, collider_type)
+    capsule.location = position
+    capsule.rotation_quaternion[1] = 1
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
+    if is_edit_mode:
+        bpy.ops.object.mode_set(mode='OBJECT')
+    capsule.dimensions.z = float(h)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    collision_collection.objects.link(capsule)
+    # Re-enter Edit mode
+    if is_edit_mode:
+        bpy.ops.object.mode_set(mode='EDIT')
+
+
+
 def draw_box_collider(name, collision_collection, half_extents, transform, physmat, collision_type):
     collision_shape = "physicsColliderBox"
     bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0))
@@ -51,6 +106,7 @@ def draw_box_collider(name, collision_collection, half_extents, transform, physm
     box.rotation_quaternion = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
     collision_collection.objects.link(box)
     bpy.context.collection.objects.unlink(box) # Unlink from the current collection
+    
 
 def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, sampleverts, radius, height, physics_material):
     is_edit_mode = bpy.context.object.mode == 'EDIT'
