@@ -215,7 +215,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                             ent_app_idx=i
                             app_name=a['appearanceName']['$value']
                             continue
-                else:
+                elif ent_app_idx<0:
                     ent_app_idx=0
 
                 app_file = ent_apps[ent_app_idx]['appearanceResource']['DepotPath']['$value']
