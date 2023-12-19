@@ -3,12 +3,12 @@ import bpy
 import math
 import json
 import os
-from .common import get_plugin_dir, get_resources_dir, get_refit_dir
+from .common import get_plugin_dir, get_resources_dir, get_refit_dir, get_rig_dir
 
 plugin_dir = get_plugin_dir()
 resources_dir = get_resources_dir()
 refit_dir = get_refit_dir()
-
+rig_dir = get_rig_dir()
 
 def CP77CollectionList(self, context):
     items = []
@@ -181,7 +181,7 @@ def CP77UvChecker(self, context):
                 bpy.ops.object.mode_set(mode='EDIT')
                 bpy.ops.object.material_slot_assign()
                 
-                print(current_mode)
+                #print(current_mode)
         
         if context.mode != current_mode:
             bpy.ops.object.mode_set(mode=current_mode)
@@ -214,13 +214,13 @@ def CP77UvUnChecker(self, context):
 
 def cp77riglist(context):
     cp77rigs = []
-    man_base = os.path.join(resources_dir, "man_base_full.glb")
+    man_base = os.path.join(rig_dir, "man_base_full.glb")
     woman_base = os.path.join(resources_dir, "woman_base.gltf")
-    man_big = os.path.join(resources_dir, "man_big_full.glb")
-    man_fat = os.path.join(resources_dir, "man_fat_full.glb")
-    Rhino = os.path.join(resources_dir, "rhino_full.glb")
-    Judy = os.path.join(resources_dir, "Judy_full.glb")
-    Panam = os.path.join(resources_dir, "Panam_full.glb")
+    man_big = os.path.join(rig_dir, "man_big_full.glb")
+    man_fat = os.path.join(rig_dir, "man_fat_full.glb")
+    Rhino = os.path.join(rig_dir, "rhino_full.glb")
+    Judy = os.path.join(rig_dir, "Judy_full.glb")
+    Panam = os.path.join(rig_dir, "Panam_full.glb")
     
     # Store the variable names in a list
     cp77rigs = [man_base, woman_base, man_big, man_fat, Rhino, Judy, Panam]

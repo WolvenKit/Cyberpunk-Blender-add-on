@@ -12,17 +12,25 @@ from mathutils import Vector
 def get_plugin_dir():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+
 def get_resources_dir():
     plugin_dir = get_plugin_dir()
     return os.path.join(plugin_dir, "resources")
+
 
 def get_refit_dir():
     resources_dir = get_resources_dir()
     return os.path.join(resources_dir, "refitters")
 
+
 def get_script_dir():
     resources_dir = get_resources_dir()
     return os.path.join(resources_dir, "scripts")
+
+
+def get_rig_dir():
+    resources_dir = get_resources_dir()
+    return os.path.join(resources_dir, "rigs")
     
 
 def UV_by_bounds(selected_objects):
