@@ -12,7 +12,6 @@ rig_dir = get_rig_dir()
 
 def CP77CollectionList(self, context):
     items = []
-    items.append('None')
     ## don't include these as their not useful
     excluded_names = ["Collection", "Scene Collection"]
 
@@ -24,7 +23,6 @@ def CP77CollectionList(self, context):
 
 def CP77ArmatureList(self, context):
     items = []
-    items.append('None')
     for obj in bpy.data.objects:
         if obj.type == 'ARMATURE':
             items.append((obj.name, obj.name, ""))
