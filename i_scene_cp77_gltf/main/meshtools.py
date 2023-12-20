@@ -12,6 +12,7 @@ rig_dir = get_rig_dir()
 
 def CP77CollectionList(self, context):
     items = []
+    items.append('None')
     ## don't include these as their not useful
     excluded_names = ["Collection", "Scene Collection"]
 
@@ -23,6 +24,7 @@ def CP77CollectionList(self, context):
 
 def CP77ArmatureList(self, context):
     items = []
+    items.append('None')
     for obj in bpy.data.objects:
         if obj.type == 'ARMATURE':
             items.append((obj.name, obj.name, ""))
@@ -77,6 +79,46 @@ def CP77GroupUngroupedVerts(self, context):
             except Exception as e:
                 print(e)
     return {'FINISHED'}
+    
+def CP77SubPrep(self, context, smooth_factor, merge_distance):
+    scn = context.scene
+    obj = context.object
+    current_mode = context.mode
+    if obj.type != 'MESH':
+        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="The active object is not a mesh.")
+        return {'CANCELLED'}  
+    
+    if current_mode != 'EDIT':
+        bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_mode(type="EDGE")
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.mesh.select_non_manifold(extend=False, use_wire=True, use_boundary=True, use_multi_face=False, use_non_contiguous=False, use_verts=False)
+    bpy.ops.mesh.mark_seam(clear=False)
+    bpy.ops.mesh.select_mode(type="VERT")
+    bpy.ops.mesh.select_all(action='SELECT')
+    
+    # Store the number of vertices before merging
+    bpy.ops.object.mode_set(mode='OBJECT')
+    before_merge_count = len(obj.data.vertices)
+    bpy.ops.object.mode_set(mode='EDIT')
+
+    bpy.ops.mesh.remove_doubles(threshold=merge_distance)
+
+    # Update the mesh and calculate the number of merged vertices
+    bpy.ops.object.mode_set(mode='OBJECT')
+    after_merge_count = len(obj.data.vertices)
+    merged_vertices = before_merge_count - after_merge_count
+
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.faces_select_linked_flat()
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.smooth_normals()
+    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"Submesh preparation complete. {merged_vertices} verts merged")
+    if context.mode != current_mode:
+        bpy.ops.object.mode_set(mode=current_mode)
+        
 
 def CP77ArmatureSet(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
@@ -208,8 +250,6 @@ def CP77UvUnChecker(self, context):
                 bpy.ops.object.material_slot_assign()
         if context.mode != current_mode:
             bpy.ops.object.mode_set(mode=current_mode)
-
-    return {'FINISHED'}
                 
 
 def cp77riglist(context):
@@ -231,7 +271,9 @@ def cp77riglist(context):
 
 
 def CP77RefitList(context):
-    target_body_paths = []
+    target_addon_paths = [None]
+    target_addon_names = ['None']
+    
     SoloArmsAddon = os.path.join(refit_dir, "SoloArmsAddon.zip")
     Adonis = os.path.join(refit_dir, "Adonis.zip")
     VanillaFemToMasc = os.path.join(refit_dir, "f2m.zip")
@@ -246,7 +288,7 @@ def CP77RefitList(context):
     Freyja = os.path.join(refit_dir, "freyja.zip")
     Hyst_EBBP_Addon = os.path.join(refit_dir, "hyst_ebbp_addon.zip")
     
-    # Convert the dictionary to a list of tuples
+    # Return the list of variable names
     target_body_paths = [SoloArmsAddon, Hyst_EBBP_Addon, Freyja, Gymfiend, Solo_Ultimate, Adonis, Flat_Chest, Hyst_EBB_RB, Hyst_EBB, Hyst_RB, Lush, VanillaFemToMasc, VanillaMascToFem ]
     target_body_names = ['Hyst_EBBP_Addon', 'Freyja', 'Gymfiend','SoloArmsAddon', 'Solo_Ultimate', 'Adonis', 'Flat_Chest', 'Hyst_EBB_RB', 'Hyst_EBB', 'Hyst_RB', 'Lush', 'VanillaFemToMasc', 'VanillaMascToFem' ]
 
