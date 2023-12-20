@@ -353,7 +353,8 @@ class CP77_PT_PanelProps(PropertyGroup):
         name="Rig GLB"
     )
     
-# mesh props
+# mesh panel props
+    
     fbx_rot: BoolProperty(
         name="",
         default=False,
@@ -375,7 +376,22 @@ class CP77_PT_PanelProps(PropertyGroup):
 
     mesh_target: EnumProperty(
         items=CP77CollectionList
-    )   
+    )
+
+    merge_distance: FloatProperty(
+        name="Merge Distance",
+        default=0.0001, 
+        min=0.0, 
+        max=1.0
+    )
+
+    smooth_factor: bpy.props.FloatProperty(
+        name="Smooth Factor", 
+        default=0.5, 
+        min=0.0, 
+        max=1.0
+    )
+
 
 class CP77CollisionGenerator(Operator):
     bl_idname = "generate_cp77.collisions"
@@ -460,6 +476,8 @@ class CP77PhysMatAssign(Operator):
     bl_idname = "object.set_physics_material"
     bl_label = "Set Physics Properties"
 
+    # Need to implement a callback here so that changing the material automatically updates the other properties
+
     def execute(self, context):
         selected_physmat = context.object["physics_material"]
 
@@ -494,6 +512,7 @@ class CP77PhysMatAssign(Operator):
             obj["inertia_Z"] = Iz
             
         return {'FINISHED'}
+    
 
 class CP77_PT_CollisionTools(Panel):
     bl_label = "Collision Tools"
@@ -509,7 +528,7 @@ class CP77_PT_CollisionTools(Panel):
         if cp77_addon_prefs.context_only:
             return context.active_object and context.active_object.type == 'MESH' 
         else:
-            return context.active_object
+            return context
 
     def draw(self, context):
         layout = self.layout
@@ -663,7 +682,7 @@ class CP77Keyframe(Operator):
 class CP77ResetArmature(Operator):
     bl_idname = "reset_armature.cp77"
     bl_parent_id = "CP77_PT_animspanel"
-    bl_label = "Reset Pose"
+    bl_label = "Reset Armature Position"
     bl_description = "Clear all transforms on current selected armature"
 
     def execute(self, context):
@@ -735,7 +754,7 @@ class CP77_PT_AnimsPanel(Panel):
         if cp77_addon_prefs.context_only:
             return context.active_object and context.active_object.type == 'ARMATURE' 
         else:
-            return context.active_object
+            return context
         
 ## make sure the context is unrestricted as possible, ensure there's an armature selected 
     def draw(self, context):
@@ -745,49 +764,52 @@ class CP77_PT_AnimsPanel(Panel):
 
         if cp77_addon_prefs.show_animtools:
             props = context.scene.cp77_panel_props
-            if bpy.context.mode in {'OBJECT', 'POSE', 'EDIT'}:
-                box = layout.box()
-                box.label(text='Rigs', icon_value=custom_icon_col["import"]['WKIT'].icon_id)
+            box = layout.box()
+            box.label(text='Rigs', icon_value=custom_icon_col["import"]['WKIT'].icon_id)
+            row = box.row(align=True)
+            row.label(text='Rig:')
+            row.prop(props, 'body_list', text="",)
+            row = box.row(align=True)
+            row.operator('cp77.rig_loader',icon='ADD', text="Load Selected Rig")
+            row.prop(props, 'fbx_rot', text="", icon='LOOP_BACK', toggle=1)
+            obj = context.active_object
+            if obj and obj.type == 'ARMATURE':
                 row = box.row(align=True)
-                row.label(text='Rig:')
-                row.prop(props, 'body_list', text="",)
-                row = box.row(align=True)
-                row.operator('cp77.rig_loader',icon='ADD', text="Load Selected Rig")
-                row.prop(props, 'fbx_rot', text="", icon='LOOP_BACK', toggle=1)
-                row = box.row(align=True)
-
-                obj = context.active_object
-                if obj and obj.type == 'ARMATURE':
-                    available_anims = list(CP77AnimsList(context,obj))
-                    active_action = obj.animation_data.action if obj.animation_data else None
+                row.operator('reset_armature.cp77')
+                available_anims = list(CP77AnimsList(context,obj))
+                active_action = obj.animation_data.action if obj.animation_data else None
+                if not available_anims:
                     box = layout.box()
                     row = box.row(align=True)
+                    row.label(text='Animsets', icon_value=custom_icon_col["import"]['WKIT'].icon_id)
+                    row.operator('cp77.new_action',icon='ADD', text="")
+                    row = box.row(align=True)
                     row.operator('insert_keyframe.cp77')
-                    if available_anims:
-                        for action in available_anims:
-                            action.use_fake_user:True
-                            selected = action == active_action
-                            if selected:
+                if available_anims:
+                    box = layout.box()
+                    for action in available_anims:
+                        action.use_fake_user:True
+                        selected = action == active_action
+                        if selected:
+                            row = box.row(align=True)
+                            row.alignment='CENTER'
+                            row.operator("screen.frame_jump", text="", icon='REW').end = False
+                            row.operator("screen.keyframe_jump", text="", icon='PREV_KEYFRAME').next = False
+                            row.operator("screen.animation_play", text="", icon='PLAY_REVERSE').reverse = True
+                            row.operator("screen.animation_play", text="", icon='PLAY')
+                            row.operator("screen.keyframe_jump", text="", icon='NEXT_KEYFRAME').next = True
+                            row.operator("screen.frame_jump", text="", icon='FF').end = True
+                            row = box.row(align=True)
+                            row.alignment='LEFT'
+                            row.prop(active_action, 'use_frame_range', text="Set Range",toggle=1)
+                            active_action.use_frame_range: True
+                            if active_action.use_frame_range:
                                 row = box.row(align=True)
-                                row.alignment='CENTER'
-                                row.operator("screen.frame_jump", text="", icon='REW').end = False
-                                row.operator("screen.keyframe_jump", text="", icon='PREV_KEYFRAME').next = False
-                                row.operator("screen.animation_play", text="", icon='PLAY_REVERSE').reverse = True
-                                row.operator("screen.animation_play", text="", icon='PLAY')
-                                row.operator("screen.keyframe_jump", text="", icon='NEXT_KEYFRAME').next = True
-                                row.operator("screen.frame_jump", text="", icon='FF').end = True
-                                row = box.row(align=True)
-                                row.operator('reset_armature.cp77')
-                                row.prop(active_action, 'use_frame_range', text="Set Range",toggle=1)
-                                active_action.use_frame_range: True
-                                if active_action.use_frame_range:
-                                    row = box.row(align=True)
-                                    row.prop(active_action, 'frame_start', text="")
-                                    row.prop(active_action, 'frame_end', text="")
-                   
-                    row.separator()
-                    row.operator('reset_armature.cp77')
-
+                                row.prop(active_action, 'frame_start', text="")
+                                row.prop(active_action, 'frame_end', text="")
+                    row = box.row(align=True)
+                    row.operator('insert_keyframe.cp77')
+               
                     box = layout.box()
                     row = box.row(align=True)
                     row.label(text='Animsets', icon_value=custom_icon_col["import"]['WKIT'].icon_id)
@@ -840,6 +862,7 @@ class CP77Autofitter(Operator):
     bl_idname = "cp77.auto_fitter"
     bl_label = "Auto Fit"
     bl_description = "Use to automatically fit your mesh to a selection of modified bodies" 
+    bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
@@ -929,6 +952,19 @@ class CP77SetArmature(Operator):
         return {'FINISHED'}
 
 
+class CP77_OT_submesh_prep(Operator):
+# based on Rudolph2109's function
+    bl_label = "Submesh Prep"
+    bl_idname = "cp77.submesh_prep"
+    bl_parent_id = "CP77_PT_MeshTools"
+    bl_description = "Merge Vertices based on distance and smoothing factor" 
+
+    def execute(self, context):
+        props= context.scene.cp77_panel_props
+        CP77SubPrep(self, context, props.smooth_factor, props.merge_distance)
+        return {'FINISHED'}
+
+
 class CP77GroupVerts(Operator):
     bl_idname = "cp77.group_verts"
     bl_parent_id = "CP77_PT_MeshTools"
@@ -940,6 +976,7 @@ class CP77GroupVerts(Operator):
         CP77GroupUngroupedVerts(self, context)
         return {'FINISHED'}
     
+
 class CP77RotateObj(Operator):
     bl_label = "Change Orientation"
     bl_idname = "cp77.rotate_obj"
@@ -964,7 +1001,7 @@ class CP77_PT_MeshTools(Panel):
         if cp77_addon_prefs.context_only:
             return context.active_object and context.active_object.type == 'MESH'
         else:
-            return context.active_object    
+            return context  
 
     def draw(self, context):
         layout = self.layout
@@ -976,16 +1013,26 @@ class CP77_PT_MeshTools(Panel):
             if cp77_addon_prefs.show_meshtools:
                 box.label(text="Mesh Cleanup", icon_value=custom_icon_col["trauma"]["TRAUMA"].icon_id)
                 row = box.row(align=True)
+                split = row.split(factor=0.7,align=True)
+                split.label(text="Merge Distance:")
+                split.prop(props,"merge_distance", text="")
+                row = box.row(align=True)
+                split = row.split(factor=0.7,align=True)
+                split.label(text="Smooth Factor:")
+                split.prop(props,"smooth_factor", text="")
+                row = box.row(align=True)
+                row.operator("cp77.submesh_prep")
+                row = box.row(align=True)
                 row.operator("cp77.group_verts", text="Group Ungrouped Verts")
                 row = box.row(align=True)
                 row.operator("cp77.rotate_obj")
+                box = layout.box()
+                box.label(icon_value=custom_icon_col["sculpt"]["SCULPT"].icon_id, text="Modelling:")
                 row = box.row(align=True)
                 if context.object.active_material and context.object.active_material.name == 'UV_Checker':
                     row.operator("cp77.uv_unchecker",  text="Remove UV Checker")
                 else:
                     row.operator("cp77.uv_checker", text="UV Checker")
-                box = layout.box()
-                box.label(icon_value=custom_icon_col["sculpt"]["SCULPT"].icon_id, text="Modelling:")
                 row = box.row(align=True)
                 split = row.split(factor=0.5,align=True)
                 split.label(text="Source Mesh:")
@@ -1123,7 +1170,10 @@ class CP77EntityImport(Operator,ImportHelper):
     use_cycles: BoolProperty(name="Use Cycles",default=True,description="Use Cycles")  
     update_gi: BoolProperty(name="Update Global Illumination",default=False,description="Update Cycles global illumination options for transparency fixes and higher quality renders")
     with_materials: BoolProperty(name="With Materials",default=True,description="Import Wolvenkit-exported materials")   
-    include_collisions: BoolProperty(name="Include Vehicle Collisions",default=False,description="Use this option if you want to include the .phys collision info for vehicle modding")
+    include_collisions: BoolProperty(name="Include Collisions",default=False,description="Use this option to import collision bodies with this entity")
+    include_phys: BoolProperty(name="Include .phys Collisions",default=False,description="Use this option if you want to import the .phys collision bodies. Useful for vehicle modding")
+    include_entCollider: BoolProperty(name="Include Collision Components",default=False,description="Use this option to import entColliderComponent and entSimpleColliderComponent")
+
     inColl: StringProperty(name= "Collector to put the imported entity in",
                                 description="Collector to put the imported entity in",
                                 default='',
@@ -1143,7 +1193,18 @@ class CP77EntityImport(Operator,ImportHelper):
         row = layout.row(align=True)
         row.prop(self, "with_materials")
         row = layout.row(align=True)
-        row.prop(self, "include_collisions")
+        if not self.include_collisions:
+            row.prop(self, "include_collisions")
+        if self.include_collisions:
+            if not hasattr(self, "_collisions_initialized") or not self._collisions_initialized:
+                self.include_phys = True
+                self.include_entCollider = True
+                self._collisions_initialized = True  # Flag to indicate initialization            
+            row.prop(self, "include_collisions")
+            row = layout.row(align=True)
+            row.prop(self, "include_phys")
+            row = layout.row(align=True)
+            row.prop(self, "include_entCollider")
 
 
     def execute(self, context):
@@ -1155,7 +1216,7 @@ class CP77EntityImport(Operator,ImportHelper):
         bob=self.filepath
         inColl=self.inColl
         #print('Bob - ',bob)
-        importEnt( bob, apps, excluded,self.with_materials, self.include_collisions,inColl)
+        importEnt( bob, apps, excluded,self.with_materials, self.include_collisions, self.include_phys, self.include_entCollider, inColl)
 
         return {'FINISHED'}
 
@@ -1326,6 +1387,7 @@ classes = (
     CP7PhysImport,
     CP77PhysMatAssign,
     CP77_PT_CollisionTools,
+    CP77_OT_submesh_prep,
 )
 
 def register():
