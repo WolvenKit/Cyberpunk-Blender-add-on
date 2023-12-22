@@ -287,7 +287,7 @@ def CP77RefitList(context):
     Hyst_EBBP_Addon = os.path.join(refit_dir, "hyst_ebbp_addon.zip")
     
     # Return the list of variable names
-    target_body_paths = [SoloArmsAddon, Hyst_EBBP_Addon, Freyja, Gymfiend, Solo_Ultimate, Adonis, Flat_Chest, Hyst_EBB_RB, Hyst_EBB, Hyst_RB, Lush, VanillaFemToMasc, VanillaMascToFem ]
+    target_body_paths = [Hyst_EBBP_Addon, Freyja, Gymfiend,SoloArmsAddon, Solo_Ultimate, Adonis, Flat_Chest, Hyst_EBB_RB, Hyst_EBB, Hyst_RB, Lush, VanillaFemToMasc, VanillaMascToFem]
     target_body_names = ['Hyst_EBBP_Addon', 'Freyja', 'Gymfiend','SoloArmsAddon', 'Solo_Ultimate', 'Adonis', 'Flat_Chest', 'Hyst_EBB_RB', 'Hyst_EBB', 'Hyst_RB', 'Lush', 'VanillaFemToMasc', 'VanillaMascToFem' ]
 
     # Return the list of tuples

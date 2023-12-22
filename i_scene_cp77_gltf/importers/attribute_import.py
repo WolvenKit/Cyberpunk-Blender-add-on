@@ -4,7 +4,8 @@ from io_scene_gltf2.io.imp.gltf2_io_binary import BinaryData
 from io_scene_gltf2.blender.imp.gltf2_blender_mesh import points_edges_tris
 from io_scene_gltf2.blender.imp.gltf2_blender_mesh import squish
 
-def manage_garment_support(existingMeshes, gltf_importer):
+def manage_garment_support(existingMeshes, gltf_importer_data):
+    gltf_importer = gltf_importer_data
     curMeshCount = 0
     for name in bpy.data.meshes.keys():
         if name not in existingMeshes:
@@ -20,7 +21,8 @@ def manage_garment_support(existingMeshes, gltf_importer):
                 mesh.color_attributes.render_color_index = 0
                 curMeshCount = curMeshCount + 1
 
-def add_vertex_color_attribute(accessor_name, attribute_name, gltf_importer, mesh, prim, indices):
+def add_vertex_color_attribute(accessor_name, attribute_name, gltf_importer_data, mesh, prim, indices):
+    gltf_importer = gltf_importer_data
     if accessor_name in prim.attributes:
         cols = BinaryData.decode_accessor(gltf_importer, prim.attributes[accessor_name], cache=True)
         cols = cols[indices]
@@ -34,7 +36,8 @@ def add_vertex_color_attribute(accessor_name, attribute_name, gltf_importer, mes
         else:
             mesh.color_attributes[layer.name].data.foreach_set('color', squish(cols))
 
-def get_indices(gltf_importer, prim):
+def get_indices(gltf_importer_data, prim):
+    gltf_importer = gltf_importer_data
     if prim.indices is not None:
         indices = BinaryData.decode_accessor(gltf_importer, prim.indices)
         indices = indices.reshape(len(indices))

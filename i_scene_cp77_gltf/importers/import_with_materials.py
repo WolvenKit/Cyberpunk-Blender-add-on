@@ -37,7 +37,7 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
     for f in loadfiles:
         filepath = os.path.join(directory, f['name'])
                     
-        gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'BLENDER', "guess_original_bind_pose" : False, "import_user_extensions": ""})
+        gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'TEMPERANCE', "guess_original_bind_pose" : False, "import_user_extensions": ""})
         gltf_importer.read()
         gltf_importer.checks()
         
@@ -64,13 +64,11 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
             if animations:
                 get_anim_info(animations)
                 if meshes:
-                    if hide_armatures is True:
-                        if 'Armature' in o.name:
-                            o.hide_set(hide_armatures)
-                    else:
-                        break
+                    if 'Armature' in o.name:
+                        o.hide_set(hide_armatures)
             else:
-                if hide_armatures is True and 'Armature' in o.name:
+            #print('o.name - ',o.name)
+                if 'Armature' in o.name:
                     o.hide_set(hide_armatures)
             
         collection['orig_filepath']=filepath
