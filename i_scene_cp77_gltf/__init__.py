@@ -954,10 +954,10 @@ class CP77SetArmature(Operator):
 
 class CP77_OT_submesh_prep(Operator):
 # based on Rudolph2109's function
-    bl_label = "Submesh Prep"
+    bl_label = "BoundaryBuddy"
     bl_idname = "cp77.submesh_prep"
     bl_parent_id = "CP77_PT_MeshTools"
-    bl_description = "Merge Vertices based on distance and smoothing factor" 
+    bl_description = "Marking seams based on edges boundary loops, merging vertices, correcting and smoothening the normals based on the direction of the faces" 
 
     def execute(self, context):
         props= context.scene.cp77_panel_props
