@@ -954,7 +954,7 @@ class CP77SetArmature(Operator):
 
 class CP77_OT_submesh_prep(Operator):
 # based on Rudolph2109's function
-    bl_label = "BoundaryBuddy"
+    bl_label = "Prep. It!"
     bl_idname = "cp77.submesh_prep"
     bl_parent_id = "CP77_PT_MeshTools"
     bl_description = "Marking seams based on edges boundary loops, merging vertices, correcting and smoothening the normals based on the direction of the faces" 
