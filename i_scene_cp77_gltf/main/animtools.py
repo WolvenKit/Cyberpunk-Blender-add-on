@@ -77,7 +77,7 @@ def play_anim(self, context, anim_name):
 
     if active_action:
         # Stop the currently playing animation
-        bpy.ops.screen.animation_cancel(restore_frame=False)
+        bpy.ops.screen.animation_cancel(restore_frame=True)
 
         # Set the active action
         obj.animation_data.action = active_action
@@ -96,6 +96,7 @@ def delete_anim(self, context):
 
 def hide_extra_bones(self, context):
     # List of bone names that should not be hidden
+    selected_object = context.active_object
     ## the regular animrig bones
     animBones = ["Hips", "Spine", "Spine1", "Spine2", "Spine3", "LeftShoulder", "LeftArm", "LeftForeArm", "LeftHand", "WeaponLeft", "LeftInHandThumb", "LeftHandThumb1", "LeftHandThumb2", "LeftInHandIndex", "LeftHandIndex1", "LeftHandIndex2", "LeftHandIndex3", "LeftInHandMiddle", "LeftHandMiddle1", "LeftHandMiddle2", "LeftHandMiddle3", "LeftInHandRing", "LeftHandRing1", "LeftHandRing2", "LeftHandRing3", "LeftInHandPinky", "LeftHandPinky1", "LeftHandPinky2", "LeftHandPinky3", "RightShoulder", "RightArm", "RightForeArm", "RightHand", "WeaponRight", "RightInHandThumb", "RightHandThumb1", "RightHandThumb2", "RightInHandIndex", "RightHandIndex1", "RightHandIndex2", "RightHandIndex3", "RightInHandMiddle", "RightHandMiddle1", "RightHandMiddle2", "RightHandMiddle3", "RightInHandRing", "RightHandRing1", "RightHandRing2", "RightHandRing3", "RightInHandPinky", "RightHandPinky1", "RightHandPinky2", "RightHandPinky3", "Neck", "Neck1", "Head", "LeftEye", "RightEye", "LeftUpLeg", "LeftLeg", "LeftFoot", "LeftHeel", "LeftToeBase", "RightUpLeg", "RightLeg", "RightFoot", "RightHeel", "RightToeBase"]
 
@@ -114,3 +115,51 @@ def hide_extra_bones(self, context):
     for bone in armature.edit_bones:
         if bone.name not in animBones:
             bone.hide = True
+
+def add_anim_props(animation, action):
+
+    extras = getattr(animation, 'extras', {})
+    if not extras:
+        return
+    # Extract properties from animation
+    schema = extras.get("schema", "")
+    animation_type = extras.get("animationType", "")
+    frame_clamping = extras.get("frameClamping", False)
+    frame_clamping_start_frame = extras.get("frameClampingStartFrame", -1)
+    frame_clamping_end_frame = extras.get("frameClampingEndFrame", -1)
+    prefer_lossless_linear_rotation_encoding = extras.get("preferLosslessLinearRotationEncoding", False)
+    num_extra_joints = extras.get("numExtraJoints", 0)
+    num_extra_tracks = extras.get("numExtraTracks", 0)  # Corrected typo in the key name
+    const_track_keys = extras.get("constTrackKeys", [])
+    track_keys = extras.get("trackKeys", [])
+    fallback_frame_indices = extras.get("fallbackFrameIndices", [])
+
+    # Add properties to the action
+    action["schema"] = schema
+    action["animationType"] = animation_type
+    action["frameClamping"] = frame_clamping
+    action["frameClampingStartFrame"] = frame_clamping_start_frame
+    action["frameClampingEndFrame"] = frame_clamping_end_frame
+    action["preferLosslessLinearRotationEncoding"] = prefer_lossless_linear_rotation_encoding
+    action["numExtraJoints"] = num_extra_joints
+    action["numeExtraTracks"] = num_extra_tracks
+    action["constTrackKeys"] = const_track_keys
+    action["trackKeys"] = track_keys
+    action["fallbackFrameIndices"] = fallback_frame_indices
+
+
+def get_anim_info(animations):
+    # Get animations
+    #animations = gltf_importer.data.animations
+
+    for animation in animations:
+        print(f"Processing animation: {animation.name}")
+
+        # Find an action whose name contains the animation name
+        action = next((act for act in bpy.data.actions if animation.name in act.name), None)
+
+        if action:
+            add_anim_props(animation, action)
+            print("Properties added to action.")
+        else:
+            print("No action found for animation.")

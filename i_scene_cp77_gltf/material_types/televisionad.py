@@ -11,9 +11,11 @@ class TelevisionAd:
         self.image_format = image_format
         
     def create(self,Data,Mat):
+        vers=bpy.app.version
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes['Principled BSDF']
-        pBSDF.inputs["Specular"].default_value = 0
+        sockets=bsdf_socket_names()
+        pBSDF.inputs[sockets["Specular"]].default_value = 0
 
         # PARAMETERS
         if "TilesWidth" in Data:
@@ -128,15 +130,21 @@ class TelevisionAd:
                 ngroup = bpy.data.node_groups['n']
             else:
                 ngroup = bpy.data.node_groups.new("n","ShaderNodeTree")   
-                ngroup.inputs.new('NodeSocketFloat','TilesWidth')
-                ngroup.inputs.new('NodeSocketFloat','TilesHeight')
-                ngroup.inputs.new('NodeSocketFloat','PlaySpeed')
-                ngroup.inputs.new('NodeSocketFloat','Time')
-                GroupInput = create_node(ngroup.nodes, "NodeGroupInput",(-1400,0))
-                ngroup.outputs.new('NodeSocketFloat','n')
-                GroupOutput = create_node(ngroup.nodes, "NodeGroupOutput",(200,0))
+                if vers[0]<4:
+                    ngroup.inputs.new('NodeSocketFloat','TilesWidth')
+                    ngroup.inputs.new('NodeSocketFloat','TilesHeight')
+                    ngroup.inputs.new('NodeSocketFloat','PlaySpeed')
+                    ngroup.inputs.new('NodeSocketFloat','Time')
+                    ngroup.outputs.new('NodeSocketFloat','n')
+                else:
+                    ngroup.interface.new_socket(name="TilesWidth", socket_type='NodeSocketFloat', in_out='INPUT')
+                    ngroup.interface.new_socket(name="TilesHeight", socket_type='NodeSocketFloat', in_out='INPUT')
+                    ngroup.interface.new_socket(name="PlaySpeed", socket_type='NodeSocketFloat', in_out='INPUT')
+                    ngroup.interface.new_socket(name="Time", socket_type='NodeSocketFloat', in_out='INPUT')
+                    ngroup.interface.new_socket(name="n", socket_type='NodeSocketFloat', in_out='OUTPUT')
             
-
+                GroupInput = create_node(ngroup.nodes, "NodeGroupInput",(-1400,0))
+                GroupOutput = create_node(ngroup.nodes, "NodeGroupOutput",(200,0))
                 mul = create_node(ngroup.nodes,"ShaderNodeMath", (-1000,0) , operation = 'MULTIPLY')
                 div = create_node(ngroup.nodes,"ShaderNodeMath", (-850,0) , operation = 'DIVIDE')
                 mul1 = create_node(ngroup.nodes,"ShaderNodeMath", (-700,0) , operation = 'MULTIPLY')
@@ -172,11 +180,21 @@ class TelevisionAd:
                 frameGroup = bpy.data.node_groups['frameAdd']
             else:
                 frameGroup = bpy.data.node_groups.new("frameAdd","ShaderNodeTree") 
-                frameGroup.inputs.new('NodeSocketFloat','PixelsHeight')
-                frameGroup.inputs.new('NodeSocketFloat','InterlaceLines')
-                frameGroup.inputs.new('NodeSocketVector','UV')
-                frameGroup.inputs.new('NodeSocketFloat','n')
-                frameGroup.outputs.new('NodeSocketFloat','frameAdd')
+                if vers[0]<4:
+                    
+                    frameGroup.inputs.new('NodeSocketFloat','PixelsHeight')
+                    frameGroup.inputs.new('NodeSocketFloat','InterlaceLines')
+                    frameGroup.inputs.new('NodeSocketVector','UV')
+                    frameGroup.inputs.new('NodeSocketFloat','n')
+                    frameGroup.outputs.new('NodeSocketFloat','frameAdd')
+                    
+                else:
+                    frameGroup.interface.new_socket(name="PixelsHeight", socket_type='NodeSocketFloat', in_out='INPUT')
+                    frameGroup.interface.new_socket(name="InterlaceLines", socket_type='NodeSocketFloat', in_out='INPUT')
+                    frameGroup.interface.new_socket(name="UV", socket_type='NodeSocketVector', in_out='INPUT')
+                    frameGroup.interface.new_socket(name="n", socket_type='NodeSocketFloat', in_out='INPUT')
+                    frameGroup.interface.new_socket(name="frameAdd", socket_type='NodeSocketFloat', in_out='OUTPUT')
+                    
                 fGroupInput = create_node(frameGroup.nodes, "NodeGroupInput",(-1400,0))
                 fGroupOutput = create_node(frameGroup.nodes, "NodeGroupOutput",(200,0))
 
@@ -228,12 +246,21 @@ class TelevisionAd:
                 subUVGroup = bpy.data.node_groups['subUV']
             else:
                 subUVGroup = bpy.data.node_groups.new("subUV","ShaderNodeTree") 
-                subUVGroup.inputs.new('NodeSocketFloat','TilesWidth')
-                subUVGroup.inputs.new('NodeSocketFloat','TilesHeight')
-                subUVGroup.inputs.new('NodeSocketFloat','n')
-                subUVGroup.inputs.new('NodeSocketFloat','frameAdd')
-                subUVGroup.outputs.new('NodeSocketVector','subUV')
-                subUVGroup.inputs.new('NodeSocketVector','UV')
+                if vers[0]<4:
+                    subUVGroup.inputs.new('NodeSocketFloat','TilesWidth')
+                    subUVGroup.inputs.new('NodeSocketFloat','TilesHeight')
+                    subUVGroup.inputs.new('NodeSocketFloat','n')
+                    subUVGroup.inputs.new('NodeSocketFloat','frameAdd')
+                    subUVGroup.inputs.new('NodeSocketVector','UV')
+                    subUVGroup.outputs.new('NodeSocketVector','subUV')
+                else: 
+                    subUVGroup.interface.new_socket(name="TilesWidth", socket_type='NodeSocketFloat', in_out='INPUT')
+                    subUVGroup.interface.new_socket(name="TilesHeight", socket_type='NodeSocketFloat', in_out='INPUT')
+                    subUVGroup.interface.new_socket(name="n", socket_type='NodeSocketFloat', in_out='INPUT')
+                    subUVGroup.interface.new_socket(name="frameAdd", socket_type='NodeSocketFloat', in_out='INPUT')
+                    subUVGroup.interface.new_socket(name="UV", socket_type='NodeSocketVector', in_out='INPUT')
+                    subUVGroup.interface.new_socket(name="subUV", socket_type='NodeSocketVector', in_out='OUTPUT')
+                    
                 subUVGroupI = create_node(subUVGroup.nodes, "NodeGroupInput",(-1400,0))
                 subUVGroupO = create_node(subUVGroup.nodes, "NodeGroupOutput",(200,0))
 
@@ -288,7 +315,7 @@ class TelevisionAd:
                 subUVGroup.links.new(frac5.outputs[0],combine.inputs[1])            
                 subUVGroup.links.new(combine.outputs[0],subUVGroupO.inputs[0])
 
-            subUV = create_node(CurMat.nodes,"ShaderNodeGroup",(-1500, 875), label="subUV")
+            subUV = create_node(CurMat.nodes,"ShaderNodeGroup",(-1350, 875), label="subUV")
             subUV.node_tree = subUVGroup
             subUV.name = "subUV"
 
@@ -320,10 +347,17 @@ class TelevisionAd:
                 brokenUVGroup = bpy.data.node_groups['brokenUV']
             else:
                 brokenUVGroup = bpy.data.node_groups.new("brokenUV","ShaderNodeTree") 
-                brokenUVGroup.inputs.new('NodeSocketFloat','rndBlocks')
-                brokenUVGroup.inputs.new('NodeSocketFloat','Time')
-                brokenUVGroup.inputs.new('NodeSocketVector','UV')
-                brokenUVGroup.outputs.new('NodeSocketVector','brokenUV')
+                if vers[0]<4:
+                    brokenUVGroup.inputs.new('NodeSocketFloat','rndBlocks')
+                    brokenUVGroup.inputs.new('NodeSocketFloat','Time')
+                    brokenUVGroup.inputs.new('NodeSocketVector','UV')
+                    brokenUVGroup.outputs.new('NodeSocketVector','brokenUV')
+                else:
+                    brokenUVGroup.interface.new_socket(name="rndBlocks", socket_type='NodeSocketFloat', in_out='INPUT')
+                    brokenUVGroup.interface.new_socket(name="Time", socket_type='NodeSocketFloat', in_out='INPUT')
+                    brokenUVGroup.interface.new_socket(name="UV", socket_type='NodeSocketVector', in_out='INPUT')
+                    brokenUVGroup.interface.new_socket(name="brokenUV", socket_type='NodeSocketVector', in_out='OUTPUT')
+                    
                 brokenUVGroupI = create_node(brokenUVGroup.nodes, "NodeGroupInput",(-1400,0))
                 brokenUVGroupO = create_node(brokenUVGroup.nodes, "NodeGroupOutput",(200,0))
                 hash12G = createHash12Group()
@@ -389,12 +423,19 @@ class TelevisionAd:
                 rndColorIGroup = bpy.data.node_groups['rndColorIndex']
             else:       
                 rndColorIGroup = bpy.data.node_groups.new("rndColorIndex","ShaderNodeTree") 
-                rndColorIGroup.inputs.new('NodeSocketFloat','rndBlocks')
-                rndColorIGroup.inputs.new('NodeSocketFloat','Time')
-                rndColorIGroup.inputs.new('NodeSocketVector','UV')
-                rndColorIGroup.outputs.new('NodeSocketInt','rndColorIndex')
+                if vers[0]<4:
+                    rndColorIGroup.inputs.new('NodeSocketFloat','rndBlocks')
+                    rndColorIGroup.inputs.new('NodeSocketFloat','Time')
+                    rndColorIGroup.inputs.new('NodeSocketVector','UV')
+                    rndColorIGroup.outputs.new('NodeSocketFloat','rndColorIndex')
+                else:
+                    rndColorIGroup.interface.new_socket(name="rndBlocks", socket_type='NodeSocketFloat', in_out='INPUT')
+                    rndColorIGroup.interface.new_socket(name="Time", socket_type='NodeSocketFloat', in_out='INPUT')
+                    rndColorIGroup.interface.new_socket(name="UV", socket_type='NodeSocketVector', in_out='INPUT')
+                    rndColorIGroup.interface.new_socket(name="rndColorIndex", socket_type='NodeSocketFloat', in_out='OUTPUT')
+                    
                 rndColorIGroupI = create_node(rndColorIGroup.nodes, "NodeGroupInput",(-1400,0))
-                rndColorIGroupO = create_node(rndColorIGroup.nodes, "NodeGroupOutput",(200,0))  
+                rndColorIGroupO = create_node(rndColorIGroup.nodes, "NodeGroupOutput",(400,0))  
                 separate2 = create_node(rndColorIGroup.nodes,"ShaderNodeSeparateXYZ", (-1250,0))
                 combine3 = create_node(rndColorIGroup.nodes,"ShaderNodeCombineXYZ", (-1100,0))
                 vecMul = create_node(rndColorIGroup.nodes,"ShaderNodeVectorMath", (-950,0), operation="MULTIPLY")
@@ -409,6 +450,7 @@ class TelevisionAd:
                 hash12_2.node_tree = hash12G
                 mul9 = create_node(rndColorIGroup.nodes,"ShaderNodeMath", (100,-25), operation="MULTIPLY")
                 mul9.inputs[1].default_value = 4
+                round1 = create_node(rndColorIGroup.nodes,"ShaderNodeMath", (250,-25), operation="ROUND")
                 rndColorIGroup.links.new(rndColorIGroupI.outputs[2],separate2.inputs[0])
                 rndColorIGroup.links.new(separate2.outputs[0],combine3.inputs[0])
                 rndColorIGroup.links.new(separate2.outputs[0],combine3.inputs[1])
@@ -423,7 +465,8 @@ class TelevisionAd:
                 rndColorIGroup.links.new(vecMul2.outputs[0],vecSub.inputs[0])
                 rndColorIGroup.links.new(vecSub.outputs[0],hash12_2.inputs[0])
                 rndColorIGroup.links.new(hash12_2.outputs[0],mul9.inputs[0])
-                rndColorIGroup.links.new(mul9.outputs[0],rndColorIGroupO.inputs[0])
+                rndColorIGroup.links.new(mul9.outputs[0],round1.inputs[0])
+                rndColorIGroup.links.new(round1.outputs[0],rndColorIGroupO.inputs[0])
                 
 
             rndColorIndex = create_node(CurMat.nodes,"ShaderNodeGroup",(-1200, 575), label="rndColorIndex")
@@ -438,8 +481,12 @@ class TelevisionAd:
                 rndColorGroup = bpy.data.node_groups['rndColor']
             else:
                 rndColorGroup = bpy.data.node_groups.new("rndColor","ShaderNodeTree") 
-                rndColorGroup.inputs.new('NodeSocketInt','rndColorIndex')
-                rndColorGroup.outputs.new('NodeSocketColor','rndColor')
+                if vers[0]<4:
+                    rndColorGroup.inputs.new('NodeSocketFloat','rndColorIndex')
+                    rndColorGroup.outputs.new('NodeSocketColor','rndColor')
+                else: 
+                    rndColorGroup.interface.new_socket(name="rndColorIndex", socket_type='NodeSocketFloat', in_out='INPUT')
+                    rndColorGroup.interface.new_socket(name="rndColor", socket_type='NodeSocketColor', in_out='OUTPUT')
                 rndColorGroupI = create_node(rndColorGroup.nodes, "NodeGroupInput",(-1400,0))
                 rndColorGroupO = create_node(rndColorGroup.nodes, "NodeGroupOutput",(200,0))  
                 compare = create_node(rndColorGroup.nodes,"ShaderNodeMath", (-1100,150), operation="COMPARE")
@@ -586,7 +633,7 @@ class TelevisionAd:
             CurMat.links.new(adNode.outputs[0],mixRGB2.inputs[1])
             CurMat.links.new(vecAdd6.outputs[0],mixRGB2.inputs[2])
 
-            # HUE
+            # HSV
             separate4 = create_node(CurMat.nodes,"ShaderNodeSeparateColor",(300,975))
             separate4.mode = "HSV"
             mul11 = create_node(CurMat.nodes,"ShaderNodeMath",(0,925),operation="MULTIPLY")
@@ -604,15 +651,132 @@ class TelevisionAd:
             CurMat.links.new(separate4.outputs[1],combine10.inputs[1])
             CurMat.links.new(separate4.outputs[2],combine10.inputs[2])
 
-            # lerp(adTex, dirtTex, dirtOpacity) and link to pBSFD
+            # blackDots
+            if 'blackDots' in bpy.data.node_groups.keys():
+                blackDotsGroup = bpy.data.node_groups['blackDots']
+            else:
+                blackDotsGroup = bpy.data.node_groups.new("blackDots","ShaderNodeTree") 
+                if vers[0]<4:
+                    blackDotsGroup.inputs.new('NodeSocketVector','UV')
+                    blackDotsGroup.inputs.new('NodeSocketFloat','PixelsHeight')
+                    blackDotsGroup.inputs.new('NodeSocketFloat','BlackLinesRatio')
+                    blackDotsGroup.inputs.new('NodeSocketFloat','BlackLinesSize')
+                    blackDotsGroup.inputs.new('NodeSocketFloat','TilesHeight')
+                    blackDotsGroup.inputs.new('NodeSocketFloat','LinesOrDots')
+                    blackDotsGroup.inputs.new('NodeSocketFloat','BlackLinesIntensity')
+                    blackDotsGroup.inputs.new('NodeSocketFloat','DistanceDivision')
+                    blackDotsGroup.outputs.new('NodeSocketFloat','blackDots')
+                else: 
+                    blackDotsGroup.interface.new_socket(name="UV", socket_type='NodeSocketVector', in_out='INPUT')
+                    blackDotsGroup.interface.new_socket(name="PixelsHeight", socket_type='NodeSocketFloat', in_out='INPUT')
+                    blackDotsGroup.interface.new_socket(name="BlackLinesRatio", socket_type='NodeSocketFloat', in_out='INPUT')
+                    blackDotsGroup.interface.new_socket(name="BlackLinesSize", socket_type='NodeSocketFloat', in_out='INPUT')
+                    blackDotsGroup.interface.new_socket(name="TilesHeight", socket_type='NodeSocketFloat', in_out='INPUT')
+                    blackDotsGroup.interface.new_socket(name="LinesOrDots", socket_type='NodeSocketFloat', in_out='INPUT')
+                    blackDotsGroup.interface.new_socket(name="BlackLinesIntensity", socket_type='NodeSocketFloat', in_out='INPUT')
+                    blackDotsGroup.interface.new_socket(name="DistanceDivision", socket_type='NodeSocketFloat', in_out='INPUT')
+                    blackDotsGroup.interface.new_socket(name="blackDots", socket_type='NodeSocketFloat', in_out='OUTPUT')
+                blackDotsGroupI = create_node(blackDotsGroup.nodes, "NodeGroupInput",(-1400,0))
+                blackDotsGroupO = create_node(blackDotsGroup.nodes, "NodeGroupOutput",(1000,0))  
+
+                # lines
+                separate = create_node(blackDotsGroup.nodes, "ShaderNodeSeparateXYZ",(-1250,50))
+                add = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-1100,50))
+                add.inputs[1].default_value = .5
+                mul = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-950,50),operation="MULTIPLY")
+                div = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-800,50),operation="DIVIDE")
+                frac = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-650,50),operation="FRACT")
+                add2 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-500,50))
+                add2.inputs[1].default_value = .4
+                floor = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-350,50),operation="FLOOR")
+                floor.use_clamp = True
+                blackDotsGroup.links.new(blackDotsGroupI.outputs[0],separate.inputs[0])
+                blackDotsGroup.links.new(separate.outputs[0],add.inputs[0])
+                blackDotsGroup.links.new(add.outputs[0],mul.inputs[0])
+                blackDotsGroup.links.new(blackDotsGroupI.outputs[1],mul.inputs[1])
+                blackDotsGroup.links.new(mul.outputs[0],div.inputs[0])
+                blackDotsGroup.links.new(blackDotsGroupI.outputs[2],div.inputs[1])
+                blackDotsGroup.links.new(div.outputs[0],frac.inputs[0])
+                blackDotsGroup.links.new(frac.outputs[0],add2.inputs[0])
+                blackDotsGroup.links.new(add2.outputs[0],floor.inputs[0])
+
+                # dots
+                vecMul = create_node(blackDotsGroup.nodes, "ShaderNodeVectorMath",(-1250,-50),operation="MULTIPLY")
+                vecMul2 = create_node(blackDotsGroup.nodes, "ShaderNodeVectorMath",(-1100,-50),operation="MULTIPLY")
+                vecMul3 = create_node(blackDotsGroup.nodes, "ShaderNodeVectorMath",(-950,-50),operation="MULTIPLY")
+                blackDotsGroup.links.new(blackDotsGroupI.outputs[0],vecMul.inputs[0])
+                blackDotsGroup.links.new(blackDotsGroupI.outputs[3],vecMul.inputs[1])
+                blackDotsGroup.links.new(vecMul.outputs[0],vecMul2.inputs[0])
+                blackDotsGroup.links.new(blackDotsGroupI.outputs[4],vecMul2.inputs[1])
+                blackDotsGroup.links.new(vecMul2.outputs[0],vecMul3.inputs[0])
+                blackDotsGroup.links.new(blackDotsGroupI.outputs[2],vecMul3.inputs[1])
+
+                separate2 = create_node(blackDotsGroup.nodes, "ShaderNodeSeparateXYZ",(-800,-50))
+                mul2 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-650,-50),operation="MULTIPLY")
+                mul2.inputs[1].default_value = 3.1415926
+                add3 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-500,-50))
+                add3.inputs[1].default_value = 3.1415926/2
+                cos = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-350,-50),operation="COSINE")
+
+                mul3 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-650,-150),operation="MULTIPLY")
+                mul3.inputs[1].default_value = 3.1415926
+                add4 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-500,-150))
+                add4.inputs[1].default_value = 3.1415926/2
+                cos2 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-350,-150),operation="COSINE")
+
+                mul4 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-200,-100),operation="MULTIPLY")
+                mul5 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(-50,-100),operation="MULTIPLY")
+                mul5.inputs[0].default_value = 2
+                mul6 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(100,-100),operation="MULTIPLY")
+                mul6.inputs[1].default_value = .5
+                blackDotsGroup.links.new(vecMul3.outputs[0],separate2.inputs[0])
+                blackDotsGroup.links.new(separate2.outputs[1],mul2.inputs[0])
+                blackDotsGroup.links.new(mul2.outputs[0],add3.inputs[0])
+                blackDotsGroup.links.new(add3.outputs[0],cos.inputs[0])
+                blackDotsGroup.links.new(separate2.outputs[0],mul3.inputs[0])
+                blackDotsGroup.links.new(mul3.outputs[0],add4.inputs[0])
+                blackDotsGroup.links.new(add4.outputs[0],cos2.inputs[0])
+                blackDotsGroup.links.new(cos.outputs[0],mul4.inputs[0])
+                blackDotsGroup.links.new(cos2.outputs[0],mul4.inputs[1])
+                blackDotsGroup.links.new(mul4.outputs[0],mul5.inputs[1])
+                blackDotsGroup.links.new(mul5.outputs[0],mul6.inputs[0])
+
+                mix = create_node(blackDotsGroup.nodes, "ShaderNodeMix",(250,0))
+                blackDotsGroup.links.new(blackDotsGroupI.outputs[5],mix.inputs[0])
+                blackDotsGroup.links.new(floor.outputs[0],mix.inputs[4])
+                blackDotsGroup.links.new(mul6.outputs[0],mix.inputs[3])
+
+                sub = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(250,-50),operation="SUBTRACT")
+                sub.inputs[0].default_value = 1
+                add5 = create_node(blackDotsGroup.nodes, "ShaderNodeMath",(400,-50))
+                add5.use_clamp = True
+                blackDotsGroup.links.new(blackDotsGroupI.outputs[6],sub.inputs[1])
+                blackDotsGroup.links.new(mix.outputs[0],add5.inputs[0])
+                blackDotsGroup.links.new(sub.outputs[0],add5.inputs[1])
+                blackDotsGroup.links.new(add5.outputs[0],blackDotsGroupO.inputs[0])
+
+            blackDots = create_node(CurMat.nodes,"ShaderNodeGroup",(-650,200), label="blackDots")
+            blackDots.node_tree = blackDotsGroup
+            CurMat.links.new(UVNode.outputs[2],blackDots.inputs[0])
+            CurMat.links.new(pixH.outputs[0],blackDots.inputs[1])
+            CurMat.links.new(blRatio.outputs[0],blackDots.inputs[2])
+            CurMat.links.new(blSize.outputs[0],blackDots.inputs[3])
+            CurMat.links.new(tilesH.outputs[0],blackDots.inputs[4])
+            CurMat.links.new(lOrDots.outputs[0],blackDots.inputs[5])
+            CurMat.links.new(blIntensity.outputs[0],blackDots.inputs[6])
+
+            # lerp(adTex * blackDots, dirtTex, dirtOpacity) and link to pBSFD
             vecLerpG = createVecLerpGroup()
             vecLerp = create_node(CurMat.nodes,"ShaderNodeGroup",(-200,200), label="vecLerp")
             vecLerp.node_tree = vecLerpG   
-            CurMat.links.new(combine10.outputs[0],vecLerp.inputs[0])
+            vecMul10 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-350,200),operation="MULTIPLY")
+            CurMat.links.new(combine10.outputs[0],vecMul10.inputs[0])
+            CurMat.links.new(blackDots.outputs[0],vecMul10.inputs[1])
+            CurMat.links.new(vecMul10.outputs[0],vecLerp.inputs[0])
             CurMat.links.new(dirtNode.outputs[0],vecLerp.inputs[1])
             CurMat.links.new(mul12.outputs[0],vecLerp.inputs[2])
             CurMat.links.new(vecLerp.outputs[0],pBSDF.inputs["Base Color"])
-            CurMat.links.new(combine10.outputs[0],pBSDF.inputs["Emission"]) # it will be like this before i implement the blackDots
+            CurMat.links.new(vecLerp.outputs[0],pBSDF.inputs[sockets["Emission"]])
 
         # metalness
         CurMat.links.new(m.outputs[0],pBSDF.inputs["Metallic"])

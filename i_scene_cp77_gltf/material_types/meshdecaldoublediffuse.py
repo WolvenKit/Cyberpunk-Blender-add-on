@@ -8,7 +8,8 @@ class MeshDecalDoubleDiffuse:
         self.image_format = image_format
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
-        CurMat.nodes['Principled BSDF'].inputs['Specular'].default_value = 0
+        sockets=bsdf_socket_names()
+        CurMat.nodes['Principled BSDF'].inputs[sockets['Specular']].default_value = 0
 
 #Diffuse
         mixRGB = CurMat.nodes.new("ShaderNodeMixRGB")

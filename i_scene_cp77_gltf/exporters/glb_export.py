@@ -3,18 +3,38 @@ from ..main.animtools import reset_armature
 
 #setup the default options to be applied to all export types
 def default_cp77_options():
-    options = {
-        'export_format': 'GLB',
-        'check_existing': True,
-        'export_skins': True,
-        'export_yup': True,
-        'export_cameras': False,
-        'export_materials': 'NONE',
-        'export_all_influences': True,
-        'export_lights': False,
-        'export_apply': False
-    }
+    vers=bpy.app.version
+    if vers[0]<4:
+        options = {
+            'export_format': 'GLB',
+            'check_existing': True,
+            'export_skins': True,
+            'export_yup': True,
+            'export_cameras': False,
+            'export_materials': 'NONE',
+            'export_all_influences': True,
+            'export_lights': False,
+            'export_apply': False,
+            'export_extras': True,
+            'export_attributes': True,
+        }
+    else:
+        options = {
+            'export_format': 'GLB',
+            'check_existing': True,
+            'export_skins': True,
+            'export_yup': True,
+            'export_cameras': False,
+            'export_materials': 'NONE',
+            'export_all_influences': True,
+            'export_lights': False,
+            'export_apply': False,
+            'export_extras': True,
+            'export_attributes': True,
+            'export_try_sparse_sk': False,
+        }
     return options
+      
 
 #make sure meshes are exported with tangents, morphs and vertex colors
 def cp77_mesh_options():
@@ -26,30 +46,27 @@ def cp77_mesh_options():
         'export_morph_normal': True,
         'export_morph': True,
         'export_colors': True,
-        'export_attributes': True
+        
     }
     return options
+
 #the options for anims
 def pose_export_options():
     options = {
         'export_animations': True,
         'export_frame_range': False,
         'export_animation_mode': 'NLA_TRACKS',
-        'export_anim_single_armature': True       
+        'export_anim_single_armature': True     
     }
     return options
 
 #setup the actual exporter - rewrote almost all of this, much quicker now
-def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_selected):
+def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_selected, static_prop):
 
     #check if the scene is in object mode, if it's not, switch to object mode
     if bpy.context.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
-        # # Select only the mesh objects
-        # for obj in context.scene.objects:
-        #     if obj.type == 'MESH':
-        #         obj.select_set(True)
-    
+
     objects = context.selected_objects
 
     #if for photomode, make sure there's an armature selected, if not use the message box to show an error
@@ -113,15 +130,18 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
     # if exporting meshes, iterate through any connected armatures, store their current state. if hidden, unhide them and select them for export
         armature_states = {}
 
-        for obj in objects: 
-            if obj.type == 'MESH' and obj.select_get():
-                armature_modifier = None
-                for modifier in obj.modifiers:
-                    if modifier.type == 'ARMATURE' and modifier.object:
-                        armature_modifier = modifier
-                        break
+        for obj in objects:
+            if not static_prop:
+                if obj.type == 'MESH' and obj.select_get():
+                    armature_modifier = None
+                    for modifier in obj.modifiers:
+                        if modifier.type == 'ARMATURE' and modifier.object:
+                            armature_modifier = modifier
+                            break
 
-                if armature_modifier:
+                    if not static_prop and not armature_modifier:
+                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=(f"Armature missing from: (obj.name) armatures are required for movement. If this is intentional, try 'export as static prop'"))
+                        return {'CANCELLED'}
                     # Store original visibility and selection state
                     armature = armature_modifier.object
                     armature_states[armature] = {"hide": armature.hide_get(),
@@ -140,17 +160,30 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
                         bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Ungrouped vertices found and selected. Please assign them to a group or delete them beforebefore exporting.")
                         return {'CANCELLED'}
 
-        if limit_selected:
-            bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
-            armature.hide_set(True)
-
-        else:
-            if export_visible:
-                bpy.ops.export_scene.gltf(filepath=filepath, use_visible=True, **options)
-                armature.hide_set(True)
+            if limit_selected:
+                try:
+                    bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
+                    if not static_prop:
+                        armature.hide_set(True)
+                except Exception as e:
+                    print(e)
+               
             else:
-                bpy.ops.export_scene.gltf(filepath=filepath, **options)
-                armature.hide_set(True)
+                if export_visible:
+                    try:
+                        bpy.ops.export_scene.gltf(filepath=filepath, use_visible=True, **options)
+                        if not static_prop:
+                            armature.hide_set(True)
+                    except Exception as e:
+                        print(e)
+
+                else:
+                    try:
+                        bpy.ops.export_scene.gltf(filepath=filepath, **options)
+                        if not static_prop:
+                            armature.hide_set(True)
+                    except Exception as e:
+                        print(e)
 
 
         # Restore original armature visibility and selection states

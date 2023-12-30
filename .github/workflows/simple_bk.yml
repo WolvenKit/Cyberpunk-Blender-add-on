@@ -19,5 +19,5 @@ jobs:
         with:
           name: Cyberpunk Blender Plugin
           name-suffix: "PR-time"
-          build-location: "./i_scene_cp77_gltf/"
+          build-location: "./"
           exclude-files: ".git;.github;README.md"

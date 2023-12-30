@@ -10,7 +10,8 @@ class MeshDecalParallax:
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
         pBSDF=CurMat.nodes['Principled BSDF']
-        pBSDF.inputs['Specular'].default_value = 0
+        sockets=bsdf_socket_names()
+        pBSDF.inputs[sockets['Specular']].default_value = 0
         #Diffuse
         mixRGB = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-500,500),blend_type = 'MULTIPLY')
         mixRGB.inputs[0].default_value = 1
