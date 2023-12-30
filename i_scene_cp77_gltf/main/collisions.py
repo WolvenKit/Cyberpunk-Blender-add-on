@@ -39,32 +39,29 @@ def draw_convex_collider(name, collision_collection, vertices, physmat, transfor
         bm.free()
 
 
-def draw_sphere_collider(name, collision_collection, radius, physmat, transform, collision_type):
-    shape = 'physicsColliderSphere'
-    is_edit_mode = bpy.context.object.mode == 'EDIT'
+def draw_sphere_collider(name, collision_collection, radius, position, physmat, collision_type):
+    collision_shape = 'physicsColliderSphere'
     r = float(radius)
     bm = bmesh.new()
-    position = (transform['position']['X'], transform['position']['Y'], transform['position']['Z'])
+   # position = (transform['position']['X'], transform['position']['Y'], transform['position']['Z'])
     bmesh.ops.create_uvsphere(bm, u_segments=8, v_segments=9, radius=r)
-    shape = 'physicsColliderSphere'
-    name = shape
+    name = collision_shape
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)
     mesh.update()
     bm.free()
     sphere = bpy.data.objects.new(name, mesh)
     sphere.location = position
-    set_collider_props(sphere, collision_shape, physics_material, collider_type)
+    set_collider_props(sphere, collision_shape, physmat, collision_type)
     collision_collection.objects.link(sphere)
 
-def draw_capsule_collider(name, collision_collection, radius, height, physmat, transform, collision_type):
-    shape = 'physicsColliderCapsule'
+def draw_capsule_collider(name, collision_collection, radius, height, position, rotation, physmat, collision_type):
+    collision_shape = 'physicsColliderCapsule'
     is_edit_mode = bpy.context.object.mode == 'EDIT'
-    r = float(radius) 
-    h = height   
+    r = float(radius)
+    h = float(height)   
     bm = bmesh.new()
     bmesh.ops.create_uvsphere(bm, u_segments=8, v_segments=9, radius=r)
-    position = (transform['position']['X'], transform['position']['Y'], transform['position']['Z'])
     delta_Z = float(h)
     bm.verts.ensure_lookup_table()
     for vert in bm.verts:
@@ -72,20 +69,21 @@ def draw_capsule_collider(name, collision_collection, radius, height, physmat, t
             vert.co[2] -= delta_Z
         elif vert.co[2] > 0:
             vert.co[2] += delta_Z
-    name = shape
+    name = collision_shape
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)
     mesh.update()
     bm.free()
     capsule = bpy.data.objects.new(name, mesh)
-    set_collider_props(capsule, collision_shape, physics_material, collider_type)
+    set_collider_props(capsule, collision_shape, physmat, collision_type)
     capsule.location = position
     capsule.rotation_quaternion[1] = 1
     bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
     if is_edit_mode:
         bpy.ops.object.mode_set(mode='OBJECT')
-    capsule.dimensions.z = float(h)
+    capsule.dimensions.z = h
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    capsule.rotation_quaternion = rotation
     collision_collection.objects.link(capsule)
     # Re-enter Edit mode
     if is_edit_mode:
