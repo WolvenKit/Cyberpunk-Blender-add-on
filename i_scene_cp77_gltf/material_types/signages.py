@@ -11,7 +11,8 @@ class Signages:
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
         pBSDF=CurMat.nodes['Principled BSDF']
-        pBSDF.inputs['Specular'].default_value = 0
+        sockets=bsdf_socket_names()
+        pBSDF.inputs[sockets['Specular']].default_value = 0
         print('Creating neon sign')
         if "ColorOneStart" in Data:
             dCol = CreateShaderNodeRGB(CurMat, Data["ColorOneStart"], -800, 250, "ColorOneStart")    
@@ -41,7 +42,7 @@ class Signages:
 
 
         CurMat.links.new(alphaNode.outputs[0], pBSDF.inputs['Alpha'])
-        CurMat.links.new(mulNode.outputs[0], pBSDF.inputs['Emission'])
+        CurMat.links.new(mulNode.outputs[0], pBSDF.inputs[sockets['Emission']])
         
         if "EmissiveEV" in Data:
             CurMat.nodes['Principled BSDF'].inputs['Emission Strength'].default_value =  Data["EmissiveEV"]*10
@@ -50,7 +51,7 @@ class Signages:
             CurMat.nodes['Principled BSDF'].inputs['Roughness'].default_value =  Data["Roughness"]
 
         if "FresnelAmount" in Data:   
-            CurMat.nodes['Principled BSDF'].inputs['Specular'].default_value =  Data["FresnelAmount"]
+            CurMat.nodes['Principled BSDF'].inputs[sockets['Specular']].default_value =  Data["FresnelAmount"]
         
         if "ColorOneStart" in Data:
             dCol = CreateShaderNodeRGB(CurMat, Data["ColorOneStart"], -850, 250, "ColorOneStart")    

@@ -3,12 +3,12 @@ import bpy
 import math
 import json
 import os
+from .common import get_plugin_dir, get_resources_dir, get_refit_dir, get_rig_dir
 
-
-plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-resources_dir = os.path.join(plugin_dir, "resources")
-refit_dir = os.path.join(resources_dir, "refitters")
-
+plugin_dir = get_plugin_dir()
+resources_dir = get_resources_dir()
+refit_dir = get_refit_dir()
+rig_dir = get_rig_dir()
 
 def CP77CollectionList(self, context):
     items = []
@@ -42,19 +42,81 @@ def find_nearest_vertex_group(obj, vertex):
 
 
 def CP77GroupUngroupedVerts(self, context):
-    """Main function to assign unassigned vertices to nearest vertex group."""
-    obj = bpy.context.object
+    C = bpy.context
+    obj = C.object
+    current_mode = C.mode
+
     if obj.type != 'MESH':
         bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="The active object is not a mesh.")
         return {'CANCELLED'}
+    else:
+        if current_mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+        ungrouped_vertices = [v for v in obj.data.vertices if not v.groups]
+
+        if ungrouped_vertices:
+            try:
+                for v in ungrouped_vertices:
+                    nearest_vertex = find_nearest_vertex_group(obj, v)
+                    if nearest_vertex:
+                        for g in nearest_vertex.groups:
+                            group_name = obj.vertex_groups[g.group].name
+                            obj.vertex_groups[group_name].add([v.index], 1.0, 'ADD')
+            except Exception as e:
+                print(e)
+
+        # Return to the mode the user was in edit_mesh was giving me a lot of trouble and is probably 
+        # the most common it will be here so special handling for it
+        if C.mode != current_mode:
+            try:
+                if current_mode == 'EDIT_MESH':
+                    bpy.ops.object.mode_set(mode='EDIT')
+                else:
+                    bpy.ops.object.mode_set(mode=current_mode)
+            except Exception as e:
+                print(e)
+    return {'FINISHED'}
     
-    ungrouped_vertices = [v for v in obj.data.vertices if not v.groups]  
-    for v in ungrouped_vertices:
-        nearest_vertex = find_nearest_vertex_group(obj, v)
-        if nearest_vertex:
-            for g in nearest_vertex.groups:
-                group_name = obj.vertex_groups[g.group].name
-                obj.vertex_groups[group_name].add([v.index], 1.0, 'ADD')
+def CP77SubPrep(self, context, smooth_factor, merge_distance):
+    scn = context.scene
+    obj = context.object
+    current_mode = context.mode
+    if obj.type != 'MESH':
+        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="The active object is not a mesh.")
+        return {'CANCELLED'}  
+    
+    if current_mode != 'EDIT':
+        bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_mode(type="EDGE")
+    bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.mesh.select_non_manifold(extend=False, use_wire=True, use_boundary=True, use_multi_face=False, use_non_contiguous=False, use_verts=False)
+    bpy.ops.mesh.mark_seam(clear=False)
+    bpy.ops.mesh.select_mode(type="VERT")
+    bpy.ops.mesh.select_all(action='SELECT')
+    
+    # Store the number of vertices before merging
+    bpy.ops.object.mode_set(mode='OBJECT')
+    before_merge_count = len(obj.data.vertices)
+    bpy.ops.object.mode_set(mode='EDIT')
+
+    bpy.ops.mesh.remove_doubles(threshold=merge_distance)
+
+    # Update the mesh and calculate the number of merged vertices
+    bpy.ops.object.mode_set(mode='OBJECT')
+    after_merge_count = len(obj.data.vertices)
+    merged_vertices = before_merge_count - after_merge_count
+
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.faces_select_linked_flat()
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.smooth_normals()
+    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"Submesh preparation complete. {merged_vertices} verts merged")
+    if context.mode != current_mode:
+        bpy.ops.object.mode_set(mode=current_mode)
+        
 
 def CP77ArmatureSet(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
@@ -159,7 +221,7 @@ def CP77UvChecker(self, context):
                 bpy.ops.object.mode_set(mode='EDIT')
                 bpy.ops.object.material_slot_assign()
                 
-                print(current_mode)
+                #print(current_mode)
         
         if context.mode != current_mode:
             bpy.ops.object.mode_set(mode=current_mode)
@@ -186,19 +248,17 @@ def CP77UvUnChecker(self, context):
                 bpy.ops.object.material_slot_assign()
         if context.mode != current_mode:
             bpy.ops.object.mode_set(mode=current_mode)
-
-    return {'FINISHED'}
                 
 
 def cp77riglist(context):
     cp77rigs = []
-    man_base = os.path.join(resources_dir, "man_base_full.glb")
+    man_base = os.path.join(rig_dir, "man_base_full.glb")
     woman_base = os.path.join(resources_dir, "woman_base.gltf")
-    man_big = os.path.join(resources_dir, "man_big_full.glb")
-    man_fat = os.path.join(resources_dir, "man_fat_full.glb")
-    Rhino = os.path.join(resources_dir, "rhino_full.glb")
-    Judy = os.path.join(resources_dir, "Judy_full.glb")
-    Panam = os.path.join(resources_dir, "Panam_full.glb")
+    man_big = os.path.join(rig_dir, "man_big_full.glb")
+    man_fat = os.path.join(rig_dir, "man_fat_full.glb")
+    Rhino = os.path.join(rig_dir, "rhino_full.glb")
+    Judy = os.path.join(rig_dir, "Judy_full.glb")
+    Panam = os.path.join(rig_dir, "Panam_full.glb")
     
     # Store the variable names in a list
     cp77rigs = [man_base, woman_base, man_big, man_fat, Rhino, Judy, Panam]
@@ -209,7 +269,9 @@ def cp77riglist(context):
 
 
 def CP77RefitList(context):
-    target_body_paths = []
+    target_addon_paths = [None]
+    target_addon_names = ['None']
+    
     SoloArmsAddon = os.path.join(refit_dir, "SoloArmsAddon.zip")
     Adonis = os.path.join(refit_dir, "Adonis.zip")
     VanillaFemToMasc = os.path.join(refit_dir, "f2m.zip")
@@ -220,10 +282,13 @@ def CP77RefitList(context):
     Hyst_EBB_RB = os.path.join(refit_dir, "hyst_ebb_rb.zip")
     Flat_Chest = os.path.join(refit_dir, "flat_chest.zip")
     Solo_Ultimate = os.path.join(refit_dir, "solo_ultimate.zip")
+    Gymfiend = os.path.join(refit_dir, "gymfiend.zip")
+    Freyja = os.path.join(refit_dir, "freyja.zip")
+    Hyst_EBBP_Addon = os.path.join(refit_dir, "hyst_ebbp_addon.zip")
     
-    # Convert the dictionary to a list of tuples
-    target_body_paths = [SoloArmsAddon, Solo_Ultimate, Adonis, Flat_Chest, Hyst_EBB_RB, Hyst_EBB, Hyst_RB, Lush, VanillaFemToMasc, VanillaMascToFem ]
-    target_body_names = ['SoloArmsAddon', 'Solo_Ultimate', 'Adonis', 'Flat_Chest', 'Hyst_EBB_RB', 'Hyst_EBB', 'Hyst_RB', 'Lush', 'VanillaFemToMasc', 'VanillaMascToFem' ]
+    # Return the list of variable names
+    target_body_paths = [Hyst_EBBP_Addon, Freyja, Gymfiend,SoloArmsAddon, Solo_Ultimate, Adonis, Flat_Chest, Hyst_EBB_RB, Hyst_EBB, Hyst_RB, Lush, VanillaFemToMasc, VanillaMascToFem]
+    target_body_names = ['Hyst_EBBP_Addon', 'Freyja', 'Gymfiend','SoloArmsAddon', 'Solo_Ultimate', 'Adonis', 'Flat_Chest', 'Hyst_EBB_RB', 'Hyst_EBB', 'Hyst_RB', 'Lush', 'VanillaFemToMasc', 'VanillaMascToFem' ]
 
     # Return the list of tuples
     return target_body_paths, target_body_names
@@ -289,8 +354,8 @@ def CP77Refit(context, refitter, target_body_path, target_body_name, fbx_rot):
         filename=z.namelist()[0]
         print(filename)
         with z.open(filename) as f:
-                data = f.read()
-                data = json.loads(data)
+            data = f.read()
+            data = json.loads(data)
 
         if data:
             control_points = data.get("deformed_control_points", [])
