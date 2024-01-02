@@ -1,9 +1,10 @@
 import bpy
 from mathutils import Vector
+import re
 
 # Set the names of the armatures that you're trying to retarget
-current_armature_name = "your_mesh_armature"
-target_armature_name = "Armature"
+current_armature_name = "Armature"      # the armature you want to import, with TOO MANY DAMN BONES
+target_armature_name = "Armature.001"   # the target armature (e.g. body__t_bug our lord and saviour)
 
 # Get references to the current and target armatures
 current_armature = bpy.data.objects.get(current_armature_name)
@@ -20,15 +21,9 @@ def check_prerequisites():
         return False
     
     current_armature.select_set(True)
-    bpy.ops.object.mode_set(mode='EDIT')
-        
-    # Check if the active object is an armature and in edit mode
-    if not bpy.context.active_object and bpy.context.active_object.type == 'ARMATURE':
-        print("Make sure you have an armature selected in edit mode.")
-        return False 
 
     # Deselect all bones first
-    bpy.ops.armature.select_all(action='DESELECT')
+    bpy.ops.object.mode_set(mode='EDIT')
     return True
 
 matching_bones = {}
@@ -62,37 +57,63 @@ def find_closest_bone(bone_name):
     print(f"\"{bone_name}\" : \"{closest_bone}\",")
 
 def rename_vertex_groups(mesh_name):
-    
-    print(f"\nrenaming vertex groups in {mesh_name}...")
+    num_renamed_groups = 0
     for original_name, target_name in matching_bones.items():
-        # Check if the vertex group exists and rename it        
-        vertex_groups = bpy.data.objects[mesh_name].vertex_groups
-        matching_group = next((group for group in vertex_groups if group.name == original_name), None)
+        # Check if the vertex group exists and rename it
+        matching_group = bpy.data.objects[mesh_name].vertex_groups.get(original_name)
 
-        if matching_group is None:
-            print(f"\tVertex group {original_name} not found")
+        if matching_group is None:     
             continue
-
+        
+        num_renamed_groups = num_renamed_groups + 1
         matching_group.name = target_name
-        print(f"\t{original_name} -> {target_name}")
+    if num_renamed_groups > 0:        
+        print(f"\trenamed {num_renamed_groups} vertex groups in {mesh_name}")
+        
+def merge_similar_vertex_groups(mesh_name):
+    obj = bpy.data.objects.get(mesh_name)
 
-def reparent_meshes():
-    # Find all meshes parented to target_armature and delete them
-    parented_meshes_to_delete = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH' and obj.parent == target_armature]
-    for mesh_to_delete in parented_meshes_to_delete:
-        bpy.data.objects.remove(mesh_to_delete, do_unlink=True)
+    pattern = re.compile(r'\.\d+$')
+    
+    # Iterate over existing vertex groups
+    existing_groups = bpy.data.objects[mesh_name].vertex_groups.keys()
+    needs_merging = [key for key in existing_groups if pattern.search(key)]
+    original_names = [string[:pattern.search(string).start()] for string in needs_merging if pattern.search(string)]
+    
+    for root_group_name in original_names:
+        groupNamePattern = re.compile(root_group_name + r'\.\d+$')
+        groups_to_merge = [group for group in existing_groups if groupNamePattern.search(group)]
+        
+        # Check if there are groups to merge
+        if not groups_to_merge or len(groups_to_merge) == 0:
+            return
+            
+        # Create a new vertex group to store the merged weights
+        merged_group = bpy.data.objects[mesh_name].vertex_groups.get(root_group_name)
+        
+        # Iterate over the groups to merge
+        for group_name in groups_to_merge:
+            source_group = bpy.data.objects[mesh_name].vertex_groups.get(group_name)
 
-    # Find all meshes parented to current_armature
-    meshes_to_reparent = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH' and obj.parent == current_armature]
+            if source_group is None:                
+                print(f"No group {group_name} found")
+                continue
+            
+            # Iterate over the vertices and transfer weights to the merged group
+            for vertex in obj.data.vertices:                
+                if not group_name in vertex.groups.keys():
+                    continue
+                vertex_index = vertex.index
+                weight = source_group.weight(vertex_index)
+                weight = weight if weight else 1
+                # Add or update the weight in the merged group
+                merged_group.add([vertex_index], weight, 'REPLACE')
 
-    # Reparent the meshes to target_armature and update armature modifiers
-    for mesh in meshes_to_reparent:
-        mesh.parent = target_armature
-        for modifier in mesh.modifiers:
-            if modifier.type == 'ARMATURE' and modifier.object == current_armature:
-                modifier.object = target_armature
+            # Remove the source group after merging
+            bpy.data.objects[mesh_name].vertex_groups.remove(source_group)
 
-        print("Meshes reparented successfully.")
+            print(f"Vertex groups {groups_to_merge} merged into '{root_group_name}'.")
+
         
 if check_prerequisites():
     target_bone_names = {bone.name for bone in target_armature.data.bones}
@@ -105,8 +126,15 @@ if check_prerequisites():
     print(f"Found {len(matching_bones)} bones that are not in \"{target_armature_name}\"")
     
     parented_meshes = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH' and obj.parent == current_armature]
-    for mesh in parented_meshes: 
-        rename_vertex_groups(mesh.name)
     
-    reparent_meshes()
+    for mesh in parented_meshes: 
+        print(f"\n processing {mesh.name}")
+        rename_vertex_groups(mesh.name)
+        merge_similar_vertex_groups(mesh.name)  
+          
+        for modifier in mesh.modifiers:
+            if modifier.type == 'ARMATURE' and modifier.object == current_armature:
+                modifier.object = target_armature    
+    
+    bpy.ops.object.mode_set(mode='OBJECT')
     print("Done! You can import now")
