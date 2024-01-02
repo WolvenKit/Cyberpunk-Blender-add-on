@@ -55,7 +55,7 @@ def pose_export_options():
     options = {
         'export_animations': True,
         'export_frame_range': False,
-        'export_animation_mode': 'NLA_TRACKS',
+        'export_animation_mode': 'ACTIONS',
         'export_anim_single_armature': True     
     }
     return options
@@ -81,6 +81,7 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
         options.update(pose_export_options())
         for armature in armatures:
             reset_armature(armature, context)
+            print(options)
             bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
             return{'FINISHED'}
     else:
