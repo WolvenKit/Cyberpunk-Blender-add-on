@@ -3,8 +3,8 @@ from mathutils import Vector
 import re
 
 # Set the names of the armatures that you're trying to retarget
-current_armature_name = "Armature"      # the armature you want to import, with TOO MANY DAMN BONES
-target_armature_name = "Armature.001"   # the target armature (e.g. body__t_bug our lord and saviour)
+current_armature_name = "Armature.002"      # the armature you want to import, with TOO MANY DAMN BONES
+target_armature_name = "Armature.003"   # the target armature (e.g. body__t_bug our lord and saviour)
 
 # Get references to the current and target armatures
 current_armature = bpy.data.objects.get(current_armature_name)
@@ -54,7 +54,7 @@ def find_closest_bone(bone_name):
     matching_bones[bone_name] = closest_bone
     
     # Print the name of the closest bone to the console
-    print(f"\"{bone_name}\" : \"{closest_bone}\",")
+    # print(f"\"{bone_name}\" : \"{closest_bone}\",")
 
 def rename_vertex_groups(mesh_name):
     num_renamed_groups = 0
@@ -127,6 +127,12 @@ if check_prerequisites():
     
     parented_meshes = [obj for obj in bpy.context.scene.objects if obj.type == 'MESH' and obj.parent == current_armature]
     
+    # find target armature collection so that we can parent our meshes to it
+    for collection in bpy.data.collections:
+        if target_armature_name in collection.objects:
+            target_armature_collection = collection            
+            break  # Break the loop after finding the first collection
+
     for mesh in parented_meshes: 
         print(f"\n processing {mesh.name}")
         rename_vertex_groups(mesh.name)
@@ -134,7 +140,17 @@ if check_prerequisites():
           
         for modifier in mesh.modifiers:
             if modifier.type == 'ARMATURE' and modifier.object == current_armature:
-                modifier.object = target_armature    
+                modifier.object = target_armature
+        
+        # Change the parent to target_armature
+        mesh.parent = target_armature
+
+        # Remove the mesh from its current collections
+        for collection in mesh.users_collection:
+            collection.objects.unlink(mesh)
+
+        if target_armature_collection:
+            target_armature_collection.objects.link(mesh)
     
     bpy.ops.object.mode_set(mode='OBJECT')
     print("Done! You can import now")
