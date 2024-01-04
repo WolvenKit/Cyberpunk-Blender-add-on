@@ -552,8 +552,9 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                         cm_list.reverse()
                                         for obj in objs:
                                             subnum=int(obj.name[8:10])
-                                            # obj.hide_viewport=not cm_list[subnum]
+                                            #obj.hide_viewport=not cm_list[subnum]
                                             obj.hide_set(not cm_list[subnum])
+                                            obj.hide_render=not cm_list[subnum]
                                 #else:
                                 except:
                                     print("Failed on ",meshname)
