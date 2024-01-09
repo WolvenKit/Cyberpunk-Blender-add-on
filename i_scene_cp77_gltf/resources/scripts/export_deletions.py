@@ -1,9 +1,15 @@
 import bpy
 import re
+yamlavail=False
+try:
+    import yaml
+    yamlavail=True
+except:
+    import json
 
-wolvenkit_project = "apartment_dogtown_cleaned_up"
-mod_directory = "C:\\Games\\Cyberpunk 2077\\archive\\pc\\mod\\"
-project_directory = "F:\\CyberpunkFiles\\world_editing\\"
+wolvenkit_project = "archivexlupdate"
+mod_directory = "D:\\GOGLibrary\\Cyberpunk 2077\\archive\\pc\\mod\\"
+project_directory = "D:\\cpmod\\"
 
 export_to_mod_dir = True
 consider_partial_deletions = True
@@ -72,9 +78,38 @@ def find_empty_collections(collection):
 
     return empty_collections
 
+def to_archive_xl(filename):
+    xlfile={}
+    xlfile['streaming']={'sectors':[]}
+    sectors=xlfile['streaming']['sectors']
+    for sectorPath in deletions:
+        new_sector={}
+        new_sector['path']=sectorPath
+        new_sector['expectedNodes']=expectedNodes[sectorPath]
+        new_sector['nodeDeletions']=[]
+        sectorData = deletions[sectorPath]
+        currentNodeIndex = -1
+        currentNodeComment = ''
+        currentNodeType = ''
+        for empty_collection in sectorData:
+            if empty_collection['nodeIndex'] > currentNodeIndex:       
+                if currentNodeIndex>-1:         
+                    new_sector['nodeDeletions'].append({'index':currentNodeIndex,'type':currentNodeType,'debugName':currentNodeComment})
+                # set instance variables
+                currentNodeIndex = empty_collection['nodeIndex']
+                currentNodeComment = empty_collection.name
+                currentNodeType = empty_collection['nodeType']
+            elif empty_collection['nodeIndex'] == currentNodeIndex:
+                currentNodeComment = f"{currentNodeComment}, {empty_collection.name}"  
+        sectors.append(new_sector)   
+    with open(filename, "w") as file:
+        if yamlavail:
+            yaml.dump(xlfile, file, indent=4, sort_keys=False)
+        else:
+            json.dumps(xlfile, file, indent=4)
 
 # Function to write to a text file
-def to_archive_xl(filename):
+def to_archive_xl_old(filename):
     with open(filename, "w") as file:
         file.write("streaming:\n")
         file.write(f"{indent}sectors:\n")
