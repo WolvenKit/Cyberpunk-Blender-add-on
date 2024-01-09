@@ -7,3 +7,19 @@ class animAnimNode_Constraint(animgraphEditorNode, Node):
 		self.inputs.new('node', "In")
         self.outputs.new('node', "Out")
 
+        # "var isSourceTransformResaved": "Bool;",
+        # "var sourceTransformIndex": "animTransformIndex;",
+        # "var transformIndex": "animTransformIndex;",
+        # "var posX": "Bool;",
+        # "var posY": "Bool;",
+        # "var posZ": "Bool;",
+        # "var rotX": "Bool;",
+        # "var rotY": "Bool;",
+        # "var rotZ": "Bool;",
+        # "var scaleX": "Bool;",
+        # "var scaleY": "Bool;",
+        # "var scaleZ": "Bool;",
+        # "var weight": "Float;",
+        # "var weightNode": "animFloatLink;",
+        # "var inputLink": "animPoseLink;",
+        # "var id": "Uint32;"
