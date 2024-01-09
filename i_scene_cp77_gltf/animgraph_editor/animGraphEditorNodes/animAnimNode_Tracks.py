@@ -2,10 +2,13 @@ class animAnimNode_Track(animgraphEditorNode, Node):
     bl_idname = 'animAnimNode_Track'
     bl_label = "Track"
 
-    def init(self, context):
+    @classmethod
+    def poll(cls, ntree):
+        return ntree.bl_idname == 'CP77AnimGraphTree'
+   
+   def init(self, context):
 		self.inputs.new('node', "In")
         self.outputs.new('node', "Out")
-        
                 # "var min": "Float;",
         # "var max": "Float;",
         # "var oldMin": "Float;",

@@ -1,7 +1,11 @@
 class animAnimNode_Sync(animgraphEditorNode, Node):
     bl_idname = 'animAnimNode_Sync'
     bl_label = "Sync"
-
-    def init(self, context):
+    
+    @classmethod
+    def poll(cls, ntree):
+        return ntree.bl_idname == 'CP77AnimGraphTree'
+   
+   def init(self, context):
 		self.inputs.new('node', "In")
-        self.outputs.new('node', "Out")				
+        self.outputs.new('node', "Out")

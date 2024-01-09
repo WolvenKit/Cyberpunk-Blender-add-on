@@ -3,7 +3,7 @@ class animAnimNode_Base(animgraphEditorNode, Node):
     bl_label = "Root"
     @classmethod
     def poll(cls, ntree):
-        return ntree.bl_idname == 'CustomTreeType'
+        return ntree.bl_idname == 'CP77AnimGraphTree'
 		
     def init(self, context):
         self.outputs.new('node', "Out")

@@ -3,9 +3,13 @@ class animAnimNode_Float(animgraphEditorNode, Node):
     bl_idname = 'animAnimNode_Float'
     bl_label = "Float"
 
-    def init(self, context):
+    @classmethod
+    def poll(cls, ntree):
+        return ntree.bl_idname == 'CP77AnimGraphTree'
+   
+   def init(self, context):
 		self.inputs.new('node', "In")
-        self.outputs.new('node', "Out")	
+        self.outputs.new('node', "Out")
 		
         # "var firstValue": "Float;",
         # "var secondValue": "Float;",
