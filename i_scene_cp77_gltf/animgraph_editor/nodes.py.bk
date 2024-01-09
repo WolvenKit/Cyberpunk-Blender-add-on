@@ -1,0 +1,191 @@
+class animAnimNode_blend(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_blend'
+    bl_label = "Blend"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+
+class animAnimNode_Pose(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_Pose'
+    bl_label = "Pose"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+
+class animAnimNode_Constraint(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_Constraint'
+    bl_label = "Constraint"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+
+class animAnimNode_Join(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_Join'
+    bl_label = "Join"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+		
+class animAnimNode_Latch(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_Latch'
+    bl_label = "Latch"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+        
+class animAnimNode_Convert(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_Convert'
+    bl_label = "Convert"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+		
+class animAnimNode_Event(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_Event'
+    bl_label = "Event"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+		
+class animAnimNode_animsomethingsomething(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_animsomethingsomething'
+    bl_label = "animsomethingsomething"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+		
+class animAnimNode_Workspots(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_Workspots'
+    bl_label = "Workspot"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+		
+class animAnimNode_statemachine(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_statemachine'
+    bl_label = "statemachine"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+		
+class animAnimNode_fpp(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_fpp'
+    bl_label = "fpp"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+		
+class animAnimNode_Curves(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_Curves'
+    bl_label = "Curves"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+		
+class animAnimNode_Interpolation(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_Interpolation'
+    bl_label = "Interpolation"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+		
+class animAnimNode_Transform(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_Transform'
+    bl_label = "Transform"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+		
+class animAnimNode_Bone(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_Bone'
+    bl_label = "Bone"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+		
+class animAnimNode_Locoomotion(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_Locoomotion'
+    bl_label = "Locoomotion"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+
+class animAnimNode_MathExpression(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_MathExpression'
+    bl_label = "MathExpression"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+		
+class animAnimNode_Track(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_Track'
+    bl_label = "Track"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+		
+class animAnimNode_SetDrivenKey(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_SetDrivenKey'
+    bl_label = "SetDrivenKey"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+		
+class animAnimNode_Float(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_Float'
+    bl_label = "Float"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")	
+		
+class animAnimNode_Stack(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_Stack'
+    bl_label = "Stack"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+		
+class animAnimNode_IK(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_IK'
+    bl_label = "IK"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")
+		
+class animAnimNode_Switch(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_Switch'
+    bl_label = "Switch"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")				
+
+class animAnimNode_Sync(animGraphEditor, Node):
+    bl_idname = 'animAnimNode_Sync'
+    bl_label = "Sync"
+
+    def init(self, context):
+		self.inputs.new('node', "In")
+        self.outputs.new('node', "Out")				
