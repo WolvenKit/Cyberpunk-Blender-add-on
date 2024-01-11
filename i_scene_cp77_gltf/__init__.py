@@ -11,6 +11,7 @@ from .importers.sector_import import *
 from .importers.import_with_materials import *
 from bpy_extras.io_utils import ExportHelper
 from .exporters.glb_export import *
+from .exporters.sectors_export import *
 from .exporters.hp_export import *
 from .exporters.collision_export import *
 from .exporters.mlsetup_export import *
@@ -1103,7 +1104,19 @@ class ShowMessageBox(Operator):
             row = self.layout.row(align = True)
             row.alignment = 'EXPAND'
             row.label(text=text)     
-        
+
+class CP77StreamingSectorExport(Operator,ExportHelper):
+    bl_idname = "export_scene.cp77_sector"
+    bl_label = "Export Sector Updates for Cyberpunk"
+    bl_options = {'REGISTER','UNDO'}
+    bl_description = "Export changes to Sectors back to project" 
+    filename_ext = ".cpmodproj"
+    filter_glob: StringProperty(default="*.cpmodproj", options={'HIDDEN'})
+
+    def execute(self, context):
+        exportSectors(self.filepath)
+        return {'FINISHED'}
+
 class CP77GLBExport(Operator,ExportHelper):
   ### cleaned this up and moved most code to exporters.py
     bl_idname = "export_scene.cp77_glb"
@@ -1363,6 +1376,7 @@ def menu_func_import(self, context):
 
 def menu_func_export(self, context):
     self.layout.operator(CP77GLBExport.bl_idname, text="Cyberpunk GLB", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
+    self.layout.operator(CP77StreamingSectorExport.bl_idname, text="Cyberpunk StreamingSector", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
     
 #kwekmaster - Minor Refactoring 
 classes = (
@@ -1370,6 +1384,7 @@ classes = (
     CP77EntityImport,
     CP77_PT_ImportWithMaterial,
     CP77StreamingSectorImport,
+    CP77StreamingSectorExport,
     CP77GLBExport,
     ShowMessageBox,
     CP77_PT_AnimsPanel,
