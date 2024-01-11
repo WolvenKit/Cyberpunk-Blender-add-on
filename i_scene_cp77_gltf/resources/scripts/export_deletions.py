@@ -108,36 +108,6 @@ def to_archive_xl(filename):
         else:
             json.dumps(xlfile, file, indent=4)
 
-# Function to write to a text file
-def to_archive_xl_old(filename):
-    with open(filename, "w") as file:
-        file.write("streaming:\n")
-        file.write(f"{indent}sectors:\n")
-        for sectorPath in deletions:
-            deletedNodes = []
-            file.write(f"{indent}{indent}- path: {sectorPath}\n")
-            file.write(f"{indent}{indent}{indent}expectedNodes: {expectedNodes[sectorPath]}\n")
-            file.write(f"{indent}{indent}{indent}nodeDeletions:\n")
-            sectorData = deletions[sectorPath]
-
-            currentNodeIndex = -1
-            currentNodeComment = ''
-            currentNodeType = ''
-            for empty_collection in sectorData:
-                if empty_collection['nodeIndex'] > currentNodeIndex:
-                    # new node! write the old one                    
-                    file.write(f"{indent}{indent}{indent}{indent}# {currentNodeComment}\n")
-                    file.write(f"{indent}{indent}{indent}{indent}- index: {currentNodeIndex}\n")
-                    file.write(f"{indent}{indent}{indent}{indent}{indent}type: {currentNodeType}\n")
-                    
-                    # set instance variables
-                    currentNodeIndex = empty_collection['nodeIndex']
-                    currentNodeComment = empty_collection.name
-                    currentNodeType = empty_collection['nodeType']
-                elif empty_collection['nodeIndex'] == currentNodeIndex:
-                    currentNodeComment = f"{currentNodeComment}, {empty_collection.name}"
-
-
 # Iterate over matching collections and find empty ones
 for sectorCollection in [c for c in bpy.data.collections if c.name.endswith("streamingsector")]:    
     sectorName=os.path.basename(sectorCollection["filepath"])[:-5]
