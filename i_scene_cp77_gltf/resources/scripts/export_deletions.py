@@ -102,11 +102,11 @@ def to_archive_xl(filename):
             # set instance variables
             
         sectors.append(new_sector)   
-    with open(filename, "w") as file:
+    with open(filename, "w") as filestream:
         if yamlavail:
-            yaml.dump(xlfile, file, indent=4, sort_keys=False)
+            yaml.dump(xlfile, filestream, indent=4, sort_keys=False)
         else:
-            json.dumps(xlfile, file, indent=4)
+            json.dump(xlfile, filestream, indent=4)
 
 # Iterate over matching collections and find empty ones
 for sectorCollection in [c for c in bpy.data.collections if c.name.endswith("streamingsector")]:    
