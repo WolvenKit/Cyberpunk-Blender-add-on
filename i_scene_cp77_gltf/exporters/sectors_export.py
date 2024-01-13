@@ -26,6 +26,7 @@ import glob
 import os
 import bpy
 import copy
+from ..main.common import *
 try:
     import yaml
     yamlavail=True
@@ -41,10 +42,16 @@ def countChildNodes(collection):
         return numChildNodes
 
 def to_archive_xl(filename, deletions, expectedNodes):
+    projectsector=os.path.basename(filename).split('.')[0]+'.streamingsector'
     xlfile={}
     xlfile['streaming']={'sectors':[]}
     sectors=xlfile['streaming']['sectors']
     for sectorPath in deletions:
+        if sectorPath =='Decals':
+            continue
+        
+        if sectorPath == projectsector:
+            continue
         new_sector={}
         new_sector['path']=sectorPath
         new_sector['expectedNodes']=expectedNodes[sectorPath]
@@ -59,7 +66,9 @@ def to_archive_xl(filename, deletions, expectedNodes):
             currentNodeType = empty_collection['nodeType']    
             if currentNodeIndex>-1:         
                 new_sector['nodeDeletions'].append({'index':currentNodeIndex,'type':currentNodeType,'debugName':currentNodeComment})
-            # set instance variables            
+            # set instance variables       
+        for decal in deletions['Decals'][sectorPath]:
+            print('Should delete ', decal)     
         sectors.append(new_sector)   
     with open(filename, "w") as file:
         if yamlavail:
@@ -277,7 +286,7 @@ def createNodeData(t, col, nodeIndex, obj, ID):
 
 
 
-def exportSectors( filepath=''):
+def exportSectors( filename=''):
     #Set this to your project directory
     project = 'D:\\cpmod\\archivexlconvert'
     if not os.path.exists(project):
@@ -294,31 +303,34 @@ def exportSectors( filepath=''):
 
     Masters=bpy.data.collections.get("MasterInstances")
 
-    neg_cube=None
-    if 'neg_cube' not in Masters.objects.keys():
-        bpy.ops.mesh.primitive_cube_add(size=.01, scale=(-1,-1,-1),location=(0,0,-10))
-        neg_cube=C.selected_objects[0]
-        neg_cube.name='neg_cube'
-        neg_cube.users_collection[0].objects.unlink(neg_cube)
-        Masters.objects.link(neg_cube) 
-    else:
-        neg_cube=Masters.objects["neg_cube"]
+    # Open the blank template streaming sector
+    resourcepath=get_resources_dir()
+
+    with open(os.path.join(resourcepath,'empty.streamingsector.json'),'r') as f: 
+        template_json=json.load(f) 
+    template_nodes = template_json["Data"]["RootChunk"]["nodes"]
+    template_nodeData = template_json['Data']['RootChunk']['nodeData']['Data']
+    ID=0
 
     # .  .  __ .    .. .  .  __      __  ___ .  .  ___  ___ 
     # |\/| /  \ \  / | |\ | / _`    /__`  |  |  | |__  |__  
     # |  | \__/  \/  | | \| \__/    .__/  |  \__/ |    |    
     #
     deletions = {}
+    deletions['Decals']={}
     expectedNodes = {}                                                      
     for filepath in jsons:
+        #if filepath==project.split('\\')[-1:][0]+'.streamingsector.json':
+         #   continue
         with open(filepath,'r') as f: 
             j=json.load(f) 
         nodes = j["Data"]["RootChunk"]["nodes"]
         t=j['Data']['RootChunk']['nodeData']['Data']
         sectorName=os.path.basename(filepath)[:-5]
         deletions[sectorName]=[]
+        deletions['Decals'][sectorName]=[]
         if sectorName not in bpy.data.collections.keys():
-            break
+            continue
         print('Updating sector ',sectorName)
         Sector_coll=bpy.data.collections.get(sectorName)    
         expectedNodes[sectorName] = countChildNodes(Sector_coll)
@@ -380,8 +392,7 @@ def exportSectors( filepath=''):
                             set_rot(inst,obj)
                             set_scale(inst,obj)
                         else:
-                            obj=neg_cube
-                            set_z_pos(inst,obj)
+                            deletions['Decals'][sectorName].append(obj)
 
                 case   'worldStaticMeshNode' | 'worldBuildingProxyMeshNode' | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode': 
                     if isinstance(e, dict) and 'mesh' in data.keys():
@@ -395,9 +406,16 @@ def exportSectors( filepath=''):
                                 if obj_col:
                                     if len(obj_col.objects)>0:
                                         obj=obj_col.objects[0]
-                                        set_pos(inst,obj)
-                                        set_rot(inst,obj)
-                                        set_scale(inst,obj)
+                                        # Needs a check for Position or this is completely wrong
+                                        if 'table' in obj_col.name:
+                                            print('boo')
+                                        if obj.matrix_world!=Matrix(obj_col['matrix']):
+                                            deletions[sectorName].append(obj_col)
+                                            new_ni=len(template_nodes)
+                                            template_nodes.append(copy.deepcopy(nodes[obj_col['nodeIndex']]))
+                                            
+                                            createNodeData(template_nodeData, obj_col, new_ni, obj,ID)
+                                            ID+=1
                                     else:
                                         deletions[sectorName].append(obj_col)
 
@@ -869,9 +887,10 @@ def exportSectors( filepath=''):
                 print('After = ',len(wtbbuffer['Transforms']))            
             
                 
-        # Export the modified json
-        with open(filepath, 'w') as outfile:
-            json.dump(j, outfile,indent=2)
+    # Export the modified json
+    sectpathout=os.path.join(path,project.split('\\')[-1:][0]+'.streamingsector.json')
+    with open(sectpathout, 'w') as outfile:
+        json.dump(template_json, outfile,indent=2)
 
     xlpathout=os.path.join(xloutpath,project.split('\\')[-1:][0]+'.archive.xl')
     to_archive_xl(xlpathout, deletions, expectedNodes)

@@ -206,6 +206,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
     # Enter the path to your projects source\raw\base folder below, needs double slashes between folder names.
     path = os.path.join( os.path.dirname(filepath),'source\\raw\\base')
     print('path is ',path)
+    project=os.path.dirname(filepath)
     # If your importing to edit the sectors and want to add stuff then set the am_modding to True and it will auto create the _new collectors
     # want_collisions when True will import/generate the box and capsule collisions
     
@@ -223,6 +224,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
     C = bpy.context
 
     for filepath in jsonpath:
+        if filepath==os.path.join(path,project.split('\\')[-1:][0]+'.streamingsector.json'):
+            continue
         with open(filepath,'r') as f: 
                 j=json.load(f) 
         sectorName=os.path.basename(filepath)[:-5]
@@ -323,6 +326,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
     inst_m=Matrix.LocRotScale(inst_pos,inst_rot,inst_scale)
 
     for fpn,filepath in enumerate(jsonpath):
+        if filepath==os.path.join(path,project.split('\\')[-1:][0]+'.streamingsector.json')d:
+            continue
         with open(filepath,'r') as f: 
               j=json.load(f) 
           
@@ -749,10 +754,11 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 for old_obj in group.all_objects:                            
                                                     obj=old_obj.copy()  
                                                     new.objects.link(obj)                             
-                                                
+                                                    
                                                     obj.location = get_pos(inst)
                                                     obj.rotation_quaternion = get_rot(inst)
                                                     obj.scale = get_scale(inst)
+                                                    new['matrix']=obj.matrix_world
                                                     if 'Armature' in obj.name:
                                                         obj.hide_set(True)
                                                     if type=='worldRotatingMeshNode':
