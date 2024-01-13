@@ -979,6 +979,9 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
         print('Finished with ',filepath)
     # doing this earlier in the file was breaking the entity postitioning. NO idea how that works, but be warned.    
     Masters.hide_viewport=True
+    for obj in bpy.data.objects:
+        if 'Decal' in obj.name:
+            obj['matrix']=obj.matrix_world
     print('Finished Importing Sectors')
 
 
