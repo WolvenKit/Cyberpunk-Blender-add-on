@@ -382,9 +382,14 @@ def exportSectors( filename):
                             if obj_col and inst_trans:
                                 if len(obj_col.objects)>0:
                                     obj=obj_col.objects[0]
-                                    set_pos(inst_trans,obj)
-                                    set_rot(inst_trans,obj)
-                                    set_scale(inst_trans,obj)
+                                    # Check for Position and if changed delete the original and add to the new sector
+                                    if obj.matrix_world!=Matrix(obj_col['matrix']):
+                                        deletions[sectorName].append(obj_col)
+                                        new_ni=len(template_nodes)
+                                        template_nodes.append(copy.deepcopy(nodes[obj_col['nodeIndex']]))
+                                        # might need to convert instanced to static here, not sure what the best approach is.
+                                        createNodeData(template_nodeData, obj_col, new_ni, obj,ID)
+                                        ID+=1
                                 else:
                                     if obj_col:
                                         deletions[sectorName].append(obj_col)
@@ -395,12 +400,16 @@ def exportSectors( filename):
                     for idx,inst in enumerate(instances):
                         obj=find_decal(i,idx,Sector_coll)
                         if obj:
-                            set_pos(inst,obj)
-                            set_rot(inst,obj)
-                            set_scale(inst,obj)
+                            # Check for Position and if changed delete the original and add to the new sector
+                            if obj.matrix_world!=Matrix(obj['matrix']):
+                                deletions['Decals'][sectorName].append(obj)
+                                new_ni=len(template_nodes)
+                                template_nodes.append(copy.deepcopy(nodes[obj['nodeIndex']]))
+                                createNodeData(template_nodeData, Sector_coll, new_ni, obj,ID)
+                                ID+=1
                         else:
                             if obj_col:
-                                deletions[sectorName].append(obj_col)
+                                deletions['Decals'][sectorName].append(obj_col)
 
                 case   'worldStaticMeshNode' | 'worldBuildingProxyMeshNode' | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode': 
                     if isinstance(e, dict) and 'mesh' in data.keys():
@@ -414,9 +423,7 @@ def exportSectors( filename):
                                 if obj_col:
                                     if len(obj_col.objects)>0:
                                         obj=obj_col.objects[0]
-                                        # Needs a check for Position or this is completely wrong
-                                        if 'table' in obj_col.name:
-                                            print('boo')
+                                        # Check for Position and if changed delete the original and add to the new sector
                                         if obj.matrix_world!=Matrix(obj_col['matrix']):
                                             deletions[sectorName].append(obj_col)
                                             new_ni=len(template_nodes)
@@ -440,28 +447,15 @@ def exportSectors( filename):
                                 # THIS IS WRONG, the entity meshes are in child collectors not objects
                                 if obj_col and len(obj_col.children)>0:
                                     if len(obj_col.children[0].objects)>0:
-                                        mat=Matrix(obj_col['matrix'])
-                                        mat_inv=mat.inverted()
-                                        obj=obj_col.children[0].objects[0]
-                                        inst_trans_m = obj.matrix_world @ mat_inv
-                                        obj_trans = obj.location
-                                        pos=inst_trans_m.translation
-                                        #pos=obj_trans-basic_pos
-                                        inst['Position']['X'] = float("{:.9g}".format(pos[0] ))
-                                        inst['Position']['Y'] = float("{:.9g}".format(pos[1] ))
-                                        inst['Position']['Z'] = float("{:.9g}".format(pos[2] ))
-                                        quat=inst_trans_m.to_quaternion()
-                                        inst['Orientation']['r'] = float("{:.9g}".format(quat[0] ))
-                                        inst['Orientation']['i'] = float("{:.9g}".format(quat[1] ))
-                                        inst['Orientation']['j'] = float("{:.9g}".format(quat[2] ))
-                                        inst['Orientation']['k'] = float("{:.9g}".format(quat[3] ))
-                                        scale=inst_trans_m.to_scale()
-                                        inst['Scale']['X']=float("{:.9g}".format(scale.x ))
-                                        inst['Scale']['Y']=float("{:.9g}".format(scale.y ))
-                                        inst['Scale']['Z']=float("{:.9g}".format(scale.z ))
-                                        #set_pos(inst,obj)
-                                        #set_rot(inst,obj)
-                                        #set_scale(inst,obj)
+                                        # Check for Position and if changed delete the original and add to the new sector
+                                        if obj.matrix_world!=Matrix(obj_col['matrix']):
+                                            deletions[sectorName].append(obj_col)
+                                            new_ni=len(template_nodes)
+                                            template_nodes.append(copy.deepcopy(nodes[obj_col['nodeIndex']]))
+                                            
+                                            createNodeData(template_nodeData, obj_col, new_ni, obj,ID)
+                                            ID+=1
+                                        
                                 else:
                                     if obj_col:
                                         deletions[sectorName].append(obj_col)                                   
@@ -518,26 +512,15 @@ def exportSectors( filename):
                                 if obj_col:
                                     if len(obj_col.objects)>0:
                                         obj=obj_col.objects[0]
+                                        # Check for Position and if changed delete the original and add to the new sector
+                                        if obj.matrix_world!=Matrix(obj_col['matrix']):
+                                            deletions[sectorName].append(obj_col)
+                                            new_ni=len(template_nodes)
+                                            template_nodes.append(copy.deepcopy(nodes[obj_col['nodeIndex']]))
+                                            
+                                            createNodeData(template_nodeData, obj_col, new_ni, obj,ID)
+                                            ID+=1
                                         
-                                        inst_trans_m = obj.matrix_world @ basic_matr_inv
-                                        obj_trans = obj.location
-                                        pos=inst_trans_m.translation
-                                        print(obj_trans, inst_pos)
-                                        deltapos=sum(obj_trans-inst_pos)
-                                        if abs(deltapos)>0.05:
-                                            print('deltapos ',abs(deltapos))
-                                            inst['Position']['X'] = float("{:.9g}".format(pos[0] ))
-                                            inst['Position']['Y'] = float("{:.9g}".format(pos[1] ))
-                                            inst['Position']['Z'] = float("{:.9g}".format(pos[2] ))
-                                            quat=inst_trans_m.to_quaternion()
-                                            inst['Orientation']['i'] = float("{:.12g}".format(quat[0] ))
-                                            inst['Orientation']['j'] = float("{:.12g}".format(quat[1] ))
-                                            inst['Orientation']['k'] = float("{:.12g}".format(quat[2] ))
-                                            inst['Orientation']['r'] = float("{:.12g}".format(quat[3] ))
-                                            scale=inst_trans_m.to_scale()
-                                            inst['Scale']['X']=float("{:.9g}".format(scale.x ))
-                                            inst['Scale']['Y']=float("{:.9g}".format(scale.y ))
-                                            inst['Scale']['Z']=float("{:.9g}".format(scale.z ))
                                     else:
                                         if obj_col:
                                             deletions[sectorName].append(obj_col)
