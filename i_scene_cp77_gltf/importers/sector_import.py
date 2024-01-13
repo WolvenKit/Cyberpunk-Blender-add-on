@@ -28,7 +28,7 @@ from pprint import pprint
 from ..main.setup import MaterialBuilder
 from operator import add
 import bmesh
-
+VERBOSE=True
 scale_factor=1
 
 def apply_transform(ob, use_location=True, use_rotation=True, use_scale=True):
@@ -204,7 +204,7 @@ def get_tan_pos(inst):
 
 def importSectors( filepath='', want_collisions=False, am_modding=False, with_materials=True ):
     # Enter the path to your projects source\raw\base folder below, needs double slashes between folder names.
-    path = os.path.join( os.path.dirname(filepath),'source\\raw\\base')
+    path = os.path.join( os.path.dirname(filepath),'source','raw','base')
     print('path is ',path)
     project=os.path.dirname(filepath)
     # If your importing to edit the sectors and want to add stuff then set the am_modding to True and it will auto create the _new collectors
@@ -218,14 +218,17 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     if s.type == 'VIEW_3D':
                         s.clip_end = 50000
 
-    jsonpath = glob.glob(path+"\**\*.streamingsector.json", recursive = True)
-    
+    jsonpath = glob.glob(os.path.join(path, "**", "*.streamingsector.json"), recursive = True)
+    print(jsonpath)
     meshes=[]
     C = bpy.context
 
     for filepath in jsonpath:
-        if filepath==os.path.join(path,project.split('\\')[-1:][0]+'.streamingsector.json'):
+        if filepath==os.path.join(path,os.path.basename(project)+'.streamingsector.json'):
             continue
+        if VERBOSE:
+            print(os.path.join(path,os.path.basename(project)+'.streamingsector.json'))
+            print(filepath)
         with open(filepath,'r') as f: 
                 j=json.load(f) 
         sectorName=os.path.basename(filepath)[:-5]
@@ -239,17 +242,17 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
             match type:
                 case 'worldEntityNode'|'worldDeviceNode': 
                     #print('worldEntityNode',i)
-                    meshname = data['entityTemplate']['DepotPath']['$value']
+                    meshname = data['entityTemplate']['DepotPath']['$value'].replace('\\', os.sep)
                     if(meshname != 0):
                         meshes.append({'basename':e['Data']['entityTemplate']['DepotPath']['$value'],'appearance':e['Data']['appearanceName'],'sector':sectorName})
                 case 'worldInstancedMeshNode':
-                    meshname = data['mesh']['DepotPath']['$value'] 
+                    meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                     if(meshname != 0):
                         meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
                 case 'worldStaticMeshNode' |'worldRotatingMeshNode'|'worldAdvertisingNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' \
                     | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode': 
                     if isinstance(e, dict) and 'mesh' in data.keys():
-                        meshname = data['mesh']['DepotPath']['$value']
+                        meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                         #print('Mesh name is - ',meshname, e['HandleId'])
                         if(meshname != 0):
                             #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
@@ -257,7 +260,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                 case 'worldInstancedDestructibleMeshNode':
                     #print('worldInstancedDestructibleMeshNode',i)
                     if isinstance(e, dict) and 'mesh' in data.keys():
-                        meshname = data['mesh']['DepotPath']['$value']
+                        meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                         #print('Mesh name is - ',meshname, e['HandleId'])
                         if(meshname != 0):
                             meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
@@ -298,7 +301,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
             impapps=','.join(apps)
             #print(os.path.join(path, m[:-4]+'glb'),impapps)
 
-            meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb')
+            meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb').replace('\\', os.sep)
+            print(meshpath)
             groupname = os.path.splitext(os.path.split(meshpath)[-1])[0]
             while len(groupname) > 63:
                 groupname = groupname[:-1]
@@ -326,8 +330,12 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
     inst_m=Matrix.LocRotScale(inst_pos,inst_rot,inst_scale)
 
     for fpn,filepath in enumerate(jsonpath):
-        if filepath==os.path.join(path,project.split('\\')[-1:][0]+'.streamingsector.json')d:
+        projectjson=os.path.join(path,'base',os.path.basename(project)+'.streamingsector.json')
+        if filepath==projectjson:
             continue
+        if VERBOSE:
+            print(projectjson)
+            print(filepath)
         with open(filepath,'r') as f: 
               j=json.load(f) 
           
@@ -351,7 +359,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                 Sector_additions_coll=bpy.data.collections.new(sectorName+'_new')
                 coll_scene.children.link(Sector_additions_coll)       
 
-        meshes =  glob.glob(path+"\**\*.glb", recursive = True)
+        meshes =  glob.glob(os.path.join(path, "**", "*.glb"), recursive = True)
 
         glbnames = [ os.path.basename(x) for x in meshes]
         meshnames = [ os.path.splitext(x)[0]+".mesh" for x in glbnames]
@@ -370,7 +378,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     case 'worldEntityNode' | 'worldDeviceNode': 
                         #print('worldEntityNode',i)
                         app=data['appearanceName']["$value"]
-                        entpath=os.path.join(path,data['entityTemplate']['DepotPath']['$value'])+'.json'
+                        entpath=os.path.join(path,data['entityTemplate']['DepotPath']['$value']).replace('\\', os.sep)+'.json'
                         ent_groupname=os.path.basename(entpath).split('.')[0]+'_'+app
                         while len(ent_groupname) > 63:
                             ent_groupname = ent_groupname[:-1]
@@ -434,7 +442,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                        
                     case 'worldBendedMeshNode' | 'worldCableMeshNode' :
                         #print(type)
-                        meshname = data['mesh']['DepotPath']['$value'] 
+                        meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep) 
                         instances = [x for x in t if x['NodeIndex'] == i]
                         #if len(instances)>1:
                         #    print('Multiple Instances of node ',i)
@@ -495,6 +503,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                 new['mesh']=meshname
                                 new['debugName']=e['Data']['debugName']
                                 new['sectorName']=sectorName 
+                                
 
                                 min_vertex = Vector((float('inf'), float('inf'), float('inf')))
                                 max_vertex = Vector((float('-inf'), float('-inf'), float('-inf')))
@@ -528,7 +537,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
     
                     case 'worldInstancedMeshNode' :
                         #print('worldInstancedMeshNode')
-                        meshname = data['mesh']['DepotPath']['$value'] 
+                        meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep) 
                         num=data['worldTransformsBuffer']['numElements']
                         start=data['worldTransformsBuffer']['startIndex']
                         if(meshname != 0):
@@ -570,6 +579,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         obj.location = get_pos(inst_trans)                                         
                                         obj.rotation_quaternion=get_rot(inst_trans)
                                         obj.scale = get_scale(inst_trans)
+                                        obj['matrix']=obj.matrix_world
                                         #if obj.location.x == 0:
                                         #    print('Location @ 0 for Mesh - ',meshname, ' - ',i,'HandleId - ', e['HandleId'])
 
@@ -656,7 +666,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
 
                     case 'worldRoadProxyMeshNode' : 
                         if isinstance(e, dict) and 'mesh' in data.keys():
-                            meshname = data['mesh']['DepotPath']['$value']
+                            meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                             meshpath=os.path.join(path, meshname[:-4]+'glb')
                             #print(os.path.exists(meshpath))
                             #print('Mesh path is - ',meshpath, e['HandleId'])
@@ -713,7 +723,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     case 'worldStaticMeshNode' |'worldRotatingMeshNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldAdvertismentNode' | \
                 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldClothMeshNode': 
                         if isinstance(e, dict) and 'mesh' in data.keys():
-                            meshname = data['mesh']['DepotPath']['$value']
+                            meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                             #print('Mesh name is - ',meshname, e['HandleId'])
                             meshAppearance = data['meshAppearance']['$value'] # Need to actually use this
                             if(meshname != 0):
@@ -757,8 +767,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                     
                                                     obj.location = get_pos(inst)
                                                     obj.rotation_quaternion = get_rot(inst)
-                                                    obj.scale = get_scale(inst)
-                                                    new['matrix']=obj.matrix_world
+                                                    obj.scale = get_scale(inst)                                                                                                        
+                                                    
                                                     if 'Armature' in obj.name:
                                                         obj.hide_set(True)
                                                     if type=='worldRotatingMeshNode':
@@ -781,7 +791,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     case 'worldInstancedDestructibleMeshNode':
                         #print('worldInstancedDestructibleMeshNode',i)
                         if isinstance(e, dict) and 'mesh' in data.keys():
-                            meshname = data['mesh']['DepotPath']['$value']
+                            meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                             num=data['cookedInstanceTransforms']['numElements']
                             start=data['cookedInstanceTransforms']['startIndex']
                             #print('Mesh name is - ',meshname, e['HandleId'])
@@ -959,6 +969,13 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     case _:
                         #print('None of the above',i)
                         pass
+                # Have to do a view_layer update or the matrices are all blank
+                bpy.context.view_layer.update()                
+                for col in Sector_coll.children:
+                    if len(col.objects)>0:
+                        col['matrix']= col.objects[0].matrix_world
+                        
+        
 
         print('Finished with ',filepath)
     # doing this earlier in the file was breaking the entity postitioning. NO idea how that works, but be warned.    
