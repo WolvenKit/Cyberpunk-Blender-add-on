@@ -19,7 +19,7 @@
 #    Its assuming it can find the json for the sector its copying from in the project, dont be clever merging blends or whatever.
 # 6) not all nodetypes are supported yet, have a look at the case statements to see which are
 # 
-# Ask in world-editing on the discord (https://discord.gg/redmodding) if you have any q/trouble
+# Ask in world-editing on the discord (https://discord.gg/redmodding) if you have any trouble
 
 import json
 import glob
@@ -27,6 +27,7 @@ import os
 import bpy
 import copy
 from ..main.common import *
+yamlavail=False
 try:
     import yaml
     yamlavail=True
@@ -41,8 +42,8 @@ def countChildNodes(collection):
         numChildNodes = collection['expectedNodes']
         return numChildNodes
 
-def to_archive_xl(filename, deletions, expectedNodes):
-    projectsector=os.path.basename(filename).split('.')[0]+'.streamingsector'
+def to_archive_xl(xlfilename, deletions, expectedNodes):
+    projectsector=os.path.splitext(os.path.basename(xlfilename))[0]+'.streamingsector'
     xlfile={}
     xlfile['streaming']={'sectors':[]}
     sectors=xlfile['streaming']['sectors']
@@ -70,14 +71,14 @@ def to_archive_xl(filename, deletions, expectedNodes):
         for decal in deletions['Decals'][sectorPath]:
             print('Should delete ', decal)     
         sectors.append(new_sector)   
-    with open(filename, "w") as file:
+    with open(xlfilename, "w") as filestream:
         if yamlavail:
-            yaml.dump(xlfile, file, indent=4, sort_keys=False)
+            yaml.dump(xlfile, filestream, indent=4, sort_keys=False)
         else:
-            json.dumps(xlfile, file, indent=4)
+            json.dump(xlfile, filestream, indent=4)
 
 def checkexists(meshname, Masters):
-    groupname = os.path.splitext(os.path.split(meshname['$value'])[-1])[0]
+    groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
     if groupname in Masters.children.keys() and len(Masters.children[groupname].objects)>0:
         return True
     else:
@@ -288,15 +289,16 @@ def createNodeData(t, col, nodeIndex, obj, ID):
 
 def exportSectors( filename=''):
     #Set this to your project directory
-    project = 'D:\\cpmod\\archivexlconvert'
+    filename= '/Volumes/Ruby/archivexlconvert/archivexlconvert.cdproj'
+    project = '/Volumes/Ruby/archivexlconvert/'
     if not os.path.exists(project):
         print('project path doesnt exist')
-    path = os.path.join(project,'source\\raw\\base')
-    print('exporting sectors from ',path)
+    projpath = os.path.join(project,'source','raw','base')
+    print('exporting sectors from ',projpath)
     #its currently set to output the modified jsons to an output folder in the project dir (create one before running)
     #you can change this to a path if you prefer
-    xloutpath = os.path.join(project,'source\\resources')
-    jsons = glob.glob(path+"\**\*.streamingsector.json", recursive = True)
+    xloutpath = os.path.join(project,'source','resources')
+    jsons = glob.glob(os.path.join(projpath, "**", "*.streamingsector.json"), recursive = True)
 
     if len(jsons)<1:
         print('ERROR - No source streaming sector jsons found')
@@ -320,8 +322,11 @@ def exportSectors( filename=''):
     deletions['Decals']={}
     expectedNodes = {}                                                      
     for filepath in jsons:
-        #if filepath==project.split('\\')[-1:][0]+'.streamingsector.json':
-         #   continue
+        projectjson = os.path.join( projpath , os.path.splitext(os.path.basename(filename))[0]+'.streamingsector.json')
+        print(projectjson)
+        print(filepath)
+        if filepath==os.path.join(projpath,projectjson):
+            continue
         with open(filepath,'r') as f: 
             j=json.load(f) 
         nodes = j["Data"]["RootChunk"]["nodes"]
@@ -347,7 +352,7 @@ def exportSectors( filename=''):
                 case 'worldInstancedMeshNode' :
                     wIMNs+=1
                     #print(wIMNs)
-                    meshname = data['mesh']['DepotPath'] 
+                    meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep) 
                     #if 'chopstick' in meshname:
                     #    print('worldInstancedMeshNode - ',meshname)
                     if not checkexists(meshname, Masters):
@@ -380,7 +385,8 @@ def exportSectors( filename=''):
                                     set_rot(inst_trans,obj)
                                     set_scale(inst_trans,obj)
                                 else:
-                                    deletions[sectorName].append(obj_col)
+                                    if obj_col:
+                                        deletions[sectorName].append(obj_col)
                                     
                 case 'worldStaticDecalNode':
                     #print('worldStaticDecalNode')
@@ -392,11 +398,12 @@ def exportSectors( filename=''):
                             set_rot(inst,obj)
                             set_scale(inst,obj)
                         else:
-                            deletions['Decals'][sectorName].append(obj)
+                            if obj_col:
+                                deletions[sectorName].append(obj_col)
 
                 case   'worldStaticMeshNode' | 'worldBuildingProxyMeshNode' | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode': 
                     if isinstance(e, dict) and 'mesh' in data.keys():
-                        meshname = data['mesh']['DepotPath']
+                        meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                         #print('Mesh name is - ',meshname, e['HandleId'])
                         if(meshname != 0):
                             instances = [x for x in t if x['NodeIndex'] == i]
@@ -417,7 +424,8 @@ def exportSectors( filename=''):
                                             createNodeData(template_nodeData, obj_col, new_ni, obj,ID)
                                             ID+=1
                                     else:
-                                        deletions[sectorName].append(obj_col)
+                                        if obj_col:
+                                            deletions[sectorName].append(obj_col)
 
                 case  'worldEntityNode':
                     if isinstance(e, dict) and 'entityTemplate' in data.keys():
@@ -454,14 +462,15 @@ def exportSectors( filename=''):
                                         #set_rot(inst,obj)
                                         #set_scale(inst,obj)
                                 else:
-                                    deletions[sectorName].append(obj_col)                                   
+                                    if obj_col:
+                                        deletions[sectorName].append(obj_col)                                   
                                         
                                         
                                         
                 case 'worldInstancedDestructibleMeshNode':
                     #print('worldInstancedDestructibleMeshNode',i)
                     if isinstance(e, dict) and 'mesh' in data.keys():
-                        meshname = data['mesh']['DepotPath']
+                        meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                         num=data['cookedInstanceTransforms']['numElements']
                         start=data['cookedInstanceTransforms']['startIndex']
                         instances = [x for x in t if x['NodeIndex'] == i]
@@ -529,7 +538,8 @@ def exportSectors( filename=''):
                                             inst['Scale']['Y']=float("{:.9g}".format(scale.y ))
                                             inst['Scale']['Z']=float("{:.9g}".format(scale.z ))
                                     else:
-                                        deletions[sectorName].append(obj_col)
+                                        if obj_col:
+                                            deletions[sectorName].append(obj_col)
         print(wIMNs)
                                         
     #       __   __          __      __  ___       ___  ___ 
@@ -561,7 +571,7 @@ def exportSectors( filename=''):
                             obj=col.objects[0]
                             nodeIndex=col['nodeIndex']
                             base=nodes[nodeIndex]['Data']
-                            meshname = col['mesh']
+                            meshname = col['mesh'].replace('\\', os.sep)
                             #print(base)
                             num=base['worldTransformsBuffer']['numElements']
                             start=base['worldTransformsBuffer']['startIndex']
@@ -608,7 +618,7 @@ def exportSectors( filename=''):
                             obj=col.objects[0]
                             nodeIndex=col['nodeIndex']
                             base=nodes[nodeIndex]['Data']
-                            meshname = col['mesh']
+                            meshname = col['mesh'].replace('\\', os.sep)
                             #print(base)
                             num=base['cookedInstanceTransforms']['numElements']
                             start=base['cookedInstanceTransforms']['startIndex']
@@ -764,7 +774,7 @@ def exportSectors( filename=''):
                     ref=n
             wtbbuffer=ref['Data']['worldTransformsBuffer']['sharedDataBuffer']['Data']['buffer']['Data']
             new_node['Data']['worldTransformsBuffer']['startIndex']=len(wtbbuffer['Transforms'])
-
+            
             new_node['HandleId']=str(int(nodes[new_Index-1]['HandleId'])+1)
             inst_col=[]
             for col in Sector_additions_coll.children:
@@ -888,11 +898,11 @@ def exportSectors( filename=''):
             
                 
     # Export the modified json
-    sectpathout=os.path.join(path,project.split('\\')[-1:][0]+'.streamingsector.json')
+    sectpathout=os.path.join(projpath,os.path.splitext(os.path.basename(filename))[0]+'.streamingsector.json')
     with open(sectpathout, 'w') as outfile:
         json.dump(template_json, outfile,indent=2)
 
-    xlpathout=os.path.join(xloutpath,project.split('\\')[-1:][0]+'.archive.xl')
+    xlpathout=os.path.join(xloutpath,os.path.splitext(os.path.basename(filename))[0]+'.archive.xl')
     to_archive_xl(xlpathout, deletions, expectedNodes)
-    print('Finished exporting sectors from ',project.split('\\')[-1:][0])
+    print('Finished exporting sectors from ',os.path.splitext(os.path.basename(filename))[0])
         
