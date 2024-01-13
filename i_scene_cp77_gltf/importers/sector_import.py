@@ -758,7 +758,6 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 new['sectorName']=sectorName
                                                 new['pivot']=inst['Pivot']
 
-
                                                 print(new['nodeDataIndex'])
                                             
                                                 for old_obj in group.all_objects:                            

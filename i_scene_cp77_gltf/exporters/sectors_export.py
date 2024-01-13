@@ -273,7 +273,7 @@ def find_decal(NodeIndex,Inst_idx,Sector_coll):
 
 def createNodeData(t, col, nodeIndex, obj, ID):
     print(ID)
-    t.append({'Id':ID,'Uk10':1088,'Uk11':256,'Uk12':0,'UkFloat1':60.47757,'UkHash1':1088,'QuestPrefabRefHash': 0,'MaxStreamingDistance': 3.4028235e+38})
+    t.append({'Id':ID,'Uk10':1088,'Uk11':256,'Uk12':0,'UkFloat1':60.47757,'UkHash1':{"$type": "NodeRef", "$storage": "uint64",  "$value": "0" },'QuestPrefabRefHash': {"$type": "NodeRef", "$storage": "uint64","$value": "0"},'MaxStreamingDistance': 3.4028235e+38})
     new = t[len(t)-1]
     new['NodeIndex']=nodeIndex
     new['Position']={'$type': 'Vector4','W':0,'X':float("{:.9g}".format(obj.location[0])),'Y':float("{:.9g}".format(obj.location[1])),'Z':float("{:.9g}".format(obj.location[2]))}
@@ -287,10 +287,11 @@ def createNodeData(t, col, nodeIndex, obj, ID):
 
 
 
-def exportSectors( filename=''):
+def exportSectors( filename):
     #Set this to your project directory
-    filename= '/Volumes/Ruby/archivexlconvert/archivexlconvert.cdproj'
-    project = '/Volumes/Ruby/archivexlconvert/'
+    #filename= '/Volumes/Ruby/archivexlconvert/archivexlconvert.cdproj'
+    #project = '/Volumes/Ruby/archivexlconvert/'
+    project=os.path.dirname(filename)
     if not os.path.exists(project):
         print('project path doesnt exist')
     projpath = os.path.join(project,'source','raw','base')
