@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "i_scene_cp77_gltf"
+version = "1.5.2.3"
+authors = [
+  { name = "HitmanHimself" },
+  { name = "Turk" },
+  { name = "Jato" },
+  { name = "dragonzkiller" },
+  { name = "kwekmaster" },
+  { name = "glitchered" },
+  { name = "Simarilius" },
+  { name = "Doctor Presto" },
+  { name = "shotlastc" },
+  { name = "Rudolph2109" },
+]
+description = "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json"
+readme = "README.md"
+requires-python = "~= 3.10"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+dependencies = ["bpy==4.0.0"]
+
+[project.optional-dependencies]
+dev = ["fake-bpy-module-4.0", "ruff"]
+
+[project.urls]
+Homepage = "https://github.com/WolvenKit/Cyberpunk-Blender-add-on"
+Issues = "https://github.com/WolvenKit/Cyberpunk-Blender-add-on/issues"
+
+[tool.ruff]
+line-length = 120
+indent-width = 4
+target-version = "py310"
+
+[tool.pyright]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"

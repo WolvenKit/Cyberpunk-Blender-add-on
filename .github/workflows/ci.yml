@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-file: env.yml
+          cache-environment: true
+          post-cleanup: all
+      - name: Ruff lint
+        run: ruff check
+        shell: micromamba-shell {0}
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-file: env.yml
+          cache-environment: true
+          post-cleanup: all
+      - name: Ruff format
+        run: ruff format --diff
+        shell: micromamba-shell {0}
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-file: env.yml
+          cache-environment: true
+          post-cleanup: all
+      - name: Pyright
+        run: pyright
+        shell: micromamba-shell {0}
