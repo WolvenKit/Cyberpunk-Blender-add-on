@@ -22,7 +22,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     coll_scene = C.scene.collection
     start_time = time.time()
 
-    before,mid,after=filepath.partition('source\\raw')
+    before,mid,after=filepath.partition(os.path.join('source','raw'))
     path=before+mid
 
     ent_name=os.path.basename(filepath)[:-9]
@@ -72,6 +72,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
         appearances=[]
         for app in ent_apps:
             appearances.append(app['appearanceName']['$value'])
+        if len(appearances)==0:
+            appearances.append('BASE_COMPONENTS_ONLY')
 
     VS=[]
     for x in j['Data']['RootChunk']['components']:
@@ -81,15 +83,15 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
         vehicle_slots= VS[0]['slots']
     
     # find the appearance file jsons
-    app_path = glob.glob(path+"\**\*.app.json", recursive = True)
+    app_path = glob.glob(os.path.join(path,"**","*.app.json"), recursive = True)
     if len(app_path)==0:
         print('No Appearance file JSONs found in path')
 
     # find the meshes
-    meshes =  glob.glob(path+"\**\*.glb", recursive = True)
+    meshes =  glob.glob(os.path.join(path,"**","*.glb"), recursive = True)
     if len(meshes)==0:
         print('No Meshes found in path')
-    mesh_jsons =  glob.glob(path+"\**\*mesh.json", recursive = True)
+    mesh_jsons =  glob.glob(os.path.join(path,"**","*mesh.json"), recursive = True)
     
     # find the anims  
     # look through the components and find an anim, and load that, 
@@ -155,9 +157,9 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     else: 
         print('no rig json loaded')
                 
-    if len(meshes)<1 or len(app_path)<1:
+    if len(meshes)<1 or len(app_path)<1 and len(ent_components)<1:
         print("You need to export the meshes and convert app and ent to json")
-        return
+        pass
 
     else:
         for x,app_name in enumerate(appearances):
@@ -263,11 +265,11 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                     if 'mesh' in c.keys() and isinstance( c['mesh']['DepotPath']['$value'], str):
                         m=c['mesh']['DepotPath']['$value']
                         meshname=os.path.basename(m)
-                        meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb')
+                        meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb').replace('\\', os.sep)
                     elif 'graphicsMesh' in c.keys() and isinstance( c['graphicsMesh']['DepotPath']['$value'], str):
                         m=c['graphicsMesh']['DepotPath']['$value']
                         meshname=os.path.basename(m)
-                        meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb')
+                        meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb').replace('\\', os.sep)
                     if meshname:
                         if meshname not in exclude_meshes:      
                             if os.path.exists(meshpath):
@@ -283,7 +285,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                             obj['componentName'] = c['name']['$value']
                                             obj['sourcePath'] = meshpath
                                             obj['meshAppearance'] = meshApp
-                                            obj['appResource'] = app_path[0]
+                                            if app_path:
+                                                obj['appResource'] = app_path[0]
                                             obj['entAppearance'] = app_name
                                     except:
                                         print('import threw an error')
@@ -552,8 +555,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                         cm_list.reverse()
                                         for obj in objs:
                                             subnum=int(obj.name[8:10])
-                                            # obj.hide_viewport=not cm_list[subnum]
                                             obj.hide_set(not cm_list[subnum])
+                                            obj.hide_render=not cm_list[subnum]
                                 #else:
                                 except:
                                     print("Failed on ",meshname)
