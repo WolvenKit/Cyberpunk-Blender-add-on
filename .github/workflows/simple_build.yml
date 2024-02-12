@@ -10,12 +10,12 @@ jobs:
   Build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - uses: vimtor/action-zip@v1.1
         with:
           files: i_scene_cp77_gltf/ 
           dest: latest_build.zip
-      - uses: actions/upload-artifact@v3.1.3
+      - uses: actions/upload-artifact@v4
         with:
           name: my-artifact
           path: ${{ github.workspace }}/latest_build.zip

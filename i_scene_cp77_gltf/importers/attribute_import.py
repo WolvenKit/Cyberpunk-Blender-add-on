@@ -12,11 +12,11 @@ def manage_garment_support(existingMeshes, gltf_importer_data):
             mesh = bpy.data.meshes[name]
             for prim in gltf_importer.data.meshes[curMeshCount].primitives:
                 if '_GARMENTSUPPORTWEIGHT' in prim.attributes:
-                    indices = get_indices(gltf_importer, prim)
-                    
-                    add_vertex_color_attribute('_GARMENTSUPPORTWEIGHT', 'GarmentSupportWeight', gltf_importer, mesh, prim, indices)
-                    
-                    add_vertex_color_attribute('_GARMENTSUPPORTCAP', 'GarmentSupportCap', gltf_importer, mesh, prim, indices)
+                    indices = get_indices(gltf_importer, prim)                    
+                    mesh.color_attributes.remove(mesh.color_attributes['_GARMENTSUPPORTWEIGHT'])
+                    add_vertex_color_attribute('_GARMENTSUPPORTWEIGHT', '_GARMENTSUPPORTWEIGHT', gltf_importer, mesh, prim, indices)
+                    mesh.color_attributes.remove(mesh.color_attributes['_GARMENTSUPPORTCAP'])                    
+                    add_vertex_color_attribute('_GARMENTSUPPORTCAP', '_GARMENTSUPPORTCAP', gltf_importer, mesh, prim, indices)
                     
                 mesh.color_attributes.render_color_index = 0
                 curMeshCount = curMeshCount + 1

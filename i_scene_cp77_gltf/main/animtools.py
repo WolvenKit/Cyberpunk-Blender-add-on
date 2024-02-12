@@ -139,8 +139,8 @@ def add_anim_props(animation, action):
     track_keys_json = json.dumps(track_keys)
     
     # Add properties to the action
-    action["schemaType"] = schema['type']
-    action["schemaVersion"] = schema['version']
+    action["schema"] = schema
+   # action["schemaVersion"] = schema['version']
     action["animationType"] = animation_type
     action["frameClamping"] = frame_clamping
     action["frameClampingStartFrame"] = frame_clamping_start_frame
@@ -150,8 +150,8 @@ def add_anim_props(animation, action):
     action["constTrackKeys"] = const_track_keys
     action["trackKeys"] = track_keys
     action["fallbackFrameIndices"] = fallback_frame_indices
-    action["preferSIMD"] = optimizationHints['preferSIMD']
-    action["maxRotationCompression"] = optimizationHints['maxRotationCompression']
+    action["optimizationHints"] = optimizationHints
+    #action["maxRotationCompression"] = optimizationHints['maxRotationCompression']
     
 
 # Set the custom property on the action
