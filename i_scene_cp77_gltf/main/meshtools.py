@@ -241,6 +241,7 @@ def CP77UvUnChecker(self, context):
             material_index = mesh.data.materials.find(uvchecker)
             mesh.data.materials.pop(index=material_index)
             i = mesh.data.materials.find(original_mat_name)
+            bpy.ops.wm.properties_remove(data_path="object", property_name="uvCheckedMat")
             if i >= 0:
                 mesh.active_material_index = i
             if current_mode != 'EDIT':
