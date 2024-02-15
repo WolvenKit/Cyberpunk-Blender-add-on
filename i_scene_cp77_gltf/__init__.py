@@ -1093,8 +1093,7 @@ class CP77_PT_MeshTools(Panel):
                 box = layout.box()
                 box.label(text="Material Export", icon="MATERIAL")
                 box.operator("export_scene.hp")
-                if context.preferences.addons[__name__].preferences.experimental_features:
-                    box.operator("export_scene.mlsetup")
+                box.operator("export_scene.mlsetup")
         
 
 ## adds a message box for the exporters to use for error notifications, will also be used later for redmod integration    
