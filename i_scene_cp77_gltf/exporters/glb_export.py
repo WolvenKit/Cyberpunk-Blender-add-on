@@ -68,6 +68,7 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
         bpy.ops.object.mode_set(mode='OBJECT')
 
     objects = context.selected_objects
+    active_obj = context.active_object
 
     #if for photomode, make sure there's an armature selected, if not use the message box to show an error
     if export_poses:
@@ -97,6 +98,11 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
             if not meshes:
                 bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="No meshes selected, please select at least one mesh")
                 return {'CANCELLED'}
+
+            if active_obj.type != 'MESH':
+                for mesh in meshes:
+                    context.view_layer.objects.active = mesh
+                    break
         
         #check that meshes include UVs and have less than 65000 verts, throw an error if not
         for mesh in meshes:
