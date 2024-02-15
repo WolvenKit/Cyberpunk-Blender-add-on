@@ -109,12 +109,12 @@ def hide_extra_bones(self, context):
 
     for bone in armature.bones:
         if bone.name not in animBones:
-            if bone.hide != True:
+            if bone.hide is not True:
                 bone.hide = True
     
     for bone in armature.edit_bones:
         if bone.name not in animBones:
-            if bone.hide != True:
+            if bone.hide is not True:
                 bone.hide = True
                 
     selected_object['deformBonesHidden'] = True
