@@ -68,7 +68,6 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
         bpy.ops.object.mode_set(mode='OBJECT')
 
     objects = context.selected_objects
-    active_obj = context.active_object
 
     #if for photomode, make sure there's an armature selected, if not use the message box to show an error
     if export_poses:
@@ -76,6 +75,29 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
         if not armatures:
             bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="No armature objects are selected, please select an armature")
             return {'CANCELLED'}
+        for action in bpy.data.actions:
+            if "schema" not in action:
+                action["schema"] ={"type": "wkit.cp2077.gltf.anims","version": 3}
+            if "animationType" not in action:
+                action["animationType"] = 'Normal'
+            if "frameClamping" not in action:	
+                action["frameClamping"] = True
+            if "frameClampingStartFrame" not in action:
+                action["frameClampingStartFrame"] = '-1'
+            if "frameClampingEndFrame" not in action:
+                action["frameClampingEndFrame"] = '-1'
+            if "numExtraJoints" not in action:
+                action["numExtraJoints"] = ''
+            if "numeExtraTracks" not in action:
+                action["numeExtraTracks"] = ''
+            if "constTrackKeys" not in action:
+                action["constTrackKeys"] = []
+            if "trackKeys" not in action:
+                action["trackKeys"] = []
+            if "fallbackFrameIndices" not in action:
+                action["fallbackFrameIndices"] = []
+            if "optimizationHints" not in action:
+                action["optimizationHints"] = { "preferSIMD": False, "maxRotationCompression": 1}
         
         #if the export poses value is True, set the export options to ensure the armature is exported properly with the animations
         options = default_cp77_options()
@@ -98,11 +120,6 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
             if not meshes:
                 bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="No meshes selected, please select at least one mesh")
                 return {'CANCELLED'}
-
-            if active_obj.type != 'MESH':
-                for mesh in meshes:
-                    context.view_layer.objects.active = mesh
-                    break
         
         #check that meshes include UVs and have less than 65000 verts, throw an error if not
         for mesh in meshes:
