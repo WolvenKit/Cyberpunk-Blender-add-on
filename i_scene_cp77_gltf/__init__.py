@@ -661,13 +661,25 @@ class CP77BoneHider(Operator):
     bl_idname = "bone_hider.cp77"
     bl_parent_id = "CP77_PT_animspanel"
     bl_options = {'REGISTER', 'UNDO'}
-    bl_label = "Hide deform Bones"
+    bl_label = "Toggle Deform Bone Visibilty"
     bl_description = "Hide deform bones in the selected armature"
     
     def execute(self, context):
         hide_extra_bones(self, context)
         return{'FINISHED'}
-        
+
+
+class CP77BoneUnhider(Operator):
+    bl_idname = "bone_unhider.cp77"
+    bl_parent_id = "CP77_PT_animspanel"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_label = "Toggle Deform Bone Visibilty"
+    bl_description = "Unhide deform bones in the selected armature"
+    
+    def execute(self, context):
+        unhide_extra_bones(self, context)
+        return{'FINISHED'}
+
 
 # inserts a keyframe on the current frame
 class CP77Keyframe(Operator):
@@ -789,7 +801,10 @@ class CP77_PT_AnimsPanel(Panel):
             obj = context.active_object
             if obj and obj.type == 'ARMATURE':
                 row = box.row(align=True)
-                row.operator('bone_hider.cp77')
+                if 'deformBonesHidden' in obj:
+                    row.operator('bone_unhider.cp77',text='Unhide Deform Bones')
+                else:
+                    row.operator('bone_hider.cp77',text='Hide Deform Bones')
                 row = box.row(align=True)
                 row.operator('reset_armature.cp77')
                 available_anims = list(CP77AnimsList(context,obj))
@@ -1079,8 +1094,7 @@ class CP77_PT_MeshTools(Panel):
                 box = layout.box()
                 box.label(text="Material Export", icon="MATERIAL")
                 box.operator("export_scene.hp")
-                if context.preferences.addons[__name__].preferences.experimental_features:
-                    box.operator("export_scene.mlsetup")
+                box.operator("export_scene.mlsetup")
         
 
 ## adds a message box for the exporters to use for error notifications, will also be used later for redmod integration    
@@ -1419,6 +1433,7 @@ classes = (
     CP77_PT_CollisionTools,
     CP77_OT_submesh_prep,
     CP77BoneHider,
+    CP77BoneUnhider,
 )
 
 def register():
