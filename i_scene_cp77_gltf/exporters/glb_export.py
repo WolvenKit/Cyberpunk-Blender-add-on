@@ -75,6 +75,29 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
         if not armatures:
             bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="No armature objects are selected, please select an armature")
             return {'CANCELLED'}
+        for action in bpy.data.actions:
+            if "schema" not in action:
+                action["schema"] ={"type": "wkit.cp2077.gltf.anims","version": 3}
+            if "animationType" not in action:
+                action["animationType"] = 'Normal'
+            if "frameClamping" not in action:	
+                action["frameClamping"] = True
+            if "frameClampingStartFrame" not in action:
+                action["frameClampingStartFrame"] = '-1'
+            if "frameClampingEndFrame" not in action:
+                action["frameClampingEndFrame"] = '-1'
+            if "numExtraJoints" not in action:
+                action["numExtraJoints"] = ''
+            if "numeExtraTracks" not in action:
+                action["numeExtraTracks"] = ''
+            if "constTrackKeys" not in action:
+                action["constTrackKeys"] = []
+            if "trackKeys" not in action:
+                action["trackKeys"] = []
+            if "fallbackFrameIndices" not in action:
+                action["fallbackFrameIndices"] = []
+            if "optimizationHints" not in action:
+                action["optimizationHints"] = { "preferSIMD": False, "maxRotationCompression": 1}
         
         #if the export poses value is True, set the export options to ensure the armature is exported properly with the animations
         options = default_cp77_options()
