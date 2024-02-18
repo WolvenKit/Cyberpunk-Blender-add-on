@@ -83,13 +83,13 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
             if "frameClamping" not in action:	
                 action["frameClamping"] = True
             if "frameClampingStartFrame" not in action:
-                action["frameClampingStartFrame"] = '-1'
+                action["frameClampingStartFrame"] = -1
             if "frameClampingEndFrame" not in action:
-                action["frameClampingEndFrame"] = '-1'
+                action["frameClampingEndFrame"] = -1
             if "numExtraJoints" not in action:
-                action["numExtraJoints"] = ''
+                action["numExtraJoints"] = 0
             if "numeExtraTracks" not in action:
-                action["numeExtraTracks"] = ''
+                action["numeExtraTracks"] = 0
             if "constTrackKeys" not in action:
                 action["constTrackKeys"] = []
             if "trackKeys" not in action:
