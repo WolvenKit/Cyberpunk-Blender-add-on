@@ -254,7 +254,7 @@ def CP77UvUnChecker(self, context):
 def cp77riglist(context):
     cp77rigs = []
     man_base = os.path.join(rig_dir, "man_base_full.glb")
-    woman_base = os.path.join(resources_dir, "woman_base.gltf")
+    woman_base = os.path.join(resources_dir, "woman_base_full.glb")
     man_big = os.path.join(rig_dir, "man_big_full.glb")
     man_fat = os.path.join(rig_dir, "man_fat_full.glb")
     Rhino = os.path.join(rig_dir, "rhino_full.glb")
