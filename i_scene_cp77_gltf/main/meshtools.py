@@ -254,7 +254,8 @@ def CP77UvUnChecker(self, context):
 def cp77riglist(context):
     cp77rigs = []
     man_base = os.path.join(rig_dir, "man_base_full.glb")
-    woman_base = os.path.join(resources_dir, "woman_base.gltf")
+    woman_base = os.path.join(rig_dir, "woman_base_full.glb")
+    Jackie = os.path.join(rig_dir, "jackie_full.glb")
     man_big = os.path.join(rig_dir, "man_big_full.glb")
     man_fat = os.path.join(rig_dir, "man_fat_full.glb")
     Rhino = os.path.join(rig_dir, "rhino_full.glb")
@@ -262,9 +263,9 @@ def cp77riglist(context):
     Panam = os.path.join(rig_dir, "Panam_full.glb")
     
     # Store the variable names in a list
-    cp77rigs = [man_base, woman_base, man_big, man_fat, Rhino, Judy, Panam]
-    cp77rig_names = ['man_base', 'woman_base', 'man_big', 'man_fat', 'Rhino', 'Judy', 'Panam']
-    
+    cp77rigs = [man_base, woman_base, Jackie, man_big, man_fat, Rhino, Judy, Panam]
+    cp77rig_names = ['man_base', 'woman_base', 'Jackie', 'man_big', 'man_fat', 'Rhino', 'Judy', 'Panam']
+
     # Return the list of variable names
     return cp77rigs, cp77rig_names
 
