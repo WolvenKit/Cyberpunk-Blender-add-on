@@ -748,6 +748,11 @@ class CP77RigLoader(Operator):
     bl_label = "Load rigs from .glb"
     bl_description = "Load Cyberpunk 2077 deform rigs from plugin resources" 
 
+    files: CollectionProperty(type=OperatorFileListElement)
+    appearances: StringProperty(name="Appearances", default="")
+    directory: StringProperty(name="Directory", default="")
+    filepath: StringProperty(name="Filepath", default="")
+
     def execute(self, context):
         props = context.scene.cp77_panel_props
         selected_rig_name = props.body_list
@@ -756,7 +761,9 @@ class CP77RigLoader(Operator):
         if selected_rig_name in rig_names:
             # Find the corresponding .glb file and load it
             selected_rig = rig_files[rig_names.index(selected_rig_name)]
-            bpy.ops.import_scene.gltf(filepath=selected_rig)
+            self.filepath = selected_rig
+            CP77GLBimport(self, exclude_unused_mats=True, image_format='PNG', with_materials=False, 
+                          filepath=selected_rig, hide_armatures=False, import_garmentsupport=False, files=[], directory='', appearances="ALL")
             if props.fbx_rot:
                 rotate_quat_180(self,context)
         return {'FINISHED'}
