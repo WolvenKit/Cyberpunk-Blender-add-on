@@ -36,6 +36,14 @@ class MetalBase:
             metNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,-550), label="Metalness", image=mImg)
             CurMat.links.new(metNode.outputs[0],pBSDF.inputs['Metallic'])
 
+        if 'GradientMap' in Data:
+            gradmap = Data["GradientMap"]
+            gradImg = imageFromRelPath(gradmap,self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            grad_image_node = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,0), label="GradientMap", image=gradImg)          
+            color_ramp_node=CreateGradMapRamp(CurMat, grad_image_node)
+            CurMat.links.new(mixRGB.outputs[0], color_ramp_node.inputs[0])
+            CurMat.links.new(color_ramp_node.outputs[0], pBSDF.inputs['Base Color'])
+
         if 'MetalnessScale' in Data:
             mScale = CreateShaderNodeValue(CurMat,Data["MetalnessScale"],-1000, -100,"MetalnessScale")
 
@@ -67,7 +75,7 @@ class MetalBase:
             CurMat.links.new(bColNode.outputs[1],alphclamp.inputs['Value'])
         else:
             CurMat.links.new(bColNode.outputs[0],alphclamp.inputs['Value'])
-
+       
         
         Clamp2 = create_node(CurMat.nodes,"ShaderNodeClamp",(-538., 476.))
         
@@ -76,11 +84,9 @@ class MetalBase:
        
         CurMat.links.new(alphclamp.outputs[0],Clamp2.inputs['Value'])
         
-
         if "Normal" in Data:
             nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["Normal"],-200,-300,'Normal',self.image_format)
             CurMat.links.new(nMap.outputs[0],pBSDF.inputs['Normal'])
-
 
         mulNode = CurMat.nodes.new("ShaderNodeMixRGB")
         mulNode.inputs[0].default_value = 1
@@ -114,6 +120,8 @@ class MetalBase:
         CurMat.links.new(Math.outputs['Value'], Clamp001.inputs[1]) # Inverted value into clamp min, so if 1 its always solic, if 0 will use BaseColor alpha
         CurMat.links.new(bColNode.outputs['Alpha'], Clamp001.inputs[0]) # alpha into one thats clamped by enableMask value        
         CurMat.links.new(Clamp001.outputs['Result'], pBSDF.inputs['Alpha'])
+        if not image_has_alpha(bcolImg): # if the image doesnt have alpha stick the color in instead
+            CurMat.links.new(bColNode.outputs['Color'],Clamp001.inputs['Value'])
 
         
 
