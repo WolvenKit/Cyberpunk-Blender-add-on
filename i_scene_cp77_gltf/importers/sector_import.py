@@ -721,7 +721,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                             print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
 
                     case 'worldStaticMeshNode' |'worldRotatingMeshNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldAdvertismentNode' | \
-                'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldClothMeshNode': 
+                'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldClothMeshNode' | 'worldDecorationMeshNode': 
                         if isinstance(e, dict) and 'mesh' in data.keys():
                             meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                             #print('Mesh name is - ',meshname, e['HandleId'])
