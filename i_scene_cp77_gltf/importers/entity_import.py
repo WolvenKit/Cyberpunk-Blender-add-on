@@ -101,7 +101,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     anim_files = glob.glob(path+"\\base\\animations\\"+"\**\*.glb", recursive = True)
     ep1_anim_files = glob.glob(path+"\\ep1\\animations\\"+"\**\*.glb", recursive = True)
     anim_files = anim_files + ep1_anim_files
-
+    app_name=None
     rig=None
     bones=None
     chunks=None
@@ -257,7 +257,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
             if len(comps)==0:      
                 print('falling back to rootchunk comps')
                 comps= j['Data']['RootChunk']['components']
-
+            fxslots={}
             for c in comps:
                 if 'mesh' in c.keys() or 'graphicsMesh' in c.keys():
                    # print(c['mesh']['DepotPath']['$value'])
@@ -560,7 +560,21 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                 #else:
                                 except:
                                     print("Failed on ",meshname)
-     
+                elif c['$type']=='entSlotComponent':
+                    print('fx slots')
+                    for slot in c['slots']:
+                        slot_name=slot['slotName']['$value']
+                        fxslots[slot_name]={}
+                        fxslots[slot_name]['relativePosition']=slot['relativePosition']
+                        fxslots[slot_name]['relativeRotation']=slot['relativeRotation']
+                        if slot['boneName']['$value']!='None':
+                            fxslots[slot_name]['boneName']=slot['boneName']['$value']
+                elif c['$type']=='entLightComponent':
+                    print('Light Component')
+                elif c['$type']=='entEffectSpawnerComponent':
+                    print('Effect Spawner Component')
+                else:
+                    print('no mesh and not slots')
               # find the .phys file jsons
         if include_collisions:
             collision_collection = bpy.data.collections.new('colliders')
