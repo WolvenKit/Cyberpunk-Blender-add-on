@@ -138,6 +138,10 @@ def json_ver_validate( json_data):
         return True
 
 def openJSON(path, mode='r',  ProjPath='', DepotPath=''):
+    path = path.replace('\\', os.sep)
+    ProjPath = ProjPath.replace('\\', os.sep)
+    DepotPath = DepotPath.replace('\\', os.sep)
+
     inproj=os.path.join(ProjPath,path)
     if os.path.exists(inproj):
         file = open(inproj,mode)
