@@ -13,7 +13,7 @@ import traceback
 def objs_in_col(top_coll, objtype):
     return sum([len([o for o in col.objects if o.type==objtype]) for col in top_coll.children_recursive])+len([o for o in top_coll.objects if o.type==objtype])
 
-def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_materials=True, filepath='', hide_armatures=True,  import_garmentsupport=False, files=[], directory='', appearances=[]):
+def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_materials=True, filepath='', hide_armatures=True,  import_garmentsupport=False, files=[], directory='', appearances=[], remap_depot=False):
     
     context=bpy.context
     loadfiles=self.files
@@ -86,6 +86,7 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
         #Kwek: was tempted to do a try-catch, but that is just La-Z
         #Kwek: Added another gate for materials
         if with_materials and os.path.exists(BasePath + ".Material.json"):
+                
             file = open(BasePath + ".Material.json",mode='r')
             obj = json.loads(file.read())
             file.close()
@@ -94,6 +95,10 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
                 self.report({'ERROR'}, "Incompatible material.json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")    
                 break
             DepotPath = str(obj["MaterialRepo"])  + "\\"
+            context=bpy.context
+            if remap_depot and os.path.exists(context.preferences.addons[__name__.split('.')[0]].preferences.depotfolder_path):
+                DepotPath = context.preferences.addons[__name__.split('.')[0]].preferences.depotfolder_path
+            DepotPath= DepotPath.replace('\\', os.sep)
             json_apps=obj['Appearances']
             # fix the app names as for some reason they have their index added on the end.
             appkeys=[k for k in json_apps.keys()]
