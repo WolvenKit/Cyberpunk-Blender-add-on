@@ -478,6 +478,13 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                                 x=ta['localTransform']['Position']['x']['Bits']/131072                                                    
                                                 y=ta['localTransform']['Position']['y']['Bits']/131072                                                    
                                                 z=ta['localTransform']['Position']['z']['Bits']/131072
+                                                target=None
+                                                for ix,obj in enumerate(objs):
+                                                    if ix>0:
+                                                        cr=obj.constraints.new(type='COPY_ROTATION')
+                                                        cr.target=target
+                                                    else:
+                                                        target=obj
                                                      
 
                                     # end new stuff
