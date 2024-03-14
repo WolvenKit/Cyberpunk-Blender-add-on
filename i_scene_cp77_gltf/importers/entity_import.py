@@ -228,7 +228,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                     ent_app_idx=0
 
                 app_file = ent_apps[ent_app_idx]['appearanceResource']['DepotPath']['$value']
-                appfilepath=os.path.join(path,app_file)+'.json'
+                appfilepath=os.path.join(path,app_file).replace('\\',os.sep)+'.json'
                 a_j=None        
                 if os.path.exists(appfilepath):
                     with open(appfilepath,'r') as a: 
@@ -253,7 +253,10 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                             print('Chunks found')
                 else:
                     print('app file not found -', filepath)
-                              
+            else:
+                if j['Data']['RootChunk']['compiledData']['Data']['Chunks']:
+                    chunks= j['Data']['RootChunk']['compiledData']['Data']['Chunks']
+
             if len(comps)==0:      
                 print('falling back to rootchunk comps')
                 comps= j['Data']['RootChunk']['components']
@@ -264,7 +267,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                     meshname=''
                     if 'mesh' in c.keys() and isinstance( c['mesh']['DepotPath']['$value'], str):
                         m=c['mesh']['DepotPath']['$value']
-                        meshname=os.path.basename(m)
+                        meshname=os.path.basename(m.replace('\\',os.sep))
                         meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb').replace('\\', os.sep)
                     elif 'graphicsMesh' in c.keys() and isinstance( c['graphicsMesh']['DepotPath']['$value'], str):
                         m=c['graphicsMesh']['DepotPath']['$value']
@@ -319,6 +322,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                                          if chunk['parentTransform']['HandleId']==pT_HId:
                                                              chunk_pt=chunk['parentTransform']
                                                              #print('HandleId found',chunk['parentTransform']['HandleId'])
+
                                         # if we found it then process it, most chars etc will just skip this                                                     
                                         if chunk_pt:   
                                             #print('in chunk pt processing bindName = ',chunk_pt['Data']['bindName'],' slotname= ',chunk_pt['Data']['slotName'])                                     
@@ -468,7 +472,22 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                                         co.subtarget= bindname
                                                         bpy.context.view_layer.objects.active = obj
                                                         bpy.ops.constraint.childof_set_inverse(constraint="Child Of", owner='OBJECT')
-                                                                
+
+                                            # Deal with TransformAnimators
+                                            if 'TransformAnimator' in bindname:
+                                                ta=[tacmp for tacmp in comps if tacmp['name']['$value']==bindname ][0]
+                                                x=ta['localTransform']['Position']['x']['Bits']/131072                                                    
+                                                y=ta['localTransform']['Position']['y']['Bits']/131072                                                    
+                                                z=ta['localTransform']['Position']['z']['Bits']/131072
+                                                target=None
+                                                for ix,obj in enumerate(objs):
+                                                    if ix>0:
+                                                        cr=obj.constraints.new(type='COPY_ROTATION')
+                                                        cr.target=target
+                                                    else:
+                                                        target=obj
+                                                     
+
                                     # end new stuff
                                     # dont get the local transform here if we already did it before
                                     if not x:   
