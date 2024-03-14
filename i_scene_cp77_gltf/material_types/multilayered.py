@@ -242,6 +242,8 @@ class Multilayered:
             CurMat.links.new(CurMat.nodes[LastLayer].outputs[1],MixLayerStacks.inputs[5])
             CurMat.links.new(CurMat.nodes[LastLayer].outputs[2],MixLayerStacks.inputs[6])
             CurMat.links.new(CurMat.nodes[LastLayer].outputs[3],MixLayerStacks.inputs[7])
+            factor=CreateShaderNodeValue(CurMat, 0.5, -1100,-250, "Factor")
+            CurMat.links.new(factor.outputs[0],MixLayerStacks.inputs[8])
             
             # replace the connections from the bottom of the stack with these
             CurMat.links.new(MixLayerStacks.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
