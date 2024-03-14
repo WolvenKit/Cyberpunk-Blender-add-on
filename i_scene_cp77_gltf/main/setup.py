@@ -37,7 +37,7 @@ class MaterialBuilder:
         self.image_format = image_format
         self.obj = Obj
         self.MeshPath= MeshPath
-        before,mid,after=MeshPath.partition('source\\raw\\')
+        before,mid,after=MeshPath.partition('source\\raw\\'.replace('\\',os.sep))
         self.ProjPath=before+mid
     
     def create(self,materialIndex):

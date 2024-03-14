@@ -7,7 +7,30 @@ import pkg_resources
 import bpy
 import bmesh
 from mathutils import Vector
+import json
 
+def normalize_paths(data):
+    if isinstance(data, dict):
+        for key, value in data.items():
+            data[key] = normalize_paths(value)
+    elif isinstance(data, list):
+        for i in range(len(data)):
+            data[i] = normalize_paths(data[i])
+    elif isinstance(data, str):
+        # Normalize the path if it is absolute
+        if data[0:4]=='base' or data[0:3]=='ep1' or data[1:3]==':\\':
+            data = data.replace('\\',os.sep)
+    return data
+
+def jsonload(filepath):
+    data=json.load(filepath)
+    normalize_paths(data)
+    return data
+
+def jsonloads(jsonstrings):
+    data=json.loads(jsonstrings)
+    normalize_paths(data)
+    return data
 
 def get_plugin_dir():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -185,6 +208,8 @@ def imageFromPath(Img,image_format,isNormal = False):
 def imageFromRelPath(ImgPath, image_format='png', isNormal = False, DepotPath='',ProjPath=''):
     # The speedtree materials use the same name textures for different plants this code was loading the same leaves on all of them
     # Also copes with the fact that theres black.xbm in base and engine for instance
+    DepotPath=DepotPath.replace('\\',os.sep)
+    ProjPath=ProjPath.replace('\\',os.sep)
     inProj=os.path.join(ProjPath,ImgPath)[:-3]+ image_format
     inDepot=os.path.join(DepotPath,ImgPath)[:-3]+ image_format
     img_names=[k for k in bpy.data.images.keys() if bpy.data.images[k].filepath==inProj]
