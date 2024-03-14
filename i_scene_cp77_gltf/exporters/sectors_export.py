@@ -370,42 +370,62 @@ def exportSectors( filename):
                     wIMNs+=1
                     #print(wIMNs)
                     meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep) 
-
+                    #if 'chopstick' in meshname:
+                    #    print('worldInstancedMeshNode - ',meshname)
                     if not checkexists(meshname, Masters):
                         print(meshname, ' not found in masters')
                         continue
+                    
                     num=data['worldTransformsBuffer']['numElements']
                     start=data['worldTransformsBuffer']['startIndex']
                     if(meshname != 0):
                         for idx in range(start, start+num):
+                            bufferID=0
+                            if 'Data' in data['worldTransformsBuffer']['sharedDataBuffer'].keys():
+                                    inst_trans=data['worldTransformsBuffer']['sharedDataBuffer']['Data']['buffer']['Data']['Transforms'][idx]
+                                        
+                            elif 'HandleRefId' in data['worldTransformsBuffer']['sharedDataBuffer'].keys():
+                                bufferID = int(data['worldTransformsBuffer']['sharedDataBuffer']['HandleRefId'])
+                                ref=e
+                                for n in nodes:
+                                    if n['HandleId']==str(bufferID-1):
+                                        ref=n
+                                inst_trans = ref['Data']['worldTransformsBuffer']['sharedDataBuffer']['Data']['buffer']['Data']['Transforms'][idx]
+                        # store the bufferID for when we add new stuff.
+                            if Sector_additions_coll:
+                                Sector_additions_coll['Inst_bufferID']=bufferID
                             obj_col=find_col(i,idx,Sector_coll)    
-                            if obj_col:
+                            if obj_col and inst_trans:
                                 if len(obj_col.objects)>0:
                                     obj=obj_col.objects[0]
-                                    if obj.matrix_world!=Matrix(obj['matrix']):
+                                    # Check for Position and if changed delete the original and add to the new sector
+                                    if obj.matrix_world!=Matrix(obj_col['matrix']):
                                         deletions[sectorName].append(obj_col)
+                                        new_ni=len(template_nodes)
+                                        template_nodes.append(copy.deepcopy(nodes[obj_col['nodeIndex']]))
+                                        # might need to convert instanced to static here, not sure what the best approach is.
+                                        createNodeData(template_nodeData, obj_col, new_ni, obj,ID)
+                                        ID+=1
                                 else:
-                                    deletions[sectorName].append(obj_col)
-                                    obj_col['exported']=True
-                            # Need to change deletions to pass the values otherwise cant deal with deleted collectors
+                                    if obj_col:
+                                        deletions[sectorName].append(obj_col)
                                     
-
                 case 'worldStaticDecalNode':
                     #print('worldStaticDecalNode')
-                    instances = [x for x in t if x['NodeIndex'] == i]
-                    for idx,inst in enumerate(instances):
+                    instances = [(x,y) for y,x in enumerate(t) if x['NodeIndex'] == i]
+                    for idx,(inst,instNid) in enumerate(instances):
                         obj=find_decal(i,idx,Sector_coll)
                         if obj:
                             # Check for Position and if changed delete the original and add to the new sector
                             if obj.matrix_world!=Matrix(obj['matrix']):
-                                deletions['Decals'][sectorName].append({'nodeIndex':idx,'NodeComment' :obj.name, 'NodeType' : obj['nodeType']})
+                                deletions['Decals'][sectorName].append({'nodeIndex':instNid,'NodeComment' :obj.name, 'NodeType' : obj['nodeType']})
                                 new_ni=len(template_nodes)
                                 template_nodes.append(copy.deepcopy(nodes[obj['nodeIndex']]))
                                 createNodeData(template_nodeData, Sector_coll, new_ni, obj,ID)
                                 ID+=1
-                                obj['exported']=True
                         else:
-                            deletions['Decals'][sectorName].append({'nodeIndex':idx,'NodeComment' :'DELETED Decal nid:'+str(inst['NodeIndex'])+' ndid:'+str(idx), 'NodeType' : 'worldStaticDecalNode'})
+                            deletions['Decals'][sectorName].append({'nodeIndex':instNid,'NodeComment' :'DELETED Decal nid:'+str(inst['NodeIndex'])+' ndid:'+str(instNid), 'NodeType' : 'worldStaticDecalNode'})
+                        
 
                 case   'worldStaticMeshNode' | 'worldBuildingProxyMeshNode' | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode': 
                     if isinstance(e, dict) and 'mesh' in data.keys():
@@ -417,7 +437,6 @@ def exportSectors( filename):
                                 obj_col=find_col(i,idx,Sector_coll)
                                 #print(obj_col)
                                 if obj_col:
-                                    obj_col['exported']=True
                                     if len(obj_col.objects)>0:
                                         obj=obj_col.objects[0]
                                         # Check for Position and if changed delete the original and add to the new sector
@@ -429,7 +448,8 @@ def exportSectors( filename):
                                             createNodeData(template_nodeData, obj_col, new_ni, obj,ID)
                                             ID+=1
                                     else:
-                                        deletions[sectorName].append(obj_col)
+                                        if obj_col:
+                                            deletions[sectorName].append(obj_col)
 
                 case  'worldEntityNode':
                     if isinstance(e, dict) and 'entityTemplate' in data.keys():
@@ -440,10 +460,10 @@ def exportSectors( filename):
                             for idx,inst in enumerate(instances):
                                 obj_col=find_col(i,idx,Sector_coll)
                                 #print(obj_col)
+                                # THIS IS WRONG, the entity meshes are in child collectors not objects
                                 if obj_col and len(obj_col.children)>0:
                                     if len(obj_col.children[0].objects)>0:
                                         # Check for Position and if changed delete the original and add to the new sector
-                                        # Find a better way to do this
                                         if obj.matrix_world!=Matrix(obj_col['matrix']):
                                             deletions[sectorName].append(obj_col)
                                             new_ni=len(template_nodes)
@@ -451,16 +471,76 @@ def exportSectors( filename):
                                             
                                             createNodeData(template_nodeData, obj_col, new_ni, obj,ID)
                                             ID+=1
-                                        obj_col['exported']=True
                                         
                                 else:
                                     if obj_col:
-                                        deletions[sectorName].append(obj_col)     
-                                        obj_col['exported']=True                              
+                                        deletions[sectorName].append(obj_col)                                   
                                         
                                         
                                         
-                
+                case 'worldInstancedDestructibleMeshNode':
+                    #print('worldInstancedDestructibleMeshNode',i)
+                    if isinstance(e, dict) and 'mesh' in data.keys():
+                        meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
+                        num=data['cookedInstanceTransforms']['numElements']
+                        start=data['cookedInstanceTransforms']['startIndex']
+                        instances = [x for x in t if x['NodeIndex'] == i]
+                        for tlidx,inst in enumerate(instances):
+                            for idx in range(start, start+num):
+                                bufferID=0
+                                basic_trans=None
+                                # Transforms are inside the cookedInstanceTransforms in a buffer
+                                if 'Data' in data['cookedInstanceTransforms']['sharedDataBuffer'].keys():
+                                    basic_trans=data['cookedInstanceTransforms']['sharedDataBuffer']['Data']['buffer']['Data']['Transforms'][idx]
+
+                                # Transforms are in a shared buffer in another node, so get the reference and find the transform data                    
+                                elif 'HandleRefId' in data['cookedInstanceTransforms']['sharedDataBuffer'].keys():
+                                    bufferID = int(data['cookedInstanceTransforms']['sharedDataBuffer']['HandleRefId'])
+                                    ref=e
+                                    for n in nodes:
+                                        if n['HandleId']==str(bufferID-1):
+                                            ref=n
+                                    basic_trans = ref['Data']['cookedInstanceTransforms']['sharedDataBuffer']['Data']['buffer']['Data']['Transforms'][idx]   
+                                    #print(basic_trans)                  
+                                else :
+                                    print(e)
+                                # store the bufferID for when we add new stuff.
+                                if Sector_additions_coll:
+                                    Sector_additions_coll['Dest_bufferID']=bufferID
+                                    #print('Setting Dest_bufferID to ',bufferID)
+                                
+                                # the Transforms are stored as 2 parts, a basic transform applied to all the instances and individual ones per instance
+                                # lets get the basic one so we can calculate the instance one.
+                                basic_pos =Vector(get_pos(basic_trans))
+                                basic_rot =Quaternion(get_rot(basic_trans))
+                                basic_scale =Vector((1,1,1))
+                                basic_matr=Matrix.LocRotScale(basic_pos,basic_rot,basic_scale)
+                                basic_matr_inv=basic_matr.inverted()
+                                
+                                # Never modify the basic on as other nodes may be referencing it. (its normally 0,0,0 anyway)
+                                inst_pos =Vector(get_pos(inst))
+                                inst_rot =Quaternion(get_rot(inst))
+                                inst_scale =Vector((1,1,1))
+                                inst_m=Matrix.LocRotScale(inst_pos,inst_rot,inst_scale)
+                                
+
+                                obj_col=find_wIDMN_col(i,tlidx,idx,Sector_coll)
+                                if obj_col:
+                                    if len(obj_col.objects)>0:
+                                        obj=obj_col.objects[0]
+                                        # Check for Position and if changed delete the original and add to the new sector
+                                        if obj.matrix_world!=Matrix(obj_col['matrix']):
+                                            deletions[sectorName].append(obj_col)
+                                            new_ni=len(template_nodes)
+                                            template_nodes.append(copy.deepcopy(nodes[obj_col['nodeIndex']]))
+                                            
+                                            createNodeData(template_nodeData, obj_col, new_ni, obj,ID)
+                                            ID+=1
+                                        
+                                    else:
+                                        if obj_col:
+                                            deletions[sectorName].append(obj_col)
+        print(wIMNs)
                                         
     #       __   __          __      __  ___       ___  ___ 
     #  /\  |  \ |  \ | |\ | / _`    /__`  |  |  | |__  |__  
@@ -472,21 +552,19 @@ def exportSectors( filename):
         for node in t:
             if int(node['Id'])>ID:
                 ID=int(node['Id'])+1
-        
-        for col in Sector_coll.children:
-            if 'exported' not in col.keys() or col['exported']==False:
+        if Sector_additions_coll:
+            for col in Sector_additions_coll.children:
                 if 'nodeIndex' in col.keys() and col['sectorName']==sectorName and len(col.objects)>0:
                     match col['nodeType']:
                         case 'worldStaticMeshNode' | 'worldStaticDecalNode' | 'worldBuildingProxyMeshNode' | 'worldGenericProxyMeshNode' | 'worldTerrainProxyMeshNode':
-                            obj=col.objects[0]                            
-                            new_ni=len(nodes)
-                            createNodeData(template_nodeData, col, new_ni, obj,ID)
+                            obj=col.objects[0]
+                            createNodeData(t, col, col['nodeIndex'], obj,ID)
                             ID+=1
                         case 'worldEntityNode':
                             new_ni=len(nodes)
                             nodes.append(copy.deepcopy(nodes[col['nodeIndex']]))
                             obj=col.objects[0]
-                            createNodeData(template_nodeData, col, new_ni, obj,ID)
+                            createNodeData(t, col, new_ni, obj,ID)
                             ID+=1
                                         
                         case 'worldInstancedMeshNode':
