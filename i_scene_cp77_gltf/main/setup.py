@@ -161,7 +161,7 @@ class MaterialBuilder:
                     glass = Glass(self.BasePath,self.image_format, self.ProjPath)
                     glass.create(rawMat["Data"],bpyMat)
                 
-                case "base\\materials\\mesh_decal_parallax.mt" :
+                case "base\\materials\\mesh_decal_parallax.mt" | "base\\materials\\vehicle_mesh_decal_parallax.mt":
                     no_shadows=True
                     meshDecalParallax = MeshDecalParallax(self.BasePath,self.image_format, self.ProjPath)
                     meshDecalParallax.create(rawMat["Data"],bpyMat)

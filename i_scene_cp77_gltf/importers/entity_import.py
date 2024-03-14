@@ -16,7 +16,7 @@ from ..main.collisions import draw_box_collider, draw_capsule_collider, draw_con
 # if you've already imported the body/head and set the rig up you can exclude them by putting them in the exclude_meshes list 
 #presto_stash=[]
 
-def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=True, include_collisions=False, include_phys=False, include_entCollider=False, inColl=''): 
+def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=True, include_collisions=False, include_phys=False, include_entCollider=False, inColl='', remapdepot=False): 
     
     C = bpy.context
     coll_scene = C.scene.collection
@@ -280,7 +280,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                         meshApp=c['meshAppearance']['$value']
                                         #print(meshApp)
                                     try:
-                                        bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=meshApp, with_materials=with_materials, update_gi=False,)
+                                        bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=meshApp, with_materials=with_materials, update_gi=False,remap_depot=remapdepot)
                                         for obj in C.selected_objects:            
                                             obj['componentName'] = c['name']['$value']
                                             obj['sourcePath'] = meshpath
@@ -294,7 +294,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                     objs = C.selected_objects
                                     if meshname=='v_sportbike2_arch_nemesis__ext01_axle_f_a_01':
                                         print('those annoying front forks')
-                                                                           
+                                    if 'rotor' in meshname or 'prop' in meshname:
+                                        print('those annoying front forks')                                 
                                     # NEW parentTransform stuff - fixes vehicles being exploded
                                     x=None
                                     y=None
