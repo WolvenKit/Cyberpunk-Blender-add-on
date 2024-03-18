@@ -1,9 +1,16 @@
 import bpy
 import re
+import os
+yamlavail=False
+try:
+    import yaml
+    yamlavail=True
+except:
+    import json
 
-wolvenkit_project = "apartment_dogtown_cleaned_up"
-mod_directory = "C:\\Games\\Cyberpunk 2077\\archive\\pc\\mod\\"
-project_directory = "F:\\CyberpunkFiles\\world_editing\\"
+wolvenkit_project = "archivexlupdate"
+mod_directory = "D:\\GOGLibrary\\Cyberpunk 2077\\archive\\pc\\mod"
+project_directory = "D:\\cpmod"
 
 export_to_mod_dir = True
 consider_partial_deletions = True
@@ -51,11 +58,12 @@ compiled_partials = [[re.compile(p) for p in partials] for partials in keep_part
 def find_empty_collections(collection):
     empty_collections = []
     is_deletion_candidate = 'nodeIndex' in collection and 'nodeType' in collection
-
+    if 'pillow' in collection.name:
+        print(collection.name)
     # check if we want to keep this collection
-    for keep_check in compiled_partials:
-        if all(p.search(collection.name) for p in keep_check):
-            return empty_collections
+#    for keep_check in compiled_partials:
+ #       if all(p.search(collection.name) for p in keep_check):
+  #          return empty_collections
 
     if len(collection.children) == 0 and is_deletion_candidate:
         if len(collection.objects) == 0:
@@ -72,44 +80,40 @@ def find_empty_collections(collection):
 
     return empty_collections
 
-
-# Function to write to a text file
 def to_archive_xl(filename):
-    with open(filename, "w") as file:
-        file.write("streaming:\n")
-        file.write(f"{indent}sectors:\n")
-        for sectorPath in deletions:
-            deletedNodes = []
-            file.write(f"{indent}{indent}- path: {sectorPath}\n")
-            file.write(f"{indent}{indent}{indent}expectedNodes: {expectedNodes[sectorPath]}\n")
-            file.write(f"{indent}{indent}{indent}nodeDeletions:\n")
-            sectorData = deletions[sectorPath]
-
-            currentNodeIndex = -1
-            currentNodeComment = ''
-            currentNodeType = ''
-            for empty_collection in sectorData:
-                if empty_collection['nodeIndex'] > currentNodeIndex:
-                    # new node! write the old one                    
-                    file.write(f"{indent}{indent}{indent}{indent}# {currentNodeComment}\n")
-                    file.write(f"{indent}{indent}{indent}{indent}- index: {currentNodeIndex}\n")
-                    file.write(f"{indent}{indent}{indent}{indent}{indent}type: {currentNodeType}\n")
-                    
-                    # set instance variables
-                    currentNodeIndex = empty_collection['nodeIndex']
-                    currentNodeComment = empty_collection.name
-                    currentNodeType = empty_collection['nodeType']
-                elif empty_collection['nodeIndex'] == currentNodeIndex:
-                    currentNodeComment = f"{currentNodeComment}, {empty_collection.name}"
-
+    xlfile={}
+    xlfile['streaming']={'sectors':[]}
+    sectors=xlfile['streaming']['sectors']
+    for sectorPath in deletions:
+        new_sector={}
+        new_sector['path']=sectorPath
+        new_sector['expectedNodes']=expectedNodes[sectorPath]
+        new_sector['nodeDeletions']=[]
+        sectorData = deletions[sectorPath]
+        currentNodeIndex = -1
+        currentNodeComment = ''
+        currentNodeType = ''
+        for empty_collection in sectorData:                           
+            currentNodeIndex = empty_collection['nodeDataIndex']
+            currentNodeComment = empty_collection.name
+            currentNodeType = empty_collection['nodeType']    
+            if currentNodeIndex>-1:         
+                new_sector['nodeDeletions'].append({'index':currentNodeIndex,'type':currentNodeType,'debugName':currentNodeComment})
+            # set instance variables
+            
+        sectors.append(new_sector)   
+    with open(filename, "w") as filestream:
+        if yamlavail:
+            yaml.dump(xlfile, filestream, indent=4, sort_keys=False)
+        else:
+            json.dump(xlfile, filestream, indent=4)
 
 # Iterate over matching collections and find empty ones
-for sectorCollection in [c for c in bpy.data.collections if c.name.endswith("streamingsector")]:
-    prefix, file_path = sectorCollection["filepath"].split('raw\\')
-    file_path = file_path.replace(".json", "")
-    expectedNodes[file_path] = countChildNodes(sectorCollection)
+for sectorCollection in [c for c in bpy.data.collections if c.name.endswith("streamingsector")]:    
+    sectorName=os.path.basename(sectorCollection["filepath"])[:-5]
+    expectedNodes[sectorName] = countChildNodes(sectorCollection)
     collections = find_empty_collections(sectorCollection)
     if len(collections) > 0:
-        deletions[file_path] = collections
+        deletions[sectorName] = collections
 
 to_archive_xl(output_filename)

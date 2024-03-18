@@ -24,10 +24,10 @@ class MeshDecal:
         CurMat.links.new(mixRGB.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
 
         mulNode =create_node(Ns, "ShaderNodeMath", (-500,450), operation = 'MULTIPLY')
-        if "DiffuseAlpha" in Data:
-            mulNode.inputs[1].default_value = float(Data["DiffuseAlpha"])
-        else:
-            mulNode.inputs[1].default_value = 1
+        #if "DiffuseAlpha" in Data:
+         #   mulNode.inputs[1].default_value = float(Data["DiffuseAlpha"])
+        #else:
+        mulNode.inputs[1].default_value = 1
 
 
         dTexMapping = CurMat.nodes.new("ShaderNodeMapping")
@@ -40,7 +40,10 @@ class MeshDecal:
             dImgNode = create_node(Ns,"ShaderNodeTexImage",  (-800,500), label="DiffuseTexture", image=dImg)
             CurMat.links.new(dTexMapping.outputs[0],dImgNode.inputs[0])
             CurMat.links.new(dImgNode.outputs[0],mixRGB.inputs[2])
-            CurMat.links.new(dImgNode.outputs[1],mulNode.inputs[0])
+            if image_has_alpha(dImg):
+                CurMat.links.new(dImgNode.outputs[1],mulNode.inputs[0])
+            else:
+                CurMat.links.new(dImgNode.outputs[0],mulNode.inputs[0])
 
         if "UVOffsetX" in Data:
             dTexMapping.inputs[1].default_value[0] = Data["UVOffsetX"]
