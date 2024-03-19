@@ -99,8 +99,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     # then check for an anim in the project thats using the rig (some things like the arch bike dont ref the anim in the ent)
     # otherwise just skip this section
     #
-    anim_files = glob.glob(os.path.join(path,"base","animations","**","*.glb"), recursive = True)
-    ep1_anim_files = glob.glob(os.path.join(path,"ep1","animations","**","*.glb"), recursive = True)
+    anim_files = glob.glob(os.path.join(path,"base","animations","**","*anims.glb"), recursive = True)
+    ep1_anim_files = glob.glob(os.path.join(path,"ep1","animations","**","*anims.glb"), recursive = True)
     anim_files = anim_files + ep1_anim_files
     app_name=None
     rig=None
@@ -112,8 +112,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
             animsinres=[x for x in anim_files if x[:-3]+'anims' in resolved] 
             if len(animsinres)==0:
                 for anim in anim_files:
-                    if os.path.exists(anim[:-3]+'anims.json'):
-                        with open(anim[:-3]+'anims.json','r') as f: 
+                    if os.path.exists(anim[:-3]+'json'):
+                        with open(anim[:-3]+'json','r') as f: 
                             anm_j=json.load(f) 
                         valid_json=json_ver_validate(anm_j)
                         if not valid_json:
