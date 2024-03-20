@@ -20,7 +20,8 @@ jobs:
       - name: Build addon
         uses: blenderkit/blender-addon-build@main
         with:
-          name: Cyberpunk-Blender-Add-on
+          name: Cyberpunk Blender Plugin
+          name-suffix: "PR-time"
           build-location: "./"
           exclude-files: ".git;.github;README.md"
 
