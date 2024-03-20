@@ -14,13 +14,13 @@ permissions:
   contents: write
 
 jobs:
-  Build:
+ Build:
     runs-on: ubuntu-latest
     steps:        
       - name: Build addon
         uses: blenderkit/blender-addon-build@main
         with:
-          name: Cyberpunk-Blender-Add-on-
+          name: Cyberpunk-Blender-Add-on
           build-location: "./"
           exclude-files: ".git;.github;README.md"
 
