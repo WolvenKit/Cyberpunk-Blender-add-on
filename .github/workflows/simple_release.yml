@@ -14,14 +14,13 @@ permissions:
   contents: write
 
 jobs:
- Build:
+  Build:
     runs-on: ubuntu-latest
     steps:        
       - name: Build addon
         uses: blenderkit/blender-addon-build@main
         with:
-          name: Cyberpunk Blender Plugin
-          name-suffix: "PR-time"
+          name: Cyberpunk-Blender-Add-on-
           build-location: "./"
           exclude-files: ".git;.github;README.md"
 
@@ -30,7 +29,7 @@ jobs:
     needs: Build
     steps:
       - name: Release addon
-        uses: blenderkit/blender-addon-release@main
+        uses: Simarilius-uk/blender-addon-release@main
         with:
           artifact_name: Cyberpunk-Blender-Add-on-
           release_name: Cyberpunk Blender Add on 
