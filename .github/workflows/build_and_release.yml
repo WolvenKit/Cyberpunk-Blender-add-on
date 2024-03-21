@@ -1,9 +1,4 @@
 name: simple_build_and_release
-on:
-  push:
-    branches: [ 'main' ]
-  pull_request:
-    branches: [ '**' ]
   workflow_dispatch:
   
 jobs:
