@@ -342,6 +342,46 @@ def CP77Refit(context, refitter, target_body_path, target_body_name, fbx_rot):
                     print('refitting:', mesh.name, 'to:', target_body_name)
                     lattice_modifier = mesh.modifiers.new(refitter_obj.name, 'LATTICE')
                     lattice_modifier.object = refitter_obj
+                    # setup source and duped meshes
+                    OrigMesh = mesh
+                    ob = bpy.context.scene.objects[OrigMesh.name]
+                    bpy.ops.object.select_all(action='DESELECT')
+                    bpy.context.view_layer.objects.active = ob
+                    ob.select_set(True)
+                    bpy.ops.object.duplicate()
+                    DupeMesh = bpy.context.object
+                    # target and remove shapekeys from the dupe, basis first
+                    ob = bpy.context.scene.objects[DupeMesh.name]
+                    bpy.ops.object.select_all(action='DESELECT')
+                    bpy.context.view_layer.objects.active = ob
+                    ob.select_set(True)
+                    bpy.context.object.active_shape_key_index = 0
+                    bpy.ops.object.shape_key_remove()
+                    bpy.ops.object.shape_key_remove()
+                    # apply lattice modifier
+                    bpy.ops.object.modifier_apply(modifier=refitter_obj.name)
+                    # target and remove shapekeys from source, garmentsupport first
+                    ob = bpy.context.scene.objects[OrigMesh.name]
+                    bpy.ops.object.select_all(action='DESELECT')
+                    bpy.context.view_layer.objects.active = ob
+                    ob.select_set(True)  
+                    bpy.context.object.active_shape_key_index = 1
+                    bpy.ops.object.shape_key_remove()
+                    bpy.ops.object.shape_key_remove()
+                    # apply lattice modifier
+                    bpy.ops.object.modifier_apply(modifier=refitter_obj.name)
+                    # select source and duped meshes in order to join as shapekeys
+                    bpy.ops.object.select_all(action='DESELECT')
+                    DupeMesh.select_set(True)
+                    OrigMesh.select_set(True)
+                    bpy.ops.object.join_shapes()
+                    # rename new shapekey as GarmentSupport
+                    bpy.context.object.active_shape_key_index = 1
+                    bpy.data.shape_keys[bpy.context.object.data.shape_keys.name].key_blocks[1].name = "GarmentSupport"
+                    # delete the dupe mesh
+                    bpy.ops.object.select_all(action='DESELECT')
+                    DupeMesh.select_set(True)
+                    bpy.ops.object.delete()
             return{'FINISHED'}    
         
 
