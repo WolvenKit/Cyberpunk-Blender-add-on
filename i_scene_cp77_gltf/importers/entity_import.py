@@ -10,6 +10,7 @@ from mathutils import Vector, Matrix , Quaternion
 import bmesh
 from ..main.common import json_ver_validate
 from .phys_import import cp77_phys_import
+from ..main.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
 
 # The appearance list needs to be the appearanceNames for each ent that you want to import, will import all if not specified
 # if you've already imported the body/head and set the rig up you can exclude them by putting them in the exclude_meshes list 
@@ -38,11 +39,13 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     for app in ent_apps:
         ent_applist.append(app['appearanceName']['$value'])
         #presto_stash.append(ent_apps)
-    ent_components= j['Data']['RootChunk']['components'] 
+    ent_components= j['Data']['RootChunk']['components']
+    ent_component_data= j['Data']['RootChunk']['compiledData']['Data']['Chunks']
     #presto_stash.append(ent_components)    
     ent_complist=[]
     ent_rigs=[]
     ent_colliderComps=[]
+    ent_simpleCollComps=[]
     chassis_info=[]  
     for comp in ent_components:
         ent_complist.append(comp['name'])
@@ -51,11 +54,13 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
             ent_rigs.append(os.path.join(path,comp['rig']['DepotPath']['$value']))
         if comp['name']['$value'] == 'Chassis':            
             chassis_info = comp
+    for comp in ent_component_data:
         if comp['$type'] == 'entColliderComponent':
             ent_colliderComps.append(comp)
         if comp['$type'] == 'entSimpleColliderComponent':
-            ent_colliderComps.append(comp)
-    #print(ent_colliderComps)
+            ent_simpleCollComps.append(comp)
+    #print('collider components:', ent_colliderComps)
+    #print('simple collider components:', ent_simpleCollComps)
     #    presto_stash.append(ent_rigs)
                 
     resolved=[]
@@ -547,48 +552,141 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                         cm_list.reverse()
                                         for obj in objs:
                                             subnum=int(obj.name[8:10])
-                                            obj.hide_viewport=not cm_list[subnum]
+                                            # obj.hide_viewport=not cm_list[subnum]
                                             obj.hide_set(not cm_list[subnum])
                                 #else:
                                 except:
                                     print("Failed on ",meshname)
      
               # find the .phys file jsons
-    if include_collisions:
-        if include_phys:
-            try:
-                physJsonPaths = glob.glob(path + "\**\*.phys.json", recursive=True)
-                if len(physJsonPaths) == 0:
-                    print('No phys file JSONs found in path')
-                    return('FINISHED')
-                else:
-                    if len(chassis_info) > 0:
-                        chassis_z = chassis_info['localTransform']['Position']['z']['Bits'] / 131072
-                        chassis_phys_j=os.path.basename(chassis_info['collisionResource']['DepotPath']['$value'])+'.json'
+        if include_collisions:
+            collision_collection = bpy.data.collections.new('colliders')
+            ent_coll.children.link(collision_collection)
+            if include_phys:
+                try:
+                    physJsonPaths = glob.glob(path + "\**\*.phys.json", recursive=True)
+                    if len(physJsonPaths) == 0:
+                        print('No phys file JSONs found in path')
                     else:
-                        #this isn't really right, but the value seems to always be very close so it's better than 0
-                        chassis_z = rig_j['boneTransforms'][2]['Translation']['Z']
-                    #print('colliders:', ent_colliderComps)
-                    for physJsonPath in physJsonPaths:
-                        if os.path.basename(physJsonPath)==chassis_phys_j:
-                            cp77_phys_import(physJsonPath, rig, chassis_z)
-            except Exception as e:
-                print(e)
-        else:
+                        if len(chassis_info) > 0:
+                            chassis_z = chassis_info['localTransform']['Position']['z']['Bits'] / 131072
+                            chassis_phys_j=os.path.basename(chassis_info['collisionResource']['DepotPath']['$value'])+'.json'
+                        else:
+                            #this isn't really right, but the value seems to always be very close so it's better than 0
+                            chassis_z = rig_j['boneTransforms'][2]['Translation']['Z']
+                        #print('colliders:', ent_colliderComps)
+                        for physJsonPath in physJsonPaths:
+                            if os.path.basename(physJsonPath)==chassis_phys_j:
+                                cp77_phys_import(collision_collection, physJsonPath, rig, chassis_z)
+                except Exception as e:
+                    print(e)
+            
             if include_entCollider:
-                if len(ent_colliderComps) == 0:
-                    print('None of entColliderComponent or entSimpleColliderComponent not found')
+                if len(ent_colliderComps) == 0 and len(ent_simpleCollComps)== 0:
+                    print('No entColliderComponent or entSimpleColliderComponents found')
                     return('FINISHED')
                 else:
-                    for index, i in enumerate(ent_colliderComps):
-                        collision_data = i['Data']
-                        for collider in collision_data:
-                            collision_shape = collision_data['$type']
-                            physmat = collision_data['material']['$value']
-                            submeshName = str(index) + '_' + collision_shape
-                            transform = collision_data['localToBody']
-                            collection_name = 'test'
-                            print(collision_shape, physmat, submeshName, transform)
+                    for index, i in enumerate(ent_component_data):
+                    #for comp in ent_component_data:
+                        if i['$type'] == 'entColliderComponent':
+                            new_col = bpy.data.collections.new('entColliderComponent')
+                            collision_collection.children.link(new_col)
+                            collision_type = 'ENTITY'
+                            cdata = i['colliders'][0]['Data']
+                            collision_shape = cdata['$type']
+                            transform = cdata['localToBody']
+                            simulationType = i['simulationType']
+                            submeshName = '_' + collision_shape
+                            physmat = cdata['material']['$value']
+                            position = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
+                            rotation = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']                
+                            #print('cdata:', cdata)                            
+                            print('collider info:', collision_shape, submeshName, physmat, position, rotation)
+                            if collision_shape == 'physicsColliderBox':
+                                try:
+                                    half_extents = cdata['halfExtents']
+                                    draw_box_collider(submeshName, new_col, half_extents, transform,  physmat, collision_type)
+                                    obj = bpy.context.object
+                                    box = obj
+                                    #set_collider_props(box, collision_shape, physmat, collision_type)
+                                    box['simulationType'] = simulationType
+                                except Exception as e:
+                                    print('uh oh', e)
+                            if collision_shape == 'physicsColliderConvex':
+                                try:
+                                    vertices = cdata['vertices']
+                                    obj = draw_convex_collider(submeshName, new_col, vertices, transform, physmat, collision_type)
+                                    convcol = obj
+                                    #set_collider_props(convcol, collision_shape, physmat, collision_type)
+                                    convcol['simulationType'] = simulationType
+                                except Exception as e:
+                                    print('uh oh', e)
+                            if collision_shape == 'physicsColliderSphere':
+                                try:
+                                    r = cdata['radius']
+                                    submeshName = '_' + collision_shape
+                                    obj = draw_sphere_collider(submeshName, new_col, r, position, physmat, collision_type)
+                                except Exception as e:
+                                    print('uh oh', e)
+                            if collision_shape == 'physicsColliderCapsule':
+                                try:
+                                    r = cdata['radius'] 
+                                    h = cdata['height']    
+                                    submeshName = '_' + collision_shape
+                                    obj = draw_capsule_collider(submeshName, new_col, r, h, position, rotation, physmat, collision_type)
+                                except Exception as e:
+                                    print('uh oh', e)
+                        if i['$type'] == 'entSimpleColliderComponent':
+                            collision_type = 'ENTITY'
+                            new_col = bpy.data.collections.new('entSimpleColliderComponent')
+                            collision_collection.children.link(new_col)
+                            cdata = i['colliders'][0]['Data']
+                            collision_shape = cdata['$type']
+                            transform = cdata['localToBody']
+                            #simulationType = i['simulationType']
+                            submeshName = '_' + collision_shape
+                            physmat = cdata['material']['$value']
+                            position = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
+                            rotation = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']                
+                            #print('position:', position[0], position[1], position[2], 'rotation', rotation[0], rotation[1], rotation[2], rotation[3])                 
+                           # print('collider info:', collision_shape, submeshName, physmat, position, rotation)
+                            if collision_shape == 'physicsColliderBox':
+                                try:
+                                    half_extents = cdata['halfExtents']
+                                    draw_box_collider(submeshName, new_col, half_extents, transform,  physmat, collision_type)
+                                    obj = bpy.context.object
+                                    box = obj
+                                    #set_collider_props(box, collision_shape, physmat, collision_type)
+                                   # box['simulationType'] = simulationType
+                                except Exception as e:
+                                    print('uh oh', e)
+                            if collision_shape == 'physicsColliderConvex':
+                                try:
+                                    vertices = cdata['vertices']
+                                    obj = draw_convex_collider(submeshName, new_col, vertices, transform, physmat, collision_type)
+                                    convcol = obj
+                                    #set_collider_props(convcol, collision_shape, physmat, collision_type)
+                                   # convcol['simulationType'] = simulationType
+                                except Exception as e:
+                                    print('uh oh', e)
+                            if collision_shape == 'physicsColliderSphere':
+                                try:
+                                    r = cdata['radius']
+                                    submeshName = '_' + collision_shape
+                                    obj = draw_sphere_collider(submeshName, new_col, r, position, physmat, collision_type)
+                                except Exception as e:
+                                    print('uh oh', e)
+                            if collision_shape == 'physicsColliderCapsule':
+                                try:
+                                    r = cdata['radius']
+                                    h = cdata['height']    
+                                    submeshName = '_' + collision_shape
+                                    obj = draw_capsule_collider(submeshName, new_col, r, h, position, rotation, physmat, collision_type)
+                                except Exception as e:
+                                    print('uh oh', e)
+
+                            
+
 
     if app_name:
         print('Exported' ,app_name)

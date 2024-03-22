@@ -1,4 +1,5 @@
 import bpy
+import json
 from mathutils import Vector, Euler, Quaternion
 
 ## function to reset the armature to its neutral position
@@ -127,25 +128,33 @@ def add_anim_props(animation, action):
     frame_clamping = extras.get("frameClamping", False)
     frame_clamping_start_frame = extras.get("frameClampingStartFrame", -1)
     frame_clamping_end_frame = extras.get("frameClampingEndFrame", -1)
-    prefer_lossless_linear_rotation_encoding = extras.get("preferLosslessLinearRotationEncoding", False)
     num_extra_joints = extras.get("numExtraJoints", 0)
     num_extra_tracks = extras.get("numExtraTracks", 0)  # Corrected typo in the key name
     const_track_keys = extras.get("constTrackKeys", [])
     track_keys = extras.get("trackKeys", [])
     fallback_frame_indices = extras.get("fallbackFrameIndices", [])
-
+    optimizationHints = extras.get("optimizationHints", [])
+    
+    const_track_keys_json = json.dumps(const_track_keys)
+    track_keys_json = json.dumps(track_keys)
+    
     # Add properties to the action
     action["schema"] = schema
+   # action["schemaVersion"] = schema['version']
     action["animationType"] = animation_type
     action["frameClamping"] = frame_clamping
     action["frameClampingStartFrame"] = frame_clamping_start_frame
     action["frameClampingEndFrame"] = frame_clamping_end_frame
-    action["preferLosslessLinearRotationEncoding"] = prefer_lossless_linear_rotation_encoding
     action["numExtraJoints"] = num_extra_joints
     action["numeExtraTracks"] = num_extra_tracks
     action["constTrackKeys"] = const_track_keys
     action["trackKeys"] = track_keys
     action["fallbackFrameIndices"] = fallback_frame_indices
+    action["optimizationHints"] = optimizationHints
+    #action["maxRotationCompression"] = optimizationHints['maxRotationCompression']
+    
+
+# Set the custom property on the action
 
 
 def get_anim_info(animations):
@@ -156,10 +165,10 @@ def get_anim_info(animations):
         print(f"Processing animation: {animation.name}")
 
         # Find an action whose name contains the animation name
-        action = next((act for act in bpy.data.actions if animation.name in act.name), None)
+        action = next((act for act in bpy.data.actions if act.name.startswith(animation.name + "_Armature")), None)
 
         if action:
             add_anim_props(animation, action)
-            print("Properties added to action.")
+            print("Properties added to", action.name)
         else:
-            print("No action found for animation.")
+            print("No action found for", animation.name)

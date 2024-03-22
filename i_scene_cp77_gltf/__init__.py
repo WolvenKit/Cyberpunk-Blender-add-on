@@ -25,7 +25,7 @@ from .importers.phys_import import *
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
     "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, Doctor Presto, shotlastc, Rudolph2109",
-    "version": (1, 5, 2),
+    "version": (1, 5, 2, 3),
     "blender": (3, 6, 0),
     "location": "File > Import-Export",
     "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
@@ -655,6 +655,19 @@ class CP77Animset(Operator):
             return self.execute(context)
             
 
+
+class CP77BoneHider(Operator):
+    bl_idname = "bone_hider.cp77"
+    bl_parent_id = "CP77_PT_animspanel"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_label = "Hide deform Bones"
+    bl_description = "Hide deform bones in the selected armature"
+    
+    def execute(self, context):
+        hide_extra_bones(self, context)
+        return{'FINISHED'}
+        
+
 # inserts a keyframe on the current frame
 class CP77Keyframe(Operator):
     bl_idname = "insert_keyframe.cp77"
@@ -774,6 +787,8 @@ class CP77_PT_AnimsPanel(Panel):
             row.prop(props, 'fbx_rot', text="", icon='LOOP_BACK', toggle=1)
             obj = context.active_object
             if obj and obj.type == 'ARMATURE':
+                row = box.row(align=True)
+                row.operator('bone_hider.cp77')
                 row = box.row(align=True)
                 row.operator('reset_armature.cp77')
                 available_anims = list(CP77AnimsList(context,obj))
@@ -1388,6 +1403,7 @@ classes = (
     CP77PhysMatAssign,
     CP77_PT_CollisionTools,
     CP77_OT_submesh_prep,
+    CP77BoneHider,
 )
 
 def register():
