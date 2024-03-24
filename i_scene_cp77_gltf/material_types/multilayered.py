@@ -232,6 +232,7 @@ class Multilayered:
             LastLayer="Layer_"+str(LayerCount-2)
             # Remove the links already made between 10 & 11
             for out in CurMat.nodes[Layer10].outputs:
+            #    if out.type != 'RGBA':
                 for l in out.links:
                     CurMat.links.remove(l)
             CurMat.links.new(CurMat.nodes[Layer10].outputs[0],MixLayerStacks.inputs[0])
@@ -244,22 +245,23 @@ class Multilayered:
             CurMat.links.new(CurMat.nodes[LastLayer].outputs[3],MixLayerStacks.inputs[7])
             factor=CreateShaderNodeValue(CurMat, 0.5, -1100,-250, "Factor")
             CurMat.links.new(factor.outputs[0],MixLayerStacks.inputs[8])
-            
+                        
             # replace the connections from the bottom of the stack with these
-            CurMat.links.new(MixLayerStacks.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
-            CurMat.links.new(MixLayerStacks.outputs[1],CurMat.nodes['Principled BSDF'].inputs['Metallic'])
-            CurMat.links.new(MixLayerStacks.outputs[2],CurMat.nodes['Principled BSDF'].inputs['Roughness'])            
+            CurMat.links.new(MixLayerStacks.outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
+            #CurMat.links.new(CurMat.nodes[targetLayer].outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
+            CurMat.links.new(MixLayerStacks.outputs[1],CurMat.nodes[loc('Principled BSDF')].inputs['Metallic'])
+            CurMat.links.new(MixLayerStacks.outputs[2],CurMat.nodes[loc('Principled BSDF')].inputs['Roughness'])            
             targetLayer="MixLayerStacks"
         else:
-            CurMat.links.new(CurMat.nodes[targetLayer].outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
-            CurMat.links.new(CurMat.nodes[targetLayer].outputs[2],CurMat.nodes['Principled BSDF'].inputs['Roughness'])
-            CurMat.links.new(CurMat.nodes[targetLayer].outputs[1],CurMat.nodes['Principled BSDF'].inputs['Metallic'])
+            CurMat.links.new(CurMat.nodes[targetLayer].outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
+            CurMat.links.new(CurMat.nodes[targetLayer].outputs[2],CurMat.nodes[loc('Principled BSDF')].inputs['Roughness'])
+            CurMat.links.new(CurMat.nodes[targetLayer].outputs[1],CurMat.nodes[loc('Principled BSDF')].inputs['Metallic'])
 
         if normalimgpath:
             yoink = self.setGlobNormal(normalimgpath,CurMat,CurMat.nodes[targetLayer].outputs[3])
-            CurMat.links.new(yoink,CurMat.nodes['Principled BSDF'].inputs['Normal'])
+            CurMat.links.new(yoink,CurMat.nodes[loc('Principled BSDF')].inputs['Normal'])
         else:
-            CurMat.links.new(CurMat.nodes[targetLayer].outputs[3],CurMat.nodes['Principled BSDF'].inputs['Normal'])
+            CurMat.links.new(CurMat.nodes[targetLayer].outputs[3],CurMat.nodes[loc('Principled BSDF')].inputs['Normal'])
         return
 
 
@@ -659,4 +661,4 @@ class Multilayered:
         else:
             LayerNormal=Data["GlobalNormal"]
 
-        self.createLayerMaterial(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_",LayerCount,CurMat,Data["MultilayerMask"],Data["GlobalNormal"])
+        self.createLayerMaterial(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_",LayerCount,CurMat,Data["MultilayerMask"],LayerNormal)
