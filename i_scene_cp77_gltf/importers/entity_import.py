@@ -8,8 +8,7 @@ import time
 from math import sin,cos
 from mathutils import Vector, Matrix , Quaternion
 import bmesh
-from ..main.common import json_ver_validate
-from ..main.common import jsonload
+from ..main.common import json_ver_validate, jsonload, loc
 from .phys_import import cp77_phys_import
 from ..main.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
 
@@ -32,7 +31,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
         j=jsonload(f) 
     valid_json=json_ver_validate(j)
     if not valid_json:
-        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Incompatible entity json file detected. This add-on version requires files generated WolvenKit 8.9.1 or higher.")
+        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Incompatible entity json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
         return {'CANCELLED'}
      
     ent_apps= j['Data']['RootChunk']['appearances']
@@ -99,10 +98,10 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     # then check for an anim in the project thats using the rig (some things like the arch bike dont ref the anim in the ent)
     # otherwise just skip this section
     #
-    anim_files = glob.glob(os.path.join(path,"base","animations","**","*anims.glb"), recursive = True)
-    ep1_anim_files = glob.glob(os.path.join(path,"ep1","animations","**","*anims.glb"), recursive = True)
+    anim_files = glob.glob(os.path.join(path,"base","animations","**","*.glb"), recursive = True)
+    ep1_anim_files = glob.glob(os.path.join(path,"ep1","animations","**","*.glb"), recursive = True)
     anim_files = anim_files + ep1_anim_files
-    app_name=None
+
     rig=None
     bones=None
     chunks=None
@@ -112,8 +111,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
             animsinres=[x for x in anim_files if x[:-3]+'anims' in resolved] 
             if len(animsinres)==0:
                 for anim in anim_files:
-                    if os.path.exists(anim[:-3]+'json'):
-                        with open(anim[:-3]+'json','r') as f: 
+                    if os.path.exists(anim[:-3]+'anims.json'):
+                        with open(anim[:-3]+'anims.json','r') as f: 
                             anm_j=json.load(f) 
                         valid_json=json_ver_validate(anm_j)
                         if not valid_json:
@@ -261,7 +260,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
             if len(comps)==0:      
                 print('falling back to rootchunk comps')
                 comps= j['Data']['RootChunk']['components']
-            fxslots={}
+
             for c in comps:
                 if 'mesh' in c.keys() or 'graphicsMesh' in c.keys():
                    # print(c['mesh']['DepotPath']['$value'])
@@ -471,7 +470,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                                         co.target=rig
                                                         co.subtarget= bindname
                                                         bpy.context.view_layer.objects.active = obj
-                                                        bpy.ops.constraint.childof_set_inverse(constraint="Child Of", owner='OBJECT')
+                                                        bpy.ops.constraint.childof_set_inverse(constraint=loc("Child Of"), owner='OBJECT')
 
                                             # Deal with TransformAnimators
                                             if 'TransformAnimator' in bindname:
@@ -579,21 +578,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                 #else:
                                 except:
                                     print("Failed on ",meshname)
-                elif c['$type']=='entSlotComponent':
-                    print('fx slots')
-                    for slot in c['slots']:
-                        slot_name=slot['slotName']['$value']
-                        fxslots[slot_name]={}
-                        fxslots[slot_name]['relativePosition']=slot['relativePosition']
-                        fxslots[slot_name]['relativeRotation']=slot['relativeRotation']
-                        if slot['boneName']['$value']!='None':
-                            fxslots[slot_name]['boneName']=slot['boneName']['$value']
-                elif c['$type']=='entLightComponent':
-                    print('Light Component')
-                elif c['$type']=='entEffectSpawnerComponent':
-                    print('Effect Spawner Component')
-                else:
-                    print('no mesh and not slots')
+     
               # find the .phys file jsons
         if include_collisions:
             collision_collection = bpy.data.collections.new('colliders')

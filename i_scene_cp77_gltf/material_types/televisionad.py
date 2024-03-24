@@ -13,7 +13,7 @@ class TelevisionAd:
     def create(self,Data,Mat):
         vers=bpy.app.version
         CurMat = Mat.node_tree
-        pBSDF = CurMat.nodes['Principled BSDF']
+        pBSDF = CurMat.nodes[loc('Principled BSDF')]
         sockets=bsdf_socket_names()
         pBSDF.inputs[sockets["Specular"]].default_value = 0
 

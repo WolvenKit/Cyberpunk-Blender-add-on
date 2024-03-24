@@ -1,6 +1,12 @@
 import bpy
 import re
 import os
+#
+# If you want your deletions archive.xl to be yaml not json you need to install pyyaml
+# Following worked for me
+# import pip
+# pip.main(['install', 'pyyaml'])
+#
 yamlavail=False
 try:
     import yaml

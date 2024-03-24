@@ -13,7 +13,7 @@ class MeshDecal:
         CurMat = Mat.node_tree
         Ns=CurMat.nodes
         sockets=bsdf_socket_names()
-        CurMat.nodes['Principled BSDF'].inputs[sockets['Specular']].default_value = 0
+        CurMat.nodes[loc('Principled BSDF')].inputs[sockets['Specular']].default_value = 0
 
 #Diffuse
         mixRGB = CurMat.nodes.new("ShaderNodeMixRGB")
@@ -21,7 +21,7 @@ class MeshDecal:
         mixRGB.hide = True
         mixRGB.blend_type = 'MULTIPLY'
         mixRGB.inputs[0].default_value = 1
-        CurMat.links.new(mixRGB.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
+        CurMat.links.new(mixRGB.outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
 
         mulNode =create_node(Ns, "ShaderNodeMath", (-500,450), operation = 'MULTIPLY')
         #if "DiffuseAlpha" in Data:
@@ -60,7 +60,7 @@ class MeshDecal:
         UVNode = create_node(Ns,"ShaderNodeTexCoord", (-1200,300))
         CurMat.links.new(UVNode.outputs[2],dTexMapping.inputs[0])
 
-        CurMat.links.new(mulNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
+        CurMat.links.new(mulNode.outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Alpha'])
 
         if "DiffuseColor" in Data:
             dColor = CreateShaderNodeRGB(CurMat, Data["DiffuseColor"], -800, 650, "DiffuseColor")
@@ -72,7 +72,7 @@ class MeshDecal:
 
         if "NormalTexture" in Data:
             nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["NormalTexture"],-200,-250,'NormalTexture',self.img_format)
-            CurMat.links.new(nMap.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Normal'])
+            CurMat.links.new(nMap.outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Normal'])
 
         if "NormalAlpha" in Data:
             norAlphaVal = CreateShaderNodeValue(CurMat, Data["NormalAlpha"], -1200,-450, "NormalAlpha")
@@ -87,7 +87,7 @@ class MeshDecal:
         else:
             mulNode1.inputs[0].default_value = 1
       
-        CurMat.links.new(mulNode1.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Roughness'])
+        CurMat.links.new(mulNode1.outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Roughness'])
         if "RoughnessTexture" in Data:
             rImg=imageFromRelPath(Data["RoughnessTexture"],DepotPath=self.BasePath, ProjPath=self.ProjPath, image_format=self.img_format)            
             rImgNode = create_node(Ns,"ShaderNodeTexImage",  (-800,-100), label="RoughnessTexture", image=rImg)
@@ -100,7 +100,7 @@ class MeshDecal:
         else:
             mulNode2.inputs[0].default_value = 1
         
-        CurMat.links.new(mulNode2.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Metallic'])
+        CurMat.links.new(mulNode2.outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Metallic'])
         if "MetalnessTexture" in Data:
             mImg=imageFromRelPath(Data["MetalnessTexture"],DepotPath=self.BasePath, ProjPath=self.ProjPath, image_format=self.img_format)            
             mImgNode = create_node(Ns,"ShaderNodeTexImage",  (-800,200), label="MetalnessTexture", image=mImg)
