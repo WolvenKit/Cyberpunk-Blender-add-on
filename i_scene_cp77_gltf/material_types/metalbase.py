@@ -11,7 +11,7 @@ class MetalBase:
 
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
-        pBSDF = CurMat.nodes['Principled BSDF']
+        pBSDF = CurMat.nodes[loc('Principled BSDF')]
         sockets=bsdf_socket_names()
 
         mixRGB = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-450,400) , blend_type = 'MULTIPLY')
@@ -75,7 +75,7 @@ class MetalBase:
             CurMat.links.new(bColNode.outputs[1],alphclamp.inputs['Value'])
         else:
             CurMat.links.new(bColNode.outputs[0],alphclamp.inputs['Value'])
-       
+
         
         Clamp2 = create_node(CurMat.nodes,"ShaderNodeClamp",(-538., 476.))
         
@@ -84,9 +84,11 @@ class MetalBase:
        
         CurMat.links.new(alphclamp.outputs[0],Clamp2.inputs['Value'])
         
+
         if "Normal" in Data:
             nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["Normal"],-200,-300,'Normal',self.image_format)
             CurMat.links.new(nMap.outputs[0],pBSDF.inputs['Normal'])
+
 
         mulNode = CurMat.nodes.new("ShaderNodeMixRGB")
         mulNode.inputs[0].default_value = 1

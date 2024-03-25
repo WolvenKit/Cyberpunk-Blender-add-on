@@ -9,6 +9,9 @@ import bmesh
 from mathutils import Vector
 import json
 
+def loc(nodename):
+    return bpy.app.translations.pgettext(nodename)
+
 def normalize_paths(data):
     if isinstance(data, dict):
         for key, value in data.items():
@@ -286,6 +289,7 @@ def CreateRebildNormalGroup(curMat, x = 0, y = 0,name = 'Rebuild Normal Z'):
         VSub = group.nodes.new("ShaderNodeVectorMath")
         VSub.location = (-1000,-200)
         VSub.operation = 'SUBTRACT'
+        VSub.name = 'NormalSubtract'
         VSub.inputs[1].default_value[0] = 1.0
         VSub.inputs[1].default_value[1] = 1.0
     

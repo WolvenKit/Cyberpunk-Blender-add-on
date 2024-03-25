@@ -51,7 +51,7 @@ class Decal:
                 
 
         CurMat = Mat.node_tree
-        Prin_BSDF=CurMat.nodes['Principled BSDF']
+        Prin_BSDF=CurMat.nodes[loc('Principled BSDF')]
         sockets=bsdf_socket_names()
         Prin_BSDF.inputs[sockets['Specular']].default_value = 0.5
         TexCoordinate = CurMat.nodes.new("ShaderNodeTexCoord")
@@ -99,7 +99,7 @@ class Decal:
                 CurMat.links.new(dImgNode.outputs[1],mulNode1.inputs[1])
             CurMat.links.new(mulNode1.outputs[0],Prin_BSDF.inputs['Alpha'])
         else:
-            CurMat.nodes['Principled BSDF'].inputs['Alpha'].default_value = 0
+            CurMat.nodes[loc('Principled BSDF')].inputs['Alpha'].default_value = 0
             print(f"Texture is not found: {difftex}")
         if RoughnessTexture and os.path.exists(os.path.join(self.BasePath ,RoughnessTexture)):
             rImgNode = CreateShaderNodeTexImage(CurMat,os.path.join(self.BasePath ,RoughnessTexture),-800,0,'RoughnessTexture',self.image_format)
