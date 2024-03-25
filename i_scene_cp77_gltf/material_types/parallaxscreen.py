@@ -88,7 +88,7 @@ class ParallaxScreen:
 
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
-        pBSDF=CurMat.nodes['Principled BSDF']
+        pBSDF=CurMat.nodes[loc('Principled BSDF')]
         sockets=bsdf_socket_names()
         pBSDF.inputs[sockets['Specular']].default_value = 0
         vers=bpy.app.version

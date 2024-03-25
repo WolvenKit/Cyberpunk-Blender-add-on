@@ -38,7 +38,7 @@ class DecalGradientmapRecolor:
                     diffAsMask = Data["values"][i]["DiffuseTextureAsMaskTexture"]
 
         CurMat = Mat.node_tree
-        pBSDF=CurMat.nodes['Principled BSDF']
+        pBSDF=CurMat.nodes[loc('Principled BSDF')]
 
         if self.found(difftex) and self.found(gradmap):
             diffImg = imageFromRelPath(difftex,self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)

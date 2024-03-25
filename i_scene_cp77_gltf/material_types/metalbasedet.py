@@ -9,7 +9,7 @@ class MetalBaseDet:
         self.image_format = image_format
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
-        pBSDF = CurMat.nodes['Principled BSDF']
+        pBSDF = CurMat.nodes[loc('Principled BSDF')]
 
         # TEXTURES
         if "BaseColor" in Data:

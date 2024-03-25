@@ -29,7 +29,7 @@ jobs:
     needs: Build
     steps:
       - name: Release addon
-        uses: simarilius-uk/blender-addon-release@main
+        uses: Simarilius-UK/blender-addon-release@main
         with:
           artifact_name: Cyberpunk-Blender-Add-on-
           release_name: Cyberpunk Blender Add on 

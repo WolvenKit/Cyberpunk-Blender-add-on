@@ -11,7 +11,7 @@ class GlassDeferred:
 
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
-        pBSDF=CurMat.nodes['Principled BSDF']
+        pBSDF=CurMat.nodes[loc('Principled BSDF')]
         MatOutput=CurMat.nodes['Material Output']
         MatOutput.location=(780,300)
         
