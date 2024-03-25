@@ -1,5 +1,10 @@
 name: simple_build_and_release
-  workflow_dispatch:
+    workflow_dispatch:
+    inputs:
+      version:
+        description: 'version'
+        required: true
+        default: '1.5.4dev'
   
 jobs:
   Build:
