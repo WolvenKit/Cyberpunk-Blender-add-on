@@ -4,37 +4,30 @@ from ..main.animtools import reset_armature
 #setup the default options to be applied to all export types
 def default_cp77_options():
     vers=bpy.app.version
-    if vers[0]<4:
-        options = {
-            'export_format': 'GLB',
-            'check_existing': True,
-            'export_skins': True,
-            'export_yup': True,
-            'export_cameras': False,
-            'export_materials': 'NONE',
-            'export_all_influences': True,
-            'export_lights': False,
-            'export_apply': False,
-            'export_extras': True,
-            'export_attributes': True,
-        }
-    else:
-        options = {
-            'export_format': 'GLB',
-            'check_existing': True,
-            'export_skins': True,
-            'export_yup': True,
-            'export_cameras': False,
-            'export_materials': 'NONE',
-            'export_all_influences': True,
-            'export_lights': False,
-            'export_apply': False,
-            'export_extras': True,
-            'export_attributes': True,
+    options = {
+        'export_format': 'GLB',
+        'check_existing': True,
+        'export_skins': True,
+        'export_yup': True,
+        'export_cameras': False,
+        'export_materials': 'NONE',
+        'export_all_influences': True,
+        'export_lights': False,
+        'export_apply': False,
+        'export_extras': True,
+    }
+    if vers[0] >= 4:
+        options.update({
+            'export_image_format': 'NONE', 
             'export_try_sparse_sk': False,
-        }
-    return options
-      
+        })
+        
+    if vers[0] >= 4.1:
+        options.update({
+            "export_shared_accessors": True,
+            "export_try_omit_sparse_sk": False,
+        })
+    return options  
 
 #make sure meshes are exported with tangents, morphs and vertex colors
 def cp77_mesh_options():
@@ -46,7 +39,7 @@ def cp77_mesh_options():
         'export_morph_normal': True,
         'export_morph': True,
         'export_colors': True,
-        
+        'export_attributes': True,
     }
     return options
 
@@ -54,9 +47,10 @@ def cp77_mesh_options():
 def pose_export_options():
     options = {
         'export_animations': True,
-        'export_frame_range': False,
+        'export_frame_range': True,
         'export_animation_mode': 'ACTIONS',
-        'export_anim_single_armature': True     
+        'export_anim_single_armature': True,  
+        "export_bake_animation": True
     }
     return options
 
