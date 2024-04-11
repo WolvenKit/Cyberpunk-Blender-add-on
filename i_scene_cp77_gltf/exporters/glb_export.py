@@ -140,6 +140,18 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
                     bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)
                     bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="All faces must be triangulated before exporting. Untriangulated faces have been selected for you")
                     return {'CANCELLED'}
+                    
+            # Check for ungrouped vertices, if they're found, switch to edit mode and select them
+            ungrouped_vertices = [v for v in mesh.data.vertices if not v.groups]
+            if ungrouped_vertices:
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.select_mode(type='VERT')
+                try:
+                    bpy.ops.mesh.select_ungrouped()
+                except RuntimeError:
+                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"No vertex groups in: {mesh.name} are assigned weights. Assign weights before exporting.")                
+                bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"Ungrouped vertices found and selected in: {mesh.name}")                
+                return {'CANCELLED'}
                 
         # set the export options for meshes
         options = default_cp77_options()
@@ -171,19 +183,6 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
                     # Make necessary to armature visibility and selection state for export
                     armature.hide_set(False)
                     armature.select_set(True)
-
-                    # Check for ungrouped vertices, if they're found, switch to edit mode and select them
-                    ungrouped_vertices = [v for v in mesh.data.vertices if not v.groups]
-                    if ungrouped_vertices:
-                        bpy.ops.object.mode_set(mode='EDIT')
-                        bpy.ops.mesh.select_mode(type='VERT')
-                        try:
-                            bpy.ops.mesh.select_ungrouped()
-                            armature.hide_set(True)
-                        except RuntimeError:
-                            bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"No vertex groups in: {obj.name} are assigned weights. Assign weights before exporting.")                
-                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"Ungrouped vertices found and selected in: {obj.name}")                
-                        return {'CANCELLED'}
 
                     for bone in armature.pose.bones:
                         bone_names.append(bone.name)
