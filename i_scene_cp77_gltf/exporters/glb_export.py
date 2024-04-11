@@ -137,6 +137,7 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
             for face in mesh.data.polygons:
                 if len(face.vertices) != 3:
                     bpy.ops.object.mode_set(mode='EDIT')
+                    bpy.ops.mesh.select_mode(type='FACE')
                     bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)
                     bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="All faces must be triangulated before exporting. Untriangulated faces have been selected for you")
                     return {'CANCELLED'}
