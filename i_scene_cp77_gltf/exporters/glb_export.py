@@ -127,10 +127,11 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
                 return {'CANCELLED'}
             
             #check submesh vertex count to ensure it's less than the maximum for import
-            for submesh in mesh.data.polygons:
-                if len(submesh.vertices) > 65535:
-                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Each submesh must have less than 65,535 vertices")
-                    return {'CANCELLED'}
+            vert_count = len(mesh.data.vertices)
+            if vert_count > 65535:
+                message=(f"{mesh.name} has {vert_count} vertices.           Each submesh must have less than 65,535 vertices")
+                bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=message)
+                return {'CANCELLED'}
                 
             #check that faces are triangulated, cancel export, switch to edit mode with the untriangulated faces selected and throw an error
             for face in mesh.data.polygons:
