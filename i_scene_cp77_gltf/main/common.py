@@ -9,6 +9,10 @@ import bmesh
 from mathutils import Vector
 import json
 
+
+def show_message(message):
+    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=message)
+
 def loc(nodename):
     return bpy.app.translations.pgettext(nodename)
 
