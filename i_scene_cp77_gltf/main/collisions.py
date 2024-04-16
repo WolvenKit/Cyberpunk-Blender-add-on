@@ -1,6 +1,7 @@
 import bpy
 import bmesh
 from mathutils import Vector, Euler, Quaternion
+from .common import show_message
 
 def create_new_object(name, transform, collision_collection):
     mesh = bpy.data.meshes.new(name)
@@ -37,6 +38,7 @@ def draw_convex_collider(name, collision_collection, vertices, physmat, transfor
             bm.verts.new(v)
         bm.to_mesh(obj.data)
         bm.free()
+        bpy.ops.mesh.convex_hull()
 
 
 def draw_sphere_collider(name, collision_collection, radius, position, physmat, collision_type):
@@ -122,12 +124,15 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
     if colliderCollection is None:
         if collider_type == 'VEHICLE':
             colliderCollection = bpy.data.collections.new("collisions.phys")
+            colliderCollection['collider_type'] = collider_type
             bpy.context.scene.collection.children.link(colliderCollection)
         elif collider_type == 'ENTITY':
             colliderCollection = bpy.data.collections.new("entColliderComponent")
+            colliderCollection['collider_type'] = collider_type
             bpy.context.scene.collection.children.link(colliderCollection)
         elif collider_type == 'WORLD':
             colliderCollection = bpy.data.collections.new("worldCollisionNode")
+            colliderCollection['collider_type'] = collider_type
             bpy.context.scene.collection.children.link(colliderCollection)
     
 
@@ -162,7 +167,7 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
             # Check if we have enough vertices
             if len(selected_verts) < verts_to_sample:
                 print("Sample number is higher than selected vertices count!")
-                bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Sample number is higher than selected vertices count!")
+                show_message("Sample number is higher than selected vertices count!")
                 return {'CANCELLED'}
             else:
                 # sample the vertices
@@ -183,8 +188,17 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
                 shape = "physicsColliderConvex"
                 set_collider_props(convcol, shape, physics_material, collider_type)
                 colliderCollection.objects.link(convcol)
+                bpy.ops.mesh.select_all(action='DESELECT')
                 context.view_layer.objects.active = convcol
                 convcol.select_set(True)
+                if is_edit_mode:
+                    bpy.ops.object.mode_set(mode='EDIT')
+                    bpy.ops.mesh.convex_hull()
+                else:
+                    if not is_edit_mode:
+                        bpy.ops.object.mode_set(mode='EDIT')
+                        bpy.ops.mesh.convex_hull()
+
 
                 if not is_edit_mode:
                     bpy.ops.object.mode_set(mode='OBJECT')
