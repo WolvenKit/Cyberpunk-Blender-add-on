@@ -15,6 +15,11 @@ import bpy
 import bpy.utils.previews
 import os
 import textwrap
+try:
+    import PIL
+except (ImportError, ModuleNotFoundError):
+    install_dependency('pillow')
+
 
 from bpy.props import (StringProperty, EnumProperty, BoolProperty, CollectionProperty, FloatProperty, IntProperty, PointerProperty)
 from bpy.types import (Scene, Operator, PropertyGroup, Object, OperatorFileListElement, Panel, AddonPreferences, TOPBAR_MT_file_import, TOPBAR_MT_file_export)
