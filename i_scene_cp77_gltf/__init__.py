@@ -482,14 +482,37 @@ class CP77CollisionExport(Operator):
     bl_description = "Export project collisions to .phys.json"
 
     filepath: StringProperty(subtype="FILE_PATH")
-  
+
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(context.scene.cp77_panel_props, "collision_type")
+
     def execute(self, context):
-        cp77_collision_export(self.filepath)
+        collision_type = context.scene.cp77_panel_props.collision_type
+        cp77_collision_export(self.filepath, collision_type)
         return {"FINISHED"}
 
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
         return {"RUNNING_MODAL"}
+        
+        
+class CP7PhysImport(Operator):
+    bl_idname = "import_scene.phys"
+    bl_label = "Import .phys Collisions"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Import collisions from an exported .phys.json"
+
+    filepath: StringProperty(subtype="FILE_PATH")
+
+    def execute(self, context):
+        cp77_phys_import(self.filepath)
+        return {"FINISHED"}
+
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {"RUNNING_MODAL"}
+        
 
 class CP7PhysImport(Operator):
     bl_idname = "import_scene.phys"
