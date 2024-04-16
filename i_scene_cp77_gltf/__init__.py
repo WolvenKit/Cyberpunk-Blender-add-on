@@ -125,10 +125,12 @@ class CP77IOSuitePreferences(AddonPreferences):
         box = layout.box()
 
         row = box.row()
-        row.prop(self, "depotfolder_path")
-        row = box.row()
         row.prop(self, "show_modtools",toggle=1) 
-        row.prop(self, "experimental_features",toggle=1)         
+        row.prop(self, "experimental_features",toggle=1)
+        if self.experimental_features:
+            row = box.row()
+            row.prop(self, "depotfolder_path")
+            row = box.row()
         if self.show_modtools:
             row.alignment = 'LEFT'
             box = layout.box()
@@ -1259,7 +1261,8 @@ class CP77EntityImport(Operator,ImportHelper):
                                 description="Collector to put the imported entity in",
                                 default='',
                                 options={'HIDDEN'})
-    
+    cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences
+        
     def draw(self, context):
         layout = self.layout
         row = layout.row(align=True)
@@ -1273,8 +1276,9 @@ class CP77EntityImport(Operator,ImportHelper):
             row.prop(self, "update_gi")
         row = layout.row(align=True)
         row.prop(self, "with_materials")
-        row = layout.row(align=True)
-        row.prop(self,"remap_depot")
+        if cp77_addon_prefs.experimental_features:
+            row = layout.row(align=True)
+            row.prop(self,"remap_depot")
         row = layout.row(align=True)
         if not self.include_collisions:
             row.prop(self, "include_collisions")
@@ -1321,7 +1325,7 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
     am_modding: BoolProperty(name="Generate New Collectors",default=False,description="Generate _new collectors for sectors to allow modifications to be saved back to game")
     with_materials: BoolProperty(name="With Materials",default=False,description="Import Wolvenkit-exported materials")
     remap_depot: BoolProperty(name="Remap Depot",default=False,description="replace the json depot path with the one in prefs")  
-    
+    cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences 
 
     def draw(self, context):
         layout = self.layout
@@ -1332,8 +1336,9 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
         row.prop(self, "am_modding")
         row = layout.row(align=True)
         row.prop(self, "with_materials")
-        row = layout.row(align=True)
-        row.prop(self, "remap_depot")
+        if cp77_addon_prefs.experimental_features:
+            row = layout.row(align=True)
+            row.prop(self,"remap_depot")
 
     def execute(self, context):
         bob=self.filepath
@@ -1356,7 +1361,7 @@ class CP77_PT_ImportWithMaterial(Panel):
     def draw_header(self, context):
         operator = context.space_data.active_operator
         self.layout.prop(operator, "with_materials", text="")
-
+    cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences
     def draw(self, context):
         operator = context.space_data.active_operator
         layout = self.layout
@@ -1369,8 +1374,9 @@ class CP77_PT_ImportWithMaterial(Panel):
         row.prop(operator, 'hide_armatures')
         row = layout.row(align=True)
         row.prop(operator, 'use_cycles')
-        row = layout.row(align=True)
-        row.prop(operator, 'remap_depot')
+        if cp77_addon_prefs.experimental_features:
+            row = layout.row(align=True)
+            row.prop(self,"remap_depot")
         if operator.use_cycles:
             row = layout.row(align=True)
             row.prop(operator, 'update_gi')
