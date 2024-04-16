@@ -8,6 +8,9 @@ def install_dependency(dependency_name):
     except Exception as e:
         print(f"Failed to install {dependency_name}: {e}")
         
+print('-------------------- Cyberpunk IO Suite Starting--------------------')
+print()
+
 import bpy
 import bpy.utils.previews
 import os
@@ -46,14 +49,15 @@ bl_info = {
     "tracker_url": "https://github.com/WolvenKit/Cyberpunk-Blender-add-on/issues/new/choose",
 }
 plugin_version = ".".join(map(str, bl_info["version"]))
-printstatement = f"Cyberpunk IO Suite version: {plugin_version}"
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
 script_dir = get_script_dir()
+
 print()
-print(printstatement)
+print(f"Cyberpunk IO Suite version: {plugin_version}")
 print()
+print('-------------------- Cyberpunk IO Suite Finished--------------------')
 
 class CP77IOSuitePreferences(AddonPreferences):
     bl_idname = __name__
