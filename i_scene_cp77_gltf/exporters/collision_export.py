@@ -5,16 +5,15 @@ from mathutils import Vector, Euler, Quaternion
 from ..main.common import show_message
 from .phys_export import export_colliders_to_phys
 
-def get_collider_collections(context, collider_type):
+def get_collider_collections(context, collider_name):
     collider_collections = []
     
-    for collection in context.scene.collection.children:
-        type = bpy.data.collections[collection.name]["collider_type"]
-        if type == collider_type:
-            collider_collections.append(collection)
+    for collection in bpy.data.collections:
+        if collider_name in collection.name:
+            collider_collections.append(collection.name)
     
     if not collider_collections:
-        print(f"Error: Collider collection not found.")
+        print(f"Error: Collider collection '{collider_name}' not found.")
         return None
     else: 
         return collider_collections
@@ -22,7 +21,8 @@ def get_collider_collections(context, collider_type):
 def cp77_collision_export(filepath, collision_type):
     context = bpy.context
     if collision_type == 'VEHICLE':
-        collections = get_collider_collections(context, 'VEHICLE')
+        collider_name = 'collisions.phys'
+        collections = get_collider_collections(context, collider_name)
         export_colliders_to_phys(collections, filepath)
     if collision_type == 'ENTITY':
         show_message('Exporting of Entity Colliders is not yet supported')
