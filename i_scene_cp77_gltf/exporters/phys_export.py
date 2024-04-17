@@ -12,7 +12,7 @@ def export_colliders_to_phys(collections, filepath):
     index = 1
     for collection in collections:
         # Iterate over objects in the collection
-        for obj in collection.objects:
+        for obj in bpy.data.collections[collection].objects:
             if 'collisionShape' in obj:
                 collider_info = {
                     "HandleId": str(index),
