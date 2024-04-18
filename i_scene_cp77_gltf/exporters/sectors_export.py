@@ -1,9 +1,8 @@
 # Script to export CP2077 streaming sectors from Blender 
 # Just does changes to existing bits so far
 # By Simarilius Jan 2023
-# last updated 8-8-23
-# latest version available at https://github.com/Simarilius-uk/CP2077_BlenderScripts
-# use with the plugin from https://github.com/WolvenKit/Cyberpunk-Blender-add-on use 1.4RC or newer for wkit newer than Jul 4th 23
+# last updated 17/4/24
+# latest version in the plugin from https://github.com/WolvenKit/Cyberpunk-Blender-add-on
 #
 #  __       __   ___  __   __  .  . .  . .   .       __   ___  __  ___  __   __      ___  __  . ___ . .  .  __  
 # /  ` \ / |__) |__  |__) |__) |  | |\ | |__/       /__` |__  /  `  |  /  \ |__)    |__  |  \ |  |  | |\ | / _` 
@@ -12,7 +11,7 @@
 # Havent written a tutorial for this yet so thought I should add some instructions
 # 1) Import the sector you want to edit using the Cyberpunk blender plugin (link above).
 # 2) You can move the existing objects around and this will be exported
-# 3) If you delete the mesh from a collector but leave the collector, the script will set the scale for that instance to -1 which stops it rendering in game
+# 3) If you delete the mesh from a collector but leave the collector, the script will delete it with archivexl the file to do this is written to \source\resources
 # 4) to add new stuff create a new collector with the sector name with _new on the end ie interior_1_1_0_1.streamingsector_new and then copy any objects you want into it.
 #    You need to copy the collector and the meshes for the nodes you want to copy, not just the meshes, the tags that make it work are on the collectors.
 # 5) If its stuff already in the sector it will create nodeData nodes to instance it, if its from another imported sector it will copy the main node too
@@ -267,7 +266,7 @@ def find_wIDMN_col(NodeIndex,tl_inst_idx, sub_inst_idx,Sector_coll):
 
 def find_decal(NodeIndex,Inst_idx,Sector_coll):
     #print('Looking for NodeIndex ',NodeIndex,' Inst_idx ',Inst_idx, ' in ',Sector_coll)
-    col=[x for x in Sector_coll.objects if x['nodeIndex']==NodeIndex]
+    col=[x for x in Sector_coll.objects if 'nodeIndex' in x.keys() and x['nodeIndex']==NodeIndex]
     if len(col)==0:
         return None
     elif len(col)==1:
@@ -895,7 +894,10 @@ def exportSectors( filename):
                 print('inserting at ',idx)
                 wtbbuffer['Transforms'].insert(idx,trans)
                 print('After = ',len(wtbbuffer['Transforms']))            
-            
+    
+    # need to process the sector_coll sectors and look for deleted collision bodies
+
+
                 
     # Export the modified json
     sectpathout=os.path.join(projpath,os.path.splitext(os.path.basename(filename))[0]+'.streamingsector.json')
