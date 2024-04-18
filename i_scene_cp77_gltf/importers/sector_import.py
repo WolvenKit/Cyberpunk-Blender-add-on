@@ -949,6 +949,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         loc=(spos[0]+x,spos[1]+y,spos[2]+z)
                                         bpy.ops.mesh.primitive_cube_add(size=1/scale_factor, scale=(ssize['X'],ssize['Y'],ssize['Z']),location=loc)
                                         cube=C.selected_objects[0]
+                                        cube.name='NodeDataIndex_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s)
                                         par_coll=cube.users_collection[0]
                                         par_coll.objects.unlink(cube)
                                         sector_Collisions_coll.objects.link(cube)
