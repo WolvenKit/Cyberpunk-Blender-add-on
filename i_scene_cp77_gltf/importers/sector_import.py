@@ -26,6 +26,7 @@ import time
 import traceback
 from pprint import pprint 
 from ..main.setup import MaterialBuilder
+from ..main.collisions import set_collider_props
 from operator import add
 import bmesh
 VERBOSE=True
@@ -222,7 +223,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
     print(jsonpath)
     meshes=[]
     C = bpy.context
-
+    # Use object wireframe colors not theme - doesnt work need to find hte viewport as the context doesnt return that for this call 
+   # bpy.context.space_data.shading.wireframe_color_type = 'OBJECT'
     for filepath in jsonpath:
         if filepath==os.path.join(path,os.path.basename(project)+'.streamingsector.json'):
             continue
@@ -340,6 +342,9 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
               j=json.load(f) 
           
         t=j['Data']['RootChunk']['nodeData']['Data']
+        # add nodeDataIndex props to all the nodes in t
+        for index, obj in enumerate(t):
+            obj['nodeDataIndex']=index
 
         numExpectedNodes = len(t)
         sectorName=os.path.basename(filepath)[:-5]
@@ -408,7 +413,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     Sector_coll.children.link(new)
                                     new['nodeType']=type
                                     new['nodeIndex']=i
-                                    new['nodeDataIndex']=next((index for index, obj in enumerate(t) if obj['NodeIndex'] == i), None)
+                                    new['nodeDataIndex']=inst['nodeDataIndex']
                                     new['instance_idx']=idx
                                     new['debugName']=e['Data']['debugName']
                                     new['sectorName']=sectorName 
@@ -499,7 +504,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                 Sector_coll.children.link(new)
                                 new['nodeType']=type
                                 new['nodeIndex']=i
-                                new['nodeDataIndex']=next((index for index, obj in enumerate(t) if obj['NodeIndex'] == i), None)
+                                new['nodeDataIndex']=inst['nodeDataIndex']
                                 new['mesh']=meshname
                                 new['debugName']=e['Data']['debugName']
                                 new['sectorName']=sectorName 
@@ -555,7 +560,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     Sector_coll.children.link(new)
                                     new['nodeType']=type
                                     new['nodeIndex']=i
-                                    new['nodeDataIndex']=next((index for index, obj in enumerate(t) if obj['NodeIndex'] == i), None)
+                                    new['nodeDataIndex']=inst['nodeDataIndex']
                                     new['instance_idx']=idx
                                     new['mesh']=meshname
                                     new['debugName']=e['Data']['debugName']
@@ -617,21 +622,27 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                             o.scale = get_scale(inst)
                             #o.empty_display_size = 0.002
                             #o.empty_display_type = 'IMAGE'
-                            mipath = o['decal']
-                            jsonpath = os.path.join(path,mipath)+".json"
-                            #print(jsonpath)
-                            try:
-                                with open(jsonpath,'r') as jsonpath:
-                                    obj=json.load(jsonpath)
-                                index = 0
-                                obj["Data"]["RootChunk"]['alpha'] = e['Data']['alpha']
-                                #FIXME: image_format
-                                builder = MaterialBuilder(obj,path,'png',path)
-                                bpymat = builder.create(index)
-                                o.data.materials.append(bpymat)
-                            except FileNotFoundError:
-                                name = os.path.basename(jsonpath)
-                                print(f'File not found {name} ({jsonpath}), you need to export .mi files')
+                            if with_materials:
+                                mipath = o['decal']
+                                jsonpath = os.path.join(path,mipath)+".json"
+                                #print(jsonpath)
+                                try:
+                                    with open(jsonpath,'r') as jsonpath:
+                                        obj=json.load(jsonpath)
+                                    index = 0
+                                    obj["Data"]["RootChunk"]['alpha'] = e['Data']['alpha']
+                                    #FIXME: image_format
+                                    builder = MaterialBuilder(obj,path,'png',path)
+                                    bpymat = builder.create(index)
+                                    o.data.materials.append(bpymat)
+                                except FileNotFoundError:
+                                    name = os.path.basename(jsonpath)
+                                    print(f'File not found {name} ({jsonpath}), you need to export .mi files')
+                            else:
+                                o.display_type = 'WIRE'
+                                o.color = (1.0, 0.905, .062, 1)
+                                o.show_wire = True
+                                o.display.show_shadows = False
 
                     case 'XworldStaticOccluderMeshNode':
                         #print('worldStaticOccluderMeshNode',i)
@@ -694,7 +705,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 Sector_coll.children.link(new)
                                                 new['nodeType']=type
                                                 new['nodeIndex']=i
-                                                new['nodeDataIndex']=next((index for index, obj in enumerate(t) if obj['NodeIndex'] == i), None)
+                                                new['nodeDataIndex']=inst['nodeDataIndex']
                                                 new['mesh']=meshname
                                                 new['debugName']=e['Data']['debugName']
                                                 new['sectorName']=sectorName
@@ -751,7 +762,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 Sector_coll.children.link(new)
                                                 new['nodeType']=type
                                                 new['nodeIndex']=i
-                                                new['nodeDataIndex']=next((index for index, obj in enumerate(t) if obj['NodeIndex'] == i), None)
+                                                new['nodeDataIndex']=inst['nodeDataIndex']
                                                 new['instance_idx']=idx
                                                 new['mesh']=meshname
                                                 new['debugName']=e['Data']['debugName']
@@ -811,7 +822,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                     Sector_coll.children.link(new)
                                                     new['nodeType']=type
                                                     new['nodeIndex']=i
-                                                    new['nodeDataIndex']=next((index for index, obj in enumerate(t) if obj['NodeIndex'] == i), None)
+                                                    new['nodeDataIndex']=inst['nodeDataIndex']
                                                     new['tl_instance_idx']=instidx
                                                     new['sub_instance_idx']=idx
                                                     new['mesh']=meshname
@@ -917,6 +928,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                             else:
                                 sector_Collisions_coll=bpy.data.collections.new(sector_Collisions)
                                 coll_scene.children.link(sector_Collisions_coll) 
+                            inst = [x for x in t if x['NodeIndex'] == i][0]
                             Actors=e['Data']['compiledData']['Data']['Actors']
                             for idx,act in enumerate(Actors):
                                 #print(len(act['Shapes']))
@@ -937,12 +949,18 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         loc=(spos[0]+x,spos[1]+y,spos[2]+z)
                                         bpy.ops.mesh.primitive_cube_add(size=1/scale_factor, scale=(ssize['X'],ssize['Y'],ssize['Z']),location=loc)
                                         cube=C.selected_objects[0]
+                                        par_coll=cube.users_collection[0]
+                                        par_coll.objects.unlink(cube)
                                         sector_Collisions_coll.objects.link(cube)
                                         cube['nodeIndex']=i
+                                        cube['nodeDataIndex']=inst['nodeDataIndex']
                                         cube['ShapeType']=shape['ShapeType']
                                         cube['ShapeNo']=s
                                         cube['ActorIdx']=idx
                                         cube['sectorName']=sectorName
+                                        cube.rotation_mode='QUATERNION'
+                                        cube.rotation_quaternion=rot
+                                        set_collider_props(cube, shape['ShapeType'], shape['Materials'][0]['$value'], 'WORLD')
                                 
                                     elif shape['ShapeType']=='Capsule':
                                         #print('Capsule Collision Node')
@@ -955,14 +973,21 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         loc=(spos[0]+x,spos[1]+y,spos[2]+z)
                                         bpy.ops.mesh.primitive_cylinder_add(radius=5/scale_factor, depth=1/scale_factor, scale=(ssize['X'],ssize['Y'],ssize['Z']),location=loc)
                                         capsule=C.selected_objects[0]
+                                        capsule.name='NodeDataIndex_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s)
+                                        par_coll=capsule.users_collection[0]
+                                        par_coll.objects.unlink(capsule)
                                         sector_Collisions_coll.objects.link(capsule)
                                         capsule['nodeIndex']=i
+                                        capsule['nodeDataIndex']=inst['nodeDataIndex']
                                         capsule['ShapeType']=shape['ShapeType']
                                         capsule['ShapeNo']=s
                                         capsule['ActorIdx']=idx
-                                        capsule['sectorName']=sectorName
+                                        capsule['sectorName']=sectorName                                        
+                                        capsule.rotation_mode='QUATERNION'
+                                        capsule.rotation_quaternion=rot
+                                        set_collider_props(cube, shape['ShapeType'], shape['Materials'][0]['$value'], 'WORLD')
                                     else: 
-                                        print(f"skipping unsuppored shape {shape['ShapeType']}")
+                                        print(f"skipping unsupported shape {shape['ShapeType']}")
 
                 
                     case _:
