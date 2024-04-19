@@ -26,7 +26,17 @@
 # - Add collisions
 # - sort out instanced bits
 
-
+import mathutils
+def are_matrices_equal(mat1, mat2, tolerance=0.01):
+    if len(mat1) != len(mat2):
+        return False
+    
+    for i in range(len(mat1)):
+        for j in range(len(mat1[i])):
+            if abs(mat1[i][j] - mat2[i][j]) > tolerance:
+                return False
+    
+    return True
 
 
 
@@ -70,7 +80,7 @@ def to_archive_xl(xlfilename, deletions, expectedNodes):
     xlfile['streaming']={'sectors':[]}
     sectors=xlfile['streaming']['sectors']
     for sectorPath in deletions:
-        if sectorPath =='Decals':
+        if sectorPath =='Decals' or sectorPath=='Collisions':
             continue
         
         if sectorPath == projectsector:
@@ -93,6 +103,9 @@ def to_archive_xl(xlfilename, deletions, expectedNodes):
         for decal in deletions['Decals'][sectorPath]:
             print('Deleting ', decal)     
             new_sector['nodeDeletions'].append({'index':decal['nodeIndex'],'type':decal['NodeType'],'debugName':decal['NodeComment']})
+        for collision in deletions['Collisions'][sectorPath].keys():
+            print('Deleting ',collision,' Actors ',deletions['Collisions'][sectorPath][collision])
+            new_sector['nodeDeletions'].append({'index':collision,"actorDeletions":deletions['Collisions'][sectorPath][collision] ,'type':'worldCollisionNode','debugName':collision,'expectedActors':expectedNodes[sectorPath+'_NI_'+str(collision)]})
         sectors.append(new_sector)   
     with open(xlfilename, "w") as filestream:
         if yamlavail:
@@ -345,7 +358,7 @@ def exportSectors( filename):
     for obj in bpy.data.objects:
         if 'exported' in obj.keys():
             obj['exported']=False
-    
+    coll_scene = bpy.context.scene.collection
     Inst_bufferIDs={}
     # .  .  __ .    .. .  .  __      __  ___ .  .  ___  ___ 
     # |\/| /  \ \  / | |\ | / _`    /__`  |  |  | |__  |__  
@@ -353,6 +366,7 @@ def exportSectors( filename):
     #
     deletions = {}
     deletions['Decals']={}
+    deletions['Collisions']={}
     expectedNodes = {}                                                      
     for filepath in jsons:
         projectjson = os.path.join( projpath , os.path.splitext(os.path.basename(filename))[0]+'.streamingsector.json')
@@ -371,6 +385,7 @@ def exportSectors( filename):
         sectorName=os.path.basename(filepath)[:-5]
         deletions[sectorName]=[]
         deletions['Decals'][sectorName]=[]
+        deletions['Collisions'][sectorName]={}
         if sectorName not in bpy.data.collections.keys():
             continue
         print('Updating sector ',sectorName)
@@ -381,6 +396,7 @@ def exportSectors( filename):
         #print(filepath)
         #print(len(nodes))
         Sector_additions_coll=bpy.data.collections.get(sectorName+'_new')
+        sector_Collisions=sectorName+'_colls'
         wIMNs=0
         for i,e in enumerate(nodes):
             data = e['Data']
@@ -561,6 +577,37 @@ def exportSectors( filename):
                                     else:
                                         if obj_col:
                                             deletions[sectorName].append(obj_col)
+                case 'worldCollisionNode':
+                    # need to process the sector_coll sectors and look for deleted collision bodies - this is almost identical to import, refactor them to have it in one place                    
+                    if sector_Collisions in coll_scene.children.keys():
+                        print('collisions')
+                        sector_Collisions_coll=bpy.data.collections.get(sector_Collisions)
+                        inst = [x for x in t if x['NodeIndex'] == i][0]
+                        Actors=e['Data']['compiledData']['Data']['Actors']
+                        expectedNodes[sectorName+'_NI_'+str(inst['nodeDataIndex'])] = len(Actors)
+                        for idx,act in enumerate(Actors):
+                            x=act['Position']['x']['Bits']/131072  
+                            y=act['Position']['y']['Bits']/131072
+                            z=act['Position']['z']['Bits']/131072
+                            arot=get_rot(act)
+                            for s,shape in enumerate(act['Shapes']):
+                                collname='NodeDataIndex_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s)    
+                                if collname in sector_Collisions_coll.objects:
+                                    print('found')
+                                    crash= sector_Collisions_coll.objects[collname]
+                                    if are_matrices_equal(crash.matrix_world,Matrix(crash['matrix'])):
+                                        print('collision moved - cant process this yet')
+                                else:
+                                    if shape['ShapeType']=='Box' or shape['ShapeType']=='Capsule':     
+                                        if inst['nodeDataIndex'] in deletions['Collisions'][sectorName].keys():
+                                            deletions['Collisions'][sectorName][inst['nodeDataIndex']].append(str(idx))
+                                        else:
+                                            deletions['Collisions'][sectorName][inst['nodeDataIndex']]=[str(idx)]
+
+
+
+
+
         print(wIMNs)
                                         
     #       __   __          __      __  ___       ___  ___ 
@@ -917,7 +964,7 @@ def exportSectors( filename):
                 wtbbuffer['Transforms'].insert(idx,trans)
                 print('After = ',len(wtbbuffer['Transforms']))            
     
-    # need to process the sector_coll sectors and look for deleted collision bodies
+   
 
 
                 
