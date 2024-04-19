@@ -44,7 +44,7 @@ from .importers.phys_import import *
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
     "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, Doctor Presto, shotlastc, Rudolph2109, Holopointz",
-    "version": (1, 5, 5),
+    "version": (1, 5, 5, 1),
     "blender": (3, 6, 0),
     "location": "File > Import-Export",
     "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
@@ -54,12 +54,14 @@ bl_info = {
     "tracker_url": "https://github.com/WolvenKit/Cyberpunk-Blender-add-on/issues/new/choose",
 }
 plugin_version = ".".join(map(str, bl_info["version"]))
+blender_version = ".".join(map(str, bpy.app.version))
 
 icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 custom_icon_col = {}
 script_dir = get_script_dir()
 
 print()
+print(f"Blender Version:{blender_version}")
 print(f"Cyberpunk IO Suite version: {plugin_version}")
 print()
 print('-------------------- Cyberpunk IO Suite Finished--------------------')
