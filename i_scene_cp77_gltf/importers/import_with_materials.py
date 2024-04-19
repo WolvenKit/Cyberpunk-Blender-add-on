@@ -4,8 +4,7 @@ import json
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
 from ..main.setup import MaterialBuilder
-from ..main.common import json_ver_validate
-from ..main.common import UV_by_bounds
+from ..main.common import json_ver_validate, UV_by_bounds, show_message
 from .attribute_import import manage_garment_support
 from ..main.animtools import get_anim_info
 import traceback
@@ -37,13 +36,16 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
     for f in loadfiles:
         filepath = os.path.join(directory, f['name'])
                     
-        gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'TEMPERANCE', "guess_original_bind_pose" : False, "import_user_extensions": ""})
+        gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'BLENDER', "guess_original_bind_pose" : False, "import_user_extensions": ""})
         gltf_importer.read()
         gltf_importer.checks()
         
         #kwekmaster: modified to reflect user choice
-        print(filepath + " Loaded; With materials: "+str(with_materials))
+        
+        if len(bpy.data.meshes) is not 0:
+            print(filepath + " Loaded; With materials: "+str(with_materials))
         existingMeshes = bpy.data.meshes.keys()
+
        
         existingMaterials = bpy.data.materials.keys()
         BlenderGlTF.create(gltf_importer)
@@ -60,10 +62,10 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
             # if animations exist, don't hide the armature and get the extras properties
             # We should probably break the base import out into a separate function, have it check the gltf file and then send the info either to anim import or import with materials, but this works too
             animations = gltf_importer.data.animations
-            meshes = gltf_importer.data.animations
+            meshes = gltf_importer.data.meshes
             if animations:
                 get_anim_info(animations)
-                if meshes:
+                if meshes and "Icosphere" not in mesh.name:
                     if 'Armature' in o.name:
                         o.hide_set(hide_armatures)
             else:
@@ -92,7 +94,8 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
             file.close()
             valid_json=json_ver_validate(obj)
             if not valid_json:
-                self.report({'ERROR'}, "Incompatible material.json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")    
+                self.report({'ERROR'}, "Incompatible material.json file detected. Material depot needs to be cleared and mesh re exported with current Wolvenkit Version.")
+                show_message('Incompatible material.json file detected. Material depot needs to be cleared and mesh re exported with current Wolvenkit Version.')
                 break
             DepotPath = str(obj["MaterialRepo"])  + "\\"
             context=bpy.context
@@ -144,7 +147,7 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
             counter = 0
             bpy_mats=bpy.data.materials
             for name in bpy.data.meshes.keys():
-                if name not in existingMeshes:
+                if name not in existingMeshes and "Icosphere" not in name:
                     bpy.data.meshes[name].materials.clear()
                     if gltf_importer.data.meshes[counter].extras is not None: #Kwek: I also found that other material hiccups will cause the Collection to fail
                         for matname in gltf_importer.data.meshes[counter].extras["materialNames"]:
@@ -189,3 +192,20 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
                     if rawmat["Name"] not in  bpy.data.materials.keys() and ((rawmat["Name"] in MatImportList) or len(MatImportList)<1):
                         Builder.create(index)
                     index = index + 1
+                    
+    vers=bpy.app.version
+    if vers[0] >= 4:
+        arms = [obj for obj in bpy.data.objects if obj.type== 'ARMATURE']
+        for arm in arms:
+            for pb in arm.pose.bones:
+                pb.custom_shape_scale_xyz[0] = .0175
+                pb.custom_shape_scale_xyz[1] = .0175
+                pb.custom_shape_scale_xyz[2] = .0175
+                pb.use_custom_shape_bone_size = True
+
+
+
+
+
+
+
