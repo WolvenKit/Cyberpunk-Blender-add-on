@@ -22,12 +22,12 @@ def default_cp77_options():
             'export_try_sparse_sk': False,
         })
         
-    if vers[0] >= 4.1:
-        options.update({
-            "export_shared_accessors": True,
-            "export_try_omit_sparse_sk": False,
-        })
-    return options  
+        if vers[1] >= 1:
+            options.update({
+                "export_shared_accessors": True,
+                "export_try_omit_sparse_sk": False,
+            })
+        return options  
 
 #make sure meshes are exported with tangents, morphs and vertex colors
 def cp77_mesh_options():
