@@ -20,6 +20,23 @@
 # 
 # Ask in world-editing on the discord (https://discord.gg/redmodding) if you have any trouble
 
+# TODO
+
+# - Fix the entities
+# - Add collisions
+# - sort out instanced bits
+
+
+
+
+
+
+
+
+
+
+
+
 import json
 import glob
 import os
@@ -347,6 +364,10 @@ def exportSectors( filename):
             j=json.load(f) 
         nodes = j["Data"]["RootChunk"]["nodes"]
         t=j['Data']['RootChunk']['nodeData']['Data']
+        # add nodeDataIndex props to all the nodes in t
+        for index, obj in enumerate(t):
+            obj['nodeDataIndex']=index
+
         sectorName=os.path.basename(filepath)[:-5]
         deletions[sectorName]=[]
         deletions['Decals'][sectorName]=[]
@@ -452,16 +473,17 @@ def exportSectors( filename):
 
                 case  'worldEntityNode':
                     if isinstance(e, dict) and 'entityTemplate' in data.keys():
-                        entname = data['entityTemplate']['DepotPath']
+                        entname = data['entityTemplate']['DepotPath']['$value'].replace('\\', os.sep) 
                         
                         if(entname != 0):
                             instances = [x for x in t if x['NodeIndex'] == i]
                             for idx,inst in enumerate(instances):
                                 obj_col=find_col(i,idx,Sector_coll)
                                 #print(obj_col)
-                                # THIS IS WRONG, the entity meshes are in child collectors not objects
+                                # THIS WAS WRONG, the entity meshes are in child collectors not objects so children>0 and children.objects>0
                                 if obj_col and len(obj_col.children)>0:
                                     if len(obj_col.children[0].objects)>0:
+                                        obj=obj_col.children[0].objects[0]
                                         # Check for Position and if changed delete the original and add to the new sector
                                         if obj.matrix_world!=Matrix(obj_col['matrix']):
                                             deletions[sectorName].append(obj_col)
