@@ -1286,9 +1286,9 @@ class CP77EntityImport(Operator,ImportHelper):
                                 description="Collector to put the imported entity in",
                                 default='',
                                 options={'HIDDEN'})
-    cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences
         
     def draw(self, context):
+        cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences
         layout = self.layout
         row = layout.row(align=True)
         split = row.split(factor=0.45,align=True)
@@ -1350,9 +1350,10 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
     am_modding: BoolProperty(name="Generate New Collectors",default=False,description="Generate _new collectors for sectors to allow modifications to be saved back to game")
     with_materials: BoolProperty(name="With Materials",default=False,description="Import Wolvenkit-exported materials")
     remap_depot: BoolProperty(name="Remap Depot",default=False,description="replace the json depot path with the one in prefs")  
-    cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences 
+
 
     def draw(self, context):
+        cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences 
         layout = self.layout
         box = layout.box()
         row = box.row(align=True) 
@@ -1386,8 +1387,9 @@ class CP77_PT_ImportWithMaterial(Panel):
     def draw_header(self, context):
         operator = context.space_data.active_operator
         self.layout.prop(operator, "with_materials", text="")
-    cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences
+    
     def draw(self, context):
+        cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences
         operator = context.space_data.active_operator
         layout = self.layout
         row = layout.row(align=True)
