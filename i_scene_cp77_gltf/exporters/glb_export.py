@@ -18,16 +18,16 @@ def default_cp77_options():
     }
     if vers[0] >= 4:
         options.update({
-            'export_image_format': 'NONE', 
+            'export_image_format': 'NONE',
             'export_try_sparse_sk': False,
         })
-        
+
         if vers[1] >= 1:
             options.update({
                 "export_shared_accessors": True,
                 "export_try_omit_sparse_sk": False,
             })
-        return options  
+        return options
 
 #make sure meshes are exported with tangents, morphs and vertex colors
 def cp77_mesh_options():
@@ -49,7 +49,7 @@ def pose_export_options():
         'export_animations': True,
         'export_frame_range': True,
         'export_animation_mode': 'ACTIONS',
-        'export_anim_single_armature': True,  
+        'export_anim_single_armature': True,
         "export_bake_animation": True
     }
     return options
@@ -58,7 +58,7 @@ def pose_export_options():
 def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_selected, static_prop):
     groupless_bones = set()
     bone_names = []
-    
+
     #check if the scene is in object mode, if it's not, switch to object mode
     if bpy.context.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
@@ -76,7 +76,7 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
                 action["schema"] ={"type": "wkit.cp2077.gltf.anims","version": 3}
             if "animationType" not in action:
                 action["animationType"] = 'Normal'
-            if "frameClamping" not in action:	
+            if "frameClamping" not in action:
                 action["frameClamping"] = True
             if "frameClampingStartFrame" not in action:
                 action["frameClampingStartFrame"] = -1
@@ -94,7 +94,7 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
                 action["fallbackFrameIndices"] = []
             if "optimizationHints" not in action:
                 action["optimizationHints"] = { "preferSIMD": False, "maxRotationCompression": 1}
-        
+
         #if the export poses value is True, set the export options to ensure the armature is exported properly with the animations
         options = default_cp77_options()
         options.update(pose_export_options())
@@ -107,7 +107,7 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
         if not limit_selected:
             for obj in bpy.data.objects:
                 if obj.type == 'MESH':
-                    obj.select_set(True) 
+                    obj.select_set(True)
         #if export_poses option isn't used, check to make sure there are meshes selected and throw an error if not
         meshes = [obj for obj in objects if obj.type == 'MESH']
 
@@ -116,44 +116,46 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
             if not meshes:
                 bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="No meshes selected, please select at least one mesh")
                 return {'CANCELLED'}
-        
+
         #check that meshes include UVs and have less than 65000 verts, throw an error if not
         for mesh in meshes:
 
             # apply transforms
             bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
             if not mesh.data.uv_layers:
-                bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Meshes must have UV layers in order to import in Wolvenkit")
+                bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Meshes must have UV layers in order to import in Wolvenkit. See https://tinyurl.com/uv-layers")
                 return {'CANCELLED'}
-            
+
             #check submesh vertex count to ensure it's less than the maximum for import
             vert_count = len(mesh.data.vertices)
             if vert_count > 65535:
-                message=(f"{mesh.name} has {vert_count} vertices.           Each submesh must have less than 65,535 vertices")
+                message=(f"{mesh.name} has {vert_count} vertices.           Each submesh must have less than 65,535 vertices. See https://tinyurl.com/vertex-count")
                 bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=message)
                 return {'CANCELLED'}
-                
+
             #check that faces are triangulated, cancel export, switch to edit mode with the untriangulated faces selected and throw an error
             for face in mesh.data.polygons:
                 if len(face.vertices) != 3:
                     bpy.ops.object.mode_set(mode='EDIT')
                     bpy.ops.mesh.select_mode(type='FACE')
                     bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)
-                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="All faces must be triangulated before exporting. Untriangulated faces have been selected for you")
+                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="All faces must be triangulated before exporting. Untriangulated faces have been selected for you. See https://tinyurl.com/triangulate-faces")
                     return {'CANCELLED'}
-                    
+
             # Check for ungrouped vertices, if they're found, switch to edit mode and select them
-            ungrouped_vertices = [v for v in mesh.data.vertices if not v.groups]
-            if ungrouped_vertices:
-                bpy.ops.object.mode_set(mode='EDIT')
-                bpy.ops.mesh.select_mode(type='VERT')
-                try:
-                    bpy.ops.mesh.select_ungrouped()
-                except RuntimeError:
-                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"No vertex groups in: {mesh.name} are assigned weights. Assign weights before exporting.")                
-                bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"Ungrouped vertices found and selected in: {mesh.name}")                
-                return {'CANCELLED'}
-                
+            # No need to do this for static props
+            if not static_prop:
+                ungrouped_vertices = [v for v in mesh.data.vertices if not v.groups]
+                if ungrouped_vertices:
+                    bpy.ops.object.mode_set(mode='EDIT')
+                    bpy.ops.mesh.select_mode(type='VERT')
+                    try:
+                        bpy.ops.mesh.select_ungrouped()
+                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"Ungrouped vertices found and selected in: {mesh.name}. See https://tinyurl.com/ungrouped-vertices")
+                    except RuntimeError:
+                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"No vertex groups in: {mesh.name} are assigned weights. Assign weights before exporting. See https://tinyurl.com/assign-vertex-weights")
+                    return {'CANCELLED'}
+
         # set the export options for meshes
         options = default_cp77_options()
         options.update(cp77_mesh_options())
@@ -174,7 +176,7 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
                             break
 
                     if not armature_modifier:
-                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=(f"Armature missing from: (obj.name) armatures are required for movement. If this is intentional, try 'export as static prop'"))
+                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=(f"Armature missing from: {obj.name} Armatures are required for movement. If this is intentional, try 'export as static prop'. See https://tinyurl.com/armature-missing"))
                         return {'CANCELLED'}
                     # Store original visibility and selection state
                     armature = armature_modifier.object
@@ -187,7 +189,7 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
 
                     for bone in armature.pose.bones:
                         bone_names.append(bone.name)
-                    
+
                     if armature_modifier.object != mesh.parent:
                         armature_modifier.object = mesh.parent
 
@@ -197,7 +199,7 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
                         if group.name in bone_names:
                             group_has_bone[group.index] = True
                              # print(vertex_group.name)
-                                
+
                         # Add groups with no weights to the set
                     for group_index, has_bone in group_has_bone.items():
                         if not has_bone:
@@ -207,9 +209,9 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
                     bpy.ops.object.mode_set(mode='OBJECT')  # Ensure in object mode for consistent behavior
                     groupless_bones_list = ", ".join(sorted(groupless_bones))
                     armature.hide_set(True)
-                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=(f"the following vertex groups are not assigned to a bone, this will result in blender creating a neutral_bone and cause Wolvenkit import to Fail:    {groupless_bones_list}"))
+                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=(f"The following vertex groups are not assigned to a bone, this will result in blender creating a neutral_bone and cause Wolvenkit import to fail:    {groupless_bones_list}\nSee https://tinyurl.com/unassigned-bone"))
                     return {'CANCELLED'}
-                
+
                 if mesh.data.name != mesh.name:
                     mesh.data.name = mesh.name
 
@@ -220,7 +222,7 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
                     armature.hide_set(True)
             except Exception as e:
                 print(e)
-               
+
         else:
             if export_visible:
                 try:
@@ -243,8 +245,8 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
         # for armature, state in armature_states.items():
             # armature.select_set(state["select"])
             # armature.hide_set(state["hide"])
-            
-        
+
+
 # def ExportAll(self, context):
 #     #Iterate through all objects in the scene
 def ExportAll(self, context):
