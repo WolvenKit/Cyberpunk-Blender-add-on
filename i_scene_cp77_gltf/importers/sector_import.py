@@ -422,8 +422,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     new['appearanceName']=data['appearanceName']
                                     new['pivot']=inst['Pivot']
 
-                                    if len(group.all_objects)>0:
-                                        new['matrix']=group.all_objects[0].matrix_local
+                                    
                                     pos = Vector(get_pos(inst))
                                     rot=[0,0,0,0]
                                     scale =Vector((1/scale_factor,1/scale_factor,1/scale_factor))
@@ -444,6 +443,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
                                         if 'Armature' in obj.name:
                                             obj.hide_set(True)
+                                    if len(group.all_objects)>0:
+                                        new['matrix']=group.all_objects[0].matrix_world
                        
                     case 'worldBendedMeshNode' | 'worldCableMeshNode' :
                         #print(type)
@@ -937,7 +938,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                 z=act['Position']['z']['Bits']/131072*scale_factor
                                 arot=get_rot(act)
                                 for s,shape in enumerate(act['Shapes']):
-                                    if shape['ShapeType']=='Box':
+                                    if shape['ShapeType']=='Box' or shape['ShapeType']=='Capsule':
                                         #print('Box Collision Node')
                                         #pprint(act['Shapes'])
                                         ssize=shape['Size']
@@ -947,46 +948,26 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         srot_q = Quaternion((srot[0],srot[1],srot[2],srot[3]))
                                         rot= arot_q @ srot_q
                                         loc=(spos[0]+x,spos[1]+y,spos[2]+z)
-                                        bpy.ops.mesh.primitive_cube_add(size=1/scale_factor, scale=(ssize['X'],ssize['Y'],ssize['Z']),location=loc)
-                                        cube=C.selected_objects[0]
-                                        cube.name='NodeDataIndex_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s)
-                                        par_coll=cube.users_collection[0]
-                                        par_coll.objects.unlink(cube)
-                                        sector_Collisions_coll.objects.link(cube)
-                                        cube['nodeIndex']=i
-                                        cube['nodeDataIndex']=inst['nodeDataIndex']
-                                        cube['ShapeType']=shape['ShapeType']
-                                        cube['ShapeNo']=s
-                                        cube['ActorIdx']=idx
-                                        cube['sectorName']=sectorName
-                                        cube.rotation_mode='QUATERNION'
-                                        cube.rotation_quaternion=rot
-                                        set_collider_props(cube, shape['ShapeType'], shape['Materials'][0]['$value'], 'WORLD')
-                                
-                                    elif shape['ShapeType']=='Capsule':
-                                        #print('Capsule Collision Node')
-                                        ssize=shape['Size']
-                                        spos=get_pos(shape)
-                                        srot=get_rot(shape)
-                                        arot_q = Quaternion((arot[0],arot[1],arot[2],arot[3]))
-                                        srot_q = Quaternion((srot[0],srot[1],srot[2],srot[3]))
-                                        rot= arot_q @ srot_q
-                                        loc=(spos[0]+x,spos[1]+y,spos[2]+z)
-                                        bpy.ops.mesh.primitive_cylinder_add(radius=5/scale_factor, depth=1/scale_factor, scale=(ssize['X'],ssize['Y'],ssize['Z']),location=loc)
-                                        capsule=C.selected_objects[0]
-                                        capsule.name='NodeDataIndex_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s)
-                                        par_coll=capsule.users_collection[0]
-                                        par_coll.objects.unlink(capsule)
-                                        sector_Collisions_coll.objects.link(capsule)
-                                        capsule['nodeIndex']=i
-                                        capsule['nodeDataIndex']=inst['nodeDataIndex']
-                                        capsule['ShapeType']=shape['ShapeType']
-                                        capsule['ShapeNo']=s
-                                        capsule['ActorIdx']=idx
-                                        capsule['sectorName']=sectorName                                        
-                                        capsule.rotation_mode='QUATERNION'
-                                        capsule.rotation_quaternion=rot
-                                        set_collider_props(cube, shape['ShapeType'], shape['Materials'][0]['$value'], 'WORLD')
+                                        if shape['ShapeType']=='Box':
+                                            bpy.ops.mesh.primitive_cube_add(size=1/scale_factor, scale=(ssize['X'],ssize['Y'],ssize['Z']),location=loc)
+                                        elif shape['ShapeType']=='Capsule':
+                                            bpy.ops.mesh.primitive_cylinder_add(radius=5/scale_factor, depth=1/scale_factor, scale=(ssize['X'],ssize['Y'],ssize['Z']),location=loc)
+                                        crash=C.selected_objects[0]
+                                        crash.name='NodeDataIndex_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s)
+                                        par_coll=crash.users_collection[0]
+                                        par_coll.objects.unlink(crash)
+                                        sector_Collisions_coll.objects.link(crash)
+                                        crash['nodeIndex']=i
+                                        crash['nodeDataIndex']=inst['nodeDataIndex']
+                                        crash['ShapeType']=shape['ShapeType']
+                                        crash['ShapeNo']=s
+                                        crash['ActorIdx']=idx
+                                        crash['sectorName']=sectorName
+                                        crash['matrix']=crash.matrix_world
+                                        crash.rotation_mode='QUATERNION'
+                                        crash.rotation_quaternion=rot
+                                        set_collider_props(crash, shape['ShapeType'], shape['Materials'][0]['$value'], 'WORLD')
+                                                                    
                                     else: 
                                         print(f"skipping unsupported shape {shape['ShapeType']}")
 
@@ -997,8 +978,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                 # Have to do a view_layer update or the matrices are all blank
                 bpy.context.view_layer.update()                
                 for col in Sector_coll.children:
-                    if len(col.objects)>0:
-                        col['matrix']= col.objects[0].matrix_world
+                    if len(col.all_objects)>0:
+                        col['matrix']= col.all_objects[0].matrix_world
                         
         
 
