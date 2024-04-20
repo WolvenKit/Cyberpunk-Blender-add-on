@@ -10,7 +10,7 @@ class Eye:
 
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
-        pBSDF = CurMat.nodes['Principled BSDF']
+        pBSDF = CurMat.nodes[loc('Principled BSDF')]
         sockets=bsdf_socket_names()
 
         if "Specularity" in Data:

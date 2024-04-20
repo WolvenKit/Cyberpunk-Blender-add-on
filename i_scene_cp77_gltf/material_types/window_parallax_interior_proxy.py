@@ -11,7 +11,7 @@ class windowParallaxIntProx:
         self.image_format = image_format
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
-        pBSDF=CurMat.nodes['Principled BSDF']
+        pBSDF=CurMat.nodes[loc('Principled BSDF')]
         CurMat.nodes.remove(pBSDF)
         AspectRatio=1
         # Aspect ratios is in the filename

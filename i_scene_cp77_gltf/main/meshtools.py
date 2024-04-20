@@ -241,6 +241,7 @@ def CP77UvUnChecker(self, context):
             material_index = mesh.data.materials.find(uvchecker)
             mesh.data.materials.pop(index=material_index)
             i = mesh.data.materials.find(original_mat_name)
+            bpy.ops.wm.properties_remove(data_path="object", property_name="uvCheckedMat")
             if i >= 0:
                 mesh.active_material_index = i
             if current_mode != 'EDIT':
@@ -253,7 +254,8 @@ def CP77UvUnChecker(self, context):
 def cp77riglist(context):
     cp77rigs = []
     man_base = os.path.join(rig_dir, "man_base_full.glb")
-    woman_base = os.path.join(resources_dir, "woman_base.gltf")
+    woman_base = os.path.join(rig_dir, "woman_base_full.glb")
+    Jackie = os.path.join(rig_dir, "jackie_full.glb")
     man_big = os.path.join(rig_dir, "man_big_full.glb")
     man_fat = os.path.join(rig_dir, "man_fat_full.glb")
     Rhino = os.path.join(rig_dir, "rhino_full.glb")
@@ -261,9 +263,9 @@ def cp77riglist(context):
     Panam = os.path.join(rig_dir, "Panam_full.glb")
     
     # Store the variable names in a list
-    cp77rigs = [man_base, woman_base, man_big, man_fat, Rhino, Judy, Panam]
-    cp77rig_names = ['man_base', 'woman_base', 'man_big', 'man_fat', 'Rhino', 'Judy', 'Panam']
-    
+    cp77rigs = [man_base, woman_base, Jackie, man_big, man_fat, Rhino, Judy, Panam]
+    cp77rig_names = ['man_base', 'woman_base', 'Jackie', 'man_big', 'man_fat', 'Rhino', 'Judy', 'Panam']
+
     # Return the list of variable names
     return cp77rigs, cp77rig_names
 
@@ -275,6 +277,8 @@ def CP77RefitList(context):
     SoloArmsAddon = os.path.join(refit_dir, "SoloArmsAddon.zip")
     Adonis = os.path.join(refit_dir, "Adonis.zip")
     VanillaFemToMasc = os.path.join(refit_dir, "f2m.zip")
+    VanillaFem_BigBoobs = os.path.join(refit_dir, "f_normal_to_big_boobs.zip")
+    VanillaFem_SmallBoobs = os.path.join(refit_dir, "f_normal_to_small_boobs.zip")
     VanillaMascToFem = os.path.join(refit_dir, "m2f.zip")
     Lush = os.path.join(refit_dir, "lush.zip")
     Hyst_RB = os.path.join(refit_dir, "hyst_rb.zip")
@@ -284,11 +288,11 @@ def CP77RefitList(context):
     Solo_Ultimate = os.path.join(refit_dir, "solo_ultimate.zip")
     Gymfiend = os.path.join(refit_dir, "gymfiend.zip")
     Freyja = os.path.join(refit_dir, "freyja.zip")
-    Hyst_EBBP_Addon = os.path.join(refit_dir, "hyst_ebbp_addon.zip")
+    # Hyst_EBBP_Addon = os.path.join(refit_dir, "hyst_ebbp_addon.zip")
     
     # Return the list of variable names
-    target_body_paths = [Hyst_EBBP_Addon, Freyja, Gymfiend,SoloArmsAddon, Solo_Ultimate, Adonis, Flat_Chest, Hyst_EBB_RB, Hyst_EBB, Hyst_RB, Lush, VanillaFemToMasc, VanillaMascToFem]
-    target_body_names = ['Hyst_EBBP_Addon', 'Freyja', 'Gymfiend','SoloArmsAddon', 'Solo_Ultimate', 'Adonis', 'Flat_Chest', 'Hyst_EBB_RB', 'Hyst_EBB', 'Hyst_RB', 'Lush', 'VanillaFemToMasc', 'VanillaMascToFem' ]
+    target_body_paths = [ Gymfiend, Freyja, SoloArmsAddon, Solo_Ultimate, Adonis, Flat_Chest, Hyst_EBB_RB, Hyst_EBB, Hyst_RB, Lush, VanillaFemToMasc, VanillaMascToFem, VanillaFem_BigBoobs, VanillaFem_SmallBoobs ]
+    target_body_names = [ 'Gymfiend', 'Freyja', 'SoloArmsAddon', 'Solo_Ultimate', 'Adonis', 'Flat_Chest', 'Hyst_EBB_RB', 'Hyst_EBB', 'Hyst_RB', 'Lush', 'VanillaFemToMasc', 'VanillaMascToFem', 'VanillaFem_BigBoobs', 'VanillaFem_SmallBoobs' ]
 
     # Return the list of tuples
     return target_body_paths, target_body_names

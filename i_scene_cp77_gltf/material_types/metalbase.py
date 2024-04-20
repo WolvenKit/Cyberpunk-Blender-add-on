@@ -11,7 +11,7 @@ class MetalBase:
 
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
-        pBSDF = CurMat.nodes['Principled BSDF']
+        pBSDF = CurMat.nodes[loc('Principled BSDF')]
         sockets=bsdf_socket_names()
 
         mixRGB = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-450,400) , blend_type = 'MULTIPLY')
@@ -35,6 +35,14 @@ class MetalBase:
             mImg=imageFromRelPath(Data["Metalness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
             metNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,-550), label="Metalness", image=mImg)
             CurMat.links.new(metNode.outputs[0],pBSDF.inputs['Metallic'])
+
+        if 'GradientMap' in Data:
+            gradmap = Data["GradientMap"]
+            gradImg = imageFromRelPath(gradmap,self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            grad_image_node = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,0), label="GradientMap", image=gradImg)          
+            color_ramp_node=CreateGradMapRamp(CurMat, grad_image_node)
+            CurMat.links.new(mixRGB.outputs[0], color_ramp_node.inputs[0])
+            CurMat.links.new(color_ramp_node.outputs[0], pBSDF.inputs['Base Color'])
 
         if 'MetalnessScale' in Data:
             mScale = CreateShaderNodeValue(CurMat,Data["MetalnessScale"],-1000, -100,"MetalnessScale")
@@ -114,6 +122,8 @@ class MetalBase:
         CurMat.links.new(Math.outputs['Value'], Clamp001.inputs[1]) # Inverted value into clamp min, so if 1 its always solic, if 0 will use BaseColor alpha
         CurMat.links.new(bColNode.outputs['Alpha'], Clamp001.inputs[0]) # alpha into one thats clamped by enableMask value        
         CurMat.links.new(Clamp001.outputs['Result'], pBSDF.inputs['Alpha'])
+        if not image_has_alpha(bcolImg): # if the image doesnt have alpha stick the color in instead
+            CurMat.links.new(bColNode.outputs['Color'],Clamp001.inputs['Value'])
 
         
 

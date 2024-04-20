@@ -37,7 +37,7 @@ class MaterialBuilder:
         self.image_format = image_format
         self.obj = Obj
         self.MeshPath= MeshPath
-        before,mid,after=MeshPath.partition('source\\raw\\')
+        before,mid,after=MeshPath.partition('source\\raw\\'.replace('\\',os.sep))
         self.ProjPath=before+mid
     
     def create(self,materialIndex):
@@ -106,7 +106,8 @@ class MaterialBuilder:
                     skin = Skin(self.BasePath, self.image_format, self.ProjPath)
                     skin.create(rawMat["Data"],bpyMat)
 
-                case "engine\\materials\\metal_base.remt" | "engine\\materials\\metal_base_proxy.mt" |'base\\materials\\metal_base_parallax.mt':
+                case "engine\\materials\\metal_base.remt" | "engine\\materials\\metal_base_proxy.mt" |\
+                    'base\\materials\\metal_base_parallax.mt' | 'base\materials\metal_base_gradientmap_recolor.mt':
                     if 'EnableMask' in rawMat.keys():
                         enableMask=rawMat['EnableMask']
                     else:
@@ -160,7 +161,7 @@ class MaterialBuilder:
                     glass = Glass(self.BasePath,self.image_format, self.ProjPath)
                     glass.create(rawMat["Data"],bpyMat)
                 
-                case "base\\materials\\mesh_decal_parallax.mt" :
+                case "base\\materials\\mesh_decal_parallax.mt" | "base\\materials\\vehicle_mesh_decal_parallax.mt":
                     no_shadows=True
                     meshDecalParallax = MeshDecalParallax(self.BasePath,self.image_format, self.ProjPath)
                     meshDecalParallax.create(rawMat["Data"],bpyMat)

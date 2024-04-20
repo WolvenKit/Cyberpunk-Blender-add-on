@@ -8,7 +8,7 @@ import time
 from math import sin,cos
 from mathutils import Vector, Matrix , Quaternion
 import bmesh
-from ..main.common import json_ver_validate
+from ..main.common import json_ver_validate, jsonload, loc
 from .phys_import import cp77_phys_import
 from ..main.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
 
@@ -16,19 +16,19 @@ from ..main.collisions import draw_box_collider, draw_capsule_collider, draw_con
 # if you've already imported the body/head and set the rig up you can exclude them by putting them in the exclude_meshes list 
 #presto_stash=[]
 
-def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=True, include_collisions=False, include_phys=False, include_entCollider=False, inColl=''): 
+def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=True, include_collisions=False, include_phys=False, include_entCollider=False, inColl='', remapdepot=False): 
     
     C = bpy.context
     coll_scene = C.scene.collection
     start_time = time.time()
 
-    before,mid,after=filepath.partition('source\\raw')
+    before,mid,after=filepath.partition(os.path.join('source','raw'))
     path=before+mid
 
     ent_name=os.path.basename(filepath)[:-9]
     print('Importing Entity', ent_name)
     with open(filepath,'r') as f: 
-        j=json.load(f) 
+        j=jsonload(f) 
     valid_json=json_ver_validate(j)
     if not valid_json:
         bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Incompatible entity json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
@@ -50,7 +50,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     for comp in ent_components:
         ent_complist.append(comp['name'])
         if 'rig' in comp.keys():
-            print(comp['rig'])
+            print(comp['rig']['DepotPath']['$value'])
             ent_rigs.append(os.path.join(path,comp['rig']['DepotPath']['$value']))
         if comp['name']['$value'] == 'Chassis':            
             chassis_info = comp
@@ -72,6 +72,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
         appearances=[]
         for app in ent_apps:
             appearances.append(app['appearanceName']['$value'])
+        if len(appearances)==0:
+            appearances.append('BASE_COMPONENTS_ONLY')
 
     VS=[]
     for x in j['Data']['RootChunk']['components']:
@@ -81,23 +83,23 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
         vehicle_slots= VS[0]['slots']
     
     # find the appearance file jsons
-    app_path = glob.glob(path+"\**\*.app.json", recursive = True)
+    app_path = glob.glob(os.path.join(path,"**","*.app.json"), recursive = True)
     if len(app_path)==0:
         print('No Appearance file JSONs found in path')
 
     # find the meshes
-    meshes =  glob.glob(path+"\**\*.glb", recursive = True)
+    meshes =  glob.glob(os.path.join(path,"**","*.glb"), recursive = True)
     if len(meshes)==0:
         print('No Meshes found in path')
-    mesh_jsons =  glob.glob(path+"\**\*mesh.json", recursive = True)
+    mesh_jsons =  glob.glob(os.path.join(path,"**","*mesh.json"), recursive = True)
     
     # find the anims  
     # look through the components and find an anim, and load that, 
     # then check for an anim in the project thats using the rig (some things like the arch bike dont ref the anim in the ent)
     # otherwise just skip this section
     #
-    anim_files = glob.glob(path+"\\base\\animations\\"+"\**\*.glb", recursive = True)
-    ep1_anim_files = glob.glob(path+"\\ep1\\animations\\"+"\**\*.glb", recursive = True)
+    anim_files = glob.glob(os.path.join(path,"base","animations","**","*anims.glb"), recursive = True)
+    ep1_anim_files = glob.glob(os.path.join(path,"ep1","animations","**","*anims.glb"), recursive = True)
     anim_files = anim_files + ep1_anim_files
 
     rig=None
@@ -106,7 +108,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     if len(anim_files)>0 and len(ent_rigs)>0: # we have glbs and we have rigs called up in the ent
             # get the armatures already in the model
             oldarms= [x for x in bpy.data.objects if 'Armature' in x.name]
-            animsinres=[x for x in anim_files if x[:-3]+'anims' in resolved] 
+            animsinres=[x for x in anim_files if x[:-4] in resolved] 
             if len(animsinres)==0:
                 for anim in anim_files:
                     if os.path.exists(anim[:-3]+'anims.json'):
@@ -139,7 +141,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
         print('no anim rig found')
 
     # find the rig json associated with the ent
-    rigjsons = glob.glob(path+"\**\*.rig.json", recursive = True)
+    rigjsons = glob.glob(os.path.join(path,"**","*.rig.json"), recursive = True)
     rig_j=None
     if len(rigjsons)>0 and len(ent_rigs)>0:
             entrigjsons=[x for x in rigjsons if x[:-5] in ent_rigs] 
@@ -155,9 +157,9 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     else: 
         print('no rig json loaded')
                 
-    if len(meshes)<1 or len(app_path)<1:
+    if len(meshes)<1 or len(app_path)<1 and len(ent_components)<1:
         print("You need to export the meshes and convert app and ent to json")
-        return
+        pass
 
     else:
         for x,app_name in enumerate(appearances):
@@ -226,7 +228,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                     ent_app_idx=0
 
                 app_file = ent_apps[ent_app_idx]['appearanceResource']['DepotPath']['$value']
-                appfilepath=os.path.join(path,app_file)+'.json'
+                appfilepath=os.path.join(path,app_file).replace('\\',os.sep)+'.json'
                 a_j=None        
                 if os.path.exists(appfilepath):
                     with open(appfilepath,'r') as a: 
@@ -251,7 +253,10 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                             print('Chunks found')
                 else:
                     print('app file not found -', filepath)
-                              
+            else:
+                if j['Data']['RootChunk']['compiledData']['Data']['Chunks']:
+                    chunks= j['Data']['RootChunk']['compiledData']['Data']['Chunks']
+
             if len(comps)==0:      
                 print('falling back to rootchunk comps')
                 comps= j['Data']['RootChunk']['components']
@@ -262,12 +267,12 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                     meshname=''
                     if 'mesh' in c.keys() and isinstance( c['mesh']['DepotPath']['$value'], str):
                         m=c['mesh']['DepotPath']['$value']
-                        meshname=os.path.basename(m)
-                        meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb')
+                        meshname=os.path.basename(m.replace('\\',os.sep))
+                        meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb').replace('\\', os.sep)
                     elif 'graphicsMesh' in c.keys() and isinstance( c['graphicsMesh']['DepotPath']['$value'], str):
                         m=c['graphicsMesh']['DepotPath']['$value']
                         meshname=os.path.basename(m)
-                        meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb')
+                        meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb').replace('\\', os.sep)
                     if meshname:
                         if meshname not in exclude_meshes:      
                             if os.path.exists(meshpath):
@@ -278,12 +283,13 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                         meshApp=c['meshAppearance']['$value']
                                         #print(meshApp)
                                     try:
-                                        bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=meshApp, with_materials=with_materials, update_gi=False,)
+                                        bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=meshApp, with_materials=with_materials, update_gi=False, remap_depot=remapdepot)
                                         for obj in C.selected_objects:            
                                             obj['componentName'] = c['name']['$value']
                                             obj['sourcePath'] = meshpath
                                             obj['meshAppearance'] = meshApp
-                                            obj['appResource'] = app_path[0]
+                                            if app_path:
+                                                obj['appResource'] = app_path[0]
                                             obj['entAppearance'] = app_name
                                     except:
                                         print('import threw an error')
@@ -315,6 +321,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                                          if chunk['parentTransform']['HandleId']==pT_HId:
                                                              chunk_pt=chunk['parentTransform']
                                                              #print('HandleId found',chunk['parentTransform']['HandleId'])
+
                                         # if we found it then process it, most chars etc will just skip this                                                     
                                         if chunk_pt:   
                                             #print('in chunk pt processing bindName = ',chunk_pt['Data']['bindName'],' slotname= ',chunk_pt['Data']['slotName'])                                     
@@ -463,8 +470,22 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                                         co.target=rig
                                                         co.subtarget= bindname
                                                         bpy.context.view_layer.objects.active = obj
-                                                        bpy.ops.constraint.childof_set_inverse(constraint="Child Of", owner='OBJECT')
-                                                                
+                                                        bpy.ops.constraint.childof_set_inverse(constraint=loc("Child Of"), owner='OBJECT')
+
+                                            # Deal with TransformAnimators
+                                            if 'TransformAnimator' in bindname:
+                                                ta=[tacmp for tacmp in comps if tacmp['name']['$value']==bindname ][0]
+                                                x=ta['localTransform']['Position']['x']['Bits']/131072                                                    
+                                                y=ta['localTransform']['Position']['y']['Bits']/131072                                                    
+                                                z=ta['localTransform']['Position']['z']['Bits']/131072
+                                                target=None
+                                                for ix,obj in enumerate(objs):
+                                                    if ix>0:
+                                                        cr=obj.constraints.new(type='COPY_ROTATION')
+                                                        cr.target=target
+                                                    else:
+                                                        target=obj
+
                                     # end new stuff
                                     # dont get the local transform here if we already did it before
                                     if not x:   
@@ -552,8 +573,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                         cm_list.reverse()
                                         for obj in objs:
                                             subnum=int(obj.name[8:10])
-                                            # obj.hide_viewport=not cm_list[subnum]
                                             obj.hide_set(not cm_list[subnum])
+                                            obj.hide_render=not cm_list[subnum]
                                 #else:
                                 except:
                                     print("Failed on ",meshname)
