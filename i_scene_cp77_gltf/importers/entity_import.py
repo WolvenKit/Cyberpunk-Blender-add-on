@@ -108,7 +108,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     if len(anim_files)>0 and len(ent_rigs)>0: # we have glbs and we have rigs called up in the ent
             # get the armatures already in the model
             oldarms= [x for x in bpy.data.objects if 'Armature' in x.name]
-            animsinres=[x for x in anim_files if x[:-3]+'anims' in resolved] 
+            animsinres=[x for x in anim_files if x[:-4] in resolved] 
             if len(animsinres)==0:
                 for anim in anim_files:
                     if os.path.exists(anim[:-3]+'anims.json'):
