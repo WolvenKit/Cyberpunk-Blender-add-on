@@ -30,9 +30,9 @@ class Hair:
 
         aImg=imageFromRelPath(hair["Strand_Alpha"],DepotPath=self.BasePath, ProjPath=self.ProjPath, image_format=self.image_format)            
         aImgNode = create_node(Ns,"ShaderNodeTexImage",  (-300,-150), label="Strand_Alpha", image=aImg)
-        CurMat.links.new(aImgNode.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Alpha'])
+        CurMat.links.new(aImgNode.outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Alpha'])
 
-        CurMat.nodes['Principled BSDF'].inputs[sockets['Specular']].default_value = 0
+        CurMat.nodes[loc('Principled BSDF')].inputs[sockets['Specular']].default_value = 0
 
         gImg=imageFromRelPath(hair["Strand_Gradient"],DepotPath=self.BasePath, ProjPath=self.ProjPath, image_format=self.image_format)            
         gImgNode = create_node(Ns,"ShaderNodeTexImage",  (-1100,50), label="Strand_Gradient", image=gImg)
@@ -84,7 +84,7 @@ class Hair:
         gamma0.inputs[1].default_value = 2.2
 
         CurMat.links.new(mulNode.outputs[0],gamma0.inputs[0])
-        CurMat.links.new(gamma0.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
+        CurMat.links.new(gamma0.outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
 
         nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + hair["Flow"],-200,-250,'Flow',self.image_format)
-        CurMat.links.new(nMap.outputs[0],CurMat.nodes['Principled BSDF'].inputs['Normal'])
+        CurMat.links.new(nMap.outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Normal'])

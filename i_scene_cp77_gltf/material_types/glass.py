@@ -10,7 +10,7 @@ class Glass:
 
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
-        pBDSF=CurMat.nodes['Principled BSDF']
+        pBDSF=CurMat.nodes[loc('Principled BSDF')]
         sockets=bsdf_socket_names()
         pBDSF.inputs[sockets['Transmission']].default_value = 1
 

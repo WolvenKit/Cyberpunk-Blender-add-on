@@ -1,0 +1,64 @@
+name: simple_build_and_release
+    workflow_dispatch:
+    inputs:
+      version:
+        description: 'version'
+        required: true
+        default: '1.5.4dev'
+  
+jobs:
+  Build:
+    runs-on: ubuntu-latest
+    steps:        
+      - name: Checkout
+        uses: actions/checkout@v2
+      
+      - name: Build addon
+        id: build
+        uses: blenderkit/blender-addon-build@main
+        with:
+          name: Cyberpunk Blender Plugin
+          name-suffix: "PR-time"
+          build-location: "./"
+          exclude-files: ".git;.github;README.md"
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: cyberpunk_blender_plugin
+          path: ./
+          
+  Release:
+    runs-on: ubuntu-latest
+    needs: Build
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: cyberpunk_blender_plugin
+          path: ./
+
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Create Draft Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.sha }}
+          release_name: Release ${{ github.sha }}
+          draft: true
+          prerelease: false
+
+      - name: Upload Release Asset
+        id: upload-release-asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./
+          asset_name: cyberpunk_blender_plugin.zip
+          asset_content_type: application/zip

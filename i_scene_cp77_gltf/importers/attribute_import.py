@@ -8,18 +8,18 @@ def manage_garment_support(existingMeshes, gltf_importer_data):
     gltf_importer = gltf_importer_data
     curMeshCount = 0
     for name in bpy.data.meshes.keys():
-        if name not in existingMeshes:
+        if name not in existingMeshes and "Icosphere" not in name:
             mesh = bpy.data.meshes[name]
             for prim in gltf_importer.data.meshes[curMeshCount].primitives:
                 if '_GARMENTSUPPORTWEIGHT' in prim.attributes:
-                    indices = get_indices(gltf_importer, prim)                    
+                    indices = get_indices(gltf_importer, prim)
                     mesh.color_attributes.remove(mesh.color_attributes['_GARMENTSUPPORTWEIGHT'])
                     add_vertex_color_attribute('_GARMENTSUPPORTWEIGHT', '_GARMENTSUPPORTWEIGHT', gltf_importer, mesh, prim, indices)
                     mesh.color_attributes.remove(mesh.color_attributes['_GARMENTSUPPORTCAP'])                    
                     add_vertex_color_attribute('_GARMENTSUPPORTCAP', '_GARMENTSUPPORTCAP', gltf_importer, mesh, prim, indices)
                     
                 mesh.color_attributes.render_color_index = 0
-                curMeshCount = curMeshCount + 1
+            curMeshCount = curMeshCount + 1
 
 def add_vertex_color_attribute(accessor_name, attribute_name, gltf_importer_data, mesh, prim, indices):
     gltf_importer = gltf_importer_data

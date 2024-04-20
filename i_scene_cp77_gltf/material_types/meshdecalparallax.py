@@ -9,7 +9,7 @@ class MeshDecalParallax:
         self.image_format = image_format
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
-        pBSDF=CurMat.nodes['Principled BSDF']
+        pBSDF=CurMat.nodes[loc('Principled BSDF')]
         sockets=bsdf_socket_names()
         pBSDF.inputs[sockets['Specular']].default_value = 0
         #Diffuse

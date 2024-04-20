@@ -1,0 +1,46 @@
+{
+  "Header": {
+    "WolvenKitVersion": "8.12.1-nightly.2024-01-08\u002Baf006c7d02fe4693a3d87822873ba322acd94c2d",
+    "WKitJsonVersion": "0.0.8",
+    "GameVersion": 2100,
+    "ExportedDateTime": "2024-01-11T20:29:08.1394444Z",
+    "DataType": "CR2W",
+    "ArchiveFileName": "D:\\cpmod\\archivexlconvert\\source\\archive\\base\\empty.streamingsector"
+  },
+  "Data": {
+    "Version": 195,
+    "BuildVersion": 0,
+    "RootChunk": {
+      "$type": "worldStreamingSector",
+      "category": "Exterior",
+      "cookingPlatform": "PLATFORM_PC",
+      "externInplaceResource": {
+        "DepotPath": {
+          "$type": "ResourcePath",
+          "$storage": "uint64",
+          "$value": "0"
+        },
+        "Flags": "Default"
+      },
+      "level": 2,
+      "localInplaceResource": [],
+      "nodeData": {
+        "BufferId": "0",
+        "Flags": 4063232,
+        "Type": "WolvenKit.RED4.Archive.Buffer.worldNodeDataBuffer, WolvenKit.RED4, Version=2.1.1.0, Culture=neutral, PublicKeyToken=null",
+        "Data": [
+        ]
+      },
+      "nodeRefs": [],
+      "nodes": [
+      ],
+      "persistentNodeIndex": 0,
+      "persistentNodes": [],
+      "variantIndices": [0
+      ],
+      "variantNodes": [],
+      "version": 62
+    },
+    "EmbeddedFiles": []
+  }
+}

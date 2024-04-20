@@ -62,14 +62,15 @@ class unknownMaterial:
                         print("\t"+param+"Scale = CreateShaderNodeRGB(CurMat, Data['"+param+"'],"+str(x)+','+str(y)+",'"+param+"',True)")
                 elif 'Scale' in param or 'scale' in param:
                     vector=create_node(CurMat.nodes,'ShaderNodeMapping',  (x,y), label=param)
-                    vector.inputs[0][0]=Data[param]['X']
-                    vector.inputs[0][1]=Data[param]['Y']
-                    vector.inputs[0][2]=Data[param]['Z']
-                    if VERBOSE:
-                        print("\tvector=create_node(CurMat.nodes,'ShaderNodeMapping',  ("+str(x)+','+str(y)+"), label='"+param+"')")
-                        print("\tvector.inputs[0][0]=Data['"+param+"']['X']")
-                        print("\tvector.inputs[0][1]=Data['"+param+"']['Y']")
-                        print("\tvector.inputs[0][2]=Data['"+param+"']['Z']")
+                    if Data[param]:
+                        vector.inputs[0][0]=Data[param]['X']
+                        vector.inputs[0][1]=Data[param]['Y']
+                        vector.inputs[0][2]=Data[param]['Z']
+                        if VERBOSE:
+                            print("\tvector=create_node(CurMat.nodes,'ShaderNodeMapping',  ("+str(x)+','+str(y)+"), label='"+param+"')")
+                            print("\tvector.inputs[0][0]=Data['"+param+"']['X']")
+                            print("\tvector.inputs[0][1]=Data['"+param+"']['Y']")
+                            print("\tvector.inputs[0][2]=Data['"+param+"']['Z']")
                 else:
                     print('dict not captured ',param)                    
                 y=y-ydelta

@@ -84,7 +84,7 @@ class Multilayered:
         self.ProjPath = str(ProjPath)
 
     def createBaseMaterial(self,matTemplateObj,mltemplate):
-        name=os.path.basename(mltemplate)
+        name=os.path.basename(mltemplate.replace('\\',os.sep))
         CT = imageFromRelPath(matTemplateObj["colorTexture"]["DepotPath"]["$value"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
         NT = imageFromRelPath(matTemplateObj["normalTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True,DepotPath=self.BasePath, ProjPath=self.ProjPath)
         RT = imageFromRelPath(matTemplateObj["roughnessTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True,DepotPath=self.BasePath, ProjPath=self.ProjPath)
@@ -92,7 +92,7 @@ class Multilayered:
 
         TileMult = float(matTemplateObj.get("tilingMultiplier",1))
 
-        NG = bpy.data.node_groups.new(name[:-11],"ShaderNodeTree")
+        NG = bpy.data.node_groups.new(name.split('.')[0],"ShaderNodeTree")
         NG['mlTemplate']=mltemplate
         vers=bpy.app.version
         if vers[0]<4:
@@ -161,6 +161,7 @@ class Multilayered:
         GNA = create_node(CurMat.nodes, "ShaderNodeVectorMath",(-400,-250),operation='ADD')
 
         GNS = create_node(CurMat.nodes, "ShaderNodeVectorMath", (-600,-250),operation='SUBTRACT')
+        GNS.name="NormalSubtract"
 
         GNGeo = create_node(CurMat.nodes, "ShaderNodeNewGeometry", (-800,-250))
 
@@ -175,10 +176,12 @@ class Multilayered:
     def createLayerMaterial(self,LayerName,LayerCount,CurMat,mlmaskpath,normalimgpath):
         NG = _getOrCreateLayerBlend()
         for x in range(LayerCount-1):
-            if os.path.exists(os.path.splitext(self.ProjPath + mlmaskpath)[0]+'_layers\\'+mlmaskpath.split('\\')[-1:][0][:-7]+"_"+str(x+1)+".png"):
+            if os.path.exists((os.path.splitext(self.ProjPath + mlmaskpath)[0]+'_layers\\'+mlmaskpath.split('\\')[-1:][0][:-7]+"_"+str(x+1)+".png").replace('\\',os.sep)):
                 MaskTexture = imageFromPath(os.path.splitext(self.ProjPath+ mlmaskpath)[0]+'_layers\\'+mlmaskpath.split('\\')[-1:][0][:-7]+"_"+str(x+1)+".png",self.image_format,isNormal = True)
+            elif os.path.exists((os.path.splitext(self.BasePath + mlmaskpath)[0]+'_layers\\'+mlmaskpath.split('\\')[-1:][0][:-7]+"_"+str(x+1)+".png").replace('\\',os.sep)):
+                MaskTexture = imageFromPath((os.path.splitext(self.BasePath + mlmaskpath)[0]+'_layers\\'+mlmaskpath.split('\\')[-1:][0][:-7]+"_"+str(x+1)+".png").replace('\\',os.sep),self.image_format,isNormal = True)
             else:
-                MaskTexture = imageFromPath(os.path.splitext(self.BasePath + mlmaskpath)[0]+"_"+str(x+1)+".png",self.image_format,isNormal = True)
+                print('Mask image not found for layer ',x+1)
 
 
 
@@ -218,22 +221,54 @@ class Multilayered:
         else:
             targetLayer="Mat_Mod_Layer_0"
 
-        CurMat.links.new(CurMat.nodes[targetLayer].outputs[0],CurMat.nodes['Principled BSDF'].inputs['Base Color'])
+        
+
+        # If theres more than 10 layers, mix them in 2 stacks then mix the stacks, trying to avoid SVM errors
+        if LayerCount>11:
+            MixLayerStacks = create_node(CurMat.nodes,"ShaderNodeGroup", (-1000,-180))
+            MixLayerStacks.node_tree = NG
+            MixLayerStacks.name = "MixLayerStacks"
+            Layer10="Layer_9"
+            LastLayer="Layer_"+str(LayerCount-2)
+            # Remove the links already made between 10 & 11
+            for out in CurMat.nodes[Layer10].outputs:
+            #    if out.type != 'RGBA':
+                for l in out.links:
+                    CurMat.links.remove(l)
+            CurMat.links.new(CurMat.nodes[Layer10].outputs[0],MixLayerStacks.inputs[0])
+            CurMat.links.new(CurMat.nodes[Layer10].outputs[1],MixLayerStacks.inputs[1])
+            CurMat.links.new(CurMat.nodes[Layer10].outputs[2],MixLayerStacks.inputs[2])
+            CurMat.links.new(CurMat.nodes[Layer10].outputs[3],MixLayerStacks.inputs[3])
+            CurMat.links.new(CurMat.nodes[LastLayer].outputs[0],MixLayerStacks.inputs[4])
+            CurMat.links.new(CurMat.nodes[LastLayer].outputs[1],MixLayerStacks.inputs[5])
+            CurMat.links.new(CurMat.nodes[LastLayer].outputs[2],MixLayerStacks.inputs[6])
+            CurMat.links.new(CurMat.nodes[LastLayer].outputs[3],MixLayerStacks.inputs[7])
+            factor=CreateShaderNodeValue(CurMat, 0.5, -1100,-250, "Factor")
+            CurMat.links.new(factor.outputs[0],MixLayerStacks.inputs[8])
+                        
+            # replace the connections from the bottom of the stack with these
+            CurMat.links.new(MixLayerStacks.outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
+            #CurMat.links.new(CurMat.nodes[targetLayer].outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
+            CurMat.links.new(MixLayerStacks.outputs[1],CurMat.nodes[loc('Principled BSDF')].inputs['Metallic'])
+            CurMat.links.new(MixLayerStacks.outputs[2],CurMat.nodes[loc('Principled BSDF')].inputs['Roughness'])            
+            targetLayer="MixLayerStacks"
+        else:
+            CurMat.links.new(CurMat.nodes[targetLayer].outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
+            CurMat.links.new(CurMat.nodes[targetLayer].outputs[2],CurMat.nodes[loc('Principled BSDF')].inputs['Roughness'])
+            CurMat.links.new(CurMat.nodes[targetLayer].outputs[1],CurMat.nodes[loc('Principled BSDF')].inputs['Metallic'])
+
         if normalimgpath:
             yoink = self.setGlobNormal(normalimgpath,CurMat,CurMat.nodes[targetLayer].outputs[3])
-            CurMat.links.new(yoink,CurMat.nodes['Principled BSDF'].inputs['Normal'])
+            CurMat.links.new(yoink,CurMat.nodes[loc('Principled BSDF')].inputs['Normal'])
         else:
-            CurMat.links.new(CurMat.nodes[targetLayer].outputs[3],CurMat.nodes['Principled BSDF'].inputs['Normal'])
-        CurMat.links.new(CurMat.nodes[targetLayer].outputs[2],CurMat.nodes['Principled BSDF'].inputs['Roughness'])
-        CurMat.links.new(CurMat.nodes[targetLayer].outputs[1],CurMat.nodes['Principled BSDF'].inputs['Metallic'])
-
+            CurMat.links.new(CurMat.nodes[targetLayer].outputs[3],CurMat.nodes[loc('Principled BSDF')].inputs['Normal'])
         return
 
 
     def create(self,Data,Mat):
         Mat['MLSetup']= Data["MultilayerSetup"]
         file = openJSON( Data["MultilayerSetup"] + ".json",mode='r',DepotPath=self.BasePath, ProjPath=self.ProjPath)
-        mlsetup = json.loads(file.read())
+        mlsetup = jsonloads(file.read())
         file.close()
         valid_json=json_ver_validate(mlsetup)
         if not valid_json:
@@ -311,7 +346,7 @@ class Multilayered:
                 MBI = imageFromPath(self.BasePath+Microblend,self.image_format,True)
 
             file = openJSON( material + ".json",mode='r',DepotPath=self.BasePath, ProjPath=self.ProjPath)
-            mltemplate = json.loads(file.read())
+            mltemplate = jsonloads(file.read())
             file.close()
             valid_json=json_ver_validate(mltemplate)
             if not valid_json:
@@ -321,7 +356,7 @@ class Multilayered:
             OverrideTable = createOverrideTable(mltemplate)#get override info for colors and what not
            # Mat[os.path.basename(material).split('.')[0]+'_cols']=OverrideTable["ColorScale"]
 
-            NG = bpy.data.node_groups.new(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#crLAer's node group
+            NG = bpy.data.node_groups.new(os.path.basename(Data["MultilayerSetup"].replace('\\',os.sep))[:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#crLAer's node group
             vers=bpy.app.version
             if vers[0]<4:
                 NG.inputs.new('NodeSocketColor','ColorScale')
@@ -376,10 +411,10 @@ class Multilayered:
 
             GroupOutN = create_node(NG.nodes, "NodeGroupOutput", (200,-100))
             LayerGroupN['mlTemplate']=material
-            if not bpy.data.node_groups.get(os.path.basename(material)[:-11]):
-                self.createBaseMaterial(mltemplate,material)
+            if not bpy.data.node_groups.get(os.path.basename(material.replace('\\',os.sep)).split('.')[0]):
+                self.createBaseMaterial(mltemplate,material.replace('\\',os.sep))
 
-            BaseMat = bpy.data.node_groups.get(os.path.basename(material)[:-11])
+            BaseMat = bpy.data.node_groups.get(os.path.basename(material.replace('\\',os.sep)).split('.')[0])
             if BaseMat:
                 BMN = create_node(NG.nodes,"ShaderNodeGroup", (-2000,0))
                 BMN.width = 300
@@ -439,7 +474,7 @@ class Multilayered:
             # Node for blending colorscale color with diffuse texture of mltemplate
             # Changed from multiply to overlay because multiply is a darkening blend mode, and colors appear too dark. Overlay is still probably wrong - jato
             if colorScale != "null":
-                ColorScaleMixN = create_node(NG.nodes,"ShaderNodeMixRGB",(-1400,100),blend_type='OVERLAY')
+                ColorScaleMixN = create_node(NG.nodes,"ShaderNodeMixRGB",(-1400,100),blend_type='MIX')
                 ColorScaleMixN.inputs[0].default_value=1
 
             # Microblend texture node
@@ -626,4 +661,4 @@ class Multilayered:
         else:
             LayerNormal=Data["GlobalNormal"]
 
-        self.createLayerMaterial(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_",LayerCount,CurMat,Data["MultilayerMask"],Data["GlobalNormal"])
+        self.createLayerMaterial(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_",LayerCount,CurMat,Data["MultilayerMask"],LayerNormal)

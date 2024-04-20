@@ -11,7 +11,7 @@ class VehicleMeshDecal:
 
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
-        pBSDF = CurMat.nodes['Principled BSDF']
+        pBSDF = CurMat.nodes[loc('Principled BSDF')]
         sockets=bsdf_socket_names()
         pBSDF.inputs[sockets['Specular']].default_value = 0
         
@@ -82,8 +82,8 @@ class VehicleMeshDecal:
         if "DirtOpacity" in Data:
             dirtOpacVal = CreateShaderNodeValue(CurMat, Data["DirtOpacity"], -1200,350, "DirtOpacity")
 
-        if "DamageInfluence" in Data:
-            dmgInfVal = CreateShaderNodeValue(CurMat, Data["DamageInfluence"]["Value"], -1200, 550, "DamageInfluence")
+       # if "DamageInfluence" in Data:
+       #     dmgInfVal = CreateShaderNodeValue(CurMat, Data["DamageInfluence"]["Value"], -1200, 550, "DamageInfluence")
 
         if "UseGradientMap" in Data:
             gradMapVal = CreateShaderNodeValue(CurMat, Data["UseGradientMap"], -1200, 750, "UseGradientMap")
