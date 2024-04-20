@@ -10,10 +10,20 @@ def export_colliders_to_phys(collections, filepath):
     print(collections)
     # Initialize an index counter
     index = 1
+    total_mass = 0
+    inertia_X = 0
+    inertia_Y = 0
+    inertia_Z = 0
     for collection in collections:
         # Iterate over objects in the collection
         for obj in bpy.data.collections[collection].objects:
             if 'collisionShape' in obj:
+                bpy.ops.object.set_physics_material()
+                if 'Mass' in obj.keys():
+                    total_mass += obj['Mass']
+                    inertia_X += obj["inertia_X"]
+                    inertia_Y += obj["inertia_Y"]
+                    inertia_Z += obj["inertia_Z"]
                 collider_info = {
                     "HandleId": str(index),
                     "Data": {
@@ -131,9 +141,9 @@ def export_colliders_to_phys(collections, filepath):
                                 "orientation": {"$type": "Quaternion", "i": 0, "j": 0, "k": 0, "r": 1},
                                 "position": {"$type": "Vector4", "W": 0, "X": 0, "Y": 0, "Z": 0}
                             },
-                            "inertia": {"$type": "Vector3", "X": 0, "Y": 0, "Z": 0},
-                            "linearDamping": 0,
-                            "mass": 0,
+                            "inertia": {"$type": "Vector3", "X": inertia_X, "Y": inertia_Y, "Z": inertia_Z},
+                            "linearDamping": -1,
+                            "mass": total_mass,
                             "maxAngularVelocity": -1,
                             "maxContactImpulse": -1,
                             "maxDepenetrationVelocity": -1,
