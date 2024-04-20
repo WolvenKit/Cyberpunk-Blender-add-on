@@ -422,13 +422,18 @@ class CP77_PT_PanelProps(PropertyGroup):
         max=1.0
     )
 
-    smooth_factor: bpy.props.FloatProperty(
+    smooth_factor: FloatProperty(
         name="Smooth Factor", 
         default=0.5, 
         min=0.0, 
         max=1.0
     )
 
+    remap_depot: BoolProperty(
+        name="Remap Depot",
+        default=False,
+        description="replace the json depot path with the one in prefs"
+    )
 
 class CP77CollisionGenerator(Operator):
     bl_idname = "generate_cp77.collisions"
@@ -1377,8 +1382,8 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
 class CP77_PT_ImportWithMaterial(Panel):
     bl_space_type = 'FILE_BROWSER'
     bl_region_type = 'TOOL_PROPS'
-    bl_label = "With Materials"
-
+    bl_label = "With Materials"  
+    
     @classmethod
     def poll(cls, context):
         operator = context.space_data.active_operator
@@ -1390,6 +1395,7 @@ class CP77_PT_ImportWithMaterial(Panel):
     
     def draw(self, context):
         cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences
+        props = context.scene.cp77_panel_props
         operator = context.space_data.active_operator
         layout = self.layout
         row = layout.row(align=True)
@@ -1403,7 +1409,7 @@ class CP77_PT_ImportWithMaterial(Panel):
         row.prop(operator, 'use_cycles')
         if cp77_addon_prefs.experimental_features:
             row = layout.row(align=True)
-            row.prop(self,"remap_depot")
+            row.prop(props,"remap_depot")
         if operator.use_cycles:
             row = layout.row(align=True)
             row.prop(operator, 'update_gi')
