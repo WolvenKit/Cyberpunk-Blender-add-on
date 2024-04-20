@@ -256,7 +256,7 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
             mesh.update()
             bm.free()
             capsule = bpy.data.objects.new(name, mesh)
-            set_collider_props(capsule, collision_shape, physics_material, collider_type)
+            set_collider_props(capsule, shape, physics_material, collider_type)
             capsule.location = center
             capsule.rotation_quaternion[1] = 1
             bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
@@ -284,6 +284,6 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
             mesh.update()
             bm.free()
             sphere = bpy.data.objects.new(name, mesh)
-            set_collider_props(sphere, collision_shape, physics_material, collider_type)
+            set_collider_props(sphere, shape, physics_material, collider_type)
             colliderCollection.objects.link(sphere)
 
