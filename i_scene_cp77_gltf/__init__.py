@@ -1466,7 +1466,8 @@ class CP77Import(Operator,ImportHelper):
 
     def execute(self, context):
         SetCyclesRenderer(self.use_cycles, self.update_gi)
-        CP77GLBimport(self, self.exclude_unused_mats, self.image_format, self.with_materials, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, self.appearances,self.remap_depot)
+        props = context.scene.cp77_panel_props
+        CP77GLBimport(self, self.exclude_unused_mats, self.image_format, self.with_materials, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, self.appearances, props.remap_depot)
 
         return {'FINISHED'}
 
