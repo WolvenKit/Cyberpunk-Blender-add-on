@@ -19,7 +19,7 @@ You can find detailed documentation (and much else) on the [Cyberpunk 2077 moddi
 
 - [Characters](https://wiki.redmodding.org/wolvenkit/modding-community/exporting-to-blender) and [vehicles](https://wiki.redmodding.org/wolvenkit/modding-community/exporting-vehicles): Point the plugin at the Wolvenkit export and it will include all meshes and materials from your project, setting them up to match the in-game appearance you specified.
 
-- Colliders (phys.json): Import colliders from Wolvenkit exported .phys files for easy visualization and editing
+- Colliders: Import colliders from Wolvenkit exported .phys and entity jsons for easy visualization and editing
 
 - Cyberpunk 2077 [animations](https://wiki.redmodding.org/wolvenkit/modding-community/exporting-to-blender/exporting-rigs-and-anims): Play animations directly on your exported models — either by [importing them from file](https://wiki.redmodding.org/wolvenkit/modding-community/exporting-to-blender/exporting-rigs-and-anims), or by using the bundled rig resources via the Cyberpunk Animations Panel
 
@@ -31,7 +31,7 @@ You can find detailed documentation (and much else) on the [Cyberpunk 2077 moddi
 
 - [Animations](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#animations-1): Export new and edited animations to GLB
 
-- Collisions: Export modified collision shapes to .phys.json
+- Collisions: Export generated collision shapes to .phys.json
 
 ## Tools and Shortcuts:
 > Hint: You can find more detailed documentation on the [Cyberpunk 2077 Modding Wiki](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite)
@@ -50,8 +50,8 @@ You can find detailed documentation (and much else) on the [Cyberpunk 2077 moddi
 
 ### Collision Tools and Generator
 - Automatic generation of convex colliders matched perfectly to the shape of your mesh, the number of vertices to sample should be set to match the number set in the .phys file in order to ensure successful export.
-- Generate box and capsule colliders with either user specified sizing or sized automatically to match the selected mesh
-- Export edited collision bodies back to .phys ***currently requires a wolvenkit converted .phys.json file
+- Generate colliders with either user specified sizing or sized automatically to match the selected mesh
+- Export your generated collision bodies to .phys.json for use in game.
 
 ### Material Exports
 - [Hair profiles](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#hair-profiles-.hp): export custom hair profiles to `.hp.json` for easy import with Wolvenkit.  
@@ -63,12 +63,11 @@ You can find detailed documentation (and much else) on the [Cyberpunk 2077 moddi
 
 # Requirements
 
-1) **Blender** version 4.0 is supported
-<br>**Blender** version 3.6 or higher is *highly recommended*
-<br>**Blender** version 3.1 or higher is *required*
+1) **Blender** version 4.0 or higher is *highly recommended*
+<br>**Blender** versions below 3.6 will not work and users of these versions should update Blender before installing the plugin
 <br>https://www.blender.org/<br/>
 
-2) **WolvenKit** version 8.11 or higher
+2) **WolvenKit** version 8.13 or higher
 <br>https://github.com/WolvenKit/WolvenKit<br/>
 
 ---
