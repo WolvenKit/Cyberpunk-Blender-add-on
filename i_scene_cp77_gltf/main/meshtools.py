@@ -232,10 +232,15 @@ def CP77UvChecker(self, context):
                 uvchecker = mat
                 mat_assigned = True
         if not mat_assigned:
-            current_mat = context.object.active_material.name
-            mesh['uvCheckedMat'] = current_mat
-            bpy.data.meshes[mesh.name].materials.append(bpy_mats['UV_Checker'])
-            i = mesh.data.materials.find('UV_Checker')
+            try:
+                current_mat = context.object.active_material.name
+                mesh['uvCheckedMat'] = current_mat
+                bpy.data.meshes[mesh.name].materials.append(bpy_mats['UV_Checker'])
+                i = mesh.data.materials.find('UV_Checker')
+            except AttributeError:
+                bpy.data.meshes[mesh.name].materials.append(bpy_mats['UV_Checker'])
+                i = mesh.data.materials.find('UV_Checker')
+           
             if i >= 0:
                 mesh.active_material_index = i
             if current_mode != 'EDIT':
@@ -254,20 +259,22 @@ def CP77UvUnChecker(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
     current_mode = context.mode
     uvchecker = 'UV_Checker'
+    original_mat_name = None
     for mesh in selected_meshes:
-        if 'uvCheckedMat' in mesh:
+        if 'uvCheckedMat' in mesh.keys() and 'uvCheckedMat' is not None:
             original_mat_name = mesh['uvCheckedMat']
         if uvchecker in mesh.data.materials:
             # Find the index of the material slot with the specified name
             material_index = mesh.data.materials.find(uvchecker)
             mesh.data.materials.pop(index=material_index)
-            i = mesh.data.materials.find(original_mat_name)
-            bpy.ops.wm.properties_remove(data_path="object", property_name="uvCheckedMat")
-            if i >= 0:
-                mesh.active_material_index = i
-            if current_mode != 'EDIT':
-                bpy.ops.object.mode_set(mode='EDIT')
-                bpy.ops.object.material_slot_assign()
+            if original_mat_name is not None:
+                i = mesh.data.materials.find(original_mat_name)
+                bpy.ops.wm.properties_remove(data_path="object", property_name="uvCheckedMat")
+                if i >= 0:
+                    mesh.active_material_index = i
+                if current_mode != 'EDIT':
+                    bpy.ops.object.mode_set(mode='EDIT')
+                    bpy.ops.object.material_slot_assign()
         if context.mode != current_mode:
             bpy.ops.object.mode_set(mode=current_mode)
                 
