@@ -1131,7 +1131,7 @@ class CP77_PT_MeshTools(Panel):
                 box = layout.box()
                 box.label(icon_value=custom_icon_col["sculpt"]["SCULPT"].icon_id, text="Modelling:")
                 row = box.row(align=True)
-                if context.object.active_material and context.object.active_material.name == 'UV_Checker':
+                if context.active_object and context.active_object.type == 'MESH' and context.object.active_material and context.object.active_material.name == 'UV_Checker':
                     row.operator("cp77.uv_unchecker",  text="Remove UV Checker")
                 else:
                     row.operator("cp77.uv_checker", text="UV Checker")
