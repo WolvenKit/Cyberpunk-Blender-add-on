@@ -13,7 +13,7 @@ rig_dir = get_rig_dir()
 def CP77CollectionList(self, context):
     items = []
     ## don't include these as their not useful
-    excluded_names = ["Collection", "Scene Collection"]
+    excluded_names = ["Collection", "Scene Collection", "glTF_not_exported"]
 
     for collection in bpy.data.collections:
         if collection.name not in excluded_names:
@@ -140,28 +140,31 @@ def CP77ArmatureSet(self, context):
 
 
 def trans_weights(self, context):
+    current_mode = context.mode
     props = context.scene.cp77_panel_props
     source_mesh_name = props.mesh_source
     target_mesh_name = props.mesh_target
+    active_objs = context.selected_objects
     # Get the source collection
     source_mesh = bpy.data.collections.get(source_mesh_name)
     
     # Get the target collection
     target_mesh = bpy.data.collections.get(target_mesh_name)
+    
+    
 
     if source_mesh and target_mesh:
+        if current_mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
         # Deselect all objects in the scene
         bpy.ops.object.select_all(action='DESELECT')
         
-        # Iterate through objects in the source collection
+        # Select the objects in the source collection
         for source_obj in source_mesh.objects:
             source_obj.select_set(True)
             
         # Set the active object to the last selected source object
         bpy.context.view_layer.objects.active = source_obj
-
-        # Switch to OBJECT mode
-        bpy.ops.object.mode_set(mode='OBJECT')
         
         # Iterate through objects in the target collection
         for target_obj in target_mesh.objects:
@@ -175,9 +178,27 @@ def trans_weights(self, context):
             layers_select_dst='NAME',
             layers_select_src='ALL'
         )
-
-        # Deselect all objects again
         bpy.ops.object.select_all(action='DESELECT')
+        context.view_layer.objects.active = None
+        
+    for obj in active_objs:
+        obj.select_set(True)
+        context.view_layer.objects.active = obj
+   
+        
+    if context.mode != current_mode:
+        try:
+            bpy.ops.object.mode_set(mode=current_mode)
+            
+        except TypeError:
+      
+            if current_mode == 'PAINT_WEIGHT':
+                bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
+            elif current_mode == 'EDIT_MESH':
+                bpy.ops.object.mode_set(mode='EDIT')
+            elif current_mode == 'PAINT_VERTEX':
+                bpy.ops.object.mode_set(mode='VERTEX_PAINT')
+    
         
 
 def CP77UvChecker(self, context):
