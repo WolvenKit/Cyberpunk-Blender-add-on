@@ -44,7 +44,7 @@ from .importers.phys_import import *
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
     "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, Doctor Presto, shotlastc, Rudolph2109, Holopointz",
-    "version": (1, 5, 5, 2),
+    "version": (1, 5, 5, 3),
     "blender": (4, 0, 0),
     "location": "File > Import-Export",
     "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
@@ -422,13 +422,18 @@ class CP77_PT_PanelProps(PropertyGroup):
         max=1.0
     )
 
-    smooth_factor: bpy.props.FloatProperty(
+    smooth_factor: FloatProperty(
         name="Smooth Factor", 
         default=0.5, 
         min=0.0, 
         max=1.0
     )
 
+    remap_depot: BoolProperty(
+        name="Remap Depot",
+        default=False,
+        description="replace the json depot path with the one in prefs"
+    )
 
 class CP77CollisionGenerator(Operator):
     bl_idname = "generate_cp77.collisions"
@@ -1126,7 +1131,7 @@ class CP77_PT_MeshTools(Panel):
                 box = layout.box()
                 box.label(icon_value=custom_icon_col["sculpt"]["SCULPT"].icon_id, text="Modelling:")
                 row = box.row(align=True)
-                if context.object.active_material and context.object.active_material.name == 'UV_Checker':
+                if context.active_object and context.active_object.type == 'MESH' and context.object.active_material and context.object.active_material.name == 'UV_Checker':
                     row.operator("cp77.uv_unchecker",  text="Remove UV Checker")
                 else:
                     row.operator("cp77.uv_checker", text="UV Checker")
@@ -1377,8 +1382,8 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
 class CP77_PT_ImportWithMaterial(Panel):
     bl_space_type = 'FILE_BROWSER'
     bl_region_type = 'TOOL_PROPS'
-    bl_label = "With Materials"
-
+    bl_label = "With Materials"  
+    
     @classmethod
     def poll(cls, context):
         operator = context.space_data.active_operator
@@ -1390,6 +1395,7 @@ class CP77_PT_ImportWithMaterial(Panel):
     
     def draw(self, context):
         cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences
+        props = context.scene.cp77_panel_props
         operator = context.space_data.active_operator
         layout = self.layout
         row = layout.row(align=True)
@@ -1403,7 +1409,7 @@ class CP77_PT_ImportWithMaterial(Panel):
         row.prop(operator, 'use_cycles')
         if cp77_addon_prefs.experimental_features:
             row = layout.row(align=True)
-            row.prop(self,"remap_depot")
+            row.prop(props,"remap_depot")
         if operator.use_cycles:
             row = layout.row(align=True)
             row.prop(operator, 'update_gi')
@@ -1460,7 +1466,8 @@ class CP77Import(Operator,ImportHelper):
 
     def execute(self, context):
         SetCyclesRenderer(self.use_cycles, self.update_gi)
-        CP77GLBimport(self, self.exclude_unused_mats, self.image_format, self.with_materials, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, self.appearances,self.remap_depot)
+        props = context.scene.cp77_panel_props
+        CP77GLBimport(self, self.exclude_unused_mats, self.image_format, self.with_materials, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, self.appearances, props.remap_depot)
 
         return {'FINISHED'}
 
