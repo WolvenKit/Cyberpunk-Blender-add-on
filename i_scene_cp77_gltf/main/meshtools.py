@@ -13,7 +13,7 @@ rig_dir = get_rig_dir()
 def CP77CollectionList(self, context):
     items = []
     ## don't include these as their not useful
-    excluded_names = ["Collection", "Scene Collection"]
+    excluded_names = ["Collection", "Scene Collection", "glTF_not_exported"]
 
     for collection in bpy.data.collections:
         if collection.name not in excluded_names:
@@ -140,28 +140,31 @@ def CP77ArmatureSet(self, context):
 
 
 def trans_weights(self, context):
+    current_mode = context.mode
     props = context.scene.cp77_panel_props
     source_mesh_name = props.mesh_source
     target_mesh_name = props.mesh_target
+    active_objs = context.selected_objects
     # Get the source collection
     source_mesh = bpy.data.collections.get(source_mesh_name)
     
     # Get the target collection
     target_mesh = bpy.data.collections.get(target_mesh_name)
+    
+    
 
     if source_mesh and target_mesh:
+        if current_mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
         # Deselect all objects in the scene
         bpy.ops.object.select_all(action='DESELECT')
         
-        # Iterate through objects in the source collection
+        # Select the objects in the source collection
         for source_obj in source_mesh.objects:
             source_obj.select_set(True)
             
         # Set the active object to the last selected source object
         bpy.context.view_layer.objects.active = source_obj
-
-        # Switch to OBJECT mode
-        bpy.ops.object.mode_set(mode='OBJECT')
         
         # Iterate through objects in the target collection
         for target_obj in target_mesh.objects:
@@ -175,9 +178,27 @@ def trans_weights(self, context):
             layers_select_dst='NAME',
             layers_select_src='ALL'
         )
-
-        # Deselect all objects again
         bpy.ops.object.select_all(action='DESELECT')
+        context.view_layer.objects.active = None
+        
+    for obj in active_objs:
+        obj.select_set(True)
+        context.view_layer.objects.active = obj
+   
+        
+    if context.mode != current_mode:
+        try:
+            bpy.ops.object.mode_set(mode=current_mode)
+            
+        except TypeError:
+      
+            if current_mode == 'PAINT_WEIGHT':
+                bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
+            elif current_mode == 'EDIT_MESH':
+                bpy.ops.object.mode_set(mode='EDIT')
+            elif current_mode == 'PAINT_VERTEX':
+                bpy.ops.object.mode_set(mode='VERTEX_PAINT')
+    
         
 
 def CP77UvChecker(self, context):
@@ -211,10 +232,15 @@ def CP77UvChecker(self, context):
                 uvchecker = mat
                 mat_assigned = True
         if not mat_assigned:
-            current_mat = context.object.active_material.name
-            mesh['uvCheckedMat'] = current_mat
-            bpy.data.meshes[mesh.name].materials.append(bpy_mats['UV_Checker'])
-            i = mesh.data.materials.find('UV_Checker')
+            try:
+                current_mat = context.object.active_material.name
+                mesh['uvCheckedMat'] = current_mat
+                bpy.data.meshes[mesh.name].materials.append(bpy_mats['UV_Checker'])
+                i = mesh.data.materials.find('UV_Checker')
+            except AttributeError:
+                bpy.data.meshes[mesh.name].materials.append(bpy_mats['UV_Checker'])
+                i = mesh.data.materials.find('UV_Checker')
+           
             if i >= 0:
                 mesh.active_material_index = i
             if current_mode != 'EDIT':
@@ -233,20 +259,22 @@ def CP77UvUnChecker(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
     current_mode = context.mode
     uvchecker = 'UV_Checker'
+    original_mat_name = None
     for mesh in selected_meshes:
-        if 'uvCheckedMat' in mesh:
+        if 'uvCheckedMat' in mesh.keys() and 'uvCheckedMat' is not None:
             original_mat_name = mesh['uvCheckedMat']
         if uvchecker in mesh.data.materials:
             # Find the index of the material slot with the specified name
             material_index = mesh.data.materials.find(uvchecker)
             mesh.data.materials.pop(index=material_index)
-            i = mesh.data.materials.find(original_mat_name)
-            bpy.ops.wm.properties_remove(data_path="object", property_name="uvCheckedMat")
-            if i >= 0:
-                mesh.active_material_index = i
-            if current_mode != 'EDIT':
-                bpy.ops.object.mode_set(mode='EDIT')
-                bpy.ops.object.material_slot_assign()
+            if original_mat_name is not None:
+                i = mesh.data.materials.find(original_mat_name)
+                bpy.ops.wm.properties_remove(data_path="object", property_name="uvCheckedMat")
+                if i >= 0:
+                    mesh.active_material_index = i
+                if current_mode != 'EDIT':
+                    bpy.ops.object.mode_set(mode='EDIT')
+                    bpy.ops.object.material_slot_assign()
         if context.mode != current_mode:
             bpy.ops.object.mode_set(mode=current_mode)
                 
