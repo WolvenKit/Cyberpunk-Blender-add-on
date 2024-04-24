@@ -239,6 +239,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
         #print(len(nodes))
         #nodes=[]
         for i,e in enumerate(nodes):
+            print(i)
             data = e['Data']
             type = data['$type']
             match type:
@@ -334,6 +335,9 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
     for fpn,filepath in enumerate(jsonpath):
         projectjson=os.path.join(path,'base',os.path.basename(project)+'.streamingsector.json')
         if filepath==projectjson:
+            continue
+        
+        if 'sim_' in filepath:
             continue
         if VERBOSE:
             print(projectjson)
@@ -433,12 +437,14 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         new.children.link(newchild)
                                         for old_obj in child.objects:                            
                                             obj=old_obj.copy()  
+                                            obj.color = (0.567942, 0.0247339, 0.600028, 1)
                                             newchild.objects.link(obj)                                     
                                             obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
                                             if 'Armature' in obj.name:
                                                 obj.hide_set(True)
                                     for old_obj in group.objects:                            
                                         obj=old_obj.copy()  
+                                        obj.color = (0.567942, 0.0247339, 0.600028, 1)
                                         new.objects.link(obj)                                     
                                         obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
                                         if 'Armature' in obj.name:
@@ -527,6 +533,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                 meshYScale=curvelength/meshyLength
                                 for old_obj in group.all_objects:                            
                                     obj=old_obj.copy()  
+                                    obj.color = (0.0380098, 0.595213, 0.600022, 1)
                                     new.objects.link(obj) 
                                     if obj.type=='MESH':
                                         curveMod=obj.modifiers.new('Curve','CURVE')
@@ -543,51 +550,69 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
     
                     case 'worldInstancedMeshNode' :
                         #print('worldInstancedMeshNode')
-                        meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep) 
-                        num=data['worldTransformsBuffer']['numElements']
-                        start=data['worldTransformsBuffer']['startIndex']
-                        if(meshname != 0):
-                            #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
-                            groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
-                            while len(groupname) > 63:
-                                groupname = groupname[:-1]
-                            group=Masters.children.get(groupname)
-                            if (group):
-                                #print('Group found for ',groupname)                               
-                                for idx in range(start, start+num):
-                                    #create the linked copy of the group of mesh
-                                
-                                    new=bpy.data.collections.new(groupname)
-                                    Sector_coll.children.link(new)
-                                    new['nodeType']=type
-                                    new['nodeIndex']=i
-                                    new['nodeDataIndex']=inst['nodeDataIndex']
-                                    new['instance_idx']=idx
-                                    new['mesh']=meshname
-                                    new['debugName']=e['Data']['debugName']
-                                    new['sectorName']=sectorName 
-                                    for old_obj in group.all_objects:                            
-                                        obj=old_obj.copy()  
-                                        new.objects.link(obj)                                    
-                                        if 'Data' in data['worldTransformsBuffer']['sharedDataBuffer'].keys():
-                                            inst_trans=data['worldTransformsBuffer']['sharedDataBuffer']['Data']['buffer']['Data']['Transforms'][idx]
-                                                
-                                        elif 'HandleRefId' in data['worldTransformsBuffer']['sharedDataBuffer'].keys():
-                                            bufferID = int(data['worldTransformsBuffer']['sharedDataBuffer']['HandleRefId'])
-                                            new['bufferID']=bufferID
-                                            ref=e
-                                            for n in nodes:
-                                                if n['HandleId']==str(bufferID-1):
-                                                    ref=n
-                                            inst_trans = ref['Data']['worldTransformsBuffer']['sharedDataBuffer']['Data']['buffer']['Data']['Transforms'][idx]       
-                                        else :
-                                            print(e)
-                                        obj.location = get_pos(inst_trans)                                         
-                                        obj.rotation_quaternion=get_rot(inst_trans)
-                                        obj.scale = get_scale(inst_trans)
-                                        obj['matrix']=obj.matrix_world
-                                        #if obj.location.x == 0:
-                                        #    print('Location @ 0 for Mesh - ',meshname, ' - ',i,'HandleId - ', e['HandleId'])
+                        instances = [x for x in t if x['NodeIndex'] == i]
+                        for idx,inst in enumerate(instances):
+                            meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep) 
+                            num=data['worldTransformsBuffer']['numElements']
+                            start=data['worldTransformsBuffer']['startIndex']
+                            if(meshname != 0):
+                                #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
+                                groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
+                                while len(groupname) > 63:
+                                    groupname = groupname[:-1]
+                                group=Masters.children.get(groupname)
+                                if (group):
+                                    #print('Group found for ',groupname)    
+                                    NDI_Coll_name = 'NDI'+str(inst['nodeDataIndex'])+'_'+groupname
+                                    while len(NDI_Coll_name) > 63:
+                                            NDI_Coll_name = NDI_Coll_name[:-1]
+                                    NDI_Coll = bpy.data.collections.new(NDI_Coll_name)
+                                    Sector_coll.children.link(NDI_Coll)
+                                    NDI_Coll['nodeType']=type
+                                    NDI_Coll['nodeIndex']=i
+                                    NDI_Coll['nodeDataIndex']=inst['nodeDataIndex']
+                                    NDI_Coll['mesh']=meshname
+                                    NDI_Coll['debugName']=e['Data']['debugName']
+                                    NDI_Coll['sectorName']=sectorName 
+                                    NDI_Coll['numElements']=num
+                                    for El_idx in range(start, start+num):
+                                        #create the linked copy of the group of mesh
+                                        new_groupname = 'NDI'+str(inst['nodeDataIndex'])+'_'+str(El_idx)+'_'+groupname
+                                        while len(new_groupname) > 63:
+                                            new_groupname = new_groupname[:-1]
+                                        new = bpy.data.collections.new(new_groupname)
+                                        NDI_Coll.children.link(new)
+                                        new['nodeType']=type
+                                        new['nodeIndex']=i
+                                        new['nodeDataIndex']=inst['nodeDataIndex']
+                                        new['Element_idx']=El_idx
+                                        new['mesh']=meshname
+                                        new['debugName']=e['Data']['debugName']
+                                        new['sectorName']=sectorName 
+                                        for old_obj in group.all_objects:                            
+                                            obj=old_obj.copy()  
+                                            new.objects.link(obj)                                    
+                                            if 'Data' in data['worldTransformsBuffer']['sharedDataBuffer'].keys():
+                                                inst_trans=data['worldTransformsBuffer']['sharedDataBuffer']['Data']['buffer']['Data']['Transforms'][El_idx]
+                                                    
+                                            elif 'HandleRefId' in data['worldTransformsBuffer']['sharedDataBuffer'].keys():
+                                                bufferID = int(data['worldTransformsBuffer']['sharedDataBuffer']['HandleRefId'])
+                                                new['bufferID']=bufferID
+                                                ref=e
+                                                for n in nodes:
+                                                    if n['HandleId']==str(bufferID-1):
+                                                        ref=n
+                                                inst_trans = ref['Data']['worldTransformsBuffer']['sharedDataBuffer']['Data']['buffer']['Data']['Transforms'][El_idx]       
+                                            else :
+                                                print(e)
+                                            obj.location = get_pos(inst_trans)                                         
+                                            obj.rotation_quaternion=get_rot(inst_trans)
+                                            obj.scale = get_scale(inst_trans)
+                                            obj['matrix']=obj.matrix_world       
+                                            obj.color = (0.785188, 0.409408, 0.0430124, 1)
+
+                                            #if obj.location.x == 0:
+                                            #    print('Location @ 0 for Mesh - ',meshname, ' - ',i,'HandleId - ', e['HandleId'])
 
                             else:
                                 print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
@@ -779,7 +804,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                     obj.location = get_pos(inst)
                                                     obj.rotation_quaternion = get_rot(inst)
                                                     obj.scale = get_scale(inst)                                                                                                        
-                                                    
+                                                    obj.color = (0.3, 0.3, 0.3, 1)
+
                                                     if 'Armature' in obj.name:
                                                         obj.hide_set(True)
                                                     if type=='worldRotatingMeshNode':
@@ -813,6 +839,18 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                             groupname = groupname[:-1]
                                         group=Masters.children.get(groupname)
                                         if (group):
+                                            NDI_Coll_name = 'NDI'+str(inst['nodeDataIndex'])+'_'+groupname
+                                            while len(NDI_Coll_name) > 63:
+                                                    NDI_Coll_name = NDI_Coll_name[:-1]
+                                            NDI_Coll = bpy.data.collections.new(NDI_Coll_name)
+                                            Sector_coll.children.link(NDI_Coll)
+                                            NDI_Coll['nodeType']=type
+                                            NDI_Coll['nodeIndex']=i
+                                            NDI_Coll['nodeDataIndex']=inst['nodeDataIndex']
+                                            NDI_Coll['mesh']=meshname
+                                            NDI_Coll['debugName']=e['Data']['debugName']
+                                            NDI_Coll['sectorName']=sectorName 
+                                            NDI_Coll['numElements']=num
                                             #print('Glb found - ',glbfoundname)
                                             #print('Glb found, looking for instances of ',i)
                                             instances = [x for x in t if x['NodeIndex'] == i]
@@ -820,7 +858,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 #print('Node - ',i, ' - ',meshname)
                                                 for idx in range(start, start+num):
                                                     new=bpy.data.collections.new(groupname)
-                                                    Sector_coll.children.link(new)
+                                                    NDI_Coll.children.link(new)
                                                     new['nodeType']=type
                                                     new['nodeIndex']=i
                                                     new['nodeDataIndex']=inst['nodeDataIndex']
