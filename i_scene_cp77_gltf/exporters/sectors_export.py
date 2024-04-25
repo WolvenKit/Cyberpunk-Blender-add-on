@@ -465,7 +465,7 @@ def exportSectors( filename):
                                 obj_col=find_col(i,idx,Sector_coll)    
                                 if obj_col :
                                     # elements are in collectors inside the top one, not just objects
-                                    if len(obj_col.children)>0:
+                                    if len(obj_col.children)>0 and len(obj_col.children[0].objects)>0:
                                         obj=obj_col.children[0].objects[0]
                                         # Check for Position and if changed delete the original and add to the new sector
                                         if obj.matrix_world!=Matrix(obj_col['matrix']):
@@ -475,9 +475,10 @@ def exportSectors( filename):
                                             create_static_from_WIMN(e,  template_nodes,  new_HID)                                            
                                             new_ni=len(template_nodes)-1
                                             for child in obj_col.children:
-                                                # might need to convert instanced to static here, not sure what the best approach is.
-                                                createNodeData(template_nodeData, child, new_ni, child.objects[0], ID)
-                                                ID+=1
+                                                if len(child.objects)>0:
+                                                    # might need to convert instanced to static here, not sure what the best approach is.
+                                                    createNodeData(template_nodeData, child, new_ni, child.objects[0], ID)
+                                                    ID+=1
                                     else:
                                         # empty collector, so just delete
                                         if obj_col:
@@ -567,7 +568,7 @@ def exportSectors( filename):
 
                                 if obj_col :
                                     # elements are in collectors inside the top one, not just objects
-                                    if len(obj_col.children)>0:
+                                    if len(obj_col.children)>0 and len(obj_col.children[0].objects)>0:
                                         obj=obj_col.children[0].objects[0]
                                         # Check for Position and if changed delete the original and add to the new sector
                                         if obj.matrix_world!=Matrix(obj_col['matrix']):
@@ -580,9 +581,10 @@ def exportSectors( filename):
 
 
                                             for child in obj_col.children:
-                                                # might need to convert instanced to static here, not sure what the best approach is.
-                                                createNodeData(template_nodeData, child, new_WIDM_static, child.objects[0],ID)
-                                                ID+=1
+                                                if len(child.objects)>0:
+                                                    # might need to convert instanced to static here, not sure what the best approach is.
+                                                    createNodeData(template_nodeData, child, new_WIDM_static, child.objects[0],ID)
+                                                    ID+=1
                                     else:
                                         # empty collector, so just delete
                                         if obj_col:
@@ -606,7 +608,7 @@ def exportSectors( filename):
                             for s,shape in enumerate(act['Shapes']):
                                 collname='NodeDataIndex_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s)    
                                 if collname in sector_Collisions_coll.objects:
-                                    #print('found')
+                                    print('found ',collname)
                                     crash= sector_Collisions_coll.objects[collname]
                                     if Matrix(crash['matrix']).to_translation()!=crash.matrix_world.to_translation():
                                         print('collision moved - cant process this yet')
@@ -631,15 +633,16 @@ def exportSectors( filename):
                                             impacts = template_nodes[len(template_nodes)-1]
                                             impacts['Data']['compiledData']['Data']['Actors']=[]
                                             #need to update the position data
-                                        
+                                      
                                         # Add the current actor to the actors
                                         impacts['Data']['compiledData']['Data']['Actors'].append(copy.deepcopy(Actors[idx]))
-                                        #update its position
+                                        #update its position                                        
                                         ddyer=impacts['Data']['compiledData']['Data']['Actors'][len(impacts['Data']['compiledData']['Data']['Actors'])-1]
                                         ddyer['Position']={'$type': 'WorldPosition',"x": { "$type": "FixedPoint", "Bits": int(crash.location[0]*131072)  },"y": {"$type": "FixedPoint","Bits": int(crash.location[1]*131072) },
                                                            "z": { "$type": "FixedPoint", "Bits": int(crash.location[2]*131072) }}
-                                        ddyer['Orientation']={'$type': 'Quaternion','r':float("{:.9g}".format(crash.rotation_quaternion[0])),'i':float("{:.9g}".format(obj.rotation_quaternion[1])),'j':float("{:.9g}".format(crash.rotation_quaternion[2])),'k':float("{:.9g}".format(crash.rotation_quaternion[3]))}
+                                        ddyer['Orientation']={'$type': 'Quaternion','r':float("{:.9g}".format(crash.rotation_quaternion[0])),'i':float("{:.9g}".format(crash.rotation_quaternion[1])),'j':float("{:.9g}".format(crash.rotation_quaternion[2])),'k':float("{:.9g}".format(crash.rotation_quaternion[3]))}
                                         ddyer['Scale']= {'$type': 'Vector3', 'X':  float("{:.9g}".format(crash.scale[0])), 'Y':  float("{:.9g}".format(crash.scale[1])), 'Z':  float("{:.9g}".format(crash.scale[2]))}
+                                        ddyer['Shapes'][s]['Size']= { "$type": "Vector3", "X": crash.dimensions[0]/2, "Y": crash.dimensions[1]/2, "Z": crash.dimensions[2]/2  }
                                         #update the numActors property
                                         impacts['Data']['numActors']=len(impacts['Data']['compiledData']['Data']['Actors'])
                                         

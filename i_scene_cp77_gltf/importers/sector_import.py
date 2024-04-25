@@ -979,7 +979,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     if shape['ShapeType']=='Box' or shape['ShapeType']=='Capsule':
                                         #print('Box Collision Node')
                                         #pprint(act['Shapes'])
-                                        ssize=shape['Size']
+                                        ssize=(2*shape['Size']['X']*act['Scale']['X'],2*shape['Size']['Y']*act['Scale']['Y'],2*shape['Size']['Z']*act['Scale']['Z'])
                                         spos=get_pos(shape)
                                         srot=get_rot(shape)
                                         arot_q = Quaternion((arot[0],arot[1],arot[2],arot[3]))
@@ -987,9 +987,9 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         rot= arot_q @ srot_q
                                         loc=(spos[0]+x,spos[1]+y,spos[2]+z)
                                         if shape['ShapeType']=='Box':
-                                            bpy.ops.mesh.primitive_cube_add(size=1/scale_factor, scale=(ssize['X'],ssize['Y'],ssize['Z']),location=loc)
+                                            bpy.ops.mesh.primitive_cube_add(size=1/scale_factor, scale=(ssize[0],ssize[1],ssize[2]),location=(loc[0],loc[1],loc[2]))
                                         elif shape['ShapeType']=='Capsule':
-                                            bpy.ops.mesh.primitive_cylinder_add(radius=5/scale_factor, depth=1/scale_factor, scale=(ssize['X'],ssize['Y'],ssize['Z']),location=loc)
+                                            bpy.ops.mesh.primitive_cylinder_add(radius=5/scale_factor, depth=1/scale_factor, scale=(ssize[0],ssize[1],ssize[2]),location=loc)
                                         crash=C.selected_objects[0]
                                         crash.name='NodeDataIndex_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s)
                                         par_coll=crash.users_collection[0]
