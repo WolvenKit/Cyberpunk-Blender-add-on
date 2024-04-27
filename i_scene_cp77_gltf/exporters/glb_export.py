@@ -47,7 +47,7 @@ def cp77_mesh_options():
 def pose_export_options():
     options = {
         'export_animations': True,
-        'export_frame_range': True,
+        'export_anim_slide_to_zero': True,
         'export_animation_mode': 'ACTIONS',
         'export_anim_single_armature': True,
         "export_bake_animation": True
