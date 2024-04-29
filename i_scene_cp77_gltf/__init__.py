@@ -1189,7 +1189,7 @@ class CP77_PT_MeshTools(Panel):
 ## adds a message box for the exporters to use for error notifications, will also be used later for redmod integration    
 class ShowMessageBox(Operator):
     bl_idname = "cp77.message_box"
-    bl_label = "Message"
+    bl_label = "Cyberpunk 2077 IO Suite"
 
     message: StringProperty(default="")
 
