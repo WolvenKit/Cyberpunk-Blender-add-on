@@ -283,7 +283,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                         meshApp=c['meshAppearance']['$value']
                                         #print(meshApp)
                                     try:
-                                        bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=meshApp, with_materials=with_materials, update_gi=False, remap_depot=remapdepot)
+                                        bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=meshApp)
                                         for obj in C.selected_objects:            
                                             obj['componentName'] = c['name']['$value']
                                             obj['sourcePath'] = meshpath
@@ -598,7 +598,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                         #print('colliders:', ent_colliderComps)
                         for physJsonPath in physJsonPaths:
                             if os.path.basename(physJsonPath)==chassis_phys_j:
-                                cp77_phys_import(collision_collection, physJsonPath, rig, chassis_z)
+                                cp77_phys_import(physJsonPath, rig, chassis_z)
                 except Exception as e:
                     print(e)
             
