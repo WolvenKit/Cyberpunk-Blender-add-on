@@ -435,6 +435,24 @@ class CP77_PT_PanelProps(PropertyGroup):
         description="replace the json depot path with the one in prefs"
     )
 
+    use_cycles: BoolProperty(
+        name="Use Cycles",
+        default=True,
+        description="Use Cycles"
+    )  
+
+    update_gi: BoolProperty(
+        name="Update Global Illumination",
+        default=False,
+        description="Update Cycles global illumination options for transparency fixes and higher quality renders"
+    )
+
+    with_materials: BoolProperty(
+        name="With Materials",
+        default=True,
+        description="Import Wolvenkit-exported materials"
+    )   
+
 class CP77CollisionGenerator(Operator):
     bl_idname = "generate_cp77.collisions"
     bl_label = "Generate Collider"
@@ -1280,13 +1298,9 @@ class CP77EntityImport(Operator,ImportHelper):
                                 default="",
                                 options={'HIDDEN'})
 
-    use_cycles: BoolProperty(name="Use Cycles",default=True,description="Use Cycles")  
-    update_gi: BoolProperty(name="Update Global Illumination",default=False,description="Update Cycles global illumination options for transparency fixes and higher quality renders")
-    with_materials: BoolProperty(name="With Materials",default=True,description="Import Wolvenkit-exported materials")   
     include_collisions: BoolProperty(name="Include Collisions",default=False,description="Use this option to import collision bodies with this entity")
     include_phys: BoolProperty(name="Include .phys Collisions",default=False,description="Use this option if you want to import the .phys collision bodies. Useful for vehicle modding")
     include_entCollider: BoolProperty(name="Include Collision Components",default=False,description="Use this option to import entColliderComponent and entSimpleColliderComponent")
-    remap_depot: BoolProperty(name="Remap Depot",default=False,description="replace the json depot path with the one in prefs")  
     inColl: StringProperty(name= "Collector to put the imported entity in",
                                 description="Collector to put the imported entity in",
                                 default='',
@@ -1294,21 +1308,22 @@ class CP77EntityImport(Operator,ImportHelper):
         
     def draw(self, context):
         cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences
+        props = context.scene.cp77_panel_props       
         layout = self.layout
         row = layout.row(align=True)
         split = row.split(factor=0.45,align=True)
         split.label(text="Ent Appearance:")
         split.prop(self, "appearances", text="")
         row = layout.row(align=True)
-        row.prop(self, "use_cycles")
-        if self.use_cycles:
+        row.prop(props, "use_cycles")
+        if props.use_cycles:
             row = layout.row(align=True)
-            row.prop(self, "update_gi")
+            row.prop(props, "update_gi")
         row = layout.row(align=True)
-        row.prop(self, "with_materials")
+        row.prop(props, "with_materials")
         if cp77_addon_prefs.experimental_features:
             row = layout.row(align=True)
-            row.prop(self,"remap_depot")
+            row.prop(props,"remap_depot")
         row = layout.row(align=True)
         if not self.include_collisions:
             row.prop(self, "include_collisions")
@@ -1325,7 +1340,8 @@ class CP77EntityImport(Operator,ImportHelper):
 
 
     def execute(self, context):
-        SetCyclesRenderer(self.use_cycles, self.update_gi)
+        props = context.scene.cp77_panel_props
+        SetCyclesRenderer(props.use_cycles, props.update_gi)
 
         apps=self.appearances.split(",")
         print('apps - ',apps)
@@ -1333,7 +1349,7 @@ class CP77EntityImport(Operator,ImportHelper):
         bob=self.filepath
         inColl=self.inColl
         #print('Bob - ',bob)
-        importEnt( bob, apps, excluded,self.with_materials, self.include_collisions, self.include_phys, self.include_entCollider, inColl, self.remap_depot)
+        importEnt( bob, apps, excluded, props.with_materials, self.include_collisions, self.include_phys, self.include_entCollider, inColl, props.remap_depot)
 
         return {'FINISHED'}
 
@@ -1353,12 +1369,11 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
 
     want_collisions: BoolProperty(name="Import Collisions",default=False,description="Import Box and Capsule Collision objects (mesh not yet supported)")
     am_modding: BoolProperty(name="Generate New Collectors",default=False,description="Generate _new collectors for sectors to allow modifications to be saved back to game")
-    with_materials: BoolProperty(name="With Materials",default=False,description="Import Wolvenkit-exported materials")
-    remap_depot: BoolProperty(name="Remap Depot",default=False,description="replace the json depot path with the one in prefs")  
 
 
     def draw(self, context):
-        cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences 
+        cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences
+        props = context.scene.cp77_panel_props
         layout = self.layout
         box = layout.box()
         row = box.row(align=True) 
@@ -1366,15 +1381,16 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
         row = layout.row(align=True)
         row.prop(self, "am_modding")
         row = layout.row(align=True)
-        row.prop(self, "with_materials")
+        row.prop(props, "with_materials")
         if cp77_addon_prefs.experimental_features:
             row = layout.row(align=True)
-            row.prop(self,"remap_depot")
+            row.prop(props,"remap_depot")
 
     def execute(self, context):
         bob=self.filepath
+        props = context.scene.cp77_panel_props
         print('Importing Sectors from project - ',bob)
-        importSectors( bob, self.want_collisions, self.am_modding, self.with_materials , self.remap_depot)
+        importSectors( bob, self.want_collisions, self.am_modding, props.with_materials , props.remap_depot)
         return {'FINISHED'}
 
 
@@ -1390,8 +1406,8 @@ class CP77_PT_ImportWithMaterial(Panel):
         return operator.bl_idname == "IO_SCENE_GLTF_OT_cp77"
 
     def draw_header(self, context):
-        operator = context.space_data.active_operator
-        self.layout.prop(operator, "with_materials", text="")
+        props = context.scene.cp77_panel_props
+        self.layout.prop(props, "with_materials", text="")
     
     def draw(self, context):
         cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences
@@ -1399,20 +1415,20 @@ class CP77_PT_ImportWithMaterial(Panel):
         operator = context.space_data.active_operator
         layout = self.layout
         row = layout.row(align=True)
-        layout.enabled = operator.with_materials
+        layout.enabled = props.with_materials
         row.prop(operator, 'exclude_unused_mats')
         row = layout.row(align=True)
         row.prop(operator, 'image_format')
         row = layout.row(align=True)
         row.prop(operator, 'hide_armatures')
         row = layout.row(align=True)
-        row.prop(operator, 'use_cycles')
+        row.prop(props, 'use_cycles')
         if cp77_addon_prefs.experimental_features:
             row = layout.row(align=True)
             row.prop(props,"remap_depot")
-        if operator.use_cycles:
+        if props.use_cycles:
             row = layout.row(align=True)
-            row.prop(operator, 'update_gi')
+            row.prop(props, 'update_gi')
         row = layout.row(align=True)
         row.prop(operator, 'import_garmentsupport')
 
@@ -1438,18 +1454,10 @@ class CP77Import(Operator,ImportHelper):
     exclude_unused_mats: BoolProperty(name="Exclude Unused Materials",default=True,description="Enabling this options skips all the materials that aren't being used by any mesh")
 
     #Kwekmaster: QoL option to match WolvenKit GUI options - Name change to With Materials
-    with_materials: BoolProperty(name="With Materials",default=True,description="Import mesh with Wolvenkit-exported materials")
-
     hide_armatures: BoolProperty(name="Hide Armatures",default=True,description="Hide the armatures on imported meshes")
 
-    use_cycles: BoolProperty(name="Use Cycles",default=True,description="Use Cycles higher quality renders")
-
-    update_gi: BoolProperty(name="Update Global Illumination",default=False,description="Update Cycles global illumination options for transparency fixes and higher quality renders")
-
     import_garmentsupport: BoolProperty(name="Import Garment Support (Experimental)",default=True,description="Imports Garment Support mesh data as color attributes")
-    
-    remap_depot: BoolProperty(name="Remap Depot",default=False,description="replace the json depot path with the one in prefs")  
-    
+
     filepath: StringProperty(subtype = 'FILE_PATH')
 
     files: CollectionProperty(type=OperatorFileListElement)
@@ -1465,9 +1473,9 @@ class CP77Import(Operator,ImportHelper):
         pass
 
     def execute(self, context):
-        SetCyclesRenderer(self.use_cycles, self.update_gi)
         props = context.scene.cp77_panel_props
-        CP77GLBimport(self, self.exclude_unused_mats, self.image_format, self.with_materials, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, self.appearances, props.remap_depot)
+        SetCyclesRenderer(props.use_cycles, props.update_gi)
+        CP77GLBimport(self, self.exclude_unused_mats, self.image_format, props.with_materials, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, self.appearances, props.remap_depot)
 
         return {'FINISHED'}
 
