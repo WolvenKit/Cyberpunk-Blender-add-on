@@ -155,17 +155,18 @@ def bsdf_socket_names():
         socket_names['Emission']= 'Emission Color'
     return socket_names    
 
-def json_ver_validate( json_data):
-    if 'Header' not in json_data.keys():
+def json_ver_validate(json_data):
+    if 'Header' not in json_data:
         return False
-    elif 'MaterialJsonVersion' in json_data['Header'].keys() and pkg_resources.parse_version(json_data['Header']['MaterialJsonVersion']) > pkg_resources.parse_version('1.0.0RC'):
-        return True
-    elif 'WKitJsonVersion' not in json_data['Header'].keys():
+    header = json_data['Header']
+    if "WolvenKitVersion" not in header and "MaterialJsonVersion" not in header:
         return False
-    elif pkg_resources.parse_version(json_data['Header']['WKitJsonVersion']) < pkg_resources.parse_version('0.0.8RC'):
+    if "WolvenKitVersion" in header:
+        if "8.13" not in header["WolvenKitVersion"] and "8.14" not in header["WolvenKitVersion"]:
+            return False
+    if "MaterialJsonVersion" in header and "1.0" not in header["MaterialJsonVersion"]:
         return False
-    else:
-        return True
+    return True
 
 def openJSON(path, mode='r',  ProjPath='', DepotPath=''):
     path = path.replace('\\', os.sep)
