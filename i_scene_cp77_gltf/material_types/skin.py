@@ -56,8 +56,21 @@ class Skin:
         CurMat.links.new(tintScale.outputs[0],albedoTintMix.inputs[0])
         CurMat.links.new(aImgNode.outputs[0],albedoTintMix.inputs[6])
         CurMat.links.new(tintColorGamma.outputs[0],albedoTintMix.inputs[7])
-        CurMat.links.new(albedoTintMix.outputs[2],pBSDF.inputs['Base Color'])
-        
+
+        #Secondary Albedo/a
+        if "SecondaryAlbedo" in Data:
+            saImg=imageFromRelPath(Data["SecondaryAlbedo"], DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            saImgNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-900,550), label="Secondary Albedo", image=saImg)
+
+            overlay = create_node(CurMat.nodes, "ShaderNodeMix", (-150,500), blend_type="OVERLAY", label="Overlay")
+            overlay.data_type = "RGBA"
+
+            CurMat.links.new(saImgNode.outputs[1], overlay.inputs[0])
+            CurMat.links.new(albedoTintMix.outputs[2], overlay.inputs[6])
+            CurMat.links.new(saImgNode.outputs[0], overlay.inputs[7])
+            CurMat.links.new(overlay.outputs[2], pBSDF.inputs['Base Color'])
+        else:
+            CurMat.links.new(albedoTintMix.outputs[2], pBSDF.inputs['Base Color'])
 
         #ROUGHNESS+MASK/rm
 
