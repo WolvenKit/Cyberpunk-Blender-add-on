@@ -113,19 +113,24 @@ def add_to_list(mesh, dict):
 def get_pos(inst):
     pos=[0,0,0]
     if 'Position' in inst.keys():
-        if 'Properties' in inst['Position'].keys():
-            pos[0] = inst['Position']['Properties']['X'] /scale_factor
-            pos[1] = inst['Position']['Properties']['Y'] /scale_factor
-            pos[2] = inst['Position']['Properties']['Z'] /scale_factor          
+        if '$type' in inst['Position'].keys() and inst['Position']['$type']=='WorldPosition':
+            pos[0]=inst['Position']['x']['Bits']/131072*scale_factor  
+            pos[1]=inst['Position']['y']['Bits']/131072*scale_factor
+            pos[2]=inst['Position']['z']['Bits']/131072*scale_factor
         else:
-            if 'X' in inst['Position'].keys():
-                pos[0] = inst['Position']['X'] /scale_factor
-                pos[1] = inst['Position']['Y'] /scale_factor
-                pos[2] = inst['Position']['Z'] /scale_factor
+            if 'Properties' in inst['Position'].keys():
+                pos[0] = inst['Position']['Properties']['X'] /scale_factor
+                pos[1] = inst['Position']['Properties']['Y'] /scale_factor
+                pos[2] = inst['Position']['Properties']['Z'] /scale_factor          
             else:
-                pos[0] = inst['Position']['x'] /scale_factor
-                pos[1] = inst['Position']['y'] /scale_factor
-                pos[2] = inst['Position']['z'] /scale_factor
+                if 'X' in inst['Position'].keys():
+                    pos[0] = inst['Position']['X'] /scale_factor
+                    pos[1] = inst['Position']['Y'] /scale_factor
+                    pos[2] = inst['Position']['Z'] /scale_factor
+                else:
+                    pos[0] = inst['Position']['x'] /scale_factor
+                    pos[1] = inst['Position']['y'] /scale_factor
+                    pos[2] = inst['Position']['z'] /scale_factor
     elif 'position' in inst.keys():
         if 'X' in inst['position'].keys():
                 pos[0] = inst['position']['X'] /scale_factor
@@ -796,7 +801,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 new['pivot']=inst['Pivot']
 
                                                 print(new['nodeDataIndex'])
-                                            
+                                                # Should do something with the Advertisements lightData  bits here 
+
                                                 for old_obj in group.all_objects:                            
                                                     obj=old_obj.copy()  
                                                     new.objects.link(obj)                             
@@ -971,21 +977,26 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                             Actors=e['Data']['compiledData']['Data']['Actors']
                             for idx,act in enumerate(Actors):
                                 #print(len(act['Shapes']))
-                                x=act['Position']['x']['Bits']/131072*scale_factor  
-                                y=act['Position']['y']['Bits']/131072*scale_factor
-                                z=act['Position']['z']['Bits']/131072*scale_factor
+                                [x,y,z] =get_pos(act)
+                                #x=act['Position']['x']['Bits']/131072*scale_factor  
+                                #y=act['Position']['y']['Bits']/131072*scale_factor
+                                #z=act['Position']['z']['Bits']/131072*scale_factor
                                 arot=get_rot(act)
                                 for s,shape in enumerate(act['Shapes']):
+                                    if 'Size' in shape.keys():
+                                        ssize=(2*shape['Size']['X']*act['Scale']['X'],2*shape['Size']['Y']*act['Scale']['Y'],2*shape['Size']['Z']*act['Scale']['Z'])
+                                    else:
+                                        ssize=None
+                                    spos=get_pos(shape)
+                                    srot=get_rot(shape)
+                                    arot_q = Quaternion((arot[0],arot[1],arot[2],arot[3]))
+                                    srot_q = Quaternion((srot[0],srot[1],srot[2],srot[3]))
+                                    rot= arot_q @ srot_q
+                                    loc=(spos[0]+x,spos[1]+y,spos[2]+z)
                                     if shape['ShapeType']=='Box' or shape['ShapeType']=='Capsule':
                                         #print('Box Collision Node')
                                         #pprint(act['Shapes'])
-                                        ssize=(2*shape['Size']['X']*act['Scale']['X'],2*shape['Size']['Y']*act['Scale']['Y'],2*shape['Size']['Z']*act['Scale']['Z'])
-                                        spos=get_pos(shape)
-                                        srot=get_rot(shape)
-                                        arot_q = Quaternion((arot[0],arot[1],arot[2],arot[3]))
-                                        srot_q = Quaternion((srot[0],srot[1],srot[2],srot[3]))
-                                        rot= arot_q @ srot_q
-                                        loc=(spos[0]+x,spos[1]+y,spos[2]+z)
+                                        
                                         if shape['ShapeType']=='Box':
                                             bpy.ops.mesh.primitive_cube_add(size=1/scale_factor, scale=(ssize[0],ssize[1],ssize[2]),location=(loc[0],loc[1],loc[2]))
                                         elif shape['ShapeType']=='Capsule':
@@ -1007,7 +1018,22 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         set_collider_props(crash, shape['ShapeType'], shape['Materials'][0]['$value'], 'WORLD')
                                                                     
                                     else: 
-                                        print(f"skipping unsupported shape {shape['ShapeType']}")
+                                        print(f"unsupported shape {shape['ShapeType']}")
+                                        o = bpy.data.objects.new('NDI_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s), None)
+                                        o['nodeType']='worldCollisionNode'
+                                        o['nodeIndex']=i
+                                        o['nodeDataIndex']=inst['nodeDataIndex']
+                                        o['ShapeType']=shape['ShapeType']
+                                        o['ShapeNo']=s
+                                        o['ActorIdx']=idx
+                                        o['sectorName']=sectorName
+                                        sector_Collisions_coll.objects.link(o)
+                                        o.location = (loc[0],loc[1],loc[2])
+                                        o.rotation_mode = "QUATERNION"
+                                        o.rotation_quaternion = rot
+                                        if ssize:
+                                            o.scale = (ssize[0],ssize[1],ssize[2])
+
 
                 
                     case _:
