@@ -61,7 +61,7 @@ def CP77CollisionTriangleMeshJSONimport( jsonpath ):
 
 if __name__ == "__main__":
     import glob
-    test='HASHES'
+    test='filenames'
     if test=='HASHES':
         project_raw_path = 'C:\\cpmod\\hotel\\source\\raw'
         sectorHashStrVal ='4490140329313192080' # from exterior_-15_-6_0_1
@@ -69,7 +69,7 @@ if __name__ == "__main__":
         for hash in entryHashStrVals:
             CP77CollisionTriangleMeshJSONimport_by_hashes(sectorHashStr=sectorHashStrVal,entryHashStr=hash,project_raw_dir=project_raw_path)
     else:
-        project_raw_path = 'C:\\cpmod\\LOD4\\source\\raw\\collision_meshes'
+        project_raw_path = 'C:\\cpmod\\notell\\source\\raw\\collision_meshes'
         jsonpaths = glob.glob(os.path.join(project_raw_path, "**", "*.json"), recursive = True)
         for jsonpath in jsonpaths:
             print(jsonpath)

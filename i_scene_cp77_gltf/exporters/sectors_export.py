@@ -611,7 +611,6 @@ def exportSectors( filename):
                                     print('found ',collname)
                                     crash= sector_Collisions_coll.objects[collname]
                                     if Matrix(crash['matrix']).to_translation()!=crash.matrix_world.to_translation():
-                                        print('collision moved - cant process this yet')
                                         # how the f do we deal with this???
                                         # delete the actor with archivexl, then recreate it with the new position
                                         # so we need a collisions node, then we need to add the actor
@@ -638,11 +637,13 @@ def exportSectors( filename):
                                         impacts['Data']['compiledData']['Data']['Actors'].append(copy.deepcopy(Actors[idx]))
                                         #update its position                                        
                                         ddyer=impacts['Data']['compiledData']['Data']['Actors'][len(impacts['Data']['compiledData']['Data']['Actors'])-1]
-                                        ddyer['Position']={'$type': 'WorldPosition',"x": { "$type": "FixedPoint", "Bits": int(crash.location[0]*131072)  },"y": {"$type": "FixedPoint","Bits": int(crash.location[1]*131072) },
-                                                           "z": { "$type": "FixedPoint", "Bits": int(crash.location[2]*131072) }}
+                                        actloc = ((crash.location[0]-ddyer['Shapes'][s]['Position']['X'])*131072,(crash.location[1]-ddyer['Shapes'][s]['Position']['Y'])*131072,(crash.location[2]-ddyer['Shapes'][s]['Position']['Z'])*131072)
+                                        ddyer['Shapes'][s]['Position']={"$type": "Vector3", "X": { "$type": "FixedPoint", "Bits": int(actloc[0])  },"y": {"$type": "FixedPoint","Bits": int(actloc[1]) },
+                                                           "z": { "$type": "FixedPoint", "Bits": int(actloc[2]) }}
                                         ddyer['Orientation']={'$type': 'Quaternion','r':float("{:.9g}".format(crash.rotation_quaternion[0])),'i':float("{:.9g}".format(crash.rotation_quaternion[1])),'j':float("{:.9g}".format(crash.rotation_quaternion[2])),'k':float("{:.9g}".format(crash.rotation_quaternion[3]))}
                                         ddyer['Scale']= {'$type': 'Vector3', 'X':  float("{:.9g}".format(crash.scale[0])), 'Y':  float("{:.9g}".format(crash.scale[1])), 'Z':  float("{:.9g}".format(crash.scale[2]))}
-                                        ddyer['Shapes'][s]['Size']= { "$type": "Vector3", "X": crash.dimensions[0]/2, "Y": crash.dimensions[1]/2, "Z": crash.dimensions[2]/2  }
+                                        if 'Size' in ddyer['Shapes'][s].keys():
+                                            ddyer['Shapes'][s]['Size']= { "$type": "Vector3", "X": crash.dimensions[0]/2, "Y": crash.dimensions[1]/2, "Z": crash.dimensions[2]/2  }
                                         #update the numActors property
                                         impacts['Data']['numActors']=len(impacts['Data']['compiledData']['Data']['Actors'])
                                         
@@ -658,6 +659,7 @@ def exportSectors( filename):
                                             deletions['Collisions'][sectorName][inst['nodeDataIndex']].append(str(idx))
                                         else:
                                             deletions['Collisions'][sectorName][inst['nodeDataIndex']]=[str(idx)]
+
 
 
 
