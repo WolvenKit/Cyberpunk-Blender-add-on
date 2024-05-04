@@ -1354,6 +1354,7 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
     want_collisions: BoolProperty(name="Import Collisions",default=False,description="Import Box and Capsule Collision objects (mesh not yet supported)")
     am_modding: BoolProperty(name="Generate New Collectors",default=False,description="Generate _new collectors for sectors to allow modifications to be saved back to game")
     with_materials: BoolProperty(name="With Materials",default=False,description="Import Wolvenkit-exported materials")
+    with_lights: BoolProperty(name="With Lights",default=False,description="Import Lights from the sector")    
     remap_depot: BoolProperty(name="Remap Depot",default=False,description="replace the json depot path with the one in prefs")  
 
 
@@ -1367,6 +1368,8 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
         row.prop(self, "am_modding")
         row = layout.row(align=True)
         row.prop(self, "with_materials")
+        row = layout.row(align=True)
+        row.prop(self, "with_lights")
         if cp77_addon_prefs.experimental_features:
             row = layout.row(align=True)
             row.prop(self,"remap_depot")
@@ -1374,7 +1377,7 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
     def execute(self, context):
         bob=self.filepath
         print('Importing Sectors from project - ',bob)
-        importSectors( bob, self.want_collisions, self.am_modding, self.with_materials , self.remap_depot)
+        importSectors( bob, self.want_collisions, self.am_modding, self.with_materials , self.remap_depot, self.with_lights)
         return {'FINISHED'}
 
 
