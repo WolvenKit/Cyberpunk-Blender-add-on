@@ -113,19 +113,24 @@ def add_to_list(mesh, dict):
 def get_pos(inst):
     pos=[0,0,0]
     if 'Position' in inst.keys():
-        if 'Properties' in inst['Position'].keys():
-            pos[0] = inst['Position']['Properties']['X'] /scale_factor
-            pos[1] = inst['Position']['Properties']['Y'] /scale_factor
-            pos[2] = inst['Position']['Properties']['Z'] /scale_factor          
+        if '$type' in inst['Position'].keys() and inst['Position']['$type']=='WorldPosition':
+            pos[0]=inst['Position']['x']['Bits']/131072*scale_factor  
+            pos[1]=inst['Position']['y']['Bits']/131072*scale_factor
+            pos[2]=inst['Position']['z']['Bits']/131072*scale_factor
         else:
-            if 'X' in inst['Position'].keys():
-                pos[0] = inst['Position']['X'] /scale_factor
-                pos[1] = inst['Position']['Y'] /scale_factor
-                pos[2] = inst['Position']['Z'] /scale_factor
+            if 'Properties' in inst['Position'].keys():
+                pos[0] = inst['Position']['Properties']['X'] /scale_factor
+                pos[1] = inst['Position']['Properties']['Y'] /scale_factor
+                pos[2] = inst['Position']['Properties']['Z'] /scale_factor          
             else:
-                pos[0] = inst['Position']['x'] /scale_factor
-                pos[1] = inst['Position']['y'] /scale_factor
-                pos[2] = inst['Position']['z'] /scale_factor
+                if 'X' in inst['Position'].keys():
+                    pos[0] = inst['Position']['X'] /scale_factor
+                    pos[1] = inst['Position']['Y'] /scale_factor
+                    pos[2] = inst['Position']['Z'] /scale_factor
+                else:
+                    pos[0] = inst['Position']['x'] /scale_factor
+                    pos[1] = inst['Position']['y'] /scale_factor
+                    pos[2] = inst['Position']['z'] /scale_factor
     elif 'position' in inst.keys():
         if 'X' in inst['position'].keys():
                 pos[0] = inst['position']['X'] /scale_factor
@@ -203,7 +208,7 @@ def get_tan_pos(inst):
         pos[1][2] = inst['Elements'][1]['Z'] 
     return pos
 
-def importSectors( filepath='', want_collisions=False, am_modding=False, with_materials=True, remap_depot=False ):
+def importSectors( filepath='', want_collisions=False, am_modding=False, with_materials=True, remap_depot=False, with_lights=False ):
     # Enter the path to your projects source\raw\base folder below, needs double slashes between folder names.
     path = os.path.join( os.path.dirname(filepath),'source','raw','base')
     print('path is ',path)
@@ -335,6 +340,9 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
         projectjson=os.path.join(path,'base',os.path.basename(project)+'.streamingsector.json')
         if filepath==projectjson:
             continue
+        
+        if 'sim_' in filepath:
+            continue
         if VERBOSE:
             print(projectjson)
             print(filepath)
@@ -433,12 +441,14 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         new.children.link(newchild)
                                         for old_obj in child.objects:                            
                                             obj=old_obj.copy()  
+                                            obj.color = (0.567942, 0.0247339, 0.600028, 1)
                                             newchild.objects.link(obj)                                     
                                             obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
                                             if 'Armature' in obj.name:
                                                 obj.hide_set(True)
                                     for old_obj in group.objects:                            
                                         obj=old_obj.copy()  
+                                        obj.color = (0.567942, 0.0247339, 0.600028, 1)
                                         new.objects.link(obj)                                     
                                         obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
                                         if 'Armature' in obj.name:
@@ -527,6 +537,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                 meshYScale=curvelength/meshyLength
                                 for old_obj in group.all_objects:                            
                                     obj=old_obj.copy()  
+                                    obj.color = (0.0380098, 0.595213, 0.600022, 1)
                                     new.objects.link(obj) 
                                     if obj.type=='MESH':
                                         curveMod=obj.modifiers.new('Curve','CURVE')
@@ -543,51 +554,69 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
     
                     case 'worldInstancedMeshNode' :
                         #print('worldInstancedMeshNode')
-                        meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep) 
-                        num=data['worldTransformsBuffer']['numElements']
-                        start=data['worldTransformsBuffer']['startIndex']
-                        if(meshname != 0):
-                            #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
-                            groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
-                            while len(groupname) > 63:
-                                groupname = groupname[:-1]
-                            group=Masters.children.get(groupname)
-                            if (group):
-                                #print('Group found for ',groupname)                               
-                                for idx in range(start, start+num):
-                                    #create the linked copy of the group of mesh
-                                
-                                    new=bpy.data.collections.new(groupname)
-                                    Sector_coll.children.link(new)
-                                    new['nodeType']=type
-                                    new['nodeIndex']=i
-                                    new['nodeDataIndex']=inst['nodeDataIndex']
-                                    new['instance_idx']=idx
-                                    new['mesh']=meshname
-                                    new['debugName']=e['Data']['debugName']
-                                    new['sectorName']=sectorName 
-                                    for old_obj in group.all_objects:                            
-                                        obj=old_obj.copy()  
-                                        new.objects.link(obj)                                    
-                                        if 'Data' in data['worldTransformsBuffer']['sharedDataBuffer'].keys():
-                                            inst_trans=data['worldTransformsBuffer']['sharedDataBuffer']['Data']['buffer']['Data']['Transforms'][idx]
-                                                
-                                        elif 'HandleRefId' in data['worldTransformsBuffer']['sharedDataBuffer'].keys():
-                                            bufferID = int(data['worldTransformsBuffer']['sharedDataBuffer']['HandleRefId'])
-                                            new['bufferID']=bufferID
-                                            ref=e
-                                            for n in nodes:
-                                                if n['HandleId']==str(bufferID-1):
-                                                    ref=n
-                                            inst_trans = ref['Data']['worldTransformsBuffer']['sharedDataBuffer']['Data']['buffer']['Data']['Transforms'][idx]       
-                                        else :
-                                            print(e)
-                                        obj.location = get_pos(inst_trans)                                         
-                                        obj.rotation_quaternion=get_rot(inst_trans)
-                                        obj.scale = get_scale(inst_trans)
-                                        obj['matrix']=obj.matrix_world
-                                        #if obj.location.x == 0:
-                                        #    print('Location @ 0 for Mesh - ',meshname, ' - ',i,'HandleId - ', e['HandleId'])
+                        instances = [x for x in t if x['NodeIndex'] == i]
+                        for idx,inst in enumerate(instances):
+                            meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep) 
+                            num=data['worldTransformsBuffer']['numElements']
+                            start=data['worldTransformsBuffer']['startIndex']
+                            if(meshname != 0):
+                                #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
+                                groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
+                                while len(groupname) > 63:
+                                    groupname = groupname[:-1]
+                                group=Masters.children.get(groupname)
+                                if (group):
+                                    #print('Group found for ',groupname)    
+                                    NDI_Coll_name = 'NDI'+str(inst['nodeDataIndex'])+'_'+groupname
+                                    while len(NDI_Coll_name) > 63:
+                                            NDI_Coll_name = NDI_Coll_name[:-1]
+                                    NDI_Coll = bpy.data.collections.new(NDI_Coll_name)
+                                    Sector_coll.children.link(NDI_Coll)
+                                    NDI_Coll['nodeType']=type
+                                    NDI_Coll['nodeIndex']=i
+                                    NDI_Coll['nodeDataIndex']=inst['nodeDataIndex']
+                                    NDI_Coll['mesh']=meshname
+                                    NDI_Coll['debugName']=e['Data']['debugName']
+                                    NDI_Coll['sectorName']=sectorName 
+                                    NDI_Coll['numElements']=num
+                                    for El_idx in range(start, start+num):
+                                        #create the linked copy of the group of mesh
+                                        new_groupname = 'NDI'+str(inst['nodeDataIndex'])+'_'+str(El_idx)+'_'+groupname
+                                        while len(new_groupname) > 63:
+                                            new_groupname = new_groupname[:-1]
+                                        new = bpy.data.collections.new(new_groupname)
+                                        NDI_Coll.children.link(new)
+                                        new['nodeType']=type
+                                        new['nodeIndex']=i
+                                        new['nodeDataIndex']=inst['nodeDataIndex']
+                                        new['Element_idx']=El_idx
+                                        new['mesh']=meshname
+                                        new['debugName']=e['Data']['debugName']
+                                        new['sectorName']=sectorName 
+                                        for old_obj in group.all_objects:                            
+                                            obj=old_obj.copy()  
+                                            new.objects.link(obj)                                    
+                                            if 'Data' in data['worldTransformsBuffer']['sharedDataBuffer'].keys():
+                                                inst_trans=data['worldTransformsBuffer']['sharedDataBuffer']['Data']['buffer']['Data']['Transforms'][El_idx]
+                                                    
+                                            elif 'HandleRefId' in data['worldTransformsBuffer']['sharedDataBuffer'].keys():
+                                                bufferID = int(data['worldTransformsBuffer']['sharedDataBuffer']['HandleRefId'])
+                                                new['bufferID']=bufferID
+                                                ref=e
+                                                for n in nodes:
+                                                    if n['HandleId']==str(bufferID-1):
+                                                        ref=n
+                                                inst_trans = ref['Data']['worldTransformsBuffer']['sharedDataBuffer']['Data']['buffer']['Data']['Transforms'][El_idx]       
+                                            else :
+                                                print(e)
+                                            obj.location = get_pos(inst_trans)                                         
+                                            obj.rotation_quaternion=get_rot(inst_trans)
+                                            obj.scale = get_scale(inst_trans)
+                                            obj['matrix']=obj.matrix_world       
+                                            obj.color = (0.785188, 0.409408, 0.0430124, 1)
+
+                                            #if obj.location.x == 0:
+                                            #    print('Location @ 0 for Mesh - ',meshname, ' - ',i,'HandleId - ', e['HandleId'])
 
                             else:
                                 print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
@@ -771,7 +800,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 new['pivot']=inst['Pivot']
 
                                                 print(new['nodeDataIndex'])
-                                            
+                                                # Should do something with the Advertisements lightData  bits here 
+
                                                 for old_obj in group.all_objects:                            
                                                     obj=old_obj.copy()  
                                                     new.objects.link(obj)                             
@@ -779,7 +809,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                     obj.location = get_pos(inst)
                                                     obj.rotation_quaternion = get_rot(inst)
                                                     obj.scale = get_scale(inst)                                                                                                        
-                                                    
+                                                    obj.color = (0.3, 0.3, 0.3, 1)
+
                                                     if 'Armature' in obj.name:
                                                         obj.hide_set(True)
                                                     if type=='worldRotatingMeshNode':
@@ -813,6 +844,18 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                             groupname = groupname[:-1]
                                         group=Masters.children.get(groupname)
                                         if (group):
+                                            NDI_Coll_name = 'NDI'+str(inst['nodeDataIndex'])+'_'+groupname
+                                            while len(NDI_Coll_name) > 63:
+                                                    NDI_Coll_name = NDI_Coll_name[:-1]
+                                            NDI_Coll = bpy.data.collections.new(NDI_Coll_name)
+                                            Sector_coll.children.link(NDI_Coll)
+                                            NDI_Coll['nodeType']=type
+                                            NDI_Coll['nodeIndex']=i
+                                            NDI_Coll['nodeDataIndex']=inst['nodeDataIndex']
+                                            NDI_Coll['mesh']=meshname
+                                            NDI_Coll['debugName']=e['Data']['debugName']
+                                            NDI_Coll['sectorName']=sectorName 
+                                            NDI_Coll['numElements']=num
                                             #print('Glb found - ',glbfoundname)
                                             #print('Glb found, looking for instances of ',i)
                                             instances = [x for x in t if x['NodeIndex'] == i]
@@ -820,7 +863,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 #print('Node - ',i, ' - ',meshname)
                                                 for idx in range(start, start+num):
                                                     new=bpy.data.collections.new(groupname)
-                                                    Sector_coll.children.link(new)
+                                                    NDI_Coll.children.link(new)
                                                     new['nodeType']=type
                                                     new['nodeIndex']=i
                                                     new['nodeDataIndex']=inst['nodeDataIndex']
@@ -881,34 +924,34 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
 
                     case 'worldStaticLightNode':
                         #print('worldStaticLightNode',i)
-                        
-                        instances = [x for x in t if x['NodeIndex'] == i]
-                        for inst in instances:
-                            light_node=e['Data']
-                            light_ndata=inst
-                            color= light_node['color']  
-                            intensity=light_node['intensity']        
-                            flicker=light_node['flicker'] 
-                            area_shape=light_node['areaShape']
-                            pos=get_pos(light_ndata)
-                            rot=get_rot(light_ndata)
-                            
-                            A_Light=bpy.data.lights.new('worldStaticLightNode_'+str(i),'AREA')
-                            light_obj=bpy.data.objects.new('worldStaticLightNode_'+str(i), A_Light)
-                            Sector_coll.objects.link(light_obj)
-                            light_obj.location=pos
-                            light_obj.rotation_mode='QUATERNION'
-                            light_obj.rotation_quaternion=rot
-                            A_Light.energy = intensity
-                            A_Light.color = get_col(color)
-                            
-                            if area_shape=='ALS_Capsule':                        
-                                A_Light.shape='ELLIPSE'
-                                A_Light.size= light_node['capsuleLength']
-                                A_Light.size_y= light_node['radius']*2
-                            elif area_shape=='ALS_Sphere':                        
-                                A_Light.shape='DISK'
-                                A_Light.size= light_node['radius']*2
+                        if with_lights:
+                            instances = [x for x in t if x['NodeIndex'] == i]
+                            for inst in instances:
+                                light_node=e['Data']
+                                light_ndata=inst
+                                color= light_node['color']  
+                                intensity=light_node['intensity']        
+                                flicker=light_node['flicker'] 
+                                area_shape=light_node['areaShape']
+                                pos=get_pos(light_ndata)
+                                rot=get_rot(light_ndata)
+                                
+                                A_Light=bpy.data.lights.new('worldStaticLightNode_'+str(i),'AREA')
+                                light_obj=bpy.data.objects.new('worldStaticLightNode_'+str(i), A_Light)
+                                Sector_coll.objects.link(light_obj)
+                                light_obj.location=pos
+                                light_obj.rotation_mode='QUATERNION'
+                                light_obj.rotation_quaternion=rot
+                                A_Light.energy = intensity
+                                A_Light.color = get_col(color)
+                                
+                                if area_shape=='ALS_Capsule':                        
+                                    A_Light.shape='ELLIPSE'
+                                    A_Light.size= light_node['capsuleLength']
+                                    A_Light.size_y= light_node['radius']*2
+                                elif area_shape=='ALS_Sphere':                        
+                                    A_Light.shape='DISK'
+                                    A_Light.size= light_node['radius']*2
 
                         pass
 
@@ -933,25 +976,30 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                             Actors=e['Data']['compiledData']['Data']['Actors']
                             for idx,act in enumerate(Actors):
                                 #print(len(act['Shapes']))
-                                x=act['Position']['x']['Bits']/131072*scale_factor  
-                                y=act['Position']['y']['Bits']/131072*scale_factor
-                                z=act['Position']['z']['Bits']/131072*scale_factor
+                                [x,y,z] =get_pos(act)
+                                #x=act['Position']['x']['Bits']/131072*scale_factor  
+                                #y=act['Position']['y']['Bits']/131072*scale_factor
+                                #z=act['Position']['z']['Bits']/131072*scale_factor
                                 arot=get_rot(act)
                                 for s,shape in enumerate(act['Shapes']):
+                                    if 'Size' in shape.keys():
+                                        ssize=(2*shape['Size']['X']*act['Scale']['X'],2*shape['Size']['Y']*act['Scale']['Y'],2*shape['Size']['Z']*act['Scale']['Z'])
+                                    else:
+                                        ssize=None
+                                    spos=get_pos(shape)
+                                    srot=get_rot(shape)
+                                    arot_q = Quaternion((arot[0],arot[1],arot[2],arot[3]))
+                                    srot_q = Quaternion((srot[0],srot[1],srot[2],srot[3]))
+                                    rot= arot_q @ srot_q
+                                    loc=(spos[0]+x,spos[1]+y,spos[2]+z)
                                     if shape['ShapeType']=='Box' or shape['ShapeType']=='Capsule':
                                         #print('Box Collision Node')
                                         #pprint(act['Shapes'])
-                                        ssize=shape['Size']
-                                        spos=get_pos(shape)
-                                        srot=get_rot(shape)
-                                        arot_q = Quaternion((arot[0],arot[1],arot[2],arot[3]))
-                                        srot_q = Quaternion((srot[0],srot[1],srot[2],srot[3]))
-                                        rot= arot_q @ srot_q
-                                        loc=(spos[0]+x,spos[1]+y,spos[2]+z)
+                                        
                                         if shape['ShapeType']=='Box':
-                                            bpy.ops.mesh.primitive_cube_add(size=1/scale_factor, scale=(ssize['X'],ssize['Y'],ssize['Z']),location=loc)
+                                            bpy.ops.mesh.primitive_cube_add(size=1/scale_factor, scale=(ssize[0],ssize[1],ssize[2]),location=(loc[0],loc[1],loc[2]))
                                         elif shape['ShapeType']=='Capsule':
-                                            bpy.ops.mesh.primitive_cylinder_add(radius=5/scale_factor, depth=1/scale_factor, scale=(ssize['X'],ssize['Y'],ssize['Z']),location=loc)
+                                            bpy.ops.mesh.primitive_cylinder_add(radius=5/scale_factor, depth=1/scale_factor, scale=(ssize[0],ssize[1],ssize[2]),location=loc)
                                         crash=C.selected_objects[0]
                                         crash.name='NodeDataIndex_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s)
                                         par_coll=crash.users_collection[0]
@@ -969,7 +1017,22 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         set_collider_props(crash, shape['ShapeType'], shape['Materials'][0]['$value'], 'WORLD')
                                                                     
                                     else: 
-                                        print(f"skipping unsupported shape {shape['ShapeType']}")
+                                        print(f"unsupported shape {shape['ShapeType']}")
+                                        o = bpy.data.objects.new('NDI_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s), None)
+                                        o['nodeType']='worldCollisionNode'
+                                        o['nodeIndex']=i
+                                        o['nodeDataIndex']=inst['nodeDataIndex']
+                                        o['ShapeType']=shape['ShapeType']
+                                        o['ShapeNo']=s
+                                        o['ActorIdx']=idx
+                                        o['sectorName']=sectorName
+                                        sector_Collisions_coll.objects.link(o)
+                                        o.location = (loc[0],loc[1],loc[2])
+                                        o.rotation_mode = "QUATERNION"
+                                        o.rotation_quaternion = rot
+                                        if ssize:
+                                            o.scale = (ssize[0],ssize[1],ssize[2])
+
 
                 
                     case _:
