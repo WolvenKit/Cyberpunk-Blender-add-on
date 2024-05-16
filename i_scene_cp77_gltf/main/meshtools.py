@@ -10,6 +10,23 @@ resources_dir = get_resources_dir()
 refit_dir = get_refit_dir()
 rig_dir = get_rig_dir()
 
+def del_empty_vgroup(self, context):
+    obj = bpy.context
+    try:
+        for obj in bpy.context.selected_objects:
+            groups = {r: None for r in range(len(obj.vertex_groups))}
+            for vert in obj.data.vertices:
+                for vg in vert.groups:
+                    i = vg.group
+                    if i in groups: del groups[i]
+            for i in sorted(groups.keys(), reverse=True):
+                obj.vertex_groups.remove(obj.vertex_groups[i])
+    except Exception as e:
+        print(f"encountered the following error:")
+        print(e)
+        
+        
+
 def CP77CollectionList(self, context):
     items = []
     ## don't include these as their not useful

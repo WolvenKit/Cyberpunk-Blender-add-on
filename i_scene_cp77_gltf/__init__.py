@@ -558,6 +558,8 @@ class CP7PhysImport(Operator):
 class CP77PhysMatAssign(Operator):
     bl_idname = "object.set_physics_material"
     bl_label = "Set Physics Properties"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Update the Collilder Properties Based on the current Physmat"
 
     # Need to implement a callback here so that changing the material automatically updates the other properties
 
@@ -658,6 +660,9 @@ class CP77_PT_CollisionTools(Panel):
                     split.label(text=f"Z: {obj.get('inertia_Z', 0):.0f}")
                     row = box.row()
                     row.operator('object.set_physics_material')
+                    if obj['collisionShape'] =='physicsColliderConvex':
+                        row = box.row()
+                        row.operator('mesh.convex_hull', text="Regenerate Convex Hull")
                     
 
 def CP77AnimsList(self, context):
@@ -828,13 +833,16 @@ class CP77NewAction(Operator):
 
 class CP77RigLoader(Operator):
     bl_idname = "cp77.rig_loader"
-    bl_label = "Load rigs from .glb"
+    bl_label = "Load Deform Rig from Resources"
     bl_description = "Load Cyberpunk 2077 deform rigs from plugin resources" 
 
     files: CollectionProperty(type=OperatorFileListElement)
     appearances: StringProperty(name="Appearances", default="")
     directory: StringProperty(name="Directory", default="")
     filepath: StringProperty(name="Filepath", default="")
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
@@ -850,8 +858,26 @@ class CP77RigLoader(Operator):
             if props.fbx_rot:
                 rotate_quat_180(self,context)
         return {'FINISHED'}
+    def draw(self,context):
+        props = context.scene.cp77_panel_props
+        layout = self.layout
+        box = layout.box()
+        row = box.row(align=True)
+        row.label(text="Select rig to load: ")
+        row.prop(props, 'body_list', text="",)
+        row = box.row(align=True)
+        row.prop(props, 'fbx_rot', text="Load Rig in FBX Orientation")
 
-
+class CP77AnimNamer(Operator):
+    bl_idname = "cp77.anim_namer"
+    bl_label = "Fix Action Names"
+    bl_options = {'INTERNAL', 'UNDO'}
+    bl_description = "replace spaces and capital letters in animation names with underscores and lower case letters" 
+    
+    def execute(self, context):
+        for a in CP77AnimsList(self,context): a.name = a.name.replace(" ", "_").lower()
+        return {'FINISHED'}
+    
 ### Draw a panel to store anims functions
 class CP77_PT_AnimsPanel(Panel):
     bl_idname = "CP77_PT_animspanel"
@@ -882,11 +908,7 @@ class CP77_PT_AnimsPanel(Panel):
             box = layout.box()
             box.label(text='Rigs', icon_value=custom_icon_col["import"]['WKIT'].icon_id)
             row = box.row(align=True)
-            row.label(text='Rig:')
-            row.prop(props, 'body_list', text="",)
-            row = box.row(align=True)
-            row.operator('cp77.rig_loader',icon='ADD', text="Load Selected Rig")
-            row.prop(props, 'fbx_rot', text="", icon='LOOP_BACK', toggle=1)
+            row.operator('cp77.rig_loader', text="Load Bundled Rig")
             obj = context.active_object
             if obj and obj.type == 'ARMATURE':
                 row = box.row(align=True)
@@ -894,8 +916,10 @@ class CP77_PT_AnimsPanel(Panel):
                     row.operator('bone_unhider.cp77',text='Unhide Deform Bones')
                 else:
                     row.operator('bone_hider.cp77',text='Hide Deform Bones')
-                row = box.row(align=True)
+                row = box.row()
                 row.operator('reset_armature.cp77')
+                row = box.row()
+                row.operator('cp77.anim_namer')
                 available_anims = list(CP77AnimsList(context,obj))
                 active_action = obj.animation_data.action if obj.animation_data else None
                 if not available_anims:
@@ -904,7 +928,13 @@ class CP77_PT_AnimsPanel(Panel):
                     row.label(text='Animsets', icon_value=custom_icon_col["import"]['WKIT'].icon_id)
                     row.operator('cp77.new_action',icon='ADD', text="")
                     row = box.row(align=True)
+                    row.menu('RENDER_MT_framerate_presets')
+                    row = box.row(align=True)
+                    row.prop(context.scene.render, "fps")
+                    row.prop(context.scene.render, "fps_base")
+                    row = box.row(align=True)
                     row.operator('insert_keyframe.cp77')
+
                 if available_anims:
                     box = layout.box()
                     for action in available_anims:
@@ -920,43 +950,45 @@ class CP77_PT_AnimsPanel(Panel):
                             row.operator("screen.keyframe_jump", text="", icon='NEXT_KEYFRAME').next = True
                             row.operator("screen.frame_jump", text="", icon='FF').end = True
                             row = box.row(align=True)
-                            row.alignment='LEFT'
-                            row.prop(active_action, 'use_frame_range', text="Set Range",toggle=1)
-                            active_action.use_frame_range: True
+                            row.prop(active_action, 'use_frame_range', text="Set Playback Range",toggle=1)
                             if active_action.use_frame_range:
                                 row = box.row(align=True)
-                                row.prop(active_action, 'frame_start', text="")
-                                row.prop(active_action, 'frame_end', text="")
-                    row = box.row(align=True)
-                    row.operator('insert_keyframe.cp77')
-               
+                                row.prop(bpy.context.scene, 'frame_start', text="")
+                                row.prop(bpy.context.scene, 'frame_end', text="")
+                                    
                     box = layout.box()
                     row = box.row(align=True)
                     row.label(text='Animsets', icon_value=custom_icon_col["import"]['WKIT'].icon_id)
                     row.operator('cp77.new_action',icon='ADD', text="")
-                    if available_anims:
-                        col = box.column(align=True)
-                        for action in available_anims:
-                            action.use_fake_user:True
-                            selected = action == active_action
-                            row = col.row(align=True)
-                            sub = row.column(align=True)
-                            sub.ui_units_x = 1.0
-                            if selected and context.screen.is_animation_playing:
-                                op = sub.operator('screen.animation_cancel', icon='PAUSE', text=action.name, emboss=True)
-                                op.restore_frame = False
-                                if active_action.use_frame_range:
-                                    row.prop(active_action, 'use_cyclic', icon='CON_FOLLOWPATH', text="")
-                            else:
-                                icon = 'PLAY' if selected else 'TRIA_RIGHT'
-                                op = sub.operator('cp77.set_animset', icon=icon, text="", emboss=True)
-                                op.name = action.name
-                                op.play = True
-
-                                op = row.operator('cp77.set_animset', text=action.name)
-                                op.name = action.name
-                                op.play = False
-                                row.operator('cp77.delete_anims', icon='X', text="").name = action.name
+                    row = box.row(align=True)
+                    row.menu('RENDER_MT_framerate_presets')
+                    row = box.row(align=True)
+                    row.prop(context.scene.render, "fps")
+                    row.prop(context.scene.render, "fps_base")
+                    row = box.row(align=True)
+                    row.operator('insert_keyframe.cp77')
+                   # if available_anims:
+                    col = box.column(align=True)
+                    for action in available_anims:
+                        action.use_fake_user:True
+                        selected = action == active_action
+                        row = col.row(align=True)
+                        sub = row.column(align=True)
+                        sub.ui_units_x = 1.0
+                        if selected and context.screen.is_animation_playing:
+                            op = sub.operator('screen.animation_cancel', icon='PAUSE', text=action.name, emboss=True)
+                            op.restore_frame = False
+                            if active_action.use_frame_range:
+                                row.prop(active_action, 'use_cyclic', icon='CON_FOLLOWPATH', text="")
+                        else:
+                            icon = 'PLAY' if selected else 'TRIA_RIGHT'
+                            op = sub.operator('cp77.set_animset', icon=icon, text="", emboss=True)
+                            op.name = action.name
+                            op.play = True
+                            op = row.operator('cp77.set_animset', text=action.name)
+                            op.name = action.name
+                            op.play = False
+                            row.operator('cp77.delete_anims', icon='X', text="").name = action.name
 
 
 class CollectionAppearancePanel(Panel):
@@ -1145,6 +1177,8 @@ class CP77_PT_MeshTools(Panel):
                 row = box.row(align=True)
                 row.operator("cp77.group_verts", text="Group Ungrouped Verts")
                 row = box.row(align=True)
+                row.operator('object.delete_unused_vgroups', text="Delete Unused Vert Groups")
+                row = box.row(align=True)
                 row.operator("cp77.rotate_obj")
                 box = layout.box()
                 box.label(icon_value=custom_icon_col["sculpt"]["SCULPT"].icon_id, text="Modelling:")
@@ -1199,6 +1233,11 @@ class ShowMessageBox(Operator):
 
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self, width=300)
+        
+    def draw_header(self, context):
+        layout = self.layout
+        layout.label(text='Cyberpunk 2077 IO Suite')
+        
 
     def draw(self, context):
         wrapp = textwrap.TextWrapper(width=50) #50 = maximum length       
@@ -1326,18 +1365,22 @@ class CP77EntityImport(Operator,ImportHelper):
             row.prop(props,"remap_depot")
         row = layout.row(align=True)
         if not self.include_collisions:
-            row.prop(self, "include_collisions")
-        if self.include_collisions:
+            self.include_phys = False
+            self.include_entCollider = False
+            self._collisions_initialized = False
+        else:
             if not hasattr(self, "_collisions_initialized") or not self._collisions_initialized:
                 self.include_phys = True
                 self.include_entCollider = True
-                self._collisions_initialized = True  # Flag to indicate initialization            
-            row.prop(self, "include_collisions")
+                self._collisions_initialized = True
+
+        row.prop(self, "include_collisions")
+
+        if self.include_collisions:
             row = layout.row(align=True)
             row.prop(self, "include_phys")
             row = layout.row(align=True)
             row.prop(self, "include_entCollider")
-
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
@@ -1530,7 +1573,9 @@ classes = (
     CP77_OT_submesh_prep,
     CP77BoneHider,
     CP77BoneUnhider,
+    CP77AnimNamer,
 )
+
 
 def register():
     custom_icon = bpy.utils.previews.new()
