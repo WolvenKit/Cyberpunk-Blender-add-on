@@ -28,6 +28,7 @@ from ..material_types.decal import Decal
 from ..material_types.decal_gradientmap_recolor import DecalGradientmapRecolor
 from ..material_types.televisionad import TelevisionAd
 from ..material_types.window_parallax_interior_proxy import windowParallaxIntProx
+from ..material_types.hologram import Hologram
 from ..material_types.unknown import unknownMaterial
 
 
@@ -185,7 +186,11 @@ class MaterialBuilder:
                 case "base\\materials\\window_parallax_interior_proxy.mt" | "base\\materials\\window_parallax_interior.mt":
                     window = windowParallaxIntProx(self.BasePath,self.image_format,self.ProjPath)
                     window.create(rawMat["Data"],bpyMat)
-                
+
+                case  "base\\fx\\shaders\\hologram.mt" :
+                    hologram = Hologram(self.BasePath,self.image_format,self.ProjPath)
+                    hologram.create(rawMat["Data"],bpyMat)       
+
                 case _:
                     print('Unhandled mt - ', rawMat["MaterialTemplate"])
                     context=bpy.context
