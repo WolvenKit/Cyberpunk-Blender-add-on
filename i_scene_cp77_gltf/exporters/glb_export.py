@@ -95,7 +95,7 @@ def add_garment_cap(mesh):
 
 # setup the actual exporter - rewrote almost all of this, much quicker now
 # mana: by assigning default attributes, we make this update-safe (some older scripts broke). Just don't re-name them!
-def export_cyberpunk_glb(context, filepath=None, export_poses=False, export_visible=False, limit_selected=True, static_prop=False, red_garment_col=False):
+def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=False, limit_selected=True, static_prop=False, red_garment_col=False):
 
     groupless_bones = set()
     bone_names = []
