@@ -54,8 +54,54 @@ def pose_export_options():
     }
     return options
 
-#setup the actual exporter - rewrote almost all of this, much quicker now
-def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_selected, static_prop):
+
+red_color = (1, 0, 0, 1)  # RGBA
+garment_cap_name="_GarmentSupportCap"
+garment_weight_name="_GarmentSupportWeight"
+
+def add_garment_cap(mesh):
+
+    cap_layer = None
+    weight_layer = None
+
+    try:
+        cap_layer = mesh.data.color_attributes.get(garment_cap_name)
+    except:
+        print("cap layer doesn't exist")
+
+    try:
+        weight_layer = mesh.data.color_attributes.get(garment_weight_name)
+    except:
+        print("weight layer doesn't exist")
+
+    if cap_layer == None:
+        bpy.context.view_layer.objects.active = mesh
+        bpy.ops.geometry.color_attribute_add(name=garment_cap_name, domain='CORNER', data_type='BYTE_COLOR')
+
+    # do not overwrite already-existing garment weight layers. Newly-created layer will be black anyway, nothing to do here.
+    if weight_layer == None:
+        bpy.context.view_layer.objects.active = mesh
+        bpy.ops.geometry.color_attribute_add(name=garment_weight_name, domain='CORNER', data_type='BYTE_COLOR')
+
+    # Now Paint the entire cap layer red
+    for poly in mesh.data.polygons:
+        for loop_index in poly.loop_indices:
+            # paint cap layer red as per export option
+            if cap_layer != None and loop_index < (len(cap_layer.data)):
+                cap_layer.data[loop_index].color = red_color
+
+
+# setup the actual exporter - rewrote almost all of this, much quicker now
+# mana: by assigning default attributes, we make this update-safe (some older scripts broke). Just don't re-name them!
+def export_cyberpunk_glb(context, filepath=None, export_poses=False, export_visible=False, limit_selected=True, static_prop=False, red_garment_col=False, settings=None):
+    if settings != None:
+        filepath = settings.filepath
+        export_poses = settings.export_poses
+        export_visible = settings.export_visible
+        limit_selected = settings.limit_selected
+        static_prop = settings.static_prop
+        red_garment_col = settings.red_garment_col
+
     groupless_bones = set()
     bone_names = []
 
@@ -102,59 +148,67 @@ def export_cyberpunk_glb(context, filepath, export_poses, export_visible, limit_
             reset_armature(armature, context)
             print(options)
             bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
+            # TODO should that be here?
             return{'FINISHED'}
-    else:
-        if not limit_selected:
-            for obj in bpy.data.objects:
-                if obj.type == 'MESH':
-                    obj.select_set(True)
-        #if export_poses option isn't used, check to make sure there are meshes selected and throw an error if not
-        meshes = [obj for obj in objects if obj.type == 'MESH']
 
-        #throw an error in the message box if you haven't selected a mesh to export
-        if not export_poses:
-            if not meshes:
-                bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="No meshes selected, please select at least one mesh")
+        return {'FINISHED'}
+
+    if not limit_selected:
+        for obj in bpy.data.objects:
+            if obj.type == 'MESH' and not "Icosphere" in obj.name:
+                obj.select_set(True)
+
+    #if export_poses option isn't used, check to make sure there are meshes selected and throw an error if not
+    meshes = [obj for obj in objects if obj.type == 'MESH' and not "Icosphere" in obj.name]
+
+    #throw an error in the message box if you haven't selected a mesh to export
+    if not export_poses:
+        if not meshes:
+            bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="No meshes selected, please select at least one mesh")
+            return {'CANCELLED'}
+
+
+    #check that meshes include UVs and have less than 65000 verts, throw an error if not
+    for mesh in meshes:
+
+        # apply transforms
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        if not mesh.data.uv_layers:
+            bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Meshes must have UV layers in order to import in Wolvenkit. See https://tinyurl.com/uv-layers")
+            return {'CANCELLED'}
+
+        #check submesh vertex count to ensure it's less than the maximum for import
+        vert_count = len(mesh.data.vertices)
+        if vert_count > 65535:
+            message=(f"{mesh.name} has {vert_count} vertices.           Each submesh must have less than 65,535 vertices. See https://tinyurl.com/vertex-count")
+            bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=message)
+            return {'CANCELLED'}
+
+        #check that faces are triangulated, cancel export, switch to edit mode with the untriangulated faces selected and throw an error
+        for face in mesh.data.polygons:
+            if len(face.vertices) != 3:
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.select_mode(type='FACE')
+                bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)
+                bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="All faces must be triangulated before exporting. Untriangulated faces have been selected for you. See https://tinyurl.com/triangulate-faces")
                 return {'CANCELLED'}
 
-        #check that meshes include UVs and have less than 65000 verts, throw an error if not
-        for mesh in meshes:
-
-            # apply transforms
-            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-            if not mesh.data.uv_layers:
-                bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Meshes must have UV layers in order to import in Wolvenkit. See https://tinyurl.com/uv-layers")
+        # Check for ungrouped vertices, if they're found, switch to edit mode and select them
+        # No need to do this for static props
+        if not static_prop:
+            ungrouped_vertices = [v for v in mesh.data.vertices if not v.groups]
+            if ungrouped_vertices:
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.select_mode(type='VERT')
+                try:
+                    bpy.ops.mesh.select_ungrouped()
+                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"Ungrouped vertices found and selected in: {mesh.name}. See https://tinyurl.com/ungrouped-vertices")
+                except RuntimeError:
+                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"No vertex groups in: {mesh.name} are assigned weights. Assign weights before exporting. See https://tinyurl.com/assign-vertex-weights")
                 return {'CANCELLED'}
 
-            #check submesh vertex count to ensure it's less than the maximum for import
-            vert_count = len(mesh.data.vertices)
-            if vert_count > 65535:
-                message=(f"{mesh.name} has {vert_count} vertices.           Each submesh must have less than 65,535 vertices. See https://tinyurl.com/vertex-count")
-                bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=message)
-                return {'CANCELLED'}
-
-            #check that faces are triangulated, cancel export, switch to edit mode with the untriangulated faces selected and throw an error
-            for face in mesh.data.polygons:
-                if len(face.vertices) != 3:
-                    bpy.ops.object.mode_set(mode='EDIT')
-                    bpy.ops.mesh.select_mode(type='FACE')
-                    bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)
-                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="All faces must be triangulated before exporting. Untriangulated faces have been selected for you. See https://tinyurl.com/triangulate-faces")
-                    return {'CANCELLED'}
-
-            # Check for ungrouped vertices, if they're found, switch to edit mode and select them
-            # No need to do this for static props
-            if not static_prop:
-                ungrouped_vertices = [v for v in mesh.data.vertices if not v.groups]
-                if ungrouped_vertices:
-                    bpy.ops.object.mode_set(mode='EDIT')
-                    bpy.ops.mesh.select_mode(type='VERT')
-                    try:
-                        bpy.ops.mesh.select_ungrouped()
-                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"Ungrouped vertices found and selected in: {mesh.name}. See https://tinyurl.com/ungrouped-vertices")
-                    except RuntimeError:
-                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"No vertex groups in: {mesh.name} are assigned weights. Assign weights before exporting. See https://tinyurl.com/assign-vertex-weights")
-                    return {'CANCELLED'}
+        if red_garment_col:
+            add_garment_cap(mesh)
 
         # set the export options for meshes
         options = default_cp77_options()

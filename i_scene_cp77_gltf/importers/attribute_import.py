@@ -33,10 +33,8 @@ def manage_garment_support(existingMeshes, gltf_importer_data):
             mesh.color_attributes.render_color_index = 0
 
         # rename attributes
-        # TODO (manavortex): Presto said that they needed an underscore to be exported. However, I used them without underscore,
-        # and they worked fine - I could see GarmentSupportCap becoming active in-game
-        rename_color_attribute(mesh, "_GARMENTSUPPORTCAP", "GarmentSupportCap")
-        rename_color_attribute(mesh, "_GARMENTSUPPORTWEIGHT", "GarmentSupportWeight")
+        rename_color_attribute(mesh, "_GARMENTSUPPORTCAP", "_GarmentSupportCap")
+        rename_color_attribute(mesh, "_GARMENTSUPPORTWEIGHT", "_GarmentSupportWeight")
 
         curMeshCount = curMeshCount + 1
 
