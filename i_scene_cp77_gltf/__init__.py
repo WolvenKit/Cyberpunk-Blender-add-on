@@ -1200,16 +1200,6 @@ class CP77StreamingSectorExport(Operator,ExportHelper):
     def execute(self, context):
         exportSectors(self.filepath)
         return {'FINISHED'}
-
-class ExportSettings:
-    def __init__(self, filepath, export_poses, export_visible, limit_selected, static_prop, red_garment_col):
-        self.filepath = filepath
-        self.export_poses = export_poses
-        self.export_visible = export_visible
-        self.limit_selected = limit_selected
-        self.static_prop = static_prop
-        self.red_garment_col = red_garment_col
-
 class CP77GLBExport(Operator,ExportHelper):
   ### cleaned this up and moved most code to exporters.py
     bl_idname = "export_scene.cp77_glb"
@@ -1218,17 +1208,6 @@ class CP77GLBExport(Operator,ExportHelper):
     bl_description = "Export to GLB with optimized settings for use with Wolvenkit for Cyberpunk 2077"
     filename_ext = ".glb"
    ### adds a checkbox for anim export settings
-
-
-    def createExportSettings(self):
-        return ExportSettings(
-            filepath=self.filepath,
-            export_poses=self.export_poses,
-            export_visible=self.export_visible,
-            limit_selected=self.limit_selected,
-            static_prop=self.static_prop,
-            red_garment_col=self.red_garment_col
-        )
 
     filter_glob: StringProperty(default="*.glb", options={'HIDDEN'})
 
@@ -1278,7 +1257,12 @@ class CP77GLBExport(Operator,ExportHelper):
             row.prop(self, "static_prop")
 
     def execute(self, context):
-        export_cyberpunk_glb(context, settings=self.createExportSettings())
+        export_cyberpunk_glb(context,
+                             export_poses=self.export_poses,
+                             export_visible=self.export_visible,
+                             limit_selected=self.limit_selected,
+                             static_prop=self.static_prop,
+                             red_garment_col=self.red_garment_col )
         return {'FINISHED'}
 
 

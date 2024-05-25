@@ -77,6 +77,8 @@ def add_garment_cap(mesh):
     if cap_layer == None:
         bpy.context.view_layer.objects.active = mesh
         bpy.ops.geometry.color_attribute_add(name=garment_cap_name, domain='CORNER', data_type='BYTE_COLOR')
+    # else:
+        # TODO Presto show a warning
 
     # do not overwrite already-existing garment weight layers. Newly-created layer will be black anyway, nothing to do here.
     if weight_layer == None:
@@ -93,14 +95,7 @@ def add_garment_cap(mesh):
 
 # setup the actual exporter - rewrote almost all of this, much quicker now
 # mana: by assigning default attributes, we make this update-safe (some older scripts broke). Just don't re-name them!
-def export_cyberpunk_glb(context, filepath=None, export_poses=False, export_visible=False, limit_selected=True, static_prop=False, red_garment_col=False, settings=None):
-    if settings != None:
-        filepath = settings.filepath
-        export_poses = settings.export_poses
-        export_visible = settings.export_visible
-        limit_selected = settings.limit_selected
-        static_prop = settings.static_prop
-        red_garment_col = settings.red_garment_col
+def export_cyberpunk_glb(context, filepath=None, export_poses=False, export_visible=False, limit_selected=True, static_prop=False, red_garment_col=False):
 
     groupless_bones = set()
     bone_names = []
