@@ -1258,6 +1258,7 @@ class CP77GLBExport(Operator,ExportHelper):
 
     def execute(self, context):
         export_cyberpunk_glb(context,
+                             filepath=self.filepath,
                              export_poses=self.export_poses,
                              export_visible=self.export_visible,
                              limit_selected=self.limit_selected,
