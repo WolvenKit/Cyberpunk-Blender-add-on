@@ -94,9 +94,11 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
         collection['numMeshChildren']=objs_in_col(collection, 'MESH')
         collection['numArmatureChildren']=objs_in_col(collection, 'ARMATURE')
 
-        for name in bpy.data.materials.keys():
-            if name not in existingMaterials:
-                bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
+        #for sketchfab exports, we want to keep our materials
+        if not isExternalImport:
+            for name in bpy.data.materials.keys():
+                if name not in existingMaterials:
+                    bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
 
         if import_garmentsupport:
             manage_garment_support(existingMeshes, gltf_importer)
