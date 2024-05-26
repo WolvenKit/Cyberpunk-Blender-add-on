@@ -7,6 +7,7 @@ from ..main.setup import MaterialBuilder
 from ..main.common import json_ver_validate, UV_by_bounds, show_message
 from .attribute_import import manage_garment_support
 from ..main.animtools import get_anim_info
+from .import_from_external import *
 import traceback
 
 def objs_in_col(top_coll, objtype):
@@ -37,8 +38,19 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
         f['name']=os.path.basename(self.filepath)
         loadfiles=(f,)
 
-
+    file_names=[]
+    file_paths=[]
     for f in loadfiles:
+        file_names.append( f['name'])
+        file_paths.append(os.path.join(directory, f['name']))
+
+    # check materials
+
+    #Kwek: Gate this--do the block iff corresponding Material.json exist
+    #Kwek: was tempted to do a try-catch, but that is just La-Z
+    #Kwek: Added another gate for materials
+    for f in loadfiles:
+        filename=os.path.splitext(f['name'])[0]
         filepath = os.path.join(directory, f['name'])
 
         gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'BLENDER', "guess_original_bind_pose" : False, "import_user_extensions": ""})
@@ -46,18 +58,34 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
         gltf_importer.checks()
 
         #kwekmaster: modified to reflect user choice
-
-        if len(bpy.data.meshes) is not 0:
+        if len(bpy.data.meshes) != 0:
             print(filepath + " Loaded; With materials: "+str(with_materials))
         existingMeshes = bpy.data.meshes.keys()
 
+        current_file_base_path = os.path.splitext(filepath)[0]
+        has_material_json = os.path.exists(current_file_base_path + ".Material.json")
 
         existingMaterials = bpy.data.materials.keys()
         BlenderGlTF.create(gltf_importer)
+
+        imported=context.selected_objects #the new stuff should be selected
+
+        # if we're not importing a Cyberpunk mesh, not all submesh names will start with submesh_00, and they will be nested weirdly.
+        # we want to clean this up.
+        imported_meshes = [obj for obj in imported if obj.type == "MESH"]
+        imported_empties = [obj for obj in imported if obj.type == "EMPTY"]
+        isExternalImport = len(imported_empties) > 0 or len([mesh.name for mesh in imported_meshes if mesh.name.startswith("submesh")]) != len(imported_meshes)
+
+        if isExternalImport:
+            CP77_cleanup_external_export(imported)
+
+
         imported= context.selected_objects #the new stuff should be selected
         if f['name'][:7]=='terrain':
             UV_by_bounds(imported)
-        collection = bpy.data.collections.new(os.path.splitext(f['name'])[0])
+
+        #create a collection by file name
+        collection = bpy.data.collections.new(filename)
         bpy.context.scene.collection.children.link(collection)
         for o in imported:
             import_meshes_and_anims(collection, gltf_importer, hide_armatures, o)
@@ -73,16 +101,14 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
         if import_garmentsupport:
             manage_garment_support(existingMeshes, gltf_importer)
 
-        BasePath = os.path.splitext(filepath)[0]
-
         #Kwek: Gate this--do the block iff corresponding Material.json exist
         #Kwek: was tempted to do a try-catch, but that is just La-Z
         #Kwek: Added another gate for materials
-        if not (with_materials and os.path.exists(BasePath + ".Material.json")):
+        if not (with_materials and has_material_json):
             blender_4_scale_armature_bones()
-            return
+            continue
 
-        file = open(BasePath + ".Material.json",mode='r')
+        file = open(current_file_base_path + ".Material.json",mode='r')
         obj = json.loads(file.read())
         file.close()
         valid_json=json_ver_validate(obj)
@@ -114,7 +140,7 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
                 for m in json_apps[key]:
                     validmats[m]=True
 
-        import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, obj,
+        import_mats(current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, obj,
                     validmats)
 
 
@@ -224,6 +250,9 @@ def blender_4_scale_armature_bones():
 
 
 def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o):
+    # check if this is a Cyberpunk import or something else entirely
+
+
     for parent in o.users_collection:
         parent.objects.unlink(o)
     collection.objects.link(o)
