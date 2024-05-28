@@ -160,11 +160,16 @@ def get_rot(inst):
             rot[1] = inst['orientation']['i'] 
             rot[2] = inst['orientation']['j'] 
             rot[3] = inst['orientation']['k'] 
-    elif 'Rotation' in inst.keys():
+    elif 'Rotation' in inst.keys() and 'r' in inst['Rotation'].keys():
             rot[0] = inst['Rotation']['r'] 
             rot[1] = inst['Rotation']['i'] 
             rot[2] = inst['Rotation']['j'] 
             rot[3] = inst['Rotation']['k'] 
+    elif 'Rotation' in inst.keys() and 'X' in inst['Rotation'].keys():
+            rot[0] = inst['Rotation']['W'] 
+            rot[1] = inst['Rotation']['X'] 
+            rot[2] = inst['Rotation']['Y'] 
+            rot[3] = inst['Rotation']['Z'] 
     elif 'rotation' in inst.keys():
             rot[0] = inst['rotation']['r'] 
             rot[1] = inst['rotation']['i'] 
@@ -258,7 +263,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     if(meshname != 0):
                         meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
                 case 'worldStaticMeshNode' |'worldRotatingMeshNode'|'worldAdvertisingNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' \
-                    | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode': 
+                    | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldTerrainMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode' | 'worldFoliageNode': 
                     if isinstance(e, dict) and 'mesh' in data.keys():
                         meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                         #print('Mesh name is - ',meshname, e['HandleId'])
@@ -552,7 +557,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 obj.scale.y=abs(meshYScale)
                                                 obj.rotation_mode='QUATERNION'
                                                 obj.rotation_quaternion = Quaternion((0.707,0,0.707,0))
-    
+                    
                     case 'worldInstancedMeshNode' :
                         #print('worldInstancedMeshNode')
                         instances = [x for x in t if x['NodeIndex'] == i]
@@ -615,6 +620,88 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                             obj.scale = get_scale(inst_trans)
                                             obj['matrix']=obj.matrix_world       
                                             obj.color = (0.785188, 0.409408, 0.0430124, 1)
+
+                                            #if obj.location.x == 0:
+                                            #    print('Location @ 0 for Mesh - ',meshname, ' - ',i,'HandleId - ', e['HandleId'])
+
+                            else:
+                                print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
+                    
+                    case 'worldFoliageNode' :
+                        #print('worldFoliageNode')
+                        instances = [x for x in t if x['NodeIndex'] == i]
+                        for idx,inst in enumerate(instances):
+                            meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep) 
+                            foliageResource=data['foliageResource']['DepotPath']['$value'].replace('\\', os.sep)+'.json'
+                            with open(os.path.join(path,foliageResource),'r') as frfile:
+                                frjson=json.load(frfile)
+                            inst_pos=get_pos(inst)
+                            Bucketnum=data['populationSpanInfo']['cketCount']
+                            Bucketstart=data['populationSpanInfo']['cketBegin']
+                            InstBegin=data['populationSpanInfo']['stancesBegin']
+                            InstCount=data['populationSpanInfo']['stancesCount']
+                            if(meshname != 0):
+                                #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
+                                groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
+                                while len(groupname) > 63:
+                                    groupname = groupname[:-1]
+                                group=Masters.children.get(groupname)
+                                if (group):
+                                    #print('Group found for ',groupname)    
+                                    WFI_Coll_name = 'WFI_'+str(inst['nodeDataIndex'])+'_'+groupname
+                                    while len(WFI_Coll_name) > 63:
+                                            WFI_Coll_name = NDI_Coll_name[:-1]
+                                    WFI_Coll = bpy.data.collections.new(WFI_Coll_name)
+                                    Sector_coll.children.link(WFI_Coll)
+                                    WFI_Coll['nodeType']=type
+                                    WFI_Coll['nodeIndex']=i
+                                    WFI_Coll['nodeDataIndex']=inst['nodeDataIndex']
+                                    WFI_Coll['mesh']=meshname
+                                    WFI_Coll['debugName']=e['Data']['debugName']
+                                    WFI_Coll['sectorName']=sectorName 
+                                    WFI_Coll['Bucketnum']=Bucketnum
+                                    WFI_Coll['Bucketstart']=Bucketstart
+                                    WFI_Coll['InstBegin']=InstBegin
+                                    WFI_Coll['InstCount']=InstCount
+
+                                    PopSubIndex=frjson['Data']['RootChunk']['dataBuffer']['Data']['Buckets'][Bucketnum]['PopulationSubIndex']
+                                    PopSubCount=frjson['Data']['RootChunk']['dataBuffer']['Data']['Buckets'][Bucketnum]['PopulationCount']
+                                    inst_pos =Vector(get_pos_whole(inst))
+                                    intr=get_rot(inst)
+                                    inst_rot =Quaternion((intr[0],intr[1],intr[2],intr[3]))
+                                    inst_scale =Vector((1,1,1))
+                                    inst_m=Matrix.LocRotScale(inst_pos,inst_rot,inst_scale)
+
+                                    for El_idx in range(InstBegin+PopSubIndex, InstBegin+InstCount):
+                                        #create the linked copy of the group of mesh
+                                        new_groupname = 'WFI'+str(inst['nodeDataIndex'])+'_'+str(El_idx)+'_'+groupname
+                                        while len(new_groupname) > 63:
+                                            new_groupname = new_groupname[:-1]
+                                        new = bpy.data.collections.new(new_groupname)
+                                        WFI_Coll.children.link(new)
+                                        new['nodeType']=type
+                                        new['nodeIndex']=i
+                                        new['nodeDataIndex']=inst['nodeDataIndex']
+                                        new['Element_idx']=El_idx
+                                        new['mesh']=meshname
+                                        new['debugName']=e['Data']['debugName']
+                                        new['sectorName']=sectorName 
+                                        
+                                        popInfo=frjson['Data']['RootChunk']['dataBuffer']['Data']['Populations'][El_idx]
+                                        inst_trans_rot=Quaternion((popInfo['Rotation']['W'],popInfo['Rotation']['X'], popInfo['Rotation']['Y'],popInfo['Rotation']['Z']))  
+                                        inst_trans_pos=Vector(get_pos(popInfo))
+                                        inst_trans_scale=Vector((popInfo['Scale'],popInfo['Scale'],popInfo['Scale']))
+                                        inst_trans_m=Matrix.LocRotScale(inst_trans_pos,inst_trans_rot,inst_trans_scale)
+                                        
+                                        tm= inst_m @ inst_trans_m
+
+                                        for old_obj in group.all_objects:                            
+                                            obj=old_obj.copy()  
+                                            new.objects.link(obj)                                    
+                                                                                        
+                                            obj.matrix_local = tm
+                                            obj['matrix']=obj.matrix_world       
+                                            obj.color = (0.0, 1.0, 0.0, 1)
 
                                             #if obj.location.x == 0:
                                             #    print('Location @ 0 for Mesh - ',meshname, ' - ',i,'HandleId - ', e['HandleId'])
@@ -763,7 +850,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                             print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
 
                     case 'worldStaticMeshNode' |'worldRotatingMeshNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldAdvertismentNode' | \
-                'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldClothMeshNode' | 'worldDecorationMeshNode': 
+                'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldTerrainMeshNode' | 'worldClothMeshNode' | 'worldDecorationMeshNode': 
                         if isinstance(e, dict) and 'mesh' in data.keys():
                             meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                             #print('Mesh name is - ',meshname, e['HandleId'])
