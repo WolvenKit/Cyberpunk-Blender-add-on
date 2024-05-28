@@ -27,6 +27,7 @@ import traceback
 from pprint import pprint 
 from ..main.setup import MaterialBuilder
 from ..main.collisions import set_collider_props
+from .collision_mesh_import import CP77CollisionTriangleMeshJSONimport_by_hashes
 from operator import add
 import bmesh
 VERBOSE=True
@@ -712,10 +713,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
 
                             else:
                                 print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
-                                                    
-                    case 'XworldDecorationMeshNode': 
-                        #print('worldDecorationMeshNode',i)
-                        pass
+                                        
                     case 'XworldInstancedOccluderNode':
                         #print('worldInstancedOccluderNode')
                         pass
@@ -1076,6 +1074,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                 #x=act['Position']['x']['Bits']/131072*scale_factor  
                                 #y=act['Position']['y']['Bits']/131072*scale_factor
                                 #z=act['Position']['z']['Bits']/131072*scale_factor
+                                sector_Hash=e['Data']['sectorHash']
                                 arot=get_rot(act)
                                 for s,shape in enumerate(act['Shapes']):
                                     if 'Size' in shape.keys():
@@ -1113,8 +1112,11 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         set_collider_props(crash, shape['ShapeType'], shape['Materials'][0]['$value'], 'WORLD')
                                                                     
                                     else: 
-                                        print(f"unsupported shape {shape['ShapeType']}")
-                                        o = bpy.data.objects.new('NDI_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s), None)
+                                        #print(f"unsupported shape {shape['ShapeType']}")
+                                        
+                                        o=CP77CollisionTriangleMeshJSONimport_by_hashes(sectorHashStr=sector_Hash,entryHashStr=shape['Hash'],project_raw_dir=path)
+                                        if not o:
+                                            o = bpy.data.objects.new('NDI_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s), None)
                                         o['nodeType']='worldCollisionNode'
                                         o['nodeIndex']=i
                                         o['nodeDataIndex']=inst['nodeDataIndex']

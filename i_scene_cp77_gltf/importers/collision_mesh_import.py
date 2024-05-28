@@ -5,7 +5,11 @@ import bmesh
 
 def CP77CollisionTriangleMeshJSONimport_by_hashes( sectorHashStr='', entryHashStr='', project_raw_dir=''):
     jsonpath=os.path.join(project_raw_dir,'collision_meshes',sectorHashStr+'_'+entryHashStr+'.json')
-    CP77CollisionTriangleMeshJSONimport( jsonpath )
+    if os.path.exists(jsonpath):
+        return CP77CollisionTriangleMeshJSONimport( jsonpath )
+    else:
+        print('ERROR: file not found: ',jsonpath)
+        return None
 
 
 def CP77CollisionTriangleMeshJSONimport( jsonpath ):
