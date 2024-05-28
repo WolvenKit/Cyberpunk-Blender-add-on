@@ -263,13 +263,22 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     if(meshname != 0):
                         meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
                 case 'worldStaticMeshNode' |'worldRotatingMeshNode'|'worldAdvertisingNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' \
-                    | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldTerrainMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode' | 'worldFoliageNode': 
-                    if isinstance(e, dict) and 'mesh' in data.keys():
+                    | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldTerrainMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode'\
+                   'worldStaticMeshNode' | 'worldDestructibleEntityProxyMeshNode' | 'worldStaticOccluderMeshNode' | 'worldFoliageNode': 
+                    if isinstance(e, dict) and 'mesh' in data.keys() and isinstance(data['mesh'], dict) and'DepotPath' in data['mesh'].keys():
                         meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                         #print('Mesh name is - ',meshname, e['HandleId'])
                         if(meshname != 0):
                             #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
-                            meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
+                            if 'meshAppearance' in e['Data'].keys():
+                                meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
+                            else:
+                                meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':{'$type': 'CName', '$storage': 'string', '$value': 'default'},'sector':sectorName})
+                    elif isinstance(e, dict) and 'meshRef' in data.keys() :
+                        meshname = data['meshRef']['DepotPath']['$value'].replace('\\', os.sep)
+                        if(meshname != 0):
+                            #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
+                            meshes.append({'basename':data['meshRef']['DepotPath']['$value'] ,'appearance':{'$type': 'CName', '$storage': 'string', '$value': 'default'},'sector':sectorName})
                 case 'worldInstancedDestructibleMeshNode':
                     #print('worldInstancedDestructibleMeshNode',i)
                     if isinstance(e, dict) and 'mesh' in data.keys():
@@ -305,7 +314,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
     to_mesh_no=100000
 
     for i,m in enumerate(meshes_w_apps):
-        if i>=from_mesh_no and i<=to_mesh_no and m[-4:]=='mesh':
+        if i>=from_mesh_no and i<=to_mesh_no and (m[-4:]=='mesh' or m[-13:]=='physicalscene'):
             apps=[]
             for meshApp in meshes_w_apps[m]['apps']:
                 apps.append(meshApp['$value'])
@@ -377,11 +386,6 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
             else:
                 Sector_additions_coll=bpy.data.collections.new(sectorName+'_new')
                 coll_scene.children.link(Sector_additions_coll)       
-
-        meshes =  glob.glob(os.path.join(path, "**", "*.glb"), recursive = True)
-
-        glbnames = [ os.path.basename(x) for x in meshes]
-        meshnames = [ os.path.splitext(x)[0]+".mesh" for x in glbnames]
 
         nodes = j["Data"]["RootChunk"]["nodes"]
         print(fpn, ' Processing ',len(nodes),' nodes for sector', sectorName)
@@ -664,8 +668,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     WFI_Coll['InstBegin']=InstBegin
                                     WFI_Coll['InstCount']=InstCount
 
-                                    PopSubIndex=frjson['Data']['RootChunk']['dataBuffer']['Data']['Buckets'][Bucketnum]['PopulationSubIndex']
-                                    PopSubCount=frjson['Data']['RootChunk']['dataBuffer']['Data']['Buckets'][Bucketnum]['PopulationCount']
+                                    PopSubIndex=frjson['Data']['RootChunk']['dataBuffer']['Data']['Buckets'][Bucketstart]['PopulationSubIndex']
+                                    PopSubCount=frjson['Data']['RootChunk']['dataBuffer']['Data']['Buckets'][Bucketstart]['PopulationCount']
                                     inst_pos =Vector(get_pos_whole(inst))
                                     intr=get_rot(inst)
                                     inst_rot =Quaternion((intr[0],intr[1],intr[2],intr[3]))
@@ -796,7 +800,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                     case 'worldRoadProxyMeshNode' : 
                         if isinstance(e, dict) and 'mesh' in data.keys():
                             meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
-                            meshpath=os.path.join(path, meshname[:-4]+'glb')
+                            #meshpath=os.path.join(path, meshname[:-4]+'glb')
+                            meshpath=os.path.join(path, meshname[:-1*len(os.path.splitext(meshname)[1])]+'.glb').replace('\\', os.sep)
                             #print(os.path.exists(meshpath))
                             #print('Mesh path is - ',meshpath, e['HandleId'])
                             if(meshname != 0):
@@ -850,11 +855,16 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                             print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
 
                     case 'worldStaticMeshNode' |'worldRotatingMeshNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldAdvertismentNode' | \
-                'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldTerrainMeshNode' | 'worldClothMeshNode' | 'worldDecorationMeshNode': 
-                        if isinstance(e, dict) and 'mesh' in data.keys():
+                'worldGenericProxyMeshNode'|'worldDestructibleEntityProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldStaticOccluderMeshNode'| 'worldTerrainMeshNode' | 'worldClothMeshNode' |\
+                'worldDecorationMeshNode' | 'worldDynamicMeshNode' : 
+                        meshname=None
+                        if isinstance(e, dict) and 'mesh' in data.keys() and isinstance(data['mesh'], dict) and'DepotPath' in data['mesh'].keys():
                             meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
+                        elif isinstance(e, dict) and 'meshRef' in data.keys():
+                            meshname = data['meshRef']['DepotPath']['$value'].replace('\\', os.sep)
+                        if meshname:
                             #print('Mesh name is - ',meshname, e['HandleId'])
-                            meshAppearance = data['meshAppearance']['$value'] # Need to actually use this
+                            #meshAppearance = data['meshAppearance']['$value'] # Need to actually use this
                             if(meshname != 0):
                                         #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
                                         groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
