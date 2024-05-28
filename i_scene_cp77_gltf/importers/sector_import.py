@@ -264,7 +264,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                         meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
                 case 'worldStaticMeshNode' |'worldRotatingMeshNode'|'worldAdvertisingNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' \
                     | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldTerrainMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode'\
-                   'worldStaticMeshNode' | 'worldDestructibleEntityProxyMeshNode' | 'worldStaticOccluderMeshNode' | 'worldFoliageNode': 
+                   'worldStaticMeshNode' | 'worldDestructibleEntityProxyMeshNode' | 'worldStaticOccluderMeshNode' |'worldDecorationMeshNode' | 'worldFoliageNode': 
                     if isinstance(e, dict) and 'mesh' in data.keys() and isinstance(data['mesh'], dict) and'DepotPath' in data['mesh'].keys():
                         meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                         #print('Mesh name is - ',meshname, e['HandleId'])
@@ -766,9 +766,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                 o.show_wire = True
                                 o.display.show_shadows = False
 
-                    case 'XworldStaticOccluderMeshNode':
-                        #print('worldStaticOccluderMeshNode',i)
-                        pass
+
                     
                     case 'worldSplineNode':
                         #print('worldSplineNode',i)
