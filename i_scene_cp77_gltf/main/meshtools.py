@@ -303,7 +303,7 @@ def CP77RefitList(context):
     target_addon_names = ['None']
     
     SoloArmsAddon = os.path.join(refit_dir, "SoloArmsAddon.zip")
-    Adonis = os.path.join(refit_dir, "Adonis.zip")
+    Adonis = os.path.join(refit_dir, "adonis.zip")
     VanillaFemToMasc = os.path.join(refit_dir, "f2m.zip")
     VanillaFem_BigBoobs = os.path.join(refit_dir, "f_normal_to_big_boobs.zip")
     VanillaFem_SmallBoobs = os.path.join(refit_dir, "f_normal_to_small_boobs.zip")
