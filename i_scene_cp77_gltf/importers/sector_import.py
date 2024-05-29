@@ -214,7 +214,7 @@ def get_tan_pos(inst):
         pos[1][2] = inst['Elements'][1]['Z'] 
     return pos
 
-def importSectors( filepath='', want_collisions=False, am_modding=False, with_materials=True, remap_depot=False ):
+def importSectors( filepath='', want_collisions=False, am_modding=False, with_materials=True, remap_depot=False, with_lights=True ):
     # Enter the path to your projects source\raw\base folder below, needs double slashes between folder names.
     path = os.path.join( os.path.dirname(filepath),'source','raw','base')
     print('path is ',path)
@@ -1018,34 +1018,34 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
 
                     case 'worldStaticLightNode':
                         #print('worldStaticLightNode',i)
-                        
-                        instances = [x for x in t if x['NodeIndex'] == i]
-                        for inst in instances:
-                            light_node=e['Data']
-                            light_ndata=inst
-                            color= light_node['color']  
-                            intensity=light_node['intensity']        
-                            flicker=light_node['flicker'] 
-                            area_shape=light_node['areaShape']
-                            pos=get_pos(light_ndata)
-                            rot=get_rot(light_ndata)
-                            
-                            A_Light=bpy.data.lights.new('worldStaticLightNode_'+str(i),'AREA')
-                            light_obj=bpy.data.objects.new('worldStaticLightNode_'+str(i), A_Light)
-                            Sector_coll.objects.link(light_obj)
-                            light_obj.location=pos
-                            light_obj.rotation_mode='QUATERNION'
-                            light_obj.rotation_quaternion=rot
-                            A_Light.energy = intensity
-                            A_Light.color = get_col(color)
-                            
-                            if area_shape=='ALS_Capsule':                        
-                                A_Light.shape='ELLIPSE'
-                                A_Light.size= light_node['capsuleLength']
-                                A_Light.size_y= light_node['radius']*2
-                            elif area_shape=='ALS_Sphere':                        
-                                A_Light.shape='DISK'
-                                A_Light.size= light_node['radius']*2
+                        if with_lights:
+                            instances = [x for x in t if x['NodeIndex'] == i]
+                            for inst in instances:
+                                light_node=e['Data']
+                                light_ndata=inst
+                                color= light_node['color']  
+                                intensity=light_node['intensity']        
+                                flicker=light_node['flicker'] 
+                                area_shape=light_node['areaShape']
+                                pos=get_pos(light_ndata)
+                                rot=get_rot(light_ndata)
+                                
+                                A_Light=bpy.data.lights.new('worldStaticLightNode_'+str(i),'AREA')
+                                light_obj=bpy.data.objects.new('worldStaticLightNode_'+str(i), A_Light)
+                                Sector_coll.objects.link(light_obj)
+                                light_obj.location=pos
+                                light_obj.rotation_mode='QUATERNION'
+                                light_obj.rotation_quaternion=rot
+                                A_Light.energy = intensity
+                                A_Light.color = get_col(color)
+                                
+                                if area_shape=='ALS_Capsule':                        
+                                    A_Light.shape='ELLIPSE'
+                                    A_Light.size= light_node['capsuleLength']
+                                    A_Light.size_y= light_node['radius']*2
+                                elif area_shape=='ALS_Sphere':                        
+                                    A_Light.shape='DISK'
+                                    A_Light.size= light_node['radius']*2
 
                         pass
 
