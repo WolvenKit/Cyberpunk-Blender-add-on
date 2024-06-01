@@ -1354,6 +1354,7 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
     want_collisions: BoolProperty(name="Import Collisions",default=False,description="Import Box and Capsule Collision objects (mesh not yet supported)")
     am_modding: BoolProperty(name="Generate New Collectors",default=False,description="Generate _new collectors for sectors to allow modifications to be saved back to game")
     with_materials: BoolProperty(name="With Materials",default=False,description="Import Wolvenkit-exported materials")
+    with_lights: BoolProperty(name="With Lights",default=False,description="Import Lights from the sector")    
     remap_depot: BoolProperty(name="Remap Depot",default=False,description="replace the json depot path with the one in prefs")  
     with_lights: BoolProperty(name="With Lights",default=False,description="Import Lights from the sector")    
 
