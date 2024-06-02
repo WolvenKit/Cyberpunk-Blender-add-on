@@ -539,7 +539,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                
                             curve=bpy.data.curves.new('worldSplineNode_','CURVE')    
                             curve.splines.new('BEZIER')
-                            curve.dimensions='3D'
+                            curve.dimensions = '3D'
                             bzps=curve.splines[0].bezier_points
                             bzps.add(len(mesh_obj.data.vertices)-1)
                             for p_no,v in enumerate(mesh_obj.data.vertices):    
