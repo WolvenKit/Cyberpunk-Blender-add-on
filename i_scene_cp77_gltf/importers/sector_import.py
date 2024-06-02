@@ -33,6 +33,36 @@ import bmesh
 VERBOSE=True
 scale_factor=1
 
+def points_within_tol(point1, point2, tolerance=0.01):
+    """
+    Check if two points are within a specified tolerance.
+    
+    :param point1: The first point as a tuple or list of (x, y, z) coordinates.
+    :param point2: The second point as a tuple or list of (x, y, z) coordinates.
+    :param tolerance: The tolerance within which the points should be to be considered close.
+    :return: True if the points are within the tolerance, False otherwise.
+    """
+    # Calculate the Euclidean distance between the points
+    distance = math.sqrt((point1[0] - point2[0]) ** 2 +
+                         (point1[1] - point2[1]) ** 2 +
+                         (point1[2] - point2[2]) ** 2)
+    
+    # Check if the distance is within the tolerance
+    return distance <= tolerance
+
+def average_vectors(vector1, vector2):
+    """
+    Calculate the average of two vectors.
+    
+    :param vector1: The first vector as a tuple or list of (x, y, z) coordinates.
+    :param vector2: The second vector as a tuple or list of (x, y, z) coordinates.
+    :return: The average vector as a tuple of (x, y, z) coordinates.
+    """
+    average = [(vector1[0] + vector2[0]) / 2,
+                (vector1[1] + vector2[1]) / 2,
+                (vector1[2] + vector2[2]) / 2]
+    return Vector(average)
+
 def apply_transform(ob, use_location=True, use_rotation=True, use_scale=True):
     mb = ob.matrix_basis
     I = Matrix()
@@ -253,40 +283,41 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
             print(i)
             data = e['Data']
             type = data['$type']
-            match type:
-                case 'worldEntityNode'|'worldDeviceNode': 
-                    #print('worldEntityNode',i)
-                    meshname = data['entityTemplate']['DepotPath']['$value'].replace('\\', os.sep)
-                    if(meshname != 0):
-                        meshes.append({'basename':e['Data']['entityTemplate']['DepotPath']['$value'],'appearance':e['Data']['appearanceName'],'sector':sectorName})
-                case 'worldInstancedMeshNode':
-                    meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
-                    if(meshname != 0):
-                        meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
-                case 'worldStaticMeshNode' |'worldRotatingMeshNode'|'worldAdvertisingNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' \
-                    | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldTerrainMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode'\
-                   'worldStaticMeshNode' | 'worldDestructibleEntityProxyMeshNode' | 'worldStaticOccluderMeshNode' |'worldDecorationMeshNode' | 'worldFoliageNode': 
-                    if isinstance(e, dict) and 'mesh' in data.keys() and isinstance(data['mesh'], dict) and'DepotPath' in data['mesh'].keys():
-                        meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
-                        #print('Mesh name is - ',meshname, e['HandleId'])
+            if  type=='worldBendedMeshNode' :#or type=='worldCableMeshNode': # can add a filter for dev here
+                match type:
+                    case 'worldEntityNode'|'worldDeviceNode': 
+                        #print('worldEntityNode',i)
+                        meshname = data['entityTemplate']['DepotPath']['$value'].replace('\\', os.sep)
                         if(meshname != 0):
-                            #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
-                            if 'meshAppearance' in e['Data'].keys():
-                                meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
-                            else:
-                                meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':{'$type': 'CName', '$storage': 'string', '$value': 'default'},'sector':sectorName})
-                    elif isinstance(e, dict) and 'meshRef' in data.keys() :
-                        meshname = data['meshRef']['DepotPath']['$value'].replace('\\', os.sep)
-                        if(meshname != 0):
-                            #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
-                            meshes.append({'basename':data['meshRef']['DepotPath']['$value'] ,'appearance':{'$type': 'CName', '$storage': 'string', '$value': 'default'},'sector':sectorName})
-                case 'worldInstancedDestructibleMeshNode':
-                    #print('worldInstancedDestructibleMeshNode',i)
-                    if isinstance(e, dict) and 'mesh' in data.keys():
+                            meshes.append({'basename':e['Data']['entityTemplate']['DepotPath']['$value'],'appearance':e['Data']['appearanceName'],'sector':sectorName})
+                    case 'worldInstancedMeshNode':
                         meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
-                        #print('Mesh name is - ',meshname, e['HandleId'])
                         if(meshname != 0):
                             meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
+                    case 'worldStaticMeshNode' |'worldRotatingMeshNode'|'worldAdvertisingNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' \
+                        | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldTerrainMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode'\
+                    'worldStaticMeshNode' | 'worldDestructibleEntityProxyMeshNode' | 'worldStaticOccluderMeshNode' |'worldDecorationMeshNode' | 'worldFoliageNode': 
+                        if isinstance(e, dict) and 'mesh' in data.keys() and isinstance(data['mesh'], dict) and'DepotPath' in data['mesh'].keys():
+                            meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
+                            #print('Mesh name is - ',meshname, e['HandleId'])
+                            if(meshname != 0):
+                                #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
+                                if 'meshAppearance' in e['Data'].keys():
+                                    meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
+                                else:
+                                    meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':{'$type': 'CName', '$storage': 'string', '$value': 'default'},'sector':sectorName})
+                        elif isinstance(e, dict) and 'meshRef' in data.keys() :
+                            meshname = data['meshRef']['DepotPath']['$value'].replace('\\', os.sep)
+                            if(meshname != 0):
+                                #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
+                                meshes.append({'basename':data['meshRef']['DepotPath']['$value'] ,'appearance':{'$type': 'CName', '$storage': 'string', '$value': 'default'},'sector':sectorName})
+                    case 'worldInstancedDestructibleMeshNode':
+                        #print('worldInstancedDestructibleMeshNode',i)
+                        if isinstance(e, dict) and 'mesh' in data.keys():
+                            meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
+                            #print('Mesh name is - ',meshname, e['HandleId'])
+                            if(meshname != 0):
+                                meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
     basenames=[]
     for m in meshes:
          if m['basename'] not in basenames:
@@ -351,7 +382,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
     inst_rot =Quaternion((0.707,0,.707,0))
     inst_scale =Vector((1,1,1))
     inst_m=Matrix.LocRotScale(inst_pos,inst_rot,inst_scale)
-
+    roads=[]
     for fpn,filepath in enumerate(jsonpath):
         projectjson=os.path.join(path,'base',os.path.basename(project)+'.streamingsector.json')
         if filepath==projectjson:
@@ -397,7 +428,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
             #   continue
             data = e['Data']
             type = data['$type']
-            if True:# type=='worldBendedMeshNode' :#or type=='worldCableMeshNode': # can add a filter for dev here
+            if  type=='worldBendedMeshNode' :#or type=='worldCableMeshNode': # can add a filter for dev here
                 match type:
                     case 'worldEntityNode' | 'worldDeviceNode': 
                         #print('worldEntityNode',i)
@@ -434,7 +465,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     new['nodeIndex']=i
                                     new['nodeDataIndex']=inst['nodeDataIndex']
                                     new['instance_idx']=idx
-                                    new['debugName']=e['Data']['debugName']
+                                    new['debugName']=e['Data']['debugName']['$value']
                                     new['sectorName']=sectorName 
                                     new['HandleId']=e['HandleId']
                                     new['entityTemplate']=os.path.basename(data['entityTemplate']['DepotPath']['$value'])
@@ -473,6 +504,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                         instances = [x for x in t if x['NodeIndex'] == i]
                         #if len(instances)>1:
                         #    print('Multiple Instances of node ',i)
+                        
+
                         if len(instances)>0 and (meshname != 0):
                             node=nodes[i]
                             defData=node['Data']['deformationData']
@@ -505,12 +538,14 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                
                             curve=bpy.data.curves.new('worldSplineNode_','CURVE')    
                             curve.splines.new('BEZIER')
+                            curve.dimensions='3D'
                             bzps=curve.splines[0].bezier_points
                             bzps.add(len(mesh_obj.data.vertices)-1)
                             for p_no,v in enumerate(mesh_obj.data.vertices):    
                                 bzps[p_no].co=v.co
                                 bzps[p_no].handle_left_type='AUTO'
-                                bzps[p_no].handle_right_type='AUTO'
+                                bzps[p_no].handle_right_type='AUTO'                      
+                                    
                                 
                             curve_obj = bpy.data.objects.new('worldSplineNode_', curve)
                             
@@ -524,11 +559,12 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                             if (group):
                                 new=bpy.data.collections.new(groupname)
                                 Sector_coll.children.link(new)
+                                    
                                 new['nodeType']=type
                                 new['nodeIndex']=i
                                 new['nodeDataIndex']=inst['nodeDataIndex']
                                 new['mesh']=meshname
-                                new['debugName']=e['Data']['debugName']
+                                new['debugName']=e['Data']['debugName']['$value']
                                 new['sectorName']=sectorName 
                                 
 
@@ -562,6 +598,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 obj.scale.y=abs(meshYScale)
                                                 obj.rotation_mode='QUATERNION'
                                                 obj.rotation_quaternion = Quaternion((0.707,0,0.707,0))
+                                                roads.append({'Mesh':obj, 'Curve':curve_obj,'Name':new['debugName'],'Startpos':bzps[0].co,'Endpos':bzps[-1].co})
                     
                     case 'worldInstancedMeshNode' :
                         #print('worldInstancedMeshNode')
@@ -587,7 +624,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     NDI_Coll['nodeIndex']=i
                                     NDI_Coll['nodeDataIndex']=inst['nodeDataIndex']
                                     NDI_Coll['mesh']=meshname
-                                    NDI_Coll['debugName']=e['Data']['debugName']
+                                    NDI_Coll['debugName']=e['Data']['debugName']['$value']
                                     NDI_Coll['sectorName']=sectorName 
                                     NDI_Coll['numElements']=num
                                     for El_idx in range(start, start+num):
@@ -602,7 +639,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         new['nodeDataIndex']=inst['nodeDataIndex']
                                         new['Element_idx']=El_idx
                                         new['mesh']=meshname
-                                        new['debugName']=e['Data']['debugName']
+                                        new['debugName']=e['Data']['debugName']['$value']
                                         new['sectorName']=sectorName 
                                         for old_obj in group.all_objects:                            
                                             obj=old_obj.copy()  
@@ -662,7 +699,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                     WFI_Coll['nodeIndex']=i
                                     WFI_Coll['nodeDataIndex']=inst['nodeDataIndex']
                                     WFI_Coll['mesh']=meshname
-                                    WFI_Coll['debugName']=e['Data']['debugName']
+                                    WFI_Coll['debugName']=e['Data']['debugName']['$value']
                                     WFI_Coll['sectorName']=sectorName 
                                     WFI_Coll['Bucketnum']=Bucketnum
                                     WFI_Coll['Bucketstart']=Bucketstart
@@ -689,7 +726,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         new['nodeDataIndex']=inst['nodeDataIndex']
                                         new['Element_idx']=El_idx
                                         new['mesh']=meshname
-                                        new['debugName']=e['Data']['debugName']
+                                        new['debugName']=e['Data']['debugName']['$value']
                                         new['sectorName']=sectorName 
                                         
                                         popInfo=frjson['Data']['RootChunk']['dataBuffer']['Data']['Populations'][El_idx]
@@ -733,7 +770,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                             o['nodeIndex']=i
                             o['instance_idx']=idx
                             o['decal']=e['Data']['material']['DepotPath']['$value']
-                            o['debugName']=e['Data']['debugName']
+                            o['debugName']=e['Data']['debugName']['$value']
                             o['sectorName']=sectorName
                             Sector_coll.objects.link(o)
                             o.location = get_pos(inst)
@@ -826,7 +863,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 new['nodeIndex']=i
                                                 new['nodeDataIndex']=inst['nodeDataIndex']
                                                 new['mesh']=meshname
-                                                new['debugName']=e['Data']['debugName']
+                                                new['debugName']=e['Data']['debugName']['$value']
                                                 new['sectorName']=sectorName
                                                 new['pivot']=inst['Pivot']
                                             
@@ -889,7 +926,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 new['nodeDataIndex']=inst['nodeDataIndex']
                                                 new['instance_idx']=idx
                                                 new['mesh']=meshname
-                                                new['debugName']=e['Data']['debugName']
+                                                new['debugName']=e['Data']['debugName']['$value']
                                                 new['sectorName']=sectorName
                                                 new['pivot']=inst['Pivot']
 
@@ -947,7 +984,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                             NDI_Coll['nodeIndex']=i
                                             NDI_Coll['nodeDataIndex']=inst['nodeDataIndex']
                                             NDI_Coll['mesh']=meshname
-                                            NDI_Coll['debugName']=e['Data']['debugName']
+                                            NDI_Coll['debugName']=e['Data']['debugName']['$value']
                                             NDI_Coll['sectorName']=sectorName 
                                             NDI_Coll['numElements']=num
                                             #print('Glb found - ',glbfoundname)
@@ -964,7 +1001,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                     new['tl_instance_idx']=instidx
                                                     new['sub_instance_idx']=idx
                                                     new['mesh']=meshname
-                                                    new['debugName']=e['Data']['debugName']
+                                                    new['debugName']=e['Data']['debugName']['$value']
                                                     new['sectorName']=sectorName  
                                                     new['pivot']=inst['Pivot']
                                                     
@@ -1150,6 +1187,48 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
     for obj in bpy.data.objects:
         if 'Decal' in obj.name:
             obj['matrix']=obj.matrix_world
+    if len(roads)>0:
+        for road in roads:
+            curve=road['Curve']
+            endpoint=curve.data.splines[0].bezier_points[-1]
+            nextroad=[r for r in roads if (points_within_tol(r['Endpos'],road['Endpos']) or points_within_tol(r['Startpos'],road['Endpos'])) and r['Name']!=road['Name']]
+            if len(nextroad)==1:
+                nextroad=nextroad[0]
+                nextcurve=nextroad['Curve']
+                if points_within_tol(nextroad['Endpos'],road['Endpos']):
+                    nextpoint=nextcurve.data.splines[0].bezier_points[-1]
+                else:
+                    nextpoint=nextcurve.data.splines[0].bezier_points[0]
+
+                
+                if points_within_tol(endpoint.handle_left, nextpoint.handle_left,0.5):
+                    lefthandlepos=average_vectors( endpoint.handle_left, nextpoint.handle_left)
+                else:
+                    lefthandlepos=average_vectors( endpoint.handle_left, nextpoint.handle_right)
+                lh = bpy.data.objects.new( "empty", None )
+                lh.location = lefthandlepos 
+                Sector_coll.objects.link(lh)   
+                if points_within_tol(endpoint.handle_right, nextpoint.handle_right,0.5):
+                    righthandlepos=average_vectors( endpoint.handle_right, nextpoint.handle_right)
+                else:
+                    righthandlepos=average_vectors( endpoint.handle_right, nextpoint.handle_left)
+                lh = bpy.data.objects.new( "empty", None )
+                lh.location = righthandlepos
+                Sector_coll.objects.link(lh)
+                # Set the handle types to vector ('FREE', 'VECTOR', 'ALIGNED', 'AUTO')
+                nextpoint.handle_left_type='ALIGNED'
+                nextpoint.handle_right_type='ALIGNED'
+                endpoint.handle_left_type='ALIGNED'
+                endpoint.handle_right_type='ALIGNED'
+                # Set the handles to the average of the two roads
+                endpoint.handle_left = lefthandlepos
+                nextpoint.handle_left = lefthandlepos
+                endpoint.handle_right = righthandlepos
+                nextpoint.handle_right = righthandlepos
+                # Set the points to be the same
+                nextpoint.co=endpoint.co
+
+
     print('Finished Importing Sectors')
 
 
