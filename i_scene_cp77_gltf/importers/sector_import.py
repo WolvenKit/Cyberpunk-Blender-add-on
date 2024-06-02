@@ -245,6 +245,7 @@ def get_tan_pos(inst):
     return pos
 
 def importSectors( filepath='', want_collisions=False, am_modding=False, with_materials=True, remap_depot=False, with_lights=True ):
+
     # Enter the path to your projects source\raw\base folder below, needs double slashes between folder names.
     path = os.path.join( os.path.dirname(filepath),'source','raw','base')
     print('path is ',path)
@@ -1150,7 +1151,6 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                                     
                                     else: 
                                         #print(f"unsupported shape {shape['ShapeType']}")
-                                        
                                         o=CP77CollisionTriangleMeshJSONimport_by_hashes(sectorHashStr=sector_Hash,entryHashStr=shape['Hash'],project_raw_dir=path)
                                         if not o:
                                             o = bpy.data.objects.new('NDI_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s), None)
@@ -1167,7 +1167,6 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         o.rotation_quaternion = rot
                                         if ssize:
                                             o.scale = (ssize[0],ssize[1],ssize[2])
-
 
                 
                     case _:
