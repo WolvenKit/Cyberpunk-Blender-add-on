@@ -283,7 +283,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
             print(i)
             data = e['Data']
             type = data['$type']
-            if  type=='worldBendedMeshNode' :#or type=='worldCableMeshNode': # can add a filter for dev here
+            if True: # type=='worldBendedMeshNode' :#or type=='worldCableMeshNode': # can add a filter for dev here
                 match type:
                     case 'worldEntityNode'|'worldDeviceNode': 
                         #print('worldEntityNode',i)
@@ -428,7 +428,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
             #   continue
             data = e['Data']
             type = data['$type']
-            if  type=='worldBendedMeshNode' :#or type=='worldCableMeshNode': # can add a filter for dev here
+            if  True:#type=='worldBendedMeshNode' :#or type=='worldCableMeshNode': # can add a filter for dev here
                 match type:
                     case 'worldEntityNode' | 'worldDeviceNode': 
                         #print('worldEntityNode',i)
