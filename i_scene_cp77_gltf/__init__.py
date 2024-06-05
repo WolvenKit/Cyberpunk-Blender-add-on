@@ -451,14 +451,17 @@ class CP77_PT_PanelProps(PropertyGroup):
         default=True,
         description="Import Wolvenkit-exported materials"
     )   
-
+    
+    preset_name: EnumProperty(
+        name="Preset Name", 
+        items=update_presets_items
+    )
+        
 class CP77CollisionGenerator(Operator):
     bl_idname = "generate_cp77.collisions"
     bl_label = "Generate Collider"
     bl_options = {'REGISTER', "UNDO"}
     bl_description = "Generate Colliders for use with Cyberpunk 2077"
-
-
 
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
@@ -1137,6 +1140,108 @@ class CP77RotateObj(Operator):
         rotate_quat_180(self, context)
         return {'FINISHED'}
 
+# Path to the JSON file
+VCOL_PRESETS_JSON = os.path.join(os.path.dirname(__file__), "vertex_color_presets.json")
+
+# Load and save presets from/to JSON
+def get_colour_presets():
+    if os.path.exists(VCOL_PRESETS_JSON):
+        with open(VCOL_PRESETS_JSON, 'r') as file:
+            return json.load(file)
+    return {}
+
+def save_presets(presets):
+    with open(VCOL_PRESETS_JSON, 'w') as file:
+        json.dump(presets, file, indent=4)
+
+def update_presets_items(self, context):
+    presets = get_colour_presets()
+    return [(name, name, "") for name in presets.keys()]
+
+class CP77AddVertexColorPreset(Operator):
+    bl_idname = "cp77.add_vertex_color_preset"
+    bl_label = "Save New Vertex Color Preset"
+    preset_name: StringProperty(name="Preset Name")
+    color_r: FloatProperty(name="Red", default=1.0, min=0.0, max=1.0)
+    color_g: FloatProperty(name="Green", default=1.0, min=0.0, max=1.0)
+    color_b: FloatProperty(name="Blue", default=1.0, min=0.0, max=1.0)
+
+    def execute(self, context):
+        presets = get_colour_presets()
+        presets[self.preset_name] = [self.color_r, self.color_g, self.color_b]
+        save_presets(presets)
+        self.report({'INFO'}, f"Preset '{self.preset_name}' added.")
+        return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+class CP77ApplyVertexColorPreset(Operator):
+    bl_idname = "cp77.apply_vertex_color_preset"
+    bl_label = "Apply Vertex Color Preset"
+
+    def execute(self, context):
+        props = context.scene.cp77_panel_props
+        presets = get_colour_presets()  # Reload presets to ensure we have the latest
+        preset = presets.get(props.preset_name)
+        if not preset:
+            self.report({'ERROR'}, f"Preset '{props.preset_name}' not found.")
+            return {'CANCELLED'}
+        
+        preset_color = preset + [1.0]
+        initial_mode = bpy.context.mode
+        bpy.ops.object.mode_set(mode='OBJECT')
+        for obj in context.selected_objects:
+            try:
+                if obj.type != 'MESH':
+                    continue
+
+                mesh = obj.data
+                if not mesh.vertex_colors:
+                    mesh.vertex_colors.new()
+
+                color_layer = mesh.vertex_colors.active.data
+
+                if initial_mode == 'EDIT_MESH':
+                    selected_verts = {v.index for v in mesh.vertices if v.select}
+
+                    for poly in mesh.polygons:
+                        for loop_index in poly.loop_indices:
+                            loop_vert_index = mesh.loops[loop_index].vertex_index
+                            if loop_vert_index in selected_verts:
+                                color_layer[loop_index].color = preset_color
+                    
+                    # Switch back to edit mode
+                    bpy.ops.object.mode_set(mode='EDIT')
+                else:
+                    for poly in mesh.polygons:
+                        for loop_index in poly.loop_indices:
+                            loop_vert_index = mesh.loops[loop_index].vertex_index
+                            if mesh.vertices[loop_vert_index].select:
+                                color_layer[loop_index].color = preset_color
+                    bpy.ops.object.mode_set(mode=initial_mode)
+                mesh.update()
+            except Exception as e:
+                print(e)
+
+        self.report({'INFO'}, f"Preset '{props.preset_name}' applied.")
+        return {'FINISHED'}
+
+class CP77VertexColorPanel(Panel):
+    bl_label = "Vert Colors"
+    bl_idname = "CP77_PT_vertex_color_presets"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "CP77 Modding"
+
+
+    def draw(self, context):
+        props = context.scene.cp77_panel_props
+        layout = self.layout
+        layout.operator("cp77.add_vertex_color_preset")
+        layout.prop(props, "preset_name", text="Select Preset")
+        layout.operator("cp77.apply_vertex_color_preset")
+
 
 class CP77_PT_MeshTools(Panel):
     bl_label = "Mesh Tools"
@@ -1219,7 +1324,7 @@ class CP77_PT_MeshTools(Panel):
                 box.operator("export_scene.mlsetup")
 
 
-## adds a message box for the exporters to use for error notifications, will also be used later for redmod integration
+## adds a message box for the exporters to use for error notifications
 class ShowMessageBox(Operator):
     bl_idname = "cp77.message_box"
     bl_label = "Cyberpunk 2077 IO Suite"
@@ -1257,6 +1362,7 @@ class CP77StreamingSectorExport(Operator,ExportHelper):
     def execute(self, context):
         exportSectors(self.filepath)
         return {'FINISHED'}
+    
 class CP77GLBExport(Operator,ExportHelper):
   ### cleaned this up and moved most code to exporters.py
     bl_idname = "export_scene.cp77_glb"
