@@ -1423,7 +1423,6 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
     want_collisions: BoolProperty(name="Import Collisions",default=False,description="Import Box and Capsule Collision objects (mesh not yet supported)")
     am_modding: BoolProperty(name="Generate New Collectors",default=False,description="Generate _new collectors for sectors to allow modifications to be saved back to game")
 
-
     def draw(self, context):
         cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences
         props = context.scene.cp77_panel_props
@@ -1467,6 +1466,7 @@ class CP77_PT_ImportWithMaterial(Panel):
         props = context.scene.cp77_panel_props
         operator = context.space_data.active_operator
         layout = self.layout
+        
         row = layout.row(align=True)
         layout.enabled = props.with_materials
         row.prop(operator, 'exclude_unused_mats')
@@ -1523,6 +1523,11 @@ class CP77Import(Operator,ImportHelper):
 
     #kwekmaster: refactor UI layout from the operator.
     def draw(self, context):
+        layout = self.layout
+        row = layout.row(align=True)
+        split = row.split(factor=0.45,align=True)
+        split.label(text="Mesh Appearance:")
+        split.prop(self, "appearances", text="")
         pass
 
     def execute(self, context):

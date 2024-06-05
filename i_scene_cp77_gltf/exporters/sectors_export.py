@@ -21,23 +21,9 @@
 # Ask in world-editing on the discord (https://discord.gg/redmodding) if you have any trouble
 
 # TODO
-
-# - Fix the entities
-# - Add collisions
+# - Fix the entities - done
+# - Add collisions - can delete
 # - sort out instanced bits
-
-from mathutils import Vector, Matrix, Quaternion
-def are_matrices_equal(mat1, mat2, tolerance=0.01):
-    if len(mat1) != len(mat2):
-        return False
-
-    for i in range(len(mat1)):
-        for j in range(len(mat1[i])):
-            if abs(mat1[i][j] - mat2[i][j]) > tolerance:
-                return False
-
-    return True
-
 
 import json
 import glob
@@ -45,8 +31,19 @@ import os
 import bpy
 import copy
 from ..main.common import *
-
+from mathutils import Vector, Matrix, Quaternion
 from os.path import join
+
+def are_matrices_equal(mat1, mat2, tolerance=0.01):
+    if len(mat1) != len(mat2):
+        return False
+    
+    for i in range(len(mat1)):
+        for j in range(len(mat1[i])):
+            if abs(mat1[i][j] - mat2[i][j]) > tolerance:
+                return False
+    
+    return True
 
 #
 # If you want your deletions archive.xl to be yaml not json, you need to install pyyaml
@@ -82,7 +79,6 @@ except:
 
 C = bpy.context
 
-
 # function to recursively count nested collections
 def countChildNodes(collection):
     if 'expectedNodes' in collection:
@@ -102,7 +98,10 @@ def to_archive_xl(xlfilename, deletions, expectedNodes):
             continue
         new_sector={}
         new_sector['path']=sectorPath
-        new_sector['expectedNodes']=expectedNodes[sectorPath]
+        if sectorPath in expectedNodes.keys():
+            new_sector['expectedNodes']=expectedNodes[sectorPath]
+        else:
+            continue
         new_sector['nodeDeletions']=[]
         sectorData = deletions[sectorPath]
         currentNodeIndex = -1
@@ -328,14 +327,55 @@ def createNodeData(t, col, nodeIndex, obj, ID):
     new = t[len(t)-1]
     new['NodeIndex']=nodeIndex
     new['Position']={'$type': 'Vector4','W':0,'X':float("{:.9g}".format(obj.location[0])),'Y':float("{:.9g}".format(obj.location[1])),'Z':float("{:.9g}".format(obj.location[2]))}
+    new['Orientation']={'$type': 'Quaternion','r':float("{:.9g}".format(obj.rotation_quaternion[0])),'i':float("{:.9g}".format(obj.rotation_quaternion[1])),'j':float("{:.9g}".format(obj.rotation_quaternion[2])),'k':float("{:.9g}".format(obj.rotation_quaternion[3]))}
+    new['Scale']= {'$type': 'Vector3', 'X':  float("{:.9g}".format(obj.scale[0])), 'Y':  float("{:.9g}".format(obj.scale[1])), 'Z':  float("{:.9g}".format(obj.scale[2]))}
     new['Pivot']= {'$type': 'Vector3', 'X': 0, 'Y': 0, 'Z': 0}
     new['Bounds']= {'$type': 'Box'}
     new['Bounds']['Max']={'$type': 'Vector4','X':float("{:.9g}".format(obj.location[0])),'Y':float("{:.9g}".format(obj.location[1])),'Z':float("{:.9g}".format(obj.location[2]))}
     new['Bounds']['Min']={'$type': 'Vector4','X':float("{:.9g}".format(obj.location[0])),'Y':float("{:.9g}".format(obj.location[1])),'Z':float("{:.9g}".format(obj.location[2]))}
-    new['Orientation']={'$type': 'Quaternion','r':float("{:.9g}".format(obj.rotation_quaternion[0])),'i':float("{:.9g}".format(obj.rotation_quaternion[1])),'j':float("{:.9g}".format(obj.rotation_quaternion[2])),'k':float("{:.9g}".format(obj.rotation_quaternion[3]))}
-    new['Scale']= {'$type': 'Vector3', 'X':  float("{:.9g}".format(obj.scale[0])), 'Y':  float("{:.9g}".format(obj.scale[1])), 'Z':  float("{:.9g}".format(obj.scale[2]))}
-
-
+    
+def create_static_from_WIMN(node, template_nodes,  newHID):
+    new_ni=len(template_nodes)
+    WSMN={
+          "Data": {
+            "$type": "worldStaticMeshNode",
+            "castLocalShadows": "Always",
+            "castRayTracedGlobalShadows": "Always",
+            "castRayTracedLocalShadows": "Always",
+            "castShadows": "Always",
+            "debugName": {
+              "$type": "CName",
+              "$storage": "string",
+              "$value": node['Data']['debugName']['$value']
+            },
+            "isHostOnly": node['Data']['isHostOnly'],
+            "isVisibleInGame": node['Data']['isVisibleInGame'],
+            "mesh": {
+              "DepotPath": {
+                "$type": "ResourcePath",
+                "$storage": "string",
+                "$value": node['Data']['mesh']['DepotPath']['$value']
+              },              
+              "Flags": "Soft"
+            },
+            "meshAppearance": {
+              "$type": "CName",
+              "$storage": "string",
+              "$value": node['Data']['meshAppearance']['$value']
+            },
+            "occluderAutohideDistanceScale": node['Data']['occluderAutohideDistanceScale'],
+            "occluderType": node['Data']['occluderType'],
+            "proxyScale": node['Data']['proxyScale'],            
+            
+            "sourcePrefabHash": node['Data']['sourcePrefabHash'],
+            "tag": node['Data']['tag'],
+            "tagExt":node['Data']['tagExt'],
+            "version": node['Data']['version'],
+            
+          }
+        }
+    template_nodes.append(WSMN)
+    newHID+=1
 
 
 def exportSectors( filename):
@@ -374,10 +414,13 @@ def exportSectors( filename):
         if 'exported' in obj.keys():
             obj['exported']=False
     coll_scene = bpy.context.scene.collection
+    impacts=None
+    impact_mats=[]
     Inst_bufferIDs={}
-    # .  .  __ .    .. .  .  __      __  ___ .  .  ___  ___
-    # |\/| /  \ \  / | |\ | / _`    /__`  |  |  | |__  |__
-    # |  | \__/  \/  | | \| \__/    .__/  |  \__/ |    |
+    new_HID=10000
+    # .  .  __ .    .. .  .  __      __  ___ .  .  ___  ___ 
+    # |\/| /  \ \  / | |\ | / _`    /__`  |  |  | |__  |__  
+    # |  | \__/  \/  | | \| \__/    .__/  |  \__/ |    |    
     #
     deletions = {}
     deletions['Decals']={}
@@ -426,40 +469,36 @@ def exportSectors( filename):
                     if not checkexists(meshname, Masters):
                         print(meshname, ' not found in masters')
                         continue
-
-                    num=data['worldTransformsBuffer']['numElements']
-                    start=data['worldTransformsBuffer']['startIndex']
-                    if(meshname != 0):
-                        for idx in range(start, start+num):
-                            bufferID=0
-                            if 'Data' in data['worldTransformsBuffer']['sharedDataBuffer'].keys():
-                                    inst_trans=data['worldTransformsBuffer']['sharedDataBuffer']['Data']['buffer']['Data']['Transforms'][idx]
-
-                            elif 'HandleRefId' in data['worldTransformsBuffer']['sharedDataBuffer'].keys():
-                                bufferID = int(data['worldTransformsBuffer']['sharedDataBuffer']['HandleRefId'])
-                                ref=e
-                                for n in nodes:
-                                    if n['HandleId']==str(bufferID-1):
-                                        ref=n
-                                inst_trans = ref['Data']['worldTransformsBuffer']['sharedDataBuffer']['Data']['buffer']['Data']['Transforms'][idx]
-                        # store the bufferID for when we add new stuff.
-                            if Sector_additions_coll:
-                                Sector_additions_coll['Inst_bufferID']=bufferID
-                            obj_col=find_col(i,idx,Sector_coll)
-                            if obj_col and inst_trans:
-                                if len(obj_col.objects)>0:
-                                    obj=obj_col.objects[0]
-                                    # Check for Position and if changed delete the original and add to the new sector
-                                    if obj.matrix_world!=Matrix(obj_col['matrix']):
-                                        deletions[sectorName].append(obj_col)
-                                        new_ni=len(template_nodes)
-                                        template_nodes.append(copy.deepcopy(nodes[obj_col['nodeIndex']]))
-                                        # might need to convert instanced to static here, not sure what the best approach is.
-                                        createNodeData(template_nodeData, obj_col, new_ni, obj,ID)
-                                        ID+=1
-                                else:
-                                    if obj_col:
-                                        deletions[sectorName].append(obj_col)
+                   
+                    instances = [(NodeData,nodeDataIndex) for nodeDataIndex,NodeData in enumerate(t) if NodeData['NodeIndex'] == i]
+                    for Nidx,(inst,instNDidx) in enumerate(instances):
+                        num=data['worldTransformsBuffer']['numElements']
+                        start=data['worldTransformsBuffer']['startIndex']
+                        if(meshname != 0):
+                            for idx in range(start, start+num):
+                                 # find the top level instance collector
+                                obj_col=find_col(i,idx,Sector_coll)    
+                                if obj_col :
+                                    # elements are in collectors inside the top one, not just objects
+                                    if len(obj_col.children)>0 and len(obj_col.children[0].objects)>0:
+                                        obj=obj_col.children[0].objects[0]
+                                        # Check for Position and if changed delete the original and add to the new sector
+                                        if obj.matrix_world!=Matrix(obj_col['matrix']):
+                                            deletions[sectorName].append(obj_col)
+                                            # working with instancedmesh nodes is a pain in the ass, so convert to static
+                                            
+                                            create_static_from_WIMN(e,  template_nodes,  new_HID)                                            
+                                            new_ni=len(template_nodes)-1
+                                            for child in obj_col.children:
+                                                if len(child.objects)>0:
+                                                    # might need to convert instanced to static here, not sure what the best approach is.
+                                                    createNodeData(template_nodeData, child, new_ni, child.objects[0], ID)
+                                                    ID+=1
+                                    else:
+                                        # empty collector, so just delete
+                                        if obj_col:
+                                            deletions[sectorName].append(obj_col)
+                                    
 
                 case 'worldStaticDecalNode':
                     #print('worldStaticDecalNode')
@@ -537,67 +576,45 @@ def exportSectors( filename):
                         num=data['cookedInstanceTransforms']['numElements']
                         start=data['cookedInstanceTransforms']['startIndex']
                         instances = [x for x in t if x['NodeIndex'] == i]
+                        # need to go through the instances (tlidx - top level index) and then the elements (just idx)
+                        new_WIDM_static=None
                         for tlidx,inst in enumerate(instances):
                             for idx in range(start, start+num):
-                                bufferID=0
-                                basic_trans=None
-                                # Transforms are inside the cookedInstanceTransforms in a buffer
-                                if 'Data' in data['cookedInstanceTransforms']['sharedDataBuffer'].keys():
-                                    basic_trans=data['cookedInstanceTransforms']['sharedDataBuffer']['Data']['buffer']['Data']['Transforms'][idx]
-
-                                # Transforms are in a shared buffer in another node, so get the reference and find the transform data
-                                elif 'HandleRefId' in data['cookedInstanceTransforms']['sharedDataBuffer'].keys():
-                                    bufferID = int(data['cookedInstanceTransforms']['sharedDataBuffer']['HandleRefId'])
-                                    ref=e
-                                    for n in nodes:
-                                        if n['HandleId']==str(bufferID-1):
-                                            ref=n
-                                    basic_trans = ref['Data']['cookedInstanceTransforms']['sharedDataBuffer']['Data']['buffer']['Data']['Transforms'][idx]
-                                    #print(basic_trans)
-                                else :
-                                    print(e)
-                                # store the bufferID for when we add new stuff.
-                                if Sector_additions_coll:
-                                    Sector_additions_coll['Dest_bufferID']=bufferID
-                                    #print('Setting Dest_bufferID to ',bufferID)
-
-                                # the Transforms are stored as 2 parts, a basic transform applied to all the instances and individual ones per instance
-                                # lets get the basic one so we can calculate the instance one.
-                                basic_pos =Vector(get_pos(basic_trans))
-                                basic_rot =Quaternion(get_rot(basic_trans))
-                                basic_scale =Vector((1,1,1))
-                                basic_matr=Matrix.LocRotScale(basic_pos,basic_rot,basic_scale)
-                                basic_matr_inv=basic_matr.inverted()
-
-                                # Never modify the basic on as other nodes may be referencing it. (its normally 0,0,0 anyway)
-                                inst_pos =Vector(get_pos(inst))
-                                inst_rot =Quaternion(get_rot(inst))
-                                inst_scale =Vector((1,1,1))
-                                inst_m=Matrix.LocRotScale(inst_pos,inst_rot,inst_scale)
-
 
                                 obj_col=find_wIDMN_col(i,tlidx,idx,Sector_coll)
-                                if obj_col:
-                                    if len(obj_col.objects)>0:
-                                        obj=obj_col.objects[0]
+
+                                if obj_col :
+                                    # elements are in collectors inside the top one, not just objects
+                                    if len(obj_col.children)>0 and len(obj_col.children[0].objects)>0:
+                                        obj=obj_col.children[0].objects[0]
                                         # Check for Position and if changed delete the original and add to the new sector
                                         if obj.matrix_world!=Matrix(obj_col['matrix']):
                                             deletions[sectorName].append(obj_col)
-                                            new_ni=len(template_nodes)
-                                            template_nodes.append(copy.deepcopy(nodes[obj_col['nodeIndex']]))
+                                            # working with instancedmesh nodes is a pain in the ass, so convert to static
+                                            if new_WIDM_static==None:
+                                                create_static_from_WIMN(e,  template_nodes,  new_HID)                                            
+                                                new_ni=len(template_nodes)-1
+                                                new_WIDM_static=new_ni
 
-                                            createNodeData(template_nodeData, obj_col, new_ni, obj,ID)
-                                            ID+=1
 
+                                            for child in obj_col.children:
+                                                if len(child.objects)>0:
+                                                    # might need to convert instanced to static here, not sure what the best approach is.
+                                                    createNodeData(template_nodeData, child, new_WIDM_static, child.objects[0],ID)
+                                                    ID+=1
                                     else:
+                                        # empty collector, so just delete
                                         if obj_col:
                                             deletions[sectorName].append(obj_col)
+
+
                 case 'worldCollisionNode':
                     # need to process the sector_coll sectors and look for deleted collision bodies - this is almost identical to import, refactor them to have it in one place
                     if sector_Collisions in coll_scene.children.keys():
-                        print('collisions')
+                        
                         sector_Collisions_coll=bpy.data.collections.get(sector_Collisions)
                         inst = [x for x in t if x['NodeIndex'] == i][0]
+                        print('collisions Node ',inst['nodeDataIndex'])
                         Actors=e['Data']['compiledData']['Data']['Actors']
                         expectedNodes[sectorName+'_NI_'+str(inst['nodeDataIndex'])] = len(Actors)
                         for idx,act in enumerate(Actors):
@@ -608,16 +625,58 @@ def exportSectors( filename):
                             for s,shape in enumerate(act['Shapes']):
                                 collname='NodeDataIndex_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s)
                                 if collname in sector_Collisions_coll.objects:
-                                    print('found')
+                                    print('found ',collname)
                                     crash= sector_Collisions_coll.objects[collname]
-                                    if are_matrices_equal(crash.matrix_world,Matrix(crash['matrix'])):
-                                        print('collision moved - cant process this yet')
+                                    if Matrix(crash['matrix']).to_translation()!=crash.matrix_world.to_translation():
+                                        # how the f do we deal with this???
+                                        # delete the actor with archivexl, then recreate it with the new position
+                                        # so we need a collisions node, then we need to add the actor
+                                        # if we already added one to the export sector it should be ref'd by impacts, if not copy this one and ref it from impacts
+                                        # Code below is working, but the collisions arent, I'm clearly missing something.
+                                        if impacts==None:
+                                            # add the actor to the archivexl deletion list 
+                                            if inst['nodeDataIndex'] in deletions['Collisions'][sectorName].keys():
+                                                deletions['Collisions'][sectorName][inst['nodeDataIndex']].append(str(idx))
+                                            else:
+                                                deletions['Collisions'][sectorName][inst['nodeDataIndex']]=[str(idx)]
+
+                                            # nodeindex is the len of template nodes
+                                            new_ni=len(template_nodes)
+                                            #copy the collision node
+                                            template_nodes.append(copy.deepcopy(nodes[i]))
+                                            createNodeData(template_nodeData, nodes[i], new_ni, obj,ID)
+                                            ID+=1
+                                            impacts = template_nodes[len(template_nodes)-1]
+                                            impacts['Data']['compiledData']['Data']['Actors']=[]
+                                            #need to update the position data
+                                      
+                                        # Add the current actor to the actors
+                                        impacts['Data']['compiledData']['Data']['Actors'].append(copy.deepcopy(Actors[idx]))
+                                        #update its position                                        
+                                        ddyer=impacts['Data']['compiledData']['Data']['Actors'][len(impacts['Data']['compiledData']['Data']['Actors'])-1]
+                                        actloc = ((crash.location[0]-ddyer['Shapes'][s]['Position']['X'])*131072,(crash.location[1]-ddyer['Shapes'][s]['Position']['Y'])*131072,(crash.location[2]-ddyer['Shapes'][s]['Position']['Z'])*131072)
+                                        ddyer['Shapes'][s]['Position']={"$type": "Vector3", "X": { "$type": "FixedPoint", "Bits": int(actloc[0])  },"y": {"$type": "FixedPoint","Bits": int(actloc[1]) },
+                                                           "z": { "$type": "FixedPoint", "Bits": int(actloc[2]) }}
+                                        ddyer['Orientation']={'$type': 'Quaternion','r':float("{:.9g}".format(crash.rotation_quaternion[0])),'i':float("{:.9g}".format(crash.rotation_quaternion[1])),'j':float("{:.9g}".format(crash.rotation_quaternion[2])),'k':float("{:.9g}".format(crash.rotation_quaternion[3]))}
+                                        ddyer['Scale']= {'$type': 'Vector3', 'X':  float("{:.9g}".format(crash.scale[0])), 'Y':  float("{:.9g}".format(crash.scale[1])), 'Z':  float("{:.9g}".format(crash.scale[2]))}
+                                        if 'Size' in ddyer['Shapes'][s].keys():
+                                            ddyer['Shapes'][s]['Size']= { "$type": "Vector3", "X": crash.dimensions[0]/2, "Y": crash.dimensions[1]/2, "Z": crash.dimensions[2]/2  }
+                                        #update the numActors property
+                                        impacts['Data']['numActors']=len(impacts['Data']['compiledData']['Data']['Actors'])
+                                        
+                                        for mat in shape['Materials']:
+                                            if mat['$value'] not in impact_mats:
+                                                impact_mats.append(mat['$value'])
+                                        impacts['Data']['numMaterials']=len(impact_mats)
+                                            
+                                        
                                 else:
                                     if shape['ShapeType']=='Box' or shape['ShapeType']=='Capsule':
                                         if inst['nodeDataIndex'] in deletions['Collisions'][sectorName].keys():
                                             deletions['Collisions'][sectorName][inst['nodeDataIndex']].append(str(idx))
                                         else:
                                             deletions['Collisions'][sectorName][inst['nodeDataIndex']]=[str(idx)]
+
 
 
 
@@ -980,9 +1039,6 @@ def exportSectors( filename):
                 print('After = ',len(wtbbuffer['Transforms']))
 
 
-
-
-
     # Export the modified json
     sectpathout=os.path.join(projpath,os.path.splitext(os.path.basename(filename))[0]+'.streamingsector.json')
     with open(sectpathout, 'w') as outfile:
@@ -990,5 +1046,4 @@ def exportSectors( filename):
 
     xlpathout=os.path.join(xloutpath,os.path.splitext(os.path.basename(filename))[0]+'.archive.xl')
     to_archive_xl(xlpathout, deletions, expectedNodes)
-    print('Finished exporting sectors from ',os.path.splitext(os.path.basename(filename))[0])
-
+    print('Finished exporting sectors from ',os.path.splitext(os.path.basename(filename))[0], ' to ',sectpathout )
