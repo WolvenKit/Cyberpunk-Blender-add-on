@@ -1367,7 +1367,6 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
     with_lights: BoolProperty(name="With Lights",default=False,description="Import Lights from the sector")
     remap_depot: BoolProperty(name="Remap Depot",default=False,description="replace the json depot path with the one in prefs")
 
-
     def draw(self, context):
         cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences
         layout = self.layout
@@ -1405,12 +1404,13 @@ class CP77_PT_ImportWithMaterial(Panel):
     def draw_header(self, context):
         operator = context.space_data.active_operator
         self.layout.prop(operator, "with_materials", text="")
-
+        
     def draw(self, context):
         cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences
         props = context.scene.cp77_panel_props
         operator = context.space_data.active_operator
         layout = self.layout
+        
         row = layout.row(align=True)
         layout.enabled = operator.with_materials
         row.prop(operator, 'exclude_unused_mats')
@@ -1475,6 +1475,11 @@ class CP77Import(Operator,ImportHelper):
 
     #kwekmaster: refactor UI layout from the operator.
     def draw(self, context):
+        layout = self.layout
+        row = layout.row(align=True)
+        split = row.split(factor=0.45,align=True)
+        split.label(text="Mesh Appearance:")
+        split.prop(self, "appearances", text="")
         pass
 
     def execute(self, context):
