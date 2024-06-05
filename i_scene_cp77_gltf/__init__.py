@@ -1546,52 +1546,38 @@ def menu_func_export(self, context):
     self.layout.operator(CP77GLBExport.bl_idname, text="Cyberpunk GLB", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
     self.layout.operator(CP77StreamingSectorExport.bl_idname, text="Cyberpunk StreamingSector", icon_value=custom_icon_col["import"]['WKIT'].icon_id)
 
-#kwekmaster - Minor Refactoring
-classes = (
-    CP77Import,
-    CP77EntityImport,
-    CP77_PT_ImportWithMaterial,
-    CP77StreamingSectorImport,
-    CP77StreamingSectorExport,
-    CP77GLBExport,
-    ShowMessageBox,
-    CP77_PT_AnimsPanel,
-    CP77Keyframe,
-    CP77CollisionExport,
-    CP77CollisionGenerator,
-    CP77Animset,
-    CP77ScriptManager,
-    CP77DeleteScript,
-    CP77CreateScript,
-    CP77LoadScript,
-    CP77AnimsDelete,
-    CP77SaveScript,
-    CP77IOSuitePreferences,
-    CollectionAppearancePanel,
-    CP77HairProfileExport,
-    CP77RotateObj,
-    CP77_PT_MeshTools,
-    CP77Autofitter,
-    CP77NewAction,
-    CP77RigLoader,
-    CP77SetArmature,
-    CP77_PT_PanelProps,
-    CP77GroupVerts,
-    CP77UVTool,
-    CP77MlSetupExport,
-    CP77WeightTransfer,
-    CP77ResetArmature,
-    CP77UVCheckRemover,
-    CP7PhysImport,
-    CP77PhysMatAssign,
-    CP77_PT_CollisionTools,
-    CP77_OT_submesh_prep,
-    CP77BoneHider,
-    CP77BoneUnhider,
-    CP77AnimNamer,
-)
+classes = []
 
+def get_classes():
+    operator_classes = []
+    other_classes = []
+    propgroup = []
+    module_names = list(sys.modules.keys())
+    for name, obj in inspect.getmembers(sys.modules[__name__]):
+        if inspect.isclass(obj) and obj.__module__ == __name__:
+            if issubclass(obj, bpy.types.PropertyGroup):
+                propgroup.append(obj)
+            elif issubclass(obj, bpy.types.Operator):
+                operator_classes.append(obj)
+            else:
+                other_classes.append(obj)
+    for module_name in module_names:
+        module = sys.modules[module_name]
+        if hasattr(module, "__file__") and module.__file__ and module.__file__.endswith(".py") and module_name != __name__:
+            for name, obj in inspect.getmembers(module):
+                if inspect.isclass(obj) and obj.__module__ == __name__:
+                    if issubclass(obj, bpy.types.PropertyGroup):
+                        propgroup.append(obj)
+                    elif issubclass(obj, bpy.types.Operator):
+                        operator_classes.append(obj)
+                    else:
+                        other_classes.append(obj)
+    
+    return propgroup + operator_classes + other_classes
 
+classes.extend(get_classes())
+
+# Register all classes
 def register():
     custom_icon = bpy.utils.previews.new()
     custom_icon.load("WKIT", os.path.join(icons_dir, "wkit.png"), 'IMAGE')
@@ -1614,29 +1600,31 @@ def register():
     custom_icon_col["tech"] = tech_icon
     custom_icon_col["sculpt"] = sculpt_icon
     custom_icon_col["refit"] = refit_icon
-
-    #kwekmaster - Minor Refactoring
+    
     for cls in classes:
+        print(f"Registered:  {cls}")
         bpy.utils.register_class(cls)
-
     Scene.cp77_panel_props = PointerProperty(type=CP77_PT_PanelProps)
     TOPBAR_MT_file_import.append(menu_func_import)
-    TOPBAR_MT_file_export.append(menu_func_export)
-
+    TOPBAR_MT_file_export.append(menu_func_export) 
+    print('')
+    print('-------------------- Cyberpunk IO Suite Finished--------------------')
+    print('')
 def unregister():
     del Scene.cp77_panel_props
     for icon_key in custom_icon_col.keys():
         bpy.utils.previews.remove(custom_icon_col[icon_key])
 
 
-    #kwekmaster - Minor Refactoring
-    for cls in classes:
+    # Unregister all classes
+    for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
 
 
+    
     TOPBAR_MT_file_import.remove(menu_func_import)
     TOPBAR_MT_file_export.remove(menu_func_export)
     custom_icon_col.clear()
-print('-------------------- Cyberpunk IO Suite Finished--------------------')
+    
 if __name__ == "__main__":
     register()
