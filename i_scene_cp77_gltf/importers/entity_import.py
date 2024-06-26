@@ -8,9 +8,9 @@ import time
 from math import sin,cos
 from mathutils import Vector, Matrix , Quaternion
 import bmesh
-from ..main.common import json_ver_validate, jsonload, loc, show_message
+from ..main.common import json_ver_validate, jsonload, loc
 from .phys_import import cp77_phys_import
-from ..main.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
+from ..collisiontools.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
 
 # The appearance list needs to be the appearanceNames for each ent that you want to import, will import all if not specified
 # if you've already imported the body/head and set the rig up you can exclude them by putting them in the exclude_meshes list 
@@ -31,8 +31,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
         j=jsonload(f) 
     valid_json=json_ver_validate(j)
     if not valid_json:
-        message="Incompatible entity json file detected. This add-on version requires materials generated WolvenKit 8.13 or higher."
-        show_message(message)
+        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Incompatible entity json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
         return {'CANCELLED'}
      
     ent_apps= j['Data']['RootChunk']['appearances']
@@ -117,8 +116,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                             anm_j=json.load(f) 
                         valid_json=json_ver_validate(anm_j)
                         if not valid_json:
-                            message="Incompatible anims json file detected. This add-on version requires jsons generated with WolvenKit 8.13 or higher."
-                            show_message(message)
+                            bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Incompatible anim json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
                             return {'CANCELLED'}
                         if os.path.join(path,anm_j['Data']['RootChunk']['rig']['DepotPath']['$value']) in ent_rigs:
                             animsinres.append(os.path.join(path,anim))
@@ -152,8 +150,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                     rig_j=json.load(f)
                     valid_json=json_ver_validate(rig_j)
                     if not valid_json:
-                        message="Incompatible rig json file detected. This add-on version requires jsons generated with WolvenKit 8.13 or higher."
-                        show_message(message)
+                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Incompatible rig json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
                         return {'CANCELLED'}
                     rig_j=rig_j['Data']['RootChunk']
                     print('rig json loaded')
@@ -238,8 +235,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                         a_j=json.load(a)
                     valid_json=json_ver_validate(a_j)
                     if not valid_json:
-                        message="Incompatible app json file detected. This add-on version requires jsons generated with WolvenKit 8.13 or higher."
-                        show_message(message)
+                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Incompatible app json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
                         return {'CANCELLED'}
                     apps=a_j['Data']['RootChunk']['appearances']
                     app_idx=0
@@ -351,8 +347,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                                         mesh_j=json.load(f)
                                                     valid_json=json_ver_validate(mesh_j)
                                                     if not valid_json:
-                                                        message="Incompatible anims json file detected. This add-on version requires jsons generated with WolvenKit 8.13 or higher."
-                                                        show_message(message)                                                        
+                                                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Incompatible anim json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
                                                         return {'CANCELLED'}
                                                     mesh_j=mesh_j['Data']['RootChunk']
                                                     #print('bindname from json ' ,mesh_j['boneNames'][0],bindname)
