@@ -1,8 +1,9 @@
 import json
 import os 
 import bpy
-from mathutils import Vector, Euler, Quaternion
-from ..main.common import show_message
+from bpy.props import StringProperty
+from bpy.types import Operator
+#from .. import show_message
 from .phys_export import export_colliders_to_phys
 
 def get_collider_collections(context, collider_name):
@@ -28,3 +29,4 @@ def cp77_collision_export(filepath, collision_type):
         show_message('Exporting of Entity Colliders is not yet supported')
     if collision_type == 'WORLD':
         show_message('Exporting of collision nodes is not yet supported')
+

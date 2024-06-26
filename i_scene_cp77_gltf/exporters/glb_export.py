@@ -1,5 +1,5 @@
 import bpy
-from ..main.animtools import reset_armature
+from .. animtools import reset_armature
 
 #setup the default options to be applied to all export types
 def default_cp77_options():
@@ -54,7 +54,7 @@ def pose_export_options():
     }
     return options
 
-
+#setup the actual exporter - rewrote almost all of this, much quicker now
 red_color = (1, 0, 0, 1)  # RGBA
 garment_cap_name="_GarmentSupportCap"
 garment_weight_name="_GarmentSupportWeight"
