@@ -918,7 +918,9 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                             meshname = data['meshRef']['DepotPath']['$value'].replace('\\', os.sep)
                         if meshname:
                             #print('Mesh name is - ',meshname, e['HandleId'])
-                            #meshAppearance = data['meshAppearance']['$value'] # Need to actually use this
+                            meshAppearance='default'
+                            if 'meshAppearance' in data.keys():
+                                meshAppearance = data['meshAppearance']['$value'] # Need to actually use this
                             if(meshname != 0):
                                         #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
                                         groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
@@ -950,6 +952,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 new['debugName']=e['Data']['debugName']['$value']
                                                 new['sectorName']=sectorName
                                                 new['pivot']=inst['Pivot']
+                                                new['meshAppearance']=meshAppearance
 
                                                 print(new['nodeDataIndex'])
                                                 # Should do something with the Advertisements lightData  bits here 
