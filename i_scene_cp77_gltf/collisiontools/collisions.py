@@ -1,7 +1,9 @@
 import bpy
 import bmesh
 from mathutils import Vector, Euler, Quaternion
-from .common import show_message
+from ..main.common import show_message
+from ..main.bartmoss_functions import calculate_mesh_volume
+
 
 def create_new_object(name, transform, collision_collection):
     mesh = bpy.data.meshes.new(name)
@@ -15,6 +17,7 @@ def create_new_object(name, transform, collision_collection):
     obj.location = position
     return obj
 
+
 def set_collider_props(obj, collision_shape, physmat, collision_type):
     obj['collisionType'] = collision_type
     obj['collisionShape'] = collision_shape
@@ -25,8 +28,9 @@ def set_collider_props(obj, collision_shape, physmat, collision_type):
     obj.show_in_front = True
     obj.display.show_shadows = False
     obj.rotation_mode = 'QUATERNION'
+    bpy.context.view_layer.update()
 
-                
+
 def draw_convex_collider(name, collision_collection, vertices, physmat, transform, collision_type):
     collision_shape = "physicsColliderConvex"
     obj = create_new_object(name, transform, collision_collection)
@@ -56,6 +60,7 @@ def draw_sphere_collider(name, collision_collection, radius, position, physmat, 
     sphere.location = position
     set_collider_props(sphere, collision_shape, physmat, collision_type)
     collision_collection.objects.link(sphere)
+
 
 def draw_capsule_collider(name, collision_collection, radius, height, position, rotation, physmat, collision_type):
     collision_shape = 'physicsColliderCapsule'
@@ -92,7 +97,6 @@ def draw_capsule_collider(name, collision_collection, radius, height, position, 
         bpy.ops.object.mode_set(mode='EDIT')
 
 
-
 def draw_box_collider(name, collision_collection, half_extents, transform, physmat, collision_type):
     collision_shape = "physicsColliderBox"
     bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0))
@@ -106,7 +110,7 @@ def draw_box_collider(name, collision_collection, half_extents, transform, physm
     box.rotation_quaternion = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
     collision_collection.objects.link(box)
     bpy.context.collection.objects.unlink(box) # Unlink from the current collection
-    
+
 
 def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, sampleverts, radius, height, physics_material):
     is_edit_mode = bpy.context.object.mode == 'EDIT'

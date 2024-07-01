@@ -2,7 +2,7 @@ import json
 import os 
 import bpy
 from mathutils import Vector, Euler, Quaternion
-from ..main.common import show_message
+#from ..main.common import show_message
 
 def export_colliders_to_phys(collections, filepath):
     # Initialize a list to store collider information

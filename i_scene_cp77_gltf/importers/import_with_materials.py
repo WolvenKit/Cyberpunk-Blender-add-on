@@ -4,11 +4,28 @@ import json
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
 from ..main.setup import MaterialBuilder
-from ..main.common import json_ver_validate, UV_by_bounds, show_message
-from .attribute_import import manage_garment_support
-from ..main.animtools import get_anim_info
+from ..main.common import json_ver_validate, UV_by_bounds
 from .import_from_external import *
+from .attribute_import import manage_garment_support
+from ..cyber_props import add_anim_props
 import traceback
+
+def get_anim_info(animations):
+    # Get animations
+    #animations = gltf_importer.data.animations
+
+    for animation in animations:
+        print(f"Processing animation: {animation.name}")
+
+        # Find an action whose name contains the animation name
+        action = next((act for act in bpy.data.actions if act.name.startswith(animation.name + "_Armature")), None)
+
+        if action:
+            add_anim_props(animation, action)
+            print("Properties added to", action.name)
+        else:
+            print("No action found for", animation.name)
+
 
 def objs_in_col(top_coll, objtype):
     return sum([len([o for o in col.objects if o.type==objtype]) for col in top_coll.children_recursive])+len([o for o in top_coll.objects if o.type==objtype])
@@ -271,10 +288,3 @@ def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o):
         # print('o.name - ',o.name)
         if 'Armature' in o.name:
             o.hide_set(hide_armatures)
-
-
-
-
-
-
-

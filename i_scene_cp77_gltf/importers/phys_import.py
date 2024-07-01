@@ -1,7 +1,7 @@
 import json
 import bpy
 import bmesh 
-from ..main.collisions import draw_box_collider, draw_convex_collider, set_collider_props
+from ..collisiontools.collisions import draw_box_collider, draw_convex_collider, set_collider_props
 
 def cp77_phys_import(filepath, rig=None, chassis_z=None):
     physJsonPath = filepath

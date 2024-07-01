@@ -10,7 +10,7 @@ from mathutils import Vector, Matrix , Quaternion
 import bmesh
 from ..main.common import json_ver_validate, jsonload, loc
 from .phys_import import cp77_phys_import
-from ..main.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
+from ..collisiontools.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
 
 # The appearance list needs to be the appearanceNames for each ent that you want to import, will import all if not specified
 # if you've already imported the body/head and set the rig up you can exclude them by putting them in the exclude_meshes list 
@@ -598,7 +598,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                         #print('colliders:', ent_colliderComps)
                         for physJsonPath in physJsonPaths:
                             if os.path.basename(physJsonPath)==chassis_phys_j:
-                                cp77_phys_import(collision_collection, physJsonPath, rig, chassis_z)
+                                cp77_phys_import(physJsonPath, rig, chassis_z)
                 except Exception as e:
                     print(e)
             

@@ -1,17 +1,33 @@
-
+import sys
 import bpy
 import os
 import math
 from mathutils import Color
 import pkg_resources
-import bpy
 import bmesh
+import inspect
 from mathutils import Vector
 import json
 
+# Function to dynamically gather classes defined in the same file
+def get_classes(module):
+    operators = set()
+    other_classes = set()
+    
+    # Collect classes in the specified module
+    for name, obj in inspect.getmembers(module):
+        if inspect.isclass(obj) and obj.__module__ == module.__name__:
+            if issubclass(obj, bpy.types.Operator):
+                operators.add(obj)
+            else:
+                other_classes.add(obj)
+    
+    # Convert the sets to lists and sort the collected classes by name
+    sorted_operators = sorted(list(operators), key=lambda cls: cls.__name__)
+    sorted_other_classes = sorted(list(other_classes), key=lambda cls: cls.__name__)
 
-def show_message(message):
-    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=message)
+    return sorted_operators, sorted_other_classes
+
 
 def loc(nodename):
     return bpy.app.translations.pgettext(nodename)
@@ -47,6 +63,10 @@ def get_resources_dir():
     plugin_dir = get_plugin_dir()
     return os.path.join(plugin_dir, "resources")
 
+def get_icon_dir():
+    plugin_dir = get_plugin_dir()
+    return os.path.join(plugin_dir, "icons")
+
 
 def get_refit_dir():
     resources_dir = get_resources_dir()
@@ -62,64 +82,6 @@ def get_rig_dir():
     resources_dir = get_resources_dir()
     return os.path.join(resources_dir, "rigs")
     
-
-def UV_by_bounds(selected_objects):
-    current_mode = bpy.context.object.mode
-    min_vertex = Vector((float('inf'), float('inf'), float('inf')))
-    max_vertex = Vector((float('-inf'), float('-inf'), float('-inf')))
-    for obj in selected_objects:
-        if obj.type == 'MESH':
-            matrix = obj.matrix_world
-            mesh = obj.data
-            for vertex in mesh.vertices:
-                vertex_world = matrix @ vertex.co
-                min_vertex = Vector(min(min_vertex[i], vertex_world[i]) for i in range(3))
-                max_vertex = Vector(max(max_vertex[i], vertex_world[i]) for i in range(3))
-
-    for obj in selected_objects:
-        if  len(obj.data.uv_layers)<1:
-            me = obj.data
-            bpy.ops.object.mode_set(mode='EDIT', toggle=False)
-            bm = bmesh.from_edit_mesh(me)
-            
-            uv_layer = bm.loops.layers.uv.verify()
-            
-            # adjust uv coordinates
-            for face in bm.faces:
-                for loop in face.loops:
-                    loop_uv = loop[uv_layer]
-                    # use xy position of the vertex as a uv coordinate
-                    loop_uv.uv[0]=(loop.vert.co.x-min_vertex[0])/(max_vertex[0]-min_vertex[0])
-                    loop_uv.uv[1]=(loop.vert.co.y-min_vertex[1])/(max_vertex[1]-min_vertex[1])
-
-            bmesh.update_edit_mesh(me)
-    bpy.ops.object.mode_set(mode=current_mode)
-
-def get_inputs(tree):
-  return ([x for x in tree.interface.items_tree if (x.item_type == 'SOCKET' and x.in_out == 'INPUT')])
-
-def get_outputs(tree):
-  return ([x for x in tree.interface.items_tree if (x.item_type == 'SOCKET' and x.in_out == 'OUTPUT')])
-
-def bsdf_socket_names():
-    socket_names={}
-    vers=bpy.app.version
-    if vers[0]<4:
-        socket_names['Subsurface']= 'Subsurface'
-        socket_names['Specular']= 'Specular'
-        socket_names['Transmission']= 'Transmission' 
-        socket_names['Coat']= 'Coat'
-        socket_names['Sheen']= 'Sheen'
-        socket_names['Emission']= 'Emission'
-    else:
-        socket_names['Subsurface']= 'Subsurface Weight'
-        socket_names['Specular']= 'Specular IOR Level'
-        socket_names['Transmission']= 'Transmission Weight' 
-        socket_names['Coat']= 'Coat Weight'
-        socket_names['Sheen']= 'Sheen Weight'
-        socket_names['Emission']= 'Emission Color'
-    return socket_names    
-
 def get_inputs(tree):
     vers=bpy.app.version
     if vers[0]<4:
@@ -155,17 +117,16 @@ def bsdf_socket_names():
         socket_names['Emission']= 'Emission Color'
     return socket_names    
 
-def json_ver_validate( json_data):
-    if 'Header' not in json_data.keys():
+def json_ver_validate(json_data):
+    if 'Header' not in json_data:
         return False
-    elif 'MaterialJsonVersion' in json_data['Header'].keys() and pkg_resources.parse_version(json_data['Header']['MaterialJsonVersion']) > pkg_resources.parse_version('1.0.0RC'):
-        return True
-    elif 'WKitJsonVersion' not in json_data['Header'].keys():
+    header = json_data['Header']
+    if "WolvenKitVersion" in header and "8.13" not in header["WolvenKitVersion"]:
+        if "8.14" not in header["WolvenKitVersion"]:
+            return False
+    if "MaterialJsonVersion" in header and "1." not in header["MaterialJsonVersion"]:
         return False
-    elif pkg_resources.parse_version(json_data['Header']['WKitJsonVersion']) < pkg_resources.parse_version('0.0.8RC'):
-        return False
-    else:
-        return True
+    return True
 
 def openJSON(path, mode='r',  ProjPath='', DepotPath=''):
     path = path.replace('\\', os.sep)
@@ -649,7 +610,9 @@ def createVecLerpGroup():
         CurMat.links.new(mul2.outputs[0],add.inputs[1])
         CurMat.links.new(add.outputs[0],GroupOutput.inputs[0])
         return CurMat
-    
+
+def show_message(message):
+    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=message) 
 def createHash12Group():
     if 'hash12' in bpy.data.node_groups.keys():
         return bpy.data.node_groups['hash12']
@@ -704,3 +667,34 @@ def createHash12Group():
         CurMat.links.new(mul.outputs[0],frac2.inputs[0])
         CurMat.links.new(frac2.outputs[0],GroupOutput.inputs[0])
         return CurMat   
+def UV_by_bounds(selected_objects):
+    current_mode = bpy.context.object.mode
+    min_vertex = Vector((float('inf'), float('inf'), float('inf')))
+    max_vertex = Vector((float('-inf'), float('-inf'), float('-inf')))
+    for obj in selected_objects:
+        if obj.type == 'MESH':
+            matrix = obj.matrix_world
+            mesh = obj.data
+            for vertex in mesh.vertices:
+                vertex_world = matrix @ vertex.co
+                min_vertex = Vector(min(min_vertex[i], vertex_world[i]) for i in range(3))
+                max_vertex = Vector(max(max_vertex[i], vertex_world[i]) for i in range(3))
+
+    for obj in selected_objects:
+        if  len(obj.data.uv_layers)<1:
+            me = obj.data
+            bpy.ops.object.mode_set(mode='EDIT', toggle=False)
+            bm = bmesh.from_edit_mesh(me)
+            
+            uv_layer = bm.loops.layers.uv.verify()
+            
+            # adjust uv coordinates
+            for face in bm.faces:
+                for loop in face.loops:
+                    loop_uv = loop[uv_layer]
+                    # use xy position of the vertex as a uv coordinate
+                    loop_uv.uv[0]=(loop.vert.co.x-min_vertex[0])/(max_vertex[0]-min_vertex[0])
+                    loop_uv.uv[1]=(loop.vert.co.y-min_vertex[1])/(max_vertex[1]-min_vertex[1])
+
+            bmesh.update_edit_mesh(me)
+    bpy.ops.object.mode_set(mode=current_mode)
