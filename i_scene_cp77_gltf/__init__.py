@@ -39,6 +39,7 @@ bl_info = {
     "doc_url": "https://github.com/WolvenKit/Cyberpunk-Blender-add-on#readme",
     "tracker_url": "https://github.com/WolvenKit/Cyberpunk-Blender-add-on/issues/new/choose",
 }
+
 plugin_version = ".".join(map(str, bl_info["version"]))
 blender_version = ".".join(map(str, bpy.app.version))
 script_dir = get_script_dir()
@@ -49,8 +50,6 @@ print(f"Cyberpunk IO Suite version: {plugin_version}")
 print()
 
 res_dir = get_resources_dir()
-
-
 
 class ShowMessageBox(Operator):
     bl_idname = "cp77.message_box"
@@ -69,7 +68,6 @@ class ShowMessageBox(Operator):
         layout = self.layout
         layout.label(text='Cyberpunk 2077 IO Suite')
         
-
     def draw(self, context):
         wrapp = textwrap.TextWrapper(width=50) #50 = maximum length       
         wList = wrapp.wrap(text=self.message) 
@@ -77,8 +75,6 @@ class ShowMessageBox(Operator):
             row = self.layout.row(align = True)
             row.alignment = 'EXPAND'
             row.label(text=text)     
-
-
 
 class CollectionAppearancePanel(Panel):
     bl_label = "Ent Appearances"
@@ -98,9 +94,7 @@ class CollectionAppearancePanel(Panel):
         collection = context.collection
         layout.prop(collection, "appearanceName")       
 
-
 operators, other_classes = get_classes(sys.modules[__name__])
-
 
 def register():
     register_prefs()
