@@ -283,7 +283,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                         meshApp=c['meshAppearance']['$value']
                                         #print(meshApp)
                                     try:
-                                        bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=meshApp)
+                                        bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=meshApp, with_materials=with_materials, update_gi=False, remap_depot=remapdepot)
                                         for obj in C.selected_objects:            
                                             obj['componentName'] = c['name']['$value']
                                             obj['sourcePath'] = meshpath
