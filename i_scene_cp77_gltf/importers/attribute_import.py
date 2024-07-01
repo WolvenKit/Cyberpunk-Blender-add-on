@@ -56,19 +56,3 @@ def add_vertex_color_attribute(accessor_name, attribute_name, gltf_importer_data
 
 def get_indices(gltf_importer_data, prim):
     gltf_importer = gltf_importer_data
-    if prim.indices is not None:
-        indices = BinaryData.decode_accessor(gltf_importer, prim.indices)
-        indices = indices.reshape(len(indices))
-    else:
-        num_verts = gltf_importer.data.accessors[prim.attributes['POSITION']].count
-        indices = np.arange(0, num_verts, dtype=np.uint32)
-
-    mode = 4 if prim.mode is None else prim.mode
-    points, edges, tris = points_edges_tris(mode, indices)
-    if points is not None:
-        indices = points
-    elif edges is not None:
-        indices = edges
-    else:
-        indices = tris
-    return indices

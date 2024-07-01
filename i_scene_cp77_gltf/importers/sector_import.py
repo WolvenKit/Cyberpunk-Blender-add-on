@@ -26,7 +26,7 @@ import time
 import traceback
 from pprint import pprint 
 from ..main.setup import MaterialBuilder
-from ..main.collisions import set_collider_props
+from ..collisiontools.collisions import set_collider_props
 from .collision_mesh_import import CP77CollisionTriangleMeshJSONimport_by_hashes
 from operator import add
 import bmesh

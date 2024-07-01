@@ -1,83 +1,11 @@
 import zipfile
 import bpy
-import math
 import json
 import os
-from .common import get_plugin_dir, get_resources_dir, get_refit_dir, get_rig_dir
-
-plugin_dir = get_plugin_dir()
-resources_dir = get_resources_dir()
-refit_dir = get_refit_dir()
-rig_dir = get_rig_dir()
-
-def CP77CollectionList(self, context):
-    items = []
-    ## don't include these as their not useful
-    excluded_names = ["Collection", "Scene Collection", "glTF_not_exported"]
-
-    for collection in bpy.data.collections:
-        if collection.name not in excluded_names:
-            items.append((collection.name, collection.name, ""))
-    return items
-
-
-def CP77ArmatureList(self, context):
-    items = []
-    for obj in bpy.data.objects:
-        if obj.type == 'ARMATURE':
-            items.append((obj.name, obj.name, ""))
-    return items
-
-
-def find_nearest_vertex_group(obj, vertex):
-    min_distance = math.inf
-    nearest_vertex = None
-    for v in obj.data.vertices:
-        if v.groups:
-            distance = (v.co - vertex.co).length
-            if distance < min_distance:
-                min_distance = distance
-                nearest_vertex = v
-    return nearest_vertex
-
-
-def CP77GroupUngroupedVerts(self, context):
-    C = bpy.context
-    obj = C.object
-    current_mode = C.mode
-
-    if obj.type != 'MESH':
-        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="The active object is not a mesh.")
-        return {'CANCELLED'}
-    else:
-        if current_mode != 'OBJECT':
-            bpy.ops.object.mode_set(mode='OBJECT')
-
-        ungrouped_vertices = [v for v in obj.data.vertices if not v.groups]
-
-        if ungrouped_vertices:
-            try:
-                for v in ungrouped_vertices:
-                    nearest_vertex = find_nearest_vertex_group(obj, v)
-                    if nearest_vertex:
-                        for g in nearest_vertex.groups:
-                            group_name = obj.vertex_groups[g.group].name
-                            obj.vertex_groups[group_name].add([v.index], 1.0, 'ADD')
-            except Exception as e:
-                print(e)
-
-        # Return to the mode the user was in edit_mesh was giving me a lot of trouble and is probably 
-        # the most common it will be here so special handling for it
-        if C.mode != current_mode:
-            try:
-                if current_mode == 'EDIT_MESH':
-                    bpy.ops.object.mode_set(mode='EDIT')
-                else:
-                    bpy.ops.object.mode_set(mode=current_mode)
-            except Exception as e:
-                print(e)
-    return {'FINISHED'}
-    
+from .verttools import *
+from ..cyber_props import *
+from ..main.common import  show_message
+   
 def CP77SubPrep(self, context, smooth_factor, merge_distance):
     scn = context.scene
     obj = context.object
@@ -123,90 +51,30 @@ def CP77ArmatureSet(self, context):
     props = context.scene.cp77_panel_props
     target_armature_name = props.selected_armature
     target_armature = bpy.data.objects.get(target_armature_name)
-    if target_armature and target_armature.type == 'ARMATURE':
-        for mesh in selected_meshes:
-            retargeted=False
-            for modifier in mesh.modifiers:
-                if modifier.type == 'ARMATURE' and modifier.object is not target_armature:
-                    modifier.object = target_armature
-                    retargeted=True
-                else:
-                    if modifier.type == 'ARMATURE' and modifier.object is target_armature:
+    if len(selected_meshes) >0:
+        if target_armature and target_armature.type == 'ARMATURE':
+            for mesh in selected_meshes:
+                retargeted=False
+                for modifier in mesh.modifiers:
+                    if modifier.type == 'ARMATURE' and modifier.object is not target_armature:
+                        modifier.object = target_armature
                         retargeted=True
-                        continue
-            if not retargeted:
-                armature = mesh.modifiers.new('Armature', 'ARMATURE')
-                armature.object = target_armature
+                    else:
+                        if modifier.type == 'ARMATURE' and modifier.object is target_armature:
+                            retargeted=True
+                            continue
+                if not retargeted:
+                    armature = mesh.modifiers.new('Armature', 'ARMATURE')
+                    armature.object = target_armature             
 
-
-def trans_weights(self, context):
-    current_mode = context.mode
-    props = context.scene.cp77_panel_props
-    source_mesh_name = props.mesh_source
-    target_mesh_name = props.mesh_target
-    active_objs = context.selected_objects
-    # Get the source collection
-    source_mesh = bpy.data.collections.get(source_mesh_name)
-    
-    # Get the target collection
-    target_mesh = bpy.data.collections.get(target_mesh_name)
-    
-    
-
-    if source_mesh and target_mesh:
-        if current_mode != 'OBJECT':
-            bpy.ops.object.mode_set(mode='OBJECT')
-        # Deselect all objects in the scene
-        bpy.ops.object.select_all(action='DESELECT')
-        
-        # Select the objects in the source collection
-        for source_obj in source_mesh.objects:
-            source_obj.select_set(True)
-            
-        # Set the active object to the last selected source object
-        bpy.context.view_layer.objects.active = source_obj
-        
-        # Iterate through objects in the target collection
-        for target_obj in target_mesh.objects:
-            target_obj.select_set(True)
-        
-        # Perform the data transfer
-        bpy.ops.object.data_transfer(
-            use_reverse_transfer=False,
-            vert_mapping='POLYINTERP_NEAREST',
-            data_type='VGROUP_WEIGHTS',
-            layers_select_dst='NAME',
-            layers_select_src='ALL'
-        )
-        bpy.ops.object.select_all(action='DESELECT')
-        context.view_layer.objects.active = None
-        
-    for obj in active_objs:
-        obj.select_set(True)
-        context.view_layer.objects.active = obj
-   
-        
-    if context.mode != current_mode:
-        try:
-            bpy.ops.object.mode_set(mode=current_mode)
-            
-        except TypeError:
-      
-            if current_mode == 'PAINT_WEIGHT':
-                bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
-            elif current_mode == 'EDIT_MESH':
-                bpy.ops.object.mode_set(mode='EDIT')
-            elif current_mode == 'PAINT_VERTEX':
-                bpy.ops.object.mode_set(mode='VERTEX_PAINT')
-    
-        
 
 def CP77UvChecker(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
     bpy_mats=bpy.data.materials
-    current_mode = context.mode
-    current_mat = None
-    uv_checker = None
+    current_mode = context.mode    
+ 
+
+
     for mat in bpy_mats:
         if mat.name == 'UV_Checker':
             uvchecker = mat
@@ -277,53 +145,6 @@ def CP77UvUnChecker(self, context):
                     bpy.ops.object.material_slot_assign()
         if context.mode != current_mode:
             bpy.ops.object.mode_set(mode=current_mode)
-                
-
-def cp77riglist(context):
-    cp77rigs = []
-    man_base = os.path.join(rig_dir, "man_base_full.glb")
-    woman_base = os.path.join(rig_dir, "woman_base_full.glb")
-    Jackie = os.path.join(rig_dir, "jackie_full.glb")
-    man_big = os.path.join(rig_dir, "man_big_full.glb")
-    man_fat = os.path.join(rig_dir, "man_fat_full.glb")
-    Rhino = os.path.join(rig_dir, "rhino_full.glb")
-    Judy = os.path.join(rig_dir, "Judy_full.glb")
-    Panam = os.path.join(rig_dir, "Panam_full.glb")
-    
-    # Store the variable names in a list
-    cp77rigs = [man_base, woman_base, Jackie, man_big, man_fat, Rhino, Judy, Panam]
-    cp77rig_names = ['man_base', 'woman_base', 'Jackie', 'man_big', 'man_fat', 'Rhino', 'Judy', 'Panam']
-
-    # Return the list of variable names
-    return cp77rigs, cp77rig_names
-
-
-def CP77RefitList(context):
-    target_addon_paths = [None]
-    target_addon_names = ['None']
-    
-    SoloArmsAddon = os.path.join(refit_dir, "SoloArmsAddon.zip")
-    Adonis = os.path.join(refit_dir, "adonis.zip")
-    VanillaFemToMasc = os.path.join(refit_dir, "f2m.zip")
-    VanillaFem_BigBoobs = os.path.join(refit_dir, "f_normal_to_big_boobs.zip")
-    VanillaFem_SmallBoobs = os.path.join(refit_dir, "f_normal_to_small_boobs.zip")
-    VanillaMascToFem = os.path.join(refit_dir, "m2f.zip")
-    Lush = os.path.join(refit_dir, "lush.zip")
-    Hyst_RB = os.path.join(refit_dir, "hyst_rb.zip")
-    Hyst_EBB = os.path.join(refit_dir, "hyst_ebb.zip")
-    Hyst_EBB_RB = os.path.join(refit_dir, "hyst_ebb_rb.zip")
-    Flat_Chest = os.path.join(refit_dir, "flat_chest.zip")
-    Solo_Ultimate = os.path.join(refit_dir, "solo_ultimate.zip")
-    Gymfiend = os.path.join(refit_dir, "gymfiend.zip")
-    Freyja = os.path.join(refit_dir, "freyja.zip")
-    # Hyst_EBBP_Addon = os.path.join(refit_dir, "hyst_ebbp_addon.zip")
-    
-    # Return the list of variable names
-    target_body_paths = [ Gymfiend, Freyja, SoloArmsAddon, Solo_Ultimate, Adonis, Flat_Chest, Hyst_EBB_RB, Hyst_EBB, Hyst_RB, Lush, VanillaFemToMasc, VanillaMascToFem, VanillaFem_BigBoobs, VanillaFem_SmallBoobs ]
-    target_body_names = [ 'Gymfiend', 'Freyja', 'SoloArmsAddon', 'Solo_Ultimate', 'Adonis', 'Flat_Chest', 'Hyst_EBB_RB', 'Hyst_EBB', 'Hyst_RB', 'Lush', 'VanillaFemToMasc', 'VanillaMascToFem', 'VanillaFem_BigBoobs', 'VanillaFem_SmallBoobs' ]
-
-    # Return the list of tuples
-    return target_body_paths, target_body_names
 
 
 def CP77RefitChecker(self, context):

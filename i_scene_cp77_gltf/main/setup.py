@@ -230,4 +230,3 @@ class MaterialBuilder:
             
             bpyMat.blend_method='HASHED'
             return bpyMat
-
