@@ -49,6 +49,7 @@ def calculate_mesh_volume(obj):
     bpy.ops.rigidbody.object_add()
     bpy.ops.rigidbody.mass_calculate(material='Custom', density=1) # density in kg/m^3
     volume = obj.rigid_body.mass
+    bpy.ops.rigidbody.objects_remove()
     return volume
     
     
