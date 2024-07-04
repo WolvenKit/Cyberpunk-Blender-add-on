@@ -1,13 +1,3 @@
-def install_dependency(dependency_name):
-    print(f"required package: {dependency_name} not found")
-    from pip import _internal as pip
-    print(f"Attempting to install {dependency_name}")
-    try:
-        pip.main(['install', dependency_name])
-        print(f"Successfully installed {dependency_name}")
-    except Exception as e:
-        print(f"Failed to install {dependency_name}: {e}")
-        
 print('-------------------- Cyberpunk IO Suite Starting--------------------')
 print()
 from .cyber_prefs import *
@@ -63,13 +53,14 @@ class ShowMessageBox(Operator):
 
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self, width=300)
+        return context.window_manager.invoke_props_dialog(self, width=500)
         
     def draw_header(self, context):
         layout = self.layout
         layout.label(text='Cyberpunk 2077 IO Suite')
         
     def draw(self, context):
-        wrapp = textwrap.TextWrapper(width=50) #50 = maximum length       
+        wrapp = textwrap.TextWrapper(width=100) #50 = maximum length       
         wList = wrapp.wrap(text=self.message) 
         for text in wList: 
             row = self.layout.row(align = True)
@@ -105,8 +96,7 @@ def register():
     register_exporters()
     register_scriptman()
     register_meshtools()
-    
-    
+
     for cls in operators:
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
