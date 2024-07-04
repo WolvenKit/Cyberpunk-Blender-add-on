@@ -1,6 +1,7 @@
 import bpy
 import os
 import json
+import time
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
 from ..main.setup import MaterialBuilder
@@ -8,25 +9,29 @@ from ..main.common import json_ver_validate, UV_by_bounds
 from .import_from_external import *
 from .attribute_import import manage_garment_support
 from ..cyber_props import add_anim_props
+from ..jsontool import jsonload
 import traceback
 
 def get_anim_info(animations):
     # Get animations
     #animations = gltf_importer.data.animations
-
+    cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     for animation in animations:
-        print(f"Processing animation: {animation.name}")
+        if not cp77_addon_prefs.non_verbose:
+            print(f"Processing animation: {animation.name}")
 
         # Find an action whose name contains the animation name
         action = next((act for act in bpy.data.actions if act.name.startswith(animation.name + "_Armature")), None)
 
         if action:
             add_anim_props(animation, action)
-            print("Properties added to", action.name)
+            if not cp77_addon_prefs.non_verbose:
+                print("Properties added to", action.name)
         else:
-            print("No action found for", animation.name)
+            if not cp77_addon_prefs.non_verbose:
+                print("No action found for", animation.name)
 
-
+    print('')
 def objs_in_col(top_coll, objtype):
     return sum([len([o for o in col.objects if o.type==objtype]) for col in top_coll.children_recursive])+len([o for o in top_coll.objects if o.type==objtype])
 
@@ -36,13 +41,25 @@ appearances = None
 collection = None
 
 def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_materials=True, filepath='', hide_armatures=True,  import_garmentsupport=False, files=[], directory='', appearances=[], remap_depot=False):
-
+    cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     context=bpy.context
+    obj = None
+    start_time = time.time()
     loadfiles=self.files
     appearances=self.appearances.split(",")
-    for f in appearances:
-        print(f)
-
+    if not cp77_addon_prefs.non_verbose:
+        if ".anims.glb" in self.filepath:
+            print('-------------------- Beginning Cyberpunk Animation Import --------------------')
+            print('')
+            print(f"Importing Animations From: {os.path.basename(self.filepath)}")
+            print('')
+        else:
+            print('-------------------- Beginning Cyberpunk Model Import --------------------')
+            print('')
+            print(f"Importing: {os.path.basename(self.filepath)}")
+            if with_materials==True:
+                print(f"Appearances to Import: {(', '.join(appearances))}")
+            print('')
     # prevent crash if no directory supplied when using filepath
     if len(self.directory)>0:
         directory = self.directory
@@ -70,13 +87,9 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
         filename=os.path.splitext(f['name'])[0]
         filepath = os.path.join(directory, f['name'])
 
-        gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'BLENDER', "guess_original_bind_pose" : False, "import_user_extensions": ""})
+        gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'BLENDER', "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':False})
         gltf_importer.read()
         gltf_importer.checks()
-
-        #kwekmaster: modified to reflect user choice
-        if len(bpy.data.meshes) != 0:
-            print(filepath + " Loaded; With materials: "+str(with_materials))
         existingMeshes = bpy.data.meshes.keys()
 
         current_file_base_path = os.path.splitext(filepath)[0]
@@ -123,22 +136,21 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
         #Kwek: Gate this--do the block iff corresponding Material.json exist
         #Kwek: was tempted to do a try-catch, but that is just La-Z
         #Kwek: Added another gate for materials
-        if not (with_materials and has_material_json):
-            blender_4_scale_armature_bones()
-            continue
-
-        file = open(current_file_base_path + ".Material.json",mode='r')
-        obj = json.loads(file.read())
-        file.close()
-        valid_json=json_ver_validate(obj)
-        if not valid_json:
-            self.report({'ERROR'}, "Incompatible material.json file detected. Material depot needs to be cleared and mesh re exported with current Wolvenkit Version.")
-            show_message('Incompatible material.json file detected. Material depot needs to be cleared and mesh re exported with current Wolvenkit Version.')
+        blender_4_scale_armature_bones()
+        if ".anims.glb" in filepath:
+            break
+        else:
+            if has_material_json:
+                matjsonpath = current_file_base_path + ".Material.json"
+                obj = jsonload(matjsonpath)
+        if obj == None:
             break
         DepotPath = str(obj["MaterialRepo"])  + "\\"
         context=bpy.context
         if remap_depot and os.path.exists(context.preferences.addons[__name__.split('.')[0]].preferences.depotfolder_path):
             DepotPath = context.preferences.addons[__name__.split('.')[0]].preferences.depotfolder_path
+            if not cp77_addon_prefs.non_verbose:
+                print(f"Using depot path: {DepotPath}")
         DepotPath= DepotPath.replace('\\', os.sep)
         json_apps=obj['Appearances']
         # fix the app names as for some reason they have their index added on the end.
@@ -161,9 +173,15 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
 
         import_mats(current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, obj,
                     validmats)
-
+    if not cp77_addon_prefs.non_verbose:                
+        print(f"GLB Import Time: {(time.time() - start_time)} Seconds")            
+        print('')
+        print('-------------------- Finished importing Cyberpunk 2077 Model --------------------')
 
 def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, obj, validmats):
+    failedon = []
+    cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
+    start_time = time.time()
     for mat in validmats.keys():
         for m in obj['Materials']:
             if m['Name'] != mat:
@@ -240,11 +258,18 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
                                 except:
                                     # Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
                                     print(traceback.print_exc())
+                                    failedon.append(matname)
                                     pass
                             index = index + 1
 
         counter = counter + 1
-
+    if not cp77_addon_prefs.non_verbose:        
+        if len(failedon) == 0:
+            print(f"Shader Setup Completed Succesfully in {(time.time() - start_time)} Seconds")
+        else:
+            print(f"Material Setup Failed on: {', '.join(failedon)}")
+            print(f"Attempted Setup for {(time.time() - start_time)} seconds")
+        
     if exclude_unused_mats:
         return
 
@@ -254,8 +279,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
                 (rawmat["Name"] in MatImportList) or len(MatImportList) < 1):
             Builder.create(index)
         index = index + 1
-
-
+        
 def blender_4_scale_armature_bones():
     vers = bpy.app.version
     if vers[0] >= 4:
@@ -284,7 +308,10 @@ def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o):
         if meshes and "Icosphere" not in mesh.name:
             if 'Armature' in o.name:
                 o.hide_set(hide_armatures)
+        else:            
+            if 'Armature' in o.name:
+                pass
+            
     else:
-        # print('o.name - ',o.name)
         if 'Armature' in o.name:
-            o.hide_set(hide_armatures)
+            o.hide_set(hide_armatures)     

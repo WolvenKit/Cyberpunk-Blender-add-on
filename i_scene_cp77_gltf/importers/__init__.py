@@ -219,7 +219,7 @@ class CP77_PT_ImportWithMaterial(Panel):
         self.layout.prop(props, "with_materials", text="")
     
     def draw(self, context):
-        cp77_addon_prefs = bpy.context.preferences.addons[__name__].preferences
+        cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
         props = context.scene.cp77_panel_props
         operator = context.space_data.active_operator
         layout = self.layout

@@ -1,31 +1,17 @@
-def install_dependency(dependency_name):
-    print(f"required package: {dependency_name} not found")
-    from pip import _internal as pip
-    print(f"Attempting to install {dependency_name}")
-    try:
-        pip.main(['install', dependency_name])
-        print(f"Successfully installed {dependency_name}")
-    except Exception as e:
-        print(f"Failed to install {dependency_name}: {e}")
-        
 print('-------------------- Cyberpunk IO Suite Starting--------------------')
 print()
 from .cyber_prefs import *
 from .cyber_props import *
 import bpy
-import sys
 import textwrap
-from bpy.props import (StringProperty, EnumProperty, BoolProperty)
-from bpy.types import (Scene, Operator, Panel)
+from bpy.props import (StringProperty)
+from bpy.types import (Operator, Panel)
 from . collisiontools import *
 from . meshtools import *
 from . animtools import *
 from . importers import *
 from . exporters import *
 from . scriptman import *
-from .main.common import get_classes
-from .main.bartmoss_functions import *
-from .icons.cp77_icons import *
 
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
@@ -62,14 +48,14 @@ class ShowMessageBox(Operator):
         return {'FINISHED'}
 
     def invoke(self, context, event):
-        return context.window_manager.invoke_props_dialog(self, width=300)
+        return context.window_manager.invoke_props_dialog(self, width=400)
         
     def draw_header(self, context):
         layout = self.layout
         layout.label(text='Cyberpunk 2077 IO Suite')
         
     def draw(self, context):
-        wrapp = textwrap.TextWrapper(width=50) #50 = maximum length       
+        wrapp = textwrap.TextWrapper(width=70) #50 = maximum length       
         wList = wrapp.wrap(text=self.message) 
         for text in wList: 
             row = self.layout.row(align = True)
@@ -94,7 +80,7 @@ class CollectionAppearancePanel(Panel):
         collection = context.collection
         layout.prop(collection, "appearanceName")       
 
-operators, other_classes = get_classes(sys.modules[__name__])
+classes = [ShowMessageBox, CollectionAppearancePanel]
 
 def register():
     register_prefs()
@@ -105,12 +91,8 @@ def register():
     register_exporters()
     register_scriptman()
     register_meshtools()
-    
-    
-    for cls in operators:
-        if not hasattr(bpy.types, cls.__name__):
-            bpy.utils.register_class(cls)
-    for cls in other_classes:
+
+    for cls in classes:
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
     load_icons()
@@ -127,11 +109,7 @@ def unregister():
     unregister_props()  
     unregister_prefs()
     
-    for cls in reversed(other_classes):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
-
-    for cls in reversed(operators):
+    for cls in reversed(classes):
         if hasattr(bpy.types, cls.__name__):
             bpy.utils.unregister_class(cls)
     unload_icons()

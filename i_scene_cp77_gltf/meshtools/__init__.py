@@ -88,6 +88,11 @@ class CP77_PT_MeshTools(Panel):
                 row = box.row(align=True)
                 row.operator("cp77.set_armature", text="Change Armature Target")
                 box = layout.box()
+                box.label(text="Vertex Colours", icon="MATERIAL")
+                box.operator("cp77.add_vertex_color_preset")
+                box.operator("cp77.apply_vertex_color_preset")   
+                box.prop(context.scene, "cp77_vertex_color_preset", text="Select Preset")              
+                box = layout.box()
                 box.label(text="Material Export", icon="MATERIAL")
                 box.operator("export_scene.hp")
                 box.operator("export_scene.mlsetup")
@@ -138,16 +143,13 @@ class CP77ApplyVertexColorPreset(Operator):
     bl_label = "Apply Vertex Color Preset"
 
     def execute(self, context):
-        props = context.scene.cp77_panel_props
-        presets = update_presets_items()  # Reload presets to ensure we have the latest
-        preset_name: EnumProperty(name="Preset Name", items=update_presets_items)
-        preset = presets.get(props.preset_name)
+        preset = Scene.cp77_vertex_color_preset
         if not preset:
             self.report({'ERROR'}, f"Preset '{self.preset_name}' not found.")
             return {'CANCELLED'}
 
-        preset_color = preset + [1.0]
-        initial_mode = bpy.context.mode
+        preset_color = preset.append(1.0)  # Adding alpha value
+        initial_mode = context.mode
 
         for obj in context.selected_objects:
             if obj.type != 'MESH':
@@ -160,22 +162,16 @@ class CP77ApplyVertexColorPreset(Operator):
             color_layer = mesh.vertex_colors.active.data
 
             if initial_mode == 'EDIT_MESH':
-                # Switch to object mode to access and modify vertex colors
                 bpy.ops.object.mode_set(mode='OBJECT')
-                
-                # Access selected vertices in edit mode
-                bpy.ops.object.mode_set(mode='EDIT')
                 selected_verts = {v.index for v in mesh.vertices if v.select}
-                bpy.ops.object.mode_set(mode='OBJECT')
-                
+                bpy.ops.object.mode_set(mode='EDIT')
+
                 for poly in mesh.polygons:
                     for loop_index in poly.loop_indices:
                         loop_vert_index = mesh.loops[loop_index].vertex_index
                         if loop_vert_index in selected_verts:
                             color_layer[loop_index].color = preset_color
-                
-                # Switch back to edit mode
-                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.object.mode_set(mode='OBJECT')
             else:
                 for poly in mesh.polygons:
                     for loop_index in poly.loop_indices:
@@ -183,12 +179,10 @@ class CP77ApplyVertexColorPreset(Operator):
                         if mesh.vertices[loop_vert_index].select:
                             color_layer[loop_index].color = preset_color
 
-            # Update the mesh
             mesh.update()
 
-        # Return to the initial mode
         bpy.ops.object.mode_set(mode=initial_mode)
-        self.report({'INFO'}, f"Preset '{props.preset_name}' applied.")
+        self.report({'INFO'}, f"Preset '{self.preset_name}' applied.")
         return {'FINISHED'}
 
 
@@ -202,21 +196,6 @@ class CP77GroupVerts(Operator):
     def execute(self, context):
         CP77GroupUngroupedVerts(self, context)
         return {'FINISHED'}
-
-
-# UI Panel
-class CP77VertexColorPanel(Panel):
-    bl_label = "Vertex Color Presets"
-    bl_idname = "CP77_PT_vertex_color_presets"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_category = "CP77 Modding"
-
-    def draw(self, context):
-        layout = self.layout
-        layout.operator("cp77.add_vertex_color_preset")
-        layout.operator("cp77.apply_vertex_color_preset")
-        layout.prop(context.scene, "cp77_vertex_color_preset", text="Select Preset")
 
 
 class CP77Autofitter(Operator):
@@ -300,13 +279,14 @@ class CP77RotateObj(Operator):
 operators, other_classes = get_classes(sys.modules[__name__])
 
 def register_meshtools():
+    
     for cls in operators:
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
     for cls in other_classes:
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
-    Scene.cp77_vertex_color_preset = EnumProperty(name="Vertex Color Preset", items=update_presets_items)
+    Scene.cp77_vertex_color_preset = EnumProperty(name="Vertex Color Preset", items=update_presets_items())
 
 def unregister_meshtools():
     for cls in reversed(other_classes):
@@ -315,3 +295,4 @@ def unregister_meshtools():
     for cls in reversed(operators):
         if hasattr(bpy.types, cls.__name__):
             bpy.utils.unregister_class(cls)
+    del Scene.cp77_vertex_color_preset
