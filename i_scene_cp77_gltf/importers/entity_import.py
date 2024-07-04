@@ -5,10 +5,12 @@ import glob
 import os
 import bpy
 import time
+import traceback
 from math import sin,cos
 from mathutils import Vector, Matrix , Quaternion
 import bmesh
-from ..main.common import json_ver_validate, jsonload, loc
+from ..main.common import loc
+from ..jsontool import jsonload
 from .phys_import import cp77_phys_import
 from ..collisiontools.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
 
@@ -27,18 +29,14 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
 
     ent_name=os.path.basename(filepath)[:-9]
     print('Importing Entity', ent_name)
-    with open(filepath,'r') as f: 
-        j=jsonload(f) 
-    valid_json=json_ver_validate(j)
-    if not valid_json:
-        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Incompatible entity json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
-        return {'CANCELLED'}
-     
+    if filepath is not None:
+       j=jsonload(filepath)
+    
     ent_apps= j['Data']['RootChunk']['appearances']
     ent_applist=[]
     for app in ent_apps:
         ent_applist.append(app['appearanceName']['$value'])
-        #presto_stash.append(ent_apps)
+    print(ent_applist)
     ent_components= j['Data']['RootChunk']['components']
     ent_component_data= j['Data']['RootChunk']['compiledData']['Data']['Chunks']
     #presto_stash.append(ent_components)    
@@ -112,14 +110,10 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
             if len(animsinres)==0:
                 for anim in anim_files:
                     if os.path.exists(anim[:-3]+'anims.json'):
-                        with open(anim[:-3]+'anims.json','r') as f: 
-                            anm_j=json.load(f) 
-                        valid_json=json_ver_validate(anm_j)
-                        if not valid_json:
-                            bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Incompatible anim json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
-                            return {'CANCELLED'}
-                        if os.path.join(path,anm_j['Data']['RootChunk']['rig']['DepotPath']['$value']) in ent_rigs:
-                            animsinres.append(os.path.join(path,anim))
+                        anm_j=jsonload(f"{anim[:-3]+'anims.json'}") 
+                        if anm_j is not None:
+                            if os.path.join(path,anm_j['Data']['RootChunk']['rig']['DepotPath']['$value']) in ent_rigs:
+                                animsinres.append(os.path.join(path,anim))
                            # presto_stash.append(animsinres)
             
             if len(animsinres)>0:
@@ -144,14 +138,11 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     rigjsons = glob.glob(os.path.join(path,"**","*.rig.json"), recursive = True)
     rig_j=None
     if len(rigjsons)>0 and len(ent_rigs)>0:
-            entrigjsons=[x for x in rigjsons if x[:-5] in ent_rigs] 
-            if len(entrigjsons)>0:
-                with open(entrigjsons[0],'r') as f: 
-                    rig_j=json.load(f)
-                    valid_json=json_ver_validate(rig_j)
-                    if not valid_json:
-                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Incompatible rig json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
-                        return {'CANCELLED'}
+        entrigjsons=[x for x in rigjsons if x[:-5] in ent_rigs] 
+        if len(entrigjsons)>0:
+            for rig in entrigjsons:
+                rig_j=jsonload(rig)
+                if rig_j is not None:
                     rig_j=rig_j['Data']['RootChunk']
                     print('rig json loaded')
     else: 
@@ -231,28 +222,25 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                 appfilepath=os.path.join(path,app_file).replace('\\',os.sep)+'.json'
                 a_j=None        
                 if os.path.exists(appfilepath):
-                    with open(appfilepath,'r') as a: 
-                        a_j=json.load(a)
-                    valid_json=json_ver_validate(a_j)
-                    if not valid_json:
-                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Incompatible app json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
-                        return {'CANCELLED'}
-                    apps=a_j['Data']['RootChunk']['appearances']
-                    app_idx=0
-                    for i,a in enumerate(apps):
-                        #print(i,a['Data']['name'])
-                        if a['Data']['name']['$value']==app_name:
-                            print('appearance matched, id = ',i)
-                            app_idx=i
-                    chunks=None
-                    if 'Data' in a_j['Data']['RootChunk']['appearances'][app_idx].keys():
-                        if a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['components']:
-                            comps= a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['components']
-                        if 'compiledData' in a_j['Data']['RootChunk']['appearances'][app_idx]['Data'].keys():
-                            chunks= a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['compiledData']['Data']['Chunks']
-                            print('Chunks found')
-                else:
-                    print('app file not found -', filepath)
+                    a_j=jsonload(appfilepath)
+                    if a_j is not None:
+                        apps=a_j['Data']['RootChunk']['appearances']
+                        
+                        app_idx=0
+                        for i,a in enumerate(apps):
+                            #print(i,a['Data']['name'])
+                            if a['Data']['name']['$value']==app_name:
+                                print('appearance matched, id = ',i)
+                                app_idx=i
+                        chunks=None
+                        if 'Data' in a_j['Data']['RootChunk']['appearances'][app_idx].keys():
+                            if a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['components']:
+                                comps= a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['components']
+                            if 'compiledData' in a_j['Data']['RootChunk']['appearances'][app_idx]['Data'].keys():
+                                chunks= a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['compiledData']['Data']['Chunks']
+                                print('Chunks found')
+                    else:
+                        print('app file not found -', filepath)
             else:
                 if j['Data']['RootChunk']['compiledData']['Data']['Chunks']:
                     chunks= j['Data']['RootChunk']['compiledData']['Data']['Chunks']
@@ -292,6 +280,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                                 obj['appResource'] = app_path[0]
                                             obj['entAppearance'] = app_name
                                     except:
+                                        print(traceback.print_exc())
                                         print('import threw an error')
                                         continue
                                     objs = C.selected_objects
@@ -577,6 +566,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                             obj.hide_render=not cm_list[subnum]
                                 #else:
                                 except:
+                                    print(traceback.print_exc())
                                     print("Failed on ",meshname)
      
               # find the .phys file jsons
