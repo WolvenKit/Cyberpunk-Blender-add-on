@@ -55,7 +55,9 @@ yamlavail=False
 try:
     import yaml
     yamlavail=True
-except:
+except ModuleNotFoundError:
+    from ..install_dependency import *
+    install_dependency('pyyaml')
     messages = [
         "pyyaml not available. Please start Blender as administrator."
         "If that doesn't help, switch to Blender's scripting perspective, create a new file, and put the following code in it (no indentation):",
@@ -73,8 +75,9 @@ except:
         messages.append("If that doesn't help either, run the following command from an administrator command prompt:")
         messages.append(f"\t\"{blender_python_path}\" -m pip install pyyaml -t \"{blender_module_path}\"")
 
-    messages.apppend("You can learn more about running Blender scripts under https://tinyurl.com/cp2077blenderpython")
+    messages.append("You can learn more about running Blender scripts under https://tinyurl.com/cp2077blenderpython")
     for message in messages:
+        show_message(message)
         print(message)
 
 C = bpy.context
