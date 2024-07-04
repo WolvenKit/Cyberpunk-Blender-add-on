@@ -1,6 +1,7 @@
 import bpy
 import os
 import json
+import time
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
 from ..main.setup import MaterialBuilder
@@ -8,6 +9,7 @@ from ..main.common import json_ver_validate, UV_by_bounds
 from .import_from_external import *
 from .attribute_import import manage_garment_support
 from ..cyber_props import add_anim_props
+from ..jsontool import jsonload
 import traceback
 
 def get_anim_info(animations):
@@ -38,10 +40,13 @@ collection = None
 def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_materials=True, filepath='', hide_armatures=True,  import_garmentsupport=False, files=[], directory='', appearances=[], remap_depot=False):
 
     context=bpy.context
+    start_time = time.time()
     loadfiles=self.files
     appearances=self.appearances.split(",")
-    for f in appearances:
-        print(f)
+    print('-----------------------------------Beginning Cyberpunk Model Import--------------------------')
+    print('')
+    print(f"importing: {os.path.basename(self.filepath)}")
+    print(f"Appearances to import: {appearances}")
 
     # prevent crash if no directory supplied when using filepath
     if len(self.directory)>0:
@@ -70,7 +75,7 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
         filename=os.path.splitext(f['name'])[0]
         filepath = os.path.join(directory, f['name'])
 
-        gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'BLENDER', "guess_original_bind_pose" : False, "import_user_extensions": ""})
+        gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'BLENDER', "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':False})
         gltf_importer.read()
         gltf_importer.checks()
 
@@ -123,22 +128,19 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
         #Kwek: Gate this--do the block iff corresponding Material.json exist
         #Kwek: was tempted to do a try-catch, but that is just La-Z
         #Kwek: Added another gate for materials
-        if not (with_materials and has_material_json):
-            blender_4_scale_armature_bones()
-            continue
-
-        file = open(current_file_base_path + ".Material.json",mode='r')
-        obj = json.loads(file.read())
-        file.close()
-        valid_json=json_ver_validate(obj)
-        if not valid_json:
-            self.report({'ERROR'}, "Incompatible material.json file detected. Material depot needs to be cleared and mesh re exported with current Wolvenkit Version.")
-            show_message('Incompatible material.json file detected. Material depot needs to be cleared and mesh re exported with current Wolvenkit Version.')
+        blender_4_scale_armature_bones()
+        if ".anims.glb" in filepath:
+            break
+        else:
+            matjsonpath = current_file_base_path + ".Material.json"
+            obj = jsonload(matjsonpath)
+        if obj == None:
             break
         DepotPath = str(obj["MaterialRepo"])  + "\\"
         context=bpy.context
         if remap_depot and os.path.exists(context.preferences.addons[__name__.split('.')[0]].preferences.depotfolder_path):
             DepotPath = context.preferences.addons[__name__.split('.')[0]].preferences.depotfolder_path
+            print(f"Using depot path: {DepotPath}")
         DepotPath= DepotPath.replace('\\', os.sep)
         json_apps=obj['Appearances']
         # fix the app names as for some reason they have their index added on the end.
@@ -161,9 +163,13 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
 
         import_mats(current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, obj,
                     validmats)
-
+        print(f"GLB import time: {(time.time() - start_time)} seconds")            
+        print('')
+        print('-----------------------------Finished importing Cyberpunk 2077 Model--------------------')
 
 def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, obj, validmats):
+    failedon = []
+    start_time = time.time()
     for mat in validmats.keys():
         for m in obj['Materials']:
             if m['Name'] != mat:
@@ -240,11 +246,18 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
                                 except:
                                     # Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
                                     print(traceback.print_exc())
+                                    failedon.append(matname)
                                     pass
                             index = index + 1
 
         counter = counter + 1
-
+        
+    if len(failedon) == 0:
+        print(f"Shader Setup Completed Succesfully in {(time.time() - start_time)} seconds")
+    else:
+        print(f"Material Setup failed on: {failedon}")
+        print(f"Attempted Setup for {(time.time() - start_time)} seconds")
+        
     if exclude_unused_mats:
         return
 
@@ -254,8 +267,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
                 (rawmat["Name"] in MatImportList) or len(MatImportList) < 1):
             Builder.create(index)
         index = index + 1
-
-
+        
 def blender_4_scale_armature_bones():
     vers = bpy.app.version
     if vers[0] >= 4:
@@ -284,7 +296,10 @@ def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o):
         if meshes and "Icosphere" not in mesh.name:
             if 'Armature' in o.name:
                 o.hide_set(hide_armatures)
+        else:            
+            if 'Armature' in o.name:
+                pass
+            
     else:
-        # print('o.name - ',o.name)
         if 'Armature' in o.name:
-            o.hide_set(hide_armatures)
+            o.hide_set(hide_armatures)     
