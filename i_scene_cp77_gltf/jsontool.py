@@ -69,12 +69,14 @@ def jsonload(filepath):
             print(f"Processing: {base_name}")
             data=load_json(filepath)
             # Do something for .mesh.json            
-        case _ if base_name.endswith('.material.json'):
+        case _ if base_name.endswith('.Material.json'):
             print(f"Processing: {base_name}")
             data=load_json(filepath)
             if json_ver_validate(data) == False:
-                print(f"invalid material.json found at: {filepath} import will continue but materials will not be set up for this mesh")
+                print(f"invalid Material.json found at: {filepath} import will continue but materials will not be set up for this mesh")
                 show_message(f"invalid material.json found at: {filepath} import will continue but materials will not be set up for this mesh")
+            else:
+                print('Building shaders')
             # Do something for .material.json
         case _ if base_name.endswith('.mlsetup.json'):
             print(f"Processing: {base_name}")
