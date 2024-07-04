@@ -129,7 +129,7 @@ def CP77UvUnChecker(self, context):
     uvchecker = 'UV_Checker'
     original_mat_name = None
     for mesh in selected_meshes:
-        if 'uvCheckedMat' in mesh.keys() and 'uvCheckedMat' is not None:
+        if 'uvCheckedMat' in mesh.keys() and 'uvCheckedMat' != None:
             original_mat_name = mesh['uvCheckedMat']
         if uvchecker in mesh.data.materials:
             # Find the index of the material slot with the specified name
