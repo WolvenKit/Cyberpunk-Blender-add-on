@@ -27,9 +27,9 @@ def save_presets(presets):
         json.dump(presets, file, indent=4)
 
         
-def update_presets_items(self, context):
+def update_presets_items():
     presets = get_colour_presets()
-    return [(name, name, "") for name in presets.keys()]  
+    return [(name, name, "") for name in presets.keys()] 
 
 
 def del_empty_vgroup(self, context):
