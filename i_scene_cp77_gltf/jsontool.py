@@ -23,8 +23,9 @@ def json_ver_validate(json_data):
     if "WolvenKitVersion" in header and "8.13" not in header["WolvenKitVersion"]:
         if "8.14" not in header["WolvenKitVersion"]:
             return False
-    if "MaterialJsonVersion" in header and "1." not in header["MaterialJsonVersion"]:
-        return False
+    if "MaterialJsonVersion" in header:
+        if "1." not in header["MaterialJsonVersion"]:
+            return False
     return True
 
 
@@ -74,7 +75,7 @@ def jsonload(filepath):
             data=load_json(filepath)
             if json_ver_validate(data) == False:
                 print(f"invalid Material.json found at: {filepath} import will continue but materials will not be set up for this mesh")
-                show_message(f"invalid material.json found at: {filepath} import will continue but materials will not be set up for this mesh")
+                show_message(f"invalid material.json: {base_name} Re-Export the Mesh using the latest version of Wolvenkit")
             else:
                 print('Building shaders')
             # Do something for .material.json
