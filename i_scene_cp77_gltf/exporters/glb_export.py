@@ -255,7 +255,7 @@ def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=F
                         if not has_bone:
                             groupless_bones.add(obj.vertex_groups[group_index].name)
 
-                if len(groupless_bones) is not 0:
+                if len(groupless_bones) != 0:
                     bpy.ops.object.mode_set(mode='OBJECT')  # Ensure in object mode for consistent behavior
                     groupless_bones_list = ", ".join(sorted(groupless_bones))
                     armature.hide_set(True)
