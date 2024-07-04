@@ -19,7 +19,11 @@ from ..collisiontools.collisions import draw_box_collider, draw_capsule_collider
 #presto_stash=[]
 
 def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=True, include_collisions=False, include_phys=False, include_entCollider=False, inColl='', remapdepot=False): 
-    
+    cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
+    if not cp77_addon_prefs.non_verbose:
+        print('')
+        print('-------------------- Importing Cyberpunk 2077 Entity --------------------')
+        print('')
     C = bpy.context
     coll_scene = C.scene.collection
     start_time = time.time()
@@ -28,7 +32,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     path=before+mid
 
     ent_name=os.path.basename(filepath)[:-9]
-    print('Importing Entity', ent_name)
+    if not cp77_addon_prefs.non_verbose: 
+        print(f"Importing appearance: {', '.join(appearances)} from entity: {ent_name}")
     if filepath is not None:
        j=jsonload(filepath)
     
@@ -36,7 +41,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     ent_applist=[]
     for app in ent_apps:
         ent_applist.append(app['appearanceName']['$value'])
-    print(ent_applist)
+    #print(ent_applist)
     ent_components= j['Data']['RootChunk']['components']
     ent_component_data= j['Data']['RootChunk']['compiledData']['Data']['Chunks']
     #presto_stash.append(ent_components)    
@@ -48,7 +53,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     for comp in ent_components:
         ent_complist.append(comp['name'])
         if 'rig' in comp.keys():
-            print(comp['rig']['DepotPath']['$value'])
+            print(f"Rig found in entity: {comp['rig']['DepotPath']['$value']}")
             ent_rigs.append(os.path.join(path,comp['rig']['DepotPath']['$value']))
         if comp['name']['$value'] == 'Chassis':            
             chassis_info = comp
@@ -692,13 +697,13 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                 except Exception as e:
                                     print('uh oh', e)
 
-                            
-
-
-    if app_name:
-        print('Exported' ,app_name)
-
-    print("--- %s seconds ---" % (time.time() - start_time))
+    if not cp77_addon_prefs.non_verbose:
+        if app_name:
+            print('') 
+            print(f"Imported Appearance: {app_name} in {time.time() - start_time} Seconds from {ent_name}.ent")
+        print('')    
+        print('-------------------- Finished Importing Cyberpunk 2077 Entity --------------------')
+        print('')
 
 # The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
 

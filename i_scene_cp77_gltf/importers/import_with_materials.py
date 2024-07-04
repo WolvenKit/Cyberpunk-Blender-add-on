@@ -31,7 +31,7 @@ def get_anim_info(animations):
             if not cp77_addon_prefs.non_verbose:
                 print("No action found for", animation.name)
 
-
+    print('')
 def objs_in_col(top_coll, objtype):
     return sum([len([o for o in col.objects if o.type==objtype]) for col in top_coll.children_recursive])+len([o for o in top_coll.objects if o.type==objtype])
 
@@ -43,16 +43,23 @@ collection = None
 def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_materials=True, filepath='', hide_armatures=True,  import_garmentsupport=False, files=[], directory='', appearances=[], remap_depot=False):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     context=bpy.context
+    obj = None
     start_time = time.time()
     loadfiles=self.files
     appearances=self.appearances.split(",")
     if not cp77_addon_prefs.non_verbose:
-        print('-------------------- Beginning Cyberpunk Model Import --------------------')
-        print('')
-        print(f"Importing: {os.path.basename(self.filepath)}")
-        if with_materials==True:
-            print(f"Appearances to Import: {(', '.join(appearances))}")
-
+        if ".anims.glb" in self.filepath:
+            print('-------------------- Beginning Cyberpunk Animation Import --------------------')
+            print('')
+            print(f"Importing Animations From: {os.path.basename(self.filepath)}")
+            print('')
+        else:
+            print('-------------------- Beginning Cyberpunk Model Import --------------------')
+            print('')
+            print(f"Importing: {os.path.basename(self.filepath)}")
+            if with_materials==True:
+                print(f"Appearances to Import: {(', '.join(appearances))}")
+            print('')
     # prevent crash if no directory supplied when using filepath
     if len(self.directory)>0:
         directory = self.directory
@@ -133,8 +140,9 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
         if ".anims.glb" in filepath:
             break
         else:
-            matjsonpath = current_file_base_path + ".Material.json"
-            obj = jsonload(matjsonpath)
+            if has_material_json:
+                matjsonpath = current_file_base_path + ".Material.json"
+                obj = jsonload(matjsonpath)
         if obj == None:
             break
         DepotPath = str(obj["MaterialRepo"])  + "\\"
@@ -165,10 +173,10 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
 
         import_mats(current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, obj,
                     validmats)
-        if not cp77_addon_prefs.non_verbose:                
-            print(f"GLB Import Time: {(time.time() - start_time)} Seconds")            
-            print('')
-            print('-------------------- Finished importing Cyberpunk 2077 Model --------------------')
+    if not cp77_addon_prefs.non_verbose:                
+        print(f"GLB Import Time: {(time.time() - start_time)} Seconds")            
+        print('')
+        print('-------------------- Finished importing Cyberpunk 2077 Model --------------------')
 
 def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, obj, validmats):
     failedon = []
