@@ -38,15 +38,17 @@ appearances = None
 collection = None
 
 def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_materials=True, filepath='', hide_armatures=True,  import_garmentsupport=False, files=[], directory='', appearances=[], remap_depot=False):
-
+    cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     context=bpy.context
     start_time = time.time()
     loadfiles=self.files
     appearances=self.appearances.split(",")
-    print('-----------------------------------Beginning Cyberpunk Model Import--------------------------')
-    print('')
-    print(f"importing: {os.path.basename(self.filepath)}")
-    print(f"Appearances to import: {appearances}")
+    if not cp77_addon_prefs.non_verbose:
+        print('-------------------- Beginning Cyberpunk Model Import --------------------')
+        print('')
+        print(f"Importing: {os.path.basename(self.filepath)}")
+        if with_materials==True:
+            print(f"Appearances to Import: {(', '.join(appearances))}")
 
     # prevent crash if no directory supplied when using filepath
     if len(self.directory)>0:
@@ -78,10 +80,6 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
         gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'BLENDER', "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':False})
         gltf_importer.read()
         gltf_importer.checks()
-
-        #kwekmaster: modified to reflect user choice
-        if len(bpy.data.meshes) != 0:
-            print(filepath + " Loaded; With materials: "+str(with_materials))
         existingMeshes = bpy.data.meshes.keys()
 
         current_file_base_path = os.path.splitext(filepath)[0]
@@ -140,7 +138,8 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
         context=bpy.context
         if remap_depot and os.path.exists(context.preferences.addons[__name__.split('.')[0]].preferences.depotfolder_path):
             DepotPath = context.preferences.addons[__name__.split('.')[0]].preferences.depotfolder_path
-            print(f"Using depot path: {DepotPath}")
+            if not cp77_addon_prefs.non_verbose:
+                print(f"Using depot path: {DepotPath}")
         DepotPath= DepotPath.replace('\\', os.sep)
         json_apps=obj['Appearances']
         # fix the app names as for some reason they have their index added on the end.
@@ -163,12 +162,14 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
 
         import_mats(current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, obj,
                     validmats)
-        print(f"GLB import time: {(time.time() - start_time)} seconds")            
-        print('')
-        print('-----------------------------Finished importing Cyberpunk 2077 Model--------------------')
+        if not cp77_addon_prefs.non_verbose:                
+            print(f"GLB Import Time: {(time.time() - start_time)} Seconds")            
+            print('')
+            print('-------------------- Finished importing Cyberpunk 2077 Model --------------------')
 
 def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, obj, validmats):
     failedon = []
+    cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     start_time = time.time()
     for mat in validmats.keys():
         for m in obj['Materials']:
@@ -251,12 +252,12 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
                             index = index + 1
 
         counter = counter + 1
-        
-    if len(failedon) == 0:
-        print(f"Shader Setup Completed Succesfully in {(time.time() - start_time)} seconds")
-    else:
-        print(f"Material Setup failed on: {failedon}")
-        print(f"Attempted Setup for {(time.time() - start_time)} seconds")
+    if not cp77_addon_prefs.non_verbose:        
+        if len(failedon) == 0:
+            print(f"Shader Setup Completed Succesfully in {(time.time() - start_time)} Seconds")
+        else:
+            print(f"Material Setup Failed on: {', '.join(failedon)}")
+            print(f"Attempted Setup for {(time.time() - start_time)} seconds")
         
     if exclude_unused_mats:
         return
