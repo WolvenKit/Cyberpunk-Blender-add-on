@@ -140,8 +140,8 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     if len(rigjsons)>0 and len(ent_rigs)>0:
         entrigjsons=[x for x in rigjsons if x[:-5] in ent_rigs] 
         if len(entrigjsons)>0:
-            for rig in entrigjsons:
-                rig_j=jsonload(rig)
+            for entrig in entrigjsons:
+                rig_j=jsonload(entrig)
                 if rig_j is not None:
                     rig_j=rig_j['Data']['RootChunk']
                     print('rig json loaded')
@@ -332,13 +332,9 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                                 json_name=os.path.join(path, c['mesh']['DepotPath']['$value']+'.json')
                                                 #print("in the deformation rig bit",json_name)
                                                 if json_name in mesh_jsons:
-                                                    with open(mesh_jsons[mesh_jsons.index(json_name)],'r') as f: 
-                                                        mesh_j=json.load(f)
-                                                    valid_json=json_ver_validate(mesh_j)
-                                                    if not valid_json:
-                                                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Incompatible anim json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
-                                                        return {'CANCELLED'}
+                                                    mesh_j = jsonload(json_name)
                                                     mesh_j=mesh_j['Data']['RootChunk']
+                                                if mesh_j is not None:
                                                     #print('bindname from json ' ,mesh_j['boneNames'][0],bindname)
                                                     if 'boneRigMatrices' in mesh_j.keys():
                                                         bm= mesh_j['boneRigMatrices'][0]
