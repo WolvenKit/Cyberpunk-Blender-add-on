@@ -59,6 +59,11 @@ class CP77IOSuitePreferences(AddonPreferences):
         description="Show the Mod tools Tab in the 3d viewport",
         default=True,
     )
+    non_verbose: BoolProperty(
+        name= "Turn off Verbose Logging",
+        description="Turns off useful print statements to avoid clutter in the console",
+        default=False,
+    )
 
     def draw(self, context):           
         layout = self.layout
@@ -67,6 +72,7 @@ class CP77IOSuitePreferences(AddonPreferences):
         row = box.row()
         row.prop(self, "show_modtools",toggle=1) 
         row.prop(self, "experimental_features",toggle=1)
+        row.prop(self, "non_verbose",toggle=1)
         if self.experimental_features:
             row = box.row()
             row.prop(self, "depotfolder_path")
