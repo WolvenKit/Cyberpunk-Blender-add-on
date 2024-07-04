@@ -78,16 +78,18 @@ def cp77riglist(self, context):
     cp77rigs = []
     man_base = os.path.join(rig_dir, "man_base_full.glb")
     woman_base = os.path.join(rig_dir, "woman_base_full.glb")
-    Jackie = os.path.join(rig_dir, "jackie_full.glb")
     man_big = os.path.join(rig_dir, "man_big_full.glb")
     man_fat = os.path.join(rig_dir, "man_fat_full.glb")
+    Judy = os.path.join(rig_dir, "judy_full.glb")
+    Panam = os.path.join(rig_dir, "panam_full.glb")
+    Jackie = os.path.join(rig_dir, "jackie_full.glb")
     Rhino = os.path.join(rig_dir, "rhino_full.glb")
-    Judy = os.path.join(rig_dir, "Judy_full.glb")
-    Panam = os.path.join(rig_dir, "Panam_full.glb")
+    Dex = os.path.join(rig_dir, "dex_full.glb")
+    Smasher = os.path.join(rig_dir, "smasher_full.glb")
     
     # Store the variable names in a list
-    cp77rigs = [man_base, woman_base, Jackie, man_big, man_fat, Rhino, Judy, Panam]
-    cp77rig_names = ['man_base', 'woman_base', 'Jackie', 'man_big', 'man_fat', 'Rhino', 'Judy', 'Panam']
+    cp77rigs = [man_base, woman_base, man_big, man_fat, Judy, Panam, Jackie, Rhino, Dex, Smasher]
+    cp77rig_names = ['man_base', 'woman_base', 'man_big', 'man_fat', 'Judy', 'Panam', 'Jackie', 'Rhino', 'Dex', 'Adam Smasher']
 
     # Return the list of variable names
     return cp77rigs, cp77rig_names

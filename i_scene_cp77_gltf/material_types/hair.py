@@ -62,7 +62,7 @@ class Hair:
         ID.color_ramp.elements.remove(ID.color_ramp.elements[0])
         counter = 0
         for Entry in profile["gradientEntriesID"]:
-            if counter is 0:
+            if counter == 0:
                 ID.color_ramp.elements[0].position = Entry.get("value",0)
                 colr = Entry["color"]
                 ID.color_ramp.elements[0].color = (float(colr["Red"])/255,float(colr["Green"])/255,float(colr["Blue"])/255,float(1))

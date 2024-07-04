@@ -41,7 +41,8 @@ class CP77GLBExport(Operator,ExportHelper):
     
     filter_glob: StringProperty(default="*.glb", options={'HIDDEN'})
    
-    
+    filepath: StringProperty(subtype="FILE_PATH")
+
     limit_selected: BoolProperty(
         name="Limit to Selected Meshes",
         default=True,

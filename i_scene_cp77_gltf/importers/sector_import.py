@@ -447,7 +447,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                             try:
                                 #print('Importing ',entpath, ' using app ',app)
                                 incoll='MasterInstances'
-                                bpy.ops.io_scene_gltf.cp77entity(filepath=entpath, appearances=app,with_materials=with_materials, inColl=incoll)
+                                bpy.ops.io_scene_gltf.cp77entity(filepath=entpath, appearances=app, inColl=incoll)
                                 move_coll=Masters.children.get(ent_groupname)
                                 imported=True
                             except:
