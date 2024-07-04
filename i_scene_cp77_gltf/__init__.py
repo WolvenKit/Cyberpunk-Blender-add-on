@@ -3,18 +3,15 @@ print()
 from .cyber_prefs import *
 from .cyber_props import *
 import bpy
-import sys
 import textwrap
-from bpy.props import (StringProperty, EnumProperty, BoolProperty)
-from bpy.types import (Scene, Operator, Panel)
+from bpy.props import (StringProperty)
+from bpy.types import (Operator, Panel)
 from . collisiontools import *
 from . meshtools import *
 from . animtools import *
 from . importers import *
 from . exporters import *
 from . scriptman import *
-from .main.bartmoss_functions import *
-from .icons.cp77_icons import *
 
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
