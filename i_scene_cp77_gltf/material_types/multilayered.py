@@ -2,6 +2,7 @@ import bpy
 import os
 from ..main.common import *
 import json
+from ..jsontool import openJSON, json_ver_validate, jsonloads
 
 
 def _getOrCreateLayerBlend():

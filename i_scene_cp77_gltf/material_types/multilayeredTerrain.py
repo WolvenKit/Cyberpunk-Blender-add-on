@@ -2,6 +2,7 @@ import bpy
 import os
 from ..main.common import *
 import json
+from ..jsontool import json_ver_validate, openJSON
 
 class MultilayeredTerrain:
     def __init__(self, BasePath,image_format,ProjPath):
