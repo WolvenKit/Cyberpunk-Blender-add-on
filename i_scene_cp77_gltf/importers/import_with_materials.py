@@ -5,7 +5,7 @@ import time
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
 from ..main.setup import MaterialBuilder
-from ..main.common import json_ver_validate, UV_by_bounds
+from ..main.bartmoss_functions import UV_by_bounds
 from .import_from_external import *
 from .attribute_import import manage_garment_support
 from ..cyber_props import add_anim_props
