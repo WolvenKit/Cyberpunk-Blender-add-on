@@ -2,6 +2,7 @@ import bpy
 import os
 from ..main.common import *
 import json
+from ..jsontool import openJSON, json_ver_validate
 
 class MultilayeredClearCoat:
     def __init__(self, BasePath,image_format):
