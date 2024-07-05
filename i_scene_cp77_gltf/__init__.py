@@ -1,5 +1,5 @@
 print('-------------------- Cyberpunk IO Suite Starting--------------------')
-print()
+print('')
 from .cyber_prefs import *
 from .cyber_props import *
 import bpy
@@ -96,8 +96,9 @@ def register():
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
     load_icons()
-
-    print('-------------------- Cyberpunk IO Suite Finished--------------------')
+    print('')
+    print('-------------------- Cyberpunk IO Suite Has Started--------------------')
+    print('')
 
 def unregister():
     unregister_scriptman()
