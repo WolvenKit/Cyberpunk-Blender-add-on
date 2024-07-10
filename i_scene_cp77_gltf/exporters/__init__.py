@@ -31,16 +31,16 @@ class CP77StreamingSectorExport(Operator,ExportHelper):
 
 
 class CP77GLBExport(Operator,ExportHelper):
-  ### cleaned this up and moved most code to exporters.py
+    ### cleaned this up and moved most code to exporters.py
     bl_idname = "export_scene.cp77_glb"
     bl_label = "Export for Cyberpunk"
     bl_options = {'REGISTER','UNDO'}
     bl_description = "Export to GLB with optimized settings for use with Wolvenkit for Cyberpunk 2077" 
     filename_ext = ".glb"
-   ### adds a checkbox for anim export settings
+    ### adds a checkbox for anim export settings
     
     filter_glob: StringProperty(default="*.glb", options={'HIDDEN'})
-   
+
     filepath: StringProperty(subtype="FILE_PATH")
 
     limit_selected: BoolProperty(
@@ -67,6 +67,12 @@ class CP77GLBExport(Operator,ExportHelper):
         description="Use this option to export all visible objects. Only use this if you know why you're using this"
     )
 
+    apply_transform: BoolProperty(
+        name="Apply Transform",
+        default=True,
+        description="Applies the transform of the objects. Disable this if you don't care about the location/rotation/scale of the objects"
+    )
+
     def draw(self, context):
         layout = self.layout
         row = layout.row(align=True) 
@@ -80,9 +86,11 @@ class CP77GLBExport(Operator,ExportHelper):
             else: 
                 row = layout.row(align=True)
                 row.prop(self, "static_prop")
-        
+            row = layout.row(align=True)
+            row.prop(self, "apply_transform")
+    
     def execute(self, context):
-        export_cyberpunk_glb(context, self.filepath, self.export_poses, self.export_visible, self.limit_selected, self.static_prop)
+        export_cyberpunk_glb(context=context, filepath=self.filepath, export_poses=self.export_poses, export_visible=self.export_visible, limit_selected=self.limit_selected, static_prop=self.static_prop, apply_transform=self.apply_transform)
         return {'FINISHED'}
 
 
