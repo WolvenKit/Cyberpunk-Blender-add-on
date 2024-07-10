@@ -96,7 +96,7 @@ def add_garment_cap(mesh):
 
 # setup the actual exporter - rewrote almost all of this, much quicker now
 # mana: by assigning default attributes, we make this update-safe (some older scripts broke). Just don't re-name them!
-def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=False, limit_selected=True, static_prop=False, red_garment_col=False, apply_transform=True):
+def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=False, limit_selected=True, static_prop=False, red_garment_col=False, apply_transform=True, apply_location=True, apply_rotation=True, apply_scale=True):
 
     groupless_bones = set()
     bone_names = []
@@ -169,7 +169,7 @@ def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=F
 
         # apply transforms
         if apply_transform:
-            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+            bpy.ops.object.transform_apply(location=apply_location, rotation=apply_rotation, scale=apply_scale)
         if not mesh.data.uv_layers:
             bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Meshes must have UV layers in order to import in Wolvenkit. See https://tinyurl.com/uv-layers")
             return {'CANCELLED'}
