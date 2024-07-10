@@ -106,11 +106,14 @@ class CP77GLBExport(Operator,ExportHelper):
                 row.prop(self, "static_prop")
             (panel_header, panel_body) = layout.panel("apply_transform", default_closed=True)
             panel_header.prop(self, "apply_transform")
-            panel_body.use_property_decorate = False
-            panel_body.enabled = self.apply_transform
-            panel_body.prop(self, "apply_transform_location")
-            panel_body.prop(self, "apply_transform_rotation")
-            panel_body.prop(self, "apply_transform_scale")
+
+            if panel_body is not None:
+                panel_body.use_property_split = True
+                panel_body.use_property_decorate = False
+                panel_body.enabled = self.apply_transform
+                panel_body.prop(self, "apply_transform_location")
+                panel_body.prop(self, "apply_transform_rotation")
+                panel_body.prop(self, "apply_transform_scale")
     
     def execute(self, context):
         export_cyberpunk_glb(
