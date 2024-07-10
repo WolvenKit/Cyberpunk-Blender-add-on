@@ -73,24 +73,6 @@ class CP77GLBExport(Operator,ExportHelper):
         description="Applies the transform of the objects. Disable this if you don't care about the location/rotation/scale of the objects"
     )
 
-    apply_transform_location: BoolProperty(
-        name="Apply Location",
-        default=True,
-        description="Applies the location of the objects."
-    )
-
-    apply_transform_rotation: BoolProperty(
-        name="Apply Rotation",
-        default=True,
-        description="Applies the rotation of the objects."
-    )
-
-    apply_transform_scale: BoolProperty(
-        name="Apply Scale",
-        default=True,
-        description="Applies the scale of the objects."
-    )
-
     def draw(self, context):
         layout = self.layout
         row = layout.row(align=True) 
@@ -104,16 +86,8 @@ class CP77GLBExport(Operator,ExportHelper):
             else: 
                 row = layout.row(align=True)
                 row.prop(self, "static_prop")
-            (panel_header, panel_body) = layout.panel("apply_transform", default_closed=True)
-            panel_header.prop(self, "apply_transform")
-
-            if panel_body is not None:
-                panel_body.use_property_split = True
-                panel_body.use_property_decorate = False
-                panel_body.enabled = self.apply_transform
-                panel_body.prop(self, "apply_transform_location")
-                panel_body.prop(self, "apply_transform_rotation")
-                panel_body.prop(self, "apply_transform_scale")
+            row = layout.row(align=True)
+            row.prop(self, "apply_transform")
     
     def execute(self, context):
         export_cyberpunk_glb(
@@ -124,9 +98,6 @@ class CP77GLBExport(Operator,ExportHelper):
             limit_selected=self.limit_selected, 
             static_prop=self.static_prop, 
             apply_transform=self.apply_transform,
-            apply_location=self.apply_transform_location,
-            apply_rotation=self.apply_transform_rotation,
-            apply_scale=self.apply_transform_scale,
         )
         return {'FINISHED'}
 
