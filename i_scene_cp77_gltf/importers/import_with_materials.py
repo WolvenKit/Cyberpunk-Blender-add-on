@@ -87,7 +87,7 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
         filename=os.path.splitext(f['name'])[0]
         filepath = os.path.join(directory, f['name'])
 
-        gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'BLENDER', "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':False})
+        gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'BLENDER', "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':False, 'bone_shape_scale_factor':1.0})
         gltf_importer.read()
         gltf_importer.checks()
         existingMeshes = bpy.data.meshes.keys()
