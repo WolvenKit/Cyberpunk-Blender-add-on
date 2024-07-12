@@ -5,6 +5,7 @@ import glob
 import os
 import bpy
 import time
+import math
 import traceback
 from math import sin,cos
 from mathutils import Vector, Matrix , Quaternion
@@ -13,6 +14,20 @@ from ..main.common import loc
 from ..jsontool import jsonload
 from .phys_import import cp77_phys_import
 from ..collisiontools.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
+
+
+
+def create_axes(ent_coll,name):
+    if name not in ent_coll.objects.keys():
+        o = bpy.data.objects.new( name , None )
+        ent_coll.objects.link( o )
+        o.empty_display_size = .5
+        o.empty_display_type = 'PLAIN_AXES'  
+        orig_rot= o.rotation_quaternion
+        o.rotation_mode='XYZ'        
+    else:
+        o=ent_coll.objects[name]
+    return o
 
 # The appearance list needs to be the appearanceNames for each ent that you want to import, will import all if not specified
 # if you've already imported the body/head and set the rig up you can exclude them by putting them in the exclude_meshes list 
@@ -255,6 +270,43 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                 comps= j['Data']['RootChunk']['components']
 
             for c in comps:
+                if c['$type']=='gameTransformAnimatorComponent':
+                    if c['animations'][0]['$type']=='gameTransformAnimationDefinition':
+                        duration=c['animations'][0]['timeline']['items'][0]['duration']
+                        HRID=c['animations'][0]['timeline']['items'][0]['impl']['HandleRefId']
+                        chunk_anim = 0 
+                        anim_HId=0
+                        # find the anim data in the chunks
+                        if chunks:
+                            for chunk in chunks:
+                                if chunk['$type']=='gameTransformAnimatorComponent':
+                                        if 'HandleId' in chunk['animations'][0]['timeline']['items'][0]['impl'].keys():                                
+                                            if int(chunk['animations'][0]['timeline']['items'][0]['impl']['HandleId'])==int(HRID):
+                                                chunk_anim=chunk['animations'][0]['timeline']['items'][0]['impl']['Data']
+                        if chunk_anim['$type']=='gameTransformAnimation_RotateOnAxis':
+                            rot_axis=chunk_anim['axis']
+                            axis_no=0 # default to x
+                            if rot_axis=='Z':
+                                axis_no=2
+                            elif rot_axis=='Y': #y & z are swapped
+                                axis_no=1
+                                                        
+                            reverse=chunk_anim['reverseDirection']
+                            no_rot=chunk_anim['numberOfFullRotations']
+                            o = create_axes(ent_coll=ent_coll,name=c['name']['$value'])
+                            o.keyframe_insert('rotation_euler', index=axis_no ,frame=1)
+                            o.rotation_euler[axis_no] = o.rotation_euler[axis_no] +math.radians(no_rot*360)
+                            o.keyframe_insert('rotation_euler', index=axis_no ,frame=duration*24)
+                            if o.animation_data.action:
+                                obj_action = bpy.data.actions.get(o.animation_data.action.name)
+                                obj_fcu = obj_action.fcurves[0]
+                                modifier = obj_fcu.modifiers.new(type='CYCLES')
+                                modifier.mode_before = 'REPEAT'
+                                modifier.mode_after = 'REPEAT'
+                                for pt in obj_fcu.keyframe_points:
+                                    pt.interpolation = 'LINEAR'
+
+
                 if 'mesh' in c.keys() or 'graphicsMesh' in c.keys():
                    # print(c['mesh']['DepotPath']['$value'])
                     meshname=''
@@ -389,7 +441,9 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                             # things like the tvs have a bindname but no slotname, bindname appears to point at the name of the main component, and its the only one with a transform applied
                                             elif bindname:
                                                 #see if we can find a component that matches it
-                                                bindpt=[cmp for cmp in comps if cmp['name']==bindname]
+                                                if bindname=='interior_02':
+                                                    print('interior_02')
+                                                bindpt=[cmp for cmp in comps if cmp['name']['$value']==bindname]
                                                 if bindpt and len(bindpt)==1:
                                                     if c['localTransform']['Position']['x']['Bits']==0 and c['localTransform']['Position']['y']['Bits']==0 and c['localTransform']['Position']['z']['Bits']==0:
                                                         c['localTransform']['Position']=bindpt[0]['localTransform']['Position']
@@ -463,14 +517,15 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                                         bpy.ops.constraint.childof_set_inverse(constraint=loc("Child Of"), owner='OBJECT')
 
                                             # Deal with TransformAnimators
-                                            if 'TransformAnimator' in bindname:
+                                            #if 'TransformAnimator' in bindname:
+                                            if bindpt and bindpt[0]['$type']=='gameTransformAnimatorComponent':
                                                 ta=[tacmp for tacmp in comps if tacmp['name']['$value']==bindname ][0]
                                                 x=ta['localTransform']['Position']['x']['Bits']/131072                                                    
                                                 y=ta['localTransform']['Position']['y']['Bits']/131072                                                    
                                                 z=ta['localTransform']['Position']['z']['Bits']/131072
-                                                target=None
+                                                target=create_axes(ent_coll, bindname)
                                                 for ix,obj in enumerate(objs):
-                                                    if ix>0:
+                                                    if target:
                                                         cr=obj.constraints.new(type='COPY_ROTATION')
                                                         cr.target=target
                                                     else:
