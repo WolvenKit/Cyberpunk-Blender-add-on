@@ -258,6 +258,7 @@ def add_anim_props(animation, action):
     # Extract properties from animation
     schema = extras.get("schema", "")
     animation_type = extras.get("animationType", "")
+    rootMotion_type = extras.get("rootMotionType"),"")
     frame_clamping = extras.get("frameClamping", False)
     frame_clamping_start_frame = extras.get("frameClampingStartFrame", -1)
     frame_clamping_end_frame = extras.get("frameClampingEndFrame", -1)
@@ -272,6 +273,7 @@ def add_anim_props(animation, action):
     action["schema"] = schema
    # action["schemaVersion"] = schema['version']
     action["animationType"] = animation_type
+    action["rootMotionType"] = rootMotion_type
     action["frameClamping"] = frame_clamping
     action["frameClampingStartFrame"] = frame_clamping_start_frame
     action["frameClampingEndFrame"] = frame_clamping_end_frame
