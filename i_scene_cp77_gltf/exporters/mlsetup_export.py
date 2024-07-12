@@ -8,7 +8,8 @@ import json
 import os
 import numpy as np
 import copy
-from ..main.common import openJSON, createOverrideTable
+from ..jsontool import openJSON
+from ..main.common import createOverrideTable
 
 
 ##################################################################################################################

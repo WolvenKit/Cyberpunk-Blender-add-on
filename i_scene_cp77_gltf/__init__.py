@@ -1,5 +1,5 @@
 print('-------------------- Cyberpunk IO Suite Starting--------------------')
-print()
+print('')
 from .cyber_prefs import *
 from .cyber_props import *
 import bpy
@@ -15,7 +15,7 @@ from . scriptman import *
 
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
-    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, Doctor Presto, shotlastc, Rudolph2109, Holopointz",
+    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, Doctor Presto, shotlastc, Rudolph2109, Holopointz, Peatral",
     "version": (1, 5, 5, 3),
     "blender": (4, 0, 0),
     "location": "File > Import-Export",
@@ -96,8 +96,9 @@ def register():
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
     load_icons()
-
-    print('-------------------- Cyberpunk IO Suite Finished--------------------')
+    print('')
+    print('-------------------- Cyberpunk IO Suite Has Started--------------------')
+    print('')
 
 def unregister():
     unregister_scriptman()

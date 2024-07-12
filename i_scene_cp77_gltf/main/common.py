@@ -28,36 +28,11 @@ def get_classes(module):
 
     return sorted_operators, sorted_other_classes
 
-
 def loc(nodename):
     return bpy.app.translations.pgettext(nodename)
 
-def normalize_paths(data):
-    if isinstance(data, dict):
-        for key, value in data.items():
-            data[key] = normalize_paths(value)
-    elif isinstance(data, list):
-        for i in range(len(data)):
-            data[i] = normalize_paths(data[i])
-    elif isinstance(data, str):
-        # Normalize the path if it is absolute
-        if data[0:4]=='base' or data[0:3]=='ep1' or data[1:3]==':\\':
-            data = data.replace('\\',os.sep)
-    return data
-
-def jsonload(filepath):
-    data=json.load(filepath)
-    normalize_paths(data)
-    return data
-
-def jsonloads(jsonstrings):
-    data=json.loads(jsonstrings)
-    normalize_paths(data)
-    return data
-
 def get_plugin_dir():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 
 def get_resources_dir():
     plugin_dir = get_plugin_dir()
@@ -67,16 +42,13 @@ def get_icon_dir():
     plugin_dir = get_plugin_dir()
     return os.path.join(plugin_dir, "icons")
 
-
 def get_refit_dir():
     resources_dir = get_resources_dir()
     return os.path.join(resources_dir, "refitters")
 
-
 def get_script_dir():
     resources_dir = get_resources_dir()
     return os.path.join(resources_dir, "scripts")
-
 
 def get_rig_dir():
     resources_dir = get_resources_dir()
@@ -116,30 +88,6 @@ def bsdf_socket_names():
         socket_names['Sheen']= 'Sheen Weight'
         socket_names['Emission']= 'Emission Color'
     return socket_names    
-
-def json_ver_validate(json_data):
-    if 'Header' not in json_data:
-        return False
-    header = json_data['Header']
-    if "WolvenKitVersion" in header and "8.13" not in header["WolvenKitVersion"]:
-        if "8.14" not in header["WolvenKitVersion"]:
-            return False
-    if "MaterialJsonVersion" in header and "1." not in header["MaterialJsonVersion"]:
-        return False
-    return True
-
-def openJSON(path, mode='r',  ProjPath='', DepotPath=''):
-    path = path.replace('\\', os.sep)
-    ProjPath = ProjPath.replace('\\', os.sep)
-    DepotPath = DepotPath.replace('\\', os.sep)
-
-    inproj=os.path.join(ProjPath,path)
-    if os.path.exists(inproj):
-        file = open(inproj,mode)
-    else:
-        file = open(os.path.join(DepotPath,path),mode)
-    return file
-
 
 def imageFromPath(Img,image_format,isNormal = False):
     # The speedtree materials use the same name textures for different plants this code was loading the same leaves on all of them
@@ -542,6 +490,7 @@ def CreateGradMapRamp(CurMat, grad_image_node, location=(-400, 250)):
     return color_ramp_node
 
  # (1-t)a+tb
+
 def createLerpGroup():
     if 'lerp' in bpy.data.node_groups.keys():
         return bpy.data.node_groups['lerp']
@@ -613,6 +562,7 @@ def createVecLerpGroup():
 
 def show_message(message):
     bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=message) 
+
 def createHash12Group():
     if 'hash12' in bpy.data.node_groups.keys():
         return bpy.data.node_groups['hash12']
@@ -667,34 +617,4 @@ def createHash12Group():
         CurMat.links.new(mul.outputs[0],frac2.inputs[0])
         CurMat.links.new(frac2.outputs[0],GroupOutput.inputs[0])
         return CurMat   
-def UV_by_bounds(selected_objects):
-    current_mode = bpy.context.object.mode
-    min_vertex = Vector((float('inf'), float('inf'), float('inf')))
-    max_vertex = Vector((float('-inf'), float('-inf'), float('-inf')))
-    for obj in selected_objects:
-        if obj.type == 'MESH':
-            matrix = obj.matrix_world
-            mesh = obj.data
-            for vertex in mesh.vertices:
-                vertex_world = matrix @ vertex.co
-                min_vertex = Vector(min(min_vertex[i], vertex_world[i]) for i in range(3))
-                max_vertex = Vector(max(max_vertex[i], vertex_world[i]) for i in range(3))
 
-    for obj in selected_objects:
-        if  len(obj.data.uv_layers)<1:
-            me = obj.data
-            bpy.ops.object.mode_set(mode='EDIT', toggle=False)
-            bm = bmesh.from_edit_mesh(me)
-            
-            uv_layer = bm.loops.layers.uv.verify()
-            
-            # adjust uv coordinates
-            for face in bm.faces:
-                for loop in face.loops:
-                    loop_uv = loop[uv_layer]
-                    # use xy position of the vertex as a uv coordinate
-                    loop_uv.uv[0]=(loop.vert.co.x-min_vertex[0])/(max_vertex[0]-min_vertex[0])
-                    loop_uv.uv[1]=(loop.vert.co.y-min_vertex[1])/(max_vertex[1]-min_vertex[1])
-
-            bmesh.update_edit_mesh(me)
-    bpy.ops.object.mode_set(mode=current_mode)
