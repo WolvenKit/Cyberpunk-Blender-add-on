@@ -115,9 +115,11 @@ def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=F
             return {'CANCELLED'}
         for action in bpy.data.actions:
             if "schema" not in action:
-                action["schema"] ={"type": "wkit.cp2077.gltf.anims","version": 3}
+                action["schema"] ={"type": "wkit.cp2077.gltf.anims","version": 4}
             if "animationType" not in action:
                 action["animationType"] = 'Normal'
+            if "rootMotionType" not in action:
+                action["rootMotionType"] = 'None'
             if "frameClamping" not in action:
                 action["frameClamping"] = True
             if "frameClampingStartFrame" not in action:
