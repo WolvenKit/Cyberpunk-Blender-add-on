@@ -87,7 +87,7 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
         filename=os.path.splitext(f['name'])[0]
         filepath = os.path.join(directory, f['name'])
         vers = bpy.app.version
-        if vers[0] >= 4.2:
+        if vers[0] == 4 and vers[1] >= 2:
             gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'BLENDER', "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':False, 'bone_shape_scale_factor':1.0})
         else:
             gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'BLENDER', "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':False,})
