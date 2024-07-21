@@ -86,8 +86,11 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
     for f in loadfiles:
         filename=os.path.splitext(f['name'])[0]
         filepath = os.path.join(directory, f['name'])
-
-        gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'BLENDER', "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':False})
+        vers = bpy.app.version
+        if vers[0] == 4 and vers[1] >= 2:
+            gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'BLENDER', "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':False, 'bone_shape_scale_factor':1.0})
+        else:
+            gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'BLENDER', "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':False,})
         gltf_importer.read()
         gltf_importer.checks()
         existingMeshes = bpy.data.meshes.keys()
@@ -173,8 +176,8 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
 
         import_mats(current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, obj,
                     validmats)
-    if not cp77_addon_prefs.non_verbose:                
-        print(f"GLB Import Time: {(time.time() - start_time)} Seconds")            
+    if not cp77_addon_prefs.non_verbose:
+        print(f"GLB Import Time: {(time.time() - start_time)} Seconds")
         print('')
         print('-------------------- Finished importing Cyberpunk 2077 Model --------------------')
 
@@ -263,13 +266,13 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
                             index = index + 1
 
         counter = counter + 1
-    if not cp77_addon_prefs.non_verbose:        
+    if not cp77_addon_prefs.non_verbose:
         if len(failedon) == 0:
             print(f"Shader Setup Completed Succesfully in {(time.time() - start_time)} Seconds")
         else:
             print(f"Material Setup Failed on: {', '.join(failedon)}")
             print(f"Attempted Setup for {(time.time() - start_time)} seconds")
-        
+
     if exclude_unused_mats:
         return
 
@@ -279,7 +282,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
                 (rawmat["Name"] in MatImportList) or len(MatImportList) < 1):
             Builder.create(index)
         index = index + 1
-        
+
 def blender_4_scale_armature_bones():
     vers = bpy.app.version
     if vers[0] >= 4:
@@ -308,10 +311,10 @@ def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o):
         if meshes and "Icosphere" not in mesh.name:
             if 'Armature' in o.name:
                 o.hide_set(hide_armatures)
-        else:            
+        else:
             if 'Armature' in o.name:
                 pass
-            
+
     else:
         if 'Armature' in o.name:
-            o.hide_set(hide_armatures)     
+            o.hide_set(hide_armatures)
