@@ -98,7 +98,16 @@ def jsonload(filepath):
                 if not cp77_addon_prefs.non_verbose:
                     print('Building shaders')
             # Do something for .material.json
-
+            
+        case _ if base_name.endswith('.gradient.json'):
+            if not cp77_addon_prefs.non_verbose:
+                print(f"Processing: {base_name}")
+            data=load_json(filepath)
+            if json_ver_validate(data) == False:
+                if not cp77_addon_prefs.non_verbose:
+                    print(f"invalid gradient.json found at: {filepath} this plugin requires jsons generated using the latest version of Wolvenkit")
+                show_message(f"found invalid gradient.json: {base_name} this plugin requires jsons generated using the latest version of Wolvenkit")
+            
         case _ if base_name.endswith('.mlsetup.json'):
             if not cp77_addon_prefs.non_verbose:
                 print(f"Processing: {base_name}")
@@ -214,7 +223,7 @@ def openJSON(path, mode='r',  ProjPath='', DepotPath=''):
 
     inproj=os.path.join(ProjPath,path)
     if os.path.exists(inproj):
-        file = open(inproj,mode)
+        data = jsonload(inproj)
     else:
-        file = open(os.path.join(DepotPath,path),mode)
-    return file
+        data = jsonload(os.path.join(DepotPath,path))
+    return data
