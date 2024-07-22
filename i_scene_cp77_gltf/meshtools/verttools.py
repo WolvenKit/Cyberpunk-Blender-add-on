@@ -8,32 +8,15 @@ from ..cyber_props import *
 
         
 res_dir = get_resources_dir()
-script_dir = get_script_dir()
-
-        
-# Path to the JSON file
-VCOL_PRESETS_JSON = os.path.join(res_dir, "vertex_color_presets.json")
-
-        
-def get_colour_presets():
-    if os.path.exists(VCOL_PRESETS_JSON):
-        with open(VCOL_PRESETS_JSON, 'r') as file:
-            return json.load(file)
-    return {}
-
-        
-def save_presets(presets):
-    with open(VCOL_PRESETS_JSON, 'w') as file:
-        json.dump(presets, file, indent=4)
-
-        
-def update_presets_items():
-    presets = get_colour_presets()
-    return [(name, name, "") for name in presets.keys()] 
-
 
 def del_empty_vgroup(self, context):
-    obj = bpy.context
+    obj = context.object
+    if not obj:
+        show_message("No active object. Please Select a Mesh and try again")
+        return {'CANCELLED'} 
+    if obj.type != 'MESH':
+        show_message("The active object is not a mesh.")
+        return {'CANCELLED'}
     try:
         for obj in bpy.context.selected_objects:
             groups = {r: None for r in range(len(obj.vertex_groups))}
@@ -47,10 +30,12 @@ def del_empty_vgroup(self, context):
         print(f"encountered the following error:")
         print(e)
         
-        
 def find_nearest_vertex_group(obj, vertex):
     min_distance = math.inf
     nearest_vertex = None
+    if not obj:
+        show_message("No active object. Please Select a Mesh and try again")
+        return {'CANCELLED'} 
     if obj.type != 'MESH':
         show_message("The active object is not a mesh.")
         return {'CANCELLED'}
@@ -62,12 +47,13 @@ def find_nearest_vertex_group(obj, vertex):
                 nearest_vertex = v
     return nearest_vertex
 
-
 def CP77GroupUngroupedVerts(self, context):
     C = bpy.context
     obj = C.object
     current_mode = C.mode
-
+    if not obj:
+        show_message("No active object. Please Select a Mesh and try again")
+        return {'CANCELLED'} 
     if obj.type != 'MESH':
         show_message("The active object is not a mesh.")
         return {'CANCELLED'}
@@ -100,7 +86,6 @@ def CP77GroupUngroupedVerts(self, context):
                 print(e)
     return {'FINISHED'}
 
-    
 def trans_weights(self, context):
     current_mode = context.mode
     props = context.scene.cp77_panel_props

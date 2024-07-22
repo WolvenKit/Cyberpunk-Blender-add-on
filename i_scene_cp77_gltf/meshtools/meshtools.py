@@ -52,6 +52,7 @@ def CP77ArmatureSet(self, context):
     props = context.scene.cp77_panel_props
     target_armature_name = props.selected_armature
     target_armature = bpy.data.objects.get(target_armature_name)
+    obj = context.object
     if not obj:
         show_message("No active object. Please Select a Mesh and try again")
         return {'CANCELLED'} 
