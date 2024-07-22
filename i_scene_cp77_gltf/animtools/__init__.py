@@ -33,16 +33,16 @@ class CP77_PT_AnimsPanel(Panel):
     def poll(cls, context):
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
         if cp77_addon_prefs.context_only:
-            return context.active_object and context.active_object.type == 'ARMATURE' 
+            return context.active_object and is_armature(context.active_object) is True
         else:
             return context
-        
+
 ## make sure the context is unrestricted as possible, ensure there's an armature selected 
     def draw(self, context):
         layout = self.layout 
 
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
-        
+
         if cp77_addon_prefs.show_animtools:
             props = context.scene.cp77_panel_props
             box = layout.box()
@@ -95,7 +95,7 @@ class CP77_PT_AnimsPanel(Panel):
                                 row = box.row(align=True)
                                 row.prop(bpy.context.scene, 'frame_start', text="")
                                 row.prop(bpy.context.scene, 'frame_end', text="")
-                                    
+
                     box = layout.box()
                     row = box.row(align=True)
                     row.label(text='Animsets', icon_value=get_icon('WKIT'))
@@ -142,8 +142,7 @@ class CP77AnimsDelete(Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object and context.active_object.animation_data
-
+        return is_armature(context.active_object)
     def execute(self, context):
         delete_anim(self, context)
         return{'FINISHED'}
@@ -162,7 +161,7 @@ class CP77Animset(Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object and context.active_object.animation_data
+        return is_armature(context.active_object)  
 
     def execute(self, context):
         obj = context.active_object
@@ -208,7 +207,7 @@ class CP77BoneHider(Operator):
     bl_options = {'REGISTER', 'UNDO'}
     bl_label = "Toggle Deform Bone Visibilty"
     bl_description = "Hide deform bones in the selected armature"
-    
+
     def execute(self, context):
         hide_extra_bones(self, context)
         return{'FINISHED'}
@@ -220,7 +219,7 @@ class CP77BoneUnhider(Operator):
     bl_options = {'REGISTER', 'UNDO'}
     bl_label = "Toggle Deform Bone Visibilty"
     bl_description = "Unhide deform bones in the selected armature"
-    
+
     def execute(self, context):
         unhide_extra_bones(self, context)
         return{'FINISHED'}
@@ -240,7 +239,7 @@ class CP77Keyframe(Operator):
         props = context.scene.cp77_panel_props
         cp77_keyframe(props, context, props.frameall)
         return {"FINISHED"}
-    
+
     def draw(self, context):
         layout = self.layout
         props = context.scene.cp77_panel_props
@@ -298,7 +297,7 @@ class CP77RigLoader(Operator):
     appearances: StringProperty(name="Appearances", default="")
     directory: StringProperty(name="Directory", default="")
     filepath: StringProperty(name="Filepath", default="")
-    
+
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
 
@@ -316,6 +315,7 @@ class CP77RigLoader(Operator):
             if props.fbx_rot:
                 rotate_quat_180(self,context)
         return {'FINISHED'}
+
     def draw(self,context):
         props = context.scene.cp77_panel_props
         layout = self.layout
@@ -332,7 +332,7 @@ class CP77AnimNamer(Operator):
     bl_label = "Fix Action Names"
     bl_options = {'INTERNAL', 'UNDO'}
     bl_description = "replace spaces and capital letters in animation names with underscores and lower case letters" 
-    
+
     def execute(self, context):
         for a in CP77AnimsList(self,context): a.name = a.name.replace(" ", "_").lower()
         return {'FINISHED'}
