@@ -61,10 +61,17 @@ def hasShapeKeys(obj):
         return False
 
 # Return the name of the shape key data block if the object has shape keys.
-def getShapeKeyName(obj):
+def getShapeKeyName(name):
     if hasShapeKeys(obj):
-        return obj.data.shape_keys.name        
+        return obj.data.shape_keys[name]        
     return ""
+    
+def getShapeKeyByName(obj, name):
+    if obj.data.shape_keys:
+        for key_block in obj.data.shape_keys.key_blocks:
+            if key_block.name == name:
+                return key_block
+    return None
 
 # returns a dictionary with all the property names for the objects shape keys.
 def getShapeKeyProps(obj):
