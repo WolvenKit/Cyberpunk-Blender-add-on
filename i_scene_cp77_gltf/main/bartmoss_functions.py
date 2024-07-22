@@ -20,16 +20,16 @@ def has_anims(o: bpy.types.Object) -> bool:
     return isinstance(o.data, bpy.types.Armature) and o.animation_data is not None
 
 def rotate_quat_180(self,context):
-    if context.active_object and context.active_object.rotation_quaternion:
-        active_obj =  context.active_object
-        active_obj.rotation_mode = 'QUATERNION'
+    if context.selected_objects is not None:
+        for obj in context.selected_objects:
+            obj.rotation_mode = 'QUATERNION'
 
-        rotation_quat = Quaternion((0, 0, 1), radians(180))
-        active_obj.rotation_quaternion = rotation_quat @ active_obj.rotation_quaternion
-        bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
-        # Update the object to reflect the changes
-        active_obj.update_tag()
-        active_obj.update_from_editmode()
+            rotation_quat = Quaternion((0, 0, 1), radians(180))
+            obj.rotation_quaternion = rotation_quat @ obj.rotation_quaternion
+            bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
+            # Update the object to reflect the changes
+            obj.update_tag()
+            obj.update_from_editmode()
 
         # Update the scene to see the changes
         bpy.context.view_layer.update()
@@ -70,22 +70,22 @@ def getShapeKeyName(obj):
 def getShapeKeyProps(obj):
 
     props = {}
-    
+
     if hasShapeKeys(obj):
         for prop in obj.data.shape_keys.key_blocks:
             props[prop.name] = prop.value
-            
+
     return props
 
 # returns a list of the given objects custom properties.
 def getCustomProps(obj):
 
     props = []
-    
+
     for prop in obj.keys():
         if prop not in '_RNA_UI' and isinstance(obj[prop], (int, float, list, idprop.types.IDPropertyArray)):
             props.append(prop)
-            
+
     return props
 
 # returns a list of modifiers for the given object
@@ -132,9 +132,9 @@ def UV_by_bounds(selected_objects):
             me = obj.data
             bpy.ops.object.mode_set(mode='EDIT', toggle=False)
             bm = bmesh.from_edit_mesh(me)
-            
+
             uv_layer = bm.loops.layers.uv.verify()
-            
+
             # adjust uv coordinates
             for face in bm.faces:
                 for loop in face.loops:
@@ -144,5 +144,4 @@ def UV_by_bounds(selected_objects):
                     loop_uv.uv[1]=(loop.vert.co.y-min_vertex[1])/(max_vertex[1]-min_vertex[1])
 
             bmesh.update_edit_mesh(me)
-    bpy.ops.object.mode_set(mode=current_mode)   
- 
+    bpy.ops.object.mode_set(mode=current_mode)
