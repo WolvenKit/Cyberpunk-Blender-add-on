@@ -245,7 +245,12 @@ def get_tan_pos(inst):
     return pos
 
 def importSectors( filepath='', want_collisions=False, am_modding=False, with_materials=True, remap_depot=False, with_lights=True ):
-
+    cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
+    if not cp77_addon_prefs.non_verbose:
+        print('')
+        print('-------------------- Importing Cyberpunk 2077 Streaming Sectors --------------------')
+        print('')
+    start_time = time.time()
     # Enter the path to your projects source\raw\base folder below, needs double slashes between folder names.
     path = os.path.join( os.path.dirname(filepath),'source','raw','base')
     print('path is ',path)
@@ -1249,10 +1254,11 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                 nextpoint.handle_right = righthandlepos
                 # Set the points to be the same
                 nextpoint.co=endpoint.co
-
-
-    print('Finished Importing Sectors')
-
+    
+    print(f"Imported Sector: {sectorName} in {time.time() - start_time}")
+    print('')
+    print('-------------------- Finished Importing Cyberpunk 2077 Streaming Sectors --------------------')
+    print('')
 
 
 # The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
