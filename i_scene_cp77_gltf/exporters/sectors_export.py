@@ -26,6 +26,7 @@
 # - sort out instanced bits
 
 import json
+from ..jsontool import jsonload
 import glob
 import os
 import bpy
@@ -409,8 +410,7 @@ def exportSectors(filename, use_yaml):
     # Open the blank template streaming sector
     resourcepath=get_resources_dir()
 
-    with open(os.path.join(resourcepath,'empty.streamingsector.json'),'r') as f:
-        template_json=json.load(f)
+    template_json=jsonload(resourcepath,'empty.streamingsector.json')
     template_nodes = template_json["Data"]["RootChunk"]["nodes"]
     template_nodeData = template_json['Data']['RootChunk']['nodeData']['Data']
     ID=0
@@ -441,8 +441,7 @@ def exportSectors(filename, use_yaml):
         print(filepath)
         if filepath==os.path.join(projpath,projectjson):
             continue
-        with open(filepath,'r') as f:
-            j=json.load(f)
+        j=jsonload(filepath)
         nodes = j["Data"]["RootChunk"]["nodes"]
         t=j['Data']['RootChunk']['nodeData']['Data']
         # add nodeDataIndex props to all the nodes in t
@@ -846,8 +845,7 @@ def exportSectors(filename, use_yaml):
                             source_sect_coll=bpy.data.collections.get(source_sector)
                             source_sect_json_path=source_sect_coll['filepath']
                             print(source_sect_json_path)
-                            with open(source_sect_json_path,'r') as f:
-                                source_sect_json=json.load(f)
+                            source_sect_json=jsonload(source_sect_json_path)
                             source_nodes = source_sect_json["Data"]["RootChunk"]["nodes"]
                             print(len(source_nodes),col['nodeIndex'])
                             print(source_nodes[col['nodeIndex']])
@@ -876,8 +874,7 @@ def exportSectors(filename, use_yaml):
             source_sect_coll=bpy.data.collections.get(source_sector)
             source_sect_json_path=source_sect_coll['filepath']
             print(source_sect_json_path)
-            with open(source_sect_json_path,'r') as f:
-                source_sect_json=json.load(f)
+            source_sect_json=jsonload(source_sect_json_path)
             source_nodes = source_sect_json["Data"]["RootChunk"]["nodes"]
             nodes.append(copy.deepcopy(source_nodes[ni]))
             new_Index=len(nodes)-1
@@ -953,8 +950,7 @@ def exportSectors(filename, use_yaml):
             source_sect_coll=bpy.data.collections.get(source_sector)
             source_sect_json_path=source_sect_coll['filepath']
             print(source_sect_json_path)
-            with open(source_sect_json_path,'r') as f:
-                source_sect_json=json.load(f)
+            source_sect_json = jsonload(source_sect_json_path)
             source_nodes = source_sect_json["Data"]["RootChunk"]["nodes"]
             nodes.append(copy.deepcopy(source_nodes[ni]))
             new_Index=len(nodes)-1
