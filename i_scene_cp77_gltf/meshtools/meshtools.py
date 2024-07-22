@@ -10,10 +10,12 @@ def CP77SubPrep(self, context, smooth_factor, merge_distance):
     scn = context.scene
     obj = context.object
     current_mode = context.mode
+    if not obj:
+        show_message("No active object. Please Select a Mesh and try again")
+        return {'CANCELLED'} 
     if obj.type != 'MESH':
-        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="The active object is not a mesh.")
-        return {'CANCELLED'}  
-    
+        show_message("The active object is not a mesh.")
+        return {'CANCELLED'}
     if current_mode != 'EDIT':
         bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_mode(type="EDGE")
@@ -50,7 +52,12 @@ def CP77ArmatureSet(self, context):
     props = context.scene.cp77_panel_props
     target_armature_name = props.selected_armature
     target_armature = bpy.data.objects.get(target_armature_name)
-
+    if not obj:
+        show_message("No active object. Please Select a Mesh and try again")
+        return {'CANCELLED'} 
+    if obj.type != 'MESH':
+        show_message("The active object is not a mesh.")
+        return {'CANCELLED'}
     if len(selected_meshes) > 0:
         if target_armature and target_armature.type == 'ARMATURE':
             # Ensure the target armature has a collection
@@ -87,10 +94,14 @@ def CP77ArmatureSet(self, context):
 def CP77UvChecker(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
     bpy_mats=bpy.data.materials
-    current_mode = context.mode    
- 
-
-
+    obj = context.object
+    current_mode = context.mode
+    if not obj:
+        show_message("No active object. Please Select a Mesh and try again")
+        return {'CANCELLED'} 
+    if obj.type != 'MESH':
+        show_message("The active object is not a mesh.")
+        return {'CANCELLED'}
     for mat in bpy_mats:
         if mat.name == 'UV_Checker':
             uvchecker = mat
@@ -140,7 +151,15 @@ def CP77UvChecker(self, context):
 
 def CP77UvUnChecker(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
+    obj = context.object
     current_mode = context.mode
+    if not obj:
+        show_message("No active object. Please Select a Mesh and try again")
+        return {'CANCELLED'} 
+    if obj.type != 'MESH':
+        show_message("The active object is not a mesh.")
+        return {'CANCELLED'}
+        
     uvchecker = 'UV_Checker'
     original_mat_name = None
     for mesh in selected_meshes:
@@ -178,6 +197,14 @@ def CP77RefitChecker(self, context):
 def CP77Refit(context, refitter, target_body_path, target_body_name, fbx_rot):
     selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
     scene = context.scene
+    obj = context.object
+    current_mode = context.mode
+    if not obj:
+        show_message("No active object. Please Select a Mesh and try again")
+        return {'CANCELLED'} 
+    if obj.type != 'MESH':
+        show_message("The active object is not a mesh.")
+        return {'CANCELLED'}
     refitter_obj = None
     r_c = None
     print(fbx_rot)

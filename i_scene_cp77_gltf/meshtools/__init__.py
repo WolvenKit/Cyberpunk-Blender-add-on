@@ -10,7 +10,6 @@ from bpy.props import (StringProperty, EnumProperty)
 from bpy.types import (Scene, Operator, Panel)
 from ..cyber_props import CP77RefitList
 from ..icons.cp77_icons import get_icon
-import mathutils
 
 class CP77_PT_MeshTools(Panel):
     bl_label = "Mesh Tools"
@@ -53,23 +52,6 @@ class CP77_PT_MeshTools(Panel):
                 split.prop(props, "selected_armature", text="")
                 row = box.row(align=True)
                 row.operator("cp77.set_armature", text="Change Armature Target")
-                
-                box = layout.box()
-                box.label(text="Mesh Cleanup", icon_value=get_icon("TRAUMA"))
-                row = box.row(align=True)
-                split = row.split(factor=0.7,align=True)
-                split.label(text="Merge Distance:")
-                split.prop(props,"merge_distance", text="", slider=True)
-                row = box.row(align=True)
-                split = row.split(factor=0.7,align=True)
-                split.label(text="Smooth Factor:")
-                split.prop(props,"smooth_factor", text="", slider=True)
-                row = box.row(align=True)
-                row.operator("cp77.submesh_prep")
-                row = box.row(align=True)
-                row.operator("cp77.group_verts", text="Group Ungrouped Verts")
-                row = box.row(align=True)
-                row.operator('object.delete_unused_vgroups', text="Delete Unused Vert Groups")
 
                 box = layout.box()
                 box.label(icon_value=get_icon("SCULPT"), text="Modelling:")
@@ -91,6 +73,23 @@ class CP77_PT_MeshTools(Panel):
                 row = box.row(align=True)
                 row.operator("cp77.rotate_obj")
                 
+                box = layout.box()
+                box.label(text="Mesh Cleanup", icon_value=get_icon("TRAUMA"))
+                row = box.row(align=True)
+                split = row.split(factor=0.7,align=True)
+                split.label(text="Merge Distance:")
+                split.prop(props,"merge_distance", text="", slider=True)
+                row = box.row(align=True)
+                split = row.split(factor=0.7,align=True)
+                split.label(text="Smooth Factor:")
+                split.prop(props,"smooth_factor", text="", slider=True)
+                row = box.row(align=True)
+                row.operator("cp77.submesh_prep")
+                row = box.row(align=True)
+                row.operator("cp77.group_verts", text="Group Ungrouped Verts")
+                row = box.row(align=True)
+                row.operator('object.delete_unused_vgroups', text="Delete Unused Vert Groups")
+
                 box = layout.box()
                 box.label(text="Vertex Colours", icon="BRUSH_DATA")
                 row = box.row(align=True)
