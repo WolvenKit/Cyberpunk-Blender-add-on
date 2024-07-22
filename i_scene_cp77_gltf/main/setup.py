@@ -45,9 +45,6 @@ class MaterialBuilder:
         if self.obj.get("Materials"):
             rawMat = self.obj["Materials"][materialIndex]
             
-
-            
-
             verbose=True
 
             bpyMat = bpy.data.materials.new(rawMat["Name"])
