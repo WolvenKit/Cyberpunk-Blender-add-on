@@ -15,7 +15,7 @@
 # 3) If you want it to generate the _new collections for you to add new stuff in set am_modding to True
 # 4) Run it                                                                      
 
-import json
+from ..jsontool import jsonload
 import glob
 import os
 import bpy
@@ -278,8 +278,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
         if VERBOSE:
             print(os.path.join(path,os.path.basename(project)+'.streamingsector.json'))
             print(filepath)
-        with open(filepath,'r') as f: 
-                j=json.load(f) 
+        j = jsonload(filepath)
         sectorName=os.path.basename(filepath)[:-5]
         t=j['Data']['RootChunk']['nodeData']['Data']
         nodes = j["Data"]["RootChunk"]["nodes"]
@@ -400,8 +399,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
         if VERBOSE:
             print(projectjson)
             print(filepath)
-        with open(filepath,'r') as f: 
-              j=json.load(f) 
+        j=jsonload(filepath) 
           
         t=j['Data']['RootChunk']['nodeData']['Data']
         # add nodeDataIndex props to all the nodes in t
@@ -683,8 +681,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                             meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep) 
                             foliageResource=data['foliageResource']['DepotPath']['$value'].replace('\\', os.sep)+'.json'
                             if os.path.exists(os.path.join(path,foliageResource)):
-                                with open(os.path.join(path,foliageResource),'r') as frfile:
-                                    frjson=json.load(frfile)
+                                frjson=jsonload(os.path.join(path,foliageResource))
                                 inst_pos=get_pos(inst)
                                 Bucketnum=data['populationSpanInfo']['cketCount']
                                 Bucketstart=data['populationSpanInfo']['cketBegin']
@@ -798,8 +795,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                 jsonpath = os.path.join(path,mipath)+".json"
                                 #print(jsonpath)
                                 try:
-                                    with open(jsonpath,'r') as jsonpath:
-                                        obj=json.load(jsonpath)
+                                    obj=jsonload(jsonpath)
                                     index = 0
                                     obj["Data"]["RootChunk"]['alpha'] = e['Data']['alpha']
                                     #FIXME: image_format
