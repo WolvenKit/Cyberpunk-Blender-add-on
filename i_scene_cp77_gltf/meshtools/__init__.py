@@ -171,6 +171,13 @@ class CP77ApplyVertexcolorPreset(Operator):
     def execute(self, context):
         props = context.scene.cp77_panel_props
         preset_name = props.vertex_color_presets
+        obj = context.object
+        if not obj:
+            show_message("No active object. Please Select a Mesh and try again")
+            return {'CANCELLED'} 
+        if obj.type != 'MESH':
+            show_message("The active object is not a mesh.")
+            return {'CANCELLED'}
         if not preset_name:
             self.report({'ERROR'}, "No preset selected.")
             return {'CANCELLED'}
