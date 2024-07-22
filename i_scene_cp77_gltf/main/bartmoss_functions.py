@@ -6,6 +6,12 @@ import idprop
 ## I get that these are lazy but they're convenient type checks
 def is_mesh(o: bpy.types.Object) -> bool:
     return isinstance(o.data, bpy.types.Mesh)
+ 
+def world_mtx(armature, bone):
+    return armature.convert_space(bone, bone.matrix, from_space='POSE', to_space='WORLD')
+
+def pose_mtx(armature, bone, mat):
+    return armature.convert_space(bone, mat, from_space='WORLD', to_space='POSE')
 
 def is_armature(o: bpy.types.Object) -> bool: # I just found out I could leave annotations like that -> future presto will appreciate knowing wtf I though I was going to return 
     return isinstance(o.data, bpy.types.Armature)
