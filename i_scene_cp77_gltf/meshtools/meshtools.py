@@ -44,7 +44,6 @@ def CP77SubPrep(self, context, smooth_factor, merge_distance):
     bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"Submesh preparation complete. {merged_vertices} verts merged")
     if context.mode != current_mode:
         bpy.ops.object.mode_set(mode=current_mode)
-        
 
 def CP77ArmatureSet(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
@@ -139,7 +138,6 @@ def CP77UvChecker(self, context):
 
     return {'FINISHED'}
 
-
 def CP77UvUnChecker(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
     current_mode = context.mode
@@ -163,7 +161,6 @@ def CP77UvUnChecker(self, context):
         if context.mode != current_mode:
             bpy.ops.object.mode_set(mode=current_mode)
 
-
 def CP77RefitChecker(self, context):
     scene = context.scene
     objects = scene.objects
@@ -177,7 +174,6 @@ def CP77RefitChecker(self, context):
 
     print('refitter result:', refitter)
     return refitter
-
 
 def CP77Refit(context, refitter, target_body_path, target_body_name, fbx_rot):
     selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
