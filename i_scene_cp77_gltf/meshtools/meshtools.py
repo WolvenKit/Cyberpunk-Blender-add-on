@@ -51,22 +51,39 @@ def CP77ArmatureSet(self, context):
     props = context.scene.cp77_panel_props
     target_armature_name = props.selected_armature
     target_armature = bpy.data.objects.get(target_armature_name)
-    if len(selected_meshes) >0:
+
+    if len(selected_meshes) > 0:
         if target_armature and target_armature.type == 'ARMATURE':
+            # Ensure the target armature has a collection
+            if not target_armature.users_collection:
+                target_collection = bpy.data.collections.new(target_armature.name + "_collection")
+                bpy.context.scene.collection.children.link(target_collection)
+                target_collection.objects.link(target_armature)
+            else:
+                target_collection = target_armature.users_collection[0]
+
             for mesh in selected_meshes:
-                retargeted=False
+                retargeted = False
                 for modifier in mesh.modifiers:
                     if modifier.type == 'ARMATURE' and modifier.object is not target_armature:
                         modifier.object = target_armature
-                        retargeted=True
-                    else:
-                        if modifier.type == 'ARMATURE' and modifier.object is target_armature:
-                            retargeted=True
-                            continue
+                        retargeted = True
+                    elif modifier.type == 'ARMATURE' and modifier.object is target_armature:
+                        retargeted = True
+                        continue
                 if not retargeted:
                     armature = mesh.modifiers.new('Armature', 'ARMATURE')
-                    armature.object = target_armature             
+                    armature.object = target_armature
+                
+                # Set parent
+                mesh.parent = target_armature
 
+                # Unlink the mesh from its original collections
+                for col in mesh.users_collection:
+                    col.objects.unlink(mesh)
+
+                # Link the mesh to the target armature's collection
+                target_collection.objects.link(mesh)
 
 def CP77UvChecker(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
