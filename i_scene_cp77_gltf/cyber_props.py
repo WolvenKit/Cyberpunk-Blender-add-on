@@ -248,6 +248,12 @@ class CP77_PT_PanelProps(PropertyGroup):
         name="With Materials",
         default=True,
         description="Import Wolvenkit-exported materials"
+    )
+
+    axl_yaml: BoolProperty(
+        name="Use YAML instead of JSON",
+        default=False,
+        description="Use the ArchiveXL YAML format instead of JSON format for generated .xl files"
     )   
 
 def add_anim_props(animation, action):

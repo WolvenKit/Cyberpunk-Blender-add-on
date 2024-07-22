@@ -24,9 +24,15 @@ class CP77StreamingSectorExport(Operator,ExportHelper):
     bl_description = "Export changes to Sectors back to project" 
     filename_ext = ".cpmodproj"
     filter_glob: StringProperty(default="*.cpmodproj", options={'HIDDEN'})
+    
+    def draw(self, context):
+        props = context.scene.cp77_panel_props
+        layout = self.layout
+        layout.prop(props, "axl_yaml")
 
     def execute(self, context):
-        exportSectors(self.filepath)
+        use_yaml = context.scene.cp77_panel_props.axl_yaml
+        exportSectors(self.filepath, use_yaml)
         return {'FINISHED'}
 
 
