@@ -56,22 +56,32 @@ def calculate_mesh_volume(obj):
 ## Returns True if the given object has shape keys, works for meshes and curves
 def hasShapeKeys(obj):
     if obj.id_data.type in ['MESH', 'CURVE']:
-        return True if obj.data.shape_keys else False
-    else:
-        return False
+        return obj.data.shape_keys != None
+        
+def getShapeKeyNames(obj):
+    if hasShapeKeys(obj):
+        key_names = []
+        for key_block in obj.data.shape_keys.key_blocks:
+            key_names.append(key_block.name)
+        return key_names       
+    return ""
 
 # Return the name of the shape key data block if the object has shape keys.
-def getShapeKeyName(name):
-    if hasShapeKeys(obj):
-        return obj.data.shape_keys[name]        
-    return ""
-    
 def getShapeKeyByName(obj, name):
-    if obj.data.shape_keys:
+    if hasShapeKeys(obj):
         for key_block in obj.data.shape_keys.key_blocks:
             if key_block.name == name:
                 return key_block
     return None
+
+def setActiveShapeKey(obj, name):
+    shape_key = getShapeKeyByName(obj, name)
+    if shape_key:
+        for index, key_block in enumerate(obj.data.shape_keys.key_blocks):
+            if key_block == shape_key:
+                obj.active_shape_key_index = index
+                return True
+    return False
 
 # returns a dictionary with all the property names for the objects shape keys.
 def getShapeKeyProps(obj):
