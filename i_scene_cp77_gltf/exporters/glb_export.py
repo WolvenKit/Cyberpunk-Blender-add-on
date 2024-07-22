@@ -1,5 +1,6 @@
 import bpy
 from .. animtools import reset_armature
+from ..main.common import show_message
 
 #setup the default options to be applied to all export types
 def default_cp77_options():
@@ -54,8 +55,6 @@ def pose_export_options():
     }
     return options
 
-#setup the actual exporter - rewrote almost all of this, much quicker now
-
 red_color = (1, 0, 0, 1)  # RGBA
 garment_cap_name="_GarmentSupportCap"
 garment_weight_name="_GarmentSupportWeight"
@@ -93,94 +92,94 @@ def add_garment_cap(mesh):
             if cap_layer != None and loop_index < (len(cap_layer.data)):
                 cap_layer.data[loop_index].color = red_color
 
-
-# setup the actual exporter - rewrote almost all of this, much quicker now
 # mana: by assigning default attributes, we make this update-safe (some older scripts broke). Just don't re-name them!
 def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=False, limit_selected=True, static_prop=False, red_garment_col=False, apply_transform=True):
-
-    groupless_bones = set()
-    bone_names = []
 
     #check if the scene is in object mode, if it's not, switch to object mode
     if bpy.context.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
 
     objects = context.selected_objects
-    armatures = [obj for obj in objects if obj.type == 'ARMATURE']
-
+    options = default_cp77_options()
+    
     #if for photomode, make sure there's an armature selected, if not use the message box to show an error
     if export_poses:
+        armatures = [obj for obj in objects if obj.type == 'ARMATURE']
         if not armatures:
-            bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="No armature objects are selected, please select an armature")
+            show_message("No armature objects are selected, please select an armature")
             return {'CANCELLED'}
-        for action in bpy.data.actions:
-            if "schema" not in action:
-                action["schema"] ={"type": "wkit.cp2077.gltf.anims","version": 4}
-            if "animationType" not in action:
-                action["animationType"] = 'Normal'
-            if "rootMotionType" not in action:
-                action["rootMotionType"] = 'None'
-            if "frameClamping" not in action:
-                action["frameClamping"] = True
-            if "frameClampingStartFrame" not in action:
-                action["frameClampingStartFrame"] = -1
-            if "frameClampingEndFrame" not in action:
-                action["frameClampingEndFrame"] = -1
-            if "numExtraJoints" not in action:
-                action["numExtraJoints"] = 0
-            if "numeExtraTracks" not in action:
-                action["numeExtraTracks"] = 0
-            if "constTrackKeys" not in action:
-                action["constTrackKeys"] = []
-            if "trackKeys" not in action:
-                action["trackKeys"] = []
-            if "fallbackFrameIndices" not in action:
-                action["fallbackFrameIndices"] = []
-            if "optimizationHints" not in action:
-                action["optimizationHints"] = { "preferSIMD": False, "maxRotationCompression": 1}
+        
+        export_anims(context, filepath, options, armatures)
+        return{'FINISHED'}
 
-        #if the export poses value is True, set the export options to ensure the armature is exported properly with the animations
-        options = default_cp77_options()
-        options.update(pose_export_options())
-        for armature in armatures:
-            reset_armature(armature, context)
-            print(options)
-            bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
-            # TODO should that be here?
-            return{'FINISHED'}
+    #if export_poses option isn't used, check to make sure there are meshes selected and throw an error if not
 
-        return {'FINISHED'}
+    #throw an error in the message box if you haven't selected a mesh to export
+    if not export_poses:
+        meshes = [obj for obj in objects if obj.type == 'MESH' and not "Icosphere" in obj.name]
+        if not meshes:
+            show_message("No meshes selected, please select at least one mesh")
+            return {'CANCELLED'}
+        export_meshes(context, filepath, export_visible, limit_selected, static_prop, red_garment_col, apply_transform, meshes, options)
 
+def export_anims(context, filepath, options, armatures):
+    for action in bpy.data.actions:
+        if "schema" not in action:
+            action["schema"] ={"type": "wkit.cp2077.gltf.anims","version": 4}
+        if "animationType" not in action:
+            action["animationType"] = 'Normal'
+        if "rootMotionType" not in action:
+            action["rootMotionType"] = 'Unknown'
+        if "frameClamping" not in action:
+            action["frameClamping"] = True
+        if "frameClampingStartFrame" not in action:
+            action["frameClampingStartFrame"] = -1
+        if "frameClampingEndFrame" not in action:
+            action["frameClampingEndFrame"] = -1
+        if "numExtraJoints" not in action:
+            action["numExtraJoints"] = 0
+        if "numeExtraTracks" not in action:
+            action["numeExtraTracks"] = 0
+        if "constTrackKeys" not in action:
+            action["constTrackKeys"] = []
+        if "trackKeys" not in action:
+            action["trackKeys"] = []
+        if "fallbackFrameIndices" not in action:
+            action["fallbackFrameIndices"] = []
+        if "optimizationHints" not in action:
+            action["optimizationHints"] = { "preferSIMD": False, "maxRotationCompression": 1}
+        
+    options.update(pose_export_options())
+    for armature in armatures:
+        reset_armature(armature, context)
+        print(options)
+        bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
+        # TODO should that be here?
+        return{'FINISHED'}
+
+    return {'FINISHED'}
+
+def export_meshes(context, filepath, export_visible, limit_selected, static_prop, red_garment_col, apply_transform, meshes, options):
+    groupless_bones = set()
+    bone_names = [] 
+    options.update(cp77_mesh_options())
     if not limit_selected:
         for obj in bpy.data.objects:
             if obj.type == 'MESH' and not "Icosphere" in obj.name:
                 obj.select_set(True)
 
-    #if export_poses option isn't used, check to make sure there are meshes selected and throw an error if not
-    meshes = [obj for obj in objects if obj.type == 'MESH' and not "Icosphere" in obj.name]
-
-    #throw an error in the message box if you haven't selected a mesh to export
-    if not export_poses:
-        if not meshes:
-            bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="No meshes selected, please select at least one mesh")
-            return {'CANCELLED'}
-
-
-    #check that meshes include UVs and have less than 65000 verts, throw an error if not
     for mesh in meshes:
-
         # apply transforms
         if apply_transform:
             bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
         if not mesh.data.uv_layers:
-            bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Meshes must have UV layers in order to import in Wolvenkit. See https://tinyurl.com/uv-layers")
+            show_message("Meshes must have UV layers in order to import in Wolvenkit. See https://tinyurl.com/uv-layers")
             return {'CANCELLED'}
 
         #check submesh vertex count to ensure it's less than the maximum for import
         vert_count = len(mesh.data.vertices)
         if vert_count > 65535:
-            message=(f"{mesh.name} has {vert_count} vertices.           Each submesh must have less than 65,535 vertices. See https://tinyurl.com/vertex-count")
-            bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=message)
+            show_message(f"{mesh.name} has {vert_count} vertices.           Each submesh must have less than 65,535 vertices. See https://tinyurl.com/vertex-count")
             return {'CANCELLED'}
 
         #check that faces are triangulated, cancel export, switch to edit mode with the untriangulated faces selected and throw an error
@@ -189,8 +188,11 @@ def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=F
                 bpy.ops.object.mode_set(mode='EDIT')
                 bpy.ops.mesh.select_mode(type='FACE')
                 bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)
-                bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="All faces must be triangulated before exporting. Untriangulated faces have been selected for you. See https://tinyurl.com/triangulate-faces")
+                show_message("All faces must be triangulated before exporting. Untriangulated faces have been selected for you. See https://tinyurl.com/triangulate-faces")
                 return {'CANCELLED'}
+            
+        if red_garment_col:
+            add_garment_cap(mesh)
 
         # Check for ungrouped vertices, if they're found, switch to edit mode and select them
         # No need to do this for static props
@@ -201,105 +203,80 @@ def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=F
                 bpy.ops.mesh.select_mode(type='VERT')
                 try:
                     bpy.ops.mesh.select_ungrouped()
-                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"Ungrouped vertices found and selected in: {mesh.name}. See https://tinyurl.com/ungrouped-vertices")
+                    show_message(f"Ungrouped vertices found and selected in: {mesh.name}. See https://tinyurl.com/ungrouped-vertices")
                 except RuntimeError:
-                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"No vertex groups in: {mesh.name} are assigned weights. Assign weights before exporting. See https://tinyurl.com/assign-vertex-weights")
+                    show_message(f"No vertex groups in: {mesh.name} are assigned weights. Assign weights before exporting. See https://tinyurl.com/assign-vertex-weights")
                 return {'CANCELLED'}
 
-        if red_garment_col:
-            add_garment_cap(mesh)
+            armature_modifier = None
+            for modifier in mesh.modifiers:
+                if modifier.type == 'ARMATURE' and modifier.object:
+                    armature_modifier = modifier
+                    break
 
-        # set the export options for meshes
-        options = default_cp77_options()
-        options.update(cp77_mesh_options())
+            if not armature_modifier:
+                show_message((f"Armature missing from: {mesh.name} Armatures are required for movement. If this is intentional, try 'export as static prop'. See https://tinyurl.com/armature-missing"))
+                return {'CANCELLED'}
+            
+            armature = armature_modifier.object
 
-        #print the options to the console
-        print(options)
+            # Make necessary to armature visibility and selection state for export
+            armature.hide_set(False)
+            armature.select_set(True)
 
-    # if exporting meshes, iterate through any connected armatures, store their current state. if hidden, unhide them and select them for export
-        armature_states = {}
+            for bone in armature.pose.bones:
+                bone_names.append(bone.name)
 
-        if not static_prop:
-            for obj in objects:
-                if obj.type == 'MESH' and obj.select_get():
-                    armature_modifier = None
-                    for modifier in obj.modifiers:
-                        if modifier.type == 'ARMATURE' and modifier.object:
-                            armature_modifier = modifier
-                            break
+            if armature_modifier.object != mesh.parent:
+                armature_modifier.object = mesh.parent
 
-                    if not armature_modifier:
-                        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=(f"Armature missing from: {obj.name} Armatures are required for movement. If this is intentional, try 'export as static prop'. See https://tinyurl.com/armature-missing"))
-                        return {'CANCELLED'}
-                    # Store original visibility and selection state
-                    armature = armature_modifier.object
-                    armature_states[armature] = {"hide": armature.hide_get(),
-                                                "select": armature.select_get()}
+            group_has_bone = {group.index: False for group in mesh.vertex_groups}
+            # groupless_bones = {}
+            for group in mesh.vertex_groups:
+                if group.name in bone_names:
+                    group_has_bone[group.index] = True
+                    # print(vertex_group.name)
 
-                    # Make necessary to armature visibility and selection state for export
-                    armature.hide_set(False)
-                    armature.select_set(True)
+                # Add groups with no weights to the set
+            for group_index, has_bone in group_has_bone.items():
+                if not has_bone:
+                    groupless_bones.add(mesh.vertex_groups[group_index].name)
 
-                    for bone in armature.pose.bones:
-                        bone_names.append(bone.name)
+            if len(groupless_bones) != 0:
+                bpy.ops.object.mode_set(mode='OBJECT')  # Ensure in object mode for consistent behavior
+                groupless_bones_list = ", ".join(sorted(groupless_bones))
+                armature.hide_set(True)
+                show_message((f"The following vertex groups are not assigned to a bone, this will result in blender creating a neutral_bone and cause Wolvenkit import to fail:    {groupless_bones_list}\nSee https://tinyurl.com/unassigned-bone"))
+                return {'CANCELLED'}
 
-                    if armature_modifier.object != mesh.parent:
-                        armature_modifier.object = mesh.parent
+        if mesh.data.name != mesh.name:
+            mesh.data.name = mesh.name
 
-                    group_has_bone = {group.index: False for group in obj.vertex_groups}
-                    # groupless_bones = {}
-                    for group in obj.vertex_groups:
-                        if group.name in bone_names:
-                            group_has_bone[group.index] = True
-                            # print(vertex_group.name)
+    if limit_selected:
+        try:
+            bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
+            if not static_prop:
+                armature.hide_set(True)
+        except Exception as e:
+            print(e)
 
-                        # Add groups with no weights to the set
-                    for group_index, has_bone in group_has_bone.items():
-                        if not has_bone:
-                            groupless_bones.add(obj.vertex_groups[group_index].name)
-
-                if len(groupless_bones) != 0:
-                    bpy.ops.object.mode_set(mode='OBJECT')  # Ensure in object mode for consistent behavior
-                    groupless_bones_list = ", ".join(sorted(groupless_bones))
-                    armature.hide_set(True)
-                    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=(f"The following vertex groups are not assigned to a bone, this will result in blender creating a neutral_bone and cause Wolvenkit import to fail:    {groupless_bones_list}\nSee https://tinyurl.com/unassigned-bone"))
-                    return {'CANCELLED'}
-
-                if mesh.data.name != mesh.name:
-                    mesh.data.name = mesh.name
-
-        if limit_selected:
+    else:
+        if export_visible:
             try:
-                bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
+                bpy.ops.export_scene.gltf(filepath=filepath, use_visible=True, **options)
                 if not static_prop:
                     armature.hide_set(True)
             except Exception as e:
                 print(e)
 
         else:
-            if export_visible:
-                try:
-                    bpy.ops.export_scene.gltf(filepath=filepath, use_visible=True, **options)
-                    if not static_prop:
-                        armature.hide_set(True)
-                except Exception as e:
-                    print(e)
-
-            else:
-                try:
-                    bpy.ops.export_scene.gltf(filepath=filepath, **options)
-                    if not static_prop:
-                         armature.hide_set(True)
-                except Exception as e:
-                    print(e)
-
-
-        # Restore original armature visibility and selection states
-        # for armature, state in armature_states.items():
-            # armature.select_set(state["select"])
-            # armature.hide_set(state["hide"])
-
-
+            try:
+                bpy.ops.export_scene.gltf(filepath=filepath, **options)
+                if not static_prop:
+                     armature.hide_set(True)
+            except Exception as e:
+                print(e)
+                
 # def ExportAll(self, context):
 #     #Iterate through all objects in the scene
 def ExportAll(self, context):
