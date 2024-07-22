@@ -5,6 +5,7 @@ import os
 from .verttools import *
 from ..cyber_props import *
 from ..main.common import  show_message
+from ..main.bartmoss_functions import setActiveShapeKey, getShapeKeyNames, getModNames
    
 def CP77SubPrep(self, context, smooth_factor, merge_distance):
     scn = context.scene
@@ -195,6 +196,47 @@ def CP77RefitChecker(self, context):
     print('refitter result:', refitter)
     return refitter
 
+def applyModifierAsShapeKey(obj):
+    names = getModNames(obj)
+    print(names)
+    refitter = None
+    for name in names:
+        if 'AutoFitter' in name:
+            refitter = name
+            if refitter:
+                bpy.context.view_layer.objects.active = obj
+                obj.select_set(True)
+                
+                bpy.ops.object.modifier_apply_as_shapekey(keep_modifier=False, modifier=refitter)
+                print(f"Applied modifier '{name}' as shape key.")
+                
+def applyRefitter(obj):
+    applyModifierAsShapeKey(obj)
+    orignames = getShapeKeyNames(obj)
+    for name in orignames:
+        if 'AutoFitter' in name:
+            refitkey = setActiveShapeKey(obj, name)
+            refitkey.value = 1
+        if 'Garment' in name:
+            gskey = setActiveShapeKey(obj, name)
+            gskey.value = 1
+
+            bpy.ops.object.shape_key_add(from_mix=True)
+            
+            gskey.value = 0
+            gskey = setActiveShapeKey(obj, name)
+            bpy.ops.object.shape_key_remove(all=False)
+    newnames = getShapeKeyNames(obj)
+    setActiveShapeKey(obj, 'Basis')
+    bpy.ops.object.shape_key_remove(all=False)
+    for name in newnames:
+        if 'AutoFitter' in name:
+            refitkey = setActiveShapeKey(obj, name)
+            refitkey.name = 'Basis'
+        if name not in orignames:
+            newgs = setActiveShapeKey(obj, name)
+            newgs.name = 'GarmentSupport'
+    
 def CP77Refit(context, refitter, target_body_path, target_body_name, fbx_rot):
     selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
     scene = context.scene
@@ -232,6 +274,7 @@ def CP77Refit(context, refitter, target_body_path, target_body_name, fbx_rot):
                     print('refitting:', mesh.name, 'to:', target_body_name)
                     lattice_modifier = mesh.modifiers.new(refitter_obj.name, 'LATTICE')
                     lattice_modifier.object = refitter_obj
+                    applyRefitter(mesh)
             return{'FINISHED'}    
         
 
@@ -296,6 +339,6 @@ def CP77Refit(context, refitter, target_body_path, target_body_name, fbx_rot):
     
             for mesh in selected_meshes:
                 lattice_modifier = mesh.modifiers.new(new_lattice.name,'LATTICE')
-                for mesh in selected_meshes:
-                    print('refitting:', mesh.name, 'to:', new_lattice["refitter_type"])
-                    lattice_modifier.object = new_lattice
+                print('refitting:', mesh.name, 'to:', new_lattice["refitter_type"])
+                lattice_modifier.object = new_lattice
+                applyRefitter(mesh)
