@@ -80,7 +80,7 @@ def setActiveShapeKey(obj, name):
         for index, key_block in enumerate(obj.data.shape_keys.key_blocks):
             if key_block == shape_key:
                 obj.active_shape_key_index = index
-                return True
+                return shape_key
     return False
 
 # returns a dictionary with all the property names for the objects shape keys.
@@ -106,11 +106,17 @@ def getCustomProps(obj):
     return props
 
 # returns a list of modifiers for the given object
-def getMods(obj):
+def getModNames(obj):
     mods = []
     for mod in obj.modifiers:
         mods.append(mod.name)        
     return mods
+
+def getModByName(obj, name):
+    for mod in obj.modifiers:
+        if mod.name == name:
+            return mod
+    return None    
 
 # returns a list with the modifier properties of the given modifier.
 def getModProps(modifier):
