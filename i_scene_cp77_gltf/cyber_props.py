@@ -4,7 +4,7 @@ from bpy.types import (PropertyGroup, Scene, Object)
 from bpy.props import (StringProperty, EnumProperty, BoolProperty, CollectionProperty, FloatProperty, IntProperty, PointerProperty)
 from .main.physmat_lib import physmat_list
 #from . meshtools import (CP77CollectionList)
-from .main.common import get_classes, get_rig_dir, get_refit_dir, get_resources_dir
+from .main.common import get_classes, get_rig_dir, get_refit_dir, get_resources_dir, update_presets_items
 import sys
 
 resources_dir = get_resources_dir()
@@ -15,6 +15,7 @@ enum_items = [(mat.get("Name", ""), mat.get("Name", ""), "") for mat in physmats
 
 
 def CP77RefitList(context):
+
     target_addon_paths = [None]
     target_addon_names = ['None']
     
@@ -41,6 +42,8 @@ def CP77RefitList(context):
     # Return the list of tuples
     return target_body_paths, target_body_names
 
+#def VertColourPresetList
+    
 
 def SetCyclesRenderer(use_cycles=True, set_gi_params=False):
     # set the render engine for all scenes to Cycles
@@ -101,6 +104,7 @@ def CP77ArmatureList(self, context):
         print(f"Error accessing bpy.data.objects: {e}")
         arms = []
     return arms
+    
 
 class CP77_PT_PanelProps(PropertyGroup):
 # collision panel props:
@@ -113,7 +117,12 @@ class CP77_PT_PanelProps(PropertyGroup):
         ],
         default='VEHICLE'
     ) 
-
+    
+    vertex_color_presets: EnumProperty(
+        name="Vertex Color Preset",
+        items=lambda self, context: update_presets_items() or [(name, name, "") for name in get_colour_presets().keys()]
+    )
+    
     physics_material: EnumProperty(
         items= enum_items,
         name="Physics Material",
@@ -248,6 +257,12 @@ class CP77_PT_PanelProps(PropertyGroup):
         name="With Materials",
         default=True,
         description="Import Wolvenkit-exported materials"
+    )
+
+    axl_yaml: BoolProperty(
+        name="Use YAML instead of JSON",
+        default=False,
+        description="Use the ArchiveXL YAML format instead of JSON format for generated .xl files"
     )   
 
 def add_anim_props(animation, action):
@@ -295,7 +310,7 @@ def register_props():
     for cls in other_classes:
         bpy.utils.register_class(cls)
     Scene.cp77_panel_props = PointerProperty(type=CP77_PT_PanelProps)
-
+    update_presets_items() 
     
 def unregister_props():
     for cls in reversed(other_classes):

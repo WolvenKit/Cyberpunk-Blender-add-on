@@ -2,6 +2,7 @@ import sys
 import bpy
 import os
 import math
+from bpy.types import EnumProperty
 from mathutils import Color
 import pkg_resources
 import bmesh
@@ -618,3 +619,23 @@ def createHash12Group():
         CurMat.links.new(frac2.outputs[0],GroupOutput.inputs[0])
         return CurMat   
 
+res_dir= get_resources_dir()
+
+# Path to the JSON file
+VCOL_PRESETS_JSON = os.path.join(res_dir, "vertex_color_presets.json")
+
+def get_color_presets():
+    if os.path.exists(VCOL_PRESETS_JSON):
+        with open(VCOL_PRESETS_JSON, 'r') as file:
+            return json.load(file)
+    return {}
+
+def save_presets(presets):
+    with open(VCOL_PRESETS_JSON, 'w') as file:
+        json.dump(presets, file, indent=4)
+    update_presets_items()
+        
+def update_presets_items():
+    presets = get_color_presets()
+    items = [(name, name, "") for name in presets.keys()]
+    return items

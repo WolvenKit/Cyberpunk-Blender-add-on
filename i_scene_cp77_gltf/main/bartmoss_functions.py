@@ -6,6 +6,12 @@ import idprop
 ## I get that these are lazy but they're convenient type checks
 def is_mesh(o: bpy.types.Object) -> bool:
     return isinstance(o.data, bpy.types.Mesh)
+ 
+def world_mtx(armature, bone):
+    return armature.convert_space(bone, bone.matrix, from_space='POSE', to_space='WORLD')
+
+def pose_mtx(armature, bone, mat):
+    return armature.convert_space(bone, mat, from_space='WORLD', to_space='POSE')
 
 def is_armature(o: bpy.types.Object) -> bool: # I just found out I could leave annotations like that -> future presto will appreciate knowing wtf I though I was going to return 
     return isinstance(o.data, bpy.types.Armature)
@@ -14,16 +20,16 @@ def has_anims(o: bpy.types.Object) -> bool:
     return isinstance(o.data, bpy.types.Armature) and o.animation_data is not None
 
 def rotate_quat_180(self,context):
-    if context.active_object and context.active_object.rotation_quaternion:
-        active_obj =  context.active_object
-        active_obj.rotation_mode = 'QUATERNION'
+    if context.selected_objects is not None:
+        for obj in context.selected_objects:
+            obj.rotation_mode = 'QUATERNION'
 
-        rotation_quat = Quaternion((0, 0, 1), radians(180))
-        active_obj.rotation_quaternion = rotation_quat @ active_obj.rotation_quaternion
-        bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
-        # Update the object to reflect the changes
-        active_obj.update_tag()
-        active_obj.update_from_editmode()
+            rotation_quat = Quaternion((0, 0, 1), radians(180))
+            obj.rotation_quaternion = rotation_quat @ obj.rotation_quaternion
+            bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
+            # Update the object to reflect the changes
+            obj.update_tag()
+            obj.update_from_editmode()
 
         # Update the scene to see the changes
         bpy.context.view_layer.update()
@@ -50,15 +56,32 @@ def calculate_mesh_volume(obj):
 ## Returns True if the given object has shape keys, works for meshes and curves
 def hasShapeKeys(obj):
     if obj.id_data.type in ['MESH', 'CURVE']:
-        return True if obj.data.shape_keys else False
-    else:
-        return False
+        return obj.data.shape_keys != None
+        
+def getShapeKeyNames(obj):
+    if hasShapeKeys(obj):
+        key_names = []
+        for key_block in obj.data.shape_keys.key_blocks:
+            key_names.append(key_block.name)
+        return key_names       
+    return ""
 
 # Return the name of the shape key data block if the object has shape keys.
-def getShapeKeyName(obj):
+def getShapeKeyByName(obj, name):
     if hasShapeKeys(obj):
-        return obj.data.shape_keys.name        
-    return ""
+        for key_block in obj.data.shape_keys.key_blocks:
+            if key_block.name == name:
+                return key_block
+    return None
+
+def setActiveShapeKey(obj, name):
+    shape_key = getShapeKeyByName(obj, name)
+    if shape_key:
+        for index, key_block in enumerate(obj.data.shape_keys.key_blocks):
+            if key_block == shape_key:
+                obj.active_shape_key_index = index
+                return shape_key
+    return False
 
 # returns a dictionary with all the property names for the objects shape keys.
 def getShapeKeyProps(obj):
@@ -83,11 +106,17 @@ def getCustomProps(obj):
     return props
 
 # returns a list of modifiers for the given object
-def getMods(obj):
+def getModNames(obj):
     mods = []
     for mod in obj.modifiers:
         mods.append(mod.name)        
     return mods
+
+def getModByName(obj, name):
+    for mod in obj.modifiers:
+        if mod.name == name:
+            return mod
+    return None    
 
 # returns a list with the modifier properties of the given modifier.
 def getModProps(modifier):

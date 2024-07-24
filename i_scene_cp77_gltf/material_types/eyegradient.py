@@ -1,8 +1,7 @@
 import bpy
 import os
 from ..main.common import *
-from ..jsontool import json_ver_validate, openJSON
-import json
+from ..jsontool import openJSON
 
 class EyeGradient:
     def __init__(self, BasePath,image_format, ProjPath):
@@ -14,13 +13,7 @@ class EyeGradient:
 
 
         # load the gradient profile from the depot
-        file = openJSON(Data["IrisColorGradient"] + ".json",mode='r', DepotPath=self.BasePath, ProjPath=self.ProjPath)
-        profile = json.loads(file.read())
-        file.close()
-        valid_json=json_ver_validate(profile)
-        if not valid_json:
-            self.report({'ERROR'}, "Incompatible eye gradient json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
-            return
+        profile = openJSON(Data["IrisColorGradient"] + ".json",mode='r', DepotPath=self.BasePath, ProjPath=self.ProjPath)
         profile= profile["Data"]["RootChunk"]
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes[loc('Principled BSDF')]

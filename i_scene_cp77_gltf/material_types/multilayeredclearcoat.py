@@ -1,8 +1,7 @@
 import bpy
 import os
 from ..main.common import *
-import json
-from ..jsontool import openJSON, json_ver_validate
+from ..jsontool import jsonload
 
 class MultilayeredClearCoat:
     def __init__(self, BasePath,image_format):
@@ -273,13 +272,7 @@ class MultilayeredClearCoat:
 
     def create(self,Data,Mat):
 
-        file = open(self.BasePath + Data["MultilayerSetup"] + ".json",mode='r')
-        mlsetup = json.loads(file.read())
-        file.close()
-        valid_json=json_ver_validate(mlsetup)
-        if not valid_json:
-            self.report({'ERROR'}, "Incompatible mlsetup json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
-            return
+        mlsetup = jsonload((self.BasePath + Data["MultilayerSetup"] + ".json"))
         mlsetup = mlsetup["Data"]["RootChunk"]
         xllay = mlsetup.get("layers")
         if xllay is None:
@@ -336,13 +329,8 @@ class MultilayeredClearCoat:
             if Microblend != "null":
                 MBI = imageFromPath(self.BasePath+Microblend,self.image_format,True)
 
-            file = open(self.BasePath + material + ".json",mode='r')
-            mltemplate = json.loads(file.read())
-            file.close()
-            valid_json=json_ver_validate(mltemplate)
-            if not valid_json:
-                self.report({'ERROR'}, "Incompatible mltemplate json file detected. This add-on version requires materials generated WolvenKit 8.9.1 or higher.")
-                return
+            file = self.BasePath + material + ".json"
+            mltemplate = jsonload(file)
             mltemplate = mltemplate["Data"]["RootChunk"]
             OverrideTable = self.createOverrideTable(mltemplate)#get override info for colors and what not
 

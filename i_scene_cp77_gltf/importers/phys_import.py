@@ -1,9 +1,12 @@
-import json
+from ..jsontool import jsonload
 import bpy
 import bmesh 
+import time
 from ..collisiontools.collisions import draw_box_collider, draw_convex_collider, set_collider_props
 
 def cp77_phys_import(filepath, rig=None, chassis_z=None):
+    cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
+    start_time = time.time()
     physJsonPath = filepath
     collision_type = 'VEHICLE'
     for area in bpy.context.screen.areas: 
@@ -12,8 +15,7 @@ def cp77_phys_import(filepath, rig=None, chassis_z=None):
             if space.type == 'VIEW_3D':
                 space.shading.wireframe_color_type = 'OBJECT'
 
-    with open(physJsonPath, 'r') as phys:
-        data = json.load(phys)
+    data = jsonload(physJsonPath)
 
     for index, i in enumerate(data['Data']['RootChunk']['bodies']):
         bname = (i['Data']['name']['$value'])
@@ -89,3 +91,6 @@ def cp77_phys_import(filepath, rig=None, chassis_z=None):
                         capsule.delta_location[2] = chassis_z 
                 bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
                 new_collection.objects.link(capsule)
+                
+    if not cp77_addon_prefs.non_verbose:
+        print(f"phys collider Import Time: {(time.time() - start_time)} Seconds")
