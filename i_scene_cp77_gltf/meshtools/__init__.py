@@ -5,12 +5,11 @@ from .. exporters import CP77HairProfileExport, mlsetup_export
 from .meshtools import *
 from .verttools import *
 from ..main.bartmoss_functions import *
-from ..main.common import get_classes
+from ..main.common import get_classes, get_color_presets, save_presets
 from bpy.props import (StringProperty, EnumProperty)
 from bpy.types import (Scene, Operator, Panel)
 from ..cyber_props import CP77RefitList
 from ..icons.cp77_icons import get_icon
-import mathutils
 
 class CP77_PT_MeshTools(Panel):
     bl_label = "Mesh Tools"
@@ -35,24 +34,25 @@ class CP77_PT_MeshTools(Panel):
 
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
         if cp77_addon_prefs.show_modtools:
-            if cp77_addon_prefs.show_meshtools:
-                box.label(text="Mesh Cleanup", icon_value=get_icon("TRAUMA"))
+            if cp77_addon_prefs.show_meshtools:                
+                box.label(icon_value=get_icon("REFIT"), text="AKL Autofitter:")
                 row = box.row(align=True)
-                split = row.split(factor=0.7,align=True)
-                split.label(text="Merge Distance:")
-                split.prop(props,"merge_distance", text="", slider=True)
+                split = row.split(factor=0.29,align=True)
+                split.label(text="Shape:")
+                split.prop(props, 'refit_json', text="")
                 row = box.row(align=True)
-                split = row.split(factor=0.7,align=True)
-                split.label(text="Smooth Factor:")
-                split.prop(props,"smooth_factor", text="", slider=True)
+                row.operator("cp77.auto_fitter", text="Refit Selected Mesh")
+                row.prop(props, 'fbx_rot', text="", icon='LOOP_BACK', toggle=1)
+                                
+                box = layout.box()
+                box.label(icon_value=get_icon("TECH"), text="Modifiers:")
                 row = box.row(align=True)
-                row.operator("cp77.submesh_prep")
+                split = row.split(factor=0.35,align=True)
+                split.label(text="Target:")
+                split.prop(props, "selected_armature", text="")
                 row = box.row(align=True)
-                row.operator("cp77.group_verts", text="Group Ungrouped Verts")
-                row = box.row(align=True)
-                row.operator('object.delete_unused_vgroups', text="Delete Unused Vert Groups")
-                row = box.row(align=True)
-                row.operator("cp77.rotate_obj")
+                row.operator("cp77.set_armature", text="Change Armature Target")
+
                 box = layout.box()
                 box.label(icon_value=get_icon("SCULPT"), text="Modelling:")
                 row = box.row(align=True)
@@ -70,35 +70,60 @@ class CP77_PT_MeshTools(Panel):
                 split.prop(props, "mesh_target", text="")
                 row = box.row(align=True)
                 box.operator("cp77.trans_weights", text="Transfer Vertex Weights")
+                row = box.row(align=True)
+                row.operator("cp77.rotate_obj")
+                
                 box = layout.box()
-                box.label(icon_value=get_icon("REFIT"), text="AKL Autofitter:")
+                box.label(text="Mesh Cleanup", icon_value=get_icon("TRAUMA"))
                 row = box.row(align=True)
-                split = row.split(factor=0.29,align=True)
-                split.label(text="Shape:")
-                split.prop(props, 'refit_json', text="")
+                split = row.split(factor=0.7,align=True)
+                split.label(text="Merge Distance:")
+                split.prop(props,"merge_distance", text="", slider=True)
                 row = box.row(align=True)
-                row.operator("cp77.auto_fitter", text="Refit Selected Mesh")
-                row.prop(props, 'fbx_rot', text="", icon='LOOP_BACK', toggle=1)
+                split = row.split(factor=0.7,align=True)
+                split.label(text="Smooth Factor:")
+                split.prop(props,"smooth_factor", text="", slider=True)
+                row = box.row(align=True)
+                row.operator("cp77.submesh_prep")
+                row = box.row(align=True)
+                row.operator("cp77.group_verts", text="Group Ungrouped Verts")
+                row = box.row(align=True)
+                row.operator('object.delete_unused_vgroups', text="Delete Unused Vert Groups")
+
                 box = layout.box()
-                box.label(icon_value=get_icon("TECH"), text="Modifiers:")
+                box.label(text="Vertex Colours", icon="BRUSH_DATA")
                 row = box.row(align=True)
-                split = row.split(factor=0.35,align=True)
-                split.label(text="Target:")
-                split.prop(props, "selected_armature", text="")
-                row = box.row(align=True)
-                row.operator("cp77.set_armature", text="Change Armature Target")
-                box = layout.box()
-                box.label(text="Vertex Colours", icon="MATERIAL")
+                split = row.split(factor=0.275,align=True)
+                split.label(text="Preset:")
+                split.prop(props, "vertex_color_presets", text="")    
+                box.operator("cp77.apply_vertex_color_preset")                   
                 box.operator("cp77.add_vertex_color_preset")
-                box.operator("cp77.apply_vertex_color_preset")   
-                box.prop(context.scene, "cp77_vertex_color_preset", text="Select Preset")              
+                box.operator("cp77.delete_vertex_color_preset")
+        
                 box = layout.box()
                 box.label(text="Material Export", icon="MATERIAL")
                 box.operator("export_scene.hp")
                 box.operator("export_scene.mlsetup")
 
+class CP77DeleteVertexcolorPreset(Operator):
+    bl_idname = "cp77.delete_vertex_color_preset"
+    bl_label = "Delete Preset"
 
-class CP77AddVertexColorPreset(Operator):
+    def execute(self, context):
+        props = context.scene.cp77_panel_props
+        preset_name = props.vertex_color_presets
+        presets = get_color_presets()
+        if preset_name in presets:
+            del presets[preset_name]
+            save_presets(presets)
+            self.report({'INFO'}, f"Preset '{preset_name}' deleted.")
+        else:
+            self.report({'ERROR'}, f"Preset '{preset_name}' not found.")
+            return {'CANCELLED'}
+            
+        return {'FINISHED'}
+
+class CP77AddVertexcolorPreset(Operator):
     bl_idname = "cp77.add_vertex_color_preset"
     bl_label = "Save Vertex Color Preset"
     bl_parent_id = "CP77_PT_MeshTools"
@@ -108,12 +133,12 @@ class CP77AddVertexColorPreset(Operator):
         name="Color",
         subtype='COLOR',
         min=0.0, max=1.0,
-        size=3,
-        default=(1, 1, 1)
+        size=4,
+        default=(1, 1, 1, 1)  # Include alpha in default
     )
 
     def execute(self, context):
-        presets = get_colour_presets()
+        presets = get_color_presets()
         presets[self.preset_name] = list(self.color)
         save_presets(presets)
         self.report({'INFO'}, f"Preset '{self.preset_name}' added.")
@@ -121,10 +146,11 @@ class CP77AddVertexColorPreset(Operator):
 
     def invoke(self, context, event):
         tool_settings = context.tool_settings.vertex_paint
-        self.color = mathutils.Color.from_scene_linear_to_srgb(tool_settings.brush.color)
+        color = tool_settings.brush.color
+        alpha = tool_settings.brush.strength  # Assuming alpha can be taken from brush strength
+        self.color = (*color[:3], alpha)  # Combine color and alpha
         print(self.color)
         return context.window_manager.invoke_props_dialog(self)
-
 
 class CP77WeightTransfer(Operator):
     bl_idname = 'cp77.trans_weights'
@@ -138,18 +164,33 @@ class CP77WeightTransfer(Operator):
         return {"FINISHED"}
         
 # Operator to apply a preset
-class CP77ApplyVertexColorPreset(Operator):
+class CP77ApplyVertexcolorPreset(Operator):
     bl_idname = "cp77.apply_vertex_color_preset"
-    bl_label = "Apply Vertex Color Preset"
+    bl_label = "Apply Vertex color Preset"
 
     def execute(self, context):
-        preset = Scene.cp77_vertex_color_preset
-        if not preset:
-            self.report({'ERROR'}, f"Preset '{self.preset_name}' not found.")
+        props = context.scene.cp77_panel_props
+        preset_name = props.vertex_color_presets
+        obj = context.object
+        if not obj:
+            show_message("No active object. Please Select a Mesh and try again")
+            return {'CANCELLED'} 
+        if obj.type != 'MESH':
+            show_message("The active object is not a mesh.")
+            return {'CANCELLED'}
+        if not preset_name:
+            self.report({'ERROR'}, "No preset selected.")
             return {'CANCELLED'}
 
-        preset_color = preset.append(1.0)  # Adding alpha value
+        presets = get_color_presets()
+        preset_color = presets.get(preset_name)
+        if not preset_color:
+            self.report({'ERROR'}, f"Preset '{preset_name}' not found.")
+            return {'CANCELLED'}
+
         initial_mode = context.mode
+        if initial_mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
 
         for obj in context.selected_objects:
             if obj.type != 'MESH':
@@ -162,27 +203,26 @@ class CP77ApplyVertexColorPreset(Operator):
             color_layer = mesh.vertex_colors.active.data
 
             if initial_mode == 'EDIT_MESH':
-                bpy.ops.object.mode_set(mode='OBJECT')
                 selected_verts = {v.index for v in mesh.vertices if v.select}
-                bpy.ops.object.mode_set(mode='EDIT')
 
                 for poly in mesh.polygons:
                     for loop_index in poly.loop_indices:
                         loop_vert_index = mesh.loops[loop_index].vertex_index
                         if loop_vert_index in selected_verts:
                             color_layer[loop_index].color = preset_color
-                bpy.ops.object.mode_set(mode='OBJECT')
+                bpy.ops.object.mode_set(mode='EDIT')           
+              #  bpy.ops.object.mode_set(mode='OBJECT')
             else:
                 for poly in mesh.polygons:
                     for loop_index in poly.loop_indices:
                         loop_vert_index = mesh.loops[loop_index].vertex_index
                         if mesh.vertices[loop_vert_index].select:
                             color_layer[loop_index].color = preset_color
-
+                bpy.ops.object.mode_set(mode=initial_mode)
             mesh.update()
-
-        bpy.ops.object.mode_set(mode=initial_mode)
-        self.report({'INFO'}, f"Preset '{self.preset_name}' applied.")
+            
+        
+        self.report({'INFO'}, f"Preset '{preset_name}' applied.")
         return {'FINISHED'}
 
 
@@ -286,7 +326,6 @@ def register_meshtools():
     for cls in other_classes:
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
-    Scene.cp77_vertex_color_preset = EnumProperty(name="Vertex Color Preset", items=update_presets_items())
 
 def unregister_meshtools():
     for cls in reversed(other_classes):
@@ -295,4 +334,3 @@ def unregister_meshtools():
     for cls in reversed(operators):
         if hasattr(bpy.types, cls.__name__):
             bpy.utils.unregister_class(cls)
-    del Scene.cp77_vertex_color_preset

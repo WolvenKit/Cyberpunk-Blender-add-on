@@ -5,15 +5,18 @@ import os
 from .verttools import *
 from ..cyber_props import *
 from ..main.common import  show_message
+from ..main.bartmoss_functions import setActiveShapeKey, getShapeKeyNames, getModNames
    
 def CP77SubPrep(self, context, smooth_factor, merge_distance):
     scn = context.scene
     obj = context.object
     current_mode = context.mode
+    if not obj:
+        show_message("No active object. Please Select a Mesh and try again")
+        return {'CANCELLED'} 
     if obj.type != 'MESH':
-        bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="The active object is not a mesh.")
-        return {'CANCELLED'}  
-    
+        show_message("The active object is not a mesh.")
+        return {'CANCELLED'}
     if current_mode != 'EDIT':
         bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_mode(type="EDGE")
@@ -44,37 +47,63 @@ def CP77SubPrep(self, context, smooth_factor, merge_distance):
     bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"Submesh preparation complete. {merged_vertices} verts merged")
     if context.mode != current_mode:
         bpy.ops.object.mode_set(mode=current_mode)
-        
 
 def CP77ArmatureSet(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
     props = context.scene.cp77_panel_props
     target_armature_name = props.selected_armature
     target_armature = bpy.data.objects.get(target_armature_name)
-    if len(selected_meshes) >0:
+    obj = context.object
+    if not obj:
+        show_message("No active object. Please Select a Mesh and try again")
+        return {'CANCELLED'} 
+    if obj.type != 'MESH':
+        show_message("The active object is not a mesh.")
+        return {'CANCELLED'}
+    if len(selected_meshes) > 0:
         if target_armature and target_armature.type == 'ARMATURE':
+            # Ensure the target armature has a collection
+            if not target_armature.users_collection:
+                target_collection = bpy.data.collections.new(target_armature.name + "_collection")
+                bpy.context.scene.collection.children.link(target_collection)
+                target_collection.objects.link(target_armature)
+            else:
+                target_collection = target_armature.users_collection[0]
+
             for mesh in selected_meshes:
-                retargeted=False
+                retargeted = False
                 for modifier in mesh.modifiers:
                     if modifier.type == 'ARMATURE' and modifier.object is not target_armature:
                         modifier.object = target_armature
-                        retargeted=True
-                    else:
-                        if modifier.type == 'ARMATURE' and modifier.object is target_armature:
-                            retargeted=True
-                            continue
+                        retargeted = True
+                    elif modifier.type == 'ARMATURE' and modifier.object is target_armature:
+                        retargeted = True
+                        continue
                 if not retargeted:
                     armature = mesh.modifiers.new('Armature', 'ARMATURE')
-                    armature.object = target_armature             
+                    armature.object = target_armature
+                
+                # Set parent
+                mesh.parent = target_armature
 
+                # Unlink the mesh from its original collections
+                for col in mesh.users_collection:
+                    col.objects.unlink(mesh)
+
+                # Link the mesh to the target armature's collection
+                target_collection.objects.link(mesh)
 
 def CP77UvChecker(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
     bpy_mats=bpy.data.materials
-    current_mode = context.mode    
- 
-
-
+    obj = context.object
+    current_mode = context.mode
+    if not obj:
+        show_message("No active object. Please Select a Mesh and try again")
+        return {'CANCELLED'} 
+    if obj.type != 'MESH':
+        show_message("The active object is not a mesh.")
+        return {'CANCELLED'}
     for mat in bpy_mats:
         if mat.name == 'UV_Checker':
             uvchecker = mat
@@ -122,10 +151,17 @@ def CP77UvChecker(self, context):
 
     return {'FINISHED'}
 
-
 def CP77UvUnChecker(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
+    obj = context.object
     current_mode = context.mode
+    if not obj:
+        show_message("No active object. Please Select a Mesh and try again")
+        return {'CANCELLED'} 
+    if obj.type != 'MESH':
+        show_message("The active object is not a mesh.")
+        return {'CANCELLED'}
+        
     uvchecker = 'UV_Checker'
     original_mat_name = None
     for mesh in selected_meshes:
@@ -146,7 +182,6 @@ def CP77UvUnChecker(self, context):
         if context.mode != current_mode:
             bpy.ops.object.mode_set(mode=current_mode)
 
-
 def CP77RefitChecker(self, context):
     scene = context.scene
     objects = scene.objects
@@ -161,10 +196,58 @@ def CP77RefitChecker(self, context):
     print('refitter result:', refitter)
     return refitter
 
+def applyModifierAsShapeKey(obj):
+    names = getModNames(obj)
+    print(names)
+    refitter = None
+    for name in names:
+        if 'AutoFitter' in name:
+            refitter = name
+            if refitter:
+                bpy.context.view_layer.objects.active = obj
+                obj.select_set(True)
+                
+                bpy.ops.object.modifier_apply_as_shapekey(keep_modifier=False, modifier=refitter)
+                print(f"Applied modifier '{name}' as shape key.")
+                
+def applyRefitter(obj):
+    applyModifierAsShapeKey(obj)
+    orignames = getShapeKeyNames(obj)
+    for name in orignames:
+        if 'AutoFitter' in name:
+            refitkey = setActiveShapeKey(obj, name)
+            refitkey.value = 1
+        if 'Garment' in name:
+            gskey = setActiveShapeKey(obj, name)
+            gskey.value = 1
 
+            bpy.ops.object.shape_key_add(from_mix=True)
+            
+            gskey.value = 0
+            gskey = setActiveShapeKey(obj, name)
+            bpy.ops.object.shape_key_remove(all=False)
+    newnames = getShapeKeyNames(obj)
+    setActiveShapeKey(obj, 'Basis')
+    bpy.ops.object.shape_key_remove(all=False)
+    for name in newnames:
+        if 'AutoFitter' in name:
+            refitkey = setActiveShapeKey(obj, name)
+            refitkey.name = 'Basis'
+        if name not in orignames:
+            newgs = setActiveShapeKey(obj, name)
+            newgs.name = 'GarmentSupport'
+    
 def CP77Refit(context, refitter, target_body_path, target_body_name, fbx_rot):
     selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
     scene = context.scene
+    obj = context.object
+    current_mode = context.mode
+    if not obj:
+        show_message("No active object. Please Select a Mesh and try again")
+        return {'CANCELLED'} 
+    if obj.type != 'MESH':
+        show_message("The active object is not a mesh.")
+        return {'CANCELLED'}
     refitter_obj = None
     r_c = None
     print(fbx_rot)
@@ -191,6 +274,7 @@ def CP77Refit(context, refitter, target_body_path, target_body_name, fbx_rot):
                     print('refitting:', mesh.name, 'to:', target_body_name)
                     lattice_modifier = mesh.modifiers.new(refitter_obj.name, 'LATTICE')
                     lattice_modifier.object = refitter_obj
+                    applyRefitter(mesh)
             return{'FINISHED'}    
         
 
@@ -255,6 +339,6 @@ def CP77Refit(context, refitter, target_body_path, target_body_name, fbx_rot):
     
             for mesh in selected_meshes:
                 lattice_modifier = mesh.modifiers.new(new_lattice.name,'LATTICE')
-                for mesh in selected_meshes:
-                    print('refitting:', mesh.name, 'to:', new_lattice["refitter_type"])
-                    lattice_modifier.object = new_lattice
+                print('refitting:', mesh.name, 'to:', new_lattice["refitter_type"])
+                lattice_modifier.object = new_lattice
+                applyRefitter(mesh)

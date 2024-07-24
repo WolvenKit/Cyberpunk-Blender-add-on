@@ -68,19 +68,20 @@ class CP77IOSuitePreferences(AddonPreferences):
     def draw(self, context):           
         layout = self.layout
         box = layout.box()
-
         row = box.row()
         row.prop(self, "show_modtools",toggle=1) 
         row.prop(self, "experimental_features",toggle=1)
         row.prop(self, "non_verbose",toggle=1)
         if self.experimental_features:
+            box = layout.box()
+            box.label(text="Material Depot Path:")
             row = box.row()
-            row.prop(self, "depotfolder_path")
+            row.prop(self, "depotfolder_path", text="")
             row = box.row()
         if self.show_modtools:
             row.alignment = 'LEFT'
             box = layout.box()
-            box.label(text="Mod Tools Properties")
+            box.label(text="Mod Tools Preferences")
             split = row.split(factor=0.5,align=True)
             col = split.column(align=True)
             row.alignment = 'LEFT'
