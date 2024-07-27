@@ -224,7 +224,7 @@ class Multilayered:
         
 
         # If theres more than 10 layers, mix them in 2 stacks then mix the stacks, trying to avoid SVM errors
-        if LayerCount>11:
+        if False:
             MixLayerStacks = create_node(CurMat.nodes,"ShaderNodeGroup", (-1000,-180))
             MixLayerStacks.node_tree = NG
             MixLayerStacks.name = "MixLayerStacks"
