@@ -368,7 +368,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                 groupname = groupname[:-1]
             if groupname not in Masters.children.keys() and os.path.exists(meshpath):
                 try:
-                    bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=impapps, update_gi=False, with_materials=with_materials, remap_depot= remap_depot)
+                    bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=impapps)
                     objs = C.selected_objects
                     move_coll= coll_scene.children.get( objs[0].users_collection[0].name )
                     coll_target.children.link(move_coll) 
@@ -857,7 +857,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                             meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                             #meshpath=os.path.join(path, meshname[:-4]+'glb')
                             meshpath=os.path.join(path, meshname[:-1*len(os.path.splitext(meshname)[1])]+'.glb').replace('\\', os.sep)
-                            #print(os.path.exists(meshpath))
+                            print(os.path.exists(meshpath))
                             #print('Mesh path is - ',meshpath, e['HandleId'])
                             if(meshname != 0):
                                         #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
