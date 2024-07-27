@@ -295,7 +295,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                             no_rot=chunk_anim['numberOfFullRotations']
                             o = create_axes(ent_coll=ent_coll,name=c['name']['$value'])
                             o.keyframe_insert('rotation_euler', index=axis_no ,frame=1)
-                            o.rotation_euler[axis_no] = o.rotation_euler[axis_no] +math.radians(no_rot*360)
+                            o.rotation_euler[axis_no] = o.rotation_euler[axis_no] +math.radians(no_rot*(-1*reverse)*360)
                             o.keyframe_insert('rotation_euler', index=axis_no ,frame=duration*24)
                             if o.animation_data.action:
                                 obj_action = bpy.data.actions.get(o.animation_data.action.name)
