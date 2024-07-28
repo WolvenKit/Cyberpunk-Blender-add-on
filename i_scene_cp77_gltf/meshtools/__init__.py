@@ -30,85 +30,54 @@ class CP77_PT_MeshTools(Panel):
     def draw(self, context):
         layout = self.layout
         box = layout.box()
+        box.operator("cp77.rotate_obj", text="Rotate Selected Objects")
+        box = layout.box()
         props = context.scene.cp77_panel_props
 
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
         if cp77_addon_prefs.show_modtools:
-            if cp77_addon_prefs.show_meshtools:                
-                box.label(icon_value=get_icon("REFIT"), text="AKL Autofitter:")
-                row = box.row(align=True)
-                split = row.split(factor=0.29,align=True)
-                split.label(text="Shape:")
-                split.prop(props, 'refit_json', text="")
-                row = box.row(align=True)
-                row.operator("cp77.auto_fitter", text="Refit Selected Mesh")
-                row.prop(props, 'fbx_rot', text="", icon='LOOP_BACK', toggle=1)
+            if cp77_addon_prefs.show_meshtools:
+                box.label(icon_value=get_icon("SCULPT"), text="Modelling:")
+                col = box.column()
+                col.operator("cp77.set_armature", text="Change Armature Target")
+                if context.active_object and context.active_object.type == 'MESH' and context.object.active_material and context.object.active_material.name == 'UV_Checker':
+                    col.operator("cp77.uv_unchecker",  text="Remove UV Checker")
+                else:
+                    col.operator("cp77.uv_checker", text="Apply UV Checker")
+                col.operator("cp77.trans_weights", text="Weight Transfer Tool")
                                 
                 box = layout.box()
-                box.label(icon_value=get_icon("TECH"), text="Modifiers:")
-                row = box.row(align=True)
-                split = row.split(factor=0.35,align=True)
-                split.label(text="Target:")
-                split.prop(props, "selected_armature", text="")
-                row = box.row(align=True)
-                row.operator("cp77.set_armature", text="Change Armature Target")
-
-                box = layout.box()
-                box.label(icon_value=get_icon("SCULPT"), text="Modelling:")
-                row = box.row(align=True)
-                if context.active_object and context.active_object.type == 'MESH' and context.object.active_material and context.object.active_material.name == 'UV_Checker':
-                    row.operator("cp77.uv_unchecker",  text="Remove UV Checker")
-                else:
-                    row.operator("cp77.uv_checker", text="UV Checker")
-                row = box.row(align=True)
-                split = row.split(factor=0.5,align=True)
-                split.label(text="Source Mesh:")
-                split.prop(props, "mesh_source", text="")
-                row = box.row(align=True)
-                split = row.split(factor=0.5,align=True)
-                split.label(text="Target Mesh:")
-                split.prop(props, "mesh_target", text="")
-                row = box.row(align=True)
-                box.operator("cp77.trans_weights", text="Transfer Vertex Weights")
-                row = box.row(align=True)
-                row.operator("cp77.rotate_obj")
+                box.label(text="Mesh Cleanup", icon_value=get_icon("TRAUMA"))
+                col = box.column()
+                col.operator("cp77.submesh_prep")
+                col.operator("cp77.group_verts", text="Group Ungrouped Verts")
+                col.operator('object.delete_unused_vgroups', text="Delete Unused Vert Groups")
                 
                 box = layout.box()
-                box.label(text="Mesh Cleanup", icon_value=get_icon("TRAUMA"))
-                row = box.row(align=True)
-                split = row.split(factor=0.7,align=True)
-                split.label(text="Merge Distance:")
-                split.prop(props,"merge_distance", text="", slider=True)
-                row = box.row(align=True)
-                split = row.split(factor=0.7,align=True)
-                split.label(text="Smooth Factor:")
-                split.prop(props,"smooth_factor", text="", slider=True)
-                row = box.row(align=True)
-                row.operator("cp77.submesh_prep")
-                row = box.row(align=True)
-                row.operator("cp77.group_verts", text="Group Ungrouped Verts")
-                row = box.row(align=True)
-                row.operator('object.delete_unused_vgroups', text="Delete Unused Vert Groups")
+                box.label(text="AKL Autofitter", icon_value=get_icon("REFIT"))
+                col = box.column()
+                col.operator("cp77.auto_fitter", text="Refit Selected Meshes")
 
                 box = layout.box()
-                box.label(text="Vertex Colours", icon="BRUSH_DATA")
-                row = box.row(align=True)
-                split = row.split(factor=0.275,align=True)
-                split.label(text="Preset:")
-                split.prop(props, "vertex_color_presets", text="")    
-                box.operator("cp77.apply_vertex_color_preset")                   
-                box.operator("cp77.add_vertex_color_preset")
-                box.operator("cp77.delete_vertex_color_preset")
+                box.label(text="Vertex Colours", icon="BRUSH_DATA")  
+                col = box.column()                
+                col.operator("cp77.apply_vertex_color_preset")                   
+                col.operator("cp77.add_vertex_color_preset")
+                col.operator("cp77.delete_vertex_color_preset")
         
                 box = layout.box()
                 box.label(text="Material Export", icon="MATERIAL")
-                box.operator("export_scene.hp")
-                box.operator("export_scene.mlsetup")
+                col = box.column()
+                col.operator("export_scene.hp")
+                col.operator("export_scene.mlsetup")
 
 class CP77DeleteVertexcolorPreset(Operator):
     bl_idname = "cp77.delete_vertex_color_preset"
-    bl_label = "Delete Preset"
-
+    bl_label = "Delete Vertex Colour Preset"
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+        
     def execute(self, context):
         props = context.scene.cp77_panel_props
         preset_name = props.vertex_color_presets
@@ -122,10 +91,18 @@ class CP77DeleteVertexcolorPreset(Operator):
             return {'CANCELLED'}
             
         return {'FINISHED'}
+        
+    def draw(self, context):
+        props = context.scene.cp77_panel_props
+        layout = self.layout
+        row = layout.row(align=True)
+        split = row.split(factor=0.275,align=True)
+        split.label(text="Preset:")
+        split.prop(props, "vertex_color_presets", text="")
 
 class CP77AddVertexcolorPreset(Operator):
     bl_idname = "cp77.add_vertex_color_preset"
-    bl_label = "Save Vertex Color Preset"
+    bl_label = "Save Vertex Colour Preset"
     bl_parent_id = "CP77_PT_MeshTools"
 
     preset_name: StringProperty(name="Preset Name")
@@ -151,23 +128,65 @@ class CP77AddVertexcolorPreset(Operator):
         self.color = (*color[:3], alpha)  # Combine color and alpha
         print(self.color)
         return context.window_manager.invoke_props_dialog(self)
+        
+    def draw(self, context):
+        layout = self.layout
+        col = layout.column()
+        col.prop(self, "color", text="")
+        row = layout.row(align=True)
+        split = row.split(factor=0.3,align=True)
+        split.label(text="Preset Name:")
+        split.prop(self, "preset_name", text="")
 
 class CP77WeightTransfer(Operator):
     bl_idname = 'cp77.trans_weights'
-    bl_label = "Transfer weights from one mesh to another"
+    bl_label = "Cyberpunk 2077 Weight Transfer Tool"
     bl_description = "Transfer weights from source mesh to target mesh"
     bl_options = {'REGISTER', 'UNDO'}
+    
+    vertInterop: BoolProperty(
+        name="Use Nearest Vert Interpolated",
+        description="Sometimes gives better results when the default mode fails",
+        default=False)
+
+    bySubmesh: BoolProperty(
+        name="Transfer by Submesh Order",
+        description="Because Mana Gets what Mana Wants :D",
+        default=False)
+
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
         # Call the trans_weights function with the provided arguments
         result = trans_weights(self, context)
         return {"FINISHED"}
         
+    def draw(self,context):
+        props = context.scene.cp77_panel_props
+        layout = self.layout
+        row = layout.row(align=True)
+        split = row.split(factor=0.3,align=True)
+        split.label(text="Source Mesh:")
+        split.prop(props, "mesh_source", text="")
+        row = layout.row(align=True)
+        split = row.split(factor=0.3,align=True)
+        split.label(text="Target Mesh:")
+        split.prop(props, "mesh_target", text="")
+        row = layout.row(align=True)
+        row.prop(self, 'vertInterop', text="Use Nearest Vert Interpolation")
+        row = layout.row(align=True)
+        row.prop(self, 'bySubmesh')
+        
 # Operator to apply a preset
 class CP77ApplyVertexcolorPreset(Operator):
     bl_idname = "cp77.apply_vertex_color_preset"
-    bl_label = "Apply Vertex color Preset"
-
+    bl_label = "Apply Vertex Colour Preset"
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+        
     def execute(self, context):
         props = context.scene.cp77_panel_props
         preset_name = props.vertex_color_presets
@@ -225,6 +244,14 @@ class CP77ApplyVertexcolorPreset(Operator):
         self.report({'INFO'}, f"Preset '{preset_name}' applied.")
         return {'FINISHED'}
 
+    def draw(self, context):
+        props = context.scene.cp77_panel_props
+        layout = self.layout
+        row = layout.row(align=True)
+        split = row.split(factor=0.275,align=True)
+        split.label(text="Preset:")
+        split.prop(props, "vertex_color_presets", text="")  
+
 
 class CP77GroupVerts(Operator):
     bl_idname = "cp77.group_verts"
@@ -237,13 +264,21 @@ class CP77GroupVerts(Operator):
         CP77GroupUngroupedVerts(self, context)
         return {'FINISHED'}
 
-
 class CP77Autofitter(Operator):
     bl_idname = "cp77.auto_fitter"
-    bl_label = "Auto Fit"
+    bl_label = "AKL Autofitter"
     bl_description = "Use to automatically fit your mesh to a selection of modified bodies" 
     bl_options = {'REGISTER', 'UNDO'}
-
+    
+    useAddon: BoolProperty(
+        name="Use an Addon",
+        description="If enabled, a base refitter will be applied, followed by an addon",
+        default=False
+    )
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+        
     def execute(self, context):
         props = context.scene.cp77_panel_props
         target_body_name = props.refit_json
@@ -255,8 +290,24 @@ class CP77Autofitter(Operator):
             CP77Refit(context, refitter, target_body_path, target_body_name, props.fbx_rot)
 
             return {'FINISHED'}
+            
+    def draw(self,context):
+        props = context.scene.cp77_panel_props
+        layout = self.layout
+        row = layout.row(align=True)
+        split = row.split(factor=0.2,align=True)
+        split.label(text="Shape:")
+        split.prop(props, 'refit_json', text="")
+        if self.useAddon:
+            row = layout.row(align=True)
+            split = row.split(factor=0.2,align=True)
+            split.label(text="Addon:")
+            split.prop(props, 'refit_json', text="")
+        col = layout.column()
+        col.prop(props, 'fbx_rot', text="Refit a mesh in FBX orientation")
+        col.prop(self, 'useAddon', text="Use a Refitter Addon")
 
-
+        
 class CP77UVTool(Operator):
     bl_idname = 'cp77.uv_checker'
     bl_label = "UV Checker"
@@ -266,7 +317,6 @@ class CP77UVTool(Operator):
     def execute(self, context):
         CP77UvChecker(self, context)
         return {"FINISHED"}
-
 
 class CP77UVCheckRemover(Operator):
     bl_idname = 'cp77.uv_unchecker'
@@ -282,35 +332,65 @@ class CP77UVCheckRemover(Operator):
         CP77UvUnChecker(self, context)
         return {"FINISHED"}
 
-
 class CP77SetArmature(Operator):
     bl_idname = "cp77.set_armature"
     bl_label = "Change Armature Target"
     bl_parent_id = "CP77_PT_MeshTools"
-    bl_description = "Change the armature modifier on selected meshes to the target" 
+    bl_description = "Change the armature modifier on selected meshes to the target"
     
+    reparent: BoolProperty(
+        name= "Also Reparent Selected Meshes to the Armature",
+        default= True
+    )
+        
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+        
     def execute(self, context):
-        CP77ArmatureSet(self,context)
+        CP77ArmatureSet(self,context, self.reparent)
         return {'FINISHED'}
-
+        
+    def draw(self, context):
+        props = context.scene.cp77_panel_props
+        layout = self.layout
+        row = layout.row(align=True)
+        split = row.split(factor=0.35,align=True)
+        split.label(text="Armature Target:")
+        split.prop(props, "selected_armature", text="")
+        col = layout.column()
+        col.prop(self, 'reparent')
 
 class CP77_OT_submesh_prep(Operator):
 # based on Rudolph2109's function
     bl_label = "Prep. It!"
     bl_idname = "cp77.submesh_prep"
     bl_parent_id = "CP77_PT_MeshTools"
-    bl_description = "Marking seams based on edges boundary loops, merging vertices, correcting and smoothening the normals based on the direction of the faces" 
-
+    bl_description = "Mark seams based on edges boundary loops, merge vertices, correct and smooth normals based on the direction of the faces" 
+   
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+        
     def execute(self, context):
         props= context.scene.cp77_panel_props
         CP77SubPrep(self, context, props.smooth_factor, props.merge_distance)
         return {'FINISHED'}
-
+        
+    def draw(self, context):
+        props= context.scene.cp77_panel_props
+        layout = self.layout
+        row = layout.row(align=True)
+        split = row.split(factor=0.7,align=True)
+        split.label(text="Merge Distance:")
+        split.prop(props,"merge_distance", text="", slider=True)
+        row = layout.row(align=True)
+        split = row.split(factor=0.7,align=True)
+        split.label(text="Smooth Factor:")
+        split.prop(props,"smooth_factor", text="", slider=True)        
 
 class CP77RotateObj(Operator):
     bl_label = "Change Orientation"
     bl_idname = "cp77.rotate_obj"
-    bl_description = "rotate the selected object"
+    bl_description = "Rotate the selected object 180 degrees"
     
     def execute(self, context):
         rotate_quat_180(self, context)
@@ -327,6 +407,13 @@ def register_meshtools():
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
 
+def unregister_meshtools():
+    for cls in reversed(other_classes):
+        if hasattr(bpy.types, cls.__name__):
+            bpy.utils.unregister_class(cls)
+    for cls in reversed(operators):
+        if hasattr(bpy.types, cls.__name__):
+            bpy.utils.unregister_class(cls)
 def unregister_meshtools():
     for cls in reversed(other_classes):
         if hasattr(bpy.types, cls.__name__):

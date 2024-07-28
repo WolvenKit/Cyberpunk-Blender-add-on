@@ -48,7 +48,7 @@ def CP77SubPrep(self, context, smooth_factor, merge_distance):
     if context.mode != current_mode:
         bpy.ops.object.mode_set(mode=current_mode)
 
-def CP77ArmatureSet(self, context):
+def CP77ArmatureSet(self, context, reparent):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
     props = context.scene.cp77_panel_props
     target_armature_name = props.selected_armature
@@ -83,21 +83,23 @@ def CP77ArmatureSet(self, context):
                     armature = mesh.modifiers.new('Armature', 'ARMATURE')
                     armature.object = target_armature
                 
-                # Set parent
-                mesh.parent = target_armature
+                if reparent == True:
+                    # Set parent
+                    mesh.parent = target_armature
 
-                # Unlink the mesh from its original collections
-                for col in mesh.users_collection:
-                    col.objects.unlink(mesh)
+                    # Unlink the mesh from its original collections
+                    for col in mesh.users_collection:
+                        col.objects.unlink(mesh)
 
-                # Link the mesh to the target armature's collection
-                target_collection.objects.link(mesh)
+                    # Link the mesh to the target armature's collection
+                    target_collection.objects.link(mesh)
 
 def CP77UvChecker(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
     bpy_mats=bpy.data.materials
     obj = context.object
     current_mode = context.mode
+    uv_checker = None
     if not obj:
         show_message("No active object. Please Select a Mesh and try again")
         return {'CANCELLED'} 
