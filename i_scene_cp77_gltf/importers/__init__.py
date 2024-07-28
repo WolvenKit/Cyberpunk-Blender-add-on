@@ -110,7 +110,7 @@ class CP77EntityImport(Operator,ImportHelper):
         bob=self.filepath
         inColl=self.inColl
         #print('Bob - ',bob)
-        importEnt( bob, apps, excluded, props.with_materials, self.include_collisions, self.include_phys, self.include_entCollider, inColl, props.remap_depot)
+        importEnt(props.with_materials, bob, apps, excluded, self.include_collisions, self.include_phys, self.include_entCollider, inColl, props.remap_depot)
 
         return {'FINISHED'}
 
@@ -152,7 +152,7 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
         bob=self.filepath
         props = context.scene.cp77_panel_props
         print('Importing Sectors from project - ',bob)
-        importSectors( bob, self.want_collisions, self.am_modding, props.with_materials , props.remap_depot)
+        importSectors( bob, props.with_materials, props.remap_depot, self.want_collisions, self.am_modding)
         return {'FINISHED'}
 
 
@@ -191,57 +191,33 @@ class CP77Import(Operator, ImportHelper):
                                 default="ALL"
                                 )
 
-    #kwekmaster: refactor UI layout from the operator.
+    # switch back to operator draw function to align with other UI features
     def draw(self, context):
-        pass
+        cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
+        props = context.scene.cp77_panel_props
+        layout = self.layout
+        col = layout.column()
+        col.prop(props, 'with_materials')
+        if props.with_materials:
+            col.prop(self, 'image_format')
+            col.prop(self, 'exclude_unused_mats')
+            col.prop(props, 'use_cycles')
+            if props.use_cycles:
+                col.prop(props, 'update_gi')
+        col.prop(self, 'hide_armatures')
+        col.prop(self, 'import_garmentsupport')
+        if cp77_addon_prefs.experimental_features:
+            col.prop(props,"remap_depot")
+        
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
         SetCyclesRenderer(props.use_cycles, props.update_gi)
-        CP77GLBimport(self, self.exclude_unused_mats, self.image_format, props.with_materials, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, self.appearances, props.remap_depot)
+        CP77GLBimport(self, props.with_materials, props.remap_depot, self.exclude_unused_mats, self.image_format, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, self.appearances)
 
         return {'FINISHED'}
  
-
-# Material Sub-panel
-class CP77_PT_ImportWithMaterial(Panel):
-    bl_space_type = 'FILE_BROWSER'
-    bl_region_type = 'TOOL_PROPS'
-    bl_label = "With Materials"  
-    
-    @classmethod
-    def poll(cls, context):
-        operator = context.space_data.active_operator
-        return operator.bl_idname == "IO_SCENE_GLTF_OT_cp77"
-
-    def draw_header(self, context):
-        props = context.scene.cp77_panel_props
-        self.layout.prop(props, "with_materials", text="")
-    
-    def draw(self, context):
-        cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
-        props = context.scene.cp77_panel_props
-        operator = context.space_data.active_operator
-        layout = self.layout
-        row = layout.row(align=True)
-        layout.enabled = props.with_materials
-        row.prop(operator, 'exclude_unused_mats')
-        row = layout.row(align=True)
-        row.prop(operator, 'image_format')
-        row = layout.row(align=True)
-        row.prop(operator, 'hide_armatures')
-        row = layout.row(align=True)
-        row.prop(props, 'use_cycles')
-        if cp77_addon_prefs.experimental_features:
-            row = layout.row(align=True)
-            row.prop(props,"remap_depot")
-        if props.use_cycles:
-            row = layout.row(align=True)
-            row.prop(props, 'update_gi')
-        row = layout.row(align=True)
-        row.prop(operator, 'import_garmentsupport')
-
-
+ 
 def menu_func_import(self, context):
     self.layout.operator(CP77Import.bl_idname, text="Cyberpunk GLTF (.gltf/.glb)", icon_value=get_icon('WKIT'))
     self.layout.operator(CP77EntityImport.bl_idname, text="Cyberpunk Entity (.json)", icon_value=get_icon('WKIT'))
