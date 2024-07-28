@@ -40,7 +40,7 @@ imported = None
 appearances = None
 collection = None
 
-def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_materials=True, filepath='', hide_armatures=True,  import_garmentsupport=False, files=[], directory='', appearances=[], remap_depot=False):
+def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, image_format='png', filepath='', hide_armatures=True,  import_garmentsupport=False, files=[], directory='', appearances=[]):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     context=bpy.context
     obj = None
@@ -56,9 +56,11 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
         else:
             print('-------------------- Beginning Cyberpunk Model Import --------------------')
             print('')
-            print(f"Importing: {os.path.basename(self.filepath)}")
             if with_materials==True:
+                print(f"Importing: {os.path.basename(self.filepath)} with materials")
                 print(f"Appearances to Import: {(', '.join(appearances))}")
+            else:
+                print(f"Importing: {os.path.basename(self.filepath)}")
             print('')
     # prevent crash if no directory supplied when using filepath
     if len(self.directory)>0:
@@ -143,7 +145,7 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
         if ".anims.glb" in filepath:
             break
         else:
-            if has_material_json:
+            if with_materials==True and has_material_json:
                 matjsonpath = current_file_base_path + ".Material.json"
                 obj = jsonload(matjsonpath)
         if obj == None:
@@ -173,9 +175,9 @@ def CP77GLBimport(self, exclude_unused_mats=True, image_format='png', with_mater
             for key in json_apps.keys():
                 for m in json_apps[key]:
                     validmats[m]=True
-
-        import_mats(current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, obj,
-                    validmats)
+        if with_materials:
+            import_mats(current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, obj, validmats)
+   
     if not cp77_addon_prefs.non_verbose:
         print(f"GLB Import Time: {(time.time() - start_time)} Seconds")
         print('')
