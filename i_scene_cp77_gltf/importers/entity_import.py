@@ -33,8 +33,9 @@ def create_axes(ent_coll,name):
 # if you've already imported the body/head and set the rig up you can exclude them by putting them in the exclude_meshes list 
 #presto_stash=[]
 
-def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=True, include_collisions=False, include_phys=False, include_entCollider=False, inColl='', remapdepot=False): 
+def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], include_collisions=False, include_phys=False, include_entCollider=False, inColl='', remapdepot=False): 
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
+    with_materials = with_materials
     if not cp77_addon_prefs.non_verbose:
         print('')
         print('-------------------- Importing Cyberpunk 2077 Entity --------------------')
@@ -137,7 +138,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                            # presto_stash.append(animsinres)
             
             if len(animsinres)>0:
-                bpy.ops.io_scene_gltf.cp77(filepath=animsinres[0])
+                bpy.ops.io_scene_gltf.cp77(with_materials, filepath=animsinres[0])
                 #find what we just loaded
                 arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
                 rig=arms[0]
@@ -328,7 +329,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                         meshApp=c['meshAppearance']['$value']
                                         #print(meshApp)
                                     try:
-                                        bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=meshApp)
+                                        bpy.ops.io_scene_gltf.cp77(with_materials, filepath=meshpath, appearances=meshApp)
                                         for obj in C.selected_objects:            
                                             obj['componentName'] = c['name']['$value']
                                             obj['sourcePath'] = meshpath
