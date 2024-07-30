@@ -84,6 +84,7 @@ def cp77riglist(self, context):
     man_big = os.path.join(rig_dir, "man_big_full.glb")
     man_fat = os.path.join(rig_dir, "man_fat_full.glb")
     Judy = os.path.join(rig_dir, "judy_full.glb")
+    Songbird = os.path.join(rig_dir, "songbird_full.glb")
     Panam = os.path.join(rig_dir, "panam_full.glb")
     Jackie = os.path.join(rig_dir, "jackie_full.glb")
     Rhino = os.path.join(rig_dir, "rhino_full.glb")
@@ -91,8 +92,8 @@ def cp77riglist(self, context):
     Smasher = os.path.join(rig_dir, "smasher_full.glb")
     
     # Store the variable names in a list
-    cp77rigs = [man_base, woman_base, man_big, man_fat, Judy, Panam, Jackie, Rhino, Dex, Smasher]
-    cp77rig_names = ['man_base', 'woman_base', 'man_big', 'man_fat', 'Judy', 'Panam', 'Jackie', 'Rhino', 'Dex', 'Adam Smasher']
+    cp77rigs = [man_base, woman_base, man_big, man_fat, Judy, Songbird, Panam, Jackie, Rhino, Dex, Smasher]
+    cp77rig_names = ['man_base', 'woman_base', 'man_big', 'man_fat', 'Judy', 'Songbird', 'Panam', 'Jackie', 'Rhino', 'Dex', 'Adam Smasher']
 
     # Return the list of variable names
     return cp77rigs, cp77rig_names
