@@ -51,15 +51,12 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     if not cp77_addon_prefs.non_verbose: 
         print(f"Importing appearance: {', '.join(appearances)} from entity: {ent_name}")
     if filepath is not None:
-       j=jsonload(filepath)
+        ent_apps, ent_components, ent_component_data, res=jsonload(filepath)
     
-    ent_apps= j['Data']['RootChunk']['appearances']
     ent_applist=[]
     for app in ent_apps:
         ent_applist.append(app['appearanceName']['$value'])
     #print(ent_applist)
-    ent_components= j['Data']['RootChunk']['components']
-    ent_component_data= j['Data']['RootChunk']['compiledData']['Data']['Chunks']
     #presto_stash.append(ent_components)    
     ent_complist=[]
     ent_rigs=[]
@@ -83,7 +80,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     #    presto_stash.append(ent_rigs)
                 
     resolved=[]
-    for res_p in j['Data']['RootChunk']['resolvedDependencies']:
+    for res_p in res:
         resolved.append(os.path.join(path,res_p['DepotPath']['$value']))
         
     # if no apps requested populate the list with all available.
@@ -95,7 +92,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
             appearances.append('BASE_COMPONENTS_ONLY')
 
     VS=[]
-    for x in j['Data']['RootChunk']['components']:
+    for x in ent_components:
         if 'name' in x.keys() and x['name']['$value']=='vehicle_slots':
             VS.append(x)
     if len(VS)>0:
@@ -263,12 +260,12 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                     else:
                         print('app file not found -', filepath)
             else:
-                if j['Data']['RootChunk']['compiledData']['Data']['Chunks']:
-                    chunks= j['Data']['RootChunk']['compiledData']['Data']['Chunks']
+                if ent_component_data:
+                    chunks= ent_component_data
 
             if len(comps)==0:      
                 print('falling back to rootchunk comps')
-                comps= j['Data']['RootChunk']['components']
+                comps= ent_components
 
             for c in comps:
                 if c['$type']=='gameTransformAnimatorComponent':
