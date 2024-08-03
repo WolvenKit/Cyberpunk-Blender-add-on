@@ -33,17 +33,17 @@ from ..material_types.unknown import unknownMaterial
 
 
 class MaterialBuilder:
-    def __init__(self,Obj,BasePath,image_format,MeshPath):
+    def __init__(self,mats,BasePath,image_format,MeshPath):
         self.BasePath = BasePath
         self.image_format = image_format
-        self.obj = Obj
+       # self.obj = Obj
         self.MeshPath= MeshPath
         before,mid,after=MeshPath.partition('source\\raw\\'.replace('\\',os.sep))
         self.ProjPath=before+mid
     
-    def create(self,materialIndex):
-        if self.obj.get("Materials"):
-            rawMat = self.obj["Materials"][materialIndex]
+    def create(self, mats, materialIndex):
+        if mats:
+            rawMat = mats[materialIndex]
             
             verbose=True
 
