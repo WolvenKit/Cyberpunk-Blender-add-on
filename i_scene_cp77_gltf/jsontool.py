@@ -101,6 +101,10 @@ def jsonload(filepath):
             else:
                 if not cp77_addon_prefs.non_verbose:
                     print('Building shaders')
+            depotpath = data["MaterialRepo"] + "\\"
+            json_apps = data['Appearances']
+            mats = data['Materials']
+            return depotpath, json_apps, mats
             # Do something for .material.json
             return data
         case _ if base_name.endswith('.gradient.json'):

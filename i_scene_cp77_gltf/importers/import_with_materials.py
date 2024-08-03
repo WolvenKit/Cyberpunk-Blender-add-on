@@ -43,7 +43,7 @@ collection = None
 def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, image_format='png', filepath='', hide_armatures=True,  import_garmentsupport=False, files=[], directory='', appearances=[]):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     context=bpy.context
-    obj = None
+   # obj = None
     start_time = time.time()
     loadfiles=self.files
     appearances=self.appearances.split(",")
@@ -147,17 +147,17 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
         else:
             if with_materials==True and has_material_json:
                 matjsonpath = current_file_base_path + ".Material.json"
-                obj = jsonload(matjsonpath)
-        if obj == None:
+                DepotPath, json_apps, mats = jsonload(matjsonpath)
+        if DepotPath == None:
             break
-        DepotPath = str(obj["MaterialRepo"])  + "\\"
+        #DepotPath = str(obj["MaterialRepo"])  + "\\"
         context=bpy.context
         if remap_depot and os.path.exists(context.preferences.addons[__name__.split('.')[0]].preferences.depotfolder_path):
             DepotPath = context.preferences.addons[__name__.split('.')[0]].preferences.depotfolder_path
             if not cp77_addon_prefs.non_verbose:
                 print(f"Using depot path: {DepotPath}")
         DepotPath= DepotPath.replace('\\', os.sep)
-        json_apps=obj['Appearances']
+        #json_apps=obj['Appearances']
         # fix the app names as for some reason they have their index added on the end.
         appkeys=[k for k in json_apps.keys()]
         for i,k in enumerate(appkeys):
@@ -176,19 +176,19 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
                 for m in json_apps[key]:
                     validmats[m]=True
         if with_materials:
-            import_mats(current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, obj, validmats)
+            import_mats(current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmats)
    
     if not cp77_addon_prefs.non_verbose:
         print(f"GLB Import Time: {(time.time() - start_time)} Seconds")
         print('')
         print('-------------------- Finished importing Cyberpunk 2077 Model --------------------')
 
-def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, obj, validmats):
+def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmats):
     failedon = []
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     start_time = time.time()
     for mat in validmats.keys():
-        for m in obj['Materials']:
+        for m in mats: #obj['Materials']:
             if m['Name'] != mat:
                 continue
             if 'BaseMaterial' in m.keys():
@@ -212,7 +212,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
                 print(m.keys())
 
     MatImportList = [k for k in validmats.keys()]
-    Builder = MaterialBuilder(obj, DepotPath, str(image_format), BasePath)
+    Builder = MaterialBuilder(mats, DepotPath, str(image_format), BasePath)
     counter = 0
     bpy_mats = bpy.data.materials
     for name in bpy.data.meshes.keys():
@@ -248,10 +248,10 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
                 else:
                     if matname in validmats.keys():
                         index = 0
-                        for rawmat in obj["Materials"]:
+                        for rawmat in mats:
                             if rawmat["Name"] == matname:
                                 try:
-                                    bpymat = Builder.create(index)
+                                    bpymat = Builder.create(mats, index)
                                     if bpymat:
                                         bpymat['BaseMaterial'] = validmats[matname]['BaseMaterial']
                                         bpymat['GlobalNormal'] = validmats[matname]['GlobalNormal']
@@ -279,10 +279,10 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
         return
 
     index = 0
-    for rawmat in obj["Materials"]:
+    for rawmat in mats:#obj["Materials"]:
         if rawmat["Name"] not in bpy.data.materials.keys() and (
                 (rawmat["Name"] in MatImportList) or len(MatImportList) < 1):
-            Builder.create(index)
+            Builder.create(mats,index)
         index = index + 1
 
 def blender_4_scale_armature_bones():
