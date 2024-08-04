@@ -78,8 +78,9 @@ def jsonload(filepath):
             ent_components= data['Data']['RootChunk']['components']
             ent_component_data= data['Data']['RootChunk']['compiledData']['Data']['Chunks']
             res = data['Data']['RootChunk']['resolvedDependencies']
+            ent_default = data['Data']['RootChunk']['defaultAppearance']['$value']
             # Do something for .ent.json
-            return ent_apps, ent_components, ent_component_data, res
+            return ent_apps, ent_components, ent_component_data, res, ent_default
         case _ if base_name.endswith('.mesh.json'):
             if not cp77_addon_prefs.non_verbose:
                 print(f"Processing: {base_name}")

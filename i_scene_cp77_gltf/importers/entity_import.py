@@ -51,7 +51,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     if not cp77_addon_prefs.non_verbose: 
         print(f"Importing appearance: {', '.join(appearances)} from entity: {ent_name}")
     if filepath is not None:
-        ent_apps, ent_components, ent_component_data, res=jsonload(filepath)
+        ent_apps, ent_components, ent_component_data, res, ent_default =jsonload(filepath)
     
     ent_applist=[]
     for app in ent_apps:
@@ -221,7 +221,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                             app_name=a['appearanceName']['$value']
 
                 if ent_app_idx<0 and app_name =='default':
-                    ent_default=j['Data']['RootChunk']['defaultAppearance']['$value']
+                    #ent_default=j['Data']['RootChunk']['defaultAppearance']['$value']
                     for i,a in enumerate(ent_apps):
                         if a['name']['$value']==ent_default:
                             print('appearance matched, id = ',i)
