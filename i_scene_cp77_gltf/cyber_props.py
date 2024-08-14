@@ -16,33 +16,38 @@ enum_items = [(mat.get("Name", ""), mat.get("Name", ""), "") for mat in physmats
 
 def CP77RefitList(context):
 
-    target_addon_paths = [None]
-    target_addon_names = ['None']
-    
-    SoloArmsAddon = os.path.join(refit_dir, "SoloArmsAddon.zip")
-    Adonis = os.path.join(refit_dir, "Adonis.zip")
-    VanillaFemToMasc = os.path.join(refit_dir, "f2m.zip")
-    VanillaFem_BigBoobs = os.path.join(refit_dir, "f_normal_to_big_boobs.zip")
-    VanillaFem_SmallBoobs = os.path.join(refit_dir, "f_normal_to_small_boobs.zip")
-    VanillaMascToFem = os.path.join(refit_dir, "m2f.zip")
-    Lush = os.path.join(refit_dir, "lush.zip")
-    Hyst_RB = os.path.join(refit_dir, "hyst_rb.zip")
-    Hyst_EBB = os.path.join(refit_dir, "hyst_ebb.zip")
-    Hyst_EBB_RB = os.path.join(refit_dir, "hyst_ebb_rb.zip")
-    Flat_Chest = os.path.join(refit_dir, "flat_chest.zip")
-    Solo_Ultimate = os.path.join(refit_dir, "solo_ultimate.zip")
-    Gymfiend = os.path.join(refit_dir, "gymfiend.zip")
-    Freyja = os.path.join(refit_dir, "freyja.zip")
-    # Hyst_EBBP_Addon = os.path.join(refit_dir, "hyst_ebbp_addon.zip")
+    Adonis = os.path.join(refit_dir, "Adonis.refitter.zip")
+    VanillaFemToMasc = os.path.join(refit_dir, "f2m.refitter.zip")
+    VanillaFem_BigBoobs = os.path.join(refit_dir, "f_normal_to_big_boobs.refitter.zip")
+    VanillaFem_SmallBoobs = os.path.join(refit_dir, "f_normal_to_small_boobs.refitter.zip")
+    VanillaMascToFem = os.path.join(refit_dir, "m2f.refitter.zip")
+    Lush = os.path.join(refit_dir, "lush.refitter.zip")
+    Hyst_RB = os.path.join(refit_dir, "hyst_rb.refitter.zip")
+    Hyst_EBB = os.path.join(refit_dir, "hyst_ebb.refitter.zip")
+    Hyst_EBB_RB = os.path.join(refit_dir, "hyst_ebb_rb.refitter.zip")
+    Flat_Chest = os.path.join(refit_dir, "flat_chest.refitter.zip")
+    Solo_Ultimate = os.path.join(refit_dir, "solo_ultimate.refitter.zip")
+    Gymfiend = os.path.join(refit_dir, "gymfiend.refitter.zip")
+    Freyja = os.path.join(refit_dir, "freyja.refitter.zip")
     
     # Return the list of variable names
-    target_body_paths = [ Gymfiend, Freyja, SoloArmsAddon, Solo_Ultimate, Adonis, Flat_Chest, Hyst_EBB_RB, Hyst_EBB, Hyst_RB, Lush, VanillaFemToMasc, VanillaMascToFem, VanillaFem_BigBoobs, VanillaFem_SmallBoobs ]
-    target_body_names = [ 'Gymfiend', 'Freyja', 'SoloArmsAddon', 'Solo_Ultimate', 'Adonis', 'Flat_Chest', 'Hyst_EBB_RB', 'Hyst_EBB', 'Hyst_RB', 'Lush', 'VanillaFemToMasc', 'VanillaMascToFem', 'VanillaFem_BigBoobs', 'VanillaFem_SmallBoobs' ]
+    target_body_paths = [ Gymfiend, Freyja, Solo_Ultimate, Adonis, Flat_Chest, Hyst_EBB_RB, Hyst_EBB, Hyst_RB, Lush, VanillaFemToMasc, VanillaMascToFem, VanillaFem_BigBoobs, VanillaFem_SmallBoobs ]
+    target_body_names = [ 'Gymfiend', 'Freyja', 'Solo_Ultimate', 'Adonis', 'Flat_Chest', 'Hyst_EBB_RB', 'Hyst_EBB', 'Hyst_RB', 'Lush', 'VanillaFemToMasc', 'VanillaMascToFem', 'VanillaFem_BigBoobs', 'VanillaFem_SmallBoobs' ]
 
     # Return the list of tuples
     return target_body_paths, target_body_names
 
-#def VertColourPresetList
+def CP77RefitAddonList(context):
+
+    SoloArmsAddon = os.path.join(refit_dir, "SoloArmsAddon.refitter.zip")
+    Hyst_EBBP_Addon = os.path.join(refit_dir, "hyst_ebbp_addon.refitter.zip")
+    
+    # Return the list of variable names
+    addon_target_body_paths = [SoloArmsAddon, Hyst_EBBP_Addon]
+    addon_target_body_names = ['SoloArmsAddon','Hyst_EBBP_Addon']
+
+    # Return the list of tuples
+    return addon_target_body_paths, addon_target_body_names
     
 
 def SetCyclesRenderer(use_cycles=True, set_gi_params=False):
@@ -207,6 +212,11 @@ class CP77_PT_PanelProps(PropertyGroup):
     refit_json: EnumProperty(
         items=[(target_body_names, target_body_names, '') for target_body_names in CP77RefitList(None)[1]],
         name="Body Shape"
+    )
+
+    refit_addon_json: EnumProperty(
+        items=[(addon_target_body_names, addon_target_body_names, '') for addon_target_body_names in CP77RefitAddonList(None)[1]],
+        name="Refitter Addon"
     )
 
     selected_armature: EnumProperty(
