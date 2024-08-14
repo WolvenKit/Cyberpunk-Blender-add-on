@@ -1,7 +1,7 @@
 import bpy
 import json
 import os
-from .main.common import show_message
+from .main.common import show_message, load_zip
 
 def normalize_paths(data):
     if isinstance(data, dict):
@@ -37,7 +37,8 @@ def load_json(file_path):
 def jsonload(filepath):
 
     if not filepath.endswith('.json'):
-        raise ValueError("This is not a json, what are you doing?")
+        if not filepath.endswith('.zip'):
+            raise ValueError(f"{filepath} is not a json, what are you doing?")
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     
     # Extract the base name of the file
@@ -211,7 +212,22 @@ def jsonload(filepath):
                 if not cp77_addon_prefs.non_verbose:                
                     print(f"invalid cfoliage.json found at: {filepath} this plugin requires jsons generated with the latest version of Wolvenkit")
                 show_message(f"invalid cfoliage.json : {base_name} this plugin requires jsons generated with the latest version of Wolvenkit")
-            return data       
+            return data
+        case _ if base_name.endswith('.refitter.zip'):
+            if not cp77_addon_prefs.non_verbose:
+                print(f"Processing: {base_name}")
+            data=load_zip(filepath)
+            data=jsonloads(data)
+            lattice_object_name = data["lattice_object_name"]
+            control_points = data["deformed_control_points"]
+            lattice_points = data["lattice_points"]
+            lattice_object_location = data["lattice_object_location"]
+            lattice_object_rotation = data["lattice_object_rotation"]
+            lattice_object_scale = data["lattice_object_scale"]
+            lattice_interpolation_u = data["lattice_interpolation_u"]
+            lattice_interpolation_v = data["lattice_interpolation_v"]
+            lattice_interpolation_w = data["lattice_interpolation_w"]
+            return lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w
         case _:
             if not cp77_addon_prefs.non_verbose:
                 print(f"Incompatible Json: {base_name}")
