@@ -33,6 +33,18 @@ import bmesh
 VERBOSE=True
 scale_factor=1
 
+def find_debugName(obj):
+    debugName=None
+    if 'debugName' in obj.users_collection[0].keys():
+        debugName=obj.users_collection[0]['debugName']
+    else:
+        if 'debugName' in D.collections[coll_parents.get(obj.users_collection[0].name)]:
+            debugName=D.collections[coll_parents.get(obj.users_collection[0].name)]['debugName']
+        else:
+            if 'debugName' in D.collections[coll_parents.get(coll_parents.get(obj.users_collection[0].name.name))]:
+                debugName=D.collections[coll_parents.get(coll_parents.get(obj.users_collection[0].name.name))]['debugName']
+    return debugName
+
 def points_within_tol(point1, point2, tolerance=0.01):
     """
     Check if two points are within a specified tolerance.
@@ -251,6 +263,17 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
         print('-------------------- Importing Cyberpunk 2077 Streaming Sectors --------------------')
         print('')
     start_time = time.time()
+    # Set this to true to limit import to the types listed in the import_types list.
+    limittypes=False
+    import_types=None
+    import_types=['worldStaticSoundEmitterNode',
+    'worldStaticParticleNode',
+    'worldEffectNode',
+    'worldPopulationSpawnerNode',
+    'worldClothMeshNode',
+    'worldRotatingMeshNode',
+    'worldCollisionNode'
+    ]
     # Enter the path to your projects source\raw\base folder below, needs double slashes between folder names.
     path = os.path.join( os.path.dirname(filepath),'source','raw','base')
     print('path is ',path)
@@ -267,28 +290,28 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                         s.clip_end = 50000
 
     jsonpath = glob.glob(os.path.join(path, "**", "*.streamingsector.json"), recursive = True)
-    print(jsonpath)
     meshes=[]
     C = bpy.context
+    I_want_to_break_free=False
     # Use object wireframe colors not theme - doesnt work need to find hte viewport as the context doesnt return that for this call 
-   # bpy.context.space_data.shading.wireframe_color_type = 'OBJECT'
+    # bpy.context.space_data.shading.wireframe_color_type = 'OBJECT'
     for filepath in jsonpath:
         if filepath==os.path.join(path,os.path.basename(project)+'.streamingsector.json'):
             continue
         if VERBOSE:
             print(os.path.join(path,os.path.basename(project)+'.streamingsector.json'))
-            print(filepath)
-        j = jsonload(filepath)
+        t, nodes = jsonload(filepath)
         sectorName=os.path.basename(filepath)[:-5]
-        t=j['Data']['RootChunk']['nodeData']['Data']
-        nodes = j["Data"]["RootChunk"]["nodes"]
         #print(len(nodes))
         #nodes=[]
+
         for i,e in enumerate(nodes):
             print(i)
             data = e['Data']
             type = data['$type']
-            if True: # type=='worldBendedMeshNode' :#or type=='worldCableMeshNode': # can add a filter for dev here
+            if I_want_to_break_free:
+                break
+            if (limittypes and type in import_types) or limittypes==False :#or type=='worldCableMeshNode': # can add a filter for dev here
                 match type:
                     case 'worldEntityNode'|'worldDeviceNode': 
                         #print('worldEntityNode',i)
@@ -399,9 +422,8 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
         if VERBOSE:
             print(projectjson)
             print(filepath)
-        j=jsonload(filepath) 
-          
-        t=j['Data']['RootChunk']['nodeData']['Data']
+
+        t, nodes = jsonload(filepath)
         # add nodeDataIndex props to all the nodes in t
         for index, obj in enumerate(t):
             obj['nodeDataIndex']=index
@@ -424,7 +446,6 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                 Sector_additions_coll=bpy.data.collections.new(sectorName+'_new')
                 coll_scene.children.link(Sector_additions_coll)       
 
-        nodes = j["Data"]["RootChunk"]["nodes"]
         print(fpn, ' Processing ',len(nodes),' nodes for sector', sectorName)
         group=''
         for i,e in enumerate(nodes):
@@ -433,7 +454,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
             #   continue
             data = e['Data']
             type = data['$type']
-            if  True:#type=='worldBendedMeshNode' :#or type=='worldCableMeshNode': # can add a filter for dev here
+            if  (limittypes and type in import_types) or limittypes==False: #or type=='worldCableMeshNode': # can add a filter for dev here
                 match type:
                     case 'worldEntityNode' | 'worldDeviceNode': 
                         #print('worldEntityNode',i)
@@ -473,7 +494,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                                     new['debugName']=e['Data']['debugName']['$value']
                                     new['sectorName']=sectorName 
                                     new['HandleId']=e['HandleId']
-                                    new['entityTemplate']=os.path.basename(data['entityTemplate']['DepotPath']['$value'])
+                                    new['entityTemplate']=data['entityTemplate']['DepotPath']['$value']
                                     new['appearanceName']=data['appearanceName']
                                     new['pivot']=inst['Pivot']
 
@@ -482,6 +503,8 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                                     rot=[0,0,0,0]
                                     scale =Vector((1/scale_factor,1/scale_factor,1/scale_factor))
                                     rot =Quaternion(get_rot(inst))
+                                    new['ent_rot']=rot.to_euler('XYZ')
+                                    new['ent_pos']=pos
                                     inst_trans_mat=Matrix.LocRotScale(pos,rot,scale)
                                     for child in group.children:
                                         newchild=bpy.data.collections.new(child.name)
@@ -779,6 +802,10 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                             o['decal']=e['Data']['material']['DepotPath']['$value']
                             o['debugName']=e['Data']['debugName']['$value']
                             o['sectorName']=sectorName
+                            o['horizontalFlip']=e['Data']['horizontalFlip']
+                            o['verticalFlip']=e['Data']['verticalFlip']
+                            o['alpha']=e['Data']['alpha']
+
                             Sector_coll.objects.link(o)
                             o.location = get_pos(inst)
                             o.rotation_mode = "QUATERNION"
@@ -933,9 +960,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                                             if type=='worldRotatingMeshNode':
                                                 rot_axis=data['rotationAxis']
                                                 axis_no=0
-                                                if rot_axis=='Z':
+                                                if rot_axis=='Y':
                                                     axis_no=1
-                                                elif rot_axis=='Y': #y & z are swapped
+                                                elif rot_axis=='Z': #y & z are swapped sometimes, need to work out why
                                                     axis_no=2
                                                 
                                                 rot_time=data['fullRotationTime']
@@ -954,7 +981,13 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                                                 new['sectorName']=sectorName
                                                 new['pivot']=inst['Pivot']
                                                 new['meshAppearance']=meshAppearance
-
+                                                if type=='worldClothMeshNode':
+                                                    new['windImpulseEnabled']= inst['windImpulseEnabled']
+                                                if type=='worldRotatingMeshNode':
+                                                    new['rot_axis']=data['rotationAxis']
+                                                    new['reverseDirection']=data['reverseDirection']
+                                                    new['fullRotationTime']=data['fullRotationTime']
+                                                    
                                                 #print(new['nodeDataIndex'])
                                                 # Should do something with the Advertisements lightData  bits here 
 
@@ -1084,6 +1117,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                             instances = [x for x in t if x['NodeIndex'] == i]
                             for inst in instances:
                                 light_node=e['Data']
+                                
                                 light_ndata=inst
                                 color= light_node['color']  
                                 intensity=light_node['intensity']        
@@ -1098,18 +1132,74 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                                 light_obj.location=pos
                                 light_obj.rotation_mode='QUATERNION'
                                 light_obj.rotation_quaternion=rot
+                                light_obj['flicker']=light_node['flicker'] 
+                                light_obj['nodeType']=type
                                 A_Light.energy = intensity
                                 A_Light.color = get_col(color)
                                 
                                 if area_shape=='ALS_Capsule':                        
                                     A_Light.shape='ELLIPSE'
                                     A_Light.size= light_node['capsuleLength']
+                                    light_obj['capsuleLength']=light_node['capsuleLength']
                                     A_Light.size_y= light_node['radius']*2
+                                    light_obj['radius']=light_node['radius']
                                 elif area_shape=='ALS_Sphere':                        
                                     A_Light.shape='DISK'
                                     A_Light.size= light_node['radius']*2
+                                    light_obj['radius']=light_node['radius']
 
                         pass
+                    
+                    case 'worldStaticParticleNode'|'worldEffectNode'|'worldPopulationSpawnerNode':
+                        #print('worldStaticParticleNode',i)                    
+                        instances = [x for x in t if x['NodeIndex'] == i]
+                        for idx,inst in enumerate(instances):
+                            o = bpy.data.objects.new( "empty", None )
+                            o.name=type+'_'+e['Data']['debugName']['$value']
+                            o['nodeType']=type
+                            o['nodeIndex']=i
+                            o['instance_idx']=idx
+                            o['debugName']=e['Data']['debugName']['$value']
+                            o['sectorName']=sectorName
+                            if type=='worldStaticParticleNode':
+                                o['particleSystem']=e['Data']['particleSystem']['DepotPath']['$value']
+                            if type=='worldEffectNode':
+                                o['effect']=e['Data']['effect']['DepotPath']['$value']
+                                
+                            if type=='worldPopulationSpawnerNode':
+                                o['appearanceName']=e['Data']['appearanceName']['$value']
+                                o['objectRecordId']=e['Data']['objectRecordId']['$value']
+                                o['spawnonstart']=e['Data']['spawnOnStart']
+                            Sector_coll.objects.link(o)
+                            o.location = get_pos(inst)
+                            o.rotation_mode = "QUATERNION"
+                            o.rotation_quaternion = get_rot(inst)
+                            o.scale = get_scale(inst)
+                            o.display_type = 'WIRE'
+                            o.color = (1.0, 0.005, .062, 1)
+                            o.show_wire = True
+                            o.display.show_shadows = False
+
+                        pass
+
+                    case 'worldStaticSoundEmitterNode':
+                        #print(type)
+                        instances = [x for x in t if x['NodeIndex'] == i]
+                        for idx,inst in enumerate(instances):
+                            o = bpy.data.objects.new( "empty", None )
+                            o.empty_display_type = 'SPHERE'
+                            o.name=type+'_'+e['Data']['debugName']['$value']
+                            o['nodeType']=type
+                            o['nodeIndex']=i
+                            o['instance_idx']=idx
+                            o['debugName']=e['Data']['debugName']['$value']
+                            o['sectorName']=sectorName
+                            o['Settings']=e['Data']['Settings']
+                            o['eventName']=e['Data']['Settings']['Data']['EventsOnActive'][0]['event']['$value']
+                            Sector_coll.objects.link(o)
+                            o.location = get_pos(inst)
+                            o.rotation_mode = "QUATERNION"
+                            o.rotation_quaternion = get_rot(inst)
 
                     case 'worldCollisionNode':
                     
@@ -1149,7 +1239,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                                     srot_q = Quaternion((srot[0],srot[1],srot[2],srot[3]))
                                     rot= arot_q @ srot_q
                                     loc=(spos[0]+x,spos[1]+y,spos[2]+z)
-                                    if shape['ShapeType']=='Box' or shape['ShapeType']=='Capsule':
+                                    if shape['ShapeType']=='Box' or shape['ShapeType']=='Capsule' or shape['ShapeType']=='Sphere':
                                         #print('Box Collision Node')
                                         #pprint(act['Shapes'])
                                         
@@ -1157,6 +1247,8 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                                             bpy.ops.mesh.primitive_cube_add(size=1/scale_factor, scale=(ssize[0],ssize[1],ssize[2]),location=(loc[0],loc[1],loc[2]))
                                         elif shape['ShapeType']=='Capsule':
                                             bpy.ops.mesh.primitive_cylinder_add(radius=5/scale_factor, depth=1/scale_factor, scale=(ssize[0],ssize[1],ssize[2]),location=loc)
+                                        elif shape['ShapeType']=='Sphere':
+                                            bpy.ops.mesh.primitive_uv_sphere_add(radius=5/scale_factor, scale=(ssize[0],ssize[1],ssize[2]),location=loc)
                                         crash=C.selected_objects[0]
                                         crash.name='NodeDataIndex_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s)
                                         par_coll=crash.users_collection[0]
