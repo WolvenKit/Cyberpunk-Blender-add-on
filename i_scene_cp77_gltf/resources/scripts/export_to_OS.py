@@ -1,3 +1,17 @@
+#
+#     ____  __      _           __  _____                                         ____        __              __ 
+#    / __ \/ /_    (_)__  _____/ /_/ ___/____  ____ __      ______  ___  _____   / __ \__  __/ /_____  __  __/ /_
+#   / / / / __ \  / / _ \/ ___/ __/\__ \/ __ \/ __ `/ | /| / / __ \/ _ \/ ___/  / / / / / / / __/ __ \/ / / / __/
+#  / /_/ / /_/ / / /  __/ /__/ /_ ___/ / /_/ / /_/ /| |/ |/ / / / /  __/ /     / /_/ / /_/ / /_/ /_/ / /_/ / /_  
+#  \____/_.___/_/ /\___/\___/\__//____/ .___/\__,_/ |__/|__/_/ /_/\___/_/      \____/\__,_/\__/ .___/\__,_/\__/  
+#            /___/                   /_/                                                     /_/                 #
+#
+# Script to generate Object Spawner jsons from the current selection
+# Written by Simarilius, OS by KeanuWheeze
+# Initial version 15/8/24
+# v0.1
+# Comments/Suggestions welcome, feel free to ping me on the wkit discord. (use worldediting or blenderaddon channels)
+
 import bpy
 import os
 import json
