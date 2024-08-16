@@ -9,8 +9,25 @@
 # Script to generate Object Spawner jsons from the current selection
 # Written by Simarilius, OS by KeanuWheeze
 # Initial version 15/8/24
-# v0.1
+# v0.2
+#
+# Import some sectors
+# Select some stuff
+# set the groupname and project folder variables
+# Run the script, it saves a json with the OS group in the top level project folder
+# Copy it to Cyberpunk 2077\bin\x64\plugins\cyber_engine_tweaks\mods\entSpawner\data\objects
+# Spawn it and enjoy/modify
+# when your happy with it use the wscript to import to wkit and convert to axl mod
+#
 # Comments/Suggestions welcome, feel free to ping me on the wkit discord. (use worldediting or blenderaddon channels)
+
+GroupName='blender_group_6'
+ProjectFolder = 'C:\\CPMod\\notell'
+
+# Can try autogenerate collisions, options are NONE, ALL, STRUCT (trys to just do walls/floors/ceilings)
+# Any objects with OS_Coll or physicsCollider in the name will get treated as collisions regardless of this
+# first if for manual coll additions, second is the naming from the plugin collision generator thing
+GENERATE_COLLISIONS='NONE'
 
 import bpy
 import os
@@ -19,13 +36,7 @@ from math import pi,radians,degrees
 D=bpy.data
 C=bpy.context
 
-GroupName='blender_group_6'
-OutputFolder = 'C:\\CPMod\\notell'
 
-# Can try autogenerate collisions, options are NONE, ALL, STRUCT (trys to just do walls/floors/ceilings)
-# Any objects with OS_Coll or physicsCollider in the name will get treated as collisions regardless of this
-# first if for manual coll additions, second is the naming from the plugin collision generator thing
-GENERATE_COLLISIONS='NONE'
 
 def set_pos(obj):
     #print(inst)
@@ -468,7 +479,7 @@ for obj in objs:
             elif 'OS_Coll' in obj.name or 'physicsCollider' in obj.name:
                 new_collision(group, obj,obj.name)
 
-sectpathout = os.path.join(OutputFolder,GroupName+'.json')
+sectpathout = os.path.join(ProjectFolder,GroupName+'.json')
 #sectpathout='C:\\CPMod\\notell\\blender_group5.json'
 with open(sectpathout, 'w') as outfile:
     json.dump(group, outfile,indent=2)
