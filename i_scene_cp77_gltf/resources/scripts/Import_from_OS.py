@@ -8,7 +8,8 @@
 # Object Spawner Group input
 #
 #
-
+project_path='C:\\CPMod\\notell'
+GroupName='blender_group3'
 with_mats=False
 
 import bpy
@@ -78,8 +79,7 @@ if "MasterInstances" not in coll_scene.children.keys():
 else:
     coll_target=bpy.data.collections.get("MasterInstances")
 
-project_path='C:\\CPMod\\notell'
-GroupName='blender_group3'
+
 
 sectpathin = os.path.join(project_path,GroupName+'.json')
 #sectpathin='C:\\CPMod\\notell\\blender_group5.json'
