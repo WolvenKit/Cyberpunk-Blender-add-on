@@ -6,8 +6,11 @@
 #            /___/                   /_/                                               /_/       
 #
 # Object Spawner Group input
+# Project path needs to be set to the top level folder of the project that has the meshes in it to find (sector that you created from if there is one)
+# groupname is the json filename without .json
 #
 #
+
 project_path='C:\\CPMod\\notell'
 GroupName='blender_group3'
 with_mats=False
