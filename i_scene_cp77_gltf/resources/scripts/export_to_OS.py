@@ -396,7 +396,6 @@ for obj in objs:
             pass
         
         case  "worldRotatingMeshNode":
-            #print('Need to do these still')
             OS_obj=new_object("mesh/rotatingMesh",obj.name,set_pos(obj),set_rot(obj),obj.users_collection[0]['mesh'])
             OS_obj['axis']=obj.users_collection[0]['rot_axis']
             OS_obj["reverse"]='reverseDirection'
@@ -480,6 +479,6 @@ for obj in objs:
                 new_collision(group, obj,obj.name)
 
 sectpathout = os.path.join(ProjectFolder,GroupName+'.json')
-#sectpathout='C:\\CPMod\\notell\\blender_group5.json'
+
 with open(sectpathout, 'w') as outfile:
     json.dump(group, outfile,indent=2)
