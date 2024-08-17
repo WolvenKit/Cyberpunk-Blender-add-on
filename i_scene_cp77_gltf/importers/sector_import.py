@@ -495,8 +495,11 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                                     new['sectorName']=sectorName 
                                     new['HandleId']=e['HandleId']
                                     new['entityTemplate']=data['entityTemplate']['DepotPath']['$value']
-                                    new['appearanceName']=data['appearanceName']
                                     new['pivot']=inst['Pivot']
+                                    if 'appearanceName' in data.keys():
+                                        new['appearanceName']=data['appearanceName']['$value']
+                                    else: 
+                                        new['appearanceName']=''
 
                                     
                                     pos = Vector(get_pos(inst))
@@ -655,6 +658,10 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                                     NDI_Coll['debugName']=e['Data']['debugName']['$value']
                                     NDI_Coll['sectorName']=sectorName 
                                     NDI_Coll['numElements']=num
+                                    if 'appearanceName' in e['Data'].keys():
+                                        NDI_Coll['appearanceName']=e['Data']['appearanceName']['$value']
+                                    else :
+                                        NDI_Coll['appearanceName']=''
                                     for El_idx in range(start, start+num):
                                         #create the linked copy of the group of mesh
                                         new_groupname = 'NDI'+str(inst['nodeDataIndex'])+'_'+str(El_idx)+'_'+groupname
@@ -669,6 +676,10 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                                         new['mesh']=meshname
                                         new['debugName']=e['Data']['debugName']['$value']
                                         new['sectorName']=sectorName 
+                                        if 'appearanceName' in e['Data'].keys():
+                                            new['appearanceName']=e['Data']['appearanceName']['$value']
+                                        else :
+                                            new['appearanceName']=''
                                         for old_obj in group.all_objects:                            
                                             obj=old_obj.copy()  
                                             new.objects.link(obj)                                    
@@ -805,6 +816,10 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                             o['horizontalFlip']=e['Data']['horizontalFlip']
                             o['verticalFlip']=e['Data']['verticalFlip']
                             o['alpha']=e['Data']['alpha']
+                            if 'appearanceName' in e['Data'].keys():
+                                o['appearanceName']=e['Data']['appearanceName']['$value']
+                            else :
+                                o['appearanceName']=''
 
                             Sector_coll.objects.link(o)
                             o.location = get_pos(inst)
@@ -981,6 +996,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                                                 new['sectorName']=sectorName
                                                 new['pivot']=inst['Pivot']
                                                 new['meshAppearance']=meshAppearance
+                                                new['appearanceName']=meshAppearance
                                                 if type=='worldClothMeshNode':
                                                     new['windImpulseEnabled']= inst['windImpulseEnabled']
                                                 if type=='worldRotatingMeshNode':
@@ -1045,6 +1061,10 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                                             NDI_Coll['debugName']=e['Data']['debugName']['$value']
                                             NDI_Coll['sectorName']=sectorName 
                                             NDI_Coll['numElements']=num
+                                            if 'appearanceName' in e['Data'].keys():
+                                                NDI_Coll['appearanceName']=e['Data']['appearanceName']['$value']
+                                            else :
+                                                NDI_Coll['appearanceName']=''
                                             #print('Glb found - ',glbfoundname)
                                             #print('Glb found, looking for instances of ',i)
                                             instances = [x for x in t if x['NodeIndex'] == i]
@@ -1062,7 +1082,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                                                     new['debugName']=e['Data']['debugName']['$value']
                                                     new['sectorName']=sectorName  
                                                     new['pivot']=inst['Pivot']
-                                                    
+                                                    new['appearanceName']=NDI_Coll['appearanceName']
                                                 
                                                     if 'Data' in data['cookedInstanceTransforms']['sharedDataBuffer'].keys():
                                                         #print(data['cookedInstanceTransforms'])
