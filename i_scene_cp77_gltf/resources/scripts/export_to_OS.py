@@ -48,7 +48,8 @@ def set_pos(obj):
     return position
 
 def set_rot(obj):
-    rotation={}
+    rotation={}   
+    obj.rotation_mode='XYZ'
     rotation['pitch'] = float("{:.9g}".format(degrees(obj.rotation_euler[0] )))
     rotation['roll'] = float("{:.9g}".format(degrees(obj.rotation_euler[1] )))
     rotation['yaw'] = float("{:.9g}".format(degrees(obj.rotation_euler[2] )))
