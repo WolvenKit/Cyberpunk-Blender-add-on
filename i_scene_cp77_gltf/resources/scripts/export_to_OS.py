@@ -21,7 +21,7 @@
 #
 # Comments/Suggestions welcome, feel free to ping me on the wkit discord. (use worldediting or blenderaddon channels)
 
-GroupName='blender_group_6'
+GroupName='blender_group_1'
 ProjectFolder = 'C:\\CPMod\\notell'
 
 # Can try autogenerate collisions, options are NONE, ALL, STRUCT (trys to just do walls/floors/ceilings)
@@ -229,7 +229,7 @@ for obj in objs:
             "scaleLocked": True,
             "autoHideDistance": 150,
             "scale": set_scale(obj),
-            "app": "",
+            "app":obj['appearanceName'],
             "dataType": "Decals",
             "rotation": rot},
             "headerOpen": False})           
@@ -258,7 +258,7 @@ for obj in objs:
                     "instanceData": [],
                     "spawnData": ent['entityTemplate'],
                     "instanceDataChanges": [],
-                    "app": "",
+                    "app": ent['appearanceName'],
                     "dataType": "Entity Template",                    
                     "rotation": rot
                     },
@@ -424,7 +424,7 @@ for obj in objs:
                 "affectedByWind": True,
                 "scaleLocked": False,
                 "position": pos,
-                "app": "gold",
+                "app": obj['appearanceName'],
                 "dataType": "Cloth Mesh",
                 "collisionType": 4
             },
@@ -458,7 +458,7 @@ for obj in objs:
                     "rotation":rot,
                     "scale":scale,
                     "rotationRelative":False,
-                    "app":"",
+                    "app":obj.users_collection[0]['appearanceName'],
                     "scaleLocked":True,
                     "modulePath":"mesh/mesh",
                     "position":pos,
