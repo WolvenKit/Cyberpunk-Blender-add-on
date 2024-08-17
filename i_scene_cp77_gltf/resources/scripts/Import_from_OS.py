@@ -12,24 +12,28 @@
 #
 
 project_path='C:\\CPMod\\notell'
-GroupName='blender_group3'
+GroupName='blender_group_1'
 with_mats=False
 
 import bpy
 import os
 import json
 from math import pi,radians,degrees
-from mathutils import Vector
+from mathutils import Vector, Matrix, Euler
+import traceback
 D=bpy.data
 C=bpy.context
 coll_scene = C.scene.collection
 
 def get_position(obj):
     pos = Vector((obj['spawnable']['position']['x'],obj['spawnable']['position']['y'],obj['spawnable']['position']['z']))
-    rot= Vector((radians(obj['spawnable']['rotation']['pitch']),
+    rot= Euler((radians(obj['spawnable']['rotation']['pitch']),
                             radians(obj['spawnable']['rotation']['roll']),
                             radians(obj['spawnable']['rotation']['yaw'])))
-    scale =Vector((obj['spawnable']['scale']['x'],obj['spawnable']['scale']['y'],obj['spawnable']['scale']['z']))
+    if 'scale' in obj['spawnable'].keys():
+        scale =Vector((obj['spawnable']['scale']['x'],obj['spawnable']['scale']['y'],obj['spawnable']['scale']['z']))
+    else:
+        scale=(1,1,1)
     return pos,rot,scale
                 
 
@@ -45,6 +49,7 @@ def process_group(group,target_coll):
 def process_object(obj,parent_coll):
     Masters=bpy.data.collections.get("MasterInstances")
     spawndata=obj['spawnable']['spawnData'] 
+    spawntype=obj['spawnable']['dataType'] 
     if spawndata[-5:]=='.mesh' :     
         meshpath=os.path.join(project_path,'source','raw', spawndata[:-1*len(os.path.splitext(spawndata)[1])]+'.glb').replace('\\', os.sep)
         impapps=obj['spawnable']['app']
@@ -81,8 +86,8 @@ def process_object(obj,parent_coll):
                     newobj.rotation_euler = rot
                     newobj.scale = scale
     elif spawndata[-4:]=='.ent' :
-        app=obj['app']
-        entpath=os.path.join(path,spawndata).replace('\\', os.sep)+'.json'
+        app=obj['spawnable']['app']
+        entpath=os.path.join(project_path,'source','raw', spawndata).replace('\\', os.sep)+'.json'
         ent_groupname=os.path.basename(entpath).split('.')[0]+'_'+app
         while len(ent_groupname) > 63:
             ent_groupname = ent_groupname[:-1]
@@ -101,44 +106,63 @@ def process_object(obj,parent_coll):
                 print(traceback.print_exc())
                 print(f"Failed during Entity import on {entpath} from app {app}")
         if imported:
-            instances = [x for x in t if x['NodeIndex'] == i]
-            for idx,inst in enumerate(instances):
-                #print(inst)
-                group=move_coll                            
-                if (group):
-                    groupname=move_coll.name
-                    #print('Group found for ',groupname)     
-                    new=bpy.data.collections.new(groupname)
-                    Sector_coll.children.link(new)
-                    new['nodeType']='worldEntityNode'
-                    new['debugName']=obj['name']
-                    new['entityTemplate']=spawndata
-                    new['appearanceName']=obj['app']
-                    
-                    pos,rot,scale=get_position(obj)
-                    new['ent_rot']=rot.to_euler('XYZ')
-                    new['ent_pos']=pos
-                    inst_trans_mat=Matrix.LocRotScale(pos,rot,scale)
-                    for child in group.children:
-                        newchild=bpy.data.collections.new(child.name)
-                        new.children.link(newchild)
-                        for old_obj in child.objects:                            
-                            obj=old_obj.copy()  
-                            obj.color = (0.567942, 0.0247339, 0.600028, 1)
-                            newchild.objects.link(obj)                                     
-                            obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
-                            if 'Armature' in obj.name:
-                                obj.hide_set(True)
-                    for old_obj in group.objects:                            
+            group=move_coll                            
+            if (group):
+                groupname=move_coll.name
+                #print('Group found for ',groupname)     
+                new=bpy.data.collections.new(groupname)
+                parent_coll.children.link(new)
+                new['nodeType']='worldEntityNode'
+                new['debugName']=obj['name']
+                new['entityTemplate']=spawndata
+                new['appearanceName']=obj['spawnable']['app']
+                
+                pos,rot,scale=get_position(obj)
+                rot=rot.to_quaternion()
+                new['ent_rot']=rot
+                new['ent_pos']=pos
+                inst_trans_mat=Matrix.LocRotScale(pos,rot,scale)
+                for child in group.children:
+                    newchild=bpy.data.collections.new(child.name)
+                    new.children.link(newchild)
+                    for old_obj in child.objects:                            
                         obj=old_obj.copy()  
                         obj.color = (0.567942, 0.0247339, 0.600028, 1)
-                        new.objects.link(obj)                                     
+                        newchild.objects.link(obj)                                     
                         obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
                         if 'Armature' in obj.name:
                             obj.hide_set(True)
-                    if len(group.all_objects)>0:
-                        new['matrix']=group.all_objects[0].matrix_world
+                for old_obj in group.objects:                            
+                    obj=old_obj.copy()  
+                    obj.color = (0.567942, 0.0247339, 0.600028, 1)
+                    new.objects.link(obj)                                     
+                    obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
+                    if 'Armature' in obj.name:
+                        obj.hide_set(True)
+                if len(group.all_objects)>0:
+                    new['matrix']=group.all_objects[0].matrix_world
+    elif spawntype=='Decals':  
+        vert = [(-0.5, -0.5, 0.0), (0.5, -0.5, 0.0), (-0.5, 0.5, 0.0), (0.5,0.5, 0.0)]
+        fac = [(0, 1, 3, 2)]
+        pl_data = bpy.data.meshes.new("PL")
+        pl_data.from_pydata(vert, [], fac)
+        pl_data.uv_layers.new(name="UVMap")
         
+        o = bpy.data.objects.new("Decal_Plane", pl_data)
+        o['nodeType']='worldStaticDecalNode'
+        o['decal']=spawndata
+        o['debugName']=obj['name']
+        o['horizontalFlip']=obj['spawnable']['horizontalFlip']
+        o['verticalFlip']=obj['spawnable']['verticalFlip']
+        o['alpha']=obj['spawnable']['alpha']
+        o['appearanceName']=obj['spawnable']['app']
+
+        parent_coll.objects.link(o)
+        pos,rot,scale=get_position(obj)
+        o.location = pos
+        o.rotation_mode = 'XYZ'
+        o.rotation_euler = rot
+        o.scale = scale  
                 
 if "MasterInstances" not in coll_scene.children.keys():
     coll_target=bpy.data.collections.new("MasterInstances")
