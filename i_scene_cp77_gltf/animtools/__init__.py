@@ -9,7 +9,7 @@ from ..icons.cp77_icons import get_icon
 from ..main.common import get_classes
 from ..importers.import_with_materials import CP77GLBimport
 from .animtools import *
-
+from .generate_rigs import create_rigify_rig
 
 def CP77AnimsList(self, context):
     for action in bpy.data.actions:
@@ -51,15 +51,13 @@ class CP77_PT_AnimsPanel(Panel):
             row.operator('cp77.rig_loader', text="Load Bundled Rig")
             obj = context.active_object
             if obj and obj.type == 'ARMATURE':
-                row = box.row(align=True)
+                col = box.column()
                 if 'deformBonesHidden' in obj:
-                    row.operator('bone_unhider.cp77',text='Unhide Deform Bones')
+                    col.operator('bone_unhider.cp77',text='Unhide Deform Bones')
                 else:
-                    row.operator('bone_hider.cp77',text='Hide Deform Bones')
-                row = box.row()
-                row.operator('reset_armature.cp77')
-                row = box.row()
-                row.operator('cp77.anim_namer')
+                    col.operator('bone_hider.cp77',text='Hide Deform Bones')
+                col.operator('reset_armature.cp77')
+                col.operator('cp77.anim_namer')
                 available_anims = list(CP77AnimsList(context,obj))
                 active_action = obj.animation_data.action if obj.animation_data else None
                 if not available_anims:
@@ -298,6 +296,7 @@ class CP77RigLoader(Operator):
     appearances: StringProperty(name="Appearances", default="")
     directory: StringProperty(name="Directory", default="")
     filepath: StringProperty(name="Filepath", default="")
+    rigify_it: BoolProperty(name='Apply Rigify Rig', default=False)
     
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
@@ -315,7 +314,10 @@ class CP77RigLoader(Operator):
                           filepath=selected_rig, hide_armatures=False, import_garmentsupport=False, files=[], directory='', appearances="ALL", remap_depot=False)
             if props.fbx_rot:
                 rotate_quat_180(self,context)
+            if self.rigify_it:
+                create_rigify_rig(self,context)
         return {'FINISHED'}
+        
     def draw(self,context):
         props = context.scene.cp77_panel_props
         layout = self.layout
@@ -323,8 +325,9 @@ class CP77RigLoader(Operator):
         row = box.row(align=True)
         row.label(text="Select rig to load: ")
         row.prop(props, 'body_list', text="",)
-        row = box.row(align=True)
-        row.prop(props, 'fbx_rot', text="Load Rig in FBX Orientation")
+        col = box.column()
+        col.prop(self, 'rigify_it', text="Generate Rigify Control Rig")
+        col.prop(props, 'fbx_rot', text="Load Rig in FBX Orientation")
 
 
 class CP77AnimNamer(Operator):

@@ -256,7 +256,7 @@ def get_tan_pos(inst):
         pos[1][2] = inst['Elements'][1]['Z'] 
     return pos
 
-def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_modding=False,with_lights=True ):
+def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding, with_lights):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     if not cp77_addon_prefs.non_verbose:
         print('')
@@ -422,9 +422,8 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
         if VERBOSE:
             print(projectjson)
             print(filepath)
-
-        t, nodes = jsonload(filepath)
         # add nodeDataIndex props to all the nodes in t
+        t, nodes = jsonload(filepath)
         for index, obj in enumerate(t):
             obj['nodeDataIndex']=index
 
@@ -845,7 +844,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                                         bpymat = mis[mipath]
                                     else:
                                         builder = MaterialBuilder(obj,path,'png',path)
-                                        bpymat = builder.create(index)
+                                        bpymat = builder.createdecal(index)
                                         mis[mipath] = bpymat
                                     if bpymat:
                                         o.data.materials.append(bpymat)

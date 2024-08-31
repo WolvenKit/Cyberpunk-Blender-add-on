@@ -1,4 +1,3 @@
-import zipfile
 import bpy
 import json
 import os
@@ -6,7 +5,7 @@ from .verttools import *
 from ..cyber_props import *
 from ..main.common import  show_message
 from ..main.bartmoss_functions import setActiveShapeKey, getShapeKeyNames, getModNames
-   
+from ..jsontool import *
 def CP77SubPrep(self, context, smooth_factor, merge_distance):
     scn = context.scene
     obj = context.object
@@ -188,15 +187,17 @@ def CP77RefitChecker(self, context):
     scene = context.scene
     objects = scene.objects
     refitter = []
-
+    addon = []
     for obj in objects:
         if obj.type =='LATTICE':
             if "refitter_type" in obj:
                 refitter.append(obj)
                 print('refitters found in scene:', refitter)
-
-    print('refitter result:', refitter)
-    return refitter
+            if "refitter_addon" in obj:
+                addon.append(obj)
+                print('refitter addons found in scene:', addon)
+    print(f'refitter result: {refitter} refitter addon: {addon}')
+    return refitter, addon
 
 def applyModifierAsShapeKey(obj):
     names = getModNames(obj)
@@ -239,21 +240,26 @@ def applyRefitter(obj):
             newgs = setActiveShapeKey(obj, name)
             newgs.name = 'GarmentSupport'
     
-def CP77Refit(context, refitter, target_body_path, target_body_name, fbx_rot):
-    selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
-    scene = context.scene
+def CP77Refit(context, refitter, addon, target_body_path, target_body_name, useAddon, addon_target_body_path, addon_target_body_name, fbx_rot):
     obj = context.object
-    current_mode = context.mode
     if not obj:
         show_message("No active object. Please Select a Mesh and try again")
         return {'CANCELLED'} 
     if obj.type != 'MESH':
         show_message("The active object is not a mesh.")
         return {'CANCELLED'}
+    else:
+        autofitter(context, refitter, addon, target_body_path, useAddon, addon_target_body_path, addon_target_body_name, target_body_name, fbx_rot)
+
+def autofitter(context, refitter, addon, target_body_path, target_body_name, useAddon, addon_target_body_path, addon_target_body_name, fbx_rot):
+    selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
+    scene = context.scene
+    current_mode = context.mode
     refitter_obj = None
+    addon_obj = None
     r_c = None
     print(fbx_rot)
-    print(refitter)
+    print(refitter, addon)
 
     if len(refitter) != 0:
         for obj in refitter:
@@ -261,24 +267,36 @@ def CP77Refit(context, refitter, target_body_path, target_body_name, fbx_rot):
             if obj['refitter_type'] == target_body_name:
                 print(obj['refitter_type'], 'refitter found')
                 refitter_obj = obj
-            
         if refitter_obj:
             print('theres a refitter:', refitter_obj.name, 'type:', refitter_obj['refitter_type'])
             for mesh in selected_meshes:
-                print('checking for refits:', mesh.name)
+                print('Checking mesh for refits:', mesh.name)
                 refit = False
                 for modifier in mesh.modifiers:
                     if modifier.type == 'LATTICE' and modifier.object == refitter_obj:
                         refit = True
                         print(mesh.name, 'is already refit for', target_body_name)
+        applyRefitter(mesh)
+    if len(addon) != 0:
+        for obj in addon:
+            print('addon object:', obj.name)
+            if obj['refitter_addon_type'] == addon_target_body_name:
+                print(obj['refitter_addon_type'], 'refitter addon found')
+                addon_obj = obj         
 
+        if addon_obj:
+            print('theres a refitter addon:', addon_obj.name, 'type:', addon_obj['refitter_addon_type'])
+            for mesh in selected_meshes:
+                print('Checking mesh for refit addons:', mesh.name)
+                refit = False
+                for modifier in mesh.modifiers:
+                    if modifier.type == 'LATTICE' and modifier.object == addon_obj:
+                        refit = True
+                        print(mesh.name, 'is already refit for', addon_target_body_name)
                 if not refit:
                     print('refitting:', mesh.name, 'to:', target_body_name)
-                    lattice_modifier = mesh.modifiers.new(refitter_obj.name, 'LATTICE')
-                    lattice_modifier.object = refitter_obj
-                    applyRefitter(mesh)
-            return{'FINISHED'}    
-        
+                    lattice_modifier = mesh.modifiers.new(addon_obj.name, 'LATTICE')
+                    lattice_modifier.object = addon_obj 
 
     for collection in scene.collection.children:
         if collection.name == 'Refitters':
@@ -289,58 +307,57 @@ def CP77Refit(context, refitter, target_body_path, target_body_name, fbx_rot):
         scene.collection.children.link(r_c)
 
     # Get the JSON file path for the selected target_body
-    with zipfile.ZipFile(target_body_path, "r") as z:
-        filename=z.namelist()[0]
-        print(filename)
-        with z.open(filename) as f:
-            data = f.read()
-            data = json.loads(data)
+    lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w  = jsonload(target_body_path)
+    new_lattice = setup_lattice(r_c, fbx_rot, lattice_object_name, target_body_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale,lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w)
 
-        if data:
-            control_points = data.get("deformed_control_points", [])
+    for mesh in selected_meshes:
+        lattice_modifier = mesh.modifiers.new(new_lattice.name,'LATTICE')
+        print(f'refitting: {mesh.name} to: {new_lattice["refitter_type"]}')
 
+        if useAddon:
+            lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w  = jsonload(addon_target_body_path)
+            new_lattice = setup_lattice(r_c, fbx_rot, lattice_object_name, addon_target_body_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale,lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w)
+            lattice_modifier.object = new_lattice
+
+        applyRefitter(mesh)
             # Create a new lattice object
-            bpy.ops.object.add(type='LATTICE', enter_editmode=False, location=(0, 0, 0))
-            new_lattice = bpy.context.object
-            new_lattice.name = data.get("lattice_object_name", "NewLattice")
-            new_lattice["refitter_type"] = target_body_name
-            lattice = new_lattice.data
-            r_c.objects.link(new_lattice)
-            bpy.context.collection.objects.unlink(new_lattice)
-                  
-            # Set the dimensions of the lattice
-            lattice.points_u = data["lattice_points"][0]
-            lattice.points_v = data["lattice_points"][1]
-            lattice.points_w = data["lattice_points"][2]
-            new_lattice.location[0] = data["lattice_object_location"][0]
-            new_lattice.location[1] = data["lattice_object_location"][1]
-            new_lattice.location[2] = data["lattice_object_location"][2]
-            if fbx_rot:
-            # Rotate the Z-axis by 180 degrees (pi radians)
-                new_lattice.rotation_euler = (data["lattice_object_rotation"][0], data["lattice_object_rotation"][1], data["lattice_object_rotation"][2] + 3.14159)
-            else:
-                new_lattice.rotation_euler = (data["lattice_object_rotation"][0], data["lattice_object_rotation"][1], data["lattice_object_rotation"][2])
-            new_lattice.scale[0] = data["lattice_object_scale"][0]
-            new_lattice.scale[1] = data["lattice_object_scale"][1]
-            new_lattice.scale[2] = data["lattice_object_scale"][2]
             
-            # Set interpolation types
-            lattice.interpolation_type_u = data.get("lattice_interpolation_u", 'KEY_BSPLINE')
-            lattice.interpolation_type_v = data.get("lattice_interpolation_v", 'KEY_BSPLINE')
-            lattice.interpolation_type_w = data.get("lattice_interpolation_w", 'KEY_BSPLINE')
-                
-            # Create a flat list of lattice points
-            lattice_points = lattice.points
-            flat_lattice_points = [lattice_points[w + v * lattice.points_u + u * lattice.points_u * lattice.points_v] for u in range(lattice.points_u) for v in range(lattice.points_v) for w in range(lattice.points_w)]
-        
-            for control_point, lattice_point in zip(control_points, flat_lattice_points):
-                lattice_point.co_deform = control_point
-                
-            if new_lattice:
-                bpy.context.object.hide_viewport = True
+def setup_lattice(r_c, fbx_rot, lattice_object_name, target_body_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale,lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w):
+    bpy.ops.object.add(type='LATTICE', enter_editmode=False, location=(0, 0, 0))
+    new_lattice = bpy.context.object
+    new_lattice.name = lattice_object_name
+    new_lattice["refitter_type"] = target_body_name
+    lattice = new_lattice.data
+    r_c.objects.link(new_lattice)
+    bpy.context.collection.objects.unlink(new_lattice)
+          
+    # Set the dimensions of the lattice
+    lattice.points_u = lattice_points[0]
+    lattice.points_v = lattice_points[1]
+    lattice.points_w = lattice_points[2]
+    new_lattice.location[0] = lattice_object_location[0]
+    new_lattice.location[1] = lattice_object_location[1]
+    new_lattice.location[2] = lattice_object_location[2]
+    if fbx_rot:
+    # Rotate the Z-axis by 180 degrees (pi radians)
+        new_lattice.rotation_euler = (lattice_object_rotation[0], lattice_object_rotation[1],lattice_object_rotation[2] + 3.14159)
+    else:
+        new_lattice.rotation_euler = (lattice_object_rotation[0], lattice_object_rotation[1],lattice_object_rotation[2])
+    new_lattice.scale[0] = lattice_object_scale[0]
+    new_lattice.scale[1] = lattice_object_scale[1]
+    new_lattice.scale[2] = lattice_object_scale[2]
     
-            for mesh in selected_meshes:
-                lattice_modifier = mesh.modifiers.new(new_lattice.name,'LATTICE')
-                print('refitting:', mesh.name, 'to:', new_lattice["refitter_type"])
-                lattice_modifier.object = new_lattice
-                applyRefitter(mesh)
+    # Set interpolation types
+    lattice.interpolation_type_u = lattice_interpolation_u
+    lattice.interpolation_type_v = lattice_interpolation_v
+    lattice.interpolation_type_w = lattice_interpolation_w
+        
+    # Create a flat list of lattice points
+    flat_lattice_points = [lattice_points[w + v * lattice.points_u + u * lattice.points_u * lattice.points_v] for u in range(lattice.points_u) for v in range(lattice.points_v) for w in range(lattice.points_w)]
+   
+    for control_point, lattice_point in control_points, flat_lattice_points:
+        lattice_point.co_deform = control_point
+        
+    if new_lattice:
+        bpy.context.object.hide_viewport = True
+    return new_lattice
