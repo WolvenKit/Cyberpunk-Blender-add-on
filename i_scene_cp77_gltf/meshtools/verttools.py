@@ -86,7 +86,7 @@ def CP77GroupUngroupedVerts(self, context):
                 print(e)
     return {'FINISHED'}
 
-def trans_weights(self, context):
+def trans_weights(self, context, vertInterop):
     current_mode = context.mode
     props = context.scene.cp77_panel_props
     source_mesh = bpy.data.collections.get(props.mesh_source)

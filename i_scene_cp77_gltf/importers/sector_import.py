@@ -244,7 +244,7 @@ def get_tan_pos(inst):
         pos[1][2] = inst['Elements'][1]['Z'] 
     return pos
 
-def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_modding=False,with_lights=True ):
+def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding, with_lights):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     if not cp77_addon_prefs.non_verbose:
         print('')
@@ -267,7 +267,6 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                         s.clip_end = 50000
 
     jsonpath = glob.glob(os.path.join(path, "**", "*.streamingsector.json"), recursive = True)
-    print(jsonpath)
     meshes=[]
     C = bpy.context
     # Use object wireframe colors not theme - doesnt work need to find hte viewport as the context doesnt return that for this call 
@@ -277,11 +276,8 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
             continue
         if VERBOSE:
             print(os.path.join(path,os.path.basename(project)+'.streamingsector.json'))
-            print(filepath)
-        j = jsonload(filepath)
+        t, nodes = jsonload(filepath)
         sectorName=os.path.basename(filepath)[:-5]
-        t=j['Data']['RootChunk']['nodeData']['Data']
-        nodes = j["Data"]["RootChunk"]["nodes"]
         #print(len(nodes))
         #nodes=[]
         for i,e in enumerate(nodes):
@@ -399,10 +395,8 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
         if VERBOSE:
             print(projectjson)
             print(filepath)
-        j=jsonload(filepath) 
-          
-        t=j['Data']['RootChunk']['nodeData']['Data']
         # add nodeDataIndex props to all the nodes in t
+        t, nodes = jsonload(filepath)
         for index, obj in enumerate(t):
             obj['nodeDataIndex']=index
 
@@ -424,7 +418,6 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                 Sector_additions_coll=bpy.data.collections.new(sectorName+'_new')
                 coll_scene.children.link(Sector_additions_coll)       
 
-        nodes = j["Data"]["RootChunk"]["nodes"]
         print(fpn, ' Processing ',len(nodes),' nodes for sector', sectorName)
         group=''
         for i,e in enumerate(nodes):
@@ -803,7 +796,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions=False, am_m
                                         bpymat = mis[mipath]
                                     else:
                                         builder = MaterialBuilder(obj,path,'png',path)
-                                        bpymat = builder.create(index)
+                                        bpymat = builder.createdecal(index)
                                         mis[mipath] = bpymat
                                     if bpymat:
                                         o.data.materials.append(bpymat)
