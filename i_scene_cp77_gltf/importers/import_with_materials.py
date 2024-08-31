@@ -40,7 +40,7 @@ imported = None
 appearances = None
 collection = None
 
-def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, image_format='png', filepath='', hide_armatures=True,  import_garmentsupport=False, files=[], directory='', appearances=[]):
+def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, image_format='png', filepath='', hide_armatures=True, import_garmentsupport=False, files=[], directory='', appearances=[]):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     context=bpy.context
    # obj = None
@@ -136,9 +136,6 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
                 if name not in existingMaterials:
                     bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
 
-        if import_garmentsupport:
-            manage_garment_support(existingMeshes, gltf_importer)
-
         #Kwek: Gate this--do the block iff corresponding Material.json exist
         #Kwek: was tempted to do a try-catch, but that is just La-Z
         #Kwek: Added another gate for materials
@@ -152,6 +149,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
                 DepotPath, json_apps, mats = jsonload(matjsonpath)
         if DepotPath == None:
             break
+
         #DepotPath = str(obj["MaterialRepo"])  + "\\"
         context=bpy.context
         if remap_depot and os.path.exists(context.preferences.addons[__name__.split('.')[0]].preferences.depotfolder_path):
@@ -168,10 +166,15 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
         #appearances = ({'name':'short_hair'},{'name':'02_ca_limestone'},{'name':'ml_plastic_doll'},{'name':'03_ca_senna'})
         #if appearances defined populate valid mats with the mats for them, otherwise populate with everything used.
         if len(appearances)>0 and 'ALL' not in appearances:
-            for key in json_apps.keys():
-                if key in  appearances:
-                    for m in json_apps[key]:
-                        validmats[m]=True
+            if 'Default' in appearances:
+                first_key = next(iter(json_apps))
+                for m in json_apps[first_key]:
+                    validmats[m] = True
+            else:
+                for key in json_apps.keys():
+                    if key in appearances:
+                        for m in json_apps[key]:
+                            validmats[m]=True
         # there isnt always a default, so if none were listed, or ALL was used, or an invalid one add everything.
         if len(validmats)==0:
             for key in json_apps.keys():
@@ -179,6 +182,10 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
                     validmats[m]=True
         if with_materials:
             import_mats(current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmats)
+
+        if import_garmentsupport:
+            manage_garment_support(existingMeshes, gltf_importer)
+
    
     if not cp77_addon_prefs.non_verbose:
         print(f"GLB Import Time: {(time.time() - start_time)} Seconds")
@@ -312,6 +319,7 @@ def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o):
     meshes = gltf_importer.data.meshes
     if animations:
         get_anim_info(animations)
+        bpy.context.scene.render.fps = 30
         if meshes and "Icosphere" not in mesh.name:
             if 'Armature' in o.name:
                 o.hide_set(hide_armatures)

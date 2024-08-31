@@ -21,10 +21,10 @@ class CP77StreamingSectorExport(Operator,ExportHelper):
     bl_idname = "export_scene.cp77_sector"
     bl_label = "Export Sector Updates for Cyberpunk"
     bl_options = {'REGISTER','UNDO'}
-    bl_description = "Export changes to Sectors back to project" 
+    bl_description = "Export changes to Sectors back to project"
     filename_ext = ".cpmodproj"
     filter_glob: StringProperty(default="*.cpmodproj", options={'HIDDEN'})
-    
+
     def draw(self, context):
         props = context.scene.cp77_panel_props
         layout = self.layout
@@ -44,7 +44,7 @@ class CP77GLBExport(Operator,ExportHelper):
     bl_description = "Export to GLB with optimized settings for use with Wolvenkit for Cyberpunk 2077" 
     filename_ext = ".glb"
     ### adds a checkbox for anim export settings
-    
+
     filter_glob: StringProperty(default="*.glb", options={'HIDDEN'})
 
     filepath: StringProperty(subtype="FILE_PATH")
@@ -54,7 +54,7 @@ class CP77GLBExport(Operator,ExportHelper):
         default=True,
         description="Only Export the Selected Meshes. This is probably the setting you want to use"
     )
-    
+
     static_prop: BoolProperty(
         name="Export as Static Prop",
         default=False,
@@ -94,15 +94,16 @@ class CP77GLBExport(Operator,ExportHelper):
                 row.prop(self, "static_prop")
             row = layout.row(align=True)
             row.prop(self, "apply_transform")
-    
+
+
     def execute(self, context):
         export_cyberpunk_glb(
-            context=context, 
-            filepath=self.filepath, 
-            export_poses=self.export_poses, 
-            export_visible=self.export_visible, 
-            limit_selected=self.limit_selected, 
-            static_prop=self.static_prop, 
+            context=context,
+            filepath=self.filepath,
+            export_poses=self.export_poses,
+            export_visible=self.export_visible,
+            limit_selected=self.limit_selected,
+            static_prop=self.static_prop,
             apply_transform=self.apply_transform,
         )
         return {'FINISHED'}
@@ -128,7 +129,7 @@ class CP77MlSetupExport(Operator):
     bl_description = "EXPERIMENTAL: Export material changes to mlsetup files" 
 
     filepath: StringProperty(subtype="FILE_PATH")
-  
+
     def execute(self, context):
         cp77_mlsetup_export(self, context)
         return {"FINISHED"}
