@@ -57,7 +57,7 @@ You can find detailed documentation (and much else) on the [Cyberpunk 2077 moddi
 - [Hair profiles](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#hair-profiles-.hp): export custom hair profiles to `.hp.json` for easy import with Wolvenkit.  
 *The .hp.json will be named after the material in blender and will be automatically deposited in the raw folder of the project that the hair mesh was exported from. The material name in blender must end with _cards to match the setup of imported vanilla hair profiles (_cards will not be part of the .hp.json export)*
 - .mlsetup (experimental/WIP): After activating this feature in the plugin's preferences, write changes back to .mlsetup files. This feature is currently in development.
-*For in-depth editing of .mlsetup files, you should use Neurolinked's fantastic [MlSetup builder}(https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/mlsetup-builder) software.*
+*For in-depth editing of .mlsetup files, you should use Neurolinked's fantastic [MlSetup builder](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/mlsetup-builder) software.*
 
 ---
 
