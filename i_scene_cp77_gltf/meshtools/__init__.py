@@ -51,7 +51,7 @@ class CP77_PT_MeshTools(Panel):
                 col = box.column()
                 col.operator("cp77.submesh_prep")
                 col.operator("cp77.group_verts", text="Group Ungrouped Verts")
-                col.operator('object.delete_unused_vgroups', text="Delete Unused Vert Groups")
+                col.operator("cp77.del_empty_vgroup", text="Delete Unused Vert Groups")
                 
                 box = layout.box()
                 box.label(text="AKL Autofitter", icon_value=get_icon("REFIT"))
@@ -160,7 +160,7 @@ class CP77WeightTransfer(Operator):
 
     def execute(self, context):
         # Call the trans_weights function with the provided arguments
-        result = trans_weights(self, context)
+        result = trans_weights(self, context, vertInterop, bySubmesh)
         return {"FINISHED"}
         
     def draw(self,context):
@@ -263,6 +263,17 @@ class CP77GroupVerts(Operator):
     def execute(self, context):
         CP77GroupUngroupedVerts(self, context)
         return {'FINISHED'}
+        
+class CP77DeleteVertGroups(Operator):
+    bl_idname = "cp77.del_empty_vgroup"
+    bl_parent_id = "CP77_PT_MeshTools"
+    bl_label = "Delete Unused Vertex Groups"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Assign ungrouped vertices to their nearest group" 
+
+    def execute(self, context):
+        del_empty_vgroup(self, context)
+        return {'FINISHED'}
 
 class CP77Autofitter(Operator):
     bl_idname = "cp77.auto_fitter"
@@ -282,12 +293,20 @@ class CP77Autofitter(Operator):
     def execute(self, context):
         props = context.scene.cp77_panel_props
         target_body_name = props.refit_json
+        addon_target_body_name = props.refit_addon_json
         target_body_paths, target_body_names = CP77RefitList(context)
-        refitter = CP77RefitChecker(self, context)  
+        addon_target_body_paths, addon_target_body_names = CP77RefitAddonList(context)
+        refitter, addon = CP77RefitChecker(self, context)  
 
         if target_body_name in target_body_names:          
             target_body_path = target_body_paths[target_body_names.index(target_body_name)]
-            CP77Refit(context, refitter, target_body_path, target_body_name, props.fbx_rot)
+            if self.useAddon:
+                if addon_target_body_name in addon_target_body_names:
+                    addon_target_body_path = addon_target_body_paths[addon_target_body_path.index(addon_target_body_name)]
+            else:
+                addon_target_body_path = None
+                addon_target_body_name = None
+            CP77Refit(context, refitter, addon, target_body_path, target_body_name, addon_target_body_path, addon_target_body_name,self.useAddon, props.fbx_rot)
 
             return {'FINISHED'}
             
@@ -302,7 +321,7 @@ class CP77Autofitter(Operator):
             row = layout.row(align=True)
             split = row.split(factor=0.2,align=True)
             split.label(text="Addon:")
-            split.prop(props, 'refit_json', text="")
+            split.prop(props, 'refit_addon_json', text="")
         col = layout.column()
         col.prop(props, 'fbx_rot', text="Refit a mesh in FBX orientation")
         col.prop(self, 'useAddon', text="Use a Refitter Addon")
