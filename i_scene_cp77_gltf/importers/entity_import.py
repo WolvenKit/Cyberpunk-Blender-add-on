@@ -349,6 +349,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                     y=None
                                     z=None
                                     bindname=None
+                                    bindpt=None
                                     pt_trans=[0,0,0]
                                     pt_rot=[0,0,0,0]
                                     pt_eul=None
