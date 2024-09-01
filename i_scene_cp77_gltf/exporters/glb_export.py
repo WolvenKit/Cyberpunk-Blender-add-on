@@ -28,10 +28,12 @@ def default_cp77_options():
                 "export_shared_accessors": True,
                 "export_try_omit_sparse_sk": False,
             })
+
         return options
 
 #make sure meshes are exported with tangents, morphs and vertex colors
 def cp77_mesh_options():
+    vers=bpy.app.version
     options = {
         'export_animations': False,
         'export_tangents': True,
@@ -39,19 +41,31 @@ def cp77_mesh_options():
         'export_morph_tangent': True,
         'export_morph_normal': True,
         'export_morph': True,
-        'export_colors': True,
         'export_attributes': True,
     }
+
+    if vers[0] < 4:
+        options.update({
+             'export_colors': True,
+
+        })
+
+        if vers[1] >= 2:
+            options.update({
+                "export_all_vertex_colors ": True,
+                "export_active_vertex_color_when_no_material": True,
+            })
     return options
 
 #the options for anims
 def pose_export_options():
+    vers=bpy.app.version
     options = {
         'export_animations': True,
         'export_anim_slide_to_zero': True,
         'export_animation_mode': 'ACTIONS',
         'export_anim_single_armature': True,
-        "export_bake_animation": True
+        "export_bake_animation": False
     }
     return options
 
@@ -101,14 +115,14 @@ def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=F
 
     objects = context.selected_objects
     options = default_cp77_options()
-    
+
     #if for photomode, make sure there's an armature selected, if not use the message box to show an error
     if export_poses:
         armatures = [obj for obj in objects if obj.type == 'ARMATURE']
         if not armatures:
             show_message("No armature objects are selected, please select an armature")
             return {'CANCELLED'}
-        
+
         export_anims(context, filepath, options, armatures)
         return{'FINISHED'}
 
@@ -148,7 +162,7 @@ def export_anims(context, filepath, options, armatures):
             action["fallbackFrameIndices"] = []
         if "optimizationHints" not in action:
             action["optimizationHints"] = { "preferSIMD": False, "maxRotationCompression": 1}
-        
+
     options.update(pose_export_options())
     for armature in armatures:
         reset_armature(armature, context)
@@ -190,7 +204,7 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
                 bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)
                 show_message("All faces must be triangulated before exporting. Untriangulated faces have been selected for you. See https://tinyurl.com/triangulate-faces")
                 return {'CANCELLED'}
-            
+
         if red_garment_col:
             add_garment_cap(mesh)
 
@@ -217,7 +231,7 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
             if not armature_modifier:
                 show_message((f"Armature missing from: {mesh.name} Armatures are required for movement. If this is intentional, try 'export as static prop'. See https://tinyurl.com/armature-missing"))
                 return {'CANCELLED'}
-            
+
             armature = armature_modifier.object
 
             # Make necessary to armature visibility and selection state for export
@@ -237,7 +251,7 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
                     group_has_bone[group.index] = True
                     # print(vertex_group.name)
 
-                # Add groups with no weights to the set
+            # Add groups with no weights to the set
             for group_index, has_bone in group_has_bone.items():
                 if not has_bone:
                     groupless_bones.add(mesh.vertex_groups[group_index].name)
@@ -276,7 +290,7 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
                      armature.hide_set(True)
             except Exception as e:
                 print(e)
-                
+
 # def ExportAll(self, context):
 #     #Iterate through all objects in the scene
 def ExportAll(self, context):

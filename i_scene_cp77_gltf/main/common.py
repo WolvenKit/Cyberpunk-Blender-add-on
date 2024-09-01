@@ -2,6 +2,7 @@ import sys
 import bpy
 import os
 import math
+import zipfile
 from bpy.types import EnumProperty
 from mathutils import Color
 import pkg_resources
@@ -9,6 +10,14 @@ import bmesh
 import inspect
 from mathutils import Vector
 import json
+
+def load_zip(path):
+    with zipfile.ZipFile(path, "r") as z:
+        filename=z.namelist()[0]
+        print(filename)
+        with z.open(filename) as f:
+            data = f.read()
+    return data
 
 # Function to dynamically gather classes defined in the same file
 def get_classes(module):

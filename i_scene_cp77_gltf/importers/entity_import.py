@@ -33,8 +33,9 @@ def create_axes(ent_coll,name):
 # if you've already imported the body/head and set the rig up you can exclude them by putting them in the exclude_meshes list 
 #presto_stash=[]
 
-def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=True, include_collisions=False, include_phys=False, include_entCollider=False, inColl='', remapdepot=False): 
+def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], include_collisions=False, include_phys=False, include_entCollider=False, inColl='', remapdepot=False): 
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
+    with_materials = with_materials
     if not cp77_addon_prefs.non_verbose:
         print('')
         print('-------------------- Importing Cyberpunk 2077 Entity --------------------')
@@ -50,15 +51,12 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     if not cp77_addon_prefs.non_verbose: 
         print(f"Importing appearance: {', '.join(appearances)} from entity: {ent_name}")
     if filepath is not None:
-       j=jsonload(filepath)
+        ent_apps, ent_components, ent_component_data, res, ent_default =jsonload(filepath)
     
-    ent_apps= j['Data']['RootChunk']['appearances']
     ent_applist=[]
     for app in ent_apps:
         ent_applist.append(app['appearanceName']['$value'])
     #print(ent_applist)
-    ent_components= j['Data']['RootChunk']['components']
-    ent_component_data= j['Data']['RootChunk']['compiledData']['Data']['Chunks']
     #presto_stash.append(ent_components)    
     ent_complist=[]
     ent_rigs=[]
@@ -82,7 +80,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
     #    presto_stash.append(ent_rigs)
                 
     resolved=[]
-    for res_p in j['Data']['RootChunk']['resolvedDependencies']:
+    for res_p in res:
         resolved.append(os.path.join(path,res_p['DepotPath']['$value']))
         
     # if no apps requested populate the list with all available.
@@ -94,7 +92,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
             appearances.append('BASE_COMPONENTS_ONLY')
 
     VS=[]
-    for x in j['Data']['RootChunk']['components']:
+    for x in ent_components:
         if 'name' in x.keys() and x['name']['$value']=='vehicle_slots':
             VS.append(x)
     if len(VS)>0:
@@ -137,7 +135,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                            # presto_stash.append(animsinres)
             
             if len(animsinres)>0:
-                bpy.ops.io_scene_gltf.cp77(filepath=animsinres[0])
+                bpy.ops.io_scene_gltf.cp77(with_materials, filepath=animsinres[0])
                 #find what we just loaded
                 arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
                 rig=arms[0]
@@ -223,7 +221,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                             app_name=a['appearanceName']['$value']
 
                 if ent_app_idx<0 and app_name =='default':
-                    ent_default=j['Data']['RootChunk']['defaultAppearance']['$value']
+                    #ent_default=j['Data']['RootChunk']['defaultAppearance']['$value']
                     for i,a in enumerate(ent_apps):
                         if a['name']['$value']==ent_default:
                             print('appearance matched, id = ',i)
@@ -262,12 +260,12 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                     else:
                         print('app file not found -', filepath)
             else:
-                if j['Data']['RootChunk']['compiledData']['Data']['Chunks']:
-                    chunks= j['Data']['RootChunk']['compiledData']['Data']['Chunks']
+                if ent_component_data:
+                    chunks= ent_component_data
 
             if len(comps)==0:      
                 print('falling back to rootchunk comps')
-                comps= j['Data']['RootChunk']['components']
+                comps= ent_components
 
             for c in comps:
                 if c['$type']=='gameTransformAnimatorComponent':
@@ -328,7 +326,7 @@ def importEnt( filepath='', appearances=[], exclude_meshes=[], with_materials=Tr
                                         meshApp=c['meshAppearance']['$value']
                                         #print(meshApp)
                                     try:
-                                        bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=meshApp)
+                                        bpy.ops.io_scene_gltf.cp77(with_materials, filepath=meshpath, appearances=meshApp)
                                         for obj in C.selected_objects:            
                                             obj['componentName'] = c['name']['$value']
                                             obj['sourcePath'] = meshpath

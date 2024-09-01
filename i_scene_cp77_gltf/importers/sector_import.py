@@ -244,7 +244,7 @@ def get_tan_pos(inst):
         pos[1][2] = inst['Elements'][1]['Z'] 
     return pos
 
-def importSectors( filepath='', want_collisions=False, am_modding=False, with_materials=True, remap_depot=False, with_lights=True ):
+def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding, with_lights):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     if not cp77_addon_prefs.non_verbose:
         print('')
@@ -267,7 +267,6 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                         s.clip_end = 50000
 
     jsonpath = glob.glob(os.path.join(path, "**", "*.streamingsector.json"), recursive = True)
-    print(jsonpath)
     meshes=[]
     C = bpy.context
     # Use object wireframe colors not theme - doesnt work need to find hte viewport as the context doesnt return that for this call 
@@ -277,11 +276,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
             continue
         if VERBOSE:
             print(os.path.join(path,os.path.basename(project)+'.streamingsector.json'))
-            print(filepath)
-        j = jsonload(filepath)
+        t, nodes = jsonload(filepath)
         sectorName=os.path.basename(filepath)[:-5]
-        t=j['Data']['RootChunk']['nodeData']['Data']
-        nodes = j["Data"]["RootChunk"]["nodes"]
         #print(len(nodes))
         #nodes=[]
         for i,e in enumerate(nodes):
@@ -368,7 +364,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                 groupname = groupname[:-1]
             if groupname not in Masters.children.keys() and os.path.exists(meshpath):
                 try:
-                    bpy.ops.io_scene_gltf.cp77(filepath=meshpath, appearances=impapps)
+                    bpy.ops.io_scene_gltf.cp77(with_mats, filepath=meshpath, appearances=impapps)
                     objs = C.selected_objects
                     move_coll= coll_scene.children.get( objs[0].users_collection[0].name )
                     coll_target.children.link(move_coll) 
@@ -399,10 +395,8 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
         if VERBOSE:
             print(projectjson)
             print(filepath)
-        j=jsonload(filepath) 
-          
-        t=j['Data']['RootChunk']['nodeData']['Data']
         # add nodeDataIndex props to all the nodes in t
+        t, nodes = jsonload(filepath)
         for index, obj in enumerate(t):
             obj['nodeDataIndex']=index
 
@@ -424,7 +418,6 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                 Sector_additions_coll=bpy.data.collections.new(sectorName+'_new')
                 coll_scene.children.link(Sector_additions_coll)       
 
-        nodes = j["Data"]["RootChunk"]["nodes"]
         print(fpn, ' Processing ',len(nodes),' nodes for sector', sectorName)
         group=''
         for i,e in enumerate(nodes):
@@ -450,7 +443,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                             try:
                                 #print('Importing ',entpath, ' using app ',app)
                                 incoll='MasterInstances'
-                                bpy.ops.io_scene_gltf.cp77entity(filepath=entpath, appearances=app, inColl=incoll)
+                                bpy.ops.io_scene_gltf.cp77entity(with_mats, filepath=entpath, appearances=app, inColl=incoll)
                                 move_coll=Masters.children.get(ent_groupname)
                                 imported=True
                             except:
@@ -790,7 +783,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
 
                             #o.empty_display_size = 0.002
                             #o.empty_display_type = 'IMAGE'
-                            if with_materials:
+                            if with_mats:
                                 mipath = o['decal']
                                 jsonpath = os.path.join(path,mipath)+".json"
                                 #print(jsonpath)
@@ -803,7 +796,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         bpymat = mis[mipath]
                                     else:
                                         builder = MaterialBuilder(obj,path,'png',path)
-                                        bpymat = builder.create(index)
+                                        bpymat = builder.createdecal(index)
                                         mis[mipath] = bpymat
                                     if bpymat:
                                         o.data.materials.append(bpymat)
@@ -864,7 +857,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                         # Roads all have stupid prx0 names so instancing by name wont work.
                                         imported=False
                                         try:                                   
-                                            bpy.ops.io_scene_gltf.cp77(filepath=meshpath, with_materials=True)
+                                            bpy.ops.io_scene_gltf.cp77(with_mats, filepath=meshpath)
                                             objs = C.selected_objects     
                                             groupname = objs[0].users_collection[0].name
                                             group= coll_scene.children.get( groupname )
@@ -955,7 +948,7 @@ def importSectors( filepath='', want_collisions=False, am_modding=False, with_ma
                                                 new['pivot']=inst['Pivot']
                                                 new['meshAppearance']=meshAppearance
 
-                                                print(new['nodeDataIndex'])
+                                                #print(new['nodeDataIndex'])
                                                 # Should do something with the Advertisements lightData  bits here 
 
                                                 for old_obj in group.all_objects:                            
@@ -1263,4 +1256,4 @@ if __name__ == "__main__":
 
     filepath = 'F:\\CPMod\\judysApt\\judysApt.cpmodproj'
 
-    importSectors( filepath, want_collisions=False, am_modding=False, with_materials=True )        
+    importSectors( filepath, with_mats=True, want_collisions=False, am_modding=False )        
