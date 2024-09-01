@@ -135,9 +135,10 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
                 if name not in existingMaterials:
                     bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
 
-        #Kwek: Gate this--do the block iff corresponding Material.json exist
+        #Kwek: Gate this--do the block if corresponding Material.json exist
         #Kwek: was tempted to do a try-catch, but that is just La-Z
         #Kwek: Added another gate for materials
+        DepotPath=None
         blender_4_scale_armature_bones()
         if ".anims.glb" in filepath:
             break
@@ -145,8 +146,9 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
             if with_materials==True and has_material_json:
                 matjsonpath = current_file_base_path + ".Material.json"
                 DepotPath, json_apps, mats = jsonload(matjsonpath)
-            if DepotPath == None:
-                break
+        if DepotPath == None:
+            print('DepotPath not set')
+            break
         #DepotPath = str(obj["MaterialRepo"])  + "\\"
         context=bpy.context
         if remap_depot and os.path.exists(context.preferences.addons[__name__.split('.')[0]].preferences.depotfolder_path):
