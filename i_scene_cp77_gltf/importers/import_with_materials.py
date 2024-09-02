@@ -46,6 +46,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
    # obj = None
     start_time = time.time()
     loadfiles=self.files
+    DepotPath=cp77_addon_prefs
     appearances=self.appearances.split(",")
     if not cp77_addon_prefs.non_verbose:
         if ".anims.glb" in self.filepath:
@@ -149,6 +150,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
         if DepotPath == None:
             print('DepotPath not set')
             break
+
         #DepotPath = str(obj["MaterialRepo"])  + "\\"
         context=bpy.context
         if remap_depot and os.path.exists(context.preferences.addons[__name__.split('.')[0]].preferences.depotfolder_path):
@@ -184,6 +186,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
 
         if import_garmentsupport:
             manage_garment_support(existingMeshes, gltf_importer)
+
    
     if not cp77_addon_prefs.non_verbose:
         print(f"GLB Import Time: {(time.time() - start_time)} Seconds")
