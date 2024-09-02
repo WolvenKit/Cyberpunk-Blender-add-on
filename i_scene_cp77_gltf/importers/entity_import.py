@@ -221,7 +221,6 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                             app_name=a['appearanceName']['$value']
 
                 if ent_app_idx<0 and app_name =='default':
-                    #ent_default=j['Data']['RootChunk']['defaultAppearance']['$value']
                     for i,a in enumerate(ent_apps):
                         if a['name']['$value']==ent_default:
                             print('appearance matched, id = ',i)

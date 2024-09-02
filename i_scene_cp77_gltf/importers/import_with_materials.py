@@ -46,6 +46,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
    # obj = None
     start_time = time.time()
     loadfiles=self.files
+    DepotPath=cp77_addon_prefs
     appearances=self.appearances.split(",")
     if not cp77_addon_prefs.non_verbose:
         if ".anims.glb" in self.filepath:
@@ -138,6 +139,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
         #Kwek: Gate this--do the block iff corresponding Material.json exist
         #Kwek: was tempted to do a try-catch, but that is just La-Z
         #Kwek: Added another gate for materials
+        DepotPath=None
         blender_4_scale_armature_bones()
         if ".anims.glb" in filepath:
             break
@@ -145,8 +147,9 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
             if with_materials==True and has_material_json:
                 matjsonpath = current_file_base_path + ".Material.json"
                 DepotPath, json_apps, mats = jsonload(matjsonpath)
-            if DepotPath == None:
-                break
+        if DepotPath == None:
+            break
+
         #DepotPath = str(obj["MaterialRepo"])  + "\\"
         context=bpy.context
         if remap_depot and os.path.exists(context.preferences.addons[__name__.split('.')[0]].preferences.depotfolder_path):
@@ -182,6 +185,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
 
         if import_garmentsupport:
             manage_garment_support(existingMeshes, gltf_importer)
+
    
     if not cp77_addon_prefs.non_verbose:
         print(f"GLB Import Time: {(time.time() - start_time)} Seconds")
