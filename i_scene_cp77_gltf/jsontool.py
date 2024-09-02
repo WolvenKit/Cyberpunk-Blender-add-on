@@ -75,6 +75,7 @@ def jsonload(filepath):
                     print(f"attempted import of invalid ent.json from: {filepath} this plugin requires jsons generated using the latest version of Wolvenkit")
                 show_message(f"attempted import of invalid ent.json: {base_name} this plugin requires jsons generated using the latest version of Wolvenkit")
                 return 'CANCELLED'
+
             ent_apps= data['Data']['RootChunk']['appearances']
             ent_components= data['Data']['RootChunk']['components']
             ent_component_data= data['Data']['RootChunk']['compiledData']['Data']['Chunks']
@@ -212,6 +213,7 @@ def jsonload(filepath):
                 if not cp77_addon_prefs.non_verbose:                
                     print(f"invalid cfoliage.json found at: {filepath} this plugin requires jsons generated with the latest version of Wolvenkit")
                 show_message(f"invalid cfoliage.json : {base_name} this plugin requires jsons generated with the latest version of Wolvenkit")
+
             return data
         case _ if base_name.endswith('.refitter.zip'):
             if not cp77_addon_prefs.non_verbose:
