@@ -248,87 +248,87 @@ for filepath in jsonpath:
                             ColInfo.append([meshname,loc,rot])
         except:
             print('bob')
-    
-    for col in ColInfo:
-        colname=col[0]
-        colloc=col[1]
-        match=None
-        matches=[x for x in MeshInfo if points_within_tol(colloc,x[1],tolerance=0.1)]
-        for match in matches:
-            combo=colname+'_'+match[0]
-            if combo in Matches :
-                Matches[combo]['count']=Matches[combo]['count']+1
-            else:
-                Matches[combo]={'meshname':match[0],'colname':colname, 'count':1,'loc':colloc}
-    x=-5 
-    C=bpy.context
-    coll_scene=C.scene.collection
-    props = C.scene.cp77_panel_props
-    props.with_materials=False
-    currentcol=None
-    currentcolmesh=None
-    imported=False
-    mdim=Vector((0,0,0))
-    coldim=Vector((0,0,0))
-    y=0
-    for key, match in Matches.items():
-        colname=match['colname']
-        if colname==currentcol:
-            y+=5
+
+for col in ColInfo:
+    colname=col[0]
+    colloc=col[1]
+    match=None
+    matches=[x for x in MeshInfo if points_within_tol(colloc,x[1],tolerance=0.1)]
+    for match in matches:
+        combo=colname+'_'+match[0]
+        if combo in Matches :
+            Matches[combo]['count']=Matches[combo]['count']+1
         else:
-            y=0
-            x+=5
-            currentcol=colname
-        match_text_data.write(colname+','+match['meshname']+','+str(match['count'])+'\n')
-        meshpath=os.path.join(path, match['meshname'][:-1*len(os.path.splitext(match['meshname'])[1])]+'.glb').replace('\\', os.sep)
-        print(meshpath)
-        groupname = os.path.splitext(os.path.split(meshpath)[-1])[0]
-        while len(groupname) > 63:
-            groupname = groupname[:-1]
-        if groupname not in coll_scene and os.path.exists(meshpath):
-            try:
-                bpy.ops.io_scene_gltf.cp77( filepath=meshpath, appearances='default')
-                objs = C.selected_objects
-                for o in objs: 
-                    if sum(o.dimensions)>sum(mdim):
-                        mdim=o.dimensions
-                    o.location = (x,y,0)
-                    imported=True
-            except:
-                print('failed on ',os.path.basename(meshpath))
-        elif groupname in coll_scene:
-            #instance it and position it           
-            imported=True 
-            group= coll_scene.children.get( groupname )
-            new=bpy.data.collections.new(groupname)
-            coll_scene.children.link(new)
-            for old_obj in group.all_objects:                            
-                o=old_obj.copy()  
-                new.objects.link(o)      
-                o.location =    (x,y,0)        
+            Matches[combo]={'meshname':match[0],'colname':colname, 'count':1,'loc':colloc}
+x=-5 
+C=bpy.context
+coll_scene=C.scene.collection
+props = C.scene.cp77_panel_props
+props.with_materials=False
+currentcol=None
+currentcolmesh=None
+imported=False
+mdim=Vector((0,0,0))
+coldim=Vector((0,0,0))
+y=0
+for key, match in Matches.items():
+    colname=match['colname']
+    if colname==currentcol:
+        y+=5
+    else:
+        y=0
+        x+=5
+        currentcol=colname
+    match_text_data.write(colname+','+match['meshname']+','+str(match['count'])+'\n')
+    meshpath=os.path.join(path, match['meshname'][:-1*len(os.path.splitext(match['meshname'])[1])]+'.glb').replace('\\', os.sep)
+    print(meshpath)
+    groupname = os.path.splitext(os.path.split(meshpath)[-1])[0]
+    while len(groupname) > 63:
+        groupname = groupname[:-1]
+    if groupname not in coll_scene and os.path.exists(meshpath):
+        try:
+            bpy.ops.io_scene_gltf.cp77( filepath=meshpath, appearances='default')
+            objs = C.selected_objects
+            for o in objs: 
                 if sum(o.dimensions)>sum(mdim):
-                        mdim=o.dimensions    
+                    mdim=o.dimensions
+                o.location = (x,y,0)
+                imported=True
+        except:
+            print('failed on ',os.path.basename(meshpath))
+    elif groupname in coll_scene:
+        #instance it and position it           
+        imported=True 
+        group= coll_scene.children.get( groupname )
+        new=bpy.data.collections.new(groupname)
+        coll_scene.children.link(new)
+        for old_obj in group.all_objects:                            
+            o=old_obj.copy()  
+            new.objects.link(o)      
+            o.location =    (x,y,0)        
+            if sum(o.dimensions)>sum(mdim):
+                    mdim=o.dimensions    
 
 
-        elif not os.path.exists(meshpath):
-            print('Mesh ', meshpath, ' does not exist')
+    elif not os.path.exists(meshpath):
+        print('Mesh ', meshpath, ' does not exist')
 
-        if imported:
-            sectorHashStr=colname.split('_')[0]
-            entryHashStr=colname.split('_')[1]
-            if y==0:
-                currentcolmesh=CP77CollisionTriangleMeshJSONimport_by_hashes(sectorHashStr=sectorHashStr,entryHashStr=entryHashStr,project_raw_dir=path)
-                o=currentcolmesh
-                coldim=o.dimensions
-            else:
-                old_obj=coll_scene.objects[colname]
-                o=old_obj.copy()                  
-            o.location=(x,y,0)
-            coll_scene.objects.link(o)
-            if sum(mdim-coldim)<0.25:
-                o.color = (0.0, 0.3, 0.0, 1)
-            else:                
-                o.color = (0.5, 0.0, 0.0, 1)
+    if imported:
+        sectorHashStr=colname.split('_')[0]
+        entryHashStr=colname.split('_')[1]
+        if y==0:
+            currentcolmesh=CP77CollisionTriangleMeshJSONimport_by_hashes(sectorHashStr=sectorHashStr,entryHashStr=entryHashStr,project_raw_dir=path)
+            o=currentcolmesh
+            coldim=o.dimensions
+        else:
+            old_obj=coll_scene.objects[colname]
+            o=old_obj.copy()                  
+        o.location=(x,y,0)
+        coll_scene.objects.link(o)
+        if sum(mdim-coldim)<0.25:
+            o.color = (0.0, 0.3, 0.0, 1)
+        else:                
+            o.color = (0.5, 0.0, 0.0, 1)
 
 print(f"Collision analysis Time: {(time.time() - start_time)} Seconds")
                 
