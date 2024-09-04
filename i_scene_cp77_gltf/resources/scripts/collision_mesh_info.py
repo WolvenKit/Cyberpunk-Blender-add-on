@@ -15,6 +15,47 @@ def CP77CollisionTriangleMeshJSONimport_by_hashes( sectorHashStr='', entryHashSt
         print('ERROR: file not found: ',jsonpath)
         return None
 
+def col_dimensions(col):
+    coldim=Vector((0,0,0))
+    for obj in col.all_objects:
+        if obj.dimensions[0]>coldim[0]:
+            coldim[0]=obj.dimensions[0]        
+        if obj.dimensions[1]>coldim[1]:
+            coldim[1]=obj.dimensions[1]        
+        if obj.dimensions[2]>coldim[2]:
+            coldim[2]=obj.dimensions[2]
+    return coldim
+
+def get_objcenter(obj):
+    # Total value of each vertex
+    x, y, z = [ sum( [v.co[i] for v in obj.data.vertices ] ) for i in range(3)]
+    # number of vertices
+    count = float(len(obj.data.vertices))
+    # Divide the sum of each vector by the number of vertices
+    # And make the position a world reference.
+    center = (Vector( (x, y, z ) ) / count )    
+    return center
+
+def get_colcenter(col):
+    x_total, y_total, z_total = 0, 0, 0
+    count_total=0
+    for obj in col.all_objects:
+        if obj.type == 'MESH':  # Ensure the object is a mesh
+            x, y, z = [ sum( [v.co[i] for v in obj.data.vertices] ) for i in range(3) ]
+            count = float(len(obj.data.vertices))
+            x_total += x
+            y_total += y
+            z_total += z
+            count_total +=count
+    center = (Vector( (x_total, y_total, z_total ) ) / count_total )   
+    return center
+
+def comparedim(o,m):
+    
+    print(o[0]-m[0])
+    print(o[1]-m[1])
+    print(o[2]-m[2])
+
 
 def CP77CollisionTriangleMeshJSONimport( jsonpath ):
     start_time = time.time()
@@ -270,6 +311,8 @@ currentcolmesh=None
 imported=False
 mdim=Vector((0,0,0))
 coldim=Vector((0,0,0))
+colcenter=Vector((0,0,0))
+meshcenter=Vector((0,0,0))
 y=0
 for key, match in Matches.items():
     colname=match['colname']
@@ -279,7 +322,7 @@ for key, match in Matches.items():
         y=0
         x+=5
         currentcol=colname
-    match_text_data.write(colname+','+match['meshname']+','+str(match['count'])+'\n')
+    
     meshpath=os.path.join(path, match['meshname'][:-1*len(os.path.splitext(match['meshname'])[1])]+'.glb').replace('\\', os.sep)
     print(meshpath)
     groupname = os.path.splitext(os.path.split(meshpath)[-1])[0]
@@ -289,9 +332,10 @@ for key, match in Matches.items():
         try:
             bpy.ops.io_scene_gltf.cp77( filepath=meshpath, appearances='default')
             objs = C.selected_objects
+            mdim=col_dimensions(objs[0].users_collection[0])
+            meshcenter=get_colcenter(objs[0].users_collection[0])
+            
             for o in objs: 
-                if sum(o.dimensions)>sum(mdim):
-                    mdim=o.dimensions
                 o.location = (x,y,0)
                 imported=True
         except:
@@ -306,8 +350,8 @@ for key, match in Matches.items():
             o=old_obj.copy()  
             new.objects.link(o)      
             o.location =    (x,y,0)        
-            if sum(o.dimensions)>sum(mdim):
-                    mdim=o.dimensions    
+        mdim=col_dimensions(new)
+        meshcenter=get_colcenter(new)
 
 
     elif not os.path.exists(meshpath):
@@ -319,16 +363,25 @@ for key, match in Matches.items():
         if y==0:
             currentcolmesh=CP77CollisionTriangleMeshJSONimport_by_hashes(sectorHashStr=sectorHashStr,entryHashStr=entryHashStr,project_raw_dir=path)
             o=currentcolmesh
-            coldim=o.dimensions
         else:
             old_obj=coll_scene.objects[colname]
-            o=old_obj.copy()                  
+            o=old_obj.copy()   
+        coldim=o.dimensions               
         o.location=(x,y,0)
         coll_scene.objects.link(o)
-        if sum(mdim-coldim)<0.25:
+        colcenter=get_objcenter(o)
+        if abs(mdim[0]-coldim[0]) < 0.5 and abs(mdim[1]-coldim[1]) < 0.5 and abs(mdim[2]-coldim[2])< 0.5 and points_within_tol(colcenter,meshcenter,tolerance=0.65):
             o.color = (0.0, 0.3, 0.0, 1)
         else:                
             o.color = (0.5, 0.0, 0.0, 1)
+            match['count']=0
+
+for key in list(Matches.keys()):
+    if Matches[key]['count']==0:
+        del Matches[key]
+    else:
+        match_text_data.write(Matches[key]['colname']+','+Matches[key]['meshname']+','+str(Matches[key]['count'])+'\n')
+
 
 print(f"Collision analysis Time: {(time.time() - start_time)} Seconds")
                 
