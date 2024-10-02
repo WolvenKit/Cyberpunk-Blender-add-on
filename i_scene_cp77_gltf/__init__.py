@@ -15,7 +15,7 @@ from . scriptman import *
 
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
-    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, Doctor Presto, shotlastc, Rudolph2109, Holopointz, Peatral",
+    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, Doctor Presto, shotlastc, Rudolph2109, Holopointz, Peatral, John CO.",
     "version": (1, 6, 0),
     "blender": (4, 0, 0),
     "location": "File > Import-Export",
