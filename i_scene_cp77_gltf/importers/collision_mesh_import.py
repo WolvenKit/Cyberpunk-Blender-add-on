@@ -2,6 +2,7 @@ import bpy
 import json
 import os
 import bmesh
+import time
 
 def CP77CollisionTriangleMeshJSONimport_by_hashes( sectorHashStr='', entryHashStr='', project_raw_dir=''):
     jsonpath=os.path.join(project_raw_dir,'collision_meshes',sectorHashStr+'_'+entryHashStr+'.json')
@@ -13,13 +14,20 @@ def CP77CollisionTriangleMeshJSONimport_by_hashes( sectorHashStr='', entryHashSt
 
 
 def CP77CollisionTriangleMeshJSONimport( jsonpath ):
+    start_time = time.time()
     D=bpy.data
     C=bpy.context
     coll_scene = C.scene.collection  
-
+    cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     with open(jsonpath,'r') as f: 
         j=json.load(f) 
     mesh_name = os.path.basename(jsonpath).split('.')[0]
+
+    if not cp77_addon_prefs.non_verbose:
+        print('-------------------- Beginning Cyberpunk Collision Mesh Import --------------------')
+        print('')
+        print(f"Importing Collision Mesh from: {mesh_name}")
+        print('')
     mesh_data = D.meshes.new(mesh_name)
     mesh_obj = D.objects.new(mesh_data.name, mesh_data)    
     mesh_obj.display_type = 'WIRE'
@@ -58,7 +66,10 @@ def CP77CollisionTriangleMeshJSONimport( jsonpath ):
         bm.to_mesh(mesh_data)
         bm.free()
         mesh_obj['collisionShape'] = 'ConvexHull'
-    coll_scene.objects.link(mesh_obj) 
+        if not cp77_addon_prefs.non_verbose:
+            print(f"Collision Mesh Import Time: {(time.time() - start_time)} Seconds")
+            print('')
+            print('-------------------- Finished importing Cyberpunk 2077 Collision Mesh --------------------')
     return mesh_obj   
 
 # The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something

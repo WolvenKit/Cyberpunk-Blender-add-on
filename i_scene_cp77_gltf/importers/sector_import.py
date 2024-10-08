@@ -1286,9 +1286,13 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                                     
                                     else: 
                                         #print(f"unsupported shape {shape['ShapeType']}")
-                                        o=CP77CollisionTriangleMeshJSONimport_by_hashes(sectorHashStr=sector_Hash,entryHashStr=shape['Hash'],project_raw_dir=path)
-                                        if not o:
-                                            o = bpy.data.objects.new('NDI_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s), None)
+                                        meshname=sector_Hash+'_'+shape['Hash']
+                                        if meshname not in Masters.objects.keys():
+                                            o=CP77CollisionTriangleMeshJSONimport_by_hashes(sectorHashStr=sector_Hash,entryHashStr=shape['Hash'],project_raw_dir=path)
+                                            if not o:
+                                                o = bpy.data.objects.new('NDI_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s), None)
+                                            Masters.objects.link(o)
+                                        o=Masters.objects[meshname].copy()
                                         o['nodeType']='worldCollisionNode'
                                         o['nodeIndex']=i
                                         o['nodeDataIndex']=inst['nodeDataIndex']
