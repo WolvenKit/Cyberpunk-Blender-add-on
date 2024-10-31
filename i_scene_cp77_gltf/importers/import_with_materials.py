@@ -199,6 +199,8 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
     start_time = time.time()
     for mat in validmats.keys():
         for m in mats: #obj['Materials']:
+            if 'Name' not in m.keys():
+                continue
             if m['Name'] != mat:
                 continue
             if 'BaseMaterial' in m.keys():
@@ -259,7 +261,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
                     if matname in validmats.keys():
                         index = 0
                         for rawmat in mats:
-                            if rawmat["Name"] == matname:
+                            if 'Name' in rawmat.keys() and rawmat["Name"] == matname:
                                 try:
                                     bpymat = Builder.create(mats, index)
                                     if bpymat:
