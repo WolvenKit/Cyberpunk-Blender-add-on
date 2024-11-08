@@ -1021,12 +1021,15 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                 new['pivot']=inst['Pivot']
                                                 new['meshAppearance']=meshAppearance
                                                 new['appearanceName']=meshAppearance
-                                                if ntype=='worldClothMeshNode':
+                                                if ntype=='worldClothMeshNode' and "windImpulseEnabled" in inst.keys():
                                                     new['windImpulseEnabled']= inst['windImpulseEnabled']
                                                 if ntype=='worldRotatingMeshNode':
-                                                    new['rot_axis']=data['rotationAxis']
-                                                    new['reverseDirection']=data['reverseDirection']
-                                                    new['fullRotationTime']=data['fullRotationTime']
+                                                    if 'rotationAxis' in data.keys():
+                                                        new['rot_axis']=data['rotationAxis']
+                                                    if 'reverseDirection' in data.keys():
+                                                        new['reverseDirection']=data['reverseDirection']
+                                                    if 'fullRotationTime' in data.keys():
+                                                        new['fullRotationTime']=data['fullRotationTime']
                                                     
                                                 #print(new['nodeDataIndex'])
                                                 # Should do something with the Advertisements lightData  bits here 
