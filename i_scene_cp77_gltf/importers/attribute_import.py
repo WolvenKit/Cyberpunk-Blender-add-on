@@ -1,8 +1,13 @@
 import bpy
 
 from io_scene_gltf2.io.imp.gltf2_io_binary import BinaryData
-from io_scene_gltf2.blender.imp.gltf2_blender_mesh import points_edges_tris
-from io_scene_gltf2.blender.imp.gltf2_blender_mesh import squish
+vers = bpy.app.version
+if vers[0] == 4 and vers[1] < 3:
+    from io_scene_gltf2.blender.imp.gltf2_blender_mesh import points_edges_tris
+    from io_scene_gltf2.blender.imp.gltf2_blender_mesh import squish
+else:
+    from io_scene_gltf2.blender.imp.mesh import points_edges_tris
+    from io_scene_gltf2.blender.imp.mesh import squish
 
 def rename_color_attribute(mesh, name_before, name_after):
     if mesh.color_attributes is None:
@@ -39,6 +44,7 @@ def manage_garment_support(existingMeshes, gltf_importer_data):
         curMeshCount = curMeshCount + 1
 
 
+
 def add_vertex_color_attribute(accessor_name, attribute_name, gltf_importer_data, mesh, prim, indices):
     gltf_importer = gltf_importer_data
     if not accessor_name in prim.attributes:
@@ -52,7 +58,11 @@ def add_vertex_color_attribute(accessor_name, attribute_name, gltf_importer_data
     if layer is None:
         print("WARNING: Vertex colors are ignored (maximum number of vertex color layers has been reached)")
     else:
-        mesh.color_attributes[layer.name].data.foreach_set('color', squish(cols))
+        print(layer.name)
+        try:
+            mesh.color_attributes[layer.name].data.foreach_set('color', squish(cols))
+        except:
+            print('something blew up setting gs attributes')
 
 def get_indices(gltf_importer_data, prim):
     gltf_importer = gltf_importer_data

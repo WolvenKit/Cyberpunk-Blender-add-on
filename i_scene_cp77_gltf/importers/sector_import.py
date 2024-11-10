@@ -1022,7 +1022,8 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                 new['meshAppearance']=meshAppearance
                                                 new['appearanceName']=meshAppearance
                                                 if ntype=='worldClothMeshNode':
-                                                    new['windImpulseEnabled']= inst['windImpulseEnabled']
+                                                    if 'windImpulseEnabled' in inst.keys():
+                                                        new['windImpulseEnabled']= inst['windImpulseEnabled']
                                                 if ntype=='worldRotatingMeshNode':
                                                     new['rot_axis']=data['rotationAxis']
                                                     new['reverseDirection']=data['reverseDirection']
