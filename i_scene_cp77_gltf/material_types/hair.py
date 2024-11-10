@@ -15,7 +15,11 @@ class Hair:
             profile= profile["Data"]["RootChunk"]
             
             Mat.blend_method = 'HASHED'
-            Mat.shadow_method = 'HASHED'
+            vers = bpy.app.version
+            if vers[0] == 4 and vers[1] <= 2:
+                Mat.shadow_method = 'HASHED'
+            else:
+                print('set shadows to hashed how in 4.3?')
 
             CurMat = Mat.node_tree
             Ns=CurMat.nodes
