@@ -191,7 +191,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
         if import_garmentsupport:
             manage_garment_support(existingMeshes, gltf_importer)
 
-   
+
     if not cp77_addon_prefs.non_verbose:
         print(f"GLB Import Time: {(time.time() - start_time)} Seconds")
         print('')
@@ -236,11 +236,20 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
             continue
         bpy.data.meshes[name].materials.clear()
         extras = gltf_importer.data.meshes[counter].extras
-        if extras is None or "materialNames" not in extras.keys() or extras["materialNames"] is None:
-            counter = counter + 1
-            continue
+
+        # morphtargets don't have material names. Just use all of them.
+        materialNames = None
+        if extras is None or ("materialNames" not in extras.keys() or extras["materialNames"] is None):
+            if BasePath.endswith(".morphtarget"):
+                materialNames = validmats.keys()
+            else:
+                counter = counter + 1
+                continue
+        else:
+            materialNames = extras["materialNames"]
+
         # Kwek: I also found that other material hiccups will cause the Collection to fail
-        for matname in extras["materialNames"]:
+        for matname in materialNames:
 
             if matname not in validmats.keys():
                 # print("Pass")
