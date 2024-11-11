@@ -3,7 +3,11 @@ import os
 import json
 import time
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
-from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
+vers = bpy.app.version
+if vers[0] == 4 and vers[1] < 3:
+    from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
+else:
+    from io_scene_gltf2.blender.imp.blender_gltf import BlenderGlTF
 from ..main.setup import MaterialBuilder
 from ..main.bartmoss_functions import UV_by_bounds
 from .import_from_external import *

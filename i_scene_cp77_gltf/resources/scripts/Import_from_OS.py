@@ -11,8 +11,9 @@
 #
 #
 
-project_path='C:\\CPMod\\notell'
-GroupName='blender_group_1'
+
+project_path=r'C:\CPMod\corpo_apt'
+GroupName='corpo_wall_test'
 with_mats=False
 
 import bpy
@@ -24,6 +25,7 @@ import traceback
 D=bpy.data
 C=bpy.context
 coll_scene = C.scene.collection
+shapes=["Box", "Capsule", "Sphere" ]
 
 def get_position(obj):
     pos = Vector((obj['spawnable']['position']['x'],obj['spawnable']['position']['y'],obj['spawnable']['position']['z']))
@@ -35,16 +37,14 @@ def get_position(obj):
     else:
         scale=(1,1,1)
     return pos,rot,scale
-                
 
+            
 def process_group(group,target_coll):
     for child in group['childs']:
-        if child['type']=='group':
-            coll_target=bpy.data.collections.new(child['name'])
-            target_coll.children.link(coll_target)
-            process_group(child,coll_target)
-        elif child['type']=='object':
+        if 'type' in child.keys() and child['type']=='object':
             process_object(child,target_coll)
+        elif 'type' in child.keys() and child['type']=='group':
+            process_group(child,target_coll)
     
 def process_object(obj,parent_coll):
     Masters=bpy.data.collections.get("MasterInstances")
@@ -86,61 +86,85 @@ def process_object(obj,parent_coll):
                     newobj.rotation_euler = rot
                     newobj.scale = scale
     elif spawndata[-4:]=='.ent' :
-        app=obj['spawnable']['app']
-        entpath=os.path.join(project_path,'source','raw', spawndata).replace('\\', os.sep)+'.json'
-        ent_groupname=os.path.basename(entpath).split('.')[0]+'_'+app
-        while len(ent_groupname) > 63:
-            ent_groupname = ent_groupname[:-1]
-        imported=False
-        if ent_groupname in Masters.children.keys():
-            move_coll=Masters.children.get(ent_groupname)
-            imported=True
-        else:
-            try:
-                #print('Importing ',entpath, ' using app ',app)
-                incoll='MasterInstances'
-                bpy.ops.io_scene_gltf.cp77entity(with_mats, filepath=entpath, appearances=app, inColl=incoll)
+        if spawntype=="Entity Template":
+            app=obj['spawnable']['app']
+            entpath=os.path.join(project_path,'source','raw', spawndata).replace('\\', os.sep)+'.json'
+            ent_groupname=os.path.basename(entpath).split('.')[0]+'_'+app
+            while len(ent_groupname) > 63:
+                ent_groupname = ent_groupname[:-1]
+            imported=False
+            if ent_groupname in Masters.children.keys():
                 move_coll=Masters.children.get(ent_groupname)
                 imported=True
-            except:
-                print(traceback.print_exc())
-                print(f"Failed during Entity import on {entpath} from app {app}")
-        if imported:
-            group=move_coll                            
-            if (group):
-                groupname=move_coll.name
-                #print('Group found for ',groupname)     
-                new=bpy.data.collections.new(groupname)
-                parent_coll.children.link(new)
-                new['nodeType']='worldEntityNode'
-                new['debugName']=obj['name']
-                new['entityTemplate']=spawndata
-                new['appearanceName']=obj['spawnable']['app']
-                
-                pos,rot,scale=get_position(obj)
-                rot=rot.to_quaternion()
-                new['ent_rot']=rot
-                new['ent_pos']=pos
-                inst_trans_mat=Matrix.LocRotScale(pos,rot,scale)
-                for child in group.children:
-                    newchild=bpy.data.collections.new(child.name)
-                    new.children.link(newchild)
-                    for old_obj in child.objects:                            
+            else:
+                try:
+                    #print('Importing ',entpath, ' using app ',app)
+                    incoll='MasterInstances'
+                    bpy.ops.io_scene_gltf.cp77entity(with_mats, filepath=entpath, appearances=app, inColl=incoll)
+                    move_coll=Masters.children.get(ent_groupname)
+                    imported=True
+                except:
+                    print(traceback.print_exc())
+                    print(f"Failed during Entity import on {entpath} from app {app}")
+            if imported:
+                group=move_coll                            
+                if (group):
+                    groupname=move_coll.name
+                    #print('Group found for ',groupname)     
+                    new=bpy.data.collections.new(groupname)
+                    parent_coll.children.link(new)
+                    new['nodeType']='worldEntityNode'
+                    new['debugName']=obj['name']
+                    new['entityTemplate']=spawndata
+                    new['appearanceName']=obj['spawnable']['app']
+                    
+                    pos,rot,scale=get_position(obj)
+                    rot=rot.to_quaternion()
+                    new['ent_rot']=rot
+                    new['ent_pos']=pos
+                    inst_trans_mat=Matrix.LocRotScale(pos,rot,scale)
+                    for child in group.children:
+                        newchild=bpy.data.collections.new(child.name)
+                        new.children.link(newchild)
+                        for old_obj in child.objects:                            
+                            obj=old_obj.copy()  
+                            obj.color = (0.567942, 0.0247339, 0.600028, 1)
+                            newchild.objects.link(obj)                                     
+                            obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
+                            if 'Armature' in obj.name:
+                                obj.hide_set(True)
+                    for old_obj in group.objects:                            
                         obj=old_obj.copy()  
                         obj.color = (0.567942, 0.0247339, 0.600028, 1)
-                        newchild.objects.link(obj)                                     
+                        new.objects.link(obj)                                     
                         obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
                         if 'Armature' in obj.name:
                             obj.hide_set(True)
-                for old_obj in group.objects:                            
-                    obj=old_obj.copy()  
-                    obj.color = (0.567942, 0.0247339, 0.600028, 1)
-                    new.objects.link(obj)                                     
-                    obj.matrix_local=  inst_trans_mat @ obj.matrix_local 
-                    if 'Armature' in obj.name:
-                        obj.hide_set(True)
-                if len(group.all_objects)>0:
-                    new['matrix']=group.all_objects[0].matrix_world
+                    if len(group.all_objects)>0:
+                        new['matrix']=group.all_objects[0].matrix_world
+        elif spawntype=="Collision Shape":            
+            # from entspawner code: o.shapeTypes = { "Box", "Capsule", "Sphere" } so 0=box, 1=capsule, 2 = sphere
+            ShapeType=shapes[obj['spawnable']['shape']]
+            if ShapeType=='Box' :
+                #print('Box Collision Node')
+                #pprint(act['Shapes'])
+                extents=obj['spawnable']['extents']
+                position=obj['spawnable']['position']
+                if ShapeType=='Box':
+                    bpy.ops.mesh.primitive_cube_add(size=1, scale=(float(extents['x'])*2,float(extents['y'])*2,float(extents['z'])*2),
+                    location=(float(position['x']),float(position['y']),float(position['z'])))
+                    #location=(float(position['x'])+float(extents['x'])*2,float(position['y'])+float(extents['y'])*2,float(position['z'])+float(extents['z'])*2))
+                crash=C.selected_objects[0]
+                crash.name=obj['name']
+                par_coll=crash.users_collection[0]
+                par_coll.objects.unlink(crash)
+                coll_scene.objects.link(crash)
+                crash['ShapeType']=obj['spawnable']['shape']
+                crash['matrix']=crash.matrix_world
+                rot=obj['spawnable']['rotation']
+                crash.rotation_mode='XYZ'
+                crash.rotation_euler=(radians(rot['pitch']),radians(rot['roll']),radians(rot['yaw']))
+
     elif spawntype=='Decals':  
         vert = [(-0.5, -0.5, 0.0), (0.5, -0.5, 0.0), (-0.5, 0.5, 0.0), (0.5,0.5, 0.0)]
         fac = [(0, 1, 3, 2)]
