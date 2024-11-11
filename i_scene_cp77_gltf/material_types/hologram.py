@@ -14,7 +14,11 @@ class Hologram:
     def create(self,Data,Mat):
         mat = Mat
         mat.use_nodes = True
-        mat.shadow_method = 'HASHED'
+        vers = bpy.app.version
+        if vers[0] == 4 and vers[1] <= 2:
+            Mat.shadow_method = 'HASHED'
+        else:
+            print('set shadows to hashed how in 4.3?')
         mat.blend_method = 'HASHED'
         sockets=bsdf_socket_names()
 
@@ -161,55 +165,53 @@ class Hologram:
         principled_bsdf_001.distribution = 'GGX'
         principled_bsdf_001.subsurface_method = 'RANDOM_WALK_SKIN'
         #Metallic
-        principled_bsdf_001.inputs[1].default_value = 0.0
+        principled_bsdf_001.inputs[loc('Metallic')].default_value = 0.0
         #Roughness
-        principled_bsdf_001.inputs[2].default_value = 1.0
+        principled_bsdf_001.inputs[loc('Roughness')].default_value = 1.0
         #IOR
-        principled_bsdf_001.inputs[3].default_value = 1.4500000476837158
+        principled_bsdf_001.inputs[loc('IOR')].default_value = 1.4500000476837158
         #Normal
-        principled_bsdf_001.inputs[5].default_value = (0.0, 0.0, 0.0)
-        #Weight
-        principled_bsdf_001.inputs[6].default_value = 0.0
+        principled_bsdf_001.inputs[loc('Normal')].default_value = (0.0, 0.0, 0.0)
         #Subsurface Weight
-        principled_bsdf_001.inputs[7].default_value = 0.0
+        principled_bsdf_001.inputs[loc('Subsurface Weight')].default_value = 0.0
         #Subsurface Radius
-        principled_bsdf_001.inputs[8].default_value = (1.0, 0.20000000298023224, 0.10000000149011612)
+        principled_bsdf_001.inputs[loc('Subsurface Radius')].default_value = (1.0, 0.20000000298023224, 0.10000000149011612)
         #Subsurface Scale
-        principled_bsdf_001.inputs[9].default_value = 0.05000000074505806
+        principled_bsdf_001.inputs[loc('Subsurface Scale')].default_value = 0.05000000074505806
         #Subsurface IOR
-        principled_bsdf_001.inputs[10].default_value = 1.399999976158142
+        principled_bsdf_001.inputs[loc('Subsurface IOR')].default_value = 1.399999976158142
         #Subsurface Anisotropy
-        principled_bsdf_001.inputs[11].default_value = 0.0
+        principled_bsdf_001.inputs[loc('Subsurface Anisotropy')].default_value = 0.0
         #Specular IOR Level
-        principled_bsdf_001.inputs[12].default_value = 0.0
+        principled_bsdf_001.inputs[loc('Specular IOR Level')].default_value = 0.0
         #Specular Tint
-        principled_bsdf_001.inputs[13].default_value = (1.0, 1.0, 1.0, 1.0)
+        principled_bsdf_001.inputs[loc('Specular Tint')].default_value = (1.0, 1.0, 1.0, 1.0)
         #Anisotropic
-        principled_bsdf_001.inputs[14].default_value = 0.0
+        principled_bsdf_001.inputs[loc('Anisotropic')].default_value = 0.0
         #Anisotropic Rotation
-        principled_bsdf_001.inputs[15].default_value = 0.0
+        principled_bsdf_001.inputs[loc('Anisotropic Rotation')].default_value = 0.0
         #Tangent
-        principled_bsdf_001.inputs[16].default_value = (0.0, 0.0, 0.0)
+        principled_bsdf_001.inputs[loc('Tangent')].default_value = (0.0, 0.0, 0.0)
         #Transmission Weight
-        principled_bsdf_001.inputs[17].default_value = 0.0
+        principled_bsdf_001.inputs[loc('Transmission Weight')].default_value = 0.0
         #Coat Weight
-        principled_bsdf_001.inputs[18].default_value = 0.0
+        principled_bsdf_001.inputs[loc('Coat Weight')].default_value = 0.0
         #Coat Roughness
-        principled_bsdf_001.inputs[19].default_value = 0.029999999329447746
+        principled_bsdf_001.inputs[loc('Coat Roughness')].default_value = 0.029999999329447746
         #Coat IOR
-        principled_bsdf_001.inputs[20].default_value = 1.5
+        principled_bsdf_001.inputs[loc('Coat IOR')].default_value = 1.5
         #Coat Tint
-        principled_bsdf_001.inputs[21].default_value = (1.0, 1.0, 1.0, 1.0)
+        principled_bsdf_001.inputs[loc('Coat Tint')].default_value = (1.0, 1.0, 1.0, 1.0)
         #Coat Normal
-        principled_bsdf_001.inputs[22].default_value = (0.0, 0.0, 0.0)
+        principled_bsdf_001.inputs[loc('Coat Normal')].default_value = (0.0, 0.0, 0.0)
         #Sheen Weight
-        principled_bsdf_001.inputs[23].default_value = 0.0
+        principled_bsdf_001.inputs[loc('Sheen Weight')].default_value = 0.0
         #Sheen Roughness
-        principled_bsdf_001.inputs[24].default_value = 0.5
+        principled_bsdf_001.inputs[loc('Sheen Roughness')].default_value = 0.5
         #Sheen Tint
-        principled_bsdf_001.inputs[25].default_value = (1.0, 1.0, 1.0, 1.0)
+        principled_bsdf_001.inputs[loc('Sheen Tint')].default_value = (1.0, 1.0, 1.0, 1.0)
         #Emission Strength
-        principled_bsdf_001.inputs[27].default_value = 30.0
+        principled_bsdf_001.inputs[loc('Emission Strength')].default_value = 30.0
                 
         #node Mix Shader
         mix_shader_003 = holo_blue_002.nodes.new("ShaderNodeMixShader")
