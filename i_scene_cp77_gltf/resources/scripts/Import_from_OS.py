@@ -178,7 +178,7 @@ def process_object(obj,parent_coll):
         o['debugName']=obj['name']
         o['horizontalFlip']=obj['spawnable']['horizontalFlip']
         o['verticalFlip']=obj['spawnable']['verticalFlip']
-        o['alpha']=obj['spawna-ble']['alpha']
+        o['alpha']=obj['spawnable']['alpha']
         o['appearanceName']=obj['spawnable']['app']
 
         parent_coll.objects.link(o)
