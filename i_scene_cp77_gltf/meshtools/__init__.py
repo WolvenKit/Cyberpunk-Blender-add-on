@@ -142,17 +142,15 @@ class CP77WeightTransfer(Operator):
     bl_idname = 'cp77.trans_weights'
     bl_label = "Cyberpunk 2077 Weight Transfer Tool"
     bl_description = "Transfer weights from source mesh to target mesh"
-    bl_options = {'REGISTER', 'UNDO'}
-    
     vertInterop: BoolProperty(
         name="Use Nearest Vert Interpolated",
         description="Sometimes gives better results when the default mode fails",
         default=False)
-
     bySubmesh: BoolProperty(
         name="Transfer by Submesh Order",
         description="Because Mana Gets what Mana Wants :D",
         default=False)
+    bl_options = {'REGISTER', 'UNDO'}
 
     
     def invoke(self, context, event):
@@ -160,7 +158,7 @@ class CP77WeightTransfer(Operator):
 
     def execute(self, context):
         # Call the trans_weights function with the provided arguments
-        result = trans_weights(self, context,  False)
+        result = trans_weights(self, context, self.properties.vertInterop ) #, self.properties.bySubmesh) 
         return {"FINISHED"}
         
     def draw(self,context):
