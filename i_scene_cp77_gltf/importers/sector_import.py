@@ -467,7 +467,8 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             o['sectorName']=sectorName
                             if e['Data']['spot']:
                                 o['workspot']=e['Data']['spot']['Data']['resource']['DepotPath']['$value']
-                            else o['workspot']='None'
+                            else: 
+                                o['workspot']='None'
                             if e['Data']['markings']:
                                 o['markings']=e['Data']['markings'][0]['$value']
                             o.empty_display_size = 0.2
