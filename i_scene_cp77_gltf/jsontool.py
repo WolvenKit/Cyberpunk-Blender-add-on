@@ -77,8 +77,12 @@ def jsonload(filepath):
                 return 'CANCELLED'
 
             ent_apps= data['Data']['RootChunk']['appearances']
-            ent_components= data['Data']['RootChunk']['components']
-            ent_component_data= data['Data']['RootChunk']['compiledData']['Data']['Chunks']
+            ent_components=[]
+            if data['Data']['RootChunk']['components']!=None:
+                ent_components= data['Data']['RootChunk']['components']
+            ent_component_data=[]
+            if data['Data']['RootChunk']['compiledData']!=None:
+                ent_component_data= data['Data']['RootChunk']['compiledData']['Data']['Chunks']
             res = data['Data']['RootChunk']['resolvedDependencies']
             ent_default = data['Data']['RootChunk']['defaultAppearance']['$value']
             # Do something for .ent.json

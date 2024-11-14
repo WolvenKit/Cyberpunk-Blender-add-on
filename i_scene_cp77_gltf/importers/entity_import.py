@@ -443,9 +443,9 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                                     print('interior_02')
                                                 bindpt=[cmp for cmp in comps if cmp['name']['$value']==bindname]
                                                 if bindpt and len(bindpt)==1:
-                                                    if c['localTransform']['Position']['x']['Bits']==0 and c['localTransform']['Position']['y']['Bits']==0 and c['localTransform']['Position']['z']['Bits']==0:
+                                                    if c['localTransform']['Position']['x']['Bits']==0 and c['localTransform']['Position']['y']['Bits']==0 and c['localTransform']['Position']['z']['Bits']==0 and 'localTransform' in bindpt[0]:
                                                         c['localTransform']['Position']=bindpt[0]['localTransform']['Position']
-                                                    if c['localTransform']['Orientation']['i']==0 and c['localTransform']['Orientation']['j']==0 and c['localTransform']['Orientation']['k']==0 and c['localTransform']['Orientation']['r']==1:
+                                                    if c['localTransform']['Orientation']['i']==0 and c['localTransform']['Orientation']['j']==0 and c['localTransform']['Orientation']['k']==0 and c['localTransform']['Orientation']['r']==1 and 'localTransform' in bindpt[0]:
                                                         c['localTransform']['Orientation']=bindpt[0]['localTransform']['Orientation']
 
 
@@ -461,28 +461,31 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                                     for o in comps:
                                                         if o['name']['$value']==bindname:
                                                             pT=o['parentTransform']                                                        
-                                                            x=o['localTransform']['Position']['x']['Bits']/131072
-                                                            y=o['localTransform']['Position']['y']['Bits']/131072
-                                                            z=o['localTransform']['Position']['z']['Bits']/131072
-                                                            pT_HId=pT['HandleRefId']
-                                                            #print(bindname, 'pT_HId = ',pT_HId)
-                                                            chunk_pt = 0 
-                                                            for chunk in chunks:
-                                                                if 'parentTransform' in chunk.keys() and isinstance( chunk['parentTransform'], dict):
-                                                                     if 'HandleId' in chunk['parentTransform'].keys():                                                                    
-                                                                         if chunk['parentTransform']['HandleId']==pT_HId:
-                                                                             chunk_pt=chunk['parentTransform']
-                                                                             #print('HandleId found',chunk['parentTransform']['HandleId'])
-                                                            if chunk_pt:   
-                                                                #print('in chunk pt processing')                                     
-                                                                bindname=chunk_pt['Data']['bindName']['$value']
-                                                                if bindname=='vehicle_slots':
-                                                                    if vehicle_slots:
-                                                                        slotname=chunk_pt['Data']['slotName']['$value']
-                                                                        for slot in vehicle_slots:
-                                                                            if slot['slotName']['$value']==slotname:
-                                                                                bindname=slot['boneName']['$value']
-                                                                                       
+                                                            if pT:
+                                                                
+                                                                x=o['localTransform']['Position']['x']['Bits']/131072
+                                                                y=o['localTransform']['Position']['y']['Bits']/131072
+                                                                z=o['localTransform']['Position']['z']['Bits']/131072
+                                                                
+                                                                pT_HId=pT['HandleRefId']
+                                                                #print(bindname, 'pT_HId = ',pT_HId)
+                                                                chunk_pt = 0 
+                                                                for chunk in chunks:
+                                                                    if 'parentTransform' in chunk.keys() and isinstance( chunk['parentTransform'], dict):
+                                                                        if 'HandleId' in chunk['parentTransform'].keys():                                                                    
+                                                                            if chunk['parentTransform']['HandleId']==pT_HId:
+                                                                                chunk_pt=chunk['parentTransform']
+                                                                                #print('HandleId found',chunk['parentTransform']['HandleId'])
+                                                                if chunk_pt:   
+                                                                    #print('in chunk pt processing')                                     
+                                                                    bindname=chunk_pt['Data']['bindName']['$value']
+                                                                    if bindname=='vehicle_slots':
+                                                                        if vehicle_slots:
+                                                                            slotname=chunk_pt['Data']['slotName']['$value']
+                                                                            for slot in vehicle_slots:
+                                                                                if slot['slotName']['$value']==slotname:
+                                                                                    bindname=slot['boneName']['$value']
+                                                                                        
                                                 ######
                                                 if bindname in bones.keys(): 
                                                     #print('bindname in bones')
