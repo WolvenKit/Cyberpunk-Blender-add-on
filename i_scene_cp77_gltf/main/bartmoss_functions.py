@@ -2,6 +2,7 @@ import bpy
 from mathutils import Vector, Quaternion, Euler, Matrix
 from math import radians
 import idprop
+import bmesh
 
 ## I get that these are lazy but they're convenient type checks
 def is_mesh(o: bpy.types.Object) -> bool:
