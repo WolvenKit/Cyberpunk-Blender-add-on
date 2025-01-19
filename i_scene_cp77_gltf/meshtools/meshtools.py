@@ -121,7 +121,7 @@ def CP77UvChecker(self, context):
         texture_node.location = (-200, 0)
         texture_node.image = image
         # Connect the texture node to the shader node
-        shader_node = uvchecker.node_tree.nodes["Principled BSDF"]
+        shader_node = uvchecker.node_tree.nodes[loc("Principled BSDF")]
         uvchecker.node_tree.links.new(texture_node.outputs['Color'], shader_node.inputs['Base Color'])
     for mesh in selected_meshes:
         mat_assigned = False
@@ -231,6 +231,7 @@ def applyRefitter(obj):
             bpy.ops.object.shape_key_remove(all=False)
     newnames = getShapeKeyNames(obj)
     setActiveShapeKey(obj, 'Basis')
+    bpy.context.view_layer.objects.active = obj
     bpy.ops.object.shape_key_remove(all=False)
     for name in newnames:
         if 'AutoFitter' in name:
@@ -353,9 +354,10 @@ def setup_lattice(r_c, fbx_rot, lattice_object_name, target_body_name, control_p
     lattice.interpolation_type_w = lattice_interpolation_w
         
     # Create a flat list of lattice points
+    lattice_points = lattice.points
     flat_lattice_points = [lattice_points[w + v * lattice.points_u + u * lattice.points_u * lattice.points_v] for u in range(lattice.points_u) for v in range(lattice.points_v) for w in range(lattice.points_w)]
    
-    for control_point, lattice_point in control_points, flat_lattice_points:
+    for control_point, lattice_point in zip(control_points, flat_lattice_points):
         lattice_point.co_deform = control_point
         
     if new_lattice:
