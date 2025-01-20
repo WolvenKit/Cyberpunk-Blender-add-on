@@ -186,7 +186,7 @@ class CP77_PT_PanelProps(PropertyGroup):
         description="This is the number of vertices in your new collider",
         default=1,
         min=1,
-        max=100,
+        max=400,
     )
 
 # anims props"
