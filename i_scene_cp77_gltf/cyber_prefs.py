@@ -20,7 +20,16 @@ class CP77IOSuitePreferences(AddonPreferences):
         subtype='DIR_PATH',
         default="//MaterialDepot"
     )
-
+    enable_temperance: BoolProperty(
+        name= "Enable the Temperance bone heuristic MAY BREAK ANIM EXPORT",
+        description="Switch the bone heuristic back to TEMPERANCE, may break anim export",
+        default=False,
+    )
+    enable_octo: BoolProperty(
+        name= "Enable the Octohedral bone representation",
+        description="Probably want to use with the temperance option above",
+        default=False,
+    )
 
 # toggle the mod tools tab and its sub panels - default True
     show_modtools: BoolProperty(
@@ -77,6 +86,14 @@ class CP77IOSuitePreferences(AddonPreferences):
             box.label(text="Material Depot Path:")
             row = box.row()
             row.prop(self, "depotfolder_path", text="")
+            row = box.row()
+            # Toggle for temperance bone heuristic
+            box = layout.box()
+            box.label(text="Enable Temperance Bone Heuristic (MAY BREAK ANIM EXPORT):")
+            row = box.row()
+            row.prop(self, "enable_temperance",toggle=1)
+            row = box.row()
+            row.prop(self, "enable_octo",toggle=1)
             row = box.row()
         if self.show_modtools:
             row.alignment = 'LEFT'
