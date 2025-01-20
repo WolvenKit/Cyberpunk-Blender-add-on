@@ -86,6 +86,12 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
         file_paths.append(os.path.join(directory, f['name']))
 
     # check materials
+    heuristic='BLENDER'
+    if cp77_addon_prefs.enable_temperance:
+        heuristic='TEMPERANCE'
+    octos=False
+    if cp77_addon_prefs.enable_octo:
+        octos=True
 
     #Kwek: Gate this--do the block iff corresponding Material.json exist
     #Kwek: was tempted to do a try-catch, but that is just La-Z
@@ -95,9 +101,9 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
         filepath = os.path.join(directory, f['name'])
         vers = bpy.app.version
         if vers[0] == 4 and vers[1] >= 2:
-            gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'BLENDER', "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':False, 'bone_shape_scale_factor':1.0})
+            gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":heuristic, "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':octos, 'bone_shape_scale_factor':1.0})
         else:
-            gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":'BLENDER', "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':False,})
+            gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":heuristic, "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':octos,})
         gltf_importer.read()
         gltf_importer.checks()
         existingMeshes = bpy.data.meshes.keys()
@@ -157,8 +163,8 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
 
         #DepotPath = str(obj["MaterialRepo"])  + "\\"
         context=bpy.context
-        if remap_depot and os.path.exists(context.preferences.addons[__name__.split('.')[0]].preferences.depotfolder_path):
-            DepotPath = context.preferences.addons[__name__.split('.')[0]].preferences.depotfolder_path
+        if remap_depot and os.path.exists(cp77_addon_prefs.depotfolder_path):
+            DepotPath = cp77_addon_prefs.depotfolder_path
             if not cp77_addon_prefs.non_verbose:
                 print(f"Using depot path: {DepotPath}")
         DepotPath= DepotPath.replace('\\', os.sep)
