@@ -53,7 +53,8 @@ class MaterialBuilder:
             bpyMat['MaterialTemplate'] = rawMat["MaterialTemplate"]
             bpyMat.use_nodes = True
             no_shadows=False
-            match rawMat["MaterialTemplate"]:
+            material_template = rawMat["MaterialTemplate"].replace('/','\\')
+            match material_template:
                 case "engine\\materials\\multilayered.mt" | "base\\materials\\vehicle_destr_blendshape.mt" | "base\\materials\\multilayered_clear_coat.mt" |  "base\\materials\\multilayered_terrain.mt":
                     multilayered = Multilayered(self.BasePath,self.image_format,self.ProjPath)
                     multilayered.create(rawMat["Data"],bpyMat)
