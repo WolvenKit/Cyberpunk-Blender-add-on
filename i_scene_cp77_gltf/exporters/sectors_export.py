@@ -395,13 +395,14 @@ def exportSectors(filename, use_yaml):
     project=os.path.dirname(filename)
     if not os.path.exists(project):
         print('project path doesnt exist')
-    projpath = os.path.join(project,'source','raw','base')
+    projpath = os.path.join(project,'source','raw')
     print('exporting sectors from ',projpath)
     #its currently set to output the modified jsons to an output folder in the project dir (create one before running)
     #you can change this to a path if you prefer
     xloutpath = os.path.join(project,'source','resources')
     jsons = glob.glob(os.path.join(projpath, "**", "*.streamingsector.json"), recursive = True)
 
+    projpath = os.path.join(project,'source','raw','base')
     if len(jsons)<1:
         print('ERROR - No source streaming sector jsons found')
 

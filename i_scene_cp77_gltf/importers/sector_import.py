@@ -275,7 +275,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
     'worldCollisionNode'
     ]
     # Enter the path to your projects source\raw\base folder below, needs double slashes between folder names.
-    path = os.path.join( os.path.dirname(filepath),'source','raw','base')
+    path = os.path.join( os.path.dirname(filepath),'source','raw')
     print('path is ',path)
     project=os.path.dirname(filepath)
     # If your importing to edit the sectors and want to add stuff then set the am_modding to True and it will auto create the _new collectors
@@ -290,6 +290,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                         s.clip_end = 50000
 
     jsonpath = glob.glob(os.path.join(path, "**", "*.streamingsector.json"), recursive = True)
+    path = os.path.join( os.path.dirname(filepath),'source','raw','base')
     meshes=[]
     C = bpy.context
     I_want_to_break_free=False
@@ -324,7 +325,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
                     case 'worldStaticMeshNode' |'worldRotatingMeshNode'|'worldAdvertisingNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' \
                         | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldTerrainMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode'\
-                    'worldStaticMeshNode' | 'worldDestructibleEntityProxyMeshNode' | 'worldStaticOccluderMeshNode' |'worldDecorationMeshNode' | 'worldFoliageNode': 
+                   | 'worldMeshNode' | 'worldDestructibleEntityProxyMeshNode' | 'worldStaticOccluderMeshNode' |'worldDecorationMeshNode' | 'worldFoliageNode': 
                         if isinstance(e, dict) and 'mesh' in data.keys() and isinstance(data['mesh'], dict) and'DepotPath' in data['mesh'].keys():
                             meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                             #print('Mesh name is - ',meshname, e['HandleId'])
@@ -413,7 +414,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
     inst_m=Matrix.LocRotScale(inst_pos,inst_rot,inst_scale)
     roads=[]
     for fpn,filepath in enumerate(jsonpath):
-        projectjson=os.path.join(path,'base',os.path.basename(project)+'.streamingsector.json')
+        projectjson=os.path.join(path,os.path.basename(project)+'.streamingsector.json')
         if filepath==projectjson:
             continue
         
@@ -457,6 +458,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                 match ntype:
                     case 'worldAISpotNode':
                         instances = [x for x in t if x['NodeIndex'] == i]
+
                         print('worldAISpotNode',i)
                         if instances:
                             inst=instances[0]
@@ -685,10 +687,11 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                     NDI_Coll['debugName']=e['Data']['debugName']['$value']
                                     NDI_Coll['sectorName']=sectorName 
                                     NDI_Coll['numElements']=num
+                                    NDI_Coll['appearanceName']=''
                                     if 'appearanceName' in e['Data'].keys():
                                         NDI_Coll['appearanceName']=e['Data']['appearanceName']['$value']
-                                    else :
-                                        NDI_Coll['appearanceName']=''
+                                    elif 'meshAppearance'in e['Data'].keys():
+                                        NDI_Coll['appearanceName']=e['Data']['meshAppearance']['$value']
                                     for El_idx in range(start, start+num):
                                         #create the linked copy of the group of mesh
                                         new_groupname = 'NDI'+str(inst['nodeDataIndex'])+'_'+str(El_idx)+'_'+groupname
@@ -703,10 +706,11 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                         new['mesh']=meshname
                                         new['debugName']=e['Data']['debugName']['$value']
                                         new['sectorName']=sectorName 
+                                        new['appearanceName']=''
                                         if 'appearanceName' in e['Data'].keys():
                                             new['appearanceName']=e['Data']['appearanceName']['$value']
-                                        else :
-                                            new['appearanceName']=''
+                                        elif 'meshAppearance'in e['Data'].keys():
+                                            new['appearanceName']=e['Data']['meshAppearance']['$value']
                                         for old_obj in group.all_objects:                            
                                             obj=old_obj.copy()  
                                             new.objects.link(obj)                                    
@@ -980,7 +984,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
 
                     case 'worldStaticMeshNode' |'worldRotatingMeshNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldAdvertismentNode' | \
                 'worldGenericProxyMeshNode'|'worldDestructibleEntityProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldStaticOccluderMeshNode'| 'worldTerrainMeshNode' | 'worldClothMeshNode' |\
-                'worldDecorationMeshNode' | 'worldDynamicMeshNode' : 
+                'worldDecorationMeshNode' | 'worldDynamicMeshNode' | 'worldMeshNode': 
                         meshname=None
                         if isinstance(e, dict) and 'mesh' in data.keys() and isinstance(data['mesh'], dict) and'DepotPath' in data['mesh'].keys():
                             meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
@@ -1082,7 +1086,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                 groupname = groupname[:-1]
                                             group=Masters.children.get(groupname)
                                             if (group):
-                                                NDI_Coll_name = 'NDI'+str(inst['nodeDataIndex'])+'_'+groupname
+                                                NDI_Coll_name = 'wIDMn'+str(inst['nodeDataIndex'])+'_'+groupname
                                                 while len(NDI_Coll_name) > 63:
                                                         NDI_Coll_name = NDI_Coll_name[:-1]
                                                 NDI_Coll = bpy.data.collections.new(NDI_Coll_name)
@@ -1094,10 +1098,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                 NDI_Coll['debugName']=e['Data']['debugName']['$value']
                                                 NDI_Coll['sectorName']=sectorName 
                                                 NDI_Coll['numElements']=num
+                                                NDI_Coll['appearanceName']=''
                                                 if 'appearanceName' in e['Data'].keys():
                                                     NDI_Coll['appearanceName']=e['Data']['appearanceName']['$value']
-                                                else :
-                                                    NDI_Coll['appearanceName']=''
                                                 #print('Glb found - ',glbfoundname)
                                                 #print('Glb found, looking for instances of ',i)
                                                 #print('Node - ',i, ' - ',meshname)
