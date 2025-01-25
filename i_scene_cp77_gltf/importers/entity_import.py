@@ -114,9 +114,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     # then check for an anim in the project thats using the rig (some things like the arch bike dont ref the anim in the ent)
     # otherwise just skip this section
     #
-    anim_files = glob.glob(os.path.join(path,"base","animations","**","*anims.glb"), recursive = True)
-    ep1_anim_files = glob.glob(os.path.join(path,"ep1","animations","**","*anims.glb"), recursive = True)
-    anim_files = anim_files + ep1_anim_files
+    anim_files = glob.glob(os.path.join(path,"**","*anims.glb"), recursive = True)
 
     rig=None
     bones=None

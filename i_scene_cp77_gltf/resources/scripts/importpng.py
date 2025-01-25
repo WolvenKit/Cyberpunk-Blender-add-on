@@ -40,7 +40,7 @@ def import_png_images():
         bpy.ops.object.material_slot_add()
         material = bpy.data.materials.new(name=f"Material_{i}")
         material.use_nodes = True
-        bsdf = material.node_tree.nodes["Principled BSDF"]
+        bsdf = material.node_tree.nodes[loc("Principled BSDF")]
         texture = material.node_tree.nodes.new("ShaderNodeTexImage")
         texture.image = bpy.data.images.load(os.path.join(directory_path, png_file))
         material.node_tree.links.new(bsdf.inputs["Base Color"], texture.outputs["Color"])
