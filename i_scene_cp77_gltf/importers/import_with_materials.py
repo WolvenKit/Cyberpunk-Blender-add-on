@@ -152,14 +152,14 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
         DepotPath=None
         blender_4_scale_armature_bones()
         if ".anims.glb" in filepath:
-            break
+            continue
         else:
             if with_materials==True and has_material_json:
                 matjsonpath = current_file_base_path + ".Material.json"
                 DepotPath, json_apps, mats = jsonload(matjsonpath)
-        if DepotPath == None:
+        if with_materials==True and DepotPath == None:
             print('DepotPath not set')
-            break
+            continue
 
         #DepotPath = str(obj["MaterialRepo"])  + "\\"
         context=bpy.context
@@ -167,7 +167,8 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
             DepotPath = cp77_addon_prefs.depotfolder_path
             if not cp77_addon_prefs.non_verbose:
                 print(f"Using depot path: {DepotPath}")
-        DepotPath= DepotPath.replace('\\', os.sep)
+        if DepotPath!=None:
+            DepotPath= DepotPath.replace('\\', os.sep)
         #json_apps=obj['Appearances']
         # fix the app names as for some reason they have their index added on the end.
         appkeys=[k for k in json_apps.keys()]
