@@ -53,7 +53,7 @@ def add_vertex_color_attribute(accessor_name, attribute_name, gltf_importer_data
     cols = cols[indices]
     if cols.shape[1] == 3:
         cols = colors_rgb_to_rgba(cols)
-    layer = mesh.vertex_colors.new(name=attribute_name)
+    layer = mesh.color_attributes.new(attribute_name, 'BYTE_COLOR', 'POINT')
 
     if layer is None:
         print("WARNING: Vertex colors are ignored (maximum number of vertex color layers has been reached)")
