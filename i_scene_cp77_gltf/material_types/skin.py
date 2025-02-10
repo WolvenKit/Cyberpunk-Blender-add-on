@@ -58,14 +58,22 @@ class Skin:
         CurMat.links.new(tintColorGamma.outputs[0],albedoTintMix.inputs[7])
 
         #Secondary Albedo/a
-        if "SecondaryAlbedo" in Data:
+        if "SecondaryAlbedo" in Data and Data["SecondaryAlbedo"]!='engine\\textures\\editor\\white.xbm':
             saImg=imageFromRelPath(Data["SecondaryAlbedo"], DepotPath=self.BasePath, ProjPath=self.ProjPath)
             saImgNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-900,550), label="Secondary Albedo", image=saImg)
 
             overlay = create_node(CurMat.nodes, "ShaderNodeMix", (-150,500), blend_type="OVERLAY", label="Overlay")
             overlay.data_type = "RGBA"
 
-            CurMat.links.new(saImgNode.outputs[1], overlay.inputs[0])
+            if "SecondaryAlbedoInfluence" in Data:
+                SecondaryAlbedoInf = CreateShaderNodeValue(CurMat, Data["SecondaryAlbedoInfluence"],-250,550,"SecondaryAlbedoInf")
+                
+                saMul =  create_node(CurMat.nodes, "ShaderNodeMath", (-200,520), operation = 'MULTIPLY')
+                CurMat.links.new(saMul.outputs[0], overlay.inputs[0])
+                CurMat.links.new(SecondaryAlbedoInf.outputs[0], saMul.inputs[0])
+                CurMat.links.new(saImgNode.outputs[1], saMul.inputs[1])
+            else:
+                CurMat.links.new(saImgNode.outputs[1], overlay.inputs[0])
             CurMat.links.new(albedoTintMix.outputs[2], overlay.inputs[6])
             CurMat.links.new(saImgNode.outputs[0], overlay.inputs[7])
             CurMat.links.new(overlay.outputs[2], pBSDF.inputs['Base Color'])
