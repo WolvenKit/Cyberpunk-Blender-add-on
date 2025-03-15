@@ -6,11 +6,12 @@
 #  \____/_.___/_/ /\___/\___/\__//____/ .___/\__,_/ |__/|__/_/ /_/\___/_/      \____/\__,_/\__/ .___/\__,_/\__/  
 #            /___/                   /_/                                                     /_/                 #
 #
-# Script to generate Object Spawner jsons from the current selection
+# Script to generate Object Spawner* jsons from the current selection *(aka Entity Spawner, World Editing Toolkit, Wheezekit, Buildy McBuildface)
 # Written by Simarilius, OS by KeanuWheeze
-# Initial version 15/8/24
-# v0.2
+# Initial version 15/8/24, updated 14/3/25
+# v0.3
 #
+# INSTRUCTIONS:
 # Import some sectors
 # Select some stuff
 # set the groupname and project folder variables
@@ -21,8 +22,8 @@
 #
 # Comments/Suggestions welcome, feel free to ping me on the wkit discord. (use worldediting or blenderaddon channels)
 
-GroupName='blender_group_1'
-ProjectFolder = 'C:\\CPMod\\notell'
+GroupName='aldecados_workshop_tent'
+ProjectFolder = 'C:\\CPMod\\OS_export'
 
 # Can try autogenerate collisions, options are NONE, ALL, STRUCT (trys to just do walls/floors/ceilings)
 # Any objects with OS_Coll or physicsCollider in the name will get treated as collisions regardless of this
@@ -95,8 +96,10 @@ def find_nodeType(obj):
         return obj['nodeType']    
     if obj.users_collection[0].name!="Scene Collection" and 'nodeType' in obj.users_collection[0].keys():
         nodeType=obj.users_collection[0]['nodeType']
+        obj['appearanceName']=obj.users_collection[0]['appearanceName']
     elif coll_parents.get(obj.users_collection[0].name)!="Scene Collection" and 'nodeType' in D.collections[coll_parents.get(obj.users_collection[0].name)]:
-            nodeType=D.collections[coll_parents.get(obj.users_collection[0].name)]['nodeType']
+        nodeType=D.collections[coll_parents.get(obj.users_collection[0].name)]['nodeType']
+        obj['appearanceName']=D.collections[coll_parents.get(obj.users_collection[0].name)]['appearanceName']
 
     return nodeType
 
