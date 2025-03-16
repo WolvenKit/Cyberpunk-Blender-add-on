@@ -100,8 +100,10 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
         filename=os.path.splitext(f['name'])[0]
         filepath = os.path.join(directory, f['name'])
         vers = bpy.app.version
-        if vers[0] == 4 and vers[1] >= 2:
+        if vers[0] == 4 and vers[1] >= 2 and vers[1] < 4:
             gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":heuristic, "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':octos, 'bone_shape_scale_factor':1.0})
+        elif vers[0] == 4 and vers[1] > 3:
+            gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":heuristic, "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':octos, 'bone_shape_scale_factor':1.0, 'import_scene_extras':True,'import_select_created_objects':True})
         else:
             gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":heuristic, "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':octos,})
         gltf_importer.read()
