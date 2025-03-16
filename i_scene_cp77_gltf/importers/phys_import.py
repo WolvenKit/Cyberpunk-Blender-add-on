@@ -45,7 +45,7 @@ def cp77_phys_import(filepath, rig=None, chassis_z=None):
             elif collision_shape == "physicsColliderBox":
                 half_extents = i['Data']['halfExtents']
                 center = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
-                box = draw_box_collider(submeshName, new_collection, half_extents, center, physmat, collision_type)
+                box = draw_box_collider(submeshName, new_collection, half_extents, transform, physmat, collision_type)
                 if rig is not None: 
                     constraint = box.constraints.new('CHILD_OF')
                     constraint.target = rig
