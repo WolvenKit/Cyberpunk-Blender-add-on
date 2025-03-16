@@ -42,7 +42,11 @@ def draw_convex_collider(name, collision_collection, vertices, physmat, transfor
             bm.verts.new(v)
         bm.to_mesh(obj.data)
         bm.free()
+        bpy.ops.object.mode_set(mode='EDIT')
+        #print(bpy.context.object.mode)
+        bpy.ops.mesh.select_all(action='SELECT')
         bpy.ops.mesh.convex_hull()
+        bpy.ops.object.mode_set(mode='OBJECT')
 
 
 def draw_sphere_collider(name, collision_collection, radius, position, physmat, collision_type):
@@ -108,8 +112,8 @@ def draw_box_collider(name, collision_collection, half_extents, transform, physm
     set_collider_props(box, collision_shape, physmat, collision_type)
     box.location = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
     box.rotation_quaternion = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
-    collision_collection.objects.link(box)
-    bpy.context.collection.objects.unlink(box) # Unlink from the current collection
+    # collision_collection.objects.link(box)
+    # bpy.context.collection.objects.unlink(box) # Unlink from the current collection
 
 
 def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, sampleverts, radius, height, physics_material):
