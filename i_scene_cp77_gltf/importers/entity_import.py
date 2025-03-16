@@ -750,7 +750,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                     obj = draw_capsule_collider(submeshName, new_col, r, h, position, rotation, physmat, collision_type)
                                 except Exception as e:
                                     print('uh oh', e)
-
+    if rig:
+        rig.pose_position = 'REST'
     if not cp77_addon_prefs.non_verbose:
         if app_name:
             print('') 
