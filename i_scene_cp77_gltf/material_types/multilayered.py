@@ -638,8 +638,10 @@ class Multilayered:
             NG.links.new(GroupInN.outputs[9],MaskMultiply.inputs[0])
             NG.links.new(GroupInN.outputs[9],MaskLinearBurnAdd.inputs[0])
             NG.links.new(GroupInN.outputs[9],MBNormSubtractMask.inputs[1])
-            NG.links.new(GroupInN.outputs[10],BMN.inputs[1])
-            NG.links.new(GroupInN.outputs[11],BMN.inputs[2])
+            if len(BMN.inputs) > 1:
+              NG.links.new(GroupInN.outputs[10],BMN.inputs[1])
+              if len(BMN.inputs) > 2:
+                NG.links.new(GroupInN.outputs[11],BMN.inputs[2])
 
             NG.links.new(MBCMicroOffset.outputs[0],MBCSubtract.inputs[1])
             NG.links.new(MBCMicroOffset.outputs[0],MBCMultiply.inputs[0])
