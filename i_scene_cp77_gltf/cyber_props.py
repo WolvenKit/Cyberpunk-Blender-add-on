@@ -16,7 +16,7 @@ enum_items = [(mat.get("Name", ""), mat.get("Name", ""), "") for mat in physmats
 
 def CP77RefitList(context):
 
-    Adonis = os.path.join(refit_dir, "Adonis.refitter.zip")
+    Adonis = os.path.join(refit_dir, "adonis.refitter.zip")
     VanillaFemToMasc = os.path.join(refit_dir, "f2m.refitter.zip")
     VanillaFem_BigBoobs = os.path.join(refit_dir, "f_normal_to_big_boobs.refitter.zip")
     VanillaFem_SmallBoobs = os.path.join(refit_dir, "f_normal_to_small_boobs.refitter.zip")
