@@ -44,9 +44,9 @@ def cp77_mlsetup_export(self, context):
         MLSetup = mat.get('MLSetup')
         ProjPath=mat.get('ProjPath')
         DepotPath=mat.get('DepotPath')
-        file = openJSON( MLSetup+".json",mode='r',DepotPath=DepotPath, ProjPath=ProjPath)
-        mlsetup = json.loads(file.read())
-        file.close()
+        mlsetup = openJSON( MLSetup+".json",mode='r',DepotPath=DepotPath, ProjPath=ProjPath)
+        #mlsetup = json.loads(file.read())
+        #file.close()
         
         xllay = mlsetup["Data"]["RootChunk"]["layers"]
         
@@ -124,9 +124,9 @@ def cp77_mlsetup_export(self, context):
             if material in prefixxed:
                 material=prefix_mat(material)
                 print('Material already modified, loading ',material)
-            mltfile = openJSON( material + ".json",mode='r',DepotPath=DepotPath, ProjPath=ProjPath)
-            mltemp = json.loads(mltfile.read())
-            mltfile.close()
+            mltemp = openJSON( material + ".json",mode='r',DepotPath=DepotPath, ProjPath=ProjPath)
+            #mltemp = json.loads(mltfile.read())
+            #mltfile.close()
             mltemplate =mltemp["Data"]["RootChunk"]
             OverrideTable = createOverrideTable(mltemplate)
             match=None
