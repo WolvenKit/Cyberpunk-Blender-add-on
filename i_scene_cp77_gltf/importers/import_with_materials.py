@@ -153,25 +153,25 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
         #Kwek: Added another gate for materials
         DepotPath=None
 
-        # initialize for material import check
-        json_apps = {}
-
         blender_4_scale_armature_bones()
 
         if ".anims.glb" in filepath:
             continue
-        else:
 
-            if with_materials==True and has_material_json:
+
+        if with_materials == True:
+            json_apps = {} # always initialize this
+
+            if has_material_json:
                 matjsonpath = current_file_base_path + ".Material.json"
                 DepotPath, json_apps, mats = jsonload(matjsonpath)
 
-        if with_materials==True and DepotPath == None:
-            print('DepotPath not set')
-            continue
+            if DepotPath == None:
+                print(f"Failed to read DepotPath, skipping material import (hasMaterialJson: {has_material_json})")
+                continue
 
         #DepotPath = str(obj["MaterialRepo"])  + "\\"
-        context=bpy.context
+        context=bpy.context # TODO: Do we need this here?
         if remap_depot and os.path.exists(cp77_addon_prefs.depotfolder_path):
             DepotPath = cp77_addon_prefs.depotfolder_path
             if not cp77_addon_prefs.non_verbose:
@@ -179,9 +179,15 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
         if DepotPath!=None:
             DepotPath= DepotPath.replace('\\', os.sep)
 
+        if import_garmentsupport:
+            manage_garment_support(existingMeshes, gltf_importer)
+
+        # the rest of the function deals with material import and validation
+        if with_materials != True:
+            return
+
         # validate materials, and don't import duplicates. Have this outside the loop/conditional so that it's valid but empty.
         validmats={}
-
         # fix the app names as for some reason they have their index added on the end.
         if len(json_apps) > 0:
             appkeys=[k for k in json_apps.keys()]
@@ -205,11 +211,8 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
                     for m in json_apps[key]:
                         validmats[m]=True
 
-        if with_materials:
             import_mats(current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmats)
 
-        if import_garmentsupport:
-            manage_garment_support(existingMeshes, gltf_importer)
 
 
     if not cp77_addon_prefs.non_verbose:
