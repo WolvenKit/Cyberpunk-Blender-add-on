@@ -82,40 +82,29 @@ def save_rig_to_json(output_filepath):
             }
         })
 
-    # Reverse the list to start with the last bones
-    updated_bones.reverse()
+    # Create a mapping of bone names to indices
+    bone_name_to_index = {bone["name"]["$value"]: i for i, bone in enumerate(updated_bones)}
 
-    # Sort the bones in descending order based on parent-child relationships
-    sorted_bones = []
-    bone_name_to_data = {bone["name"]["$value"]: bone for bone in updated_bones}
-
-    def add_bone_and_children_descending(bone_name):
-        bone = bone_name_to_data[bone_name]
-        if bone not in sorted_bones:
-            # Add children recursively first
-            for child in armature_object.pose.bones:
-                if child.parent and child.parent.name == bone_name:
-                    add_bone_and_children_descending(child.name)
-            sorted_bones.append(bone)
-
-    # Start with the root bones (bones with no parent)
-    for bone in armature_object.pose.bones:
-        if bone.parent is None:
-            add_bone_and_children_descending(bone.name)
-
-    # Reverse the sorted list back to ascending order
-    sorted_bones.reverse()
-
-    # Update parent indices based on the sorted order
-    bone_name_to_index = {bone["name"]["$value"]: i for i, bone in enumerate(sorted_bones)}
-    for bone in sorted_bones:
+    # Update parent indices based on the mapping
+    for bone in updated_bones:
         parent_name = bone.pop("parent_name")  # Remove the temporary parent_name field
         bone["parent_index"] = bone_name_to_index[parent_name] if parent_name else -1
 
+    # Bubble sort the bones in descending order based on parent_index
+    n = len(updated_bones)
+    for i in range(n):
+        for j in range(0, n - i - 1):
+            if updated_bones[j]["parent_index"] < updated_bones[j + 1]["parent_index"]:
+                # Swap the bones
+                updated_bones[j], updated_bones[j + 1] = updated_bones[j + 1], updated_bones[j]
+
+    # Reverse the list to ensure parent bones appear before their children
+    updated_bones.reverse()
+
     # Update the JSON data
-    rig_data["Data"]["RootChunk"]["boneNames"] = [bone["name"] for bone in sorted_bones]
-    rig_data["Data"]["RootChunk"]["boneParentIndexes"] = [bone["parent_index"] for bone in sorted_bones]
-    rig_data["Data"]["RootChunk"]["boneTransforms"] = [bone["transform"] for bone in sorted_bones]
+    rig_data["Data"]["RootChunk"]["boneNames"] = [bone["name"] for bone in updated_bones]
+    rig_data["Data"]["RootChunk"]["boneParentIndexes"] = [bone["parent_index"] for bone in updated_bones]
+    rig_data["Data"]["RootChunk"]["boneTransforms"] = [bone["transform"] for bone in updated_bones]
 
     # Save the updated JSON data to the output file
     with open(output_filepath, 'w') as file:
