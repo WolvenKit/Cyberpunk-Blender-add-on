@@ -12,7 +12,7 @@ def CP77SubPrep(self, context, smooth_factor, merge_distance):
     current_mode = context.mode
     if not obj:
         show_message("No active object. Please Select a Mesh and try again")
-        return {'CANCELLED'} 
+        return {'CANCELLED'}
     if obj.type != 'MESH':
         show_message("The active object is not a mesh.")
         return {'CANCELLED'}
@@ -24,7 +24,7 @@ def CP77SubPrep(self, context, smooth_factor, merge_distance):
     bpy.ops.mesh.mark_seam(clear=False)
     bpy.ops.mesh.select_mode(type="VERT")
     bpy.ops.mesh.select_all(action='SELECT')
-    
+
     # Store the number of vertices before merging
     bpy.ops.object.mode_set(mode='OBJECT')
     before_merge_count = len(obj.data.vertices)
@@ -55,7 +55,7 @@ def CP77ArmatureSet(self, context, reparent):
     obj = context.object
     if not obj:
         show_message("No active object. Please Select a Mesh and try again")
-        return {'CANCELLED'} 
+        return {'CANCELLED'}
     if obj.type != 'MESH':
         show_message("The active object is not a mesh.")
         return {'CANCELLED'}
@@ -81,7 +81,7 @@ def CP77ArmatureSet(self, context, reparent):
                 if not retargeted:
                     armature = mesh.modifiers.new('Armature', 'ARMATURE')
                     armature.object = target_armature
-                
+
                 if reparent == True:
                     # Set parent
                     mesh.parent = target_armature
@@ -101,7 +101,7 @@ def CP77UvChecker(self, context):
     uv_checker = None
     if not obj:
         show_message("No active object. Please Select a Mesh and try again")
-        return {'CANCELLED'} 
+        return {'CANCELLED'}
     if obj.type != 'MESH':
         show_message("The active object is not a mesh.")
         return {'CANCELLED'}
@@ -138,15 +138,15 @@ def CP77UvChecker(self, context):
             except AttributeError:
                 bpy.data.meshes[mesh.name].materials.append(bpy_mats['UV_Checker'])
                 i = mesh.data.materials.find('UV_Checker')
-           
+
             if i >= 0:
                 mesh.active_material_index = i
             if current_mode != 'EDIT':
                 bpy.ops.object.mode_set(mode='EDIT')
                 bpy.ops.object.material_slot_assign()
-                
+
                 #print(current_mode)
-        
+
         if context.mode != current_mode:
             bpy.ops.object.mode_set(mode=current_mode)
 
@@ -158,11 +158,11 @@ def CP77UvUnChecker(self, context):
     current_mode = context.mode
     if not obj:
         show_message("No active object. Please Select a Mesh and try again")
-        return {'CANCELLED'} 
+        return {'CANCELLED'}
     if obj.type != 'MESH':
         show_message("The active object is not a mesh.")
         return {'CANCELLED'}
-        
+
     uvchecker = 'UV_Checker'
     original_mat_name = None
     for mesh in selected_meshes:
@@ -201,18 +201,19 @@ def CP77RefitChecker(self, context):
 
 def applyModifierAsShapeKey(obj):
     names = getModNames(obj)
-    print(names)
-    refitter = None
-    for name in names:
-        if 'AutoFitter' in name:
-            refitter = name
-            if refitter:
-                bpy.context.view_layer.objects.active = obj
-                obj.select_set(True)
-                
-                bpy.ops.object.modifier_apply_as_shapekey(keep_modifier=False, modifier=refitter)
-                print(f"Applied modifier '{name}' as shape key.")
-                
+    autoFitters =  [s for s in names if 'Autofitter' in s]
+
+    if len(autoFitters) == 0:
+        print(f"No autofitter found for {obj.name}. Current modifiers are {names}")
+        return
+
+    for refitter in autoFitters:
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+
+        bpy.ops.object.modifier_apply_as_shapekey(keep_modifier=False, modifier=refitter)
+        print(f"Applied modifier '{refitter}' as shape key.")
+
 def applyRefitter(obj):
     applyModifierAsShapeKey(obj)
     orignames = getShapeKeyNames(obj)
@@ -225,14 +226,18 @@ def applyRefitter(obj):
             gskey.value = 1
 
             bpy.ops.object.shape_key_add(from_mix=True)
-            
+
             gskey.value = 0
             gskey = setActiveShapeKey(obj, name)
             bpy.ops.object.shape_key_remove(all=False)
     newnames = getShapeKeyNames(obj)
-    setActiveShapeKey(obj, 'Basis')
     bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.shape_key_remove(all=False)
+
+    # if we have active shape keys: activate 'Basis' and remove the others
+    if obj.data.shape_keys is not None and obj.data.shape_keys.key_blocks is not None:
+        setActiveShapeKey(obj, 'Basis')
+        bpy.ops.object.shape_key_remove(all=False)
+
     for name in newnames:
         if 'AutoFitter' in name:
             refitkey = setActiveShapeKey(obj, name)
@@ -240,19 +245,23 @@ def applyRefitter(obj):
         if name not in orignames:
             newgs = setActiveShapeKey(obj, name)
             newgs.name = 'GarmentSupport'
-    
+
 def CP77Refit(context, refitter, addon, target_body_path, target_body_name, useAddon, addon_target_body_path, addon_target_body_name, fbx_rot):
     obj = context.object
     if not obj:
         show_message("No active object. Please Select a Mesh and try again")
-        return {'CANCELLED'} 
+        return {'CANCELLED'}
     if obj.type != 'MESH':
         show_message("The active object is not a mesh.")
         return {'CANCELLED'}
     else:
         autofitter(context, refitter, addon, target_body_path, useAddon, addon_target_body_path, addon_target_body_name, target_body_name, fbx_rot)
 
-def autofitter(context, refitter, addon, target_body_path, target_body_name, useAddon, addon_target_body_path, addon_target_body_name, fbx_rot):
+def autofitter(context, refitter, addon, target_body_path, useAddon, addon_target_body_path, addon_target_body_name, target_body_name, fbx_rot):
+    if target_body_name == None:
+        show_message("No target body selected. Please select a target body and try again.")
+        return {'CANCELLED'}
+
     selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
     scene = context.scene
     current_mode = context.mode
@@ -264,7 +273,6 @@ def autofitter(context, refitter, addon, target_body_path, target_body_name, use
 
     if len(refitter) != 0:
         for obj in refitter:
-            print('refitter object:', obj.name)
             if obj['refitter_type'] == target_body_name:
                 print(obj['refitter_type'], 'refitter found')
                 refitter_obj = obj
@@ -277,13 +285,15 @@ def autofitter(context, refitter, addon, target_body_path, target_body_name, use
                     if modifier.type == 'LATTICE' and modifier.object == refitter_obj:
                         refit = True
                         print(mesh.name, 'is already refit for', target_body_name)
-        applyRefitter(mesh)
+                        continue
+                print(mesh.name, 'Applying refit for', target_body_name)
+                applyRefitter(mesh)
     if len(addon) != 0:
         for obj in addon:
             print('addon object:', obj.name)
             if obj['refitter_addon_type'] == addon_target_body_name:
                 print(obj['refitter_addon_type'], 'refitter addon found')
-                addon_obj = obj         
+                addon_obj = obj
 
         if addon_obj:
             print('theres a refitter addon:', addon_obj.name, 'type:', addon_obj['refitter_addon_type'])
@@ -297,7 +307,7 @@ def autofitter(context, refitter, addon, target_body_path, target_body_name, use
                 if not refit:
                     print('refitting:', mesh.name, 'to:', target_body_name)
                     lattice_modifier = mesh.modifiers.new(addon_obj.name, 'LATTICE')
-                    lattice_modifier.object = addon_obj 
+                    lattice_modifier.object = addon_obj
 
     for collection in scene.collection.children:
         if collection.name == 'Refitters':
@@ -307,9 +317,7 @@ def autofitter(context, refitter, addon, target_body_path, target_body_name, use
         r_c = bpy.data.collections.new('Refitters')
         scene.collection.children.link(r_c)
 
-    # Get the JSON file path for the selected target_body
-    lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w  = jsonload(target_body_path)
-    new_lattice = setup_lattice(r_c, fbx_rot, lattice_object_name, target_body_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale,lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w)
+    new_lattice = add_lattice(target_body_path, r_c, fbx_rot, target_body_name)
 
     for mesh in selected_meshes:
         lattice_modifier = mesh.modifiers.new(new_lattice.name,'LATTICE')
@@ -320,9 +328,24 @@ def autofitter(context, refitter, addon, target_body_path, target_body_name, use
             new_lattice = setup_lattice(r_c, fbx_rot, lattice_object_name, addon_target_body_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale,lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w)
             lattice_modifier.object = new_lattice
 
+        lattice_modifier.object = new_lattice
         applyRefitter(mesh)
             # Create a new lattice object
-            
+
+# re-use previous lattice, or add a new one if there isn't one
+def add_lattice(target_body_path, r_c, fbx_rot, target_body_name):
+    for refitter in r_c.objects:
+        if refitter.name == f"{target_body_name}Autofitter":
+            print(f"{target_body_name}Autofitter already exists")
+            return refitter
+
+    print(f"Creting {target_body_name}Autofitter from json file (reading {target_body_path})")
+    # Get the JSON file path for the selected target_body
+    lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w  = jsonload(target_body_path)
+    new_lattice = setup_lattice(r_c, fbx_rot, lattice_object_name, target_body_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale,lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w)
+    return new_lattice
+
+
 def setup_lattice(r_c, fbx_rot, lattice_object_name, target_body_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale,lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w):
     bpy.ops.object.add(type='LATTICE', enter_editmode=False, location=(0, 0, 0))
     new_lattice = bpy.context.object
@@ -331,7 +354,7 @@ def setup_lattice(r_c, fbx_rot, lattice_object_name, target_body_name, control_p
     lattice = new_lattice.data
     r_c.objects.link(new_lattice)
     bpy.context.collection.objects.unlink(new_lattice)
-          
+
     # Set the dimensions of the lattice
     lattice.points_u = lattice_points[0]
     lattice.points_v = lattice_points[1]
@@ -347,19 +370,19 @@ def setup_lattice(r_c, fbx_rot, lattice_object_name, target_body_name, control_p
     new_lattice.scale[0] = lattice_object_scale[0]
     new_lattice.scale[1] = lattice_object_scale[1]
     new_lattice.scale[2] = lattice_object_scale[2]
-    
+
     # Set interpolation types
     lattice.interpolation_type_u = lattice_interpolation_u
     lattice.interpolation_type_v = lattice_interpolation_v
     lattice.interpolation_type_w = lattice_interpolation_w
-        
+
     # Create a flat list of lattice points
     lattice_points = lattice.points
     flat_lattice_points = [lattice_points[w + v * lattice.points_u + u * lattice.points_u * lattice.points_v] for u in range(lattice.points_u) for v in range(lattice.points_v) for w in range(lattice.points_w)]
-   
+
     for control_point, lattice_point in zip(control_points, flat_lattice_points):
         lattice_point.co_deform = control_point
-        
+
     if new_lattice:
         bpy.context.object.hide_viewport = True
     return new_lattice

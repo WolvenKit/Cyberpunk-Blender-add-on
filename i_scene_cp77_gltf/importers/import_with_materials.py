@@ -152,53 +152,67 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
         #Kwek: was tempted to do a try-catch, but that is just La-Z
         #Kwek: Added another gate for materials
         DepotPath=None
+
         blender_4_scale_armature_bones()
+
         if ".anims.glb" in filepath:
             continue
-        else:
-            if with_materials==True and has_material_json:
+
+
+        if with_materials == True:
+            json_apps = {} # always initialize this
+
+            if has_material_json:
                 matjsonpath = current_file_base_path + ".Material.json"
                 DepotPath, json_apps, mats = jsonload(matjsonpath)
-        if with_materials==True and DepotPath == None:
-            print('DepotPath not set')
-            continue
+
+            if DepotPath == None:
+                print(f"Failed to read DepotPath, skipping material import (hasMaterialJson: {has_material_json})")
+                continue
 
         #DepotPath = str(obj["MaterialRepo"])  + "\\"
-        context=bpy.context
+        context=bpy.context # TODO: Do we need this here?
         if remap_depot and os.path.exists(cp77_addon_prefs.depotfolder_path):
             DepotPath = cp77_addon_prefs.depotfolder_path
             if not cp77_addon_prefs.non_verbose:
                 print(f"Using depot path: {DepotPath}")
         if DepotPath!=None:
             DepotPath= DepotPath.replace('\\', os.sep)
-        #json_apps=obj['Appearances']
-        # fix the app names as for some reason they have their index added on the end.
-        appkeys=[k for k in json_apps.keys()]
-        for i,k in enumerate(appkeys):
-            json_apps[k[:-1*len(str(i))]]=json_apps.pop(k)
-        validmats={}
-        #appearances = ({'name':'short_hair'},{'name':'02_ca_limestone'},{'name':'ml_plastic_doll'},{'name':'03_ca_senna'})
-        #if appearances defined populate valid mats with the mats for them, otherwise populate with everything used.
-        if len(appearances)>0 and 'ALL' not in appearances:
-            if 'Default' in appearances:
-                first_key = next(iter(json_apps))
-                for m in json_apps[first_key]:
-                    validmats[m] = True
-            else:
-                for key in json_apps.keys():
-                    if key in appearances:
-                        for m in json_apps[key]:
-                            validmats[m]=True
-        # there isnt always a default, so if none were listed, or ALL was used, or an invalid one add everything.
-        if len(validmats)==0:
-            for key in json_apps.keys():
-                for m in json_apps[key]:
-                    validmats[m]=True
-        if with_materials:
-            import_mats(current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmats)
 
         if import_garmentsupport:
             manage_garment_support(existingMeshes, gltf_importer)
+
+        # the rest of the function deals with material import and validation
+        if with_materials != True:
+            return
+
+        # validate materials, and don't import duplicates. Have this outside the loop/conditional so that it's valid but empty.
+        validmats={}
+        # fix the app names as for some reason they have their index added on the end.
+        if len(json_apps) > 0:
+            appkeys=[k for k in json_apps.keys()]
+            for i,k in enumerate(appkeys):
+                json_apps[k[:-1*len(str(i))]]=json_apps.pop(k)
+            #appearances = ({'name':'short_hair'},{'name':'02_ca_limestone'},{'name':'ml_plastic_doll'},{'name':'03_ca_senna'})
+            #if appearances defined populate valid mats with the mats for them, otherwise populate with everything used.
+            if len(appearances)>0 and 'ALL' not in appearances:
+                if 'Default' in appearances:
+                    first_key = next(iter(json_apps))
+                    for m in json_apps[first_key]:
+                        validmats[m] = True
+                else:
+                    for key in json_apps.keys():
+                        if key in appearances:
+                            for m in json_apps[key]:
+                                validmats[m]=True
+            # there isnt always a default, so if none were listed, or ALL was used, or an invalid one add everything.
+            if len(validmats)==0:
+                for key in json_apps.keys():
+                    for m in json_apps[key]:
+                        validmats[m]=True
+
+            import_mats(current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmats)
+
 
 
     if not cp77_addon_prefs.non_verbose:
