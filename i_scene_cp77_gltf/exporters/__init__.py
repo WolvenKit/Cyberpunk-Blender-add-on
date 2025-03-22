@@ -10,12 +10,34 @@ from .hp_export import *
 from .phys_export import *
 from .sectors_export import *
 from .mlsetup_export import *
+from .write_rig import *
 from ..main.bartmoss_functions import *
 from ..main.common import get_classes, show_message
 from ..cyber_props import *
 from ..cyber_prefs import *
 from ..icons.cp77_icons import *
 
+class CP77RigJSONExport(Operator,ExportHelper):
+    bl_idname = "export_scene.cp77_rig_export"
+    bl_label = "Export Rig Updates to JSON for Cyberpunk"
+    bl_options = {'REGISTER','UNDO'}
+    bl_description = "Export changes to Rigs exported from JSON back to JSON"
+    filename_ext = ".rig.json"
+    filter_glob: StringProperty(default="*.rig.json", options={'HIDDEN'})
+
+    def draw(self, context):
+        props = context.scene.cp77_panel_props
+        layout = self.layout
+
+    def execute(self, context):
+        save_rig_to_json(self.filepath)
+        return {'FINISHED'}
+        
+    def check(self, context):
+        # Ensure the file path ends with the correct extension
+        if not self.filepath.endswith(self.filename_ext):
+            self.filepath += self.filename_ext
+        return True
 
 class CP77StreamingSectorExport(Operator,ExportHelper):
     bl_idname = "export_scene.cp77_sector"
@@ -159,6 +181,7 @@ class CP77CollisionExport(Operator):
 def menu_func_export(self, context):
     self.layout.operator(CP77GLBExport.bl_idname, text="Cyberpunk GLB", icon_value=get_icon("WKIT"))
     self.layout.operator(CP77StreamingSectorExport.bl_idname, text="Cyberpunk StreamingSector", icon_value=get_icon("WKIT"))
+    self.layout.operator(CP77RigJSONExport.bl_idname, text="Cyberpunk Rig to JSON", icon_value=get_icon("WKIT"))
 
 operators, other_classes = get_classes(sys.modules[__name__])
 
