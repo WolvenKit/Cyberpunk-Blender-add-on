@@ -46,6 +46,7 @@ def create_rig_from_json(json_filepath):
 
     # Create a new armature and object
     armature = bpy.data.armatures.new("Rig")
+    armature["source"] = json_filepath
     armature_object = bpy.data.objects.new("Rig", armature)
     bpy.context.collection.objects.link(armature_object)
 
