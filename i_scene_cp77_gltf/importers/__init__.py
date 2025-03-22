@@ -13,6 +13,32 @@ from ..main.common import get_classes
 from ..cyber_props import *
 from ..cyber_prefs import *
 from ..icons.cp77_icons import *
+from .read_rig import create_rig_from_json
+
+class CP77ImportRig(Operator):
+    bl_idname = "import_scene.rig"
+    bl_label = "Import Rig from JSON"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Import a rig from a rig.JSON file and create an armature in Blender"
+    
+    filter_glob: StringProperty(
+            default="*.rig.json",
+            options={'HIDDEN'},
+            )
+    filepath: bpy.props.StringProperty(subtype="FILE_PATH")
+
+    def execute(self, context):
+        create_rig_from_json(self.filepath)
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+    
+    def draw(self, context):
+        layout = self.layout
+        row = layout.row(align=True)
+        row.operator("import_scene.rig", text="Import Rig from JSON", icon='IMPORT')
 
 
 class CP7PhysImport(Operator):
@@ -39,7 +65,7 @@ class CP77EntityImport(Operator,ImportHelper):
     bl_description = "Import Characters and Vehicles from Cyberpunk 2077 Entity Files" 
     
     filter_glob: StringProperty(
-        default="*.json",
+        default="*.ent.json",
         options={'HIDDEN'},
         )
 
@@ -235,6 +261,7 @@ class CP77Import(Operator, ImportHelper):
  
  
 def menu_func_import(self, context):
+    self.layout.operator(CP77ImportRig.bl_idname, text="Cyberpunk Rig import (.rig.json)", icon_value=get_icon('WKIT'))
     self.layout.operator(CP77Import.bl_idname, text="Cyberpunk GLTF (.gltf/.glb)", icon_value=get_icon('WKIT'))
     self.layout.operator(CP77EntityImport.bl_idname, text="Cyberpunk Entity (.json)", icon_value=get_icon('WKIT'))
     self.layout.operator(CP77StreamingSectorImport.bl_idname, text="Cyberpunk StreamingSector", icon_value=get_icon('WKIT'))
