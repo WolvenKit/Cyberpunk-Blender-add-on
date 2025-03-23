@@ -113,7 +113,10 @@ def create_rig_from_json(json_filepath):
         if parent_index != -1:
             parent_bone_name = bone_names[parent_index]["$value"]
             bone.parent = bones[parent_bone_name]
-
+        
+        # Calculate and apply the roll
+        bone.align_roll(global_rotation.to_euler())
+        
         # Store the bone for reference
         bones[bone_name] = bone
 
