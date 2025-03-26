@@ -39,6 +39,15 @@ def get_anim_info(animations):
 def objs_in_col(top_coll, objtype):
     return sum([len([o for o in col.objects if o.type==objtype]) for col in top_coll.children_recursive])+len([o for o in top_coll.objects if o.type==objtype])
 
+
+# will collapse glTF_not_exported collection in the outliner
+def disable_collection_by_name(collection_name):
+    for vl in bpy.context.scene.view_layers:
+        for l in vl.layer_collection.children:
+             if l.name.lower() == collection_name.lower():
+                l.exclude = True
+
+
 existingMaterials = None
 imported = None
 appearances = None
@@ -141,6 +150,8 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
         collection['orig_filepath']=filepath
         collection['numMeshChildren']=objs_in_col(collection, 'MESH')
         collection['numArmatureChildren']=objs_in_col(collection, 'ARMATURE')
+
+        disable_collection_by_name("glTF_not_exported")
 
         #for sketchfab exports, we want to keep our materials
         if not isExternalImport:
@@ -344,7 +355,6 @@ def blender_4_scale_armature_bones():
                 pb.custom_shape_scale_xyz[2] = .0175
                 pb.use_custom_shape_bone_size = True
 
-
 def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o):
     # check if this is a Cyberpunk import or something else entirely
 
@@ -369,3 +379,4 @@ def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o):
     else:
         if 'Armature' in o.name:
             o.hide_set(hide_armatures)
+
