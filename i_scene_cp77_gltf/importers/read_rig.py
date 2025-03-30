@@ -7,6 +7,20 @@ import bpy
 import json
 from mathutils import Quaternion, Vector
 
+def create_custom_bone_shape():
+    if "CustomBoneShape" in bpy.data.objects:
+        return bpy.data.objects["CustomBoneShape"]
+    # Create a new mesh object for the custom bone shape
+    mesh = bpy.data.meshes.new("CustomBoneShape")
+    obj = bpy.data.objects.new("CustomBoneShape", mesh)
+    bpy.context.collection.objects.link(obj)
+
+    mesh.from_pydata(
+        [(-0.014190172776579857, -0.014190172776579857, 0.010027172975242138), (0.0, 0.0, 0.10000000149011612), (-0.014190172776579857, 0.014190172776579857, 0.010027172975242138), (0.014190172776579857, -0.014190172776579857, 0.010027172975242138), (0.014190172776579857, 0.014190172776579857, 0.010027172975242138), (3.3832008305978434e-09, -3.3832008305978434e-09, -0.0010654638754203916)], 
+        [], 
+        [(0, 1, 2), (2, 1, 4), (4, 1, 3), (3, 1, 0), (2, 4, 5), (3, 0, 5), (5, 0, 2), (5, 4, 3)])
+    return obj
+
 # Helper function to compute global transform
 def compute_global_transform(index, transforms, parents, global_transforms):
     if index in global_transforms:
@@ -50,6 +64,9 @@ def create_rig_from_json(json_filepath):
     armature_object = bpy.data.objects.new("Rig", armature)
     bpy.context.collection.objects.link(armature_object)
 
+    # Enable bone axis display
+    armature_object.data.show_axes = True
+
     # Enter edit mode to add bones
     bpy.context.view_layer.objects.active = armature_object
     bpy.ops.object.mode_set(mode='EDIT')    
@@ -67,27 +84,66 @@ def create_rig_from_json(json_filepath):
 
         # Get global transform
         global_translation, global_rotation = global_transforms[i]
+        
+        # Calculate the tail position based on the rotation and a fixed length
+        tail_offset = global_rotation @ Vector((0, 0.1, 0))  # Rotate a vector of length 0.1
+        global_tail = global_translation + tail_offset
+
+         # Calculate the bone length based on the distance to the first child
+        child_head_positions = [
+        global_transforms[j][0]  # Get the global translation of the child
+        for j, child_parent_index in enumerate(bone_parents)
+        if child_parent_index == i  # Check if this bone is a parent of the child
+        ]
+
+        if child_head_positions:
+            # Calculate the length as the distance to the first child's head
+            bone_length = (child_head_positions[0] - global_translation).length
+        else:
+            # If no children, use the default length (e.g., 0.1)
+            bone_length = 0.1
 
         # Create a new bone
         bone = armature.edit_bones.new(bone_name)
         bone.head = global_translation
-        bone.tail = global_translation + Vector((0, 0.1, 0))  # Temporary tail position
-        bone.align_roll(global_rotation.to_euler())
+        bone.tail = global_tail
+        bone.length = bone_length
 
         # Set parent if applicable
         if parent_index != -1:
             parent_bone_name = bone_names[parent_index]["$value"]
             bone.parent = bones[parent_bone_name]
-
+        
+        # Calculate and apply the roll
+        bone.align_roll(global_rotation.to_euler())
+        
         # Store the bone for reference
         bones[bone_name] = bone
 
     # Exit edit mode
     bpy.ops.object.mode_set(mode='OBJECT')
 
+    # Create or retrieve the custom bone shape
+    custom_shape = create_custom_bone_shape()
+
+    bpy.ops.object.mode_set(mode='POSE')
+    # Assign the custom shape to each bone
+    for bone_name, bone in bones.items():
+        pose_bone = armature_object.pose.bones[bone_name]
+        pose_bone.custom_shape = custom_shape
+        scale=pose_bone.length/0.1
+        pose_bone.custom_shape_scale_xyz[0] = scale
+        pose_bone.custom_shape_scale_xyz[1] = scale
+        if bone_name != "Root":
+            pose_bone.custom_shape_scale_xyz[2] = -scale
+        else:
+            pose_bone.custom_shape_scale_xyz[2] = scale
+        pose_bone.use_custom_shape_bone_size = False
     print("Rig created successfully!")
 
 
+    # Exit pose mode
+    bpy.ops.object.mode_set(mode='OBJECT')
 
 
 # Example usage:
