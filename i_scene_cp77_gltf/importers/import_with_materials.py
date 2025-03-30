@@ -347,7 +347,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
 def blender_4_scale_armature_bones():
     vers = bpy.app.version
     if vers[0] >= 4:
-        arms = [obj for obj in bpy.data.objects if obj.type == 'ARMATURE']
+        arms = [obj for obj in bpy.data.objects if obj.type == 'ARMATURE' and 'Armature' in obj.name]
         for arm in arms:
             for pb in arm.pose.bones:
                 pb.custom_shape_scale_xyz[0] = .0175
