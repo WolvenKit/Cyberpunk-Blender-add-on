@@ -101,11 +101,11 @@ def register():
     print('')
 
 def unregister():
-    unregister_scriptman()
     unregister_meshtools()
-    unregister_collisiontools()
-    unregister_importers()
+    unregister_scriptman()
     unregister_exporters()
+    unregister_importers()
+    unregister_collisiontools()
     unregister_animtools()
     unregister_props()  
     unregister_prefs()
