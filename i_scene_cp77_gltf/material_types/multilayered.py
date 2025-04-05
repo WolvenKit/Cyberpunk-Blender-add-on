@@ -201,8 +201,6 @@ class Multilayered:
             else:
                 print('Mask image not found for layer ',x+1)
 
-
-
             LayerGroupN = create_node(CurMat.nodes,"ShaderNodeGroup", (-1400,400-100*x))
             LayerGroupN.node_tree = NG
             LayerGroupN.name = "Layer_"+str(x)
@@ -214,75 +212,66 @@ class Multilayered:
             # Mask flip deprecated in WolvenKit deveolpment build 8.7+
             #MaskN.texture_mapping.scale[1] = -1 #flip mask if needed
 
-            if x == 0:
-                CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+"0"].outputs[0],LayerGroupN.inputs[0])
-                CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+"0"].outputs[1],LayerGroupN.inputs[1])
-                CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+"0"].outputs[2],LayerGroupN.inputs[2])
-                CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+"0"].outputs[3],LayerGroupN.inputs[3])
-                CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+"1"].outputs[0],LayerGroupN.inputs[4])
-                CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+"1"].outputs[1],LayerGroupN.inputs[5])
-                CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+"1"].outputs[2],LayerGroupN.inputs[6])
-                CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+"1"].outputs[3],LayerGroupN.inputs[7])
+            predecessorName = "Mat_Mod_Layer_0"
+            successorName = "Mat_Mod_Layer_1"
+            previousNode = None
+            nextNode = None
+
+            # since we are skipping the import for layers with an opacity of 0, we can no longer be certain
+            # that everything is directly adjacent to each other.
+            if x > 0:
+                previousNodeIndex = x-1
+                predecessorName = f"Layer_{previousNodeIndex}"
+                while previousNodeIndex > 0 and predecessorName not in CurMat.nodes.keys():
+                    previousNodeIndex -= 1
+                    predecessorName = f"Layer_{previousNodeIndex}"
+
+                nextNodeIndex = x+1
+                successorName = f"Mat_Mod_Layer_{nextNodeIndex}"
+                while nextNodeIndex < 20 and successorName not in CurMat.nodes.keys():
+                    nextNodeIndex 9= 1
+                    successorName = f"Mat_Mod_Layer_{nextNodeIndex}"
+
+            nextNode = CurMat.nodes[successorName] if successorName in CurMat.nodes.keys() else None
+            previousNode = CurMat.nodes[predecessorName] if predecessorName in CurMat.nodes.keys() else None
+
+            if previousNode is not None:
+                CurMat.links.new(previousNode.outputs[0],LayerGroupN.inputs[0])
+                CurMat.links.new(previousNode.outputs[1],LayerGroupN.inputs[1])
+                CurMat.links.new(previousNode.outputs[2],LayerGroupN.inputs[2])
+                CurMat.links.new(previousNode.outputs[3],LayerGroupN.inputs[3])
+
+            if nextNode is not None:
+
+                CurMat.links.new(nextNode.outputs[0],LayerGroupN.inputs[4])
+                CurMat.links.new(nextNode.outputs[1],LayerGroupN.inputs[5])
+                CurMat.links.new(nextNode.outputs[2],LayerGroupN.inputs[6])
+                CurMat.links.new(nextNode.outputs[3],LayerGroupN.inputs[7])
+
+                if MaskN:
+                    CurMat.links.new(MaskN.outputs[0], nextNode.inputs[9])
+
+            if previousNode is not None and nextNode is not None:
+                CurMat.links.new(nextNode.outputs[4], previousNode.inputs[8])
+
+            # set target layer to the last processed layer, because the last one will be connected to the BSDF output
+            if LayerCount>1:
+                targetLayer="Layer_"+str(LayerCount-2)
             else:
-                CurMat.links.new(CurMat.nodes["Layer_"+str(x-1)].outputs[0],LayerGroupN.inputs[0])
-                CurMat.links.new(CurMat.nodes["Layer_"+str(x-1)].outputs[1],LayerGroupN.inputs[1])
-                CurMat.links.new(CurMat.nodes["Layer_"+str(x-1)].outputs[2],LayerGroupN.inputs[2])
-                CurMat.links.new(CurMat.nodes["Layer_"+str(x-1)].outputs[3],LayerGroupN.inputs[3])
-                CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].outputs[0],LayerGroupN.inputs[4])
-                CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].outputs[1],LayerGroupN.inputs[5])
-                CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].outputs[2],LayerGroupN.inputs[6])
-                CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].outputs[3],LayerGroupN.inputs[7])
-            if MaskN:
-                CurMat.links.new(MaskN.outputs[0],CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].inputs[9])
-            CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].outputs[4],CurMat.nodes["Layer_"+str(x)].inputs[8])
-
-        if LayerCount>1:
-            targetLayer="Layer_"+str(LayerCount-2)
-        else:
-            targetLayer="Mat_Mod_Layer_0"
+                targetLayer="Mat_Mod_Layer_0"
 
 
 
-        # If theres more than 10 layers, mix them in 2 stacks then mix the stacks, trying to avoid SVM errors
-        if False:
-            MixLayerStacks = create_node(CurMat.nodes,"ShaderNodeGroup", (-1000,-180))
-            MixLayerStacks.node_tree = NG
-            MixLayerStacks.name = "MixLayerStacks"
-            Layer10="Layer_9"
-            LastLayer="Layer_"+str(LayerCount-2)
-            # Remove the links already made between 10 & 11
-            for out in CurMat.nodes[Layer10].outputs:
-            #    if out.type != 'RGBA':
-                for l in out.links:
-                    CurMat.links.remove(l)
-            CurMat.links.new(CurMat.nodes[Layer10].outputs[0],MixLayerStacks.inputs[0])
-            CurMat.links.new(CurMat.nodes[Layer10].outputs[1],MixLayerStacks.inputs[1])
-            CurMat.links.new(CurMat.nodes[Layer10].outputs[2],MixLayerStacks.inputs[2])
-            CurMat.links.new(CurMat.nodes[Layer10].outputs[3],MixLayerStacks.inputs[3])
-            CurMat.links.new(CurMat.nodes[LastLayer].outputs[0],MixLayerStacks.inputs[4])
-            CurMat.links.new(CurMat.nodes[LastLayer].outputs[1],MixLayerStacks.inputs[5])
-            CurMat.links.new(CurMat.nodes[LastLayer].outputs[2],MixLayerStacks.inputs[6])
-            CurMat.links.new(CurMat.nodes[LastLayer].outputs[3],MixLayerStacks.inputs[7])
-            factor=CreateShaderNodeValue(CurMat, 0.5, -1100,-250, "Factor")
-            CurMat.links.new(factor.outputs[0],MixLayerStacks.inputs[8])
-
-            # replace the connections from the bottom of the stack with these
-            CurMat.links.new(MixLayerStacks.outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
-            #CurMat.links.new(CurMat.nodes[targetLayer].outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
-            CurMat.links.new(MixLayerStacks.outputs[1],CurMat.nodes[loc('Principled BSDF')].inputs['Metallic'])
-            CurMat.links.new(MixLayerStacks.outputs[2],CurMat.nodes[loc('Principled BSDF')].inputs['Roughness'])
-            targetLayer="MixLayerStacks"
-        else:
-            CurMat.links.new(CurMat.nodes[targetLayer].outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
-            CurMat.links.new(CurMat.nodes[targetLayer].outputs[2],CurMat.nodes[loc('Principled BSDF')].inputs['Roughness'])
-            CurMat.links.new(CurMat.nodes[targetLayer].outputs[1],CurMat.nodes[loc('Principled BSDF')].inputs['Metallic'])
+        CurMat.links.new(CurMat.nodes[targetLayer].outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
+        CurMat.links.new(CurMat.nodes[targetLayer].outputs[2],CurMat.nodes[loc('Principled BSDF')].inputs['Roughness'])
+        CurMat.links.new(CurMat.nodes[targetLayer].outputs[1],CurMat.nodes[loc('Principled BSDF')].inputs['Metallic'])
 
         if normalimgpath:
             yoink = self.setGlobNormal(normalimgpath,CurMat,CurMat.nodes[targetLayer].outputs[3])
             CurMat.links.new(yoink,CurMat.nodes[loc('Principled BSDF')].inputs['Normal'])
         else:
             CurMat.links.new(CurMat.nodes[targetLayer].outputs[3],CurMat.nodes[loc('Principled BSDF')].inputs['Normal'])
-        return
+
 
 
     def create(self,Data,Mat):
