@@ -130,7 +130,7 @@ class Multilayered:
         TexCordN = create_node( NG.nodes, "ShaderNodeTexCoord",(-500,-64))
 
 
-        combine = create_node(NG.nodes,"ShaderNodeCombineXYZ",  (-600,-60)) 
+        combine = create_node(NG.nodes,"ShaderNodeCombineXYZ",  (-600,-60))
 
 
         TileMultN = create_node( NG.nodes, "ShaderNodeValue", (-700,-45*2))
@@ -241,7 +241,7 @@ class Multilayered:
         else:
             targetLayer="Mat_Mod_Layer_0"
 
-        
+
 
         # If theres more than 10 layers, mix them in 2 stacks then mix the stacks, trying to avoid SVM errors
         if False:
@@ -265,12 +265,12 @@ class Multilayered:
             CurMat.links.new(CurMat.nodes[LastLayer].outputs[3],MixLayerStacks.inputs[7])
             factor=CreateShaderNodeValue(CurMat, 0.5, -1100,-250, "Factor")
             CurMat.links.new(factor.outputs[0],MixLayerStacks.inputs[8])
-                        
+
             # replace the connections from the bottom of the stack with these
             CurMat.links.new(MixLayerStacks.outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
             #CurMat.links.new(CurMat.nodes[targetLayer].outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
             CurMat.links.new(MixLayerStacks.outputs[1],CurMat.nodes[loc('Principled BSDF')].inputs['Metallic'])
-            CurMat.links.new(MixLayerStacks.outputs[2],CurMat.nodes[loc('Principled BSDF')].inputs['Roughness'])            
+            CurMat.links.new(MixLayerStacks.outputs[2],CurMat.nodes[loc('Principled BSDF')].inputs['Roughness'])
             targetLayer="MixLayerStacks"
         else:
             CurMat.links.new(CurMat.nodes[targetLayer].outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
@@ -297,6 +297,14 @@ class Multilayered:
         LayerIndex = 0
         CurMat = Mat.node_tree
         for x in (xllay):
+            opacity = x.get("opacity")
+            if opacity is None:
+                opacity = x.get("Opacity")
+
+            # if opacity is 0, then the layer has been turned off
+            if opacity == 0:
+                continue
+
             MatTile = x.get("matTile")
             if MatTile is None:
                 MatTile = x.get("MatTile")
@@ -337,10 +345,6 @@ class Multilayered:
             OffsetV = x.get("offsetV")
             if OffsetV is None:
                 OffsetV = x.get("OffsetV")
-
-            opacity = x.get("opacity")
-            if opacity is None:
-                opacity = x.get("Opacity")
 
             material = x["material"]["DepotPath"].get("$value")
             if material is None:
@@ -438,7 +442,7 @@ class Multilayered:
             if BaseMat:
                 BMN = create_node(NG.nodes,"ShaderNodeGroup", (-2000,0))
                 BMN.width = 300
-                BMN.node_tree = BaseMat                
+                BMN.node_tree = BaseMat
 
             # SET LAYER GROUP DEFAULT VALUES
 
