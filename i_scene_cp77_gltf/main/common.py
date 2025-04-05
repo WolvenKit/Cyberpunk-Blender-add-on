@@ -23,7 +23,7 @@ def load_zip(path):
 def get_classes(module):
     operators = set()
     other_classes = set()
-    
+
     # Collect classes in the specified module
     for name, obj in inspect.getmembers(module):
         if inspect.isclass(obj) and obj.__module__ == module.__name__:
@@ -31,7 +31,7 @@ def get_classes(module):
                 operators.add(obj)
             else:
                 other_classes.add(obj)
-    
+
     # Convert the sets to lists and sort the collected classes by name
     sorted_operators = sorted(list(operators), key=lambda cls: cls.__name__)
     sorted_other_classes = sorted(list(other_classes), key=lambda cls: cls.__name__)
@@ -63,7 +63,7 @@ def get_script_dir():
 def get_rig_dir():
     resources_dir = get_resources_dir()
     return os.path.join(resources_dir, "rigs")
-    
+
 def get_inputs(tree):
     vers=bpy.app.version
     if vers[0]<4:
@@ -85,7 +85,7 @@ def bsdf_socket_names():
         socket_names['Subsurface']= 'Subsurface'
         socket_names['Subsurface Color']= 'Subsurface Color'
         socket_names['Specular']= 'Specular'
-        socket_names['Transmission']= 'Transmission' 
+        socket_names['Transmission']= 'Transmission'
         socket_names['Coat']= 'Coat'
         socket_names['Sheen']= 'Sheen'
         socket_names['Emission']= 'Emission'
@@ -93,15 +93,15 @@ def bsdf_socket_names():
         socket_names['Subsurface Color']= 'Base Color'
         socket_names['Subsurface']= 'Subsurface Weight'
         socket_names['Specular']= 'Specular IOR Level'
-        socket_names['Transmission']= 'Transmission Weight' 
+        socket_names['Transmission']= 'Transmission Weight'
         socket_names['Coat']= 'Coat Weight'
         socket_names['Sheen']= 'Sheen Weight'
         socket_names['Emission']= 'Emission Color'
-    return socket_names    
+    return socket_names
 
 def imageFromPath(Img,image_format,isNormal = False):
     # The speedtree materials use the same name textures for different plants this code was loading the same leaves on all of them
-    Im = bpy.data.images.get(os.path.basename(Img)[:-4])    
+    Im = bpy.data.images.get(os.path.basename(Img)[:-4])
     if Im and Im.filepath==Img[:-3]+ image_format:
         if Im.colorspace_settings.name != 'Non-Color':
             if isNormal:
@@ -109,7 +109,7 @@ def imageFromPath(Img,image_format,isNormal = False):
         else:
             if not isNormal:
                 Im = None
-    else: 
+    else:
         Im=None
     if not Im :
         Im = bpy.data.images.get(os.path.basename(Img)[:-4] + ".001")
@@ -122,7 +122,7 @@ def imageFromPath(Img,image_format,isNormal = False):
                     Im = None
         else :
             Im = None
-    
+
     if not Im:
         Im = bpy.data.images.new(os.path.basename(Img)[:-4],1,1)
         Im.source = "FILE"
@@ -136,6 +136,13 @@ def imageFromRelPath(ImgPath, image_format='png', isNormal = False, DepotPath=''
     # Also copes with the fact that theres black.xbm in base and engine for instance
     DepotPath=DepotPath.replace('\\',os.sep)
     ProjPath=ProjPath.replace('\\',os.sep)
+    if ImgPath is float:
+        print(f"refusing to process unresolved relative image path {ImgPath}")
+        return
+    if ProjPath is float:
+        print(f"refusing to process unresolved project path {ProjPath}")
+        return
+
     inProj=os.path.join(ProjPath,ImgPath)[:-3]+ image_format
     inDepot=os.path.join(DepotPath,ImgPath)[:-3]+ image_format
     img_names=[k for k in bpy.data.images.keys() if bpy.data.images[k].filepath==inProj]
@@ -147,10 +154,10 @@ def imageFromRelPath(ImgPath, image_format='png', isNormal = False, DepotPath=''
         if len(img_names)>0:
             img_name=img_names[0]
     if img_name:
-        Im = bpy.data.images.get(img_name)    
+        Im = bpy.data.images.get(img_name)
     else:
         Im = None
-        
+
     if Im:
         if Im.colorspace_settings.name != 'Non-Color':
             if isNormal:
@@ -158,9 +165,9 @@ def imageFromRelPath(ImgPath, image_format='png', isNormal = False, DepotPath=''
         else:
             if not isNormal:
                 Im = None
-    else: 
+    else:
         Im=None
-   
+
     if not Im:
         Im = bpy.data.images.new(os.path.basename(ImgPath)[:-4],1,1)
         Im.source = "FILE"
@@ -189,10 +196,10 @@ def CreateRebildNormalGroup(curMat, x = 0, y = 0,name = 'Rebuild Normal Z'):
 
     if group is None:
         group = bpy.data.node_groups.new("Rebuild Normal Z","ShaderNodeTree")
-    
+
         GroupInN = group.nodes.new("NodeGroupInput")
         GroupInN.location = (-1400,0)
-    
+
         GroupOutN = group.nodes.new("NodeGroupOutput")
         GroupOutN.location = (200,0)
         vers=bpy.app.version
@@ -202,30 +209,30 @@ def CreateRebildNormalGroup(curMat, x = 0, y = 0,name = 'Rebuild Normal Z'):
         else:
             group.interface.new_socket(name="Image", socket_type='NodeSocketColor', in_out='OUTPUT')
             group.interface.new_socket(name="Image",socket_type='NodeSocketColor', in_out='INPUT')
-    
+
         VMup = group.nodes.new("ShaderNodeVectorMath")
         VMup.location = (-1200,-200)
         VMup.operation = 'MULTIPLY'
         VMup.inputs[1].default_value[0] = 2.0
         VMup.inputs[1].default_value[1] = 2.0
-    
+
         VSub = group.nodes.new("ShaderNodeVectorMath")
         VSub.location = (-1000,-200)
         VSub.operation = 'SUBTRACT'
         VSub.name = 'NormalSubtract'
         VSub.inputs[1].default_value[0] = 1.0
         VSub.inputs[1].default_value[1] = 1.0
-    
+
         VDot = group.nodes.new("ShaderNodeVectorMath")
         VDot.location = (-800,-200)
         VDot.operation = 'DOT_PRODUCT'
-    
+
         Sub = group.nodes.new("ShaderNodeMath")
         Sub.location = (-600,-200)
         Sub.operation = 'SUBTRACT'
         group.links.new(VDot.outputs[0],Sub.inputs[1])
         Sub.inputs[0].default_value = 1.020
-    
+
         SQR = group.nodes.new("ShaderNodeMath")
         SQR.location = (-400,-200)
         SQR.operation = 'SQRT'
@@ -239,14 +246,14 @@ def CreateRebildNormalGroup(curMat, x = 0, y = 0,name = 'Rebuild Normal Z'):
         Sep.location = (-600,0)
         Comb = group.nodes.new("ShaderNodeCombineRGB")
         Comb.location = (-300,0)
-        
+
         RGBCurvesConvert = group.nodes.new("ShaderNodeRGBCurve")
         RGBCurvesConvert.label = "Convert DX to OpenGL Normal"
         RGBCurvesConvert.hide = True
         RGBCurvesConvert.location = (-100,0)
         RGBCurvesConvert.mapping.curves[1].points[0].location = (0,1)
         RGBCurvesConvert.mapping.curves[1].points[1].location = (1,0)
-    
+
         group.links.new(GroupInN.outputs[0],VMup.inputs[0])
         group.links.new(VMup.outputs[0],VSub.inputs[0])
         group.links.new(VSub.outputs[0],VDot.inputs[0])
@@ -260,7 +267,7 @@ def CreateRebildNormalGroup(curMat, x = 0, y = 0,name = 'Rebuild Normal Z'):
         group.links.new(Range.outputs[0],Comb.inputs[2])
         group.links.new(Comb.outputs[0],RGBCurvesConvert.inputs[1])
         group.links.new(RGBCurvesConvert.outputs[0],GroupOutN.inputs[0])
-    
+
     ShaderGroup = curMat.nodes.new("ShaderNodeGroup")
     ShaderGroup.location = (x,y)
     ShaderGroup.hide = True
@@ -322,12 +329,12 @@ def CreateShaderNodeValue(curMat, value = 0,x = 0, y = 0,name = None):
     return valNode
 
 def crop_image(orig_img,outname, cropped_min_x, cropped_max_x, cropped_min_y, cropped_max_y):
-    '''Crops an image object of type <class 'bpy.types.Image'>.  For example, for a 10x10 image, 
+    '''Crops an image object of type <class 'bpy.types.Image'>.  For example, for a 10x10 image,
     if you put cropped_min_x = 2 and cropped_max_x = 6,
-    you would get back a cropped image with width 4, and 
+    you would get back a cropped image with width 4, and
     pixels ranging from the 2 to 5 in the x-coordinate
-    Note: here y increasing as you down the image.  So, 
-    if cropped_min_x and cropped_min_y are both zero, 
+    Note: here y increasing as you down the image.  So,
+    if cropped_min_x and cropped_min_y are both zero,
     you'll get the top-left of the image (as in GIMP).
     Returns: An image of type  <class 'bpy.types.Image'>
     '''
@@ -345,7 +352,7 @@ def crop_image(orig_img,outname, cropped_min_x, cropped_max_x, cropped_min_y, cr
     print("Exctracting image fragment, this could take a while...")
 
     #loop through each row of the cropped image grabbing the appropriate pixels from original
-    #the reason for the strange limits is because of the 
+    #the reason for the strange limits is because of the
     #order that Blender puts pixels into a 1-D array.
     current_cropped_row = 0
     for yy in range(orig_size_y - cropped_max_y, orig_size_y - cropped_min_y):
@@ -354,10 +361,10 @@ def crop_image(orig_img,outname, cropped_min_x, cropped_max_x, cropped_min_y, cr
         #and to know where to stop we add the amount of pixels we must copy
         orig_end_index = orig_start_index + (cropped_size_x * num_channels)
         #the index we start at for the cropped image
-        cropped_start_index = (current_cropped_row * cropped_size_x) * num_channels 
+        cropped_start_index = (current_cropped_row * cropped_size_x) * num_channels
         cropped_end_index = cropped_start_index + (cropped_size_x * num_channels)
 
-        #copy over pixels 
+        #copy over pixels
         cropped_img.pixels[cropped_start_index : cropped_end_index] = orig_img.pixels[orig_start_index : orig_end_index]
 
         #move to the next row before restarting loop
@@ -464,7 +471,7 @@ def createParallaxGroup():
 def CreateGradMapRamp(CurMat, grad_image_node, location=(-400, 250)):
     # Get image dimensions
     image_width = grad_image_node.image.size[0]
-    
+
     # Calculate stop positions
     stop_positions = [i / (image_width) for i in range(image_width)]
     #print(len(stop_positions))
@@ -495,8 +502,8 @@ def CreateGradMapRamp(CurMat, grad_image_node, location=(-400, 250)):
                 element = color_ramp_node.color_ramp.elements[0]
             element.color = (color.r, color.g, color.b, alphas[i])
             element.position = stop_positions[i]
-        
-    color_ramp_node.color_ramp.interpolation = 'CONSTANT' 
+
+    color_ramp_node.color_ramp.interpolation = 'CONSTANT'
     return color_ramp_node
 
  # (1-t)a+tb
@@ -571,12 +578,12 @@ def createVecLerpGroup():
         return CurMat
 
 def show_message(message):
-    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=message) 
+    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=message)
 
 def createHash12Group():
     if 'hash12' in bpy.data.node_groups.keys():
         return bpy.data.node_groups['hash12']
-    else:     
+    else:
         CurMat = bpy.data.node_groups.new('hash12', 'ShaderNodeTree')
         vers=bpy.app.version
         if vers[0]<4:
@@ -587,17 +594,17 @@ def createHash12Group():
             CurMat.interface.new_socket(name="result", socket_type='NodeSocketFloat', in_out='OUTPUT')
         GroupInput = create_node(CurMat.nodes,"NodeGroupInput",(-500, 0), label="Group Input")
         GroupOutput = create_node(CurMat.nodes,"NodeGroupOutput",(1350, 0), label="Group Output")
-        separate = create_node(CurMat.nodes,"ShaderNodeSeparateXYZ",  (-350,0))      
-        combine = create_node(CurMat.nodes,"ShaderNodeCombineXYZ",  (-200,0)) 
-        combine2 = create_node(CurMat.nodes,"ShaderNodeCombineXYZ",  (-200,-50)) 
-        vecMul = create_node(CurMat.nodes,"ShaderNodeVectorMath",  (0,0), operation = "MULTIPLY") 
-        frac = create_node(CurMat.nodes,"ShaderNodeVectorMath",  (150,0), operation = "FRACTION") 
+        separate = create_node(CurMat.nodes,"ShaderNodeSeparateXYZ",  (-350,0))
+        combine = create_node(CurMat.nodes,"ShaderNodeCombineXYZ",  (-200,0))
+        combine2 = create_node(CurMat.nodes,"ShaderNodeCombineXYZ",  (-200,-50))
+        vecMul = create_node(CurMat.nodes,"ShaderNodeVectorMath",  (0,0), operation = "MULTIPLY")
+        frac = create_node(CurMat.nodes,"ShaderNodeVectorMath",  (150,0), operation = "FRACTION")
         vecMul.inputs[1].default_value = (.1031,.1031,.1031)
-        dot = create_node(CurMat.nodes,"ShaderNodeVectorMath",  (300,-50), operation = "DOT_PRODUCT") 
-        vecAdd = create_node(CurMat.nodes,"ShaderNodeVectorMath",  (0,-50), operation = "ADD") 
+        dot = create_node(CurMat.nodes,"ShaderNodeVectorMath",  (300,-50), operation = "DOT_PRODUCT")
+        vecAdd = create_node(CurMat.nodes,"ShaderNodeVectorMath",  (0,-50), operation = "ADD")
         vecAdd2 = create_node(CurMat.nodes,"ShaderNodeVectorMath",  (600,0), operation = "ADD")
         combine3 = create_node(CurMat.nodes,"ShaderNodeCombineXYZ",  (450,-50))
-        separate2 = create_node(CurMat.nodes,"ShaderNodeSeparateXYZ",  (750,0)) 
+        separate2 = create_node(CurMat.nodes,"ShaderNodeSeparateXYZ",  (750,0))
         add = create_node(CurMat.nodes,"ShaderNodeMath",  (900,0), operation = "ADD")
         mul = create_node(CurMat.nodes,"ShaderNodeMath",  (1050,0), operation = "MULTIPLY")
         frac2 = create_node(CurMat.nodes,"ShaderNodeMath",  (1200,0), operation = "FRACT")
@@ -626,7 +633,7 @@ def createHash12Group():
         CurMat.links.new(separate2.outputs[2],mul.inputs[1])
         CurMat.links.new(mul.outputs[0],frac2.inputs[0])
         CurMat.links.new(frac2.outputs[0],GroupOutput.inputs[0])
-        return CurMat   
+        return CurMat
 
 res_dir= get_resources_dir()
 
@@ -643,7 +650,7 @@ def save_presets(presets):
     with open(VCOL_PRESETS_JSON, 'w') as file:
         json.dump(presets, file, indent=4)
     update_presets_items()
-        
+
 def update_presets_items():
     presets = get_color_presets()
     items = [(name, name, "") for name in presets.keys()]
