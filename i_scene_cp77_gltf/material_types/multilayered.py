@@ -192,7 +192,7 @@ class Multilayered:
     def createLayerMaterial(self,LayerName,LayerCount,CurMat,mlmaskpath,normalimgpath, skip_layers):
         NG = _getOrCreateLayerBlend()
         for x in range(LayerCount-1):
-            if x > 0 and x in skip_layers:
+            if x > 0 and x+1 in skip_layers:
                 continue
             MaskTexture=None
             projpath = os.path.join(os.path.splitext(os.path.join(self.ProjPath, mlmaskpath))[0] + '_layers', os.path.split(mlmaskpath)[-1:][0][:-7] + "_" + str(x + 1) + ".png")
@@ -255,7 +255,7 @@ class Multilayered:
                     CurMat.links.new(MaskN.outputs[0], nextNode.inputs[9])
 
             if previousNode is not None and nextNode is not None:
-                CurMat.links.new(nextNode.outputs[4], previousNode.inputs[8])
+                CurMat.links.new(nextNode.outputs[4], LayerGroupN.inputs[8])
 
         targetLayer = "Mat_Mod_Layer_0"
         for idx in reversed(range(LayerCount)):
@@ -292,9 +292,8 @@ class Multilayered:
 
         # clear layer opacity dictionary
         skip_layers = []
-        idx = -1
-        for x in (xllay):
-            idx += 1
+        
+        for idx,x  in enumerate(xllay):
             opacity = x.get("opacity")
             if opacity is None:
                 opacity = x.get("Opacity")
@@ -302,6 +301,7 @@ class Multilayered:
             # if opacity is 0, then the layer has been turned off
             if opacity == 0:
                 skip_layers.append(idx)
+                LayerIndex += 1
                 continue
 
             MatTile = x.get("matTile")
@@ -425,7 +425,7 @@ class Multilayered:
             NG_inputs[8].min_value = 0
             NG_inputs[8].max_value = 1
 
-            LayerGroupN = create_node(CurMat.nodes, "ShaderNodeGroup", (-2000,500-100*LayerIndex))
+            LayerGroupN = create_node(CurMat.nodes, "ShaderNodeGroup", (-2000,500-100*idx))
             LayerGroupN.width = 400
             LayerGroupN.node_tree = NG
             LayerGroupN.name = "Mat_Mod_Layer_"+str(LayerIndex)
@@ -710,72 +710,6 @@ class Multilayered:
 
         self.createLayerMaterial(file_name+"_Layer_", LayerCount, CurMat, Data["MultilayerMask"], LayerNormal, skip_layers)
 
-        optimize_layer_blends(Mat)
+  
 
 
-# TODO this doesn't work yet
-def optimize_layer_blends(material):
-    """Clean up layer blend nodes by removing predecessors with too few inputs."""
-    node_tree = material.node_tree
-
-    links = node_tree.links
-
-    # delete unlinked nodes
-    linked_nodes = set()
-
-    for link in links:
-        linked_nodes.add(link.from_node)
-        linked_nodes.add(link.to_node)
-
-    for node in [n for n in node_tree.nodes if n not in linked_nodes]:
-        if node.type is not 'TEX_GROUP' and node.bl_idname != 'ShaderNodeGroup':
-            continue
-        material.node_tree.nodes.remove(node)
-
-
-    # Get all layer blend nodes in the material
-    layer_blends = [node for node in material.node_tree.nodes if node.type == 'GROUP' and node.name.startswith('Mat_Mod_Layer_')]
-
-    for blend_node in layer_blends:
-        if (len(blend_node.inputs) > 5):
-            continue
-
-        predecessor_link = blend_node.links[0]
-        predecessor = predecessor_link.from_node
-
-        # Skip if predecessor is not a layer blend node
-        if predecessor.bl_idname != 'LayerBlend':
-            continue
-
-        # Check if predecessor has less than 6 inputs (adjust number as needed)
-        if len(predecessor.inputs) < 6 or len([inp for inp in predecessor.inputs if inp.links]) < 6:
-            # Store all links going into the predecessor
-            predecessor_inputs = {}
-            for inp in predecessor.inputs:
-                if inp.links:
-                    predecessor_inputs[inp.name] = [link.from_socket for link in inp.links]
-
-            # Store links coming out of the predecessor (except the one to our current blend node)
-            predecessor_outputs = []
-            for out in predecessor.outputs:
-                for link in out.links:
-                    if link.to_node != blend_node:
-                        predecessor_outputs.append((link.to_socket, out))
-
-            # Remove the predecessor node
-            material.node_tree.nodes.remove(predecessor)
-
-            # Reconnect inputs directly to our blend node
-            for inp_name, source_sockets in predecessor_inputs.items():
-                # Find matching input in current blend node
-                target_input = blend_node.inputs.get(inp_name)
-                if target_input:
-                    for source_socket in source_sockets:
-                        links.new(source_socket, target_input)
-
-            # Reconnect any outputs from the predecessor to its original destinations
-            for target_socket, source_socket in predecessor_outputs:
-                links.new(source_socket, target_socket)
-
-            # Optional: print debug info
-            print(f"Optimized layer blend nodes: Removed {predecessor.name} and connected directly")
