@@ -11,7 +11,7 @@ from math import sin,cos
 from mathutils import Vector, Matrix , Quaternion
 import bmesh
 from ..main.common import loc, show_message
-from ..jsontool import jsonload
+from ..jsontool import JSONTool
 from .phys_import import cp77_phys_import
 from ..collisiontools.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
 
@@ -45,11 +45,14 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     before,mid,after=filepath.partition(os.path.join('source','raw'))
     path=before+mid
 
+    error_messages = []
+    JSONTool.start_caching()
+
     ent_name=os.path.basename(filepath)[:-9]
     if not cp77_addon_prefs.non_verbose:
         print(f"Importing appearance: {', '.join(appearances)} from entity: {ent_name}")
     if filepath is not None:
-        ent_apps, ent_components, ent_component_data, res, ent_default =jsonload(filepath)
+        ent_apps, ent_components, ent_component_data, res, ent_default = JSONTool.jsonload(filepath, error_messages)
 
     ent_applist=[]
     for app in ent_apps:
@@ -121,6 +124,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     rig=None
     bones=None
     chunks=None
+
     if len(anim_files) == 0 or len(ent_rigs) == 0: # we have glbs and we have rigs called up in the ent
         print('no anim rig found')
     else:
@@ -130,7 +134,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         if len(animsinres)==0:
             for anim in anim_files:
                 if os.path.exists(anim[:-3]+'anims.json'):
-                    anm_j=jsonload(f"{anim[:-3]+'anims.json'}")
+                    anm_j=JSONTool.jsonload(f"{anim[:-3]+'anims.json'}", error_messages)
                     if anm_j is not None:
                         if os.path.join(path,anm_j['Data']['RootChunk']['rig']['DepotPath']['$value']) in ent_rigs:
                             animsinres.append(os.path.join(path,anim))
@@ -160,7 +164,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         entrigjsons=[x for x in rigjsons if x[:-5] in ent_rigs]
         if len(entrigjsons)>0:
             for entrig in entrigjsons:
-                rig_j=jsonload(entrig)
+                rig_j=JSONTool.jsonload(entrig, error_messages)
                 if rig_j is not None:
                     rig_j=rig_j['Data']['RootChunk']
                     print('rig json loaded')
@@ -244,7 +248,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                 if not os.path.exists(appfilepath):
                     print('app file not found -', filepath)
                 else:
-                    a_j=jsonload(appfilepath)
+                    a_j=JSONTool.jsonload(appfilepath, error_messages)
                     if a_j is not None:
                         apps=a_j['Data']['RootChunk']['appearances']
 
@@ -389,7 +393,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                                 json_name=os.path.join(path, c['mesh']['DepotPath']['$value']+'.json')
                                                 #print("in the deformation rig bit",json_name)
                                                 if json_name in mesh_jsons:
-                                                    mesh_j = jsonload(json_name)
+                                                    mesh_j = JSONTool.jsonload(json_name, error_messages)
                                                     mesh_j=mesh_j['Data']['RootChunk']
                                                 if mesh_j is not None:
                                                     #print('bindname from json ' ,mesh_j['boneNames'][0],bindname)
@@ -756,6 +760,10 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                     print('uh oh', e)
     if rig:
         rig.pose_position = 'REST'
+
+    JSONTool.stop_caching()
+    if len(error_messages) > 0:
+        show_message('Errors during import:\n\t' + '\n\t'.join(error_messages))
     if not cp77_addon_prefs.non_verbose:
         if app_name:
             print(f"Imported Appearance: {app_name} in {time.time() - start_time} Seconds from {ent_name}.ent")
