@@ -5,7 +5,7 @@ from .verttools import *
 from ..cyber_props import *
 from ..main.common import  show_message
 from ..main.bartmoss_functions import setActiveShapeKey, getShapeKeyNames, getModNames
-from ..jsontool import *
+from ..jsontool import JSONTool
 def CP77SubPrep(self, context, smooth_factor, merge_distance):
     scn = context.scene
     obj = context.object
@@ -121,7 +121,7 @@ def CP77UvChecker(self, context):
         texture_node.location = (-200, 0)
         texture_node.image = image
         # Connect the texture node to the shader node
-        shader_node = uvchecker.node_tree.nodes[loc("Principled BSDF")]
+        shader_node = uvchecker.node_tree.nodes["Principled BSDF"]
         uvchecker.node_tree.links.new(texture_node.outputs['Color'], shader_node.inputs['Base Color'])
     for mesh in selected_meshes:
         mat_assigned = False
@@ -324,7 +324,7 @@ def autofitter(context, refitter, addon, target_body_path, useAddon, addon_targe
         print(f'refitting: {mesh.name} to: {new_lattice["refitter_type"]}')
 
         if useAddon:
-            lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w  = jsonload(addon_target_body_path)
+            lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w  = JSONTool.jsonload(addon_target_body_path)
             new_lattice = setup_lattice(r_c, fbx_rot, lattice_object_name, addon_target_body_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale,lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w)
             lattice_modifier.object = new_lattice
 
@@ -341,7 +341,7 @@ def add_lattice(target_body_path, r_c, fbx_rot, target_body_name):
 
     print(f"Creting {target_body_name}Autofitter from json file (reading {target_body_path})")
     # Get the JSON file path for the selected target_body
-    lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w  = jsonload(target_body_path)
+    lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w  = JSONTool.jsonload(target_body_path)
     new_lattice = setup_lattice(r_c, fbx_rot, lattice_object_name, target_body_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale,lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w)
     return new_lattice
 

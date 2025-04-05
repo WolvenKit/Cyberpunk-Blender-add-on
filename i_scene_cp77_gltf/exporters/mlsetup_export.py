@@ -8,7 +8,7 @@ import json
 import os
 import numpy as np
 import copy
-from ..jsontool import openJSON
+from ..jsontool import JSONTool
 from ..main.common import createOverrideTable
 
 
@@ -44,17 +44,17 @@ def cp77_mlsetup_export(self, context):
         MLSetup = mat.get('MLSetup')
         ProjPath=mat.get('ProjPath')
         DepotPath=mat.get('DepotPath')
-        mlsetup = openJSON( MLSetup+".json",mode='r',DepotPath=DepotPath, ProjPath=ProjPath)
+        mlsetup = JSONTool.openJSON( MLSetup+".json",mode='r',DepotPath=DepotPath, ProjPath=ProjPath)
         #mlsetup = json.loads(file.read())
         #file.close()
-        
+
         xllay = mlsetup["Data"]["RootChunk"]["layers"]
-        
+
         LayerCount = len(xllay)
-            
+
         print('Obj -'+ obj.name)
         print('Mat -'+ mat.name)
-    
+
         layer=0
         layer_txt=''
         numLayers= len([x for x in nodes if 'Image Texture' in x.name])
@@ -69,9 +69,9 @@ def cp77_mlsetup_export(self, context):
             print('#')
             print('# Layer '+str(layer))
             print('#')
-            
+
             json_layer=xllay[layer]
-                    
+
             # Layer Mask
             if layernodename:
                 LayerMask=nodes[layernodename].image.filepath
@@ -93,7 +93,7 @@ def cp77_mlsetup_export(self, context):
     #        json_layer['normalStrength']['$value'=NormalStrength
             Opacity = LayerGroup.inputs['Opacity'].default_value
             json_layer['opacity']=Opacity
-            
+
             #print(ColorScale)
             print('MatTile: '+str(MatTile))
             print('MbTile: '+str(MbTile))
@@ -101,7 +101,7 @@ def cp77_mlsetup_export(self, context):
             print('MicroblendContrast: '+str(MicroblendContrast))
             print('NormalStrength: '+str(NormalStrength))
             print('Opacity: '+str(Opacity))
-            
+
             # Microblend
             NG=LayerGroup.node_tree.nodes
             Microblend = bpy.path.abspath(NG['Image Texture'].image.filepath)[:-3]+'xbm'
@@ -109,14 +109,14 @@ def cp77_mlsetup_export(self, context):
             # Need to take the filesystem out of this
             rel_mb=make_rel(Microblend)
             json_layer['microblend']['DepotPath']['$value']=rel_mb
-            
+
             # Tile bitmaps
             tileNG=NG['Group'].node_tree.nodes
             tile_diff = bpy.path.abspath(tileNG['Image Texture'].image.filepath)[:-3]+'xbm'
             tile_metal = bpy.path.abspath(tileNG['Image Texture.001'].image.filepath)[:-3]+'xbm'
             tile_rough = bpy.path.abspath(tileNG['Image Texture.002'].image.filepath)[:-3]+'xbm'
             tile_normal = bpy.path.abspath(tileNG['Image Texture.003'].image.filepath)[:-3]+'xbm'
-            
+
             # Need to see if this is in the overrides in the mltemplate, if not, add it and reference the new one. and save a local copy of the mltemplate if its not already local
             cs=ColorScale.default_value[::]
             material=LayerGroup['mlTemplate']
@@ -124,13 +124,13 @@ def cp77_mlsetup_export(self, context):
             if material in prefixxed:
                 material=prefix_mat(material)
                 print('Material already modified, loading ',material)
-            mltemp = openJSON( material + ".json",mode='r',DepotPath=DepotPath, ProjPath=ProjPath)
+            mltemp = JSONTool.openJSON( material + ".json",mode='r',DepotPath=DepotPath, ProjPath=ProjPath)
             #mltemp = json.loads(mltfile.read())
             #mltfile.close()
             mltemplate =mltemp["Data"]["RootChunk"]
             OverrideTable = createOverrideTable(mltemplate)
             match=None
-            for og in OverrideTable['ColorScale']:            
+            for og in OverrideTable['ColorScale']:
                 err=np.sum(np.subtract(OverrideTable['ColorScale'][og],cs))
                 #print(err)
                 if abs(err)<0.000001:
@@ -150,43 +150,43 @@ def cp77_mlsetup_export(self, context):
                 mltemplate['overrides']['colorScale'][0]['v']['Elements'][0]=cs[0]
                 mltemplate['overrides']['colorScale'][0]['v']['Elements'][1]=cs[1]
                 mltemplate['overrides']['colorScale'][0]['v']['Elements'][2]=cs[2]
-                print('ColScale - ',name)            
+                print('ColScale - ',name)
                 json_layer['colorScale']['$value']= name
                 print(cs[::])
 
                 if  os.path.basename(material)[:len(prefix)]==prefix:
-                    outpath= os.path.join(ProjPath,material)+".json"    
+                    outpath= os.path.join(ProjPath,material)+".json"
                 else:
                     newmaterial=prefix_mat(material)
-                    outpath= os.path.join(ProjPath,newmaterial)+".json"    
-                    json_layer['material']['DepotPath']['$value']=newmaterial  
+                    outpath= os.path.join(ProjPath,newmaterial)+".json"
+                    json_layer['material']['DepotPath']['$value']=newmaterial
                     prefixxed.append(material)
 
                 if not os.path.exists(os.path.dirname(outpath)):
                     os.makedirs(os.path.dirname(outpath))
-                        
+
                 with open(outpath, 'w') as outfile:
-                    json.dump(mltemp, outfile,indent=2)    
-                
+                    json.dump(mltemp, outfile,indent=2)
+
 
             print('tile_diff: '+str(tile_diff))
             print('tile_metal: '+str(tile_metal))
             print('tile_rough: '+str(tile_rough))
             print('tile_normal: '+str(tile_normal))
-                
+
             layer+=1
 
     if os.path.basename(MLSetup)[:len(out_prefix)]==out_prefix:
-        outpath= os.path.join(ProjPath,MLSetup)+".json"    
+        outpath= os.path.join(ProjPath,MLSetup)+".json"
     else:
         b,m,a=MLSetup.partition(os.path.basename(MLSetup))
         newmlsetup=b+out_prefix+m
-        outpath= os.path.join(ProjPath,newmlsetup)+".json"    
+        outpath= os.path.join(ProjPath,newmlsetup)+".json"
 
     if not os.path.exists(os.path.dirname(outpath)):
         os.makedirs(os.path.dirname(outpath))
-            
+
     with open(outpath, 'w') as outfile:
-            json.dump(mlsetup, outfile,indent=2)  
+            json.dump(mlsetup, outfile,indent=2)
             print('Saved to ',outpath)
     bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="MLSetup Succesfully")
