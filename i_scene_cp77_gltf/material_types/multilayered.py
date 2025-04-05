@@ -496,11 +496,13 @@ class Multilayered:
 
             # Node for blending colorscale color with diffuse texture of mltemplate
             # Changed from multiply to overlay because multiply is a darkening blend mode, and colors appear too dark. Overlay is still probably wrong - jato
-            if colorScale != "null":
+            if colorScale != "null" and colorScale != "null_null":
                 ColorScaleMixN = create_node(NG.nodes,"ShaderNodeMixRGB",(-1400,100),blend_type='MIX')
                 ColorScaleMixN.inputs[0].default_value=1
                 if 'logos' in BaseMat.name:
                     ColorScaleMixN.blend_type='MULTIPLY'
+            else:
+                ColorScaleMixN = None
 
             # Microblend texture node
             MBN = create_node(NG.nodes,"ShaderNodeTexImage",(-2300,-800),image = MBI,label = "Microblend")
@@ -618,7 +620,8 @@ class Multilayered:
 
 
             # CREATE FINAL LINKS
-            NG.links.new(GroupInN.outputs[0],ColorScaleMixN.inputs[2])
+            if ColorScaleMixN is not None:
+                NG.links.new(GroupInN.outputs[0],ColorScaleMixN.inputs[2])
             NG.links.new(GroupInN.outputs[1],BMN.inputs[0])
             NG.links.new(GroupInN.outputs[2],MBMapping.inputs[3])
             NG.links.new(GroupInN.outputs[3],MBGrtrThanN.inputs[0])
@@ -656,8 +659,11 @@ class Multilayered:
             NG.links.new(MaskMultiply.outputs[0],MaskMBMix.inputs[6])
             NG.links.new(MaskLinearBurnInvert.outputs[0],MaskMBMix.inputs[7])
             NG.links.new(MaskMBMix.outputs[2],MaskRange.inputs[0])
-
-            NG.links.new(BMN.outputs[0],ColorScaleMixN.inputs[1])
+            
+            if ColorScaleMixN is not None:
+                NG.links.new(BMN.outputs[0],ColorScaleMixN.inputs[1])
+            else:
+                NG.links.new(BMN.outputs[0],GroupOutN.inputs[0])
             NG.links.new(BMN.outputs[1],MetalRampN.inputs[0])
             NG.links.new(BMN.outputs[2],RoughRampN.inputs[0])
             NG.links.new(BMN.outputs[3],NormStrengthN.inputs[1])
@@ -677,7 +683,8 @@ class Multilayered:
             NG.links.new(NormSubN.outputs[0],NormalCombineN.inputs[1])
             NG.links.new(NormalCombineN.outputs[0],NormalizeN.inputs[0])
 
-            NG.links.new(ColorScaleMixN.outputs[0],GroupOutN.inputs[0]) #Color output
+            if ColorScaleMixN is not None:
+                NG.links.new(ColorScaleMixN.outputs[0],GroupOutN.inputs[0]) #Color output
             NG.links.new(MetalRampN.outputs[0],GroupOutN.inputs[1]) #Metalness output
             NG.links.new(RoughRampN.outputs[0],GroupOutN.inputs[2]) #Roughness output
             NG.links.new(NormalizeN.outputs[0],GroupOutN.inputs[3]) #Normal output
