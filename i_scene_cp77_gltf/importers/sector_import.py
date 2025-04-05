@@ -33,6 +33,37 @@ import bmesh
 VERBOSE=True
 scale_factor=1
 
+def assign_custom_properties(obj, data, sectorName, i, **kwargs ):
+    ntype=data['$type']
+    obj['nodeType']=ntype
+    obj['nodeIndex']=i
+    if 'debugName' in data.keys():
+        obj['debugName']=data['debugName']['$value']
+    obj['sectorName']=sectorName
+    if 'sourcePrefabHash' in data.keys():
+        obj['sourcePrefabHash']=data['sourcePrefabHash']
+    if ntype=='worldAISpotNode':
+        if data['spot']:
+            obj['workspot']=data['spot']['Data']['resource']['DepotPath']['$value']
+        else: 
+            obj['workspot']='None'
+        if data['markings']:
+            obj['markings']=data['markings'][0]['$value']
+    if 'entityTemplate' in data.keys():
+        obj['entityTemplate']=data['entityTemplate']['DepotPath']['$value']
+    
+    if 'appearanceName' in data.keys():
+        obj['appearanceName']=data['appearanceName']['$value']
+    elif 'meshAppearance'in data.keys():
+        obj['appearanceName']=data['meshAppearance']['$value']
+    else: 
+        obj['appearanceName']=''
+    
+    # Assign any additional properties passed as kwargs
+    for key, value in kwargs.items():
+        obj[key] = value
+
+
 def find_debugName(obj):
     debugName=None
     if 'debugName' in obj.users_collection[0].keys():
@@ -463,20 +494,11 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                         if instances:
                             inst=instances[0]
                             o = bpy.data.objects.new( "empty", None )
-                            o['nodeType']=ntype
-                            o['nodeIndex']=i
-                            o['debugName']=e['Data']['debugName']['$value']
-                            o['sectorName']=sectorName
-                            if e['Data']['spot']:
-                                o['workspot']=e['Data']['spot']['Data']['resource']['DepotPath']['$value']
-                            else: 
-                                o['workspot']='None'
-                            if e['Data']['markings']:
-                                o['markings']=e['Data']['markings'][0]['$value']
+                            assign_custom_properties(o, data,sectorName,i)
                             o.empty_display_size = 0.2
                             o.empty_display_type = 'CONE'
                             Sector_coll.objects.link(o) 
-                            o.name= ntype+'_'+e['Data']['debugName']['$value']
+                            o.name= ntype+'_'+data['debugName']['$value']
                             o.location = get_pos(inst)
                             o.rotation_mode = "QUATERNION"
                             o.rotation_quaternion = get_rot(inst)
@@ -516,21 +538,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                     #print('Group found for ',groupname)     
                                     new=bpy.data.collections.new(groupname)
                                     Sector_coll.children.link(new)
-                                    new['nodeType']=ntype
-                                    new['nodeIndex']=i
-                                    new['nodeDataIndex']=inst['nodeDataIndex']
-                                    new['instance_idx']=idx
-                                    new['debugName']=e['Data']['debugName']['$value']
-                                    new['sectorName']=sectorName 
-                                    new['HandleId']=e['HandleId']
-                                    new['entityTemplate']=data['entityTemplate']['DepotPath']['$value']
-                                    new['pivot']=inst['Pivot']
-                                    if 'appearanceName' in data.keys():
-                                        new['appearanceName']=data['appearanceName']['$value']
-                                    else: 
-                                        new['appearanceName']=''
-
-                                    
+                                    assign_custom_properties(new, data,sectorName,i,ndi=inst['nodeDataIndex'],idx=idx,HandleId=e['HandleId'],pivot=inst['Pivot'])                                    
                                     pos = Vector(get_pos(inst))
                                     rot=[0,0,0,0]
                                     scale =Vector((1/scale_factor,1/scale_factor,1/scale_factor))
@@ -619,15 +627,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             if (group):
                                 new=bpy.data.collections.new(groupname)
                                 Sector_coll.children.link(new)
-                                    
-                                new['nodeType']=ntype
-                                new['nodeIndex']=i
-                                new['nodeDataIndex']=inst['nodeDataIndex']
-                                new['mesh']=meshname
-                                new['debugName']=e['Data']['debugName']['$value']
-                                new['sectorName']=sectorName 
+                                assign_custom_properties(new, data,sectorName,i,
+                                nodeDataIndex=inst['nodeDataIndex'],mesh=meshname)    
                                 
-
                                 min_vertex = Vector((float('inf'), float('inf'), float('inf')))
                                 max_vertex = Vector((float('-inf'), float('-inf'), float('-inf')))
                                 for obj in group.all_objects:
@@ -680,18 +682,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                             NDI_Coll_name = NDI_Coll_name[:-1]
                                     NDI_Coll = bpy.data.collections.new(NDI_Coll_name)
                                     Sector_coll.children.link(NDI_Coll)
-                                    NDI_Coll['nodeType']=ntype
-                                    NDI_Coll['nodeIndex']=i
-                                    NDI_Coll['nodeDataIndex']=inst['nodeDataIndex']
-                                    NDI_Coll['mesh']=meshname
-                                    NDI_Coll['debugName']=e['Data']['debugName']['$value']
-                                    NDI_Coll['sectorName']=sectorName 
-                                    NDI_Coll['numElements']=num
-                                    NDI_Coll['appearanceName']=''
-                                    if 'appearanceName' in e['Data'].keys():
-                                        NDI_Coll['appearanceName']=e['Data']['appearanceName']['$value']
-                                    elif 'meshAppearance'in e['Data'].keys():
-                                        NDI_Coll['appearanceName']=e['Data']['meshAppearance']['$value']
+                                    assign_custom_properties(NDI_Coll, data,sectorName,i,
+                                    nodeDataIndex=inst['nodeDataIndex'],mesh=meshname,numElements=num)   
+                                    
                                     for El_idx in range(start, start+num):
                                         #create the linked copy of the group of mesh
                                         new_groupname = 'NDI'+str(inst['nodeDataIndex'])+'_'+str(El_idx)+'_'+groupname
@@ -699,18 +692,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                             new_groupname = new_groupname[:-1]
                                         new = bpy.data.collections.new(new_groupname)
                                         NDI_Coll.children.link(new)
-                                        new['nodeType']=ntype
-                                        new['nodeIndex']=i
-                                        new['nodeDataIndex']=inst['nodeDataIndex']
-                                        new['Element_idx']=El_idx
-                                        new['mesh']=meshname
-                                        new['debugName']=e['Data']['debugName']['$value']
-                                        new['sectorName']=sectorName 
-                                        new['appearanceName']=''
-                                        if 'appearanceName' in e['Data'].keys():
-                                            new['appearanceName']=e['Data']['appearanceName']['$value']
-                                        elif 'meshAppearance'in e['Data'].keys():
-                                            new['appearanceName']=e['Data']['meshAppearance']['$value']
+                                        assign_custom_properties(new, data,sectorName,i,
+                                        nodeDataIndex=inst['nodeDataIndex'],mesh=meshname,Element_idx=El_idx) 
+                                        
                                         for old_obj in group.all_objects:                            
                                             obj=old_obj.copy()  
                                             new.objects.link(obj)                                    
@@ -765,16 +749,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                 WFI_Coll_name = NDI_Coll_name[:-1]
                                         WFI_Coll = bpy.data.collections.new(WFI_Coll_name)
                                         Sector_coll.children.link(WFI_Coll)
-                                        WFI_Coll['nodeType']=ntype
-                                        WFI_Coll['nodeIndex']=i
-                                        WFI_Coll['nodeDataIndex']=inst['nodeDataIndex']
-                                        WFI_Coll['mesh']=meshname
-                                        WFI_Coll['debugName']=e['Data']['debugName']['$value']
-                                        WFI_Coll['sectorName']=sectorName 
-                                        WFI_Coll['Bucketnum']=Bucketnum
-                                        WFI_Coll['Bucketstart']=Bucketstart
-                                        WFI_Coll['InstBegin']=InstBegin
-                                        WFI_Coll['InstCount']=InstCount
+                                        assign_custom_properties(WFI_Coll, data,sectorName,i,
+                                        nodeDataIndex=inst['nodeDataIndex'],mesh=meshname,Element_idx=El_idx,                                       
+                                        Bucketnum=Bucketnum, Bucketstart=Bucketstart, InstBegin=InstBegin, InstCount=InstCount)
     
                                         PopSubIndex=frjson['Data']['RootChunk']['dataBuffer']['Data']['Buckets'][Bucketstart]['PopulationSubIndex']
                                         PopSubCount=frjson['Data']['RootChunk']['dataBuffer']['Data']['Buckets'][Bucketstart]['PopulationCount']
@@ -791,14 +768,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                 new_groupname = new_groupname[:-1]
                                             new = bpy.data.collections.new(new_groupname)
                                             WFI_Coll.children.link(new)
-                                            new['nodeType']=ntype
-                                            new['nodeIndex']=i
-                                            new['nodeDataIndex']=inst['nodeDataIndex']
-                                            new['Element_idx']=El_idx
-                                            new['mesh']=meshname
-                                            new['debugName']=e['Data']['debugName']['$value']
-                                            new['sectorName']=sectorName 
-                                            
+                                            assign_custom_properties(new, data,sectorName,i,
+                                            nodeDataIndex=inst['nodeDataIndex'],mesh=meshname,Element_idx=El_idx) 
+                                        
                                             popInfo=frjson['Data']['RootChunk']['dataBuffer']['Data']['Populations'][El_idx]
                                             inst_trans_rot=Quaternion((popInfo['Rotation']['W'],popInfo['Rotation']['X'], popInfo['Rotation']['Y'],popInfo['Rotation']['Z']))  
                                             inst_trans_pos=Vector(get_pos(popInfo))
@@ -838,28 +810,18 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             pl_data.uv_layers.new(name="UVMap")
                             
                             o = bpy.data.objects.new("Decal_Plane", pl_data)
-                            o['nodeType']='worldStaticDecalNode'
-                            o['nodeIndex']=i
-                            o['instance_idx']=idx
-                            o['decal']=e['Data']['material']['DepotPath']['$value']
-                            o['debugName']=e['Data']['debugName']['$value']
-                            o['sectorName']=sectorName
-                            o['horizontalFlip']=e['Data']['horizontalFlip']
-                            o['verticalFlip']=e['Data']['verticalFlip']
-                            o['alpha']=e['Data']['alpha']
-                            if 'appearanceName' in e['Data'].keys():
-                                o['appearanceName']=e['Data']['appearanceName']['$value']
-                            else :
-                                o['appearanceName']=''
-
+                            assign_custom_properties(o, data,sectorName,i,
+                            instance_idx=idx,mesh=meshname,
+                            decal=data['material']['DepotPath']['$value'],
+                            horizontalFlip=data['horizontalFlip'],
+                            verticalFlip=data['verticalFlip'],
+                            alpha=data['alpha'])
+                            
                             Sector_coll.objects.link(o)
                             o.location = get_pos(inst)
                             o.rotation_mode = "QUATERNION"
                             o.rotation_quaternion = get_rot(inst)
                             o.scale = get_scale(inst)
-                            
-
-
 
                             #o.empty_display_size = 0.002
                             #o.empty_display_type = 'IMAGE'
@@ -870,7 +832,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 try:
                                     obj=jsonload(jsonpath)
                                     index = 0
-                                    obj["Data"]["RootChunk"]['alpha'] = e['Data']['alpha']
+                                    obj["Data"]["RootChunk"]['alpha'] = data['alpha']
                                     #FIXME: image_format
                                     if mipath in mis.keys():
                                         bpymat = mis[mipath]
@@ -954,13 +916,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                             for inst in instances:
                                                 new=bpy.data.collections.new(groupname)
                                                 Sector_coll.children.link(new)
-                                                new['nodeType']=ntype
-                                                new['nodeIndex']=i
-                                                new['nodeDataIndex']=inst['nodeDataIndex']
-                                                new['mesh']=meshname
-                                                new['debugName']=e['Data']['debugName']['$value']
-                                                new['sectorName']=sectorName
-                                                new['pivot']=inst['Pivot']
+                                                assign_custom_properties(new, data,sectorName,i,
+                                                nodeDataIndex=inst['nodeDataIndex'], instance_idx=idx,
+                                                mesh=meshname, pivot=inst['Pivot'])                                               
                                             
                                                 for old_obj in group.all_objects:                            
                                                     obj=old_obj.copy()  
@@ -1018,16 +976,11 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                             for idx,inst in enumerate(instances):
                                                 new=bpy.data.collections.new(groupname)
                                                 Sector_coll.children.link(new)
-                                                new['nodeType']=ntype
-                                                new['nodeIndex']=i
-                                                new['nodeDataIndex']=inst['nodeDataIndex']
-                                                new['instance_idx']=idx
-                                                new['mesh']=meshname
-                                                new['debugName']=e['Data']['debugName']['$value']
-                                                new['sectorName']=sectorName
-                                                new['pivot']=inst['Pivot']
-                                                new['meshAppearance']=meshAppearance
-                                                new['appearanceName']=meshAppearance
+                                                assign_custom_properties(new, data,sectorName,i,
+                                                nodeDataIndex=inst['nodeDataIndex'], instance_idx=idx,
+                                                mesh=meshname, pivot=inst['Pivot'],
+                                                meshAppearance=meshAppearance,
+                                                appearanceName=meshAppearance)
                                                 if ntype=='worldClothMeshNode':
                                                     if 'windImpulseEnabled' in inst.keys():
                                                         new['windImpulseEnabled']= inst['windImpulseEnabled']
@@ -1091,6 +1044,11 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                         NDI_Coll_name = NDI_Coll_name[:-1]
                                                 NDI_Coll = bpy.data.collections.new(NDI_Coll_name)
                                                 Sector_coll.children.link(NDI_Coll)
+                                                assign_custom_properties(NDI_Coll, data,sectorName,i,
+                                                nodeDataIndex=inst['nodeDataIndex'], instance_idx=idx,
+                                                mesh=meshname, pivot=inst['Pivot'],
+                                                meshAppearance=meshAppearance,
+                                                appearanceName=meshAppearance)
                                                 NDI_Coll['nodeType']=ntype
                                                 NDI_Coll['nodeIndex']=i
                                                 NDI_Coll['nodeDataIndex']=inst['nodeDataIndex']
