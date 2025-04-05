@@ -10,7 +10,7 @@ import traceback
 from math import sin,cos
 from mathutils import Vector, Matrix , Quaternion
 import bmesh
-from ..main.common import loc
+from ..main.common import loc, show_message
 from ..jsontool import jsonload
 from .phys_import import cp77_phys_import
 from ..collisiontools.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
@@ -37,9 +37,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     with_materials = with_materials
     if not cp77_addon_prefs.non_verbose:
-        print('')
-        print('-------------------- Importing Cyberpunk 2077 Entity --------------------')
-        print('')
+        print('\n-------------------- Importing Cyberpunk 2077 Entity --------------------')
     C = bpy.context
     coll_scene = C.scene.collection
     start_time = time.time()
@@ -56,6 +54,10 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     ent_applist=[]
     for app in ent_apps:
         ent_applist.append(app['appearanceName']['$value'])
+
+    if len(ent_applist) == 0:
+        show_message("No appearances found in entity file. Imported objects may be incomplete or missing.")
+
     #print(ent_applist)
     #presto_stash.append(ent_components)
     ent_complist=[]
@@ -262,7 +264,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
 
 
             if len(comps)==0:
-                print('falling back to rootchunk comps')
+                print('falling back to rootchunk components...')
                 comps= ent_components
 
             for c in comps:
@@ -334,8 +336,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                                 obj['appResource'] = app_path[0]
                                             obj['entAppearance'] = app_name
                                     except:
+                                        print('import threw an error:')
                                         print(traceback.print_exc())
-                                        print('import threw an error')
                                         continue
                                     objs = C.selected_objects
                                     if meshname=='v_sportbike2_arch_nemesis__ext01_axle_f_a_01':
@@ -540,7 +542,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                         y=c['localTransform']['Position']['y']['Bits']/131072
                                     if not z:
                                         z=c['localTransform']['Position']['z']['Bits']/131072
-                                    #print ('Local transform  x= ',x,'  y= ',y,' z= ',z)
+                                    #print ('Local transform  x= ',x,'y= ',y,' z= ',z)
 
                                     # local transforms are in the original mesh coord sys, but get applied after its already re-oriented, mainly only matters for wheels.
                                     # this is hacky af as I cant be arsed dealing with doing it properly with quaternions or whatever right now. Feel free to fix it.
@@ -550,7 +552,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                         y_orig=y
                                         x=x_orig*cos(z_ang)+y_orig*sin(z_ang)
                                         y=x_orig*sin(z_ang)+y_orig*cos(z_ang)
-                                        #print ('Local transform  x= ',x,'  y= ',y,' z= ',z)
+                                        #print ('Local transform  x= ',x,'y= ',y,' z= ',z)
 
                                     for obj in objs:
                                         #print(obj.name, obj.type)
@@ -623,8 +625,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                             obj.hide_render=not cm_list[subnum]
                                 #else:
                                 except:
-                                    print(traceback.print_exc())
                                     print("Failed on ",meshname)
+                                    print(traceback.print_exc())
 
               # find the .phys file jsons
         if include_collisions:
@@ -756,11 +758,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         rig.pose_position = 'REST'
     if not cp77_addon_prefs.non_verbose:
         if app_name:
-            print('')
             print(f"Imported Appearance: {app_name} in {time.time() - start_time} Seconds from {ent_name}.ent")
-        print('')
-        print('-------------------- Finished Importing Cyberpunk 2077 Entity --------------------')
-        print('')
+        print('-------------------- Finished Importing Cyberpunk 2077 Entity --------------------\n')
 
 # The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
 

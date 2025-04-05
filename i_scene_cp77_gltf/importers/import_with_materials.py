@@ -14,6 +14,7 @@ from .import_from_external import *
 from .attribute_import import manage_garment_support
 from ..cyber_props import add_anim_props
 from ..jsontool import jsonload
+from ..main.common import show_message
 import traceback
 
 def get_anim_info(animations):
@@ -63,19 +64,16 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
     appearances=self.appearances.split(",")
     if not cp77_addon_prefs.non_verbose:
         if ".anims.glb" in self.filepath:
-            print('-------------------- Beginning Cyberpunk Animation Import --------------------')
-            print('')
+            print('\n-------------------- Beginning Cyberpunk Animation Import --------------------')
             print(f"Importing Animations From: {os.path.basename(self.filepath)}")
-            print('')
+
         else:
-            print('-------------------- Beginning Cyberpunk Model Import --------------------')
-            print('')
+            print('\n-------------------- Beginning Cyberpunk Model Import --------------------')
             if with_materials==True:
                 print(f"Importing: {os.path.basename(self.filepath)} with materials")
                 print(f"Appearances to Import: {(', '.join(appearances))}")
             else:
                 print(f"Importing: {os.path.basename(self.filepath)}")
-            print('')
     # prevent crash if no directory supplied when using filepath
     if len(self.directory)>0:
         directory = self.directory
@@ -101,6 +99,9 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
     octos=False
     if cp77_addon_prefs.enable_octo:
         octos=True
+
+    #mana: error messages - display one popup, not 500k
+    errorMessages = []
 
     #Kwek: Gate this--do the block iff corresponding Material.json exist
     #Kwek: was tempted to do a try-catch, but that is just La-Z
@@ -175,7 +176,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
 
             if has_material_json:
                 matjsonpath = current_file_base_path + ".Material.json"
-                DepotPath, json_apps, mats = jsonload(matjsonpath)
+                DepotPath, json_apps, mats = jsonload(matjsonpath, errorMessages)
 
             if DepotPath == None:
                 print(f"Failed to read DepotPath, skipping material import (hasMaterialJson: {has_material_json})")
@@ -222,14 +223,20 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
                     for m in json_apps[key]:
                         validmats[m]=True
 
-            import_mats(current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmats)
+            try:
+                import_mats(current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmats)
+
+            except Exception as e:
+                print("Exception when trying to import mats: " + str(e))
+                raise e
 
 
+    if len(errorMessages) > 0:
+        show_message("\n".join(errorMessages))
 
     if not cp77_addon_prefs.non_verbose:
         print(f"GLB Import Time: {(time.time() - start_time)} Seconds")
-        print('')
-        print('-------------------- Finished importing Cyberpunk 2077 Model --------------------')
+        print('-------------------- Finished importing Cyberpunk 2077 Model --------------------\n')
 
 def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmats):
     failedon = []
@@ -288,51 +295,53 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
             if matname not in validmats.keys():
                 # print("Pass")
                 # print(matname, validmats.keys())
-                pass
-            else:
-                # print('matname: ',matname, validmats[matname])
-                m = validmats[matname]
-                # Should create a list of mis that dont play nice with this and just check if the mat is using one.
+                continue
 
-                if matname in bpy_mats.keys() and 'glass' not in matname and 'MaterialTemplate' not in matname and 'Window' not in matname and matname[
-                                                                                                                                                :5] != 'Atlas' and 'BaseMaterial' in \
-                        bpy_mats[matname].keys() and bpy_mats[matname]['BaseMaterial'] == m['BaseMaterial'] and \
-                        bpy_mats[matname]['GlobalNormal'] == m['GlobalNormal'] and bpy_mats[matname][
-                    'MultilayerMask'] == m['MultilayerMask']:
+            # print('matname: ',matname, validmats[matname])
+            m = validmats[matname]
 
-                    bpy.data.meshes[name].materials.append(bpy_mats[matname])
-                elif matname in bpy_mats.keys() and matname[:5] == 'Atlas' and bpy_mats[matname][
-                    'BaseMaterial'] == m['BaseMaterial'] and bpy_mats[matname]['DiffuseMap'] == m['DiffuseMap']:
-                    bpy.data.meshes[name].materials.append(bpy_mats[matname])
-                else:
-                    if matname in validmats.keys():
-                        index = 0
-                        for rawmat in mats:
-                            if 'Name' in rawmat.keys() and rawmat["Name"] == matname:
-                                try:
-                                    bpymat = Builder.create(mats, index)
-                                    if bpymat:
-                                        bpymat['BaseMaterial'] = validmats[matname]['BaseMaterial']
-                                        bpymat['GlobalNormal'] = validmats[matname]['GlobalNormal']
-                                        bpymat['MultilayerMask'] = validmats[matname]['MultilayerMask']
-                                        bpymat['DiffuseMap'] = validmats[matname]['DiffuseMap']
-                                        bpy.data.meshes[name].materials.append(bpymat)
-                                        if 'no_shadows' in bpymat.keys() and bpymat['no_shadows']:
-                                            bpy.data.objects[name].visible_shadow = False
-                                except:
-                                    # Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
-                                    print(traceback.print_exc())
-                                    failedon.append(matname)
-                                    pass
-                            index = index + 1
+            # Should create a list of mis that dont play nice with this and just check if the mat is using one.
+            if matname in bpy_mats.keys() and 'glass' not in matname and 'MaterialTemplate' not in matname and 'Window' not in matname and matname[:5] != 'Atlas' and 'BaseMaterial' in \
+                    bpy_mats[matname].keys() and bpy_mats[matname]['BaseMaterial'] == m['BaseMaterial'] and \
+                    bpy_mats[matname]['GlobalNormal'] == m['GlobalNormal'] and bpy_mats[matname][
+                'MultilayerMask'] == m['MultilayerMask']:
+
+                bpy.data.meshes[name].materials.append(bpy_mats[matname])
+            elif matname in bpy_mats.keys() and matname[:5] == 'Atlas' and bpy_mats[matname][
+                'BaseMaterial'] == m['BaseMaterial'] and bpy_mats[matname]['DiffuseMap'] == m['DiffuseMap']:
+                bpy.data.meshes[name].materials.append(bpy_mats[matname])
+            elif matname in validmats.keys():
+                index = 0
+                for rawmat in mats:
+                    if 'Name' not in rawmat.keys() or rawmat["Name"] != matname:
+                        index = index + 1
+                        continue
+                    try:
+                        bpymat = Builder.create(mats, index)
+                        if bpymat:
+                            bpymat['BaseMaterial'] = validmats[matname]['BaseMaterial']
+                            bpymat['GlobalNormal'] = validmats[matname]['GlobalNormal']
+                            bpymat['MultilayerMask'] = validmats[matname]['MultilayerMask']
+                            bpymat['DiffuseMap'] = validmats[matname]['DiffuseMap']
+                            bpy.data.meshes[name].materials.append(bpymat)
+                            if 'no_shadows' in bpymat.keys() and bpymat['no_shadows'] and name in bpy.data.objects.keys():
+                                bpy.data.objects[name].visible_shadow = False
+                    except:
+                        # Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
+                        print(traceback.print_exc())
+                        failedon.append(matname)
+                        pass
+
+                    index = index + 1
 
         counter = counter + 1
     if not cp77_addon_prefs.non_verbose:
         if len(failedon) == 0:
-            print(f"Shader Setup Completed Succesfully in {(time.time() - start_time)} Seconds")
+            print(f'Shader Setup Completed Succesfully in {(time.time() - start_time)} Seconds')
         else:
-            print(f"Material Setup Failed on: {', '.join(failedon)}")
-            print(f"Attempted Setup for {(time.time() - start_time)} seconds")
+            line_separator = '\n    '
+            print(f'Material Setup Failed on: {line_separator}{line_separator.join(failedon)}')
+            print(f'Attempted Setup for {(time.time() - start_time)} seconds')
 
     if exclude_unused_mats:
         return
@@ -369,7 +378,7 @@ def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o):
     if animations:
         get_anim_info(animations)
         bpy.context.scene.render.fps = 30
-        if meshes and "Icosphere" not in mesh.name:
+        if meshes and "Icosphere" not in o.name:
             if 'Armature' in o.name:
                 o.hide_set(hide_armatures)
         else:
