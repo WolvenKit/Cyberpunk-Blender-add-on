@@ -106,7 +106,7 @@ class MaterialBuilder:
                     skin.create(rawMat["Data"],bpyMat)
 
                 case "engine\\materials\\metal_base.remt" | "engine\\materials\\metal_base_proxy.mt" |\
-                    'base\\materials\\metal_base_parallax.mt' | 'base\materials\metal_base_gradientmap_recolor.mt' | 'base\materials\metal_base_ui.mt':
+                    'base\\materials\\metal_base_parallax.mt' | 'base\materials\metal_base_gradientmap_recolor.mt':
                     if 'EnableMask' in rawMat.keys():
                         enableMask=rawMat['EnableMask']
                     else:
