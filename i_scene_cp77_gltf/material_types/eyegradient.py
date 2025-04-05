@@ -1,7 +1,7 @@
 import bpy
 import os
 from ..main.common import *
-from ..jsontool import openJSON
+from ..jsontool import JSONTool
 
 class EyeGradient:
     def __init__(self, BasePath,image_format, ProjPath):
@@ -13,7 +13,7 @@ class EyeGradient:
 
 
         # load the gradient profile from the depot
-        profile = openJSON(Data["IrisColorGradient"] + ".json",mode='r', DepotPath=self.BasePath, ProjPath=self.ProjPath)
+        profile = JSONTool.openJSON(Data["IrisColorGradient"] + ".json",mode='r', DepotPath=self.BasePath, ProjPath=self.ProjPath)
         profile= profile["Data"]["RootChunk"]
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes[loc('Principled BSDF')]
@@ -45,7 +45,7 @@ class EyeGradient:
             rsVecNode.location = (-150, 0)
             rsVecNode.operation = "SCALE"
             rsVecNode.hide = True
-            
+
             CurMat.links.new(rImgNode.outputs[0],rsVecNode.inputs[0])
             CurMat.links.new(rsNode.outputs[0],rsVecNode.inputs[3])
             CurMat.links.new(rsVecNode.outputs[0],pBSDF.inputs['Roughness'])
