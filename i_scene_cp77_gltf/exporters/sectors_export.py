@@ -26,7 +26,6 @@
 # - sort out instanced bits
 
 import json
-from ..jsontool import jsonload
 import glob
 import os
 import bpy
@@ -39,12 +38,12 @@ from ..cyber_props import *
 def are_matrices_equal(mat1, mat2, tolerance=0.01):
     if len(mat1) != len(mat2):
         return False
-    
+
     for i in range(len(mat1)):
         for j in range(len(mat1[i])):
             if abs(mat1[i][j] - mat2[i][j]) > tolerance:
                 return False
-    
+
     return True
 
 #
@@ -62,7 +61,7 @@ def try_import_yaml():
         yamlavail=True
     except ModuleNotFoundError:
         from ..install_dependency import install_dependency
-        try: 
+        try:
             install_dependency('pyyaml')
         except Exception as e:
             print(e)
@@ -343,7 +342,7 @@ def createNodeData(t, col, nodeIndex, obj, ID):
     new['Bounds']= {'$type': 'Box'}
     new['Bounds']['Max']={'$type': 'Vector4','X':float("{:.9g}".format(obj.location[0])),'Y':float("{:.9g}".format(obj.location[1])),'Z':float("{:.9g}".format(obj.location[2]))}
     new['Bounds']['Min']={'$type': 'Vector4','X':float("{:.9g}".format(obj.location[0])),'Y':float("{:.9g}".format(obj.location[1])),'Z':float("{:.9g}".format(obj.location[2]))}
-    
+
 def create_static_from_WIMN(node, template_nodes,  newHID):
     new_ni=len(template_nodes)
     WSMN={
@@ -365,7 +364,7 @@ def create_static_from_WIMN(node, template_nodes,  newHID):
                 "$type": "ResourcePath",
                 "$storage": "string",
                 "$value": node['Data']['mesh']['DepotPath']['$value']
-              },              
+              },
               "Flags": "Soft"
             },
             "meshAppearance": {
@@ -375,13 +374,13 @@ def create_static_from_WIMN(node, template_nodes,  newHID):
             },
             "occluderAutohideDistanceScale": node['Data']['occluderAutohideDistanceScale'],
             "occluderType": node['Data']['occluderType'],
-            "proxyScale": node['Data']['proxyScale'],            
-            
+            "proxyScale": node['Data']['proxyScale'],
+
             "sourcePrefabHash": node['Data']['sourcePrefabHash'],
             "tag": node['Data']['tag'],
             "tagExt":node['Data']['tagExt'],
             "version": node['Data']['version'],
-            
+
           }
         }
     template_nodes.append(WSMN)
@@ -412,7 +411,7 @@ def exportSectors(filename, use_yaml):
     resourcepath=get_resources_dir()
     with open(os.path.join(resourcepath,'empty.streamingsector.json'),'r') as f:
         template_json=json.load(f)
-    
+
     template_nodes = template_json["Data"]["RootChunk"]["nodes"]
     template_nodeData = template_json['Data']['RootChunk']['nodeData']['Data']
     ID=0
@@ -429,9 +428,9 @@ def exportSectors(filename, use_yaml):
     impact_mats=[]
     Inst_bufferIDs={}
     new_HID=10000
-    # .  .  __ .    .. .  .  __      __  ___ .  .  ___  ___ 
-    # |\/| /  \ \  / | |\ | / _`    /__`  |  |  | |__  |__  
-    # |  | \__/  \/  | | \| \__/    .__/  |  \__/ |    |    
+    # .  .  __ .    .. .  .  __      __  ___ .  .  ___  ___
+    # |\/| /  \ \  / | |\ | / _`    /__`  |  |  | |__  |__
+    # |  | \__/  \/  | | \| \__/    .__/  |  \__/ |    |
     #
     deletions = {}
     deletions['Decals']={}
@@ -480,7 +479,7 @@ def exportSectors(filename, use_yaml):
                     if not checkexists(meshname, Masters):
                         print(meshname, ' not found in masters')
                         continue
-                   
+
                     instances = [(NodeData,nodeDataIndex) for nodeDataIndex,NodeData in enumerate(t) if NodeData['NodeIndex'] == i]
                     for Nidx,(inst,instNDidx) in enumerate(instances):
                         num=data['worldTransformsBuffer']['numElements']
@@ -488,7 +487,7 @@ def exportSectors(filename, use_yaml):
                         if(meshname != 0):
                             for idx in range(start, start+num):
                                  # find the top level instance collector
-                                obj_col=find_col(i,idx,Sector_coll)    
+                                obj_col=find_col(i,idx,Sector_coll)
                                 if obj_col :
                                     # elements are in collectors inside the top one, not just objects
                                     if len(obj_col.children)>0 and len(obj_col.children[0].objects)>0:
@@ -497,8 +496,8 @@ def exportSectors(filename, use_yaml):
                                         if obj.matrix_world!=Matrix(obj_col['matrix']):
                                             deletions[sectorName].append(obj_col)
                                             # working with instancedmesh nodes is a pain in the ass, so convert to static
-                                            
-                                            create_static_from_WIMN(e,  template_nodes,  new_HID)                                            
+
+                                            create_static_from_WIMN(e,  template_nodes,  new_HID)
                                             new_ni=len(template_nodes)-1
                                             for child in obj_col.children:
                                                 if len(child.objects)>0:
@@ -509,7 +508,7 @@ def exportSectors(filename, use_yaml):
                                         # empty collector, so just delete
                                         if obj_col:
                                             deletions[sectorName].append(obj_col)
-                                    
+
 
                 case 'worldStaticDecalNode':
                     #print('worldStaticDecalNode')
@@ -603,7 +602,7 @@ def exportSectors(filename, use_yaml):
                                             deletions[sectorName].append(obj_col)
                                             # working with instancedmesh nodes is a pain in the ass, so convert to static
                                             if new_WIDM_static==None:
-                                                create_static_from_WIMN(e,  template_nodes,  new_HID)                                            
+                                                create_static_from_WIMN(e,  template_nodes,  new_HID)
                                                 new_ni=len(template_nodes)-1
                                                 new_WIDM_static=new_ni
 
@@ -622,7 +621,7 @@ def exportSectors(filename, use_yaml):
                 case 'worldCollisionNode':
                     # need to process the sector_coll sectors and look for deleted collision bodies - this is almost identical to import, refactor them to have it in one place
                     if sector_Collisions in coll_scene.children.keys():
-                        
+
                         sector_Collisions_coll=bpy.data.collections.get(sector_Collisions)
                         inst = [x for x in t if x['NodeIndex'] == i][0]
                         print('collisions Node ',inst['nodeDataIndex'])
@@ -645,7 +644,7 @@ def exportSectors(filename, use_yaml):
                                         # if we already added one to the export sector it should be ref'd by impacts, if not copy this one and ref it from impacts
                                         # Code below is working, but the collisions arent, I'm clearly missing something.
                                         if impacts==None:
-                                            # add the actor to the archivexl deletion list 
+                                            # add the actor to the archivexl deletion list
                                             if inst['nodeDataIndex'] in deletions['Collisions'][sectorName].keys():
                                                 deletions['Collisions'][sectorName][inst['nodeDataIndex']].append(str(idx))
                                             else:
@@ -660,10 +659,10 @@ def exportSectors(filename, use_yaml):
                                             impacts = template_nodes[len(template_nodes)-1]
                                             impacts['Data']['compiledData']['Data']['Actors']=[]
                                             #need to update the position data
-                                      
+
                                         # Add the current actor to the actors
                                         impacts['Data']['compiledData']['Data']['Actors'].append(copy.deepcopy(Actors[idx]))
-                                        #update its position                                        
+                                        #update its position
                                         ddyer=impacts['Data']['compiledData']['Data']['Actors'][len(impacts['Data']['compiledData']['Data']['Actors'])-1]
                                         actloc = ((crash.location[0]-ddyer['Shapes'][s]['Position']['X'])*131072,(crash.location[1]-ddyer['Shapes'][s]['Position']['Y'])*131072,(crash.location[2]-ddyer['Shapes'][s]['Position']['Z'])*131072)
                                         ddyer['Shapes'][s]['Position']={"$type": "Vector3", "X": { "$type": "FixedPoint", "Bits": int(actloc[0])  },"y": {"$type": "FixedPoint","Bits": int(actloc[1]) },
@@ -674,13 +673,13 @@ def exportSectors(filename, use_yaml):
                                             ddyer['Shapes'][s]['Size']= { "$type": "Vector3", "X": crash.dimensions[0]/2, "Y": crash.dimensions[1]/2, "Z": crash.dimensions[2]/2  }
                                         #update the numActors property
                                         impacts['Data']['numActors']=len(impacts['Data']['compiledData']['Data']['Actors'])
-                                        
+
                                         for mat in shape['Materials']:
                                             if mat['$value'] not in impact_mats:
                                                 impact_mats.append(mat['$value'])
                                         impacts['Data']['numMaterials']=len(impact_mats)
-                                            
-                                        
+
+
                                 else:
                                     if shape['ShapeType']=='Box' or shape['ShapeType']=='Capsule':
                                         if inst['nodeDataIndex'] in deletions['Collisions'][sectorName].keys():

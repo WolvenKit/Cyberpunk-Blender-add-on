@@ -13,7 +13,7 @@ from ..main.bartmoss_functions import UV_by_bounds
 from .import_from_external import *
 from .attribute_import import manage_garment_support
 from ..cyber_props import add_anim_props
-from ..jsontool import jsonload
+from ..jsontool import JSONTool
 from ..main.common import show_message
 import traceback
 
@@ -176,7 +176,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
 
             if has_material_json:
                 matjsonpath = current_file_base_path + ".Material.json"
-                DepotPath, json_apps, mats = jsonload(matjsonpath, errorMessages)
+                DepotPath, json_apps, mats = JSONTool.jsonload(matjsonpath, errorMessages)
 
             if DepotPath == None:
                 print(f"Failed to read DepotPath, skipping material import (hasMaterialJson: {has_material_json})")

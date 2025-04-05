@@ -1,6 +1,6 @@
-from ..jsontool import jsonload
+from ..jsontool import JSONTool
 import bpy
-import bmesh 
+import bmesh
 import time
 from ..collisiontools.collisions import draw_box_collider, draw_convex_collider, set_collider_props
 
@@ -9,13 +9,13 @@ def cp77_phys_import(filepath, rig=None, chassis_z=None):
     start_time = time.time()
     physJsonPath = filepath
     collision_type = 'VEHICLE'
-    for area in bpy.context.screen.areas: 
+    for area in bpy.context.screen.areas:
         if area.type == 'VIEW_3D':
             space = area.spaces.active
             if space.type == 'VIEW_3D':
                 space.shading.wireframe_color_type = 'OBJECT'
 
-    data = jsonload(physJsonPath)
+    data = JSONTool.jsonload(physJsonPath)
 
     for index, i in enumerate(data['Data']['RootChunk']['bodies']):
         bname = (i['Data']['name']['$value'])
@@ -29,35 +29,35 @@ def cp77_phys_import(filepath, rig=None, chassis_z=None):
             submeshName = str(index) + '_' + collision_shape
             transform = i['Data']['localToBody']
             print(bname, collision_shape, physmat, submeshName, transform)
-            
+
             if collision_shape == "physicsColliderConvex":
                 vertices = i['Data']['vertices']
                 obj = draw_convex_collider(submeshName, new_collection, vertices, physmat, transform, collision_type)
-                if rig is not None: 
+                if rig is not None:
                     constraint = obj.constraints.new('CHILD_OF')
                     constraint.target = rig
                     constraint.subtarget = 'Base'
                     bpy.ops.constraint.childof_set_inverse(constraint="Child Of", owner='OBJECT')
-                    if chassis_z is not None: 
-                        obj.delta_location[2] = chassis_z 
+                    if chassis_z is not None:
+                        obj.delta_location[2] = chassis_z
 
             # If the type is "physicsColliderBox", create a box centered at the object's location
             elif collision_shape == "physicsColliderBox":
                 half_extents = i['Data']['halfExtents']
                 center = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
                 box = draw_box_collider(submeshName, new_collection, half_extents, transform, physmat, collision_type)
-                if rig is not None: 
+                if rig is not None:
                     constraint = box.constraints.new('CHILD_OF')
                     constraint.target = rig
                     constraint.subtarget = 'Base'
                     bpy.ops.constraint.childof_set_inverse(constraint="Child Of", owner='OBJECT')
-                    if chassis_z is not None: 
-                        box.delta_location[2] = chassis_z 
+                    if chassis_z is not None:
+                        box.delta_location[2] = chassis_z
 
-            # handle physicsColliderCapsule       
+            # handle physicsColliderCapsule
             elif collision_shape == "physicsColliderCapsule":
-                r = i['Data']['radius'] 
-                h = i['Data']['height']    
+                r = i['Data']['radius']
+                h = i['Data']['height']
 
                 # create the capsule
                 bm = bmesh.new()
@@ -82,15 +82,15 @@ def cp77_phys_import(filepath, rig=None, chassis_z=None):
                 capsule.dimensions.z = float(h)
                 capsule.location = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
                 capsule.rotation_quaternion = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
-                if rig is not None: 
+                if rig is not None:
                     constraint = capsule.constraints.new('CHILD_OF')
                     constraint.target = rig
                     constraint.subtarget = 'Base'
                     bpy.ops.constraint.childof_set_inverse(constraint="Child Of", owner='OBJECT')
-                    if chassis_z is not None: 
-                        capsule.delta_location[2] = chassis_z 
+                    if chassis_z is not None:
+                        capsule.delta_location[2] = chassis_z
                 bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
                 new_collection.objects.link(capsule)
-                
+
     if not cp77_addon_prefs.non_verbose:
         print(f"phys collider Import Time: {(time.time() - start_time)} Seconds")

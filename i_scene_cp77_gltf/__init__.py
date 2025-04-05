@@ -49,18 +49,18 @@ class ShowMessageBox(Operator):
 
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self, width=400)
-        
+
     def draw_header(self, context):
         layout = self.layout
         layout.label(text='Cyberpunk 2077 IO Suite')
-        
+
     def draw(self, context):
-        wrapp = textwrap.TextWrapper(width=70) #50 = maximum length       
-        wList = wrapp.wrap(text=self.message) 
-        for text in wList: 
+        wrapp = textwrap.TextWrapper(width=70) #50 = maximum length
+        wList = wrapp.wrap(text=self.message)
+        for text in wList:
             row = self.layout.row(align = True)
             row.alignment = 'EXPAND'
-            row.label(text=text)     
+            row.label(text=text)
 
 class CollectionAppearancePanel(Panel):
     bl_label = "Ent Appearances"
@@ -78,13 +78,13 @@ class CollectionAppearancePanel(Panel):
     def draw(self, context):
         layout = self.layout
         collection = context.collection
-        layout.prop(collection, "appearanceName")       
+        layout.prop(collection, "appearanceName")
 
 classes = [ShowMessageBox, CollectionAppearancePanel]
 
 def register():
     register_prefs()
-    register_props() 
+    register_props()
     register_animtools()
     register_collisiontools()
     register_importers()
@@ -93,6 +93,8 @@ def register():
     register_meshtools()
 
     for cls in classes:
+        if cls.__name__ is "JSONTool": # this one is static
+            continue
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
     load_icons()
@@ -107,13 +109,13 @@ def unregister():
     unregister_importers()
     unregister_collisiontools()
     unregister_animtools()
-    unregister_props()  
+    unregister_props()
     unregister_prefs()
-    
+
     for cls in reversed(classes):
         if hasattr(bpy.types, cls.__name__):
             bpy.utils.unregister_class(cls)
     unload_icons()
-           
+
 if __name__ == "__main__":
     register()

@@ -1,7 +1,7 @@
 import bpy
 import os
 from ..main.common import *
-from ..jsontool import openJSON
+from ..jsontool import JSONTool
 import numpy as np
 
 def np_array_from_image(img_name):
@@ -188,9 +188,12 @@ class Multilayered:
         CurMat.links.new(GNA.outputs[0],GNN.inputs[0])
         return GNN.outputs[0]
 
-    def createLayerMaterial(self,LayerName,LayerCount,CurMat,mlmaskpath,normalimgpath):
+
+    def createLayerMaterial(self,LayerName,LayerCount,CurMat,mlmaskpath,normalimgpath, skip_layers):
         NG = _getOrCreateLayerBlend()
         for x in range(LayerCount-1):
+            if x > 0 and x in skip_layers:
+                continue
             MaskTexture=None
             projpath = os.path.join(os.path.splitext(os.path.join(self.ProjPath, mlmaskpath))[0] + '_layers', os.path.split(mlmaskpath)[-1:][0][:-7] + "_" + str(x + 1) + ".png")
             basepath = os.path.join(os.path.splitext(os.path.join(self.BasePath, mlmaskpath))[0] + '_layers', os.path.split(mlmaskpath)[-1:][0][:-7] + "_" + str(x + 1) + ".png")
@@ -229,7 +232,7 @@ class Multilayered:
                 nextNodeIndex = x+1
                 successorName = f"Mat_Mod_Layer_{nextNodeIndex}"
                 while nextNodeIndex < 20 and successorName not in CurMat.nodes.keys():
-                    nextNodeIndex 9= 1
+                    nextNodeIndex += 1
                     successorName = f"Mat_Mod_Layer_{nextNodeIndex}"
 
             nextNode = CurMat.nodes[successorName] if successorName in CurMat.nodes.keys() else None
@@ -254,13 +257,12 @@ class Multilayered:
             if previousNode is not None and nextNode is not None:
                 CurMat.links.new(nextNode.outputs[4], previousNode.inputs[8])
 
-            # set target layer to the last processed layer, because the last one will be connected to the BSDF output
-            if LayerCount>1:
-                targetLayer="Layer_"+str(LayerCount-2)
-            else:
-                targetLayer="Mat_Mod_Layer_0"
-
-
+        targetLayer = "Mat_Mod_Layer_0"
+        for idx in reversed(range(LayerCount)):
+            layer_name = f"Layer_{idx}"
+            if layer_name in CurMat.nodes.keys():
+                targetLayer = layer_name
+                break
 
         CurMat.links.new(CurMat.nodes[targetLayer].outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
         CurMat.links.new(CurMat.nodes[targetLayer].outputs[2],CurMat.nodes[loc('Principled BSDF')].inputs['Roughness'])
@@ -276,7 +278,7 @@ class Multilayered:
 
     def create(self,Data,Mat):
         Mat['MLSetup']= Data["MultilayerSetup"]
-        mlsetup = openJSON( Data["MultilayerSetup"] + ".json",mode='r',DepotPath=self.BasePath, ProjPath=self.ProjPath)
+        mlsetup = JSONTool.openJSON( Data["MultilayerSetup"] + ".json",mode='r',DepotPath=self.BasePath, ProjPath=self.ProjPath)
         mlsetup = mlsetup["Data"]["RootChunk"]
         xllay = mlsetup.get("layers")
         if xllay is None:
@@ -285,13 +287,21 @@ class Multilayered:
 
         LayerIndex = 0
         CurMat = Mat.node_tree
+
+        file_name = os.path.basename(Data["MultilayerSetup"].replace('\\',os.sep))[:-8]
+
+        # clear layer opacity dictionary
+        skip_layers = []
+        idx = -1
         for x in (xllay):
+            idx += 1
             opacity = x.get("opacity")
             if opacity is None:
                 opacity = x.get("Opacity")
 
             # if opacity is 0, then the layer has been turned off
             if opacity == 0:
+                skip_layers.append(idx)
                 continue
 
             MatTile = x.get("matTile")
@@ -360,12 +370,13 @@ class Multilayered:
             if Microblend != "null":
                 MBI = imageFromPath(self.BasePath+Microblend,self.image_format,True)
 
-            mltemplate = openJSON( material + ".json",mode='r',DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            mltemplate = JSONTool.openJSON( material + ".json",mode='r',DepotPath=self.BasePath, ProjPath=self.ProjPath)
             mltemplate = mltemplate["Data"]["RootChunk"]
             OverrideTable = createOverrideTable(mltemplate)#get override info for colors and what not
            # Mat[os.path.basename(material).split('.')[0]+'_cols']=OverrideTable["ColorScale"]
 
-            NG = bpy.data.node_groups.new(os.path.basename(Data["MultilayerSetup"].replace('\\',os.sep))[:-8]+"_Layer_"+str(LayerIndex),"ShaderNodeTree")#crLAer's node group
+            layerName = file_name+"_Layer_"+str(LayerIndex)
+            NG = bpy.data.node_groups.new(layerName,"ShaderNodeTree")#crLAer's node group
             vers=bpy.app.version
             if vers[0]<4:
                 NG.inputs.new('NodeSocketColor','ColorScale')
@@ -690,4 +701,4 @@ class Multilayered:
         else:
             LayerNormal=Data["GlobalNormal"]
 
-        self.createLayerMaterial(os.path.basename(Data["MultilayerSetup"])[:-8]+"_Layer_",LayerCount,CurMat,Data["MultilayerMask"],LayerNormal)
+        self.createLayerMaterial(file_name+"_Layer_", LayerCount, CurMat, Data["MultilayerMask"], LayerNormal, skip_layers)
