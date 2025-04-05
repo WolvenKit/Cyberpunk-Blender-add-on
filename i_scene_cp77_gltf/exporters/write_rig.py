@@ -15,10 +15,14 @@ def save_rig_to_json(output_filepath):
     if armature_object is None or armature_object.type != 'ARMATURE':
         raise ValueError("No active armature object found in the scene.")
 
+    # TODO: Sim, please look at this, the logic does not seem entirely sound
+    if 'source' not in armature_object.data.keys():
+         armature_object.data['source'] = output_filepath
+
     json_filepath = armature_object.data['source']
     if not os.path.exists(json_filepath):
         raise ValueError(f"Source JSON file '{json_filepath}' not found.")
-    
+
     # Load the original JSON data
     with open(json_filepath, 'r') as file:
         rig_data = json.load(file)
@@ -119,5 +123,5 @@ def save_rig_to_json(output_filepath):
 # save_rig_to_json(r"c:\CPMod\terrain_collision\source\raw\base\characters\common\hair\hh_040_wa__pixie_bob\hh_040_wa__pixie_bob_dangle_skeleton.rig.json")
 if __name__ == "__main__":
 
-    outpath = r"c:\CPMod\terrain_collision\source\raw\base\characters\common\hair\hh_040_wa__pixie_bob\hh_040_wa__pixie_bob_dangle_skeleton_mod.rig.json"   
+    outpath = r"c:\CPMod\terrain_collision\source\raw\base\characters\common\hair\hh_040_wa__pixie_bob\hh_040_wa__pixie_bob_dangle_skeleton_mod.rig.json"
     save_rig_to_json(outpath)
