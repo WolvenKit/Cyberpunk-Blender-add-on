@@ -40,11 +40,11 @@ class MaterialBuilder:
         self.MeshPath= MeshPath
         before,mid,after=MeshPath.partition('source\\raw\\'.replace('\\',os.sep))
         self.ProjPath=before+mid
-    
+
     def create(self, mats, materialIndex):
         if mats:
             rawMat = mats[materialIndex]
-            
+
             verbose=True
 
             bpyMat = bpy.data.materials.new(rawMat["Name"])
@@ -59,7 +59,7 @@ class MaterialBuilder:
                     multilayered = Multilayered(self.BasePath,self.image_format,self.ProjPath)
                     multilayered.create(rawMat["Data"],bpyMat)
 
-                
+
                 #case  "base\\materials\\multilayered_terrain.mt":
                  #   multilayeredTerrain = Multilayered(self.BasePath,self.image_format, self.ProjPath)
                   #  multilayeredTerrain.create(rawMat["Data"],bpyMat)
@@ -96,7 +96,7 @@ class MaterialBuilder:
                         enableMask=False
                     vehicleMeshDecal = VehicleMeshDecal(self.BasePath, self.image_format, self.ProjPath, enableMask)
                     vehicleMeshDecal.create(rawMat["Data"],bpyMat)
-                
+
                 case "base\\materials\\vehicle_lights.mt":
                     vehicleLights = VehicleLights(self.BasePath, self.image_format, self.ProjPath)
                     vehicleLights.create(rawMat["Data"],bpyMat)
@@ -106,7 +106,7 @@ class MaterialBuilder:
                     skin.create(rawMat["Data"],bpyMat)
 
                 case "engine\\materials\\metal_base.remt" | "engine\\materials\\metal_base_proxy.mt" |\
-                    'base\\materials\\metal_base_parallax.mt' | 'base\materials\metal_base_gradientmap_recolor.mt':
+                    'base\\materials\\metal_base_parallax.mt' | 'base\materials\metal_base_gradientmap_recolor.mt' | 'base\materials\metal_base_ui.mt':
                     if 'EnableMask' in rawMat.keys():
                         enableMask=rawMat['EnableMask']
                     else:
@@ -147,7 +147,7 @@ class MaterialBuilder:
                 case "base\\materials\\glass.mt" | "base\\materials\\vehicle_glass.mt":
                     glass = Glass(self.BasePath,self.image_format, self.ProjPath)
                     glass.create(rawMat["Data"],bpyMat)
-                
+
                 case "base\\materials\\glass_deferred.mt":
                     glassdef = GlassDeferred(self.BasePath,self.image_format, self.ProjPath)
                     glassdef.create(rawMat["Data"],bpyMat)
@@ -155,11 +155,11 @@ class MaterialBuilder:
                 case "base\\fx\\shaders\\signages.mt" :
                     signages= Signages(self.BasePath,self.image_format, self.ProjPath)
                     signages.create(rawMat["Data"],bpyMat)
-                
+
                 case "base\\materials\\glass_onesided.mt" | "base\\materials\\vehicle_glass_onesided.mt":
                     glass = Glass(self.BasePath,self.image_format, self.ProjPath)
                     glass.create(rawMat["Data"],bpyMat)
-                
+
                 case "base\\materials\\mesh_decal_parallax.mt" | "base\\materials\\vehicle_mesh_decal_parallax.mt":
                     no_shadows=True
                     meshDecalParallax = MeshDecalParallax(self.BasePath,self.image_format, self.ProjPath)
@@ -180,14 +180,14 @@ class MaterialBuilder:
                 case  "base\\fx\\shaders\\television_ad.mt" :
                     televisionAd = TelevisionAd(self.BasePath,self.image_format,self.ProjPath)
                     televisionAd.create(rawMat["Data"],bpyMat)
-                
+
                 case "base\\materials\\window_parallax_interior_proxy.mt" | "base\\materials\\window_parallax_interior.mt":
                     window = windowParallaxIntProx(self.BasePath,self.image_format,self.ProjPath)
                     window.create(rawMat["Data"],bpyMat)
 
                 case  "base\\fx\\shaders\\hologram.mt" :
                     hologram = Hologram(self.BasePath,self.image_format,self.ProjPath)
-                    hologram.create(rawMat["Data"],bpyMat)       
+                    hologram.create(rawMat["Data"],bpyMat)
 
                 case _:
                     print('Unhandled mt - ', rawMat["MaterialTemplate"])
@@ -200,7 +200,7 @@ class MaterialBuilder:
             bpyMat.blend_method='HASHED'
             bpyMat['no_shadows']=no_shadows
             return bpyMat
-        
+
         else:
             self.obj["Data"]["RootChunk"].get("baseMaterial")
             if self.obj["Header"].get("ArchiveFileName"):
@@ -208,7 +208,7 @@ class MaterialBuilder:
                 name = os.path.basename(name)
             else:
                 name = 'decal_material'
-            
+
             bpyMat = bpy.data.materials.new(name)
             bpyMat.use_nodes = True
 
@@ -222,17 +222,17 @@ class MaterialBuilder:
                     print('decal_gradientmap_recolor.mt')
                     decalGradientMapRecolor = DecalGradientmapRecolor(self.BasePath,self.image_format, self.ProjPath)
                     decalGradientMapRecolor.create(self.obj["Data"]["RootChunk"],bpyMat)
-                
+
 
                 case _:
                     print(self.obj["Data"]["RootChunk"]["baseMaterial"]["DepotPath"]['$value']," | unimplemented yet")
-            
+
             bpyMat.blend_method='HASHED'
             return bpyMat
     def createdecal(self,materialIndex):
         if self.obj.get("Materials"):
             rawMat = self.obj["Materials"][materialIndex]
-            
+
             verbose=True
 
             bpyMat = bpy.data.materials.new(rawMat["Name"])
@@ -246,7 +246,7 @@ class MaterialBuilder:
                     multilayered = Multilayered(self.BasePath,self.image_format,self.ProjPath)
                     multilayered.create(rawMat["Data"],bpyMat)
 
-                
+
                 #case  "base\\materials\\multilayered_terrain.mt":
                  #   multilayeredTerrain = Multilayered(self.BasePath,self.image_format, self.ProjPath)
                   #  multilayeredTerrain.create(rawMat["Data"],bpyMat)
@@ -283,7 +283,7 @@ class MaterialBuilder:
                         enableMask=False
                     vehicleMeshDecal = VehicleMeshDecal(self.BasePath, self.image_format, self.ProjPath, enableMask)
                     vehicleMeshDecal.create(rawMat["Data"],bpyMat)
-                
+
                 case "base\\materials\\vehicle_lights.mt":
                     vehicleLights = VehicleLights(self.BasePath, self.image_format, self.ProjPath)
                     vehicleLights.create(rawMat["Data"],bpyMat)
@@ -334,7 +334,7 @@ class MaterialBuilder:
                 case "base\\materials\\glass.mt" | "base\\materials\\vehicle_glass.mt":
                     glass = Glass(self.BasePath,self.image_format, self.ProjPath)
                     glass.create(rawMat["Data"],bpyMat)
-                
+
                 case "base\\materials\\glass_deferred.mt":
                     glassdef = GlassDeferred(self.BasePath,self.image_format, self.ProjPath)
                     glassdef.create(rawMat["Data"],bpyMat)
@@ -342,11 +342,11 @@ class MaterialBuilder:
                 case "base\\fx\\shaders\\signages.mt" :
                     signages= Signages(self.BasePath,self.image_format, self.ProjPath)
                     signages.create(rawMat["Data"],bpyMat)
-                
+
                 case "base\\materials\\glass_onesided.mt" | "base\\materials\\vehicle_glass_onesided.mt":
                     glass = Glass(self.BasePath,self.image_format, self.ProjPath)
                     glass.create(rawMat["Data"],bpyMat)
-                
+
                 case "base\\materials\\mesh_decal_parallax.mt" | "base\\materials\\vehicle_mesh_decal_parallax.mt":
                     no_shadows=True
                     meshDecalParallax = MeshDecalParallax(self.BasePath,self.image_format, self.ProjPath)
@@ -367,14 +367,14 @@ class MaterialBuilder:
                 case  "base\\fx\\shaders\\television_ad.mt" :
                     televisionAd = TelevisionAd(self.BasePath,self.image_format,self.ProjPath)
                     televisionAd.create(rawMat["Data"],bpyMat)
-                
+
                 case "base\\materials\\window_parallax_interior_proxy.mt" | "base\\materials\\window_parallax_interior.mt":
                     window = windowParallaxIntProx(self.BasePath,self.image_format,self.ProjPath)
                     window.create(rawMat["Data"],bpyMat)
 
                 case  "base\\fx\\shaders\\hologram.mt" :
                     hologram = Hologram(self.BasePath,self.image_format,self.ProjPath)
-                    hologram.create(rawMat["Data"],bpyMat)       
+                    hologram.create(rawMat["Data"],bpyMat)
 
                 case _:
                     print('Unhandled mt - ', rawMat["MaterialTemplate"])
@@ -387,14 +387,14 @@ class MaterialBuilder:
             bpyMat.blend_method='HASHED'
             bpyMat['no_shadows']=no_shadows
             return bpyMat
-        
+
         elif self.obj["Data"]["RootChunk"].get("baseMaterial"):
             if self.obj["Header"].get("ArchiveFileName"):
                 name = self.obj["Header"]["ArchiveFileName"]
                 name = os.path.basename(name)
             else:
                 name = 'decal_material'
-            
+
             bpyMat = bpy.data.materials.new(name)
             bpyMat.use_nodes = True
 
@@ -408,10 +408,10 @@ class MaterialBuilder:
                     print('decal_gradientmap_recolor.mt')
                     decalGradientMapRecolor = DecalGradientmapRecolor(self.BasePath,self.image_format, self.ProjPath)
                     decalGradientMapRecolor.create(self.obj["Data"]["RootChunk"],bpyMat)
-                
+
 
                 case _:
                     print(self.obj["Data"]["RootChunk"]["baseMaterial"]["DepotPath"]['$value']," | unimplemented yet")
-            
+
             bpyMat.blend_method='HASHED'
             return bpyMat
