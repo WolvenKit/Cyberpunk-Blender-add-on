@@ -2,6 +2,7 @@ import bpy
 import json
 import os
 from .main.common import show_message, load_zip
+from pathlib import Path
 
 def normalize_paths(data):
     if isinstance(data, dict):
@@ -34,48 +35,49 @@ def load_json(file_path):
         normalize_paths(data)
     return data
 
-def jsonload(filepath):
+# Handles generation of error messages depending on verbosity and/or print_immediately settings.
+# If print_immediately is set to false, then the error message will be appended to the errorMessages array.
+def create_error(print_immediately, suppress_verbose, base_name, file_extension, specific_error, errorMessages = []):
+    error_message = f"invalid {file_extension} found at: {base_name}. {specific_error}"
+    if not suppress_verbose:
+        print(error_message)
+    if print_immediately:
+        show_message(error_message)
+    else:
+        errorMessages.append(error_message)
 
-    if not filepath.endswith('.json'):
-        if not filepath.endswith('.zip'):
-            raise ValueError(f"{filepath} is not a json, what are you doing?")
+# error messages for different file types
+invalid_json_error = "This plugin requires jsons generated using the latest version of Wolvenkit."
+invalid_material_error = "Import will continue, but shaders may be incorrectly set up for these objects."
+invalid_phys_error = "Import may continue, but .phys colliders will not be imported."
+
+# Pass an errorMessages array to process error messages outside of this function (e.g. for calling it in a loop)
+def jsonload(filepath, errorMessages = None):
+
+    print_messages = errorMessages is None #function caled in a loop
+    errorMessages = [] if errorMessages is None else errorMessages
+
+    if not filepath.endswith('.json') and not filepath.endswith('.zip'):
+        raise ValueError(f"{filepath} is not a json, what are you doing?")
+
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
-    
+
     # Extract the base name of the file
     base_name = os.path.basename(filepath)
-    
-    # Match/case statement to handle different types of json files
-    match base_name:
-        case _ if base_name.endswith('.anims.json'):
-            if not cp77_addon_prefs.non_verbose:
-                print(f"Processing: {base_name}")
-            data=load_json(filepath)
-            if json_ver_validate(data) == False:
-                if not cp77_addon_prefs.non_verbose:
-                    print(f"invalid anims.json found at: {filepath} this plugin requires jsons generated using the latest version of Wolvenkit")
-                show_message(f"invalid anims.json found at: {base_name} this plugin requires jsons generated using the latest version of Wolvenkit")
-            # Do something for .anims.json
-            return data
-        case _ if base_name.endswith('.app.json'):
-            if not cp77_addon_prefs.non_verbose:
-                print(f"Processing: {base_name}")
-            data=load_json(filepath)
-            if json_ver_validate(data) == False:
-                if not cp77_addon_prefs.non_verbose:
-                    print(f"invalid app.json found at: {filepath} this plugin requires jsons generated using the latest version of Wolvenkit")
-                show_message(f"invalid app.json: {base_name} this plugin requires jsons generated using the latest version of Wolvenkit")
-            # Do something for .app.json
-            return data
-        case _ if base_name.endswith('.ent.json'):
-            if not cp77_addon_prefs.non_verbose:
-                print(f"Processing: {base_name}")
-            data=load_json(filepath)
-            if json_ver_validate(data) == False:
-                if not cp77_addon_prefs.non_verbose:
-                    print(f"attempted import of invalid ent.json from: {filepath} this plugin requires jsons generated using the latest version of Wolvenkit")
-                show_message(f"attempted import of invalid ent.json: {base_name} this plugin requires jsons generated using the latest version of Wolvenkit")
-                return 'CANCELLED'
 
+    file_extension = ''.join(Path(filepath).suffixes)
+
+    if not cp77_addon_prefs.non_verbose:
+        print(f"  Processing: {base_name}")
+        data=load_json(filepath)
+
+    has_error = json_ver_validate(data) == False
+
+    match file_extension:
+        case '.ent.json':
+            if has_error:
+                create_error(print_messages, cp77_addon_prefs.non_verbose, base_name, file_extension, invalid_json_error, errorMessages)
+                return 'CANCELLED'
             ent_apps= data['Data']['RootChunk']['appearances']
             ent_components=[]
             if data['Data']['RootChunk']['components']!=None:
@@ -87,141 +89,43 @@ def jsonload(filepath):
             ent_default = data['Data']['RootChunk']['defaultAppearance']['$value']
             # Do something for .ent.json
             return ent_apps, ent_components, ent_component_data, res, ent_default
-        case _ if base_name.endswith('.mesh.json'):
-            if not cp77_addon_prefs.non_verbose:
-                print(f"Processing: {base_name}")
-            data=load_json(filepath)
-            if json_ver_validate(data) == False:
-                if not cp77_addon_prefs.non_verbose:
-                    print(f"invalid mesh.json found at: {filepath} this plugin requires jsons generated using the latest version of Wolvenkit")
-                show_message(f"found invalid mesh.json: {base_name} this plugin requires jsons generated using the latest version of Wolvenkit")
-            # Do something for .mesh.json
+
+        case '.anims.json' | '.app.json' | '.streamingblock.json' |  '.mesh.json' | '.gradient.json' | '.rig.json' | '.cfoliage.json' | '.hp.json' | '.streamingblock.json':
+            if has_error:
+                create_error(print_messages, cp77_addon_prefs.non_verbose, base_name, file_extension, invalid_json_error, errorMessages)
             return data
-        case _ if base_name.endswith('.Material.json'):
+
+        case '.phys.json':
+            if has_error:
+                create_error(print_messages, cp77_addon_prefs.non_verbose, base_name, file_extension, invalid_phys_error, errorMessages)
+            return data
+
+        case '.mlsetup.json' | '.mltemplate.json' | '.mt.json' | '.mi.json':
+            if has_error:
+                create_error(print_messages, cp77_addon_prefs.non_verbose, base_name, file_extension, invalid_material_error, errorMessages)
+            return data
+
+        case '.streamingsector.json':
+            if has_error:
+                create_error(print_messages, cp77_addon_prefs.non_verbose, base_name, file_extension, invalid_json_error, errorMessages)
+
+            t = data['Data']['RootChunk']['nodeData']['Data']
+            nodes = data["Data"]["RootChunk"]["nodes"]
+            return t, nodes
+
+        case '.Material.json':
+            if has_error:
+                create_error(print_messages, cp77_addon_prefs.non_verbose, base_name, file_extension, invalid_json_error, errorMessages)
+
             if not cp77_addon_prefs.non_verbose:
-                print(f"Processing: {base_name}")
-            data=load_json(filepath)
-            if json_ver_validate(data) == False:
-                if not cp77_addon_prefs.non_verbose:
-                    print(f"invalid Material.json found at: {filepath} import will continue but materials will not be set up for this mesh")
-                show_message(f"invalid material.json: {base_name} Re-Export the Mesh using the latest version of Wolvenkit")
-            else:
-                if not cp77_addon_prefs.non_verbose:
-                    print('Building shaders')
+                print('  Building shaders')
             depotpath = data["MaterialRepo"] + "\\"
             json_apps = data['Appearances']
             mats = data['Materials']
+
             return depotpath, json_apps, mats
-            # Do something for .material.json
-            return data
-        case _ if base_name.endswith('.gradient.json'):
-            if not cp77_addon_prefs.non_verbose:
-                print(f"Processing: {base_name}")
-            data=load_json(filepath)
-            if json_ver_validate(data) == False:
-                if not cp77_addon_prefs.non_verbose:
-                    print(f"invalid gradient.json found at: {filepath} this plugin requires jsons generated using the latest version of Wolvenkit")
-                show_message(f"found invalid gradient.json: {base_name} this plugin requires jsons generated using the latest version of Wolvenkit")
-            return data
-        case _ if base_name.endswith('.mlsetup.json'):
-            if not cp77_addon_prefs.non_verbose:
-                print(f"Processing: {base_name}")
-            data=load_json(filepath)
-            if json_ver_validate(data) == False:
-                if not cp77_addon_prefs.non_verbose:
-                    print(f"invalid mlsetup.json found at: {filepath} import will continue but shaders may be incorrectly set up for this mesh")
-                show_message(f"invalid mlsetup.json: {base_name} import will continue but shaders may be incorrectly setup for this mesh")
-            # Do something for .mlsetup.json
-            return data
-        case _ if base_name.endswith('.mltemplate.json'):
-            if not cp77_addon_prefs.non_verbose:
-                print(f"Processing: {base_name}")
-            data=load_json(filepath)
-            if json_ver_validate(data) == False:
-                if not cp77_addon_prefs.non_verbose:
-                    print(f"invalid mltemplate.json found at: {filepath} import will continue but shaders may be incorrectly set up for this mesh")
-                show_message(f"invalid mltemplate.json: {base_name} import will continue but shaders may be incorrectly setup for this mesh")
-            # Do something for .mlsetup.json
-            return data
-        case _ if base_name.endswith('.mt.json'):
-            if not cp77_addon_prefs.non_verbose:
-                print(f"Processing: {base_name}")
-            data=load_json(filepath)
-            if json_ver_validate(data) == False:
-                if not cp77_addon_prefs.non_verbose:
-                    print(f"invalid mt.json found at: {filepath} import will continue but shaders may be incorrectly set up for this mesh")
-                show_message(f"invalid mt.json: {base_name} import will continue but shaders may be incorrectly setup for this mesh")
-            return data        
-        case _ if base_name.endswith('.mi.json'):
-            if not cp77_addon_prefs.non_verbose:
-                print(f"Processing: {base_name}")
-            data=load_json(filepath)
-            if json_ver_validate(data) == False:
-                if not cp77_addon_prefs.non_verbose:
-                    print(f"invalid mi.json found at: {filepath} import will continue but shaders may be incorrectly set up for this mesh")
-                show_message(f"invalid mi.json: {base_name} import will continue but shaders may be incorrectly setup for this mesh")
-            return data        
-        case _ if base_name.endswith('.phys.json'):
-            if not cp77_addon_prefs.non_verbose:
-                print(f"Processing: {base_name}")
-            data=load_json(filepath)
-            if json_ver_validate(data) == False:
-                if not cp77_addon_prefs.non_verbose:
-                    print(f"invalid phys.json found at: {filepath} import may continue but .phys colliders will not be imported")
-                show_message(f"invalid phys.json: {base_name} import may continue but .phys colliders will not be imported")
-            # Do something for .phys.json
-            return data
-        case _ if base_name.endswith('.streamingsector.json'):
-            if not cp77_addon_prefs.non_verbose:
-                print(f"Processing: {base_name}")
-            data=load_json(filepath)
-            if json_ver_validate(data) == False:
-                if not cp77_addon_prefs.non_verbose:
-                    print(f"invalid streamingsector.json found at: {filepath} this plugin requires jsons generated with the latest version of Wolvenkit")
-                show_message(f"invalid streamingsector.json: {base_name} this plugin requires jsons generated with the latest version of Wolvenkit")
-            else: 
-                t = data['Data']['RootChunk']['nodeData']['Data']
-                nodes = data["Data"]["RootChunk"]["nodes"]
-            return t, nodes
 
-        case _ if base_name.endswith('.streamingblock.json'):
-            if not cp77_addon_prefs.non_verbose:
-                print(f"Processing: {base_name}")
-            data=load_json(filepath)
-            # Do something for .streamingblock.json
-            return data
-        case _ if base_name.endswith('.rig.json'):
-            if not cp77_addon_prefs.non_verbose:
-                print(f"Processing: {base_name}")
-            data=load_json(filepath)
-            if json_ver_validate(data) == False:
-                if not cp77_addon_prefs.non_verbose:                
-                    print(f"invalid rig.json found at: {filepath} this plugin requires jsons generated with the latest version of Wolvenkit")
-                show_message(f"invalid rig.json: {base_name} this plugin requires jsons generated with the latest version of Wolvenkit")
-            # Do something for .rig.json
-            return data
-        case _ if base_name.endswith('.hp.json'):
-            if not cp77_addon_prefs.non_verbose:
-                print(f"Processing: {base_name}")
-            data=load_json(filepath)
-            if json_ver_validate(data) == False:
-                if not cp77_addon_prefs.non_verbose:                
-                    print(f"invalid hp.json found at: {filepath} this plugin requires jsons generated with the latest version of Wolvenkit")
-                show_message(f"invalid Hair Profile: {base_name} this plugin requires jsons generated with the latest version of Wolvenkit")
-            return data       
-        case _ if base_name.endswith('.cfoliage.json'):
-            if not cp77_addon_prefs.non_verbose:
-                print(f"Processing: {base_name}")
-            data=load_json(filepath)
-            if json_ver_validate(data) == False:
-                if not cp77_addon_prefs.non_verbose:                
-                    print(f"invalid cfoliage.json found at: {filepath} this plugin requires jsons generated with the latest version of Wolvenkit")
-                show_message(f"invalid cfoliage.json : {base_name} this plugin requires jsons generated with the latest version of Wolvenkit")
-
-            return data
         case _ if base_name.endswith('.refitter.zip'):
-            if not cp77_addon_prefs.non_verbose:
-                print(f"Processing: {base_name}")
             data=load_zip(filepath)
             data=jsonloads(data)
             lattice_object_name = data["lattice_object_name"]
@@ -235,11 +139,9 @@ def jsonload(filepath):
             lattice_interpolation_w = data["lattice_interpolation_w"]
             return lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w
         case _:
-            if not cp77_addon_prefs.non_verbose:
-                print(f"Incompatible Json: {base_name}")
-                print("json files must be generated with a latest version of Wolvenkit")
-            show_message(f"Incompatible Json: {base_name} json files must be generated with a latest version of Wolvenkit")
+            create_error(print_messages, cp77_addon_prefs.non_verbose, base_name, file_extension, invalid_json_error, errorMessages)
             # Do something for other json files
+
 
 def jsonloads(jsonstrings):
 
