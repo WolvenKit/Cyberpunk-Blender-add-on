@@ -289,12 +289,13 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
         else:
             materialNames = extras["materialNames"]
 
+        # remove duplicate material names (why does "extras" end up with 10k "decals" entries when I import the maimai?)
+        materialNames = list(dict.fromkeys(materialNames))
+
         # Kwek: I also found that other material hiccups will cause the Collection to fail
         for matname in materialNames:
 
             if matname not in validmats.keys():
-                # print("Pass")
-                # print(matname, validmats.keys())
                 continue
 
             # print('matname: ',matname, validmats[matname])
