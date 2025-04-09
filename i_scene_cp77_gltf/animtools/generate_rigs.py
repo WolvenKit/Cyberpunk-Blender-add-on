@@ -5,44 +5,43 @@ from rna_prop_ui import rna_idprop_ui_create
 from mathutils import Color
 
 def create_meta(obj):
-    if obj and obj.type == 'ARMATURE':
-        original_armature = obj
-        
-        # Deselect all objects
-        bpy.ops.object.select_all(action='DESELECT')
-        
-        # Select the original armature
-        original_armature.select_set(True)
-        bpy.context.view_layer.objects.active = original_armature
-        
-        # Duplicate the original armature
-        bpy.ops.object.duplicate()
-        meta_rig = bpy.context.object
-        meta_rig.name = original_armature.name + "_meta"
-        meta_rig.data.name = meta_rig.name
-        
-        # Remove all duplicate bones
-        for bone in meta_rig.pose.bones:
-            if bone.name.endswith(".001"):
-                meta_rig.data.edit_bones.remove(meta_rig.data.edit_bones[bone.name])
-        
-        # Rename the bones in the duplicated armature to match the original
-        for original_bone, meta_bone in zip(original_armature.pose.bones, meta_rig.pose.bones):
-            if meta_bone.name != original_bone.name:
-                bpy.context.view_layer.objects.active = meta_rig
-                bpy.ops.object.mode_set(mode='EDIT')
-                meta_rig.data.edit_bones[meta_bone.name].name = original_bone.name
-                bpy.ops.object.mode_set(mode='POSE')
-                
-        return meta_rig
-    else:
+    if not obj or obj.type != 'ARMATURE':
         print("No armature selected.")
         return None
+    original_armature = obj
+
+    # Deselect all objects
+    bpy.ops.object.select_all(action='DESELECT')
+
+    # Select the original armature
+    original_armature.select_set(True)
+    bpy.context.view_layer.objects.active = original_armature
+
+    # Duplicate the original armature
+    bpy.ops.object.duplicate()
+    meta_rig = bpy.context.object
+    meta_rig.name = original_armature.name + "_meta"
+    meta_rig.data.name = meta_rig.name
+
+    # Remove all duplicate bones
+    for bone in meta_rig.pose.bones:
+        if bone.name.endswith(".001"):
+            meta_rig.data.edit_bones.remove(meta_rig.data.edit_bones[bone.name])
+
+    # Rename the bones in the duplicated armature to match the original
+    for original_bone, meta_bone in zip(original_armature.pose.bones, meta_rig.pose.bones):
+        if meta_bone.name != original_bone.name:
+            bpy.context.view_layer.objects.active = meta_rig
+            bpy.ops.object.mode_set(mode='EDIT')
+            meta_rig.data.edit_bones[meta_bone.name].name = original_bone.name
+            bpy.ops.object.mode_set(mode='POSE')
+
+    return meta_rig
 
 def create_constraints(rigify_rig, original_armature):
     bpy.context.view_layer.objects.active = rigify_rig
     bpy.ops.object.mode_set(mode='POSE')
-    
+
     rigify_pose_bones = rigify_rig.pose.bones
     conbo = {}
 
@@ -59,13 +58,13 @@ def create_constraints(rigify_rig, original_armature):
         constraint.name = "Copy Transforms from " + rigify_bone_name
         constraint.target = rigify_rig
         constraint.subtarget = rigify_bone_name
-        
+
     for original_bone_name, rigify_bone_name in conbo.items():
         original_bone = original_armature.pose.bones[original_bone_name]
         constraint = original_bone.constraints.new(type='COPY_LOCATION')
         constraint.name = "Copy Transforms from " + rigify_bone_name
         constraint.target = rigify_rig
-        constraint.subtarget = rigify_bone_name      
+        constraint.subtarget = rigify_bone_name
 
     bpy.ops.object.mode_set(mode='OBJECT')
 
@@ -7800,7 +7799,7 @@ def create_rigify(obj):
     arm.collections.active_index = 0
 
     return bones
-    
+
 def create_rigify_rig(self, context):
     org = context.object
   #  meta = create_meta(org)
@@ -7812,6 +7811,5 @@ if __name__ == "__main__":
     meta = create_meta(org)
     rigify_rig = create_rigify(meta)
     create_constraints(rigify_rig, meta)
-    
-    
-    
+
+
