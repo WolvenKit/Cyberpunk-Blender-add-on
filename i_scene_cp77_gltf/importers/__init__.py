@@ -20,7 +20,7 @@ class CP77ImportRig(Operator):
     bl_label = "Import Rig from JSON"
     bl_options = {'REGISTER', 'UNDO'}
     bl_description = "Import a rig from a rig.JSON file and create an armature in Blender"
-    
+
     filter_glob: StringProperty(
             default="*.rig.json",
             options={'HIDDEN'},
@@ -34,7 +34,7 @@ class CP77ImportRig(Operator):
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
-    
+
     def draw(self, context):
         layout = self.layout
         row = layout.row(align=True)
@@ -56,14 +56,14 @@ class CP7PhysImport(Operator):
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
         return {"RUNNING_MODAL"}
-    
+
 
 class CP77EntityImport(Operator,ImportHelper):
 
     bl_idname = "io_scene_gltf.cp77entity"
     bl_label = "Import Ent from JSON"
-    bl_description = "Import Characters and Vehicles from Cyberpunk 2077 Entity Files" 
-    
+    bl_description = "Import Characters and Vehicles from Cyberpunk 2077 Entity Files"
+
     filter_glob: StringProperty(
         default="*.ent.json",
         options={'HIDDEN'},
@@ -88,10 +88,10 @@ class CP77EntityImport(Operator,ImportHelper):
                                 description="Collector to put the imported entity in",
                                 default='',
                                 options={'HIDDEN'})
-        
+
     def draw(self, context):
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
-        props = context.scene.cp77_panel_props       
+        props = context.scene.cp77_panel_props
         layout = self.layout
         row = layout.row(align=True)
         split = row.split(factor=0.45,align=True)
@@ -145,13 +145,13 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
 
     bl_idname = "io_scene_gltf.cp77sector"
     bl_label = "Import All StreamingSectors from project"
-    bl_description = "Load Cyberpunk 2077 Streaming Sectors" 
-    
+    bl_description = "Load Cyberpunk 2077 Streaming Sectors"
+
     filter_glob: StringProperty(
         default="*.cpmodproj",
         options={'HIDDEN'},
         )
-    
+
     filepath: StringProperty(name= "Filepath",
                              subtype = 'FILE_PATH')
 
@@ -164,7 +164,7 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
         props = context.scene.cp77_panel_props
         layout = self.layout
         box = layout.box()
-        col = box.column() 
+        col = box.column()
         col.prop(self, "want_collisions",)
         col.prop(self, "with_lights")
         col.prop(self, "am_modding")
@@ -211,13 +211,13 @@ class CP77Import(Operator, ImportHelper):
 
     files: CollectionProperty(type=OperatorFileListElement)
     directory: StringProperty()
-    
+
     appearances: StringProperty(name= "Appearances",
                                 description="Appearances to extract with models",
                                 default="Default"
                                 )
-    scripting: BoolProperty(name="Scripting",default=False ,description="Tell it its being called by a script so it can ignore the gui file lists",options={'HIDDEN'})    
-    
+    scripting: BoolProperty(name="Scripting",default=False ,description="Tell it its being called by a script so it can ignore the gui file lists",options={'HIDDEN'})
+
     # switch back to operator draw function to align with other UI features
     def draw(self, context):
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
@@ -225,7 +225,7 @@ class CP77Import(Operator, ImportHelper):
         layout = self.layout
         if not props.with_materials:
             box = layout.box()
-            col = box.column() 
+            col = box.column()
             col.prop(props, 'with_materials')
             col.prop(self, 'hide_armatures')
             col.prop(self, 'import_garmentsupport')
@@ -233,7 +233,7 @@ class CP77Import(Operator, ImportHelper):
                 col.prop(props,"remap_depot")
         if props.with_materials:
             box = layout.box()
-            col = box.column() 
+            col = box.column()
             col.prop(props, 'with_materials')
             col.prop(self, 'exclude_unused_mats')
             col.prop(props, 'use_cycles')
@@ -246,21 +246,25 @@ class CP77Import(Operator, ImportHelper):
             box.label(text='Appearances to Import:')
             box.prop(self, 'appearances', text='')
             box = layout.box()
-            col = box.column() 
+            col = box.column()
             col.prop(self, 'hide_armatures')
             col.prop(self, 'import_garmentsupport')
             if cp77_addon_prefs.experimental_features:
                 col.prop(props,"remap_depot")
-        
+
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
         SetCyclesRenderer(props.use_cycles, props.update_gi)
-        CP77GLBimport(self, props.with_materials, props.remap_depot, self.exclude_unused_mats, self.image_format, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, self.appearances, self.scripting)
+
+        # turns out that multimesh import of an entire car uses a gazillion duplicates as well...
+        JSONTool.start_caching()
+        CP77GLBimport(self, props.with_materials, props.remap_depot, self.exclude_unused_mats, self.image_format, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, self.appearances)
+        JSONTool.stop_caching()
 
         return {'FINISHED'}
- 
- 
+
+
 def menu_func_import(self, context):
     self.layout.operator(CP77ImportRig.bl_idname, text="Cyberpunk Rig import (.rig.json)", icon_value=get_icon('WKIT'))
     self.layout.operator(CP77Import.bl_idname, text="Cyberpunk GLTF (.gltf/.glb)", icon_value=get_icon('WKIT'))
