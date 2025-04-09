@@ -6,20 +6,20 @@ from ..main.common import  (get_resources_dir, get_script_dir, show_message)
 from bpy.props import (StringProperty, EnumProperty, FloatVectorProperty)
 from ..cyber_props import *
 
-        
+
 res_dir = get_resources_dir()
 
 def del_empty_vgroup(self, context):
     obj = context.object
     if not obj:
         show_message("No active object. Please Select a Mesh and try again")
-        return {'CANCELLED'} 
+        return {'CANCELLED'}
     if obj.type != 'MESH':
         show_message("The active object is not a mesh.")
         return {'CANCELLED'}
     try:
         for obj in bpy.context.selected_objects:
-            groups = {r: None for r in range(len(obj.vertex_groups))}
+            groups = {r: 0 for r in range(len(obj.vertex_groups))}
             for vert in obj.data.vertices:
                 for vg in vert.groups:
                     i = vg.group
@@ -29,13 +29,13 @@ def del_empty_vgroup(self, context):
     except Exception as e:
         print(f"encountered the following error:")
         print(e)
-        
+
 def find_nearest_vertex_group(obj, vertex):
     min_distance = math.inf
     nearest_vertex = None
     if not obj:
         show_message("No active object. Please Select a Mesh and try again")
-        return {'CANCELLED'} 
+        return {'CANCELLED'}
     if obj.type != 'MESH':
         show_message("The active object is not a mesh.")
         return {'CANCELLED'}
@@ -53,7 +53,7 @@ def CP77GroupUngroupedVerts(self, context):
     current_mode = C.mode
     if not obj:
         show_message("No active object. Please Select a Mesh and try again")
-        return {'CANCELLED'} 
+        return {'CANCELLED'}
     if obj.type != 'MESH':
         show_message("The active object is not a mesh.")
         return {'CANCELLED'}
@@ -74,7 +74,7 @@ def CP77GroupUngroupedVerts(self, context):
             except Exception as e:
                 print(e)
 
-        # Return to the mode the user was in edit_mesh was giving me a lot of trouble and is probably 
+        # Return to the mode the user was in edit_mesh was giving me a lot of trouble and is probably
         # the most common it will be here so special handling for it
         if C.mode != current_mode:
             try:
@@ -96,17 +96,17 @@ def trans_weights(self, context, vertInterop):
     if source_mesh and target_mesh:
         if current_mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
-        
+
         bpy.ops.object.select_all(action='DESELECT')
-        
+
         for source_obj in source_mesh.objects:
             source_obj.select_set(True)
-        
+
         context.view_layer.objects.active = source_mesh.objects[-1]
-        
+
         for target_obj in target_mesh.objects:
             target_obj.select_set(True)
-        
+
         bpy.ops.object.data_transfer(
             use_reverse_transfer=False,
             vert_mapping='POLYINTERP_NEAREST',
@@ -116,7 +116,7 @@ def trans_weights(self, context, vertInterop):
         )
         bpy.ops.object.select_all(action='DESELECT')
         context.view_layer.objects.active = None
-        
+
     for obj in active_objs:
         obj.select_set(True)
         context.view_layer.objects.active = obj
