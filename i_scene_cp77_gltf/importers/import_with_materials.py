@@ -196,7 +196,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
 
         # the rest of the function deals with material import and validation
         if with_materials != True:
-            return
+            continue
 
         # validate materials, and don't import duplicates. Have this outside the loop/conditional so that it's valid but empty.
         validmats={}
