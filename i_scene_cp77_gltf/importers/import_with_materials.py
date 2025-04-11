@@ -61,6 +61,11 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
     start_time = time.time()
     if not scripting:
         loadfiles=self.files
+    else:
+        f={}
+        f['name']=os.path.basename(self.filepath)
+        loadfiles=(f,)
+        
     DepotPath=cp77_addon_prefs
     appearances=self.appearances.split(",")
     if not cp77_addon_prefs.non_verbose:
@@ -81,12 +86,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
     else:
         directory = os.path.dirname(self.filepath)
 
-    #if no files were supplied and a filepath is populate the files from the filepath
-    if len(loadfiles)==0 and len(self.filepath)>0:
-        f={}
-        f['name']=os.path.basename(self.filepath)
-        loadfiles=(f,)
-
+    
     file_names=[]
     file_paths=[]
     for f in loadfiles:
