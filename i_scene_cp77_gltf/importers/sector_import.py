@@ -354,7 +354,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                         meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                         if(meshname != 0):
                             meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
-                    case 'worldStaticMeshNode' |'worldRotatingMeshNode'|'worldAdvertisingNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' \
+                    case 'worldStaticMeshNode' |'worldRotatingMeshNode'|'worldAdvertisingNode'| 'worldAdvertisementNode' | 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' \
                         | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldTerrainMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode'\
                    | 'worldMeshNode' | 'worldDestructibleEntityProxyMeshNode' | 'worldStaticOccluderMeshNode' |'worldDecorationMeshNode' | 'worldFoliageNode':
                         if isinstance(e, dict) and 'mesh' in data.keys() and isinstance(data['mesh'], dict) and'DepotPath' in data['mesh'].keys():
@@ -423,7 +423,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                 groupname = groupname[:-1]
             if groupname not in Masters.children.keys() and os.path.exists(meshpath):
                 try:
-                    bpy.ops.io_scene_gltf.cp77(with_mats, filepath=meshpath, appearances=impapps)
+                    bpy.ops.io_scene_gltf.cp77(with_mats, filepath=meshpath, appearances=impapps,scripting=True)
                     objs = C.selected_objects
                     move_coll= coll_scene.children.get( objs[0].users_collection[0].name )
                     coll_target.children.link(move_coll)
@@ -899,7 +899,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                         # Roads all have stupid prx0 names so instancing by name wont work.
                                         imported=False
                                         try:
-                                            bpy.ops.io_scene_gltf.cp77(with_mats, filepath=meshpath)
+                                            bpy.ops.io_scene_gltf.cp77(with_mats, filepath=meshpath,scripting=True)
                                             objs = C.selected_objects
                                             groupname = objs[0].users_collection[0].name
                                             group= coll_scene.children.get( groupname )
@@ -940,7 +940,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                         else:
                                             print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
 
-                    case 'worldStaticMeshNode' |'worldRotatingMeshNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldAdvertismentNode' | \
+                    case 'worldStaticMeshNode' |'worldRotatingMeshNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldAdvertisementNode' | \
                 'worldGenericProxyMeshNode'|'worldDestructibleEntityProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldStaticOccluderMeshNode'| 'worldTerrainMeshNode' | 'worldClothMeshNode' |\
                 'worldDecorationMeshNode' | 'worldDynamicMeshNode' | 'worldMeshNode':
                         meshname=None
