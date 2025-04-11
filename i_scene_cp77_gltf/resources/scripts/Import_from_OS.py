@@ -58,7 +58,7 @@ def process_object(obj,parent_coll):
             groupname = groupname[:-1]
         if groupname not in Masters.children.keys() and os.path.exists(meshpath):
             try:
-                bpy.ops.io_scene_gltf.cp77(with_mats, filepath=meshpath, appearances=impapps)
+                bpy.ops.io_scene_gltf.cp77(with_mats, filepath=meshpath, appearances=impapps,scripting=True)
                 objs = C.selected_objects
                 move_coll= coll_scene.children.get( objs[0].users_collection[0].name )
                 Masters.children.link(move_coll) 

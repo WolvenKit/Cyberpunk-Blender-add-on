@@ -423,7 +423,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                 groupname = groupname[:-1]
             if groupname not in Masters.children.keys() and os.path.exists(meshpath):
                 try:
-                    bpy.ops.io_scene_gltf.cp77(with_mats, filepath=meshpath, appearances=impapps)
+                    bpy.ops.io_scene_gltf.cp77(with_mats, filepath=meshpath, appearances=impapps,scripting=True)
                     objs = C.selected_objects
                     move_coll= coll_scene.children.get( objs[0].users_collection[0].name )
                     coll_target.children.link(move_coll)
@@ -899,7 +899,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                         # Roads all have stupid prx0 names so instancing by name wont work.
                                         imported=False
                                         try:
-                                            bpy.ops.io_scene_gltf.cp77(with_mats, filepath=meshpath)
+                                            bpy.ops.io_scene_gltf.cp77(with_mats, filepath=meshpath,scripting=True)
                                             objs = C.selected_objects
                                             groupname = objs[0].users_collection[0].name
                                             group= coll_scene.children.get( groupname )

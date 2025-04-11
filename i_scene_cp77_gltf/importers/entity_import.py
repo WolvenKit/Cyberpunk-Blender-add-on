@@ -141,7 +141,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                         # presto_stash.append(animsinres)
 
         if len(animsinres)>0:
-            bpy.ops.io_scene_gltf.cp77(with_materials, filepath=animsinres[0])
+            bpy.ops.io_scene_gltf.cp77(with_materials, filepath=animsinres[0],scripting=True)
             #find what we just loaded
             arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
             rig=arms[0]
@@ -331,7 +331,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                         meshApp=c['meshAppearance']['$value']
                                         #print(meshApp)
                                     try:
-                                        bpy.ops.io_scene_gltf.cp77(with_materials, filepath=meshpath, appearances=meshApp)
+                                        bpy.ops.io_scene_gltf.cp77(with_materials, filepath=meshpath, appearances=meshApp,scripting=True)
                                         for obj in C.selected_objects:
                                             obj['componentName'] = c['name']['$value']
                                             obj['sourcePath'] = meshpath
