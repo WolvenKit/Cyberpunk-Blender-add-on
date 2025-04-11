@@ -354,7 +354,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                         meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                         if(meshname != 0):
                             meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
-                    case 'worldStaticMeshNode' |'worldRotatingMeshNode'|'worldAdvertisingNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' \
+                    case 'worldStaticMeshNode' |'worldRotatingMeshNode'|'worldAdvertisingNode'| 'worldAdvertisementNode' | 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' \
                         | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldTerrainMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode'\
                    | 'worldMeshNode' | 'worldDestructibleEntityProxyMeshNode' | 'worldStaticOccluderMeshNode' |'worldDecorationMeshNode' | 'worldFoliageNode':
                         if isinstance(e, dict) and 'mesh' in data.keys() and isinstance(data['mesh'], dict) and'DepotPath' in data['mesh'].keys():
@@ -940,7 +940,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                         else:
                                             print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
 
-                    case 'worldStaticMeshNode' |'worldRotatingMeshNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldAdvertismentNode' | \
+                    case 'worldStaticMeshNode' |'worldRotatingMeshNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldAdvertisementNode' | \
                 'worldGenericProxyMeshNode'|'worldDestructibleEntityProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldStaticOccluderMeshNode'| 'worldTerrainMeshNode' | 'worldClothMeshNode' |\
                 'worldDecorationMeshNode' | 'worldDynamicMeshNode' | 'worldMeshNode':
                         meshname=None
