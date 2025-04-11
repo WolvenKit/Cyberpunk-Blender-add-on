@@ -54,12 +54,13 @@ imported = None
 appearances = None
 collection = None
 
-def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, image_format='png', filepath='', hide_armatures=True, import_garmentsupport=False, files=[], directory='', appearances=[]):
+def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, image_format='png', filepath='', hide_armatures=True, import_garmentsupport=False, files=[], directory='', appearances=[], scripting=False):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     context=bpy.context
    # obj = None
     start_time = time.time()
-    loadfiles=self.files
+    if not scripting:
+        loadfiles=self.files
     DepotPath=cp77_addon_prefs
     appearances=self.appearances.split(",")
     if not cp77_addon_prefs.non_verbose:
@@ -75,7 +76,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
             else:
                 print(f"Importing: {os.path.basename(self.filepath)}")
     # prevent crash if no directory supplied when using filepath
-    if len(self.directory)>0:
+    if len(self.directory)>0 and not scripting:
         directory = self.directory
     else:
         directory = os.path.dirname(self.filepath)
