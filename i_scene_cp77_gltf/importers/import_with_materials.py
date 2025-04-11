@@ -54,12 +54,13 @@ imported = None
 appearances = None
 collection = None
 
-def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, image_format='png', filepath='', hide_armatures=True, import_garmentsupport=False, files=[], directory='', appearances=[]):
+def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, image_format='png', filepath='', hide_armatures=True, import_garmentsupport=False, files=[], directory='', appearances=[], scripting=False):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     context=bpy.context
    # obj = None
     start_time = time.time()
-    loadfiles=self.files
+    if not scripting:
+        loadfiles=self.files
     DepotPath=cp77_addon_prefs
     appearances=self.appearances.split(",")
     if not cp77_addon_prefs.non_verbose:
@@ -75,7 +76,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
             else:
                 print(f"Importing: {os.path.basename(self.filepath)}")
     # prevent crash if no directory supplied when using filepath
-    if len(self.directory)>0:
+    if len(self.directory)>0 and not scripting:
         directory = self.directory
     else:
         directory = os.path.dirname(self.filepath)
@@ -196,7 +197,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
 
         # the rest of the function deals with material import and validation
         if with_materials != True:
-            return
+            continue
 
         # validate materials, and don't import duplicates. Have this outside the loop/conditional so that it's valid but empty.
         validmats={}
@@ -289,12 +290,13 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
         else:
             materialNames = extras["materialNames"]
 
+        # remove duplicate material names (why does "extras" end up with 10k "decals" entries when I import the maimai?)
+        materialNames = list(dict.fromkeys(materialNames))
+
         # Kwek: I also found that other material hiccups will cause the Collection to fail
         for matname in materialNames:
 
             if matname not in validmats.keys():
-                # print("Pass")
-                # print(matname, validmats.keys())
                 continue
 
             # print('matname: ',matname, validmats[matname])

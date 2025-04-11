@@ -330,7 +330,7 @@ for key, match in Matches.items():
         groupname = groupname[:-1]
     if groupname not in coll_scene and os.path.exists(meshpath):
         try:
-            bpy.ops.io_scene_gltf.cp77( filepath=meshpath, appearances='default')
+            bpy.ops.io_scene_gltf.cp77( filepath=meshpath, appearances='default',scripting=True)
             objs = C.selected_objects
             mdim=col_dimensions(objs[0].users_collection[0])
             meshcenter=get_colcenter(objs[0].users_collection[0])
