@@ -59,7 +59,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         ent_applist.append(app['appearanceName']['$value'])
 
     if len(ent_applist) == 0:
-        show_message("No appearances found in entity file. Imported objects may be incomplete or missing.")
+        print(f"No appearances found in entity file {ent_name}. Imported objects may be incomplete or missing.")
+        show_message("No appearances found in entity file. Imported objects may be incomplete or missing. "+ent_name)
 
     #print(ent_applist)
     #presto_stash.append(ent_components)
