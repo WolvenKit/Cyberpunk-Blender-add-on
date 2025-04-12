@@ -517,11 +517,23 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                                         obj.rotation_quaternion.z = btrans['Rotation']['k']
                                                         obj.rotation_quaternion.w = btrans['Rotation']['r']
                                                         # Apply child of constraints to them and set the inverse
-                                                        co=obj.constraints.new(type='CHILD_OF')
-                                                        co.target=rig
-                                                        co.subtarget= bindname
-                                                        bpy.context.view_layer.objects.active = obj
-                                                        bpy.ops.constraint.childof_set_inverse(constraint=loc("Child Of"), owner='OBJECT')
+                                                        if 'fuel_cap' not in bindname:
+                                                            co=obj.constraints.new(type='CHILD_OF')
+                                                            co.target=rig
+                                                            co.subtarget= bindname
+                                                            bpy.context.view_layer.objects.active = obj
+                                                            bpy.ops.constraint.childof_set_inverse(constraint=loc("Child Of"), owner='OBJECT')
+                                                        else:
+                                                            # Apply location constraint to the fuel cap
+                                                            co=obj.constraints.new(type='COPY_LOCATION')
+                                                            co.target=rig
+                                                            co.subtarget= bindname
+                                                        if 'wheel' in bindname:
+                                                            # Apply Copy Rotation constraint to the wheels
+                                                            cr=obj.constraints.new(type='COPY_ROTATION')
+                                                            cr.target=rig
+                                                            if 'steering' not in bindname:
+                                                                cr.subtarget= bindname
 
                                             # Deal with TransformAnimators
                                             #if 'TransformAnimator' in bindname:
@@ -585,34 +597,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                     ent_coll.children.link(move_coll)
                                     coll_scene.children.unlink(move_coll)
 
-                                #can probably a better way to pull this from somewhere but this works for now.
-                                    license_plates = [obj for obj in bpy.data.objects if 'license_plate' in obj.get('componentName', '')]
-                                    bumper_f_objs = [obj for obj in bpy.data.objects if 'bumper_f' in obj.get('componentName', '')]
-                                    bumper_b_objs = [obj for obj in bpy.data.objects if 'bumper_b' in obj.get('componentName', '')]
 
-                                    if len(license_plates) > 0:
-                                        for obj in license_plates:
-                                            try:
-                                                # use the component name to figure out if this supposed to be attached to the front or back bumper
-                                                componentName = obj.get('componentName', '')
-                                                bumper_type = 'bumper_f' if 'license_plate_f' in componentName else 'bumper_b'
-                                                # Find the correct bumper and match it to the license plate
-                                                potential_parents = bumper_f_objs if bumper_type == 'bumper_f' else bumper_b_objs
-                                                # Check if there's actually an object to parent the license plate to, if there is set it to obj.parent
-                                                if potential_parents:
-                                                    obj.parent = potential_parents[0]
-                                                # I'm pretty certain you have this stored somewhere else already - we should probably look at just adding all of the localTransforms
-                                                # to a dict seperate from comp earlier on and just matching them by componnent name whenever we need to apply transforms
-                                                    lct = next((comp for comp in comps if comp["name"]["$value"] == componentName), None)
-                                                    #print(lct["localTransform"])
-                                                    if lct:
-                                                        obj.location[0] = lct["localTransform"]["Position"]["x"]["Bits"]/ 131072
-                                                        obj.location[1] = lct["localTransform"]["Position"]["y"]["Bits"]/ 131072
-                                                        obj.location[2] = lct["localTransform"]["Position"]["z"]["Bits"]/ 131072
-                                                else:
-                                                    print('no bumper found to parent license plate to')
-                                            except Exception as e:
-                                                print(e)
                                     # New chunkMask reading
                                     # convert the value to a list of bools, then apply those statuses to the submeshes.
                                     if 'chunkMask' in c.keys():
@@ -631,6 +616,37 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 except:
                                     print("Failed on ",meshname)
                                     print(traceback.print_exc())
+
+        #can probably a better way to pull this from somewhere but this works for now.
+        license_plates = [obj for obj in bpy.data.objects if 'license_plate' in obj.get('componentName', '')]
+        bumper_f_objs = [obj for obj in bpy.data.objects if 'bumper_f' in obj.get('componentName', '')]
+        bumper_b_objs = [obj for obj in bpy.data.objects if 'bumper_b' in obj.get('componentName', '')]
+
+        if len(license_plates) > 0:
+            for obj in license_plates:
+                #print(obj.name)
+                if not len(obj.constraints)>0:
+                    try:
+                        # use the component name to figure out if this supposed to be attached to the front or back bumper
+                        componentName = obj.get('componentName', '')
+                        bumper_type = 'bumper_f' if 'license_plate_f' in componentName else 'bumper_b'
+                        # Find the correct bumper and match it to the license plate
+                        potential_parents = bumper_f_objs if bumper_type == 'bumper_f' else bumper_b_objs
+                        # Check if there's actually an object to parent the license plate to, if there is set it to obj.parent
+                        if potential_parents:
+                            obj.parent = potential_parents[0]
+                        # I'm pretty certain you have this stored somewhere else already - we should probably look at just adding all of the localTransforms
+                        # to a dict seperate from comp earlier on and just matching them by componnent name whenever we need to apply transforms
+                            lct = next((comp for comp in comps if comp["name"]["$value"] == componentName), None)
+                            #print(lct["localTransform"])
+                            if lct:
+                                obj.location[0] = lct["localTransform"]["Position"]["x"]["Bits"]/ 131072
+                                obj.location[1] = lct["localTransform"]["Position"]["y"]["Bits"]/ 131072
+                                obj.location[2] = lct["localTransform"]["Position"]["z"]["Bits"]/ 131072
+                        else:
+                            print('no bumper found to parent license plate to')
+                    except Exception as e:
+                        print(e)
 
               # find the .phys file jsons
         if include_collisions:
@@ -759,7 +775,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 except Exception as e:
                                     print('uh oh', e)
     if rig:
-        rig.pose_position = 'REST'
+        arm=bpy.data.armatures[rig.name]
+        arm.pose_position = 'REST'
 
     JSONTool.stop_caching()
     if len(error_messages) > 0:
