@@ -1046,17 +1046,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                 Sector_coll.children.link(NDI_Coll)
                                                 assign_custom_properties(NDI_Coll, data,sectorName,i,
                                                 nodeDataIndex=inst['nodeDataIndex'], instance_idx=idx,
-                                                mesh=meshname, pivot=inst['Pivot'],
-                                                meshAppearance=meshAppearance,
-                                                appearanceName=meshAppearance)
-                                                NDI_Coll['nodeType']=ntype
-                                                NDI_Coll['nodeIndex']=i
-                                                NDI_Coll['nodeDataIndex']=inst['nodeDataIndex']
-                                                NDI_Coll['mesh']=meshname
-                                                NDI_Coll['debugName']=e['Data']['debugName']['$value']
-                                                NDI_Coll['sectorName']=sectorName
-                                                NDI_Coll['numElements']=num
-                                                NDI_Coll['appearanceName']=''
+                                                mesh=meshname, pivot=inst['Pivot'])
                                                 if 'appearanceName' in e['Data'].keys():
                                                     NDI_Coll['appearanceName']=e['Data']['appearanceName']['$value']
                                                 #print('Glb found - ',glbfoundname)
