@@ -354,9 +354,9 @@ def register_animtools():
 
 
 def unregister_animtools():
-    for cls in reversed(other_classes):
+    for cls in reversed(operators):
         if hasattr(bpy.types, cls.__name__):
             bpy.utils.unregister_class(cls)
-    for cls in reversed(operators):
+    for cls in reversed(other_classes):
         if hasattr(bpy.types, cls.__name__):
             bpy.utils.unregister_class(cls)
