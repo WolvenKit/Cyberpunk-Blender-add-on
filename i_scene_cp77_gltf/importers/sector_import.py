@@ -750,7 +750,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                         WFI_Coll = bpy.data.collections.new(WFI_Coll_name)
                                         Sector_coll.children.link(WFI_Coll)
                                         assign_custom_properties(WFI_Coll, data,sectorName,i,
-                                        nodeDataIndex=inst['nodeDataIndex'],mesh=meshname,Element_idx=El_idx,                                       
+                                        nodeDataIndex=inst['nodeDataIndex'],mesh=meshname,                                   
                                         Bucketnum=Bucketnum, Bucketstart=Bucketstart, InstBegin=InstBegin, InstCount=InstCount)
     
                                         PopSubIndex=frjson['Data']['RootChunk']['dataBuffer']['Data']['Buckets'][Bucketstart]['PopulationSubIndex']
