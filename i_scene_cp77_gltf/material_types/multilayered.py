@@ -76,6 +76,15 @@ def mask_mixer_node_group():
     mix_001.data_type = 'RGBA'
     mix_001.factor_mode = 'UNIFORM'
 
+    #node Mix.002
+    mix_002 = mask_mixer.nodes.new("ShaderNodeMix")
+    mix_002.name = "Mix.002"
+    mix_002.blend_type = 'OVERLAY'
+    mix_002.clamp_factor = True
+    mix_002.clamp_result = False
+    mix_002.data_type = 'RGBA'
+    mix_002.factor_mode = 'UNIFORM'
+
     #node Math.006
     math_006 = mask_mixer.nodes.new("ShaderNodeMath")
     math_006.name = "Math.006"
@@ -116,17 +125,28 @@ def mask_mixer_node_group():
     math_010.use_clamp = False
     #Value
     math_010.inputs[0].default_value = 0.0
+    
+    #node Math.011
+    math_011 = mask_mixer.nodes.new("ShaderNodeMath")
+    math_011.name = "Math.011"
+    math_011.operation = 'GREATER_THAN'
+    math_011.use_clamp = False
+    #Value
+    math_011.inputs[1].default_value = 0.5
 
-
+    MixN = create_node(mask_mixer.nodes,"ShaderNodeMix",(130, 430),blend_type='MIX')
+    
     #Set locations
-    group_output.location = (762.4629516601562, -85.77066802978516)
-    group_input.location = (-599.7591552734375, 0.0)
-    mix_001.location = (-93.963623046875, 170.34710693359375)
-    math_006.location = (-358.4058532714844, -142.66656494140625)
-    map_range_001.location = (385.4674072265625, 135.95416259765625)
-    math_008.location = (-116.00799560546875, -147.20404052734375)
-    math_009.location = (56.01458740234375, -272.09808349609375)
-    math_010.location = (54.735107421875, -116.58660888671875)
+    group_output.location = (760., -85.)
+    group_input.location = (-600., 0.0)
+    mix_001.location = (-95., 170.)
+    mix_002.location = (-95., 440)
+    math_006.location = (-360., -140.)
+    map_range_001.location = (385., 135.)
+    math_008.location = (-115., -145.)
+    math_009.location = (55., -275.)
+    math_010.location = (55., -115.)
+    math_011.location = (-95., 600)
 
     #Set dimensions
     group_output.width, group_output.height = 140.0, 100.0
@@ -144,7 +164,9 @@ def mask_mixer_node_group():
     #math_006.Value -> math_008.Value
     mask_mixer.links.new(math_006.outputs[0], math_008.inputs[0])
     #mix_001.Result -> map_range_001.Value
-    mask_mixer.links.new(mix_001.outputs[2], map_range_001.inputs[0])
+    mask_mixer.links.new(mix_001.outputs[2], MixN.inputs[3])
+    #mix_001.Result -> map_range_001.Value
+    mask_mixer.links.new(mix_002.outputs[2], MixN.inputs[2])
     #math_010.Value -> map_range_001.From Min
     mask_mixer.links.new(math_010.outputs[0], map_range_001.inputs[1])
     #math_006.Value -> mix_001.Factor
@@ -163,6 +185,17 @@ def mask_mixer_node_group():
     mask_mixer.links.new(group_input.outputs[2], math_006.inputs[1])
     #map_range_001.Result -> group_output.Layer Mask
     mask_mixer.links.new(map_range_001.outputs[0], group_output.inputs[0])
+    # Mask into greater than node
+    mask_mixer.links.new(group_input.outputs[0], math_011.inputs[0])
+    
+    mask_mixer.links.new(math_011.outputs[0], MixN.inputs[0])
+    #group_input.Mask -> mix_001.A
+    mask_mixer.links.new(group_input.outputs[0], mix_002.inputs[6])
+    #group_input.Microblend Alpha -> mix_001.B
+    mask_mixer.links.new(group_input.outputs[1], mix_002.inputs[7])
+    #mix_001.Result -> map_range_001.Value
+    mask_mixer.links.new(MixN.outputs[0], map_range_001.inputs[0])
+
     return mask_mixer
     
 
