@@ -8,197 +8,6 @@ def np_array_from_image(img_name):
     img = bpy.data.images[img_name]
     return np.array(img.pixels[:])
 
-#initialize Mask Mixer node group
-def mask_mixer_node_group():
-    if "Mask Mixer" in bpy.data.node_groups:
-        return bpy.data.node_groups["Mask Mixer"]
-
-    #create layer's node group
-    mask_mixer = bpy.data.node_groups.new(type = 'ShaderNodeTree', name = "Mask Mixer")
-
-    mask_mixer.color_tag = 'NONE'
-    mask_mixer.description = ""
-    mask_mixer.default_group_node_width = 140
-    
-
-    #mask_mixer interface
-    #Socket Layer Mask
-    layer_mask_socket = mask_mixer.interface.new_socket(name = "Layer Mask", in_out='OUTPUT', socket_type = 'NodeSocketFloat')
-    layer_mask_socket.default_value = 0.0
-    layer_mask_socket.min_value = -3.4028234663852886e+38
-    layer_mask_socket.max_value = 3.4028234663852886e+38
-    layer_mask_socket.subtype = 'NONE'
-    layer_mask_socket.attribute_domain = 'POINT'
-
-    #Socket Mask
-    mask_socket = mask_mixer.interface.new_socket(name = "Mask", in_out='INPUT', socket_type = 'NodeSocketColor')
-    mask_socket.default_value = (0.5, 0.5, 0.5, 1.0)
-    mask_socket.attribute_domain = 'POINT'
-
-    #Socket Microblend Alpha
-    microblend_alpha_socket = mask_mixer.interface.new_socket(name = "Microblend Alpha", in_out='INPUT', socket_type = 'NodeSocketColor')
-    microblend_alpha_socket.default_value = (0.5, 0.5, 0.5, 1.0)
-    microblend_alpha_socket.attribute_domain = 'POINT'
-
-    #Socket Microblend Contrast
-    microblend_contrast_socket = mask_mixer.interface.new_socket(name = "Microblend Contrast", in_out='INPUT', socket_type = 'NodeSocketFloat')
-    microblend_contrast_socket.default_value = 0.5
-    microblend_contrast_socket.min_value = -10000.0
-    microblend_contrast_socket.max_value = 10000.0
-    microblend_contrast_socket.subtype = 'NONE'
-    microblend_contrast_socket.attribute_domain = 'POINT'
-
-    #Socket Opacity
-    opacity_socket = mask_mixer.interface.new_socket(name = "Opacity", in_out='INPUT', socket_type = 'NodeSocketFloat')
-    opacity_socket.default_value = 1.0
-    opacity_socket.min_value = -10000.0
-    opacity_socket.max_value = 10000.0
-    opacity_socket.subtype = 'NONE'
-    opacity_socket.attribute_domain = 'POINT'
-
-
-    #initialize mask_mixer nodes
-    #node Group Output
-    group_output = mask_mixer.nodes.new("NodeGroupOutput")
-    group_output.name = "Group Output"
-    group_output.is_active_output = True
-
-    #node Group Input
-    group_input = mask_mixer.nodes.new("NodeGroupInput")
-    group_input.name = "Group Input"
-
-    #node Mix.001
-    mix_001 = mask_mixer.nodes.new("ShaderNodeMix")
-    mix_001.name = "Mix.001"
-    mix_001.blend_type = 'OVERLAY'
-    mix_001.clamp_factor = True
-    mix_001.clamp_result = False
-    mix_001.data_type = 'RGBA'
-    mix_001.factor_mode = 'UNIFORM'
-
-    #node Mix.002
-    mix_002 = mask_mixer.nodes.new("ShaderNodeMix")
-    mix_002.name = "Mix.002"
-    mix_002.blend_type = 'OVERLAY'
-    mix_002.clamp_factor = True
-    mix_002.clamp_result = False
-    mix_002.data_type = 'RGBA'
-    mix_002.factor_mode = 'UNIFORM'
-
-    #node Math.006
-    math_006 = mask_mixer.nodes.new("ShaderNodeMath")
-    math_006.name = "Math.006"
-    math_006.operation = 'SUBTRACT'
-    math_006.use_clamp = False
-    #Value
-    math_006.inputs[0].default_value = 1.0    
-
-    #node Map Range.001
-    map_range_001 = mask_mixer.nodes.new("ShaderNodeMapRange")
-    map_range_001.name = "Map Range.001"
-    map_range_001.clamp = True
-    map_range_001.data_type = 'FLOAT'
-    map_range_001.interpolation_type = 'LINEAR'
-    #To Min
-    map_range_001.inputs[3].default_value = 0.0
-
-    #node Math.008
-    math_008 = mask_mixer.nodes.new("ShaderNodeMath")
-    math_008.name = "Math.008"
-    math_008.operation = 'DIVIDE'
-    math_008.use_clamp = False
-    #Value_001
-    math_008.inputs[1].default_value = 2.0
-
-    #node Math.009
-    math_009 = mask_mixer.nodes.new("ShaderNodeMath")
-    math_009.name = "Math.009"
-    math_009.operation = 'SUBTRACT'
-    math_009.use_clamp = False
-    #Value
-    math_009.inputs[0].default_value = 1.0
-
-    #node Math.010
-    math_010 = mask_mixer.nodes.new("ShaderNodeMath")
-    math_010.name = "Math.010"
-    math_010.operation = 'ADD'
-    math_010.use_clamp = False
-    #Value
-    math_010.inputs[0].default_value = 0.0
-    
-    #node Math.011
-    math_011 = mask_mixer.nodes.new("ShaderNodeMath")
-    math_011.name = "Math.011"
-    math_011.operation = 'GREATER_THAN'
-    math_011.use_clamp = False
-    #Value
-    math_011.inputs[1].default_value = 0.5
-
-    MixN = create_node(mask_mixer.nodes,"ShaderNodeMix",(130, 430),blend_type='MIX')
-    
-    #Set locations
-    group_output.location = (760., -85.)
-    group_input.location = (-600., 0.0)
-    mix_001.location = (-95., 170.)
-    mix_002.location = (-95., 440)
-    math_006.location = (-360., -140.)
-    map_range_001.location = (385., 135.)
-    math_008.location = (-115., -145.)
-    math_009.location = (55., -275.)
-    math_010.location = (55., -115.)
-    math_011.location = (-95., 600)
-
-    #Set dimensions
-    group_output.width, group_output.height = 140.0, 100.0
-    group_input.width, group_input.height = 140.0, 100.0
-    mix_001.width, mix_001.height = 140.0, 100.0
-    math_006.width, math_006.height = 140.0, 100.0
-    map_range_001.width, map_range_001.height = 140.0, 100.0
-    math_008.width, math_008.height = 140.0, 100.0
-    math_009.width, math_009.height = 140.0, 100.0
-    math_010.width, math_010.height = 140.0, 100.0
-
-    #initialize mask_mixer links
-    #math_009.Value -> map_range_001.From Max
-    mask_mixer.links.new(math_009.outputs[0], map_range_001.inputs[2])
-    #math_006.Value -> math_008.Value
-    mask_mixer.links.new(math_006.outputs[0], math_008.inputs[0])
-    #mix_001.Result -> map_range_001.Value
-    mask_mixer.links.new(mix_001.outputs[2], MixN.inputs[3])
-    #mix_001.Result -> map_range_001.Value
-    mask_mixer.links.new(mix_002.outputs[2], MixN.inputs[2])
-    #math_010.Value -> map_range_001.From Min
-    mask_mixer.links.new(math_010.outputs[0], map_range_001.inputs[1])
-    #math_006.Value -> mix_001.Factor
-    mask_mixer.links.new(math_006.outputs[0], mix_001.inputs[0])
-    #math_008.Value -> math_009.Value
-    mask_mixer.links.new(math_008.outputs[0], math_009.inputs[1])
-    #math_008.Value -> math_010.Value
-    mask_mixer.links.new(math_008.outputs[0], math_010.inputs[1])
-    #group_input.Opacity -> map_range_001.To Max
-    mask_mixer.links.new(group_input.outputs[3], map_range_001.inputs[4])
-    #group_input.Mask -> mix_001.A
-    mask_mixer.links.new(group_input.outputs[0], mix_001.inputs[6])
-    #group_input.Microblend Alpha -> mix_001.B
-    mask_mixer.links.new(group_input.outputs[1], mix_001.inputs[7])
-    #group_input.Microblend Contrast -> math_006.Value
-    mask_mixer.links.new(group_input.outputs[2], math_006.inputs[1])
-    #map_range_001.Result -> group_output.Layer Mask
-    mask_mixer.links.new(map_range_001.outputs[0], group_output.inputs[0])
-    # Mask into greater than node
-    mask_mixer.links.new(group_input.outputs[0], math_011.inputs[0])
-    
-    mask_mixer.links.new(math_011.outputs[0], MixN.inputs[0])
-    #group_input.Mask -> mix_001.A
-    mask_mixer.links.new(group_input.outputs[0], mix_002.inputs[6])
-    #group_input.Microblend Alpha -> mix_001.B
-    mask_mixer.links.new(group_input.outputs[1], mix_002.inputs[7])
-    #mix_001.Result -> map_range_001.Value
-    mask_mixer.links.new(MixN.outputs[0], map_range_001.inputs[0])
-
-    return mask_mixer
-    
-
 def _getOrCreateLayerBlend():
     if "Layer_Blend" in bpy.data.node_groups:
         return bpy.data.node_groups["Layer_Blend"]
@@ -277,8 +86,6 @@ class Multilayered:
         self.BasePath = str(BasePath)
         self.image_format = image_format
         self.ProjPath = str(ProjPath)
-
-    
 
     def createBaseMaterial(self,matTemplateObj,mltemplate):
         name=os.path.basename(mltemplate.replace('\\',os.sep))
@@ -466,6 +273,7 @@ class Multilayered:
             CurMat.links.new(yoink,CurMat.nodes[loc('Principled BSDF')].inputs['Normal'])
         else:
             CurMat.links.new(CurMat.nodes[targetLayer].outputs[3],CurMat.nodes[loc('Principled BSDF')].inputs['Normal'])
+
 
 
     def create(self,Data,Mat):
@@ -776,26 +584,50 @@ class Multilayered:
             MBCMicroOffset = create_node(NG.nodes,"ShaderNodeMath", (-2000,-200), operation = 'ADD', label = "Micro-offset")
             MBCMicroOffset.inputs[1].default_value = 0.0001
 
+            # Invert microblend contrast so mbcontrast value of 1 = 0, and 0 = 1
+            MBCSubtract = create_node(NG.nodes,"ShaderNodeMath", (-1200,-650), operation = 'SUBTRACT')
+            MBCSubtract.inputs[0].default_value = 1.0
 
-            mask_mixer=mask_mixer_node_group()
-            #node Group
-            mask_mixergroup = NG.nodes.new("ShaderNodeGroup")
-            mask_mixergroup.name = "Group"
-            mask_mixergroup.node_tree = mask_mixer
-            #Socket_1
-            mask_mixergroup.inputs[0].default_value = (0.5, 0.5, 0.5, 1.0)
-            #Socket_2
-            mask_mixergroup.inputs[1].default_value = (0.5, 0.5, 0.5, 1.0)
-            #Socket_3
-            mask_mixergroup.inputs[2].default_value = 0.5
-            #Socket_4
-            mask_mixergroup.inputs[3].default_value = 1.0
-            #Set locations
-            mask_mixergroup.location = (-1550, -600)
-            #Set dimensions
-            mask_mixergroup.width, mask_mixergroup.height = 287.65118408203125, 100.0
+            # Doubles mlmask levels as mbcontrast approaches 1
+            # Updated formula so 0.5 microblendcontrast yields 1.0x mask instead of 1.5x mask. Mid-values will skew heavier towards the MB alpha instead of the layer mask. - jato
+            MBCMultiply = create_node(NG.nodes,"ShaderNodeMath", (-1400,-700), operation = 'MULTIPLY')
+            MBCMultiply.inputs[1].default_value = 2.0
 
+            # Doubles mlmask levels as mbcontrast approaches 1
+            MaskMultiply = create_node(NG.nodes,"ShaderNodeMath", (-1200,-700), operation = 'MULTIPLY')
+            MaskMultiply.use_clamp = True
 
+            # Blender doesn't support Linear Burn blend mode, so we do it manually
+            MaskLinearBurnAdd = create_node(NG.nodes,"ShaderNodeMath", (-1600,-800), operation = 'ADD')
+
+            # Blender doesn't support Linear Burn blend mode, so we do it manually
+            MaskLinearBurnSubtract = create_node(NG.nodes,"ShaderNodeMath", (-1400,-800), operation = 'SUBTRACT')
+            MaskLinearBurnSubtract.inputs[0].default_value = 1.0
+
+            # Blender doesn't support Linear Burn blend mode, so we do it manually
+            MaskLinearBurnInvert = create_node(NG.nodes,"ShaderNodeInvert", (-1200,-800))
+            MaskLinearBurnInvert.inputs[0].default_value = 1.0
+
+            # Mix the microblend against the original mlmask
+            MaskMBMix = create_node(NG.nodes,"ShaderNodeMix", (-900,-750), label = "MICROBLEND MIXER")
+            MaskMBMix.data_type ='RGBA'
+            MaskMBMix.clamp_factor = True
+            MaskMBMix.clamp_result = True
+
+            # Raise the contrast of the microblend as mbcontrast approaches zero by increasing `From Min` value
+            # Smoother Step setting appears to disable clamp in the UI? Not sure if this matters
+            MaskRange = create_node(NG.nodes,"ShaderNodeMapRange", (-600,-650))
+            MaskRange.inputs['From Min'].default_value = (0)
+            MaskRange.inputs['From Max'].default_value = (1)
+            MaskRange.inputs['To Min'].default_value = (0)
+            MaskRange.inputs['To Max'].default_value = (1)
+            MaskRange.interpolation_type = 'SMOOTHERSTEP'
+            MaskRange.clamp = True
+            MaskRange.hide = False
+
+            MaskOpReroute = create_node(NG.nodes,"NodeReroute", (-1500,-750))
+
+            # --- End Mask Layer ---
 
 
             # CREATE FINAL LINKS
@@ -809,17 +641,36 @@ class Multilayered:
             NG.links.new(GroupInN.outputs[5],MBUVCombine.inputs[0])
             NG.links.new(GroupInN.outputs[6],MBUVCombine.inputs[1])
             NG.links.new(GroupInN.outputs[7],NormStrengthN.inputs[0])
+            NG.links.new(GroupInN.outputs[8],MaskOpReroute.inputs[0])
+            NG.links.new(GroupInN.outputs[9],MaskMultiply.inputs[0])
+            NG.links.new(GroupInN.outputs[9],MaskLinearBurnAdd.inputs[0])
             NG.links.new(GroupInN.outputs[9],MBNormSubtractMask.inputs[1])
             if len(BMN.inputs) > 1:
               NG.links.new(GroupInN.outputs[10],BMN.inputs[1])
               if len(BMN.inputs) > 2:
                 NG.links.new(GroupInN.outputs[11],BMN.inputs[2])
+
+            NG.links.new(MBCMicroOffset.outputs[0],MBCSubtract.inputs[1])
+            NG.links.new(MBCMicroOffset.outputs[0],MBCMultiply.inputs[0])
             NG.links.new(MBCMicroOffset.outputs[0],MBNormMultiply.inputs[1])
+
             NG.links.new(MBTexCord.outputs[2],MBMapping.inputs[0])
             NG.links.new(MBUVCombine.outputs[0],MBMapping.inputs[1])
             NG.links.new(MBMapping.outputs[0],MBN.inputs[0])
             NG.links.new(MBN.outputs[0],MBRGBCurveN.inputs[1])
-            NG.links.new(MBN.outputs[0],MBMixN.inputs[2])            
+            NG.links.new(MBN.outputs[0],MBMixN.inputs[2])
+            NG.links.new(MBN.outputs[1],MaskLinearBurnAdd.inputs[1])
+
+            NG.links.new(MBCSubtract.outputs[0],MaskMBMix.inputs[0])
+            NG.links.new(MBCSubtract.outputs[0],MaskRange.inputs[1])
+            NG.links.new(MBCMultiply.outputs[0],MaskMultiply.inputs[1])
+
+            NG.links.new(MaskLinearBurnAdd.outputs[0],MaskLinearBurnSubtract.inputs[1])
+            NG.links.new(MaskLinearBurnSubtract.outputs[0],MaskLinearBurnInvert.inputs[1])
+            NG.links.new(MaskMultiply.outputs[0],MaskMBMix.inputs[6])
+            NG.links.new(MaskLinearBurnInvert.outputs[0],MaskMBMix.inputs[7])
+            NG.links.new(MaskMBMix.outputs[2],MaskRange.inputs[0])
+            
             if ColorScaleMixN is not None:
                 NG.links.new(BMN.outputs[0],ColorScaleMixN.inputs[1])
             else:
@@ -827,7 +678,11 @@ class Multilayered:
             NG.links.new(BMN.outputs[1],MetalRampN.inputs[0])
             NG.links.new(BMN.outputs[2],RoughRampN.inputs[0])
             NG.links.new(BMN.outputs[3],NormStrengthN.inputs[1])
+
             NG.links.new(NormStrengthN.outputs[0],NormalCombineN.inputs[0])
+
+            NG.links.new(MaskOpReroute.outputs[0],MaskRange.inputs[4])
+
             NG.links.new(MBGrtrThanN.outputs[0],MBMixN.inputs[0])
             NG.links.new(MBRGBCurveN.outputs[0],MBMixN.inputs[1])
             NG.links.new(MBMixN.outputs[0],MBNormalN.inputs[1])
@@ -844,13 +699,7 @@ class Multilayered:
             NG.links.new(MetalRampN.outputs[0],GroupOutN.inputs[1]) #Metalness output
             NG.links.new(RoughRampN.outputs[0],GroupOutN.inputs[2]) #Roughness output
             NG.links.new(NormalizeN.outputs[0],GroupOutN.inputs[3]) #Normal output
-
-            NG.links.new(mask_mixergroup.outputs[0], MBNormSubtractMask.inputs[1])
-            NG.links.new(mask_mixergroup.outputs[0], GroupOutN.inputs[4])
-            NG.links.new(MBN.outputs[1], mask_mixergroup.inputs[1])
-            NG.links.new(GroupInN.outputs[4], mask_mixergroup.inputs[2])
-            NG.links.new(GroupInN.outputs[8], mask_mixergroup.inputs[3])
-            NG.links.new(GroupInN.outputs[9], mask_mixergroup.inputs[0])
+            NG.links.new(MaskRange.outputs[0],GroupOutN.inputs[4]) #Mask Layer output
 
         # Data for vehicledestrblendshape.mt
         # Instead of maintaining two material py files we should setup the main multilayered shader to handle variants such as the vehicle material
@@ -862,8 +711,4 @@ class Multilayered:
         self.createLayerMaterial(file_name+"_Layer_", LayerCount, CurMat, Data["MultilayerMask"], LayerNormal, skip_layers)
 
   
-
-
-    
-
 
