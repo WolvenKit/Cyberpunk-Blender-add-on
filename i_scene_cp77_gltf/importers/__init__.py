@@ -216,7 +216,8 @@ class CP77Import(Operator, ImportHelper):
                                 description="Appearances to extract with models",
                                 default="Default"
                                 )
-
+    scripting: BoolProperty(name="Scripting",default=False ,description="Tell it its being called by a script so it can ignore the gui file lists",options={'HIDDEN'})    
+    
     # switch back to operator draw function to align with other UI features
     def draw(self, context):
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
@@ -255,7 +256,7 @@ class CP77Import(Operator, ImportHelper):
     def execute(self, context):
         props = context.scene.cp77_panel_props
         SetCyclesRenderer(props.use_cycles, props.update_gi)
-        CP77GLBimport(self, props.with_materials, props.remap_depot, self.exclude_unused_mats, self.image_format, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, self.appearances)
+        CP77GLBimport(self, props.with_materials, props.remap_depot, self.exclude_unused_mats, self.image_format, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, self.appearances, self.scripting)
 
         return {'FINISHED'}
  

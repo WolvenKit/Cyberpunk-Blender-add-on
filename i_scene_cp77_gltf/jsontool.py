@@ -59,14 +59,14 @@ class JSONTool:
         JSONTool._json_cache.clear()
 
     @staticmethod
-    def create_error(suppress_verbose, base_name, file_extension, specific_error, error_messages = None):
+    def create_error(suppress_verbose, base_name, file_extension, specific_error, error_Messages = None):
         error_message = f"invalid {file_extension} found at: {base_name}. {specific_error}"
         if not suppress_verbose:
             print(error_message)
-        if error_messages is None:
+        if error_Messages is None:
             show_message(error_message)
         else:
-            errorMessages.append(error_message)
+            error_Messages.append(error_message)
 
     cachable_types = [
         '.anims.json',
