@@ -354,9 +354,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                         meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                         if(meshname != 0):
                             meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
-                    case 'worldStaticMeshNode' |'worldRotatingMeshNode'|'worldAdvertisingNode'| 'worldAdvertisementNode' | 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' \
-                        | 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldTerrainMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode'\
-                   | 'worldMeshNode' | 'worldDestructibleEntityProxyMeshNode' | 'worldStaticOccluderMeshNode' |'worldDecorationMeshNode' | 'worldFoliageNode':
+                    case 'worldStaticMeshNode' |'worldRotatingMeshNode'|'worldAdvertisingNode'| 'worldAdvertisementNode' | 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode'  \
+                        |  'worldTerrainMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode'\
+                   | 'worldMeshNode' | 'worldStaticOccluderMeshNode' |'worldDecorationMeshNode' | 'worldFoliageNode':
                         if isinstance(e, dict) and 'mesh' in data.keys() and isinstance(data['mesh'], dict) and'DepotPath' in data['mesh'].keys():
                             meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                             #print('Mesh name is - ',meshname, e['HandleId'])
@@ -378,6 +378,30 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             #print('Mesh name is - ',meshname, e['HandleId'])
                             if(meshname != 0):
                                 meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
+
+        # Do the proxy nodes after all the others, that way none proxies will be imported first and wont be hidden by the proxy ones
+        for i,e in enumerate(nodes):
+            data = e['Data']
+            ntype = data['$type']
+            if I_want_to_break_free:
+                break
+            if (limittypes and ntype in import_types) or limittypes==False :#or type=='worldCableMeshNode': # can add a filter for dev here
+                match ntype:
+                    case 'worldGenericProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldDestructibleEntityProxyMeshNode' | 'worldBuildingProxyMeshNode':
+                        if isinstance(e, dict) and 'mesh' in data.keys() and isinstance(data['mesh'], dict) and'DepotPath' in data['mesh'].keys():
+                            meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
+                            if(meshname != 0):
+                                if 'meshAppearance' in e['Data'].keys():
+                                    meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
+                                else:
+                                    meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':{'$type': 'CName', '$storage': 'string', '$value': 'default'},'sector':sectorName})
+                        elif isinstance(e, dict) and 'meshRef' in data.keys() :
+                            meshname = data['meshRef']['DepotPath']['$value'].replace('\\', os.sep)
+                            if(meshname != 0):
+                                meshes.append({'basename':data['meshRef']['DepotPath']['$value'] ,'appearance':{'$type': 'CName', '$storage': 'string', '$value': 'default'},'sector':sectorName})
+                    
+
+
     basenames=[]
     for m in meshes:
          if m['basename'] not in basenames:
@@ -421,11 +445,13 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
             groupname = os.path.splitext(os.path.split(meshpath)[-1])[0]
             while len(groupname) > 63:
                 groupname = groupname[:-1]
+            
             if groupname not in Masters.children.keys() and os.path.exists(meshpath):
                 try:
                     bpy.ops.io_scene_gltf.cp77(with_mats, filepath=meshpath, appearances=impapps,scripting=True)
                     objs = C.selected_objects
                     move_coll= coll_scene.children.get( objs[0].users_collection[0].name )
+                    move_coll['meshpath']=m
                     coll_target.children.link(move_coll)
                     coll_scene.children.unlink(move_coll)
                 except:
