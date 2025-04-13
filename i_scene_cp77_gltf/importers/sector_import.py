@@ -940,7 +940,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                         else:
                                             print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
 
-                    case 'worldStaticMeshNode' |'worldRotatingMeshNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' | 'worldAdvertisementNode' | \
+                    case 'worldStaticMeshNode' |'worldRotatingMeshNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' |'worldAdvertisingNode'|  'worldAdvertisementNode' | \
                 'worldGenericProxyMeshNode'|'worldDestructibleEntityProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldStaticOccluderMeshNode'| 'worldTerrainMeshNode' | 'worldClothMeshNode' |\
                 'worldDecorationMeshNode' | 'worldDynamicMeshNode' | 'worldMeshNode':
                         meshname=None
@@ -994,6 +994,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
 
                                                 #print(new['nodeDataIndex'])
                                                 # Should do something with the Advertisements lightData  bits here
+                                                if ntype=='worldAdvertisingNode' or ntype=='worldAdvertisementNode':
+                                                    if 'lightData' in data.keys():
+                                                        new['lightData']=data['lightData']
 
                                                 for old_obj in group.all_objects:
                                                     obj=old_obj.copy()
