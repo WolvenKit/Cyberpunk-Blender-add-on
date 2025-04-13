@@ -65,7 +65,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
         f={}
         f['name']=os.path.basename(self.filepath)
         loadfiles=(f,)
-        
+
     DepotPath=cp77_addon_prefs
     appearances=self.appearances.split(",")
     if not cp77_addon_prefs.non_verbose:
@@ -86,7 +86,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
     else:
         directory = os.path.dirname(self.filepath)
 
-    
+
     file_names=[]
     file_paths=[]
     for f in loadfiles:
@@ -103,6 +103,8 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
 
     #mana: error messages - display one popup, not 500k
     errorMessages = []
+
+    JSONTool.start_caching()
 
     #Kwek: Gate this--do the block iff corresponding Material.json exist
     #Kwek: was tempted to do a try-catch, but that is just La-Z
@@ -231,6 +233,8 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
                 print("Exception when trying to import mats: " + str(e))
                 raise e
 
+
+    JSONTool.stop_caching()
 
     if len(errorMessages) > 0:
         show_message("\n".join(errorMessages))
