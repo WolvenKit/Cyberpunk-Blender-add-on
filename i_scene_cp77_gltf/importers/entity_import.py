@@ -618,6 +618,49 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                     print("Failed on ",meshname)
                                     print(traceback.print_exc())
 
+            for c in ent_component_data:
+                if (c['$type']=='entLightChannelComponent'):
+                    print('Light channel found')
+                    if 'shape' in c.keys() and 'Data' in c['shape'].keys() and 'vertices' in c['shape']['Data'].keys():
+                        vertices=c['shape']['Data']['vertices']
+                        if len(vertices)>0 and 'indices' in c['shape']['Data'].keys():
+                            indices=c['shape']['Data']['indices']
+                            if len(indices)>0:
+                                mesh_data = bpy.data.meshes.new(c['name']['$value'])
+                                mesh_obj = bpy.data.objects.new(mesh_data.name, mesh_data)    
+                                mesh_obj.display_type = 'WIRE'
+                                mesh_obj.color = (0.005, 0.79105, 1, 1)
+                                mesh_obj.show_wire = True
+                                mesh_obj.show_in_front = True
+                                mesh_obj.display.show_shadows = False
+                                mesh_obj.rotation_mode = 'QUATERNION' 
+                                verts=[]
+                                for v in vertices:
+                                    verts.append((v['X'],v['Y'],v['Z']))
+                                edges=[]    
+                                Faces=[indices[i:i+3] for i in range(0, len(indices), 3)]
+                                mesh_data.from_pydata(verts, edges, Faces)
+                                mesh_obj['ntype'] = 'entLightChannelComponent'
+                                mesh_obj['name'] = c['name']['$value']
+                                mesh_obj['entJSON'] = filepath
+                                
+                                bindname=c['parentTransform']['Data']['bindName']['$value']
+                                if bindname=='vehicle_slots':
+                                    if vehicle_slots:
+                                        slotname=c['parentTransform']['Data']['slotName']['$value']
+                                        for slot in vehicle_slots:
+                                            if slot['slotName']['$value']==slotname:
+                                                bindname=slot['boneName']['$value']
+
+                                ent_coll.objects.link(mesh_obj)
+                                if bindname and rig:
+                                    co=mesh_obj.constraints.new(type='COPY_LOCATION')
+                                    co.target=rig
+                                    co.subtarget= bindname
+
+                            
+                        
+
         #can probably a better way to pull this from somewhere but this works for now.
         license_plates = [obj for obj in bpy.data.objects if 'license_plate' in obj.get('componentName', '')]
         bumper_f_objs = [obj for obj in bpy.data.objects if 'bumper_f' in obj.get('componentName', '')]
