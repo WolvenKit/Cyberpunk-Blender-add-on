@@ -1,5 +1,6 @@
 import bpy
 import json
+import zipfile
 import os
 from .main.common import show_message, load_zip
 from pathlib import Path
@@ -106,7 +107,11 @@ class JSONTool:
         else:
             if not cp77_addon_prefs.non_verbose:
                 print(f"  Parsing json file {base_name}")
-            data = JSONTool.load_json(filepath)
+
+            if base_name.endswith('.refitter.zip'):
+                data=JSONTool.jsonloads(load_zip(filepath))
+            else:
+                data = JSONTool.load_json(filepath)
 
         # do not append error messages twice
         has_error = not isCached and JSONTool.json_ver_validate(data) == False
@@ -167,8 +172,6 @@ class JSONTool:
                 return depotpath, json_apps, mats
 
             case _ if base_name.endswith('.refitter.zip'):
-                data=load_zip(filepath)
-                data=JSONTool.jsonloads(data)
                 lattice_object_name = data["lattice_object_name"]
                 control_points = data["deformed_control_points"]
                 lattice_points = data["lattice_points"]
@@ -179,6 +182,7 @@ class JSONTool:
                 lattice_interpolation_v = data["lattice_interpolation_v"]
                 lattice_interpolation_w = data["lattice_interpolation_w"]
                 return lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w
+
             case _:
                 JSONTool.create_error(cp77_addon_prefs.non_verbose, base_name, file_extension, invalid_json_error, errorMessages)
 
