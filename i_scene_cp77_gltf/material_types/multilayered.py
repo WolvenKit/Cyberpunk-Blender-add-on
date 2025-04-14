@@ -204,12 +204,12 @@ class Multilayered:
             else:
                 print('Mask image not found for layer ',x+1)
 
-            LayerGroupN = create_node(CurMat.nodes,"ShaderNodeGroup", (-1400,400-100*x))
+            LayerGroupN = create_node(CurMat.nodes,"ShaderNodeGroup", (-1400,400-125*x))
             LayerGroupN.node_tree = NG
             LayerGroupN.name = "Layer_"+str(x)
             MaskN=None
             if MaskTexture:
-                MaskN = create_node(CurMat.nodes,"ShaderNodeTexImage",(-2400,400-100*x), image = MaskTexture,label="Layer_"+str(x+1))
+                MaskN = create_node(CurMat.nodes,"ShaderNodeTexImage",(-2400,400-125*x), image = MaskTexture,label="Layer_"+str(x+1))
 
             #if self.flipMaskY:
             # Mask flip deprecated in WolvenKit deveolpment build 8.7+
@@ -425,7 +425,7 @@ class Multilayered:
             NG_inputs[8].min_value = 0
             NG_inputs[8].max_value = 1
 
-            LayerGroupN = create_node(CurMat.nodes, "ShaderNodeGroup", (-2000,500-100*idx))
+            LayerGroupN = create_node(CurMat.nodes, "ShaderNodeGroup", (-2000,500-125*idx))
             LayerGroupN.width = 400
             LayerGroupN.node_tree = NG
             LayerGroupN.name = "Mat_Mod_Layer_"+str(LayerIndex)
