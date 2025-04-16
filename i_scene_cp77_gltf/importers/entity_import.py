@@ -105,22 +105,24 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         vehicle_slots= VS[0]['slots']
 
     # find the appearance file jsons
-    app_path = glob.glob(os.path.join(path,"**","*.app.json"), recursive = True)
+    escaped_path = glob.escape(path)
+    app_path = glob.glob(os.path.join(escaped_path,"**","*.app.json"), recursive = True)
     if len(app_path)==0:
         print('No Appearance file JSONs found in path')
 
     # find the meshes
-    meshes =  glob.glob(os.path.join(path,"**","*.glb"), recursive = True)
+    
+    meshes =  glob.glob(os.path.join(escaped_path,"**","*.glb"), recursive = True)
     if len(meshes)==0:
         print('No Meshes found in path')
-    mesh_jsons =  glob.glob(os.path.join(path,"**","*mesh.json"), recursive = True)
+    mesh_jsons =  glob.glob(os.path.join(escaped_path,"**","*mesh.json"), recursive = True)
 
     # find the anims
     # look through the components and find an anim, and load that,
     # then check for an anim in the project thats using the rig (some things like the arch bike dont ref the anim in the ent)
     # otherwise just skip this section
     #
-    anim_files = glob.glob(os.path.join(path,"**","*anims.glb"), recursive = True)
+    anim_files = glob.glob(os.path.join(escaped_path,"**","*anims.glb"), recursive = True)
 
     rig=None
     bones=None
@@ -157,7 +159,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                 rig["ent"] = ent_name + ".ent.json"
 
     # find the rig json associated with the ent
-    rigjsons = glob.glob(os.path.join(path,"**","*.rig.json"), recursive = True)
+    rigjsons = glob.glob(os.path.join(escaped_path,"**","*.rig.json"), recursive = True)
     rig_j=None
     if len(rigjsons)==0 or len(ent_rigs)==0:
         print('no rig json loaded')
@@ -698,7 +700,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
             ent_coll.children.link(collision_collection)
             if include_phys:
                 try:
-                    physJsonPaths = glob.glob(path + "\**\*.phys.json", recursive=True)
+                    physJsonPaths = glob.glob(escaped_path + "\**\*.phys.json", recursive=True)
                     if len(physJsonPaths) == 0:
                         print('No phys file JSONs found in path')
                     else:
@@ -839,8 +841,8 @@ if __name__ == "__main__":
     # The list below needs to be the appearanceNames for each ent that you want to import
     # NOT the name in appearances list, expand it and its the property inside, also its name in the app file
     appearances =['kitsch_f']
-
-    jsonpath = glob.glob(path+"\**\*.ent.json", recursive = True)
+    escaped_path = glob.escape(path)
+    jsonpath = glob.glob(escaped_path+"\**\*.ent.json", recursive = True)
     if len(jsonpath)==0:
         print('No jsons found')
 

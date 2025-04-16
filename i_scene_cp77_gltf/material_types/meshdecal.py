@@ -25,7 +25,7 @@ class MeshDecal:
 
         mulNode =create_node(Ns, "ShaderNodeMath", (-500,450), operation = 'MULTIPLY')
         if "DiffuseAlpha" in Data:
-            mulNode.inputs[1].default_value = float(Data["DiffuseAlpha"])
+           mulNode.inputs[1].default_value = float(Data["DiffuseAlpha"])
         else:
             mulNode.inputs[1].default_value = 1
 
