@@ -711,4 +711,3 @@ class Multilayered:
         self.createLayerMaterial(file_name+"_Layer_", LayerCount, CurMat, Data["MultilayerMask"], LayerNormal, skip_layers)
 
   
-
