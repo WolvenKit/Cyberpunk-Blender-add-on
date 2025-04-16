@@ -399,7 +399,8 @@ def exportSectors(filename, use_yaml):
     #its currently set to output the modified jsons to an output folder in the project dir (create one before running)
     #you can change this to a path if you prefer
     xloutpath = os.path.join(project,'source','resources')
-    jsons = glob.glob(os.path.join(projpath, "**", "*.streamingsector.json"), recursive = True)
+    escaped_path = glob.escape(projpath)    
+    jsons = glob.glob(os.path.join(escaped_path, "**", "*.streamingsector.json"), recursive = True)
 
     projpath = os.path.join(project,'source','raw','base')
     if len(jsons)<1:
