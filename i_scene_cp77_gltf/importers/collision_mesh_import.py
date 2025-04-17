@@ -84,8 +84,9 @@ if __name__ == "__main__":
         for hash in entryHashStrVals:
             CP77CollisionTriangleMeshJSONimport_by_hashes(sectorHashStr=sectorHashStrVal,entryHashStr=hash,project_raw_dir=project_raw_path)
     else:
-        project_raw_path = 'C:\\cpmod\\notell\\source\\raw\\collision_meshes'
-        jsonpaths = glob.glob(os.path.join(project_raw_path, "**", "*.json"), recursive = True)
+        project_raw_path = 'C:\\cpmod\\notell\\source\\raw\\collision_meshes'        
+        escaped_path = glob.escape(project_raw_path)    
+        jsonpaths = glob.glob(os.path.join(escaped_path, "**", "*.json"), recursive = True)
         for jsonpath in jsonpaths:
             print(jsonpath)
             mesh_obj = CP77CollisionTriangleMeshJSONimport(jsonpath)
