@@ -319,8 +319,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                 for s in a.spaces:
                     if s.type == 'VIEW_3D':
                         s.clip_end = 50000
-
-    jsonpath = glob.glob(os.path.join(path, "**", "*.streamingsector.json"), recursive = True)
+     
+    escaped_path = glob.escape(path)    
+    jsonpath = glob.glob(os.path.join(escaped_path, "**", "*.streamingsector.json"), recursive = True)
     path = os.path.join( os.path.dirname(filepath),'source','raw','base')
     meshes=[]
     C = bpy.context
