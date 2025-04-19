@@ -57,6 +57,11 @@ collection = None
 def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, image_format='png', filepath='', hide_armatures=True, import_garmentsupport=False, files=[], directory='', appearances=[], scripting=False):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     context=bpy.context
+
+    ## switch to pose mode if it's not already
+    if context.mode != 'OBJECT':
+        bpy.ops.object.mode_set(mode='OBJECT')
+
    # obj = None
     start_time = time.time()
     if not scripting:
@@ -233,8 +238,8 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
                 print("Exception when trying to import mats: " + str(e))
                 raise e
 
-
     JSONTool.stop_caching()
+
 
     if len(errorMessages) > 0:
         show_message("\n".join(errorMessages))
