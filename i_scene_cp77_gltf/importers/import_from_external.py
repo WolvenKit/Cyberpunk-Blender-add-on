@@ -65,6 +65,22 @@ def get_closest_valid_parent(obj):
 def CP77_cleanup_external_export(importedObjects):
 
     empties=[]
+    multimesh=False
+    meshcount=0
+    # check if we have a multimesh object, and if so, set the flag  
+    for obj in importedObjects:
+        if obj.type == 'MESH' and obj.name.startswith(str(meshcount)+"_"):
+            multimesh = True
+            meshcount += 1
+        elif obj.type == 'MESH' :
+            multimesh = False
+            meshcount += 1
+        else:
+            multimesh = False
+
+    if multimesh:
+        return
+
 
     # collect mesh names for iterating
     validObjectNames = sorted([obj.name for obj in filter(lambda obj: obj.type in valid_object_types, importedObjects)])
