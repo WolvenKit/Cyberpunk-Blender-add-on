@@ -1,8 +1,49 @@
 import bpy
 import json
+import re
 from mathutils import Vector, Euler, Quaternion
 
 animBones = ["Hips", "Spine", "Spine1", "Spine2", "Spine3", "LeftShoulder", "LeftArm", "LeftForeArm", "LeftHand", "WeaponLeft", "LeftInHandThumb", "LeftHandThumb1", "LeftHandThumb2", "LeftInHandIndex", "LeftHandIndex1", "LeftHandIndex2", "LeftHandIndex3", "LeftInHandMiddle", "LeftHandMiddle1", "LeftHandMiddle2", "LeftHandMiddle3", "LeftInHandRing", "LeftHandRing1", "LeftHandRing2", "LeftHandRing3", "LeftInHandPinky", "LeftHandPinky1", "LeftHandPinky2", "LeftHandPinky3", "RightShoulder", "RightArm", "RightForeArm", "RightHand", "WeaponRight", "RightInHandThumb", "RightHandThumb1", "RightHandThumb2", "RightInHandIndex", "RightHandIndex1", "RightHandIndex2", "RightHandIndex3", "RightInHandMiddle", "RightHandMiddle1", "RightHandMiddle2", "RightHandMiddle3", "RightInHandRing", "RightHandRing1", "RightHandRing2", "RightHandRing3", "RightInHandPinky", "RightHandPinky1", "RightHandPinky2", "RightHandPinky3", "Neck", "Neck1", "Head", "LeftEye", "RightEye", "LeftUpLeg", "LeftLeg", "LeftFoot", "LeftHeel", "LeftToeBase", "RightUpLeg", "RightLeg", "RightFoot", "RightHeel", "RightToeBase"]
+
+
+def delete_unused_bones(self, context):
+    obj = context.active_object
+    current_context = bpy.context.mode
+
+
+    cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
+
+
+    # get all vertex groups from all children
+    all_vertex_groups = {vg.name for mesh in (child for child in obj.children if child.type == 'MESH') for vg in mesh.vertex_groups}
+
+    # Delete bones that aren't in the list
+    o = bpy.context.object
+    bpy.ops.object.mode_set(mode='EDIT')
+
+    b = obj.data.edit_bones[0]
+
+    # for rigs, these are nested - otherwise, just iterate
+    allBones = b.children_recursive
+    if len(allBones) == 0:
+        allBones = obj.data.edit_bones
+
+    for bone in allBones:
+        m = re.search(r'\.\d+$', bone.name) # drop numbers from bone names
+        if m is not None:
+            bone.name = bone.name.replace(m[0], "")
+        if bone.name in all_vertex_groups:
+           continue
+
+        if not cp77_addon_prefs.non_verbose:
+            print(f"Deleting bone {bone.name}")
+        bpy.context.object.data.edit_bones.remove(bone)
+
+
+    if current_context != bpy.context.mode:
+        bpy.ops.object.mode_set(mode=current_context)
+
+    return {'FINISHED'}
 
 ## function to reset the armature to its neutral position
 def reset_armature(self, context):
@@ -16,15 +57,15 @@ def reset_armature(self, context):
         if current_context != 'POSE':
             # Switch to pose mode
             bpy.ops.object.mode_set(mode='POSE')
-        
+
         # Deselect all bones first
         for pose_bone in obj.pose.bones:
             pose_bone.bone.select = False
-        
+
         # Select all bones in pose mode
         for pose_bone in obj.pose.bones:
             pose_bone.bone.select = True
-        
+
         # Clear transforms for all selected bones
         bpy.ops.pose.transforms_clear()
     finally:
@@ -48,7 +89,7 @@ def cp77_keyframe(self, context, frameall=False):
     if not frameall:
         bpy.ops.anim.keyframe_insert_by_name(type="WholeCharacterSelected")
         return {'FINISHED'}
-    
+
     else:
         action = armature.animation_data.action
         if action:
@@ -62,9 +103,9 @@ def cp77_keyframe(self, context, frameall=False):
                 bpy.ops.anim.keyframe_insert_by_name(type="WholeCharacterSelected")
             bpy.ops.object.mode_set(current_context)
 
-        if context_mode != bpy.context.mode:
-            bpy.context.mode = context_mode
-        
+        if current_context != bpy.context.mode:
+            bpy.context.mode = current_context
+
         return {'FINISHED'}
 
 
@@ -114,14 +155,14 @@ def hide_extra_bones(self, context):
         if bone.name not in animBones:
             if bone.hide is not True:
                 bone.hide = True
-    
+
     for bone in armature.edit_bones:
         if bone.name not in animBones:
             if bone.hide is not True:
                 bone.hide = True
-                
+
     selected_object['deformBonesHidden'] = True
-        
+
 
 def unhide_extra_bones(self, context):
     selected_object = context.active_object
@@ -139,5 +180,5 @@ def unhide_extra_bones(self, context):
     for bone in armature.edit_bones:
         if bone.hide == True:
             bone.hide = False
-                
-    bpy.ops.wm.properties_remove(data_path="object", property_name="deformBonesHidden")       
+
+    bpy.ops.wm.properties_remove(data_path="object", property_name="deformBonesHidden")
