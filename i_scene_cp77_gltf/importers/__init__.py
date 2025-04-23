@@ -259,7 +259,7 @@ class CP77Import(Operator, ImportHelper):
 
         # turns out that multimesh import of an entire car uses a gazillion duplicates as well...
         JSONTool.start_caching()
-        CP77GLBimport(self, props.with_materials, props.remap_depot, self.exclude_unused_mats, self.image_format, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, self.appearances)
+        CP77GLBimport(self, props.with_materials, props.remap_depot, self.exclude_unused_mats, self.image_format, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, self.appearances, self.scripting)
         JSONTool.stop_caching()
 
         return {'FINISHED'}
