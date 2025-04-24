@@ -142,6 +142,24 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
         imported_empties = [obj for obj in imported if obj.type == "EMPTY"]
         isExternalImport = len(imported_empties) > 0 or len([mesh.name for mesh in imported_meshes if mesh.name.startswith("submesh")]) != len(imported_meshes)
 
+        multimesh=False
+        meshcount=0
+        # check if we have a multimesh object, and if so, set the flag  
+        for obj in imported:
+            if obj.type == 'MESH' and obj.name.startswith(str(meshcount)+"_"):
+                multimesh = True
+                meshcount += 1
+            elif obj.type == 'MESH' :
+                multimesh = False
+                meshcount += 1
+            else:
+                multimesh = False
+                appearances = ['ALL']
+                exclude_unused_mats = False
+
+        if multimesh:
+            isExternalImport = False
+
         if isExternalImport:
             CP77_cleanup_external_export(imported)
 
@@ -232,7 +250,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
                         validmats[m]=True
 
             try:
-                import_mats(current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmats)
+                import_mats(current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmats,multimesh)
 
             except Exception as e:
                 print("Exception when trying to import mats: " + str(e))
@@ -248,7 +266,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
         print(f"GLB Import Time: {(time.time() - start_time)} Seconds")
         print('-------------------- Finished importing Cyberpunk 2077 Model --------------------\n')
 
-def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmats):
+def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmats,multimesh=False):
     failedon = []
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     start_time = time.time()
@@ -282,9 +300,11 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
     Builder = MaterialBuilder(mats, DepotPath, str(image_format), BasePath)
     counter = 0
     bpy_mats = bpy.data.materials
-    for name in bpy.data.meshes.keys():
-        if name in existingMeshes or "Icosphere" in name:
-            continue
+    names=[key for key in bpy.data.meshes.keys() if 'Icosphere' not in key]
+    if multimesh:
+        names= sorted(list(names), key=lambda x: int(x.split('_')[0]))
+    for name in names:
+
         bpy.data.meshes[name].materials.clear()
         extras = gltf_importer.data.meshes[counter].extras
 
