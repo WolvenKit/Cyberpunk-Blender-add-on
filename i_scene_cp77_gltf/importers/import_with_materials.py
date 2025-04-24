@@ -396,27 +396,22 @@ def blender_4_scale_armature_bones():
                 pb.use_custom_shape_bone_size = True
 
 def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o):
-    # check if this is a Cyberpunk import or something else entirely
-
+    # TODO: check if this is a Cyberpunk import or something else entirely
 
     for parent in o.users_collection:
         parent.objects.unlink(o)
     collection.objects.link(o)
-    # if animations exist, don't hide the armature and get the extras properties
+
     # We should probably break the base import out into a separate function, have it check the gltf file and then send the info either to anim import or import with materials, but this works too
     animations = gltf_importer.data.animations
     meshes = gltf_importer.data.meshes
+
+    # if animations exist, don't hide the armature and get the extras properties
     if animations:
         get_anim_info(animations)
         bpy.context.scene.render.fps = 30
-        if meshes and "Icosphere" not in o.name:
-            if 'Armature' in o.name:
-                o.hide_set(hide_armatures)
-        else:
-            if 'Armature' in o.name:
-                pass
 
-    else:
-        if 'Armature' in o.name:
-            o.hide_set(hide_armatures)
+    # if no meshes exist, don't hide the armature
+    elif meshes and 'Armature' in o.name:
+        o.hide_set(hide_armatures)
 
