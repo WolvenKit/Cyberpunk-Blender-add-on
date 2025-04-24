@@ -56,6 +56,7 @@ def SetCyclesRenderer(use_cycles=True, set_gi_params=False):
     if use_cycles:
         for scene in bpy.data.scenes:
             scene.render.engine = 'CYCLES'
+            scene.cycles.device = 'GPU'
 
         if set_gi_params:
             cycles = bpy.context.scene.cycles
