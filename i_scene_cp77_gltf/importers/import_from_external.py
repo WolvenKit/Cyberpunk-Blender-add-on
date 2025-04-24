@@ -65,6 +65,8 @@ def get_closest_valid_parent(obj):
 def CP77_cleanup_external_export(importedObjects):
 
     empties=[]
+    
+
 
     # collect mesh names for iterating
     validObjectNames = sorted([obj.name for obj in filter(lambda obj: obj.type in valid_object_types, importedObjects)])
