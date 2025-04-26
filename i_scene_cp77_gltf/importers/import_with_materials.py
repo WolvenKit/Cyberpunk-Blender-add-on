@@ -300,7 +300,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
     Builder = MaterialBuilder(mats, DepotPath, str(image_format), BasePath)
     counter = 0
     bpy_mats = bpy.data.materials
-    names=[key for key in bpy.data.meshes.keys() if 'Icosphere' not in key]
+    names=[key for key in bpy.data.meshes.keys() if 'Icosphere' not in key and key not in existingMeshes]
     if multimesh:
         names= sorted(list(names), key=lambda x: int(x.split('_')[0]))
     for name in names:
