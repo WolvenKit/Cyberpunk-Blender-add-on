@@ -121,7 +121,7 @@ def CP77UvChecker(self, context):
         texture_node.location = (-200, 0)
         texture_node.image = image
         # Connect the texture node to the shader node
-        shader_node = uvchecker.node_tree.nodes["Principled BSDF"]
+        shader_node = uvchecker.node_tree.nodes[loc("Principled BSDF")]
         uvchecker.node_tree.links.new(texture_node.outputs['Color'], shader_node.inputs['Base Color'])
     for mesh in selected_meshes:
         mat_assigned = False
