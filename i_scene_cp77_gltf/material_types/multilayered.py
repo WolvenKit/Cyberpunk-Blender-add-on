@@ -1262,7 +1262,7 @@ class Multilayered:
 
             # Node for blending colorscale color with diffuse texture of mltemplate
             # Changed from multiply to overlay because multiply is a darkening blend mode, and colors appear too dark. Overlay is still probably wrong - jato
-            if colorScale != "null" and colorScale != "null_null":
+            if colorScale != "null":
                 ColorScaleMixN = create_node(NG.nodes,"ShaderNodeMixRGB",(-1400,100),blend_type='MULTIPLY')
                 ColorScaleMixN.inputs[0].default_value=1
                 if 'logos' in BaseMat.name:
