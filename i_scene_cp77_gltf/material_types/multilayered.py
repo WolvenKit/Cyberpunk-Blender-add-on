@@ -958,7 +958,11 @@ class Multilayered:
             elif os.path.exists(basepath):
                 MaskTexture = imageFromPath(basepath, self.image_format, isNormal = True)
             else:
-                print('Mask image not found for layer ',x+1)
+                if 'AppData' in basepath:
+                    print('Mask image not found for layer ',x+1,' DepotPath appears to be in Appdata, this is known to cause issues')
+                else:
+                    print('Mask image not found for layer ',x+1)
+
 
             LayerGroupN = create_node(CurMat.nodes,"ShaderNodeGroup", (-1400,400-100*x))
             LayerGroupN.node_tree = NG
