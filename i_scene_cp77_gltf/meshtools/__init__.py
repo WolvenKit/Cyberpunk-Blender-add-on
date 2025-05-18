@@ -300,7 +300,7 @@ class CP77Autofitter(Operator):
             target_body_path = target_body_paths[target_body_names.index(target_body_name)]
             if self.useAddon:
                 if addon_target_body_name in addon_target_body_names:
-                    addon_target_body_path = addon_target_body_paths[addon_target_body_path.index(addon_target_body_name)]
+                    addon_target_body_path = addon_target_body_paths[addon_target_body_names.index(addon_target_body_name)]
             else:
                 addon_target_body_path = None
                 addon_target_body_name = None
