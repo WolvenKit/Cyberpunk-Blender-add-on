@@ -201,7 +201,7 @@ def CP77RefitChecker(self, context):
 
 def applyModifierAsShapeKey(obj):
     names = getModNames(obj)
-    autoFitters =  [s for s in names if 'Autofitter' in s]
+    autoFitters =  [s for s in names if 'AutoFitter' in s]
 
     if len(autoFitters) == 0:
         print(f"No autofitter found for {obj.name}. Current modifiers are {names}")
@@ -235,21 +235,8 @@ def applyRefitter(obj):
 
     # if we have active shape keys: activate 'Basis' and remove the others
     if obj.data.shape_keys is not None and obj.data.shape_keys.key_blocks is not None:
-        # This is not strictly correct, but it does at least get the behavior back to
-        # pre-1.6 where the refit would at least apply without breaking the meshes.
-        # You still have to do some shape key rework to get GarmentSupport back,
-        # but I'm not blender-y enough to know what else needs to happen
-        blocks = obj.data.shape_keys.key_blocks
-        for ind in reversed(range(len(blocks))):
-            bl = blocks[ind]
-            if bl.name in {"Basis"}:
-                print(f'Key: {bl.name}')
-            else:
-                print(f'Key: {bl.name} (removed)')
-                # set active index before remove
-                obj.active_shape_key_index = ind
-                bpy.ops.object.shape_key_remove()
         setActiveShapeKey(obj, 'Basis')
+        bpy.ops.object.shape_key_remove(all=False)
 
     for name in newnames:
         if 'AutoFitter' in name:
@@ -352,7 +339,7 @@ def add_lattice(target_body_path, r_c, fbx_rot, target_body_name):
             print(f"{target_body_name}Autofitter already exists")
             return refitter
 
-    print(f"Creting {target_body_name}Autofitter from json file (reading {target_body_path})")
+    print(f"Creating {target_body_name}Autofitter from json file (reading {target_body_path})")
     # Get the JSON file path for the selected target_body
     lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w  = JSONTool.jsonload(target_body_path)
     new_lattice = setup_lattice(r_c, fbx_rot, lattice_object_name, target_body_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale,lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w)
