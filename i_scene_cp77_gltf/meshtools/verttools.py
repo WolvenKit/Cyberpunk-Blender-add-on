@@ -1,6 +1,7 @@
 import bpy
 import bpy.utils.previews
 import os
+import math
 import json
 from ..main.common import  (get_resources_dir, get_script_dir, show_message)
 from bpy.props import (StringProperty, EnumProperty, FloatVectorProperty)
@@ -70,7 +71,8 @@ def CP77GroupUngroupedVerts(self, context):
                     if nearest_vertex:
                         for g in nearest_vertex.groups:
                             group_name = obj.vertex_groups[g.group].name
-                            obj.vertex_groups[group_name].add([v.index], 1.0, 'ADD')
+                            vertex_weight = obj.vertex_groups[g.group].weight(nearest_vertex.index)
+                            obj.vertex_groups[group_name].add([v.index], vertex_weight, 'ADD')
             except Exception as e:
                 print(e)
 
