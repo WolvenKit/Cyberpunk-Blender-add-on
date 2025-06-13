@@ -48,7 +48,7 @@ def CP77RefitAddonList(context):
 
     # Return the list of tuples
     return addon_target_body_paths, addon_target_body_names
-    
+
 
 def SetCyclesRenderer(use_cycles=True, set_gi_params=False):
     # set the render engine for all scenes to Cycles
@@ -60,17 +60,13 @@ def SetCyclesRenderer(use_cycles=True, set_gi_params=False):
 
         if set_gi_params:
             cycles = bpy.context.scene.cycles
-            cycles.max_bounces = 32
-            cycles.caustics_reflective = True
-            cycles.caustics_refractive = True
-            cycles.diffuse_bounces = 32
-            cycles.glossy_bounces = 32
-            cycles.transmission_bounces = 32
-            cycles.volume_bounces = 32
-            cycles.transparent_max_bounces = 32
-            cycles.use_fast_gi = False
-            cycles.ao_bounces = 1
-            cycles.ao_bounces_render = 1
+            cycles.transparent_max_bounces = 40
+
+def SetVulkanBackend(use_vulkan=True):
+
+    if use_vulkan:
+        system_prefs = bpy.context.preferences.system
+        system_prefs.gpu_backend = 'VULKAN'
 
 def CP77CollectionList(self, context):
     items = []
@@ -254,28 +250,44 @@ class CP77_PT_PanelProps(PropertyGroup):
     )
 
     use_cycles: BoolProperty(
-        name="Use Cycles",
+        name="Set Render Engine to Cycles",
+        default=False,
+        description="Sets the Render Engine to Cycles. Imported shaders may fail to compile while using EEVEE without the Vulkan backend"
+    )
+
+    use_vulkan: BoolProperty(
+        name="Set Backend to Vulkan",
         default=True,
-        description="Use Cycles"
-    )  
+        description="""(Requires Restart) Sets the Blender graphics backend to Vulkan which can compile shaders that fail using OpenGL.
+This setting can also be changed from within system preferences."""
+    )
 
     update_gi: BoolProperty(
-        name="Update Global Illumination",
+        name="Increase Transparent Light Paths",
         default=False,
-        description="Update Cycles global illumination options for transparency fixes and higher quality renders"
+        description="Increase Cycles maximum bounces for transparent light paths. This improves shading of layered meshes with alpha such as hair."
     )
 
     with_materials: BoolProperty(
         name="With Materials",
         default=True,
-        description="Import Wolvenkit-exported materials"
+        description="Import WolvenKit-exported materials"
     )
 
     axl_yaml: BoolProperty(
         name="Use YAML instead of JSON",
         default=False,
         description="Use the ArchiveXL YAML format instead of JSON format for generated .xl files"
-    )   
+    )
+
+# MLSETUP export props
+
+    write_mltemplate: BoolProperty(
+        name="Generate modified MLTEMPLATE",
+        default=False,
+        description="""WARNING! Can overwrite WolvenKit project files!
+Write a MLTEMPLATE json with additional ColorScale overrides to the WolvenKit project when unique ColorScale values are detected"""
+    )
 
 def add_anim_props(animation, action):
 

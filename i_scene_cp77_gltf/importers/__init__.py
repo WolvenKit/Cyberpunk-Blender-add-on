@@ -98,15 +98,17 @@ class CP77EntityImport(Operator,ImportHelper):
         split.label(text="Ent Appearance:")
         split.prop(self, "appearances", text="")
         row = layout.row(align=True)
-        row.prop(props, "use_cycles")
+        box = layout.box()
+        col = box.column()
+        col.prop(props, "with_materials")
+        box = layout.box()
+        col = box.column()
+        col.prop(props, "use_vulkan")
+        col.prop(props, "use_cycles")
         if props.use_cycles:
-            row = layout.row(align=True)
-            row.prop(props, "update_gi")
-        row = layout.row(align=True)
-        row.prop(props, "with_materials")
+            col.prop(props, "update_gi")
         if cp77_addon_prefs.experimental_features:
-            row = layout.row(align=True)
-            row.prop(props,"remap_depot")
+            col.prop(props,"remap_depot")
         row = layout.row(align=True)
         if not self.include_collisions:
             self.include_phys = False
@@ -236,6 +238,9 @@ class CP77Import(Operator, ImportHelper):
             col = box.column()
             col.prop(props, 'with_materials')
             col.prop(self, 'exclude_unused_mats')
+            box = layout.box()
+            col = box.column()
+            col.prop(props, 'use_vulkan')
             col.prop(props, 'use_cycles')
             if props.use_cycles:
                 col.prop(props, 'update_gi')
@@ -255,6 +260,7 @@ class CP77Import(Operator, ImportHelper):
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
+        SetVulkanBackend(props.use_vulkan)
         SetCyclesRenderer(props.use_cycles, props.update_gi)
 
         # turns out that multimesh import of an entire car uses a gazillion duplicates as well...
@@ -266,10 +272,10 @@ class CP77Import(Operator, ImportHelper):
 
 
 def menu_func_import(self, context):
-    self.layout.operator(CP77ImportRig.bl_idname, text="Cyberpunk Rig import (.rig.json)", icon_value=get_icon('WKIT'))
     self.layout.operator(CP77Import.bl_idname, text="Cyberpunk GLTF (.gltf/.glb)", icon_value=get_icon('WKIT'))
     self.layout.operator(CP77EntityImport.bl_idname, text="Cyberpunk Entity (.json)", icon_value=get_icon('WKIT'))
     self.layout.operator(CP77StreamingSectorImport.bl_idname, text="Cyberpunk StreamingSector", icon_value=get_icon('WKIT'))
+    self.layout.operator(CP77ImportRig.bl_idname, text="Cyberpunk Rig import (.rig.json)", icon_value=get_icon('WKIT'))
 
 
 operators, other_classes = get_classes(sys.modules[__name__])

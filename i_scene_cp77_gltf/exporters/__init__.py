@@ -148,13 +148,25 @@ class CP77MlSetupExport(Operator):
     bl_idname = "export_scene.mlsetup"
     bl_label = "Export MLSetup"
     bl_parent_id = "CP77_PT_MeshTools"
-    bl_description = "EXPERIMENTAL: Export material changes to mlsetup files" 
+    bl_description = "Export selected material to a mlsetup json file which can be imported in WolvenKit" 
 
     filepath: StringProperty(subtype="FILE_PATH")
 
+    def draw(self, context):
+        props = context.scene.cp77_panel_props
+        layout = self.layout
+        layout.prop(props, "write_mltemplate")
+
+    def invoke(self, context, event):
+        self.filepath = cp77_mlsetup_getpath(self, context)
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
     def execute(self, context):
-        cp77_mlsetup_export(self, context)
+        write_mltemplate = context.scene.cp77_panel_props.write_mltemplate
+        cp77_mlsetup_export(self, context, self.filepath, write_mltemplate)
         return {"FINISHED"}
+
 
 class CP77CollisionExport(Operator):
     bl_idname = "export_scene.collisions"
