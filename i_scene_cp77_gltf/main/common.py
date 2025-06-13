@@ -276,6 +276,77 @@ def CreateRebildNormalGroup(curMat, x = 0, y = 0,name = 'Rebuild Normal Z'):
 
     return ShaderGroup
 
+def CreateCalculateVecNormalZ(curMat, x = 0, y = 0,name = 'Calculate Vectorized Normal Z'):
+    group = bpy.data.node_groups.get("Calculate Vectorized Normal Z")
+
+    if group is None:
+        group = bpy.data.node_groups.new("Calculate Vectorized Normal Z","ShaderNodeTree")
+
+        GroupInN = group.nodes.new("NodeGroupInput")
+        GroupInN.location = (-1400,0)
+
+        GroupOutN = group.nodes.new("NodeGroupOutput")
+        GroupOutN.location = (300,0)
+        vers=bpy.app.version
+        if vers[0]<4:
+            group.inputs.new('NodeSocketVector','Image')
+            group.outputs.new('NodeSocketColor','Image')
+        else:
+            group.interface.new_socket(name="Image",socket_type='NodeSocketVector', in_out='INPUT')
+            group.interface.new_socket(name="Image",socket_type='NodeSocketColor', in_out='OUTPUT')
+
+        VDot = group.nodes.new("ShaderNodeVectorMath")
+        VDot.location = (-900,-200)
+        VDot.operation = 'DOT_PRODUCT'
+
+        Sub = group.nodes.new("ShaderNodeMath")
+        Sub.location = (-700,-200)
+        Sub.operation = 'SUBTRACT'
+        group.links.new(VDot.outputs[0],Sub.inputs[1])
+        Sub.inputs[0].default_value = 1.0
+
+        SQR = group.nodes.new("ShaderNodeMath")
+        SQR.location = (-500,-200)
+        SQR.operation = 'SQRT'
+
+        Sep = group.nodes.new("ShaderNodeSeparateColor")
+        Sep.location = (-700,100)
+
+        Mult = group.nodes.new("ShaderNodeMath")
+        Mult.operation = 'MULTIPLY'
+        Mult.location = (-500,0)
+        Mult.label = "OpenGL to DX"
+        Mult.inputs[1].default_value = -1.0
+
+        Comb = group.nodes.new("ShaderNodeCombineColor")
+        Comb.location = (-300,100)
+
+        MultAdd = group.nodes.new("ShaderNodeVectorMath")
+        MultAdd.location = (-50, 0)
+        MultAdd.operation = "MULTIPLY_ADD"
+        MultAdd.inputs[1].default_value = 0.5, 0.5, 0.5
+        MultAdd.inputs[2].default_value = 0.5, 0.5, 0.5
+
+        group.links.new(GroupInN.outputs[0],Sep.inputs[0])
+        group.links.new(GroupInN.outputs[0],VDot.inputs[0])
+        group.links.new(GroupInN.outputs[0],VDot.inputs[1])
+        group.links.new(VDot.outputs["Value"],Sub.inputs[1])
+        group.links.new(Sub.outputs[0],SQR.inputs[0])
+        group.links.new(SQR.outputs[0],Comb.inputs[2])
+        group.links.new(Sep.outputs[0],Comb.inputs[0])
+        group.links.new(Sep.outputs[1],Mult.inputs[0])
+        group.links.new(Mult.outputs[0],Comb.inputs[1])
+        group.links.new(Comb.outputs[0],MultAdd.inputs[0])
+        group.links.new(MultAdd.outputs[0],GroupOutN.inputs[0])
+
+    ShaderGroup = curMat.nodes.new("ShaderNodeGroup")
+    ShaderGroup.location = (x,y)
+    ShaderGroup.hide = True
+    ShaderGroup.node_tree = group
+    ShaderGroup.name = name
+
+    return ShaderGroup
+
 def CreateShaderNodeNormalMap(curMat,path = None, x = 0, y = 0, name = None,image_format = 'png', nonCol = True):
     nMap = curMat.nodes.new("ShaderNodeNormalMap")
     nMap.location = (x,y)
@@ -296,6 +367,26 @@ def CreateShaderNodeNormalMap(curMat,path = None, x = 0, y = 0, name = None,imag
         curMat.links.new(NormalRebuildGroup.outputs[0],nMap.inputs[1])
 
     return nMap
+
+def CreateShaderNodeGlobalNormalMap(curMat,path = None, x = 0, y = 0, name = None,image_format = 'png', nonCol = True):
+    normalVectorize = curMat.nodes.new("ShaderNodeVectorMath")
+    normalVectorize.operation='MULTIPLY_ADD'
+    normalVectorize.location = (x,y)
+    normalVectorize.hide = True
+    normalVectorize.inputs[1].default_value = 2, 2, 0
+    normalVectorize.inputs[2].default_value = -1, -1, 0
+
+    if path is not None:
+        ImgNode = curMat.nodes.new("ShaderNodeTexImage")
+        ImgNode.location = (x - 450, y)
+        ImgNode.width = 350
+        ImgNode.hide = False
+        Img = imageFromPath(path,image_format,nonCol)
+        ImgNode.image = Img
+
+        curMat.links.new(ImgNode.outputs[0],normalVectorize.inputs[0])
+
+    return normalVectorize
 
 def image_has_alpha(img):
     b = 32 if img.is_float else 8
@@ -393,7 +484,9 @@ def createOverrideTable(matTemplateObj):
         Output = {}
         Output["ColorScale"] = {}
         Output["NormalStrength"] = {}
+        Output["RoughLevelsIn"] = {}
         Output["RoughLevelsOut"] = {}
+        Output["MetalLevelsIn"] = {}
         Output["MetalLevelsOut"] = {}
         for x in OverList["colorScale"]:
             tmpName = x["n"]["$value"]
@@ -407,11 +500,25 @@ def createOverrideTable(matTemplateObj):
             if x.get("v") is not None:
                 tmpStrength = float(x["v"])
             Output["NormalStrength"][tmpName] = tmpStrength
+        for x in OverList["roughLevelsIn"]:
+            tmpName = x["n"]["$value"]
+            tmpStrength0 = float(x["v"]["Elements"][0])
+            tmpStrength1 = float(x["v"]["Elements"][1])
+            Output["RoughLevelsIn"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
         for x in OverList["roughLevelsOut"]:
             tmpName = x["n"]["$value"]
             tmpStrength0 = float(x["v"]["Elements"][0])
             tmpStrength1 = float(x["v"]["Elements"][1])
             Output["RoughLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
+        for x in OverList["metalLevelsIn"]:
+            tmpName = x["n"]["$value"]
+            if x.get("v") is not None:
+                tmpStrength0 = float(x["v"]["Elements"][0])
+                tmpStrength1 = float(x["v"]["Elements"][1])
+            else:
+                tmpStrength0 = 0
+                tmpStrength1 = 1
+            Output["MetalLevelsIn"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
         for x in OverList["metalLevelsOut"]:
             tmpName = x["n"]["$value"]
             if x.get("v") is not None:
