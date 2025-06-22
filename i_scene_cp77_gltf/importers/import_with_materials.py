@@ -54,7 +54,7 @@ imported = None
 appearances = None
 collection = None
 
-def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, image_format='png', filepath='', hide_armatures=True, import_garmentsupport=False, files=[], directory='', appearances=[], scripting=False):
+def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=True, image_format='png', filepath='', hide_armatures=True, import_garmentsupport=False, files=[], directory='', appearances=[], scripting=False):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     context=bpy.context
 
@@ -65,31 +65,29 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
    # obj = None
     start_time = time.time()
     if not scripting:
-        loadfiles=self.files
+        loadfiles=files
     else:
         f={}
-        f['name']=os.path.basename(self.filepath)
+        f['name']=os.path.basename(filepath)
         loadfiles=(f,)
-
+    glbname=os.path.basename(filepath)
     DepotPath=cp77_addon_prefs
-    appearances=self.appearances.split(",")
+    
     if not cp77_addon_prefs.non_verbose:
-        if ".anims.glb" in self.filepath:
+        if ".anims.glb" in filepath:
             print('\n-------------------- Beginning Cyberpunk Animation Import --------------------')
-            print(f"Importing Animations From: {os.path.basename(self.filepath)}")
+            print(f"Importing Animations From: {glbname}")
 
         else:
             print('\n-------------------- Beginning Cyberpunk Model Import --------------------')
             if with_materials==True:
-                print(f"Importing: {os.path.basename(self.filepath)} with materials")
+                print(f"Importing: {glbname} with materials")
                 print(f"Appearances to Import: {(', '.join(appearances))}")
             else:
-                print(f"Importing: {os.path.basename(self.filepath)}")
+                print(f"Importing: {glbname}")
     # prevent crash if no directory supplied when using filepath
-    if len(self.directory)>0 and not scripting:
-        directory = self.directory
-    else:
-        directory = os.path.dirname(self.filepath)
+    if len(directory)==0 or scripting:
+        directory = os.path.dirname(filepath)
 
 
     file_names=[]
