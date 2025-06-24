@@ -229,55 +229,57 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
             if obj.type == 'MESH' and not "Icosphere" in obj.name:
                 obj.select_set(True)
 
-    for mesh in meshes:
-        # apply transforms
-        if apply_transform:
-            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-        if not mesh.data.uv_layers:
-            show_message("Meshes must have UV layers in order to import in Wolvenkit. See https://tinyurl.com/uv-layers")
-            return {'CANCELLED'}
+    armature_modifier = None
+    try:
+        for mesh in meshes:
+            if not mesh.data.uv_layers:
+                raise BaseException("Meshes must have UV layers in order to import in Wolvenkit. See https://tinyurl.com/uv-layers")
 
-        #check submesh vertex count to ensure it's less than the maximum for import
-        vert_count = len(mesh.data.vertices)
-        if vert_count > 65535:
-            show_message(f"{mesh.name} has {vert_count} vertices.           Each submesh must have less than 65,535 vertices. See https://tinyurl.com/vertex-count")
-            return {'CANCELLED'}
+            #check submesh vertex count to ensure it's less than the maximum for import
+            vert_count = len(mesh.data.vertices)
+            if vert_count > 65535:
+                raise BaseException(f"{mesh.name} has {vert_count} vertices.           Each submesh must have less than 65,535 vertices. See https://tinyurl.com/vertex-count")
 
-        #check that faces are triangulated, cancel export, switch to edit mode with the untriangulated faces selected and throw an error
-        for face in mesh.data.polygons:
-            if len(face.vertices) != 3:
-                bpy.ops.object.mode_set(mode='EDIT')
-                bpy.ops.mesh.select_mode(type='FACE')
-                bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)
-                show_message("All faces must be triangulated before exporting. Untriangulated faces have been selected for you. See https://tinyurl.com/triangulate-faces")
-                return {'CANCELLED'}
+            # apply transforms
+            if apply_transform:
+                bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
-        if red_garment_col:
-            add_garment_cap(mesh)
+            #check that faces are triangulated, cancel export, switch to edit mode with the untriangulated faces selected and throw an error
+            for face in mesh.data.polygons:
+                if len(face.vertices) != 3:
+                    bpy.ops.object.mode_set(mode='EDIT')
+                    bpy.ops.mesh.select_mode(type='FACE')
+                    bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)
+                    raise BaseException("All faces must be triangulated before exporting. Untriangulated faces have been selected for you. See https://tinyurl.com/triangulate-faces")
 
-        # Check for ungrouped vertices, if they're found, switch to edit mode and select them
-        # No need to do this for static props
-        if not static_prop:
+            if red_garment_col:
+                add_garment_cap(mesh)
+
+
+            if mesh.data.name != mesh.name:
+                mesh.data.name = mesh.name
+
+            # Check for ungrouped vertices, if they're found, switch to edit mode and select them
+            # No need to do this for static props
+            if static_prop:
+                continue
             ungrouped_vertices = [v for v in mesh.data.vertices if not v.groups]
             if ungrouped_vertices:
                 bpy.ops.object.mode_set(mode='EDIT')
                 bpy.ops.mesh.select_mode(type='VERT')
                 try:
                     bpy.ops.mesh.select_ungrouped()
-                    show_message(f"Ungrouped vertices found and selected in: {mesh.name}. See https://tinyurl.com/ungrouped-vertices")
+                    raise BaseException(f"Ungrouped vertices found and selected in: {mesh.name}. See https://tinyurl.com/ungrouped-vertices")
                 except RuntimeError:
-                    show_message(f"No vertex groups in: {mesh.name} are assigned weights. Assign weights before exporting. See https://tinyurl.com/assign-vertex-weights")
-                return {'CANCELLED'}
+                    raise BaseException(f"No vertex groups in: {mesh.name} are assigned weights. Assign weights before exporting. See https://tinyurl.com/assign-vertex-weights")
 
-            armature_modifier = None
             for modifier in mesh.modifiers:
                 if modifier.type == 'ARMATURE' and modifier.object:
                     armature_modifier = modifier
                     break
 
             if not armature_modifier:
-                show_message((f"Armature missing from: {mesh.name} Armatures are required for movement. If this is intentional, try 'export as static prop'. See https://tinyurl.com/armature-missing"))
-                return {'CANCELLED'}
+                raise BaseException((f"Armature missing from: {mesh.name} Armatures are required for movement. If this is intentional, try 'export as static prop'. See https://tinyurl.com/armature-missing"))
 
             armature = armature_modifier.object
 
@@ -306,37 +308,38 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
             if len(groupless_bones) != 0:
                 bpy.ops.object.mode_set(mode='OBJECT')  # Ensure in object mode for consistent behavior
                 groupless_bones_list = ", ".join(sorted(groupless_bones))
-                armature.hide_set(True)
-                show_message((f"The following vertex groups are not assigned to a bone, this will result in blender creating a neutral_bone and cause Wolvenkit import to fail:    {groupless_bones_list}\nSee https://tinyurl.com/unassigned-bone"))
-                return {'CANCELLED'}
+                raise BaseException(f"The following vertex groups are not assigned to a bone, this will result in blender creating a neutral_bone and cause Wolvenkit import to fail:    {groupless_bones_list}\nSee https://tinyurl.com/unassigned-bone")
 
-        if mesh.data.name != mesh.name:
-            mesh.data.name = mesh.name
 
-    if limit_selected:
-        try:
-            bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
-            if not static_prop:
-                armature.hide_set(True)
-        except Exception as e:
-            print(e)
-
-    else:
-        if export_visible:
+        if limit_selected:
             try:
-                bpy.ops.export_scene.gltf(filepath=filepath, use_visible=True, **options)
-                if not static_prop:
-                    armature.hide_set(True)
+                bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
             except Exception as e:
                 print(e)
 
         else:
-            try:
-                bpy.ops.export_scene.gltf(filepath=filepath, **options)
-                if not static_prop:
-                     armature.hide_set(True)
-            except Exception as e:
-                print(e)
+            if export_visible:
+                try:
+                    bpy.ops.export_scene.gltf(filepath=filepath, use_visible=True, **options)
+                    if not static_prop:
+                        armature.hide_set(True)
+                except Exception as e:
+                    print(e)
+
+            else:
+                try:
+                    bpy.ops.export_scene.gltf(filepath=filepath, **options)
+                    if not static_prop:
+                        armature.hide_set(True)
+                except Exception as e:
+                    print(e)
+        return {'FINISHED'}
+    except Exception as e:
+        show_message(e.args[0])
+        return {'CANCELLED'}
+    finally:
+        if armature is not None and not static_prop:
+            armature.hide_set(True)
 
 # def ExportAll(self, context):
 #     #Iterate through all objects in the scene
