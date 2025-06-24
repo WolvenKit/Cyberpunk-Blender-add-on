@@ -106,35 +106,82 @@ def add_garment_cap(mesh):
             if cap_layer != None and loop_index < (len(cap_layer.data)):
                 cap_layer.data[loop_index].color = red_color
 
+
+# make sure that a custom scale or whatever won't screw up the export
+export_defaults = {
+    'system': 'METRIC',
+    'length_unit': 'METERS',
+    'scale_length': 1.0,
+    'system_rotation': 'DEGREES',
+    'mass_unit': 'KILOGRAMS',
+    'temperature_unit': 'KELVIN',
+    'time_unit': 'SECONDS',
+    'use_separate': False
+}
+
+# back up user's current workbench configuration and reset to factory defaults
+def save_user_settings_and_reset_to_default():
+    user_settings = {
+        'bpy_context': bpy.context.mode,
+        'system': bpy.context.scene.unit_settings.system,
+        'length_unit': bpy.context.scene.unit_settings.length_unit,
+        'scale_length': bpy.context.scene.unit_settings.scale_length,
+        'system_rotation': bpy.context.scene.unit_settings.system_rotation,
+        'mass_unit': bpy.context.scene.unit_settings.mass_unit,
+        'temperature_unit': bpy.context.scene.unit_settings.temperature_unit,
+        'time_unit': bpy.context.scene.unit_settings.time_unit,
+        'use_separate': bpy.context.scene.unit_settings.use_separate
+    }
+
+    for key, value in export_defaults.items():
+        setattr(bpy.context.scene.unit_settings, key, value)
+    return user_settings
+
+    # restore user's previous state
+def restore_user_settings(user_settings):
+    for key, value in user_settings.items():
+        if key == 'bpy_context':
+            continue
+        setattr(bpy.context.scene.unit_settings, key, value)
+
+    if bpy.context.mode != user_settings['bpy_context']:
+        bpy.ops.object.mode_set(mode=user_settings['bpy_context'])
+
+
+
 # mana: by assigning default attributes, we make this update-safe (some older scripts broke). Just don't re-name them!
 def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=False, limit_selected=True, static_prop=False, red_garment_col=False, apply_transform=True):
+
+    user_settings = save_user_settings_and_reset_to_default()
+
+    objects = context.selected_objects
+    options = default_cp77_options()
 
     #check if the scene is in object mode, if it's not, switch to object mode
     if bpy.context.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
 
-    objects = context.selected_objects
-    options = default_cp77_options()
+    try:
+        #if for photomode, make sure there's an armature selected, if not use the message box to show an error
+        if export_poses:
+            armatures = [obj for obj in objects if obj.type == 'ARMATURE']
+            if not armatures:
+                raise BaseException("No armature objects are selected, please select an armature")
 
-    #if for photomode, make sure there's an armature selected, if not use the message box to show an error
-    if export_poses:
-        armatures = [obj for obj in objects if obj.type == 'ARMATURE']
-        if not armatures:
-            show_message("No armature objects are selected, please select an armature")
-            return {'CANCELLED'}
+            export_anims(context, filepath, options, armatures)
 
-        export_anims(context, filepath, options, armatures)
-        return{'FINISHED'}
-
-    #if export_poses option isn't used, check to make sure there are meshes selected and throw an error if not
-
-    #throw an error in the message box if you haven't selected a mesh to export
-    if not export_poses:
+        #if export_poses option isn't used, check to make sure there are meshes selected and throw an error if not
         meshes = [obj for obj in objects if obj.type == 'MESH' and not "Icosphere" in obj.name]
         if not meshes:
-            show_message("No meshes selected, please select at least one mesh")
-            return {'CANCELLED'}
+            raise BaseException("No meshes selected, please select at least one mesh")
+
         export_meshes(context, filepath, export_visible, limit_selected, static_prop, red_garment_col, apply_transform, meshes, options)
+    except Exception as e:
+        show_message(e.args[0])
+        return {'CANCELLED'}
+    finally:
+        restore_user_settings(user_settings)
+        return{'FINISHED'}
 
 def export_anims(context, filepath, options, armatures):
     for action in bpy.data.actions:
@@ -175,7 +222,7 @@ def export_anims(context, filepath, options, armatures):
 
 def export_meshes(context, filepath, export_visible, limit_selected, static_prop, red_garment_col, apply_transform, meshes, options):
     groupless_bones = set()
-    bone_names = [] 
+    bone_names = []
     options.update(cp77_mesh_options())
     if not limit_selected:
         for obj in bpy.data.objects:
