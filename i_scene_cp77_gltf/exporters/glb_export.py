@@ -166,14 +166,14 @@ def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=F
         if export_poses:
             armatures = [obj for obj in objects if obj.type == 'ARMATURE']
             if not armatures:
-                raise BaseException("No armature objects are selected, please select an armature")
+                raise ValueError("No armature objects are selected, please select an armature")
 
             export_anims(context, filepath, options, armatures)
 
         #if export_poses option isn't used, check to make sure there are meshes selected and throw an error if not
         meshes = [obj for obj in objects if obj.type == 'MESH' and not "Icosphere" in obj.name]
         if not meshes:
-            raise BaseException("No meshes selected, please select at least one mesh")
+            raise ValueError("No meshes selected, please select at least one mesh")
 
         export_meshes(context, filepath, export_visible, limit_selected, static_prop, red_garment_col, apply_transform, meshes, options)
     except Exception as e:
@@ -234,12 +234,12 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
     try:
         for mesh in meshes:
             if not mesh.data.uv_layers:
-                raise BaseException("Meshes must have UV layers in order to import in Wolvenkit. See https://tinyurl.com/uv-layers")
+                raise ValueError("Meshes must have UV layers in order to import in Wolvenkit. See https://tinyurl.com/uv-layers")
 
             #check submesh vertex count to ensure it's less than the maximum for import
             vert_count = len(mesh.data.vertices)
             if vert_count > 65535:
-                raise BaseException(f"{mesh.name} has {vert_count} vertices.           Each submesh must have less than 65,535 vertices. See https://tinyurl.com/vertex-count")
+                raise ValueError(f"{mesh.name} has {vert_count} vertices.           Each submesh must have less than 65,535 vertices. See https://tinyurl.com/vertex-count")
 
             # apply transforms
             if apply_transform:
@@ -250,7 +250,7 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
                 bpy.ops.object.mode_set(mode='EDIT')
                 bpy.ops.mesh.select_mode(type='FACE')
                 bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)
-                raise BaseException("All faces must be triangulated before exporting. Untriangulated faces have been selected for you. See https://tinyurl.com/triangulate-faces")
+                raise ValueError("All faces must be triangulated before exporting. Untriangulated faces have been selected for you. See https://tinyurl.com/triangulate-faces")
 
             if red_garment_col:
                 add_garment_cap(mesh)
@@ -269,9 +269,9 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
                 bpy.ops.mesh.select_mode(type='VERT')
                 try:
                     bpy.ops.mesh.select_ungrouped()
-                    raise BaseException(f"Ungrouped vertices found and selected in: {mesh.name}. See https://tinyurl.com/ungrouped-vertices")
+                    raise ValueError(f"Ungrouped vertices found and selected in: {mesh.name}. See https://tinyurl.com/ungrouped-vertices")
                 except RuntimeError:
-                    raise BaseException(f"No vertex groups in: {mesh.name} are assigned weights. Assign weights before exporting. See https://tinyurl.com/assign-vertex-weights")
+                    raise ValueError(f"No vertex groups in: {mesh.name} are assigned weights. Assign weights before exporting. See https://tinyurl.com/assign-vertex-weights")
 
             for modifier in mesh.modifiers:
                 if modifier.type == 'ARMATURE' and modifier.object:
@@ -279,7 +279,7 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
                     break
 
             if not armature_modifier:
-                raise BaseException((f"Armature missing from: {mesh.name} Armatures are required for movement. If this is intentional, try 'export as static prop'. See https://tinyurl.com/armature-missing"))
+                raise ValueError((f"Armature missing from: {mesh.name} Armatures are required for movement. If this is intentional, try 'export as static prop'. See https://tinyurl.com/armature-missing"))
 
             armature = armature_modifier.object
 
@@ -308,7 +308,7 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
             if len(groupless_bones) != 0:
                 bpy.ops.object.mode_set(mode='OBJECT')  # Ensure in object mode for consistent behavior
                 groupless_bones_list = ", ".join(sorted(groupless_bones))
-                raise BaseException(f"The following vertex groups are not assigned to a bone, this will result in blender creating a neutral_bone and cause Wolvenkit import to fail:    {groupless_bones_list}\nSee https://tinyurl.com/unassigned-bone")
+                raise ValueError(f"The following vertex groups are not assigned to a bone, this will result in blender creating a neutral_bone and cause Wolvenkit import to fail:    {groupless_bones_list}\nSee https://tinyurl.com/unassigned-bone")
 
 
         if limit_selected:
