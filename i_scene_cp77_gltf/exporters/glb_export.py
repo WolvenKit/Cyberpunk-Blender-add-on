@@ -230,6 +230,7 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
                 obj.select_set(True)
 
     armature_modifier = None
+    armature = None
     try:
         for mesh in meshes:
             if not mesh.data.uv_layers:
@@ -245,12 +246,11 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
                 bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
             #check that faces are triangulated, cancel export, switch to edit mode with the untriangulated faces selected and throw an error
-            for face in mesh.data.polygons:
-                if len(face.vertices) != 3:
-                    bpy.ops.object.mode_set(mode='EDIT')
-                    bpy.ops.mesh.select_mode(type='FACE')
-                    bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)
-                    raise BaseException("All faces must be triangulated before exporting. Untriangulated faces have been selected for you. See https://tinyurl.com/triangulate-faces")
+            if any(len(face.vertices) != 3 for face in mesh.data.polygons):
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.select_mode(type='FACE')
+                bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)
+                raise BaseException("All faces must be triangulated before exporting. Untriangulated faces have been selected for you. See https://tinyurl.com/triangulate-faces")
 
             if red_garment_col:
                 add_garment_cap(mesh)
