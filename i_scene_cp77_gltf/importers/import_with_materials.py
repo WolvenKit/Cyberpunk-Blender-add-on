@@ -156,7 +156,6 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
                 meshcount += 1
             else:
                 multimesh = False
-                appearances = ['ALL']
                 exclude_unused_mats = False
 
         if multimesh:
