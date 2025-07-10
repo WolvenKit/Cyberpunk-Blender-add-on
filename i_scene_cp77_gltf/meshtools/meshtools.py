@@ -3,7 +3,7 @@ import json
 import os
 from .verttools import *
 from ..cyber_props import *
-from ..main.common import  show_message
+from ..main.common import loc, show_message
 from ..main.bartmoss_functions import setActiveShapeKey, getShapeKeyNames, getModNames
 from ..jsontool import JSONTool
 def CP77SubPrep(self, context, smooth_factor, merge_distance):
@@ -122,7 +122,7 @@ def CP77UvChecker(self, context):
         texture_node.image = image
         # Connect the texture node to the shader node
         shader_node = uvchecker.node_tree.nodes[loc("Principled BSDF")]
-        uvchecker.node_tree.links.new(texture_node.outputs['Color'], shader_node.inputs['Base Color'])
+        uvchecker.node_tree.links.new(texture_node.outputs[loc('Color')], shader_node.inputs[loc('Base Color')])
     for mesh in selected_meshes:
         mat_assigned = False
         for mat in context.object.material_slots:
