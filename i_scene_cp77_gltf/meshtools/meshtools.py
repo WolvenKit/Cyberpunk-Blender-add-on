@@ -59,39 +59,43 @@ def CP77ArmatureSet(self, context, reparent):
     if obj.type != 'MESH':
         show_message("The active object is not a mesh.")
         return {'CANCELLED'}
-    if len(selected_meshes) > 0:
-        if target_armature and target_armature.type == 'ARMATURE':
-            # Ensure the target armature has a collection
-            if not target_armature.users_collection:
-                target_collection = bpy.data.collections.new(target_armature.name + "_collection")
-                bpy.context.scene.collection.children.link(target_collection)
-                target_collection.objects.link(target_armature)
-            else:
-                target_collection = target_armature.users_collection[0]
+    if len(selected_meshes) == 0 or not target_armature or target_armature.type != 'ARMATURE':
+        return {'FINISHED'}
 
-            for mesh in selected_meshes:
-                retargeted = False
-                for modifier in mesh.modifiers:
-                    if modifier.type == 'ARMATURE' and modifier.object is not target_armature:
-                        modifier.object = target_armature
-                        retargeted = True
-                    elif modifier.type == 'ARMATURE' and modifier.object is target_armature:
-                        retargeted = True
-                        continue
-                if not retargeted:
-                    armature = mesh.modifiers.new('Armature', 'ARMATURE')
-                    armature.object = target_armature
+    # Ensure the target armature has a collection
+    if not target_armature.users_collection:
+        target_collection = bpy.data.collections.new(target_armature.name + "_collection")
+        bpy.context.scene.collection.children.link(target_collection)
+        target_collection.objects.link(target_armature)
+    else:
+        target_collection = target_armature.users_collection[0]
 
-                if reparent == True:
-                    # Set parent
-                    mesh.parent = target_armature
+    for mesh in selected_meshes:
+        retargeted = False
+        for modifier in mesh.modifiers:
+            if modifier.type == 'ARMATURE' and modifier.object is not target_armature:
+                modifier.object = target_armature
+                retargeted = True
+            elif modifier.type == 'ARMATURE' and modifier.object is target_armature:
+                retargeted = True
+                continue
 
-                    # Unlink the mesh from its original collections
-                    for col in mesh.users_collection:
-                        col.objects.unlink(mesh)
+        if not retargeted:
+            armature = mesh.modifiers.new('Armature', 'ARMATURE')
+            armature.object = target_armature
 
-                    # Link the mesh to the target armature's collection
-                    target_collection.objects.link(mesh)
+        if reparent != True:
+            continue
+
+        # Set parent
+        mesh.parent = target_armature
+
+        # Unlink the mesh from its original collections
+        for col in mesh.users_collection:
+            col.objects.unlink(mesh)
+
+        # Link the mesh to the target armature's collection
+        target_collection.objects.link(mesh)
 
 
 # find or create the uv checker material instance. We don't need the return value, but we need the material to exist.
@@ -176,18 +180,19 @@ def CP77UvUnChecker(self, context):
     for mesh in selected_meshes:
         if 'uvCheckedMat' in mesh.keys() and 'uvCheckedMat' != None:
             original_mat_name = mesh['uvCheckedMat']
-        if uv_checker_matname in mesh.data.materials:
-            # Find the index of the material slot with the specified name
-            material_index = mesh.data.materials.find(uv_checker_matname)
-            mesh.data.materials.pop(index=material_index)
-            if original_mat_name is not None:
-                i = mesh.data.materials.find(original_mat_name)
-                bpy.ops.wm.properties_remove(data_path="object", property_name="uvCheckedMat")
-                if i >= 0:
-                    mesh.active_material_index = i
-                if current_mode != 'EDIT':
-                    bpy.ops.object.mode_set(mode='EDIT')
-                    bpy.ops.object.material_slot_assign()
+        if uv_checker_matname not in mesh.data.materials:
+            continue
+        # Find the index of the material slot with the specified name
+        material_index = mesh.data.materials.find(uv_checker_matname)
+        mesh.data.materials.pop(index=material_index)
+        if original_mat_name is not None:
+            i = mesh.data.materials.find(original_mat_name)
+            bpy.ops.wm.properties_remove(data_path="object", property_name="uvCheckedMat")
+            if i >= 0:
+                mesh.active_material_index = i
+            if current_mode != 'EDIT':
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.object.material_slot_assign()
         if context.mode != current_mode:
             bpy.ops.object.mode_set(mode=current_mode)
 
