@@ -214,7 +214,7 @@ def CP77RefitChecker(self, context):
 
 def applyModifierAsShapeKey(obj):
     names = getModNames(obj)
-    autoFitters =  [s for s in names if 'Autofitter' in s]
+    autoFitters =  [s for s in names if 'AutoFitter' in s]
 
     if len(autoFitters) == 0:
         print(f"No autofitter found for {obj.name}. Current modifiers are {names}")
@@ -352,7 +352,7 @@ def add_lattice(target_body_path, r_c, fbx_rot, target_body_name):
             print(f"{target_body_name}Autofitter already exists")
             return refitter
 
-    print(f"Creting {target_body_name}Autofitter from json file (reading {target_body_path})")
+    print(f"Creating {target_body_name}Autofitter from json file (reading {target_body_path})")
     # Get the JSON file path for the selected target_body
     lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w  = JSONTool.jsonload(target_body_path)
     new_lattice = setup_lattice(r_c, fbx_rot, lattice_object_name, target_body_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale,lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w)
