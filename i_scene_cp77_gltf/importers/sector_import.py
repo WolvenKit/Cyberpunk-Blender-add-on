@@ -498,8 +498,16 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                     objs = C.selected_objects
                     move_coll= coll_scene.children.get( objs[0].users_collection[0].name )
                     move_coll['meshpath']=m
-                    coll_target.children.link(move_coll)
-                    coll_scene.children.unlink(move_coll)
+                    for app in apps:
+                        new_coll=move_coll.copy()
+                        new_coll.name=groupname+'@'+app
+                        new_coll['appearance']=app                        
+                        coll_target.children.link(new_coll)
+                        coll_scene.children.unlink(new_coll)
+                        for obj in move_coll.objects:
+                            obj_copy=obj.copy()
+                            obj_copy.data = obj.data.copy()
+                            new_coll.objects.link(obj_copy)
                 except:
                     print('failed on ',os.path.basename(meshpath))                    
                     print(traceback.print_exc())
