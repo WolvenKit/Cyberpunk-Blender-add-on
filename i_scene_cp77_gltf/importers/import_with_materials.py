@@ -380,14 +380,18 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
             m = validmats[matname]
 
             # Should create a list of mis that dont play nice with this and just check if the mat is using one.
-            if matname in bpy_mats.keys() and 'glass' not in matname and 'MaterialTemplate' not in matname and 'Window' not in matname and matname[:5] != 'Atlas' and 'BaseMaterial' in \
-                    bpy_mats[matname].keys() and bpy_mats[matname]['BaseMaterial'] == m['BaseMaterial'] and \
+            if matname in bpy_mats.keys() and 'glass' not in matname and 'MaterialTemplate' not in matname and 'Window' not in matname \
+                 and matname[:5] != 'Atlas' and 'decal_diffuse' not in matname and \
+                'BaseMaterial' in bpy_mats[matname].keys() and bpy_mats[matname]['BaseMaterial'] == m['BaseMaterial'] and \
                     bpy_mats[matname]['GlobalNormal'] == m['GlobalNormal'] and bpy_mats[matname][
                 'MultilayerMask'] == m['MultilayerMask']:
 
                 bpy.data.meshes[name].materials.append(bpy_mats[matname])
             elif matname in bpy_mats.keys() and matname[:5] == 'Atlas' and bpy_mats[matname][
                 'BaseMaterial'] == m['BaseMaterial'] and bpy_mats[matname]['DiffuseMap'] == m['DiffuseMap']:
+                bpy.data.meshes[name].materials.append(bpy_mats[matname])
+            elif matname in bpy_mats.keys() and matname=='decal_diffuse' and bpy_mats[matname]['BaseMaterial'] == m['BaseMaterial'] and \
+                bpy_mats[matname]['DiffuseTexture'] == m['DiffuseTexture']:
                 bpy.data.meshes[name].materials.append(bpy_mats[matname])
             elif matname in validmats.keys():
                 index = 0
