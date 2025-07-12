@@ -9,7 +9,7 @@ import os
 import numpy as np
 import copy
 from ..jsontool import JSONTool
-from ..main.common import createOverrideTable
+from ..main.common import createOverrideTable, show_message
 
 
 ##################################################################################################################
@@ -202,11 +202,15 @@ def cp77_mlsetup_export(self, context, mlsetuppath, write_mltemplate):
 
 def cp77_mlsetup_getpath(self, context):
     obj=bpy.context.active_object
+    if not obj or obj is None:
+        raise ValueError("No object selected")
+    if not obj.material_slots:
+        raise ValueError('Selected object has no materials')
+
     mat=obj.material_slots[0].material
 
     if not mat.get('MLSetup'):
-        self.report({'ERROR'}, 'Multilayered setup not found within selected material.')
-        return {'CANCELLED'}
+        raise ValueError('Multilayered setup not found within selected material.')
     else:
         MLSetup = mat.get('MLSetup')
         ProjPath=mat.get('ProjPath')
@@ -220,5 +224,5 @@ def cp77_mlsetup_getpath(self, context):
 
     if not os.path.exists(os.path.dirname(outpath)):
         os.makedirs(os.path.dirname(outpath))
-    
+
     return outpath
