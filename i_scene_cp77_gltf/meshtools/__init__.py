@@ -304,7 +304,18 @@ class CP77Autofitter(Operator):
             else:
                 addon_target_body_path = None
                 addon_target_body_name = None
-            CP77Refit(context, refitter, addon, target_body_path, target_body_name, addon_target_body_path, addon_target_body_name,self.useAddon, props.fbx_rot)
+
+            CP77Refit(
+                context=context,
+                refitter=refitter,
+                addon=addon,
+                target_body_path=target_body_path,
+                target_body_name=target_body_name,
+                useAddon=self.useAddon,
+                addon_target_body_path=addon_target_body_path,
+                addon_target_body_name=addon_target_body_name,
+                fbx_rot=props.fbx_rot
+            )
 
             return {'FINISHED'}
 

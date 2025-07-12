@@ -106,35 +106,82 @@ def add_garment_cap(mesh):
             if cap_layer != None and loop_index < (len(cap_layer.data)):
                 cap_layer.data[loop_index].color = red_color
 
+
+# make sure that a custom scale or whatever won't screw up the export
+export_defaults = {
+    'system': 'METRIC',
+    'length_unit': 'METERS',
+    'scale_length': 1.0,
+    'system_rotation': 'DEGREES',
+    'mass_unit': 'KILOGRAMS',
+    'temperature_unit': 'KELVIN',
+    'time_unit': 'SECONDS',
+    'use_separate': False
+}
+
+# back up user's current workbench configuration and reset to factory defaults
+def save_user_settings_and_reset_to_default():
+    user_settings = {
+        'bpy_context': bpy.context.mode,
+        'system': bpy.context.scene.unit_settings.system,
+        'length_unit': bpy.context.scene.unit_settings.length_unit,
+        'scale_length': bpy.context.scene.unit_settings.scale_length,
+        'system_rotation': bpy.context.scene.unit_settings.system_rotation,
+        'mass_unit': bpy.context.scene.unit_settings.mass_unit,
+        'temperature_unit': bpy.context.scene.unit_settings.temperature_unit,
+        'time_unit': bpy.context.scene.unit_settings.time_unit,
+        'use_separate': bpy.context.scene.unit_settings.use_separate
+    }
+
+    for key, value in export_defaults.items():
+        setattr(bpy.context.scene.unit_settings, key, value)
+    return user_settings
+
+    # restore user's previous state
+def restore_user_settings(user_settings):
+    for key, value in user_settings.items():
+        if key == 'bpy_context':
+            continue
+        setattr(bpy.context.scene.unit_settings, key, value)
+
+    if bpy.context.mode != user_settings['bpy_context']:
+        bpy.ops.object.mode_set(mode=user_settings['bpy_context'])
+
+
+
 # mana: by assigning default attributes, we make this update-safe (some older scripts broke). Just don't re-name them!
 def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=False, limit_selected=True, static_prop=False, red_garment_col=False, apply_transform=True):
+
+    user_settings = save_user_settings_and_reset_to_default()
+
+    objects = context.selected_objects
+    options = default_cp77_options()
 
     #check if the scene is in object mode, if it's not, switch to object mode
     if bpy.context.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
 
-    objects = context.selected_objects
-    options = default_cp77_options()
+    try:
+        #if for photomode, make sure there's an armature selected, if not use the message box to show an error
+        if export_poses:
+            armatures = [obj for obj in objects if obj.type == 'ARMATURE']
+            if not armatures:
+                raise ValueError("No armature objects are selected, please select an armature")
 
-    #if for photomode, make sure there's an armature selected, if not use the message box to show an error
-    if export_poses:
-        armatures = [obj for obj in objects if obj.type == 'ARMATURE']
-        if not armatures:
-            show_message("No armature objects are selected, please select an armature")
-            return {'CANCELLED'}
+            export_anims(context, filepath, options, armatures)
 
-        export_anims(context, filepath, options, armatures)
-        return{'FINISHED'}
-
-    #if export_poses option isn't used, check to make sure there are meshes selected and throw an error if not
-
-    #throw an error in the message box if you haven't selected a mesh to export
-    if not export_poses:
+        #if export_poses option isn't used, check to make sure there are meshes selected and throw an error if not
         meshes = [obj for obj in objects if obj.type == 'MESH' and not "Icosphere" in obj.name]
         if not meshes:
-            show_message("No meshes selected, please select at least one mesh")
-            return {'CANCELLED'}
+            raise ValueError("No meshes selected, please select at least one mesh")
+
         export_meshes(context, filepath, export_visible, limit_selected, static_prop, red_garment_col, apply_transform, meshes, options)
+    except Exception as e:
+        show_message(e.args[0])
+        return {'CANCELLED'}
+    finally:
+        restore_user_settings(user_settings)
+        return{'FINISHED'}
 
 def export_anims(context, filepath, options, armatures):
     for action in bpy.data.actions:
@@ -175,62 +222,64 @@ def export_anims(context, filepath, options, armatures):
 
 def export_meshes(context, filepath, export_visible, limit_selected, static_prop, red_garment_col, apply_transform, meshes, options):
     groupless_bones = set()
-    bone_names = [] 
+    bone_names = []
     options.update(cp77_mesh_options())
     if not limit_selected:
         for obj in bpy.data.objects:
             if obj.type == 'MESH' and not "Icosphere" in obj.name:
                 obj.select_set(True)
 
-    for mesh in meshes:
-        # apply transforms
-        if apply_transform:
-            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-        if not mesh.data.uv_layers:
-            show_message("Meshes must have UV layers in order to import in Wolvenkit. See https://tinyurl.com/uv-layers")
-            return {'CANCELLED'}
+    armature_modifier = None
+    armature = None
+    try:
+        for mesh in meshes:
+            if not mesh.data.uv_layers:
+                raise ValueError("Meshes must have UV layers in order to import in Wolvenkit. See https://tinyurl.com/uv-layers")
 
-        #check submesh vertex count to ensure it's less than the maximum for import
-        vert_count = len(mesh.data.vertices)
-        if vert_count > 65535:
-            show_message(f"{mesh.name} has {vert_count} vertices.           Each submesh must have less than 65,535 vertices. See https://tinyurl.com/vertex-count")
-            return {'CANCELLED'}
+            #check submesh vertex count to ensure it's less than the maximum for import
+            vert_count = len(mesh.data.vertices)
+            if vert_count > 65535:
+                raise ValueError(f"{mesh.name} has {vert_count} vertices.           Each submesh must have less than 65,535 vertices. See https://tinyurl.com/vertex-count")
 
-        #check that faces are triangulated, cancel export, switch to edit mode with the untriangulated faces selected and throw an error
-        for face in mesh.data.polygons:
-            if len(face.vertices) != 3:
+            # apply transforms
+            if apply_transform:
+                bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+            #check that faces are triangulated, cancel export, switch to edit mode with the untriangulated faces selected and throw an error
+            if any(len(face.vertices) != 3 for face in mesh.data.polygons):
                 bpy.ops.object.mode_set(mode='EDIT')
                 bpy.ops.mesh.select_mode(type='FACE')
                 bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)
-                show_message("All faces must be triangulated before exporting. Untriangulated faces have been selected for you. See https://tinyurl.com/triangulate-faces")
-                return {'CANCELLED'}
+                raise ValueError("All faces must be triangulated before exporting. Untriangulated faces have been selected for you. See https://tinyurl.com/triangulate-faces")
 
-        if red_garment_col:
-            add_garment_cap(mesh)
+            if red_garment_col:
+                add_garment_cap(mesh)
 
-        # Check for ungrouped vertices, if they're found, switch to edit mode and select them
-        # No need to do this for static props
-        if not static_prop:
+
+            if mesh.data.name != mesh.name:
+                mesh.data.name = mesh.name
+
+            # Check for ungrouped vertices, if they're found, switch to edit mode and select them
+            # No need to do this for static props
+            if static_prop:
+                continue
             ungrouped_vertices = [v for v in mesh.data.vertices if not v.groups]
             if ungrouped_vertices:
                 bpy.ops.object.mode_set(mode='EDIT')
                 bpy.ops.mesh.select_mode(type='VERT')
                 try:
                     bpy.ops.mesh.select_ungrouped()
-                    show_message(f"Ungrouped vertices found and selected in: {mesh.name}. See https://tinyurl.com/ungrouped-vertices")
+                    raise ValueError(f"Ungrouped vertices found and selected in: {mesh.name}. See https://tinyurl.com/ungrouped-vertices")
                 except RuntimeError:
-                    show_message(f"No vertex groups in: {mesh.name} are assigned weights. Assign weights before exporting. See https://tinyurl.com/assign-vertex-weights")
-                return {'CANCELLED'}
+                    raise ValueError(f"No vertex groups in: {mesh.name} are assigned weights. Assign weights before exporting. See https://tinyurl.com/assign-vertex-weights")
 
-            armature_modifier = None
             for modifier in mesh.modifiers:
                 if modifier.type == 'ARMATURE' and modifier.object:
                     armature_modifier = modifier
                     break
 
             if not armature_modifier:
-                show_message((f"Armature missing from: {mesh.name} Armatures are required for movement. If this is intentional, try 'export as static prop'. See https://tinyurl.com/armature-missing"))
-                return {'CANCELLED'}
+                raise ValueError((f"Armature missing from: {mesh.name} Armatures are required for movement. If this is intentional, try 'export as static prop'. See https://tinyurl.com/armature-missing"))
 
             armature = armature_modifier.object
 
@@ -259,37 +308,38 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
             if len(groupless_bones) != 0:
                 bpy.ops.object.mode_set(mode='OBJECT')  # Ensure in object mode for consistent behavior
                 groupless_bones_list = ", ".join(sorted(groupless_bones))
-                armature.hide_set(True)
-                show_message((f"The following vertex groups are not assigned to a bone, this will result in blender creating a neutral_bone and cause Wolvenkit import to fail:    {groupless_bones_list}\nSee https://tinyurl.com/unassigned-bone"))
-                return {'CANCELLED'}
+                raise ValueError(f"The following vertex groups are not assigned to a bone, this will result in blender creating a neutral_bone and cause Wolvenkit import to fail:    {groupless_bones_list}\nSee https://tinyurl.com/unassigned-bone")
 
-        if mesh.data.name != mesh.name:
-            mesh.data.name = mesh.name
 
-    if limit_selected:
-        try:
-            bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
-            if not static_prop:
-                armature.hide_set(True)
-        except Exception as e:
-            print(e)
-
-    else:
-        if export_visible:
+        if limit_selected:
             try:
-                bpy.ops.export_scene.gltf(filepath=filepath, use_visible=True, **options)
-                if not static_prop:
-                    armature.hide_set(True)
+                bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
             except Exception as e:
                 print(e)
 
         else:
-            try:
-                bpy.ops.export_scene.gltf(filepath=filepath, **options)
-                if not static_prop:
-                     armature.hide_set(True)
-            except Exception as e:
-                print(e)
+            if export_visible:
+                try:
+                    bpy.ops.export_scene.gltf(filepath=filepath, use_visible=True, **options)
+                    if not static_prop:
+                        armature.hide_set(True)
+                except Exception as e:
+                    print(e)
+
+            else:
+                try:
+                    bpy.ops.export_scene.gltf(filepath=filepath, **options)
+                    if not static_prop:
+                        armature.hide_set(True)
+                except Exception as e:
+                    print(e)
+        return {'FINISHED'}
+    except Exception as e:
+        show_message(e.args[0])
+        return {'CANCELLED'}
+    finally:
+        if armature is not None and not static_prop:
+            armature.hide_set(True)
 
 # def ExportAll(self, context):
 #     #Iterate through all objects in the scene

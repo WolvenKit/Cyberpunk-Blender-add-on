@@ -3,7 +3,7 @@ import json
 import os
 from .verttools import *
 from ..cyber_props import *
-from ..main.common import  show_message
+from ..main.common import loc, show_message
 from ..main.bartmoss_functions import setActiveShapeKey, getShapeKeyNames, getModNames
 from ..jsontool import JSONTool
 def CP77SubPrep(self, context, smooth_factor, merge_distance):
@@ -59,98 +59,111 @@ def CP77ArmatureSet(self, context, reparent):
     if obj.type != 'MESH':
         show_message("The active object is not a mesh.")
         return {'CANCELLED'}
-    if len(selected_meshes) > 0:
-        if target_armature and target_armature.type == 'ARMATURE':
-            # Ensure the target armature has a collection
-            if not target_armature.users_collection:
-                target_collection = bpy.data.collections.new(target_armature.name + "_collection")
-                bpy.context.scene.collection.children.link(target_collection)
-                target_collection.objects.link(target_armature)
-            else:
-                target_collection = target_armature.users_collection[0]
+    if len(selected_meshes) == 0 or not target_armature or target_armature.type != 'ARMATURE':
+        return {'FINISHED'}
 
-            for mesh in selected_meshes:
-                retargeted = False
-                for modifier in mesh.modifiers:
-                    if modifier.type == 'ARMATURE' and modifier.object is not target_armature:
-                        modifier.object = target_armature
-                        retargeted = True
-                    elif modifier.type == 'ARMATURE' and modifier.object is target_armature:
-                        retargeted = True
-                        continue
-                if not retargeted:
-                    armature = mesh.modifiers.new('Armature', 'ARMATURE')
-                    armature.object = target_armature
+    # Ensure the target armature has a collection
+    if not target_armature.users_collection:
+        target_collection = bpy.data.collections.new(target_armature.name + "_collection")
+        bpy.context.scene.collection.children.link(target_collection)
+        target_collection.objects.link(target_armature)
+    else:
+        target_collection = target_armature.users_collection[0]
 
-                if reparent == True:
-                    # Set parent
-                    mesh.parent = target_armature
+    for mesh in selected_meshes:
+        retargeted = False
+        for modifier in mesh.modifiers:
+            if modifier.type == 'ARMATURE' and modifier.object is not target_armature:
+                modifier.object = target_armature
+                retargeted = True
+            elif modifier.type == 'ARMATURE' and modifier.object is target_armature:
+                retargeted = True
+                continue
 
-                    # Unlink the mesh from its original collections
-                    for col in mesh.users_collection:
-                        col.objects.unlink(mesh)
+        if not retargeted:
+            armature = mesh.modifiers.new('Armature', 'ARMATURE')
+            armature.object = target_armature
 
-                    # Link the mesh to the target armature's collection
-                    target_collection.objects.link(mesh)
+        if reparent != True:
+            continue
+
+        # Set parent
+        mesh.parent = target_armature
+
+        # Unlink the mesh from its original collections
+        for col in mesh.users_collection:
+            col.objects.unlink(mesh)
+
+        # Link the mesh to the target armature's collection
+        target_collection.objects.link(mesh)
+
+
+# find or create the uv checker material instance. We don't need the return value, but we need the material to exist.
+def ensure_uv_checker_material():
+    #check if it's already defined
+    if (match := next((mat for mat in bpy.data.materials if mat.name == uv_checker_matname), None)) is not None:
+        return match
+
+    # Load the image texture
+    image_path = os.path.join(resources_dir, "uvchecker.png")
+    image = bpy.data.images.load(image_path)
+
+    # Create a new material
+    uvchecker = bpy.data.materials.new(name=uv_checker_matname)
+    uvchecker.use_nodes = True
+
+    # Create a new texture node
+    texture_node = uvchecker.node_tree.nodes.new(type='ShaderNodeTexImage')
+    texture_node.location = (-200, 0)
+    texture_node.image = image
+
+    # Connect the texture node to the shader node
+    shader_node = uvchecker.node_tree.nodes[loc("Principled BSDF")]
+    uvchecker.node_tree.links.new(texture_node.outputs[loc('Color')], shader_node.inputs[loc('Base Color')])
 
 def CP77UvChecker(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
     bpy_mats=bpy.data.materials
     obj = context.object
     current_mode = context.mode
-    uv_checker = None
+
     if not obj:
         show_message("No active object. Please Select a Mesh and try again")
         return {'CANCELLED'}
     if obj.type != 'MESH':
         show_message("The active object is not a mesh.")
         return {'CANCELLED'}
-    for mat in bpy_mats:
-        if mat.name == 'UV_Checker':
-            uvchecker = mat
-            uv_checker = True
-    if uv_checker == None:
-        image_path = os.path.join(resources_dir, "uvchecker.png")
-        # Load the image texture
-        image = bpy.data.images.load(image_path)
-        # Create a new material
-        uvchecker = bpy_mats.new(name="UV_Checker")
-        uvchecker.use_nodes = True
-        # Create a new texture node
-        texture_node = uvchecker.node_tree.nodes.new(type='ShaderNodeTexImage')
-        texture_node.location = (-200, 0)
-        texture_node.image = image
-        # Connect the texture node to the shader node
-        shader_node = uvchecker.node_tree.nodes[loc("Principled BSDF")]
-        uvchecker.node_tree.links.new(texture_node.outputs['Color'], shader_node.inputs['Base Color'])
+
+    ensure_uv_checker_material()
+
     for mesh in selected_meshes:
-        mat_assigned = False
-        for mat in context.object.material_slots:
-            if mat.name == 'UV_Checker':
-                uvchecker = mat
-                mat_assigned = True
-        if not mat_assigned:
-            try:
-                current_mat = context.object.active_material.name
-                mesh['uvCheckedMat'] = current_mat
-                bpy.data.meshes[mesh.name].materials.append(bpy_mats['UV_Checker'])
-                i = mesh.data.materials.find('UV_Checker')
-            except AttributeError:
-                bpy.data.meshes[mesh.name].materials.append(bpy_mats['UV_Checker'])
-                i = mesh.data.materials.find('UV_Checker')
+        # the mesh already has an UV checker material slot, we have nothing to do
+        if any(mat.name == uv_checker_matname for mat in context.object.material_slots):
+            continue
 
-            if i >= 0:
-                mesh.active_material_index = i
-            if current_mode != 'EDIT':
-                bpy.ops.object.mode_set(mode='EDIT')
-                bpy.ops.object.material_slot_assign()
+        try:
+            current_mat = context.object.active_material.name
+            mesh['uvCheckedMat'] = current_mat
+        except AttributeError:
+            print(f"Mesh {mesh.name} already has an UV checker material")
 
-                #print(current_mode)
+        bpy.data.meshes[mesh.name].materials.append(bpy_mats[uv_checker_matname])
+        i = mesh.data.materials.find(uv_checker_matname)
+
+        if i >= 0:
+            mesh.active_material_index = i
+        if current_mode != 'EDIT':
+            bpy.ops.object.mode_set(mode='EDIT')
+            bpy.ops.object.material_slot_assign()
+
+            #print(current_mode)
 
         if context.mode != current_mode:
             bpy.ops.object.mode_set(mode=current_mode)
 
     return {'FINISHED'}
+
+uv_checker_matname = 'UV_Checker'
 
 def CP77UvUnChecker(self, context):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
@@ -163,23 +176,23 @@ def CP77UvUnChecker(self, context):
         show_message("The active object is not a mesh.")
         return {'CANCELLED'}
 
-    uvchecker = 'UV_Checker'
     original_mat_name = None
     for mesh in selected_meshes:
+        if uv_checker_matname not in mesh.data.materials:
+            continue
         if 'uvCheckedMat' in mesh.keys() and 'uvCheckedMat' != None:
             original_mat_name = mesh['uvCheckedMat']
-        if uvchecker in mesh.data.materials:
-            # Find the index of the material slot with the specified name
-            material_index = mesh.data.materials.find(uvchecker)
-            mesh.data.materials.pop(index=material_index)
-            if original_mat_name is not None:
-                i = mesh.data.materials.find(original_mat_name)
-                bpy.ops.wm.properties_remove(data_path="object", property_name="uvCheckedMat")
-                if i >= 0:
-                    mesh.active_material_index = i
-                if current_mode != 'EDIT':
-                    bpy.ops.object.mode_set(mode='EDIT')
-                    bpy.ops.object.material_slot_assign()
+        # Find the index of the material slot with the specified name
+        material_index = mesh.data.materials.find(uv_checker_matname)
+        mesh.data.materials.pop(index=material_index)
+        if original_mat_name is not None:
+            i = mesh.data.materials.find(original_mat_name)
+            bpy.ops.wm.properties_remove(data_path="object", property_name="uvCheckedMat")
+            if i >= 0:
+                mesh.active_material_index = i
+            if current_mode != 'EDIT':
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.object.material_slot_assign()
         if context.mode != current_mode:
             bpy.ops.object.mode_set(mode=current_mode)
 
@@ -201,7 +214,7 @@ def CP77RefitChecker(self, context):
 
 def applyModifierAsShapeKey(obj):
     names = getModNames(obj)
-    autoFitters =  [s for s in names if 'Autofitter' in s]
+    autoFitters =  [s for s in names if 'AutoFitter' in s]
 
     if len(autoFitters) == 0:
         print(f"No autofitter found for {obj.name}. Current modifiers are {names}")
@@ -339,7 +352,7 @@ def add_lattice(target_body_path, r_c, fbx_rot, target_body_name):
             print(f"{target_body_name}Autofitter already exists")
             return refitter
 
-    print(f"Creting {target_body_name}Autofitter from json file (reading {target_body_path})")
+    print(f"Creating {target_body_name}Autofitter from json file (reading {target_body_path})")
     # Get the JSON file path for the selected target_body
     lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w  = JSONTool.jsonload(target_body_path)
     new_lattice = setup_lattice(r_c, fbx_rot, lattice_object_name, target_body_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale,lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w)
