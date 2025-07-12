@@ -32,7 +32,7 @@ class CP77RigJSONExport(Operator,ExportHelper):
     def execute(self, context):
         save_rig_to_json(self.filepath)
         return {'FINISHED'}
-        
+
     def check(self, context):
         # Ensure the file path ends with the correct extension
         if not self.filepath.endswith(self.filename_ext):
@@ -63,7 +63,7 @@ class CP77GLBExport(Operator,ExportHelper):
     bl_idname = "export_scene.cp77_glb"
     bl_label = "Export for Cyberpunk"
     bl_options = {'REGISTER','UNDO'}
-    bl_description = "Export to GLB with optimized settings for use with Wolvenkit for Cyberpunk 2077" 
+    bl_description = "Export to GLB with optimized settings for use with Wolvenkit for Cyberpunk 2077"
     filename_ext = ".glb"
     ### adds a checkbox for anim export settings
 
@@ -103,7 +103,7 @@ class CP77GLBExport(Operator,ExportHelper):
 
     def draw(self, context):
         layout = self.layout
-        row = layout.row(align=True) 
+        row = layout.row(align=True)
         row.prop(self, "export_poses")
         if not self.export_poses:
             row = layout.row(align=True)
@@ -111,7 +111,7 @@ class CP77GLBExport(Operator,ExportHelper):
             if not self.limit_selected:
                 row = layout.row(align=True)
                 row.prop(self, "export_visible")
-            else: 
+            else:
                 row = layout.row(align=True)
                 row.prop(self, "static_prop")
             row = layout.row(align=True)
@@ -148,7 +148,7 @@ class CP77MlSetupExport(Operator):
     bl_idname = "export_scene.mlsetup"
     bl_label = "Export MLSetup"
     bl_parent_id = "CP77_PT_MeshTools"
-    bl_description = "Export selected material to a mlsetup json file which can be imported in WolvenKit" 
+    bl_description = "Export selected material to a mlsetup json file which can be imported in WolvenKit"
 
     filepath: StringProperty(subtype="FILE_PATH")
 
@@ -158,9 +158,17 @@ class CP77MlSetupExport(Operator):
         layout.prop(props, "write_mltemplate")
 
     def invoke(self, context, event):
-        self.filepath = cp77_mlsetup_getpath(self, context)
-        context.window_manager.fileselect_add(self)
-        return {'RUNNING_MODAL'}
+        try:
+            self.filepath = cp77_mlsetup_getpath(self, context)
+            context.window_manager.fileselect_add(self)
+            return {'RUNNING_MODAL'}
+        except TypeError as e:
+            show_message(e.args[0])
+            return {'CANCELLED'}
+        except ValueError as e:
+            show_message(e.args[0])
+            return {'CANCELLED'}
+
 
     def execute(self, context):
         write_mltemplate = context.scene.cp77_panel_props.write_mltemplate
@@ -203,7 +211,7 @@ def register_exporters():
             bpy.utils.register_class(cls)
     for cls in other_classes:
         if not hasattr(bpy.types, cls.__name__):
-            bpy.utils.register_class(cls)   
+            bpy.utils.register_class(cls)
     TOPBAR_MT_file_export.append(menu_func_export)
 
 def unregister_exporters():
