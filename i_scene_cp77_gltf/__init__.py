@@ -12,6 +12,7 @@ from . animtools import *
 from . importers import *
 from . exporters import *
 from . scriptman import *
+from . materialtools import *
 
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
@@ -91,6 +92,7 @@ def register():
     register_exporters()
     register_scriptman()
     register_meshtools()
+    register_materialtools()
 
     for cls in classes:
         if cls.__name__ is "JSONTool": # this one is static
@@ -103,6 +105,7 @@ def register():
     print('')
 
 def unregister():
+    unregister_materialtools()
     unregister_meshtools()
     unregister_scriptman()
     unregister_exporters()
