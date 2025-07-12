@@ -1089,7 +1089,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                 NDI_Coll = bpy.data.collections.new(NDI_Coll_name)
                                                 Sector_coll.children.link(NDI_Coll)
                                                 assign_custom_properties(NDI_Coll, data,sectorName,i,
-                                                nodeDataIndex=inst['nodeDataIndex'], instance_idx=idx,
+                                                nodeDataIndex=inst['nodeDataIndex'], 
                                                 mesh=meshname, pivot=inst['Pivot'])
                                                 if 'appearanceName' in e['Data'].keys():
                                                     NDI_Coll['appearanceName']=e['Data']['appearanceName']['$value']
