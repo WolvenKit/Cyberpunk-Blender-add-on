@@ -121,9 +121,9 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         elif vers[0] == 4 and vers[1] > 3 and vers[1] < 5:
             gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":heuristic, "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':octos, 'bone_shape_scale_factor':1.0, 'import_scene_extras':True, 'import_select_created_objects':True})
         elif vers[0] == 4 and vers[1] >= 5:
-            gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, 'import_unused_materials' :False, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":heuristic, "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':octos, 'bone_shape_scale_factor':1.0, 'import_scene_as_collection':False, 'import_scene_extras':True, 'import_select_created_objects':True,})
+            gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, 'import_unused_materials' :False, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":heuristic, "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':octos, 'bone_shape_scale_factor':1.0, 'import_scene_as_collection':False, 'import_scene_extras':True, 'import_select_created_objects':True,'import_merge_material_slots':False, 'import_merge_meshes':False, 'import_merge_armatures':False, 'import_merge_lights':False, 'import_merge_cameras':False, 'import_merge_empty_objects':False, 'import_merge_skins':False, 'import_merge_shapes':False, 'import_merge_skins_and_shapes':False})
         else:
-            gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":heuristic, "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':octos,})
+            gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":heuristic, "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':octos, 'import_select_created_objects':True,})
         gltf_importer.read()
         gltf_importer.checks()
         existingMeshes = bpy.data.meshes.keys()
@@ -331,14 +331,18 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
             m = validmats[matname]
 
             # Should create a list of mis that dont play nice with this and just check if the mat is using one.
-            if matname in bpy_mats.keys() and 'glass' not in matname and 'MaterialTemplate' not in matname and 'Window' not in matname and matname[:5] != 'Atlas' and 'BaseMaterial' in \
-                    bpy_mats[matname].keys() and bpy_mats[matname]['BaseMaterial'] == m['BaseMaterial'] and \
+            if matname in bpy_mats.keys() and 'glass' not in matname and 'MaterialTemplate' not in matname and 'Window' not in matname \
+                 and matname[:5] != 'Atlas' and 'decal_diffuse' not in matname and \
+                'BaseMaterial' in bpy_mats[matname].keys() and bpy_mats[matname]['BaseMaterial'] == m['BaseMaterial'] and \
                     bpy_mats[matname]['GlobalNormal'] == m['GlobalNormal'] and bpy_mats[matname][
                 'MultilayerMask'] == m['MultilayerMask']:
 
                 bpy.data.meshes[name].materials.append(bpy_mats[matname])
             elif matname in bpy_mats.keys() and matname[:5] == 'Atlas' and bpy_mats[matname][
                 'BaseMaterial'] == m['BaseMaterial'] and bpy_mats[matname]['DiffuseMap'] == m['DiffuseMap']:
+                bpy.data.meshes[name].materials.append(bpy_mats[matname])
+            elif matname in bpy_mats.keys() and matname=='decal_diffuse' and bpy_mats[matname]['BaseMaterial'] == m['BaseMaterial'] and \
+                bpy_mats[matname]['DiffuseTexture'] == m['DiffuseTexture']:
                 bpy.data.meshes[name].materials.append(bpy_mats[matname])
             elif matname in validmats.keys():
                 index = 0
