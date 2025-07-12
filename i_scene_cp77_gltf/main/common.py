@@ -504,12 +504,12 @@ def createOverrideTable(matTemplateObj):
             tmpName = x["n"]["$value"]
             tmpStrength0 = float(x["v"]["Elements"][0])
             tmpStrength1 = float(x["v"]["Elements"][1])
-            Output["RoughLevelsIn"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
+            Output["RoughLevelsIn"][tmpName] = [(tmpStrength0),(tmpStrength1)]
         for x in OverList["roughLevelsOut"]:
             tmpName = x["n"]["$value"]
             tmpStrength0 = float(x["v"]["Elements"][0])
             tmpStrength1 = float(x["v"]["Elements"][1])
-            Output["RoughLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
+            Output["RoughLevelsOut"][tmpName] = [(tmpStrength0),(tmpStrength1)]
         for x in OverList["metalLevelsIn"]:
             tmpName = x["n"]["$value"]
             if x.get("v") is not None:
@@ -518,7 +518,7 @@ def createOverrideTable(matTemplateObj):
             else:
                 tmpStrength0 = 0
                 tmpStrength1 = 1
-            Output["MetalLevelsIn"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
+            Output["MetalLevelsIn"][tmpName] = [(tmpStrength0),(tmpStrength1)]
         for x in OverList["metalLevelsOut"]:
             tmpName = x["n"]["$value"]
             if x.get("v") is not None:
@@ -527,7 +527,7 @@ def createOverrideTable(matTemplateObj):
             else:
                 tmpStrength0 = 0
                 tmpStrength1 = 1
-            Output["MetalLevelsOut"][tmpName] = [(tmpStrength0,tmpStrength0,tmpStrength0,1),(tmpStrength1,tmpStrength1,tmpStrength1,1)]
+            Output["MetalLevelsOut"][tmpName] = [(tmpStrength0),(tmpStrength1)]
         return Output
 
 def createParallaxGroup():
