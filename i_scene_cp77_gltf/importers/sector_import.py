@@ -505,13 +505,14 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                         coll_target.children.link(new_coll)
                         new_coll['meshpath']=m
                         # Set the appearance property
+                        json_apps= None
                         json_apps =  json.loads(move_coll['json_apps'])
                         new_coll['appearance'] = app
                         for idx,obj in enumerate(move_coll.objects):
                             obj_copy=obj.copy()
                             obj_copy.data = obj.data.copy()
                             if obj_copy.type == 'MESH':
-                                if app in json_apps and idx < len(json_apps[app]):
+                                if json_apps and app in json_apps and idx < len(json_apps[app]):
                                     # Assign the material from the json_apps if it exists
                                     mat_name = json_apps.get(app)[idx]
                                     if mat_name and mat_name in bpy.data.materials:
