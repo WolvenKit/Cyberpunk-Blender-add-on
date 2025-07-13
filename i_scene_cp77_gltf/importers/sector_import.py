@@ -375,7 +375,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 meshes[data['mesh']['DepotPath']['$value']]['appearances'].append(e['Data']['meshAppearance'])
                     
                     case 'worldStaticMeshNode' |'worldRotatingMeshNode'|'worldAdvertisingNode'| 'worldAdvertisementNode' | 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode'  \
-                        |  'worldTerrainMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode'\
+                        |  'worldTerrainMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode'| 'worldDynamicMeshNode'\
                    | 'worldMeshNode' | 'worldStaticOccluderMeshNode' |'worldDecorationMeshNode' | 'worldFoliageNode':
                         if isinstance(e, dict) and 'mesh' in data.keys() and isinstance(data['mesh'], dict) and'DepotPath' in data['mesh'].keys():
                             meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
@@ -473,7 +473,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
     to_mesh_no=100000
 
     for i,m in enumerate(meshes_w_apps):
-        if i>=from_mesh_no and i<=to_mesh_no and (m[-4:]=='mesh' or m[-13:]=='physicalscene'):
+        if i>=from_mesh_no and i<=to_mesh_no and (m[-4:]=='mesh' or m[-13:]=='physicalscene' or m[-6:]=='w2mesh'):
             apps=[]
             for meshApp in meshes_w_apps[m]['apps'][0]:
                 if meshApp['$value'] not in apps and meshApp['$value']!='':                   
@@ -482,8 +482,11 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
             #    print(len(apps))
             impapps=','.join(apps)
             #print(os.path.join(path, m[:-4]+'glb'),impapps)
-
-            meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb').replace('\\', os.sep)
+            if m[-13:]=='physicalscene' or m[-6:]=='w2mesh':
+                meshpath=os.path.join(path, m+'.glb').replace('\\', os.sep)
+                print('not a standard mesh')
+            else:
+                meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb').replace('\\', os.sep)
             print(meshpath)
             groupname = os.path.splitext(os.path.split(meshpath)[-1])[0]
             while len(groupname) > 63:
@@ -1028,7 +1031,10 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 meshAppearance = data['meshAppearance']['$value'] # Need to actually use this
                             if(meshname != 0):
                                         #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
-                                        groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
+                                        if meshname[-5:] == '.mesh':
+                                            groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
+                                        else:
+                                            groupname = os.path.basename(meshname)
                                         while len(groupname) > 63:
                                             groupname = groupname[:-1]
                                         group=Masters.children.get(groupname)
