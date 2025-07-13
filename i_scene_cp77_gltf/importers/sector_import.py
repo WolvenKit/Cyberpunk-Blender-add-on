@@ -500,13 +500,21 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                     move_coll['meshpath']=m
                     coll_target.children.link(move_coll)
                     for app in apps:
-                        new_coll=move_coll.copy()
-                        new_coll.name=groupname+'@'+app
-                        new_coll['appearance']=app                        
+                        # Create a completely new collection for this appearance
+                        new_coll = bpy.data.collections.new(groupname + '@' + app)
                         coll_target.children.link(new_coll)
-                        for obj in move_coll.objects:
+                        new_coll['meshpath']=m
+                        # Set the appearance property
+                        json_apps =  json.loads(move_coll['json_apps'])
+                        new_coll['appearance'] = app
+                        for idx,obj in enumerate(move_coll.objects):
                             obj_copy=obj.copy()
                             obj_copy.data = obj.data.copy()
+                            if obj_copy.type == 'MESH':
+                                mat_name = json_apps.get(app)[idx]
+                                if mat_name and mat_name in bpy.data.materials:
+                                    obj_copy.data.materials.clear()
+                                    obj_copy.data.materials.append(bpy.data.materials[mat_name])
                             new_coll.objects.link(obj_copy)                    
                     coll_scene.children.unlink(move_coll)
                 except:
