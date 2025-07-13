@@ -592,7 +592,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 obj.location.x =  obj.location.x+x
                                 obj.location.y = obj.location.y+y
                                 obj.location.z =  obj.location.z+z
-                                if 'Orientation' in c['localTransform'].keys() and not rig:
+                                if 'Orientation' in c['localTransform'].keys():
                                     obj.rotation_quaternion.x = c['localTransform']['Orientation']['i']
                                     obj.rotation_quaternion.y = c['localTransform']['Orientation']['j']
                                     obj.rotation_quaternion.z = c['localTransform']['Orientation']['k']

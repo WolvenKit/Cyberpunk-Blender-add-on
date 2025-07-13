@@ -65,11 +65,6 @@ class CP77_PT_MeshTools(Panel):
                 col.operator("cp77.add_vertex_color_preset")
                 col.operator("cp77.delete_vertex_color_preset")
 
-                box = layout.box()
-                box.label(text="Material Export", icon="MATERIAL")
-                col = box.column()
-                col.operator("export_scene.hp")
-                col.operator("export_scene.mlsetup")
 
 class CP77DeleteVertexcolorPreset(Operator):
     bl_idname = "cp77.delete_vertex_color_preset"

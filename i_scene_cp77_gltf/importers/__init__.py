@@ -187,6 +187,7 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
 class CP77Import(Operator, ImportHelper):
     bl_idname = "io_scene_gltf.cp77"
     bl_label = "Import glTF"
+    bl_options = {'REGISTER', 'UNDO'}
     bl_description = "Load glTF 2.0 files with Cyberpunk 2077 materials" #Kwek: tooltips towards a more polished UI.
     filter_glob: StringProperty(
         default="*.gltf;*.glb",
@@ -270,6 +271,23 @@ class CP77Import(Operator, ImportHelper):
 
         return {'FINISHED'}
 
+class CP77MaterialReload(Operator):
+    bl_idname = "reload_material.cp77"
+    bl_label = "Reload Material"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_parent_id = "CP77_PT_MaterialTools"
+    bl_description = """Reload the active material from json.
+WARNING! All data within the active material will be deleted"""
+
+    def execute(self, context):
+        try:
+            reload_mats()
+
+        except Exception as e:
+            print("Exception when trying to import mats: " + str(e))
+            raise e
+
+        return {"FINISHED"}
 
 def menu_func_import(self, context):
     self.layout.operator(CP77Import.bl_idname, text="Cyberpunk GLTF (.gltf/.glb)", icon_value=get_icon('WKIT'))
