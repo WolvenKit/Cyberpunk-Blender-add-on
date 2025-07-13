@@ -113,7 +113,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
     #Kwek: was tempted to do a try-catch, but that is just La-Z
     #Kwek: Added another gate for materials
     for f in loadfiles:
-        filename=os.path.splitext(f['name'])[0]
+        filename=os.path.splitext(os.path.splitext(f['name'])[0])[0]
         filepath = os.path.join(directory, f['name'])
         vers = bpy.app.version
         if vers[0] == 4 and vers[1] >= 2 and vers[1] < 4:
@@ -128,7 +128,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         gltf_importer.checks()
         existingMeshes = bpy.data.meshes.keys()
 
-        current_file_base_path = os.path.splitext(filepath)[0]
+        current_file_base_path = os.path.join(os.path.dirname(filepath),filename)
         has_material_json = os.path.exists(current_file_base_path + ".Material.json")
 
         existingMaterials = bpy.data.materials.keys()
