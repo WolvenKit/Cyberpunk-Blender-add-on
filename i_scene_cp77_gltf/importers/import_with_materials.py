@@ -121,7 +121,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         elif vers[0] == 4 and vers[1] > 3 and vers[1] < 5:
             gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":heuristic, "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':octos, 'bone_shape_scale_factor':1.0, 'import_scene_extras':True, 'import_select_created_objects':True})
         elif vers[0] == 4 and vers[1] >= 5:
-            gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, 'import_unused_materials' :False, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":heuristic, "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':octos, 'bone_shape_scale_factor':1.0, 'import_scene_as_collection':False, 'import_scene_extras':True, 'import_select_created_objects':True,'import_merge_material_slots':False, 'import_merge_meshes':False, 'import_merge_armatures':False, 'import_merge_lights':False, 'import_merge_cameras':False, 'import_merge_empty_objects':False, 'import_merge_skins':False, 'import_merge_shapes':False, 'import_merge_skins_and_shapes':False})
+            gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, 'import_unused_materials' :False, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":heuristic, "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':octos, 'bone_shape_scale_factor':1.0, 'import_scene_as_collection':True, 'import_scene_extras':True, 'import_select_created_objects':True, 'import_merge_material_slots':False})
         else:
             gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":heuristic, "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':octos, 'import_select_created_objects':True,})
         gltf_importer.read()
@@ -227,9 +227,14 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         validmats={}
         # fix the app names as for some reason they have their index added on the end.
         if len(json_apps) > 0:
+            
             appkeys=[k for k in json_apps.keys()]
             for i,k in enumerate(appkeys):
                 json_apps[k[:-1*len(str(i))]]=json_apps.pop(k)
+            
+            # save the json_apps to the collection so that we can use it later
+            collection['json_apps']=json.dumps(json_apps)
+
             #appearances = ({'name':'short_hair'},{'name':'02_ca_limestone'},{'name':'ml_plastic_doll'},{'name':'03_ca_senna'})
             #if appearances defined populate valid mats with the mats for them, otherwise populate with everything used.
             if len(appearances)>0 and 'ALL' not in appearances:
@@ -264,6 +269,53 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
     if not cp77_addon_prefs.non_verbose:
         print(f"GLB Import Time: {(time.time() - start_time)} Seconds")
         print('-------------------- Finished importing Cyberpunk 2077 Model --------------------\n')
+
+def reload_mats():
+    active_obj = bpy.context.active_object
+    mat_idx = active_obj.active_material_index
+    mat = active_obj.material_slots[mat_idx].material
+    old_mat_name = mat.name
+
+    DepotPath = mat.get('DepotPath')
+    BasePath = mat.get('MeshPath')
+    errorMessages = []
+    matjsonpath = BasePath + ".Material.json"
+
+    # JATO: hard-coded to PNG (who doesnt use PNG?) but could be exposed if we add image_format to material properties
+    image_format='png'
+
+    # JATO: no idea what this does but the glb import function does it so...
+    JSONTool.start_caching()
+
+    # JATO: probably a better way to do this but idk how and dont want to rewrite the function
+    somejunk, otherjunk, mats = JSONTool.jsonload(matjsonpath, errorMessages)
+
+    Builder = MaterialBuilder(mats, DepotPath, str(image_format), BasePath)
+
+    index = 0
+    for rawmat in mats:
+        if rawmat["Name"] == old_mat_name:
+            newmat = Builder.create(mats,index)
+            break
+        index = index + 1
+
+    # JATO: Remap all users of old material to new material because multiple submeshes can share the same old material
+    bpy.data.materials[old_mat_name].user_remap(bpy.data.materials[newmat.name])
+
+    # JATO: Copy custom material properties from old mat to new mat. Maybe we could regenerate from file, but I'm having a hard time understanding the code for that within import_mats function
+    for k in mat.keys():
+        newmat[k] = mat[k]
+
+    # JATO: Removing the old material appears to cause a crash TODO: fix context?
+    if mat:
+        bpy.data.materials.remove(mat, do_unlink=True, do_id_user=True, do_ui_user=True)
+
+    newmat.name = old_mat_name
+
+    JSONTool.stop_caching()
+
+    if len(errorMessages) > 0:
+        show_message("\n".join(errorMessages))
 
 def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmats,multimesh=False):
     failedon = []
@@ -305,6 +357,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
     for name in names:
 
         bpy.data.meshes[name].materials.clear()
+        # we're not getting the materials from the json, but from the glTF importer data
         extras = gltf_importer.data.meshes[counter].extras
 
         # morphtargets don't have material names. Just use all of them.
@@ -319,6 +372,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
             materialNames = extras["materialNames"]
 
         # remove duplicate material names (why does "extras" end up with 10k "decals" entries when I import the maimai?)
+        # Sim - because of a bug in wkit I'd assume mana
         materialNames = list(dict.fromkeys(materialNames))
 
         # Kwek: I also found that other material hiccups will cause the Collection to fail
