@@ -511,10 +511,12 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             obj_copy=obj.copy()
                             obj_copy.data = obj.data.copy()
                             if obj_copy.type == 'MESH':
-                                mat_name = json_apps.get(app)[idx]
-                                if mat_name and mat_name in bpy.data.materials:
-                                    obj_copy.data.materials.clear()
-                                    obj_copy.data.materials.append(bpy.data.materials[mat_name])
+                                if app in json_apps and idx < len(json_apps[app]):
+                                    # Assign the material from the json_apps if it exists
+                                    mat_name = json_apps.get(app)[idx]
+                                    if mat_name and mat_name in bpy.data.materials:
+                                        obj_copy.data.materials.clear()
+                                        obj_copy.data.materials.append(bpy.data.materials[mat_name])
                             new_coll.objects.link(obj_copy)                    
                     coll_scene.children.unlink(move_coll)
                 except:
@@ -576,6 +578,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
             #   continue
             data = e['Data']
             ntype = data['$type']
+            meshAppearance='default'
+            if 'meshAppearance' in data.keys():
+                meshAppearance = data['meshAppearance']['$value'] # Need to actually use this
             if  (limittypes and ntype in import_types) or limittypes==False: #or type=='worldCableMeshNode': # can add a filter for dev here
                 match ntype:
                     case 'worldAISpotNode':
@@ -1041,9 +1046,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             meshname = data['meshRef']['DepotPath']['$value'].replace('\\', os.sep)
                         if meshname:
                             #print('Mesh name is - ',meshname, e['HandleId'])
-                            meshAppearance='default'
-                            if 'meshAppearance' in data.keys():
-                                meshAppearance = data['meshAppearance']['$value'] # Need to actually use this
+                            
                             
                             if(meshname != 0):
                                         #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
@@ -1129,9 +1132,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 #print('Mesh name is - ',meshname, e['HandleId'])
                                 if(meshname != 0):
                                             #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
-                                            groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
-                                            while len(groupname) > 63:
-                                                groupname = groupname[:-1]
+                                            groupname = os.path.splitext(os.path.split(meshname)[-1])[0]+'@'+meshAppearance
                                             group=Masters.children.get(groupname)
                                             if (group):
                                                 NDI_Coll_name = 'wIDMn'+str(inst['nodeDataIndex'])+'_'+groupname
