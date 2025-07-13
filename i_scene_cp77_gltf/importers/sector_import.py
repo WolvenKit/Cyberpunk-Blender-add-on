@@ -500,13 +500,24 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                     move_coll['meshpath']=m
                     coll_target.children.link(move_coll)
                     for app in apps:
-                        new_coll=move_coll.copy()
-                        new_coll.name=groupname+'@'+app
-                        new_coll['appearance']=app                        
+                        # Create a completely new collection for this appearance
+                        new_coll = bpy.data.collections.new(groupname + '@' + app)
                         coll_target.children.link(new_coll)
-                        for obj in move_coll.objects:
+                        new_coll['meshpath']=m
+                        # Set the appearance property
+                        json_apps= None
+                        json_apps =  json.loads(move_coll['json_apps'])
+                        new_coll['appearance'] = app
+                        for idx,obj in enumerate(move_coll.objects):
                             obj_copy=obj.copy()
                             obj_copy.data = obj.data.copy()
+                            if obj_copy.type == 'MESH':
+                                if json_apps and app in json_apps and idx < len(json_apps[app]):
+                                    # Assign the material from the json_apps if it exists
+                                    mat_name = json_apps.get(app)[idx]
+                                    if mat_name and mat_name in bpy.data.materials:
+                                        obj_copy.data.materials.clear()
+                                        obj_copy.data.materials.append(bpy.data.materials[mat_name])
                             new_coll.objects.link(obj_copy)                    
                     coll_scene.children.unlink(move_coll)
                 except:
@@ -568,6 +579,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
             #   continue
             data = e['Data']
             ntype = data['$type']
+            meshAppearance='default'
+            if 'meshAppearance' in data.keys():
+                meshAppearance = data['meshAppearance']['$value'] # Need to actually use this
             if  (limittypes and ntype in import_types) or limittypes==False: #or type=='worldCableMeshNode': # can add a filter for dev here
                 match ntype:
                     case 'worldAISpotNode':
@@ -1033,9 +1047,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             meshname = data['meshRef']['DepotPath']['$value'].replace('\\', os.sep)
                         if meshname:
                             #print('Mesh name is - ',meshname, e['HandleId'])
-                            meshAppearance='default'
-                            if 'meshAppearance' in data.keys():
-                                meshAppearance = data['meshAppearance']['$value'] # Need to actually use this
+                            
                             
                             if(meshname != 0):
                                         #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
@@ -1121,9 +1133,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 #print('Mesh name is - ',meshname, e['HandleId'])
                                 if(meshname != 0):
                                             #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
-                                            groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
-                                            while len(groupname) > 63:
-                                                groupname = groupname[:-1]
+                                            groupname = os.path.splitext(os.path.split(meshname)[-1])[0]+'@'+meshAppearance
                                             group=Masters.children.get(groupname)
                                             if (group):
                                                 NDI_Coll_name = 'wIDMn'+str(inst['nodeDataIndex'])+'_'+groupname
