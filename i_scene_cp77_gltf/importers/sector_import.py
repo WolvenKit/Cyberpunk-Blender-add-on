@@ -66,6 +66,17 @@ def assign_custom_properties(obj, data, sectorName, i, **kwargs ):
     for key, value in kwargs.items():
         obj[key] = value
 
+# Get the group name for the mesh based on its name and appearance
+# group, groupname = get_group(meshname,meshAppearance)
+def get_group(meshname,meshAppearance,Masters):
+    if meshname[-5:] == '.mesh':
+        groupname = os.path.splitext(os.path.split(meshname)[-1])[0]+'@'+meshAppearance
+    else:
+        groupname = os.path.basename(meshname)+'@'+meshAppearance
+    while len(groupname) > 63:
+        groupname = groupname[:-1]
+    group=Masters.children.get(groupname)
+    return group, groupname 
 
 def find_debugName(obj):
     debugName=None
@@ -718,11 +729,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             coll_scene.objects.link(curve_obj)
                             curvelength=get_curve_length(curve_obj)
 
-                            groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
-
-                            while len(groupname) > 63:
-                                groupname = groupname[:-1]
-                            group=Masters.children.get(groupname)
+                            group, groupname = get_group(meshname,meshAppearance,Masters)
                             if (group):
                                 new=bpy.data.collections.new(groupname)
                                 Sector_coll.children.link(new)
@@ -770,10 +777,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             start=data['worldTransformsBuffer']['startIndex']
                             if(meshname != 0):
                                 #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
-                                groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
-                                while len(groupname) > 63:
-                                    groupname = groupname[:-1]
-                                group=Masters.children.get(groupname)
+                                group, groupname = get_group(meshname,meshAppearance,Masters)
                                 if (group):
                                     #print('Group found for ',groupname)
                                     NDI_Coll_name = 'NDI'+str(inst['nodeDataIndex'])+'_'+groupname
@@ -837,10 +841,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 InstCount=data['populationSpanInfo']['stancesCount']
                                 if(meshname != 0):
                                     #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
-                                    groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
-                                    while len(groupname) > 63:
-                                        groupname = groupname[:-1]
-                                    group=Masters.children.get(groupname)
+                                    group, groupname = get_group(meshname,meshAppearance,Masters)
                                     if (group):
                                         #print('Group found for ',groupname)
                                         WFI_Coll_name = 'WFI_'+str(inst['nodeDataIndex'])+'_'+groupname
@@ -1054,13 +1055,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             
                             if(meshname != 0):
                                         #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
-                                        if meshname[-5:] == '.mesh':
-                                            groupname = os.path.splitext(os.path.split(meshname)[-1])[0]+'@'+meshAppearance
-                                        else:
-                                            groupname = os.path.basename(meshname)+'@'+meshAppearance
-                                        while len(groupname) > 63:
-                                            groupname = groupname[:-1]
-                                        group=Masters.children.get(groupname)
+                                        group, groupname = get_group(meshname,meshAppearance,Masters)
                                         if (group):
                                             #print('Group found for ',groupname)
                                             if ntype=='worldRotatingMeshNode':
