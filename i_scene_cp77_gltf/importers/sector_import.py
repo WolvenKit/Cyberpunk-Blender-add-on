@@ -499,6 +499,15 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                     move_coll= coll_scene.children.get( objs[0].users_collection[0].name )
                     move_coll['meshpath']=m
                     coll_target.children.link(move_coll)
+                    for app in apps:
+                        new_coll=move_coll.copy()
+                        new_coll.name=groupname+'@'+app
+                        new_coll['appearance']=app                        
+                        coll_target.children.link(new_coll)
+                        for obj in move_coll.objects:
+                            obj_copy=obj.copy()
+                            obj_copy.data = obj.data.copy()
+                            new_coll.objects.link(obj_copy)                    
                     coll_scene.children.unlink(move_coll)
                 except:
                     print('failed on ',os.path.basename(meshpath))                    
@@ -693,6 +702,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             curvelength=get_curve_length(curve_obj)
 
                             groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
+
                             while len(groupname) > 63:
                                 groupname = groupname[:-1]
                             group=Masters.children.get(groupname)
@@ -1026,9 +1036,10 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             meshAppearance='default'
                             if 'meshAppearance' in data.keys():
                                 meshAppearance = data['meshAppearance']['$value'] # Need to actually use this
+                            
                             if(meshname != 0):
                                         #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
-                                        groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
+                                        groupname = os.path.splitext(os.path.split(meshname)[-1])[0]+'@'+meshAppearance
                                         while len(groupname) > 63:
                                             groupname = groupname[:-1]
                                         group=Masters.children.get(groupname)

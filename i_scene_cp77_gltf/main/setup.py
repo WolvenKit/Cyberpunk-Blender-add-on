@@ -48,6 +48,7 @@ class MaterialBuilder:
             verbose=True
 
             bpyMat = bpy.data.materials.new(rawMat["Name"])
+            bpyMat['MeshPath'] = self.MeshPath
             bpyMat['DepotPath'] = self.BasePath
             bpyMat['ProjPath']= self.ProjPath
             bpyMat['MaterialTemplate'] = rawMat["MaterialTemplate"]
