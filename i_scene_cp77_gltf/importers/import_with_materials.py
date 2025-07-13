@@ -227,9 +227,14 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         validmats={}
         # fix the app names as for some reason they have their index added on the end.
         if len(json_apps) > 0:
+            
             appkeys=[k for k in json_apps.keys()]
             for i,k in enumerate(appkeys):
                 json_apps[k[:-1*len(str(i))]]=json_apps.pop(k)
+            
+            # save the json_apps to the collection so that we can use it later
+            collection['json_apps']=json.dumps(json_apps)
+
             #appearances = ({'name':'short_hair'},{'name':'02_ca_limestone'},{'name':'ml_plastic_doll'},{'name':'03_ca_senna'})
             #if appearances defined populate valid mats with the mats for them, otherwise populate with everything used.
             if len(appearances)>0 and 'ALL' not in appearances:
@@ -352,6 +357,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
     for name in names:
 
         bpy.data.meshes[name].materials.clear()
+        # we're not getting the materials from the json, but from the glTF importer data
         extras = gltf_importer.data.meshes[counter].extras
 
         # morphtargets don't have material names. Just use all of them.
@@ -366,6 +372,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
             materialNames = extras["materialNames"]
 
         # remove duplicate material names (why does "extras" end up with 10k "decals" entries when I import the maimai?)
+        # Sim - because of a bug in wkit I'd assume mana
         materialNames = list(dict.fromkeys(materialNames))
 
         # Kwek: I also found that other material hiccups will cause the Collection to fail
