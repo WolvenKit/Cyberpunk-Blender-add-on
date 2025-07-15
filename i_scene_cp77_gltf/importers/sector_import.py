@@ -491,7 +491,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                     apps.append(meshApp['$value'])
             #if len(apps)>1:
             #    print(len(apps))
-            impapps=','.join(apps)
+            #impapps=','.join(apps)
             #print(os.path.join(path, m[:-4]+'glb'),impapps)
             if m[-13:]=='physicalscene' or m[-6:]=='w2mesh':
                 meshpath=os.path.join(path, m+'.glb').replace('\\', os.sep)
@@ -506,7 +506,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
             if groupname not in Masters.children.keys() and os.path.exists(meshpath):
                 try:
                     JSONTool.start_caching()
-                    CP77GLBimport( with_materials=with_mats,remap_depot= props.remap_depot, filepath=meshpath, appearances=impapps,scripting=True)
+                    CP77GLBimport( with_materials=with_mats,remap_depot= props.remap_depot, filepath=meshpath, appearances=apps,scripting=True)
                     JSONTool.stop_caching()
                     #bpy.ops.io_scene_gltf.cp77(with_mats, filepath=meshpath, appearances=impapps,scripting=True)
                     objs = C.selected_objects
@@ -529,9 +529,11 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 if json_apps and app in json_apps and idx < len(json_apps[app]):
                                     # Assign the material from the json_apps if it exists
                                     mat_name = json_apps.get(app)[idx]
-                                    if mat_name and mat_name in bpy.data.materials:
-                                        obj_copy.data.materials.clear()
-                                        obj_copy.data.materials.append(bpy.data.materials[mat_name])
+                                    #if mat_name and mat_name in bpy.data.materials:
+                                    for ii in range(len(obj_copy.data.materials)-1,-1,-1):
+                                        mat=obj_copy.data.materials.keys()[ii]
+                                        if mat.split('.')[0]!=mat_name:
+                                            obj_copy.data.materials.pop(index=ii)
                             new_coll.objects.link(obj_copy)                    
                     coll_scene.children.unlink(move_coll)
                 except:
@@ -1448,7 +1450,6 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                 nextpoint.handle_right = righthandlepos
                 # Set the points to be the same
                 nextpoint.co=endpoint.co
-
     print(f"Imported Sectors from : {wkit_proj_name} in {time.time() - start_time}")
     print('')
     print('-------------------- Finished Importing Cyberpunk 2077 Streaming Sectors --------------------')

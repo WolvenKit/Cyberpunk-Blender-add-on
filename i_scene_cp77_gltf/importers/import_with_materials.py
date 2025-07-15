@@ -82,7 +82,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
             print('\n-------------------- Beginning Cyberpunk Model Import --------------------')
             if with_materials==True:
                 print(f"Importing: {glbname} with materials")
-                print(f"Appearances to Import: {(', '.join(appearances))}")
+                print(f"Appearances to Import: ",appearances)
             else:
                 print(f"Importing: {glbname}")
     # prevent crash if no directory supplied when using filepath
