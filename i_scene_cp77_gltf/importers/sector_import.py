@@ -313,13 +313,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
     # Set this to true to limit import to the types listed in the import_types list.
     limittypes=False
     import_types=None
-    import_types=['worldStaticSoundEmitterNode','worldAISpotNode',
-    'worldStaticParticleNode',
-    'worldEffectNode',
-    'worldPopulationSpawnerNode',
-    'worldClothMeshNode',
-    'worldRotatingMeshNode',
-    'worldCollisionNode'
+    import_types=['worldEntityNode'
     ]
     wkit_proj_name=os.path.basename(filepath)
     # Enter the path to your projects source\raw\base folder below, needs double slashes between folder names.
@@ -619,9 +613,12 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
 
                     case 'worldEntityNode' | 'worldDeviceNode':
                         #print('worldEntityNode',i)
+                        
                         app=data['appearanceName']["$value"]
                         entpath=os.path.join(path,data['entityTemplate']['DepotPath']['$value']).replace('\\', os.sep)+'.json'
                         ent_groupname=os.path.basename(entpath).split('.')[0]+'_'+app
+                        if 'door' in ent_groupname:
+                            print('Door entity found, pausing')
                         while len(ent_groupname) > 63:
                             ent_groupname = ent_groupname[:-1]
                         imported=False
@@ -657,6 +654,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                     new['ent_rot']=rot.to_euler('XYZ')
                                     new['ent_pos']=pos
                                     inst_trans_mat=Matrix.LocRotScale(pos,rot,scale)
+                                    print('Entity transform matrix:', inst_trans_mat)
                                     for child in group.children:
                                         newchild=bpy.data.collections.new(child.name)
                                         new.children.link(newchild)
@@ -664,9 +662,18 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                             obj=old_obj.copy()
                                             obj.color = (0.567942, 0.0247339, 0.600028, 1)
                                             newchild.objects.link(obj)
-                                            obj.matrix_local=  inst_trans_mat @ obj.matrix_local
+                                            print(obj.name, 'applying transform')
+                                            print("Before:", obj.matrix_local)
+                                            if obj.parent:
+                                                # Apply in local space relative to parent
+                                                obj.matrix_local = inst_trans_mat @ obj.matrix_local
+                                            else:
+                                                # No parent, apply in world space
+                                                obj.matrix_world = inst_trans_mat @ obj.matrix_world
+                                            print("After:", obj.matrix_local)
                                             if 'Armature' in obj.name:
                                                 obj.hide_set(True)
+                                        bpy.context.view_layer.update()
                                     for old_obj in group.objects:
                                         obj=old_obj.copy()
                                         obj.color = (0.567942, 0.0247339, 0.600028, 1)
