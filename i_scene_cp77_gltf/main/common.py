@@ -10,6 +10,7 @@ import bmesh
 import inspect
 from mathutils import Vector
 import json
+from typing import Literal, get_args
 
 def load_zip(path):
     with zipfile.ZipFile(path, "r") as z:
@@ -687,6 +688,7 @@ def createVecLerpGroup():
 def show_message(message):
     bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=message)
 
+
 def createHash12Group():
     if 'hash12' in bpy.data.node_groups.keys():
         return bpy.data.node_groups['hash12']
@@ -762,3 +764,16 @@ def update_presets_items():
     presets = get_color_presets()
     items = [(name, name, "") for name in presets.keys()]
     return items
+
+
+_TARGET_TYPES = Literal["MESH", "ARMATURE", "ALL"]
+def get_collection_children(target_collection_name, target_type:_TARGET_TYPES = "MESH"):
+    options = get_args(_TARGET_TYPES)
+    assert target_type in options, f"'{target_type}' is not in {options}"
+
+    collection = bpy.data.collections.get(target_collection_name)
+    if collection is None:
+        return None
+
+    selected_children = [obj for obj in collection.objects if target_type == "ALL" or obj.type == target_type]
+    return selected_children
