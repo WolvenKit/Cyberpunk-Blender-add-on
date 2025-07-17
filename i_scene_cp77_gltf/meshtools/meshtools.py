@@ -345,6 +345,62 @@ def autofitter(context, refitter, addon, target_body_path, useAddon, addon_targe
         applyRefitter(mesh)
             # Create a new lattice object
 
+def add_garment_support(context, target_collection_name):
+    selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
+    target_collection = bpy.data.collections.get(target_collection_name)
+
+    if not selected_meshes or len(selected_meshes) == 0:
+        show_message("No objects selected!")
+        return {'CANCELLED'}
+
+    if not target_collection:
+        show_message(f"Target collection '{target_collection_name}' not found.")
+        return {'CANCELLED'}
+
+    target_mesh, *_ = [obj for obj in target_collection.objects if obj.type == 'MESH']
+
+    if not target_mesh:
+        show_message(f"Target collection '{target_collection_name}' does not contain any meshes.")
+        return {'CANCELLED'}
+
+    current_mode = context.mode
+
+    try:
+        # Remember current mode and switch to OBJECT mode
+        if current_mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+        for obj in selected_meshes:
+            # Remove existing 'GarmentSupport' shape key if it exists
+            if obj.data.shape_keys:
+                for shape_key in reversed(obj.data.shape_keys.key_blocks):
+                    obj.shape_key_remove(shape_key)
+
+            # Add shrinkwrap modifier
+            shrinkwrap = obj.modifiers.new(name="GarmentSupport", type='SHRINKWRAP')
+            shrinkwrap.target = target_mesh
+            shrinkwrap.wrap_method = 'NEAREST_SURFACEPOINT'
+            shrinkwrap.wrap_mode = 'ON_SURFACE'  # Note: 'Snap Mode' is actually 'wrap_mode' in API
+            shrinkwrap.offset = 0.001
+
+            # Apply modifier as shape key
+            bpy.context.view_layer.objects.active = obj  # Set active object
+            bpy.ops.object.modifier_apply_as_shapekey(modifier=shrinkwrap.name)
+
+    except:
+        # delete the modifier if an error occurred
+        if "GarmentSupport" in obj.modifiers:
+            obj.modifiers.remove(obj.modifiers["GarmentSupport"])
+        show_message("An error occurred while creating garment support. Please check the console for details.")
+        return {'CANCELLED'}
+    finally:
+        # Switch back to original mode
+        if  context.mode != current_mode:
+            bpy.ops.object.mode_set(mode=current_mode)
+
+    return {'FINISHED'}
+
+
 # re-use previous lattice, or add a new one if there isn't one
 def add_lattice(target_body_path, r_c, fbx_rot, target_body_name):
     for refitter in r_c.objects:

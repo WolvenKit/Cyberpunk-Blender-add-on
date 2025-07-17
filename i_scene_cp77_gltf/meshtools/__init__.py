@@ -45,6 +45,7 @@ class CP77_PT_MeshTools(Panel):
                 else:
                     col.operator("cp77.uv_checker", text="Apply UV Checker")
                 col.operator("cp77.trans_weights", text="Weight Transfer Tool")
+                col.operator("cp77.garment_support", text="Create Garment Support")
 
                 box = layout.box()
                 box.label(text="Mesh Cleanup", icon_value=get_icon("TRAUMA"))
@@ -132,6 +133,31 @@ class CP77AddVertexcolorPreset(Operator):
         split = row.split(factor=0.3,align=True)
         split.label(text="Preset Name:")
         split.prop(self, "preset_name", text="")
+
+class CP77GarmentSupport(Operator):
+    bl_idname = 'cp77.garment_support'
+    bl_label = "Cyberpunk 2077 Garment Support Tool"
+    bl_description = "Create a garment support shapekey from a selection"
+    bl_options = {'REGISTER', 'UNDO'}
+    mesh_target: StringProperty(name="Mesh Target")
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        props = context.scene.cp77_panel_props
+        # Call the trans_weights function with the provided arguments
+        result = add_garment_support(context, props.mesh_target)
+        return {"FINISHED"}
+
+    def draw(self,context):
+        props = context.scene.cp77_panel_props
+        layout = self.layout
+        row = layout.row(align=True)
+        split = row.split(factor=0.3,align=True)
+        split.label(text="Target Mesh:")
+        split.prop(props, "mesh_target", text="")
+        row = layout.row(align=True)
 
 class CP77WeightTransfer(Operator):
     bl_idname = 'cp77.trans_weights'
