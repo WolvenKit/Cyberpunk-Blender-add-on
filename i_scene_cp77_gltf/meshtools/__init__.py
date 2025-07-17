@@ -5,7 +5,7 @@ from .. exporters import CP77HairProfileExport, mlsetup_export
 from .meshtools import *
 from .verttools import *
 from ..main.bartmoss_functions import *
-from ..main.common import get_classes, get_color_presets, save_presets
+from ..main.common import get_active_collection, get_classes, get_color_presets, get_selected_collection, save_presets
 from bpy.props import (StringProperty, EnumProperty)
 from bpy.types import (Scene, Operator, Panel)
 from ..cyber_props import CP77RefitList
@@ -168,10 +168,24 @@ class CP77WeightTransfer(Operator):
         name="Transfer by Submesh Order",
         description="Because Mana Gets what Mana Wants :D",
         default=False)
+
     bl_options = {'REGISTER', 'UNDO'}
 
-
     def invoke(self, context, event):
+        selected_collection = get_selected_collection()
+        active_collection = get_active_collection()
+
+        if active_collection and selected_collection and active_collection.name == selected_collection.name:
+            active_collection = None
+
+        props = context.scene.cp77_panel_props
+
+        if selected_collection and active_collection:
+            props.mesh_source = selected_collection.name
+            props.mesh_target = active_collection.name
+        elif selected_collection:
+            props.mesh_target = selected_collection.name
+
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
@@ -181,6 +195,7 @@ class CP77WeightTransfer(Operator):
 
     def draw(self,context):
         props = context.scene.cp77_panel_props
+
         layout = self.layout
         row = layout.row(align=True)
         split = row.split(factor=0.3,align=True)

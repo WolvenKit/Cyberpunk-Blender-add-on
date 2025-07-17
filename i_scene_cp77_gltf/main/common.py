@@ -766,6 +766,25 @@ def update_presets_items():
     return items
 
 
+def get_selected_collection():
+    selected_objects = [ obj for obj in bpy.context.selected_objects if obj != bpy.context.active_object ]
+    if len(selected_objects) == 0:
+        selected_objects.append(bpy.context.active_object)
+
+    collections = [coll for coll in bpy.data.collections if any(obj.name in [o.name for o in coll.objects] for obj in selected_objects)]
+    if (collections is not None and len(collections) == 1):
+        return collections[0]
+
+    return None
+
+def get_active_collection():
+
+    collections = [coll for coll in bpy.data.collections if bpy.context.active_object.name in [o.name for o in coll.objects]]
+    if (collections is not None and len(collections) == 1):
+        return collections[0]
+
+    return None
+
 _TARGET_TYPES = Literal["MESH", "ARMATURE", "ALL"]
 def get_collection_children(target_collection_name, target_type:_TARGET_TYPES = "MESH"):
     options = get_args(_TARGET_TYPES)
