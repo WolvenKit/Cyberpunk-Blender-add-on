@@ -1,9 +1,10 @@
 import bpy
 import json
 import os
+
 from .verttools import *
 from ..cyber_props import *
-from ..main.common import loc, show_message
+from ..main.common import loc, show_message, get_collection_children
 from ..main.bartmoss_functions import setActiveShapeKey, getShapeKeyNames, getModNames
 from ..jsontool import JSONTool
 def CP77SubPrep(self, context, smooth_factor, merge_distance):
@@ -346,21 +347,23 @@ def autofitter(context, refitter, addon, target_body_path, useAddon, addon_targe
             # Create a new lattice object
 
 def add_garment_support(context, target_collection_name):
-    selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
-    target_collection = bpy.data.collections.get(target_collection_name)
-
-    if not selected_meshes or len(selected_meshes) == 0:
-        show_message("No objects selected!")
-        return {'CANCELLED'}
-
-    if not target_collection:
+    target_collection_children = get_collection_children(target_collection_name, "MESH")
+    if not target_collection_children:
         show_message(f"Target collection '{target_collection_name}' not found.")
         return {'CANCELLED'}
+    if len(target_collection_children) == 0:
+        show_message(f"No meshes found in collection '{target_collection_name}'.")
+        return {'CANCELLED'}
+    if len(target_collection_children) > 1:
+        show_message(f"Target collection '{target_collection_name}' contains multiple meshes. Please join them into a single mesh before proceeding.")
+        return {'CANCELLED'}
 
-    target_mesh, *_ = [obj for obj in target_collection.objects if obj.type == 'MESH']
+    target_mesh = target_collection_children[0]
 
-    if not target_mesh:
-        show_message(f"Target collection '{target_collection_name}' does not contain any meshes.")
+    selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH' and obj != target_mesh]
+
+    if not selected_meshes or len(selected_meshes) == 0:
+        show_message("No objects selected, or only the target mesh selected!")
         return {'CANCELLED'}
 
     current_mode = context.mode
@@ -387,11 +390,11 @@ def add_garment_support(context, target_collection_name):
             bpy.context.view_layer.objects.active = obj  # Set active object
             bpy.ops.object.modifier_apply_as_shapekey(modifier=shrinkwrap.name)
 
-    except:
+    except Exception as e:
         # delete the modifier if an error occurred
         if "GarmentSupport" in obj.modifiers:
             obj.modifiers.remove(obj.modifiers["GarmentSupport"])
-        show_message("An error occurred while creating garment support. Please check the console for details.")
+        show_message("An error occurred while creating garment support: " + str(e))
         return {'CANCELLED'}
     finally:
         # Switch back to original mode

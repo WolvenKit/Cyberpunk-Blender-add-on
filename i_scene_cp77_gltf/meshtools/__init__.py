@@ -145,10 +145,7 @@ class CP77GarmentSupport(Operator):
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
-        props = context.scene.cp77_panel_props
-        # Call the trans_weights function with the provided arguments
-        result = add_garment_support(context, props.mesh_target)
-        return {"FINISHED"}
+        return add_garment_support(context, context.scene.cp77_panel_props.mesh_target)
 
     def draw(self,context):
         props = context.scene.cp77_panel_props
