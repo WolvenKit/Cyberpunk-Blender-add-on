@@ -66,16 +66,27 @@ def assign_custom_properties(obj, data, sectorName, i, **kwargs ):
     for key, value in kwargs.items():
         obj[key] = value
 
+def get_groupname(meshname, meshAppearance):
+    groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
+    if 'intersection' in meshname:
+        groupname = os.path.dirname(meshname).split(os.sep)[-1] + '_' + groupname
+    if len(meshAppearance)>0:
+        groupname += '@' + meshAppearance
+    while len(groupname) > 63:
+        groupname = groupname[:-1]
+    return groupname
+
 # Get the group name for the mesh based on its name and appearance
 # group, groupname = get_group(meshname,meshAppearance)
 def get_group(meshname,meshAppearance,Masters):
-    if meshname[-5:] == '.mesh':
-        groupname = os.path.splitext(os.path.split(meshname)[-1])[0]+'@'+meshAppearance
+    groups= [g for g in Masters.children if g['meshpath']==meshname and g['appearance']==meshAppearance]
+    if len(groups)>0:
+        group=groups[0]
+        groupname = group.name
     else:
-        groupname = os.path.basename(meshname)+'@'+meshAppearance
-    while len(groupname) > 63:
-        groupname = groupname[:-1]
-    group=Masters.children.get(groupname)
+        groupname = get_groupname(meshname, meshAppearance)
+        group = Masters.children.get(groupname)
+        
     return group, groupname 
 
 def find_debugName(obj):
@@ -383,6 +394,8 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                         |  'worldTerrainMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode'| 'worldDynamicMeshNode'\
                    | 'worldMeshNode' | 'worldStaticOccluderMeshNode' |'worldDecorationMeshNode' | 'worldFoliageNode':
                         if isinstance(e, dict) and 'mesh' in data.keys() and isinstance(data['mesh'], dict) and'DepotPath' in data['mesh'].keys():
+                            #if ntype=='worldBendedMeshNode':
+                            #    print('worldBendedMeshNode',i)
                             meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                             #print('Mesh name is - ',meshname, e['HandleId'])
                             if(meshname != 0):
@@ -493,9 +506,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
             else:
                 meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb').replace('\\', os.sep)
             print(meshpath)
-            groupname = os.path.splitext(os.path.split(meshpath)[-1])[0]
-            while len(groupname) > 63:
-                groupname = groupname[:-1]
+            groupname = get_groupname(meshpath, '')
             
             if groupname not in Masters.children.keys() and os.path.exists(meshpath):
                 try:
@@ -504,18 +515,21 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                     JSONTool.stop_caching()
                     #bpy.ops.io_scene_gltf.cp77(with_mats, filepath=meshpath, appearances=impapps,scripting=True)
                     objs = C.selected_objects
+                    if objs[0].users_collection[0].name!= groupname:
+                        objs[0].users_collection[0].name= groupname
                     move_coll= coll_scene.children.get( objs[0].users_collection[0].name )
                     move_coll['meshpath']=m
-                    coll_target.children.link(move_coll)
+                    move_coll['appearance']='default'
+                    Masters.children.link(move_coll)
                     for app in apps:
                         # Create a completely new collection for this appearance
                         new_coll = bpy.data.collections.new(groupname + '@' + app)
-                        coll_target.children.link(new_coll)
+                        Masters.children.link(new_coll)
                         new_coll['meshpath']=m
+                        new_coll['appearance'] = app
                         # Set the appearance property
                         json_apps= None
                         json_apps =  json.loads(move_coll['json_apps'])
-                        new_coll['appearance'] = app
                         for idx,obj in enumerate(move_coll.objects):
                             obj_copy=obj.copy()
                             obj_copy.data = obj.data.copy()
@@ -523,11 +537,16 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 if json_apps and app in json_apps and idx < len(json_apps[app]):
                                     # Assign the material from the json_apps if it exists
                                     mat_name = json_apps.get(app)[idx]
+                                    if 'sidewalk' in m:
+                                        mat_name = 'sidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalk'
+                                        #print('Its too damn long', mat_name)
+                                        #print(obj_copy.data.materials.keys())
                                     #if mat_name and mat_name in bpy.data.materials:
-                                    for ii in range(len(obj_copy.data.materials)-1,-1,-1):
-                                        mat=obj_copy.data.materials.keys()[ii]
-                                        if mat.split('.')[0]!=mat_name:
-                                            obj_copy.data.materials.pop(index=ii)
+                                    if len(mat_name)<63:    
+                                        for ii in range(len(obj_copy.data.materials)-1,-1,-1):
+                                            mat=obj_copy.data.materials.keys()[ii]
+                                            if mat.split('.')[0]!=mat_name:
+                                                obj_copy.data.materials.pop(index=ii)
                             new_coll.objects.link(obj_copy)                    
                     coll_scene.children.unlink(move_coll)
                 except:
@@ -643,6 +662,8 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 group=move_coll
                                 if (group):
                                     groupname=move_coll.name
+                                    move_coll['meshpath']='fake'
+                                    move_coll['appearance']='fake'
                                     #print('Group found for ',groupname)
                                     new=bpy.data.collections.new(groupname)
                                     Sector_coll.children.link(new)

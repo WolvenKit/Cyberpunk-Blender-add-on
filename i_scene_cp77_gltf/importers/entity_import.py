@@ -65,7 +65,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
 
     if len(ent_applist) == 0:
         print(f"No appearances found in entity file {ent_name}. Imported objects may be incomplete or missing.")
-        show_message("No appearances found in entity file. Imported objects may be incomplete or missing. "+ent_name)
+        #show_message("No appearances found in entity file. Imported objects may be incomplete or missing. "+ent_name)
+        # this just isnt true, loads of stuff doesnt have appaearances, and the popup is annoying
 
     #print(ent_applist)
     #presto_stash.append(ent_components)
@@ -610,6 +611,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 move_coll= coll_scene.children.get( objs[0].users_collection[0].name )
                                 move_coll['depotPath']=c['mesh']['DepotPath']['$value']
                                 move_coll['meshAppearance']=meshApp
+                                move_coll['meshpath']="its an entity"
                                 if bindname:
                                     move_coll['bindname']=bindname
                                 ent_coll.children.link(move_coll)
