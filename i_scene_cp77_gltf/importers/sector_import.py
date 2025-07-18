@@ -20,6 +20,7 @@ import glob
 import os
 import bpy
 import math
+import traceback
 from mathutils import Vector, Matrix , Quaternion
 from pathlib import Path
 import time
@@ -30,6 +31,8 @@ from ..collisiontools.collisions import set_collider_props
 from .collision_mesh_import import CP77CollisionTriangleMeshJSONimport_by_hashes
 from operator import add
 import bmesh
+from .entity_import import *
+from .import_with_materials import *
 VERBOSE=True
 scale_factor=1
 
@@ -63,6 +66,28 @@ def assign_custom_properties(obj, data, sectorName, i, **kwargs ):
     for key, value in kwargs.items():
         obj[key] = value
 
+def get_groupname(meshname, meshAppearance):
+    groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
+    if 'intersection' in meshname:
+        groupname = os.path.dirname(meshname).split(os.sep)[-1] + '_' + groupname
+    if len(meshAppearance)>0:
+        groupname += '@' + meshAppearance
+    while len(groupname) > 63:
+        groupname = groupname[:-1]
+    return groupname
+
+# Get the group name for the mesh based on its name and appearance
+# group, groupname = get_group(meshname,meshAppearance)
+def get_group(meshname,meshAppearance,Masters):
+    groups= [g for g in Masters.children if g['meshpath']==meshname and g['appearance']==meshAppearance]
+    if len(groups)>0:
+        group=groups[0]
+        groupname = group.name
+    else:
+        groupname = get_groupname(meshname, meshAppearance)
+        group = Masters.children.get(groupname)
+        
+    return group, groupname 
 
 def find_debugName(obj):
     debugName=None
@@ -173,15 +198,17 @@ def get_pos_whole(inst):
         pos[2] = inst['position']['Z']
     return pos
 
-def add_to_list(mesh, dict):
-     basename=mesh['basename']
-     if basename in dict.keys():
-         if mesh['appearance'] not in dict[basename]['apps']:
-             dict[basename]['apps'].append(mesh['appearance'])
-         if mesh['sector'] not in dict[basename]['sectors']:
+# add_to_list(m , meshes_w_apps)
+def add_to_list(basename, meshes, dict):
+     mesh = meshes[basename]
+     if basename in dict:
+        for app in mesh['appearances']:
+            if app not in dict[basename]['apps']:
+                dict[basename]['apps'].append(mesh['appearance'])
+        if mesh['sector'] not in dict[basename]['sectors']:
             dict[basename]['sectors'].append(mesh['sector'])
      else:
-         dict[basename]={'apps':[mesh['appearance']],'sectors':[mesh['sector']]}
+        dict[basename]={'apps':[mesh['appearances']],'sectors':[mesh['sector']]}
 
 
 def get_pos(inst):
@@ -297,14 +324,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
     # Set this to true to limit import to the types listed in the import_types list.
     limittypes=False
     import_types=None
-    import_types=['worldStaticSoundEmitterNode','worldAISpotNode',
-    'worldStaticParticleNode',
-    'worldEffectNode',
-    'worldPopulationSpawnerNode',
-    'worldClothMeshNode',
-    'worldRotatingMeshNode',
-    'worldCollisionNode'
+    import_types=['worldEntityNode'
     ]
+    wkit_proj_name=os.path.basename(filepath)
     # Enter the path to your projects source\raw\base folder below, needs double slashes between folder names.
     path = os.path.join( os.path.dirname(filepath),'source','raw')
     print('path is ',path)
@@ -319,11 +341,16 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                 for s in a.spaces:
                     if s.type == 'VIEW_3D':
                         s.clip_end = 50000
-     
+    props = bpy.context.scene.cp77_panel_props 
     escaped_path = glob.escape(path)    
     jsonpath = glob.glob(os.path.join(escaped_path, "**", "*.streamingsector.json"), recursive = True)
+    mesh_jsons =  glob.glob(os.path.join(escaped_path,"**","*mesh.json"), recursive = True)
+    anim_files = glob.glob(os.path.join(escaped_path,"**","*anims.glb"), recursive = True)
+    app_path = glob.glob(os.path.join(escaped_path,"**","*.app.json"), recursive = True)
+    rigjsons = glob.glob(os.path.join(escaped_path,"**","*.rig.json"), recursive = True)
+    glbs =  glob.glob(os.path.join(escaped_path,"**","*.glb"), recursive = True)
     path = os.path.join( os.path.dirname(filepath),'source','raw','base')
-    meshes=[]
+    meshes={}
     C = bpy.context
     I_want_to_break_free=False
     # Use object wireframe colors not theme - doesnt work need to find hte viewport as the context doesnt return that for this call
@@ -350,35 +377,58 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                         #print('worldEntityNode',i)
                         meshname = data['entityTemplate']['DepotPath']['$value'].replace('\\', os.sep)
                         if(meshname != 0):
-                            meshes.append({'basename':e['Data']['entityTemplate']['DepotPath']['$value'],'appearance':e['Data']['appearanceName'],'sector':sectorName})
+                            if meshname not in meshes:
+                                meshes[e['Data']['entityTemplate']['DepotPath']['$value']] = {'appearances':[e['Data']['appearanceName']],'sector':sectorName}                        
+                            else:
+                                meshes[e['Data']['entityTemplate']['DepotPath']['$value']]['appearances'].append(e['Data']['appearanceName'])
+                    
                     case 'worldInstancedMeshNode':
                         meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                         if(meshname != 0):
-                            meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
+                            if meshname not in meshes:
+                                meshes[data['mesh']['DepotPath']['$value']] = {'appearances':[e['Data']['meshAppearance']],'sector':sectorName}
+                            else:
+                                meshes[data['mesh']['DepotPath']['$value']]['appearances'].append(e['Data']['meshAppearance'])
+                    
                     case 'worldStaticMeshNode' |'worldRotatingMeshNode'|'worldAdvertisingNode'| 'worldAdvertisementNode' | 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode'  \
-                        |  'worldTerrainMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode'\
+                        |  'worldTerrainMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode'| 'worldDynamicMeshNode'\
                    | 'worldMeshNode' | 'worldStaticOccluderMeshNode' |'worldDecorationMeshNode' | 'worldFoliageNode':
                         if isinstance(e, dict) and 'mesh' in data.keys() and isinstance(data['mesh'], dict) and'DepotPath' in data['mesh'].keys():
+                            #if ntype=='worldBendedMeshNode':
+                            #    print('worldBendedMeshNode',i)
                             meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                             #print('Mesh name is - ',meshname, e['HandleId'])
                             if(meshname != 0):
                                 #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
                                 if 'meshAppearance' in e['Data'].keys():
-                                    meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
+                                    if meshname not in meshes:
+                                        meshes[data['mesh']['DepotPath']['$value']] = {'appearances':[e['Data']['meshAppearance']],'sector':sectorName}
+                                    else:
+                                        meshes[data['mesh']['DepotPath']['$value']]['appearances'].append(e['Data']['meshAppearance'])
                                 else:
-                                    meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':{'$type': 'CName', '$storage': 'string', '$value': 'default'},'sector':sectorName})
+                                    if meshname not in meshes:
+                                        meshes[data['mesh']['DepotPath']['$value']] = {'appearances':[{'$type': 'CName', '$storage': 'string', '$value': 'default'}],'sector':sectorName}
+                                    else:
+                                        meshes[data['mesh']['DepotPath']['$value']]['appearances'].append({'$type': 'CName', '$storage': 'string', '$value': 'default'})
                         elif isinstance(e, dict) and 'meshRef' in data.keys() :
                             meshname = data['meshRef']['DepotPath']['$value'].replace('\\', os.sep)
                             if(meshname != 0):
                                 #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
-                                meshes.append({'basename':data['meshRef']['DepotPath']['$value'] ,'appearance':{'$type': 'CName', '$storage': 'string', '$value': 'default'},'sector':sectorName})
+                                if meshname not in meshes:
+                                    meshes[data['meshRef']['DepotPath']['$value']] = {'appearances':[{'$type': 'CName', '$storage': 'string', '$value': 'default'}],'sector':sectorName}
+                                else:
+                                    meshes[data['meshRef']['DepotPath']['$value']]['appearances'].append({'$type': 'CName', '$storage': 'string', '$value': 'default'})
+                    
                     case 'worldInstancedDestructibleMeshNode':
                         #print('worldInstancedDestructibleMeshNode',i)
                         if isinstance(e, dict) and 'mesh' in data.keys():
                             meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                             #print('Mesh name is - ',meshname, e['HandleId'])
                             if(meshname != 0):
-                                meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
+                                if meshname not in meshes:
+                                    meshes[data['mesh']['DepotPath']['$value']] = {'appearances':[e['Data']['meshAppearance']],'sector':sectorName}
+                                else:
+                                    meshes[data['mesh']['DepotPath']['$value']]['appearances'].append(e['Data']['meshAppearance'])
 
         # Do the proxy nodes after all the others, that way none proxies will be imported first and wont be hidden by the proxy ones
         for i,e in enumerate(nodes):
@@ -393,26 +443,35 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                             if(meshname != 0):
                                 if 'meshAppearance' in e['Data'].keys():
-                                    meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':e['Data']['meshAppearance'],'sector':sectorName})
+                                    if meshname not in meshes:
+                                        meshes[data['mesh']['DepotPath']['$value']] = {'appearances':[e['Data']['meshAppearance']],'sector':sectorName}
+                                    else:
+                                        meshes[data['mesh']['DepotPath']['$value']]['appearances'].append(e['Data']['meshAppearance'])
                                 else:
-                                    meshes.append({'basename':data['mesh']['DepotPath']['$value'] ,'appearance':{'$type': 'CName', '$storage': 'string', '$value': 'default'},'sector':sectorName})
+                                    if meshname not in meshes:
+                                        meshes[data['mesh']['DepotPath']['$value']] = {'appearances':[{'$type': 'CName', '$storage': 'string', '$value': 'default'}],'sector':sectorName}
+                                    else:
+                                        meshes[data['mesh']['DepotPath']['$value']]['appearances'].append({'$type': 'CName', '$storage': 'string', '$value': 'default'})
                         elif isinstance(e, dict) and 'meshRef' in data.keys() :
                             meshname = data['meshRef']['DepotPath']['$value'].replace('\\', os.sep)
                             if(meshname != 0):
-                                meshes.append({'basename':data['meshRef']['DepotPath']['$value'] ,'appearance':{'$type': 'CName', '$storage': 'string', '$value': 'default'},'sector':sectorName})
+                                if meshname not in meshes:
+                                    meshes[data['meshRef']['DepotPath']['$value']]={'appearances':[{'$type': 'CName', '$storage': 'string', '$value': 'default'}],'sector':sectorName}
+                                else:
+                                    meshes[data['meshRef']['DepotPath']['$value']]['appearances'].append({'$type': 'CName', '$storage': 'string', '$value': 'default'})
                     
 
 
-    basenames=[]
+    basenames={}
     for m in meshes:
-         if m['basename'] not in basenames:
-             basenames.append(m['basename'])
+         if m not in basenames:
+             basenames[m]=True
 
     meshes_w_apps={}
 
     for m in meshes:
        if len(m)>0:
-            add_to_list(m , meshes_w_apps)
+            add_to_list(m , meshes, meshes_w_apps)
 
     path = path[:-5]
 
@@ -432,31 +491,70 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
     to_mesh_no=100000
 
     for i,m in enumerate(meshes_w_apps):
-        if i>=from_mesh_no and i<=to_mesh_no and (m[-4:]=='mesh' or m[-13:]=='physicalscene'):
+        if i>=from_mesh_no and i<=to_mesh_no and (m[-4:]=='mesh' or m[-13:]=='physicalscene' or m[-6:]=='w2mesh'):
             apps=[]
-            for meshApp in meshes_w_apps[m]['apps']:
-                apps.append(meshApp['$value'])
+            for meshApp in meshes_w_apps[m]['apps'][0]:
+                if meshApp['$value'] not in apps and meshApp['$value']!='':                   
+                    apps.append(meshApp['$value'])
             #if len(apps)>1:
             #    print(len(apps))
-            impapps=','.join(apps)
+            #impapps=','.join(apps)
             #print(os.path.join(path, m[:-4]+'glb'),impapps)
-
-            meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb').replace('\\', os.sep)
+            if m[-13:]=='physicalscene' or m[-6:]=='w2mesh':
+                meshpath=os.path.join(path, m+'.glb').replace('\\', os.sep)
+                print('not a standard mesh')
+            else:
+                meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb').replace('\\', os.sep)
             print(meshpath)
-            groupname = os.path.splitext(os.path.split(meshpath)[-1])[0]
-            while len(groupname) > 63:
-                groupname = groupname[:-1]
+            groupname = get_groupname(meshpath, '')
             
             if groupname not in Masters.children.keys() and os.path.exists(meshpath):
                 try:
-                    bpy.ops.io_scene_gltf.cp77(with_mats, filepath=meshpath, appearances=impapps,scripting=True)
+                    JSONTool.start_caching()
+                    CP77GLBimport( with_materials=with_mats,remap_depot= props.remap_depot, filepath=meshpath, appearances=apps,scripting=True)
+                    JSONTool.stop_caching()
+                    #bpy.ops.io_scene_gltf.cp77(with_mats, filepath=meshpath, appearances=impapps,scripting=True)
                     objs = C.selected_objects
+                    if objs[0].users_collection[0].name!= groupname:
+                        objs[0].users_collection[0].name= groupname
                     move_coll= coll_scene.children.get( objs[0].users_collection[0].name )
                     move_coll['meshpath']=m
-                    coll_target.children.link(move_coll)
+                    move_coll['appearance']='default'
+                    Masters.children.link(move_coll)
+                    for app in apps:
+                        # Create a completely new collection for this appearance
+                        new_coll = bpy.data.collections.new(groupname + '@' + app)
+                        Masters.children.link(new_coll)
+                        new_coll['meshpath']=m
+                        new_coll['appearance'] = app
+                        # Set the appearance property
+                        json_apps= None
+                        json_apps =  json.loads(move_coll['json_apps'])
+                        for idx,obj in enumerate(move_coll.objects):
+                            obj_copy=obj.copy()
+                            obj_copy.data = obj.data.copy()
+                            if obj_copy.type == 'MESH':
+                                if json_apps and app in json_apps and idx < len(json_apps[app]):
+                                    # Assign the material from the json_apps if it exists
+                                    mat_name = json_apps.get(app)[idx]
+                                    if 'sidewalk' in m:
+                                        mat_name = 'sidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalk'
+                                        #print('Its too damn long', mat_name)
+                                        #print(obj_copy.data.materials.keys())
+                                    if 'station' in groupname:
+                                        print('Pause here')
+                                        print(mat_name, list(obj_copy.data.materials.keys()), mat_name in obj_copy.data.materials.keys())
+                                    #if mat_name and mat_name in bpy.data.materials:
+                                    if len(mat_name)<63:    
+                                        for ii in range(len(obj_copy.data.materials)-1,-1,-1):
+                                            mat=obj_copy.data.materials.keys()[ii]
+                                            if mat.split('.')[0]!=mat_name:
+                                                obj_copy.data.materials.pop(index=ii)
+                            new_coll.objects.link(obj_copy)                    
                     coll_scene.children.unlink(move_coll)
                 except:
-                    print('failed on ',os.path.basename(meshpath))
+                    print('failed on ',os.path.basename(meshpath))                    
+                    print(traceback.print_exc())
             elif not os.path.exists(meshpath):
                 print('Mesh ', meshpath, ' does not exist')
     empty=[]
@@ -471,6 +569,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
     inst_scale =Vector((1,1,1))
     inst_m=Matrix.LocRotScale(inst_pos,inst_rot,inst_scale)
     roads=[]
+    no_sectors=len(jsonpath)
     for fpn,filepath in enumerate(jsonpath):
         projectjson=os.path.join(path,os.path.basename(project)+'.streamingsector.json')
         if filepath==projectjson:
@@ -504,7 +603,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                 Sector_additions_coll=bpy.data.collections.new(sectorName+'_new')
                 coll_scene.children.link(Sector_additions_coll)
 
-        print(fpn, ' Processing ',len(nodes),' nodes for sector', sectorName)
+        print(fpn, ' Processing ',len(nodes),' nodes for sector', sectorName, '(no ', fpn+1, ' of ', no_sectors,')')
         group=''
         for i,e in enumerate(nodes):
 
@@ -512,6 +611,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
             #   continue
             data = e['Data']
             ntype = data['$type']
+            meshAppearance='default'
+            if 'meshAppearance' in data.keys():
+                meshAppearance = data['meshAppearance']['$value'] # Need to actually use this
             if  (limittypes and ntype in import_types) or limittypes==False: #or type=='worldCableMeshNode': # can add a filter for dev here
                 match ntype:
                     case 'worldAISpotNode':
@@ -531,14 +633,14 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             o.rotation_quaternion = get_rot(inst)
                             o.scale = get_scale(inst)
 
-
-
-
                     case 'worldEntityNode' | 'worldDeviceNode':
                         #print('worldEntityNode',i)
+                        
                         app=data['appearanceName']["$value"]
                         entpath=os.path.join(path,data['entityTemplate']['DepotPath']['$value']).replace('\\', os.sep)+'.json'
                         ent_groupname=os.path.basename(entpath).split('.')[0]+'_'+app
+                        if 'door' in ent_groupname:
+                            print('Door entity found, pausing')
                         while len(ent_groupname) > 63:
                             ent_groupname = ent_groupname[:-1]
                         imported=False
@@ -549,7 +651,8 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             try:
                                 #print('Importing ',entpath, ' using app ',app)
                                 incoll='MasterInstances'
-                                bpy.ops.io_scene_gltf.cp77entity(with_mats, filepath=entpath, appearances=app, inColl=incoll)
+                                importEnt(with_mats, filepath=entpath, appearances=[app], inColl=incoll,meshes=glbs,mesh_jsons=mesh_jsons, escaped_path=escaped_path, app_path=app_path,
+                                 anim_files=anim_files, rigjsons=rigjsons)
                                 move_coll=Masters.children.get(ent_groupname)
                                 imported=True
                             except:
@@ -562,6 +665,8 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 group=move_coll
                                 if (group):
                                     groupname=move_coll.name
+                                    move_coll['meshpath']='fake'
+                                    move_coll['appearance']='fake'
                                     #print('Group found for ',groupname)
                                     new=bpy.data.collections.new(groupname)
                                     Sector_coll.children.link(new)
@@ -573,6 +678,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                     new['ent_rot']=rot.to_euler('XYZ')
                                     new['ent_pos']=pos
                                     inst_trans_mat=Matrix.LocRotScale(pos,rot,scale)
+                                    #print('Entity transform matrix:', inst_trans_mat)
                                     for child in group.children:
                                         newchild=bpy.data.collections.new(child.name)
                                         new.children.link(newchild)
@@ -580,9 +686,18 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                             obj=old_obj.copy()
                                             obj.color = (0.567942, 0.0247339, 0.600028, 1)
                                             newchild.objects.link(obj)
-                                            obj.matrix_local=  inst_trans_mat @ obj.matrix_local
+                                            #print(obj.name, 'applying transform')
+                                            #print("Before:", obj.matrix_local)
+                                            if obj.parent:
+                                                # Apply in local space relative to parent
+                                                obj.matrix_local = inst_trans_mat @ obj.matrix_local
+                                            else:
+                                                # No parent, apply in world space
+                                                obj.matrix_world = inst_trans_mat @ obj.matrix_world
+                                            #print("After:", obj.matrix_local)
                                             if 'Armature' in obj.name:
                                                 obj.hide_set(True)
+                                        bpy.context.view_layer.update()
                                     for old_obj in group.objects:
                                         obj=old_obj.copy()
                                         obj.color = (0.567942, 0.0247339, 0.600028, 1)
@@ -647,10 +762,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             coll_scene.objects.link(curve_obj)
                             curvelength=get_curve_length(curve_obj)
 
-                            groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
-                            while len(groupname) > 63:
-                                groupname = groupname[:-1]
-                            group=Masters.children.get(groupname)
+                            group, groupname = get_group(meshname,meshAppearance,Masters)
                             if (group):
                                 new=bpy.data.collections.new(groupname)
                                 Sector_coll.children.link(new)
@@ -698,10 +810,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             start=data['worldTransformsBuffer']['startIndex']
                             if(meshname != 0):
                                 #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
-                                groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
-                                while len(groupname) > 63:
-                                    groupname = groupname[:-1]
-                                group=Masters.children.get(groupname)
+                                group, groupname = get_group(meshname,meshAppearance,Masters)
                                 if (group):
                                     #print('Group found for ',groupname)
                                     NDI_Coll_name = 'NDI'+str(inst['nodeDataIndex'])+'_'+groupname
@@ -748,7 +857,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                             #    print('Location @ 0 for Mesh - ',meshname, ' - ',i,'HandleId - ', e['HandleId'])
 
                             else:
-                                print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
+                                print('Mesh not found in masters - ',meshname, ' - ',i, e['HandleId'])
 
                     case 'worldFoliageNode' :
                         #print('worldFoliageNode')
@@ -765,10 +874,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 InstCount=data['populationSpanInfo']['stancesCount']
                                 if(meshname != 0):
                                     #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
-                                    groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
-                                    while len(groupname) > 63:
-                                        groupname = groupname[:-1]
-                                    group=Masters.children.get(groupname)
+                                    group, groupname = get_group(meshname,meshAppearance,Masters)
                                     if (group):
                                         #print('Group found for ',groupname)
                                         WFI_Coll_name = 'WFI_'+str(inst['nodeDataIndex'])+'_'+groupname
@@ -818,11 +924,12 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                 #    print('Location @ 0 for Mesh - ',meshname, ' - ',i,'HandleId - ', e['HandleId'])
 
                                 else:
-                                    print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
+                                    print('Mesh not found in masters - ',meshname, ' - ',i, e['HandleId'])
 
                     case 'XworldInstancedOccluderNode':
                         #print('worldInstancedOccluderNode')
                         pass
+                    
                     case 'worldStaticDecalNode':
                         #print('worldStaticDecalNode')
                         # decals are imported as planes tagged with the material details so you can see what they are and move them.
@@ -965,11 +1072,11 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                     obj.scale = get_scale(inst)
                                                     bpy.context.scene.cursor.location=curse
                                         else:
-                                            print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
+                                            print('Mesh not found in masters - ',meshname, ' - ',i, e['HandleId'])
 
                     case 'worldStaticMeshNode' |'worldRotatingMeshNode'| 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode' | 'worldBuildingProxyMeshNode' |'worldAdvertisingNode'|  'worldAdvertisementNode' | \
-                'worldGenericProxyMeshNode'|'worldDestructibleEntityProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldStaticOccluderMeshNode'| 'worldTerrainMeshNode' | 'worldClothMeshNode' |\
-                'worldDecorationMeshNode' | 'worldDynamicMeshNode' | 'worldMeshNode':
+                    'worldGenericProxyMeshNode'|'worldDestructibleEntityProxyMeshNode'| 'worldTerrainProxyMeshNode' | 'worldStaticOccluderMeshNode'| 'worldTerrainMeshNode' | 'worldClothMeshNode' |\
+                    'worldDecorationMeshNode' | 'worldDynamicMeshNode' | 'worldMeshNode':
                         meshname=None
                         if isinstance(e, dict) and 'mesh' in data.keys() and isinstance(data['mesh'], dict) and'DepotPath' in data['mesh'].keys():
                             meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
@@ -977,15 +1084,11 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             meshname = data['meshRef']['DepotPath']['$value'].replace('\\', os.sep)
                         if meshname:
                             #print('Mesh name is - ',meshname, e['HandleId'])
-                            meshAppearance='default'
-                            if 'meshAppearance' in data.keys():
-                                meshAppearance = data['meshAppearance']['$value'] # Need to actually use this
+                            
+                            
                             if(meshname != 0):
                                         #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
-                                        groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
-                                        while len(groupname) > 63:
-                                            groupname = groupname[:-1]
-                                        group=Masters.children.get(groupname)
+                                        group, groupname = get_group(meshname,meshAppearance,Masters)
                                         if (group):
                                             #print('Group found for ',groupname)
                                             if ntype=='worldRotatingMeshNode':
@@ -1051,7 +1154,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
 
 
                                         else:
-                                            print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
+                                            print('Mesh not found in masters - ',meshname, ' - ',i, e['HandleId'])
 
                     case 'worldInstancedDestructibleMeshNode':
                         #print('worldInstancedDestructibleMeshNode',i)
@@ -1064,9 +1167,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 #print('Mesh name is - ',meshname, e['HandleId'])
                                 if(meshname != 0):
                                             #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
-                                            groupname = os.path.splitext(os.path.split(meshname)[-1])[0]
-                                            while len(groupname) > 63:
-                                                groupname = groupname[:-1]
+                                            groupname = os.path.splitext(os.path.split(meshname)[-1])[0]+'@'+meshAppearance
                                             group=Masters.children.get(groupname)
                                             if (group):
                                                 NDI_Coll_name = 'wIDMn'+str(inst['nodeDataIndex'])+'_'+groupname
@@ -1075,7 +1176,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                 NDI_Coll = bpy.data.collections.new(NDI_Coll_name)
                                                 Sector_coll.children.link(NDI_Coll)
                                                 assign_custom_properties(NDI_Coll, data,sectorName,i,
-                                                nodeDataIndex=inst['nodeDataIndex'], instance_idx=idx,
+                                                nodeDataIndex=inst['nodeDataIndex'], 
                                                 mesh=meshname, pivot=inst['Pivot'])
                                                 if 'appearanceName' in e['Data'].keys():
                                                     NDI_Coll['appearanceName']=e['Data']['appearanceName']['$value']
@@ -1141,7 +1242,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                         if 'Armature' in obj.name:
                                                             obj.hide_set(True)
                                             else:
-                                                print('Mesh not found - ',meshname, ' - ',i, e['HandleId'])
+                                                print('Mesh not found in masters - ',meshname, ' - ',i, e['HandleId'])
 
                     case 'worldStaticLightNode':
                         #print('worldStaticLightNode',i)
@@ -1236,13 +1337,13 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
 
                     case 'worldCollisionNode':
 
-        #   ______      _____      _
-        #  / ____/___  / / (_)____(_)___  ____  _____
-        # / /   / __ \/ / / / ___/ / __ \/ __ \/ ___/
-        #/ /___/ /_/ / / / (__  ) / /_/ / / / (__  )
-        #\____/\____/_/_/_/____/_/\____/_/ /_/____/
-        #
-        # Collisions are only partially supported, cant get the mesh object ones out of the geomCache from wkit enmasse currently so only box and capsule ones
+                        #   ______      _____      _
+                        #  / ____/___  / / (_)____(_)___  ____  _____
+                        # / /   / __ \/ / / / ___/ / __ \/ __ \/ ___/
+                        #/ /___/ /_/ / / / (__  ) / /_/ / / / (__  )
+                        #\____/\____/_/_/_/____/_/\____/_/ /_/____/
+                        #
+                        # Collisions are only partially supported, cant get the mesh object ones out of the geomCache from wkit enmasse currently so only box and capsule ones
                         if want_collisions:
                             #print('worldCollisionNode',i)
                             sector_Collisions=sectorName+'_colls'
@@ -1325,15 +1426,16 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                     case _:
                         #print('None of the above',i)
                         pass
-                # Have to do a view_layer update or the matrices are all blank
-                bpy.context.view_layer.update()
-                for col in Sector_coll.children:
-                    if len(col.all_objects)>0:
-                        col['matrix']= col.all_objects[0].matrix_world
+        print('Nodes complete, updating view layer and saving world matrices')
+        # Have to do a view_layer update or the matrices are all blank
+        bpy.context.view_layer.update()
+        for col in Sector_coll.children:
+            if len(col.all_objects)>0:
+                col['matrix']= col.all_objects[0].matrix_world
 
 
 
-        print('Finished with ',filepath)
+        print('Finished with ',filepath,' (no ', fpn+1, ' of ', no_sectors,')')
     # doing this earlier in the file was breaking the entity postitioning. NO idea how that works, but be warned.
     Masters.hide_viewport=True
     for obj in bpy.data.objects:
@@ -1379,8 +1481,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                 nextpoint.handle_right = righthandlepos
                 # Set the points to be the same
                 nextpoint.co=endpoint.co
-
-    print(f"Imported Sector: {sectorName} in {time.time() - start_time}")
+    print(f"Imported Sectors from : {wkit_proj_name} in {time.time() - start_time}")
     print('')
     print('-------------------- Finished Importing Cyberpunk 2077 Streaming Sectors --------------------')
     print('')

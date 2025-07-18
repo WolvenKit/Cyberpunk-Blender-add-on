@@ -802,7 +802,7 @@ class ParallaxScreenTransparent:
 
         # l3
 
-        if 'l3' in bpy.data.node_groups.keys():
+        if 'l3_ps_t' in bpy.data.node_groups.keys():
             l3Group = bpy.data.node_groups['l3_ps_t']
         else:     
             l3Group = bpy.data.node_groups.new("l3_ps_t","ShaderNodeTree")
@@ -1915,8 +1915,9 @@ class ParallaxScreenTransparent:
         m2.node_tree = m2Group 
         CurMat.links.new(m1.outputs[0],m2.inputs[0])
         CurMat.links.new(i2.outputs[0],m2.inputs[1])
-        CurMat.links.new(m1.outputs[1],m2.inputs[2])
-        CurMat.links.new(i2.outputs[1],m2.inputs[3])
+        if len(m2.outputs) > 1:
+            CurMat.links.new(m1.outputs[1],m2.inputs[2])
+            CurMat.links.new(i2.outputs[1],m2.inputs[3])
 
         # m3
         if 'm3' in bpy.data.node_groups.keys():

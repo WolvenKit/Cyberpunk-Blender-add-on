@@ -95,7 +95,7 @@ def register():
     register_materialtools()
 
     for cls in classes:
-        if cls.__name__ is "JSONTool": # this one is static
+        if cls.__name__ == "JSONTool": # this one is static
             continue
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
