@@ -126,7 +126,7 @@ class Decal:
             reroute2.location = (-275, 115)
             CurMat.links.new(mImgNode.outputs[0],reroute2.inputs[0])
             CurMat.links.new(reroute2.outputs[0],Prin_BSDF.inputs['Metallic'])
-            CurMat.links.new(TexCoordinate.outputs[0],rImgNode.inputs[0])         
+            CurMat.links.new(TexCoordinate.outputs[0],mImgNode.inputs[0])         
 
 
 # The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something

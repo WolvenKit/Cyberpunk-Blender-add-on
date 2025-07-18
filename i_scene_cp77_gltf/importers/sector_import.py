@@ -541,6 +541,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                         mat_name = 'sidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalk'
                                         #print('Its too damn long', mat_name)
                                         #print(obj_copy.data.materials.keys())
+                                    if 'station' in groupname:
+                                        print('Pause here')
+                                        print(mat_name, list(obj_copy.data.materials.keys()), mat_name in obj_copy.data.materials.keys())
                                     #if mat_name and mat_name in bpy.data.materials:
                                     if len(mat_name)<63:    
                                         for ii in range(len(obj_copy.data.materials)-1,-1,-1):
@@ -675,7 +678,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                     new['ent_rot']=rot.to_euler('XYZ')
                                     new['ent_pos']=pos
                                     inst_trans_mat=Matrix.LocRotScale(pos,rot,scale)
-                                    print('Entity transform matrix:', inst_trans_mat)
+                                    #print('Entity transform matrix:', inst_trans_mat)
                                     for child in group.children:
                                         newchild=bpy.data.collections.new(child.name)
                                         new.children.link(newchild)
@@ -683,15 +686,15 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                             obj=old_obj.copy()
                                             obj.color = (0.567942, 0.0247339, 0.600028, 1)
                                             newchild.objects.link(obj)
-                                            print(obj.name, 'applying transform')
-                                            print("Before:", obj.matrix_local)
+                                            #print(obj.name, 'applying transform')
+                                            #print("Before:", obj.matrix_local)
                                             if obj.parent:
                                                 # Apply in local space relative to parent
                                                 obj.matrix_local = inst_trans_mat @ obj.matrix_local
                                             else:
                                                 # No parent, apply in world space
                                                 obj.matrix_world = inst_trans_mat @ obj.matrix_world
-                                            print("After:", obj.matrix_local)
+                                            #print("After:", obj.matrix_local)
                                             if 'Armature' in obj.name:
                                                 obj.hide_set(True)
                                         bpy.context.view_layer.update()
