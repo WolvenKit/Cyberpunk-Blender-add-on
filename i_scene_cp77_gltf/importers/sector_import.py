@@ -550,11 +550,11 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                         mat_name = 'sidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalk'
                                         #print('Its too damn long', mat_name)
                                         #print(obj_copy.data.materials.keys())
-                                    if 'station' in groupname:
+                                    if 'station' in groupname or 'fluorescent_light_b' in groupname:
                                         print('Pause here')
                                         print(mat_name, list(obj_copy.data.materials.keys()), mat_name in obj_copy.data.materials.keys())
                                     #if mat_name and mat_name in bpy.data.materials:
-                                    if len(mat_name)<63 and len(obj_copy.data.materials)>1:
+                                    if len(mat_name)<63 and len(obj_copy.data.materials)>1 and mat_name in obj_copy.data.materials.keys():
                                         for ii in range(len(obj_copy.data.materials)-1,-1,-1):
                                             mat=obj_copy.data.materials.keys()[ii]
                                             if mat.split('.')[0]!=mat_name:
