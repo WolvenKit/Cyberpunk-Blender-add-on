@@ -314,6 +314,23 @@ def get_tan_pos(inst):
         pos[1][2] = inst['Elements'][1]['Z']
     return pos
 
+def get_meshappearance(data):
+    if 'meshAppearance' in data.keys():
+        meshAppearance = data['meshAppearance']
+    else:
+        meshAppearance = {'$type': 'CName', '$storage': 'string', '$value': 'default'}
+    return meshAppearance
+
+def get_meshname(data):
+    meshname=''
+    if 'mesh' in data.keys() and isinstance(data['mesh'], dict) and'DepotPath' in data['mesh'].keys():
+        meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
+    elif 'meshRef' in data.keys():
+        meshname = data['meshRef']['DepotPath']['$value'].replace('\\', os.sep)
+    elif 'entityTemplate' in data.keys() and isinstance(data['entityTemplate'], dict) and'DepotPath' in data['entityTemplate'].keys():
+        meshname = data['entityTemplate']['DepotPath']['$value'].replace('\\', os.sep)
+    return meshname
+
 def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding, with_lights):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     if not cp77_addon_prefs.non_verbose:
@@ -372,23 +389,23 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
             if I_want_to_break_free:
                 break
             if (limittypes and ntype in import_types) or limittypes==False :#or type=='worldCableMeshNode': # can add a filter for dev here
+                meshname = get_meshname(data)
+                meshAppearance= get_meshappearance(data)
                 match ntype:
                     case 'worldEntityNode'|'worldDeviceNode':
-                        #print('worldEntityNode',i)
-                        meshname = data['entityTemplate']['DepotPath']['$value'].replace('\\', os.sep)
+                        #print('worldEntityNode',i)                        
                         if(meshname != 0):
                             if meshname not in meshes:
-                                meshes[e['Data']['entityTemplate']['DepotPath']['$value']] = {'appearances':[e['Data']['appearanceName']],'sector':sectorName}                        
+                                meshes[meshname] = {'appearances':[meshAppearance],'sector':sectorName}                        
                             else:
-                                meshes[e['Data']['entityTemplate']['DepotPath']['$value']]['appearances'].append(e['Data']['appearanceName'])
+                                meshes[meshname]['appearances'].append(meshAppearance)
                     
                     case 'worldInstancedMeshNode':
-                        meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                         if(meshname != 0):
                             if meshname not in meshes:
-                                meshes[data['mesh']['DepotPath']['$value']] = {'appearances':[e['Data']['meshAppearance']],'sector':sectorName}
+                                meshes[meshname] = {'appearances':[meshAppearance],'sector':sectorName}
                             else:
-                                meshes[data['mesh']['DepotPath']['$value']]['appearances'].append(e['Data']['meshAppearance'])
+                                meshes[meshname]['appearances'].append(meshAppearance)
                     
                     case 'worldStaticMeshNode' |'worldRotatingMeshNode'|'worldAdvertisingNode'| 'worldAdvertisementNode' | 'worldPhysicalDestructionNode' | 'worldBakedDestructionNode'  \
                         |  'worldTerrainMeshNode' | 'worldBendedMeshNode'| 'worldCableMeshNode' | 'worldClothMeshNode'| 'worldDynamicMeshNode'\
@@ -396,39 +413,31 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                         if isinstance(e, dict) and 'mesh' in data.keys() and isinstance(data['mesh'], dict) and'DepotPath' in data['mesh'].keys():
                             #if ntype=='worldBendedMeshNode':
                             #    print('worldBendedMeshNode',i)
-                            meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                             #print('Mesh name is - ',meshname, e['HandleId'])
                             if(meshname != 0):
                                 #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
-                                if 'meshAppearance' in e['Data'].keys():
-                                    if meshname not in meshes:
-                                        meshes[data['mesh']['DepotPath']['$value']] = {'appearances':[e['Data']['meshAppearance']],'sector':sectorName}
-                                    else:
-                                        meshes[data['mesh']['DepotPath']['$value']]['appearances'].append(e['Data']['meshAppearance'])
+                                if meshname not in meshes:
+                                    meshes[meshname] = {'appearances':[meshAppearance],'sector':sectorName}
                                 else:
-                                    if meshname not in meshes:
-                                        meshes[data['mesh']['DepotPath']['$value']] = {'appearances':[{'$type': 'CName', '$storage': 'string', '$value': 'default'}],'sector':sectorName}
-                                    else:
-                                        meshes[data['mesh']['DepotPath']['$value']]['appearances'].append({'$type': 'CName', '$storage': 'string', '$value': 'default'})
+                                    meshes[meshname]['appearances'].append(meshAppearance)
+                            
                         elif isinstance(e, dict) and 'meshRef' in data.keys() :
-                            meshname = data['meshRef']['DepotPath']['$value'].replace('\\', os.sep)
                             if(meshname != 0):
                                 #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
                                 if meshname not in meshes:
-                                    meshes[data['meshRef']['DepotPath']['$value']] = {'appearances':[{'$type': 'CName', '$storage': 'string', '$value': 'default'}],'sector':sectorName}
+                                    meshes[meshname] = {'appearances':[{'$type': 'CName', '$storage': 'string', '$value': 'default'}],'sector':sectorName}
                                 else:
-                                    meshes[data['meshRef']['DepotPath']['$value']]['appearances'].append({'$type': 'CName', '$storage': 'string', '$value': 'default'})
+                                    meshes[meshname]['appearances'].append({'$type': 'CName', '$storage': 'string', '$value': 'default'})
                     
                     case 'worldInstancedDestructibleMeshNode':
                         #print('worldInstancedDestructibleMeshNode',i)
-                        if isinstance(e, dict) and 'mesh' in data.keys():
-                            meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
+                        if isinstance(e, dict) and 'mesh' in data.keys():                            
                             #print('Mesh name is - ',meshname, e['HandleId'])
                             if(meshname != 0):
                                 if meshname not in meshes:
-                                    meshes[data['mesh']['DepotPath']['$value']] = {'appearances':[e['Data']['meshAppearance']],'sector':sectorName}
+                                    meshes[meshname] = {'appearances':[meshAppearance],'sector':sectorName}
                                 else:
-                                    meshes[data['mesh']['DepotPath']['$value']]['appearances'].append(e['Data']['meshAppearance'])
+                                    meshes[meshname]['appearances'].append(meshAppearance)
 
         # Do the proxy nodes after all the others, that way none proxies will be imported first and wont be hidden by the proxy ones
         for i,e in enumerate(nodes):
@@ -545,7 +554,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                         print('Pause here')
                                         print(mat_name, list(obj_copy.data.materials.keys()), mat_name in obj_copy.data.materials.keys())
                                     #if mat_name and mat_name in bpy.data.materials:
-                                    if len(mat_name)<63:    
+                                    if len(mat_name)<63 and len(obj_copy.data.materials)>1:
                                         for ii in range(len(obj_copy.data.materials)-1,-1,-1):
                                             mat=obj_copy.data.materials.keys()[ii]
                                             if mat.split('.')[0]!=mat_name:
