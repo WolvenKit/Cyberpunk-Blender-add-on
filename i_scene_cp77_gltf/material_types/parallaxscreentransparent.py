@@ -1863,10 +1863,10 @@ class ParallaxScreenTransparent:
         CurMat.links.new(i3.outputs[1],m1.inputs[3])
 
         # m2
-        if 'm2' in bpy.data.node_groups.keys():
-            m2Group = bpy.data.node_groups['m2']
+        if 'parallax_screen_trans_m2' in bpy.data.node_groups.keys():
+            m2Group = bpy.data.node_groups['parallax_screen_trans_m2']
         else:           
-            m2Group = bpy.data.node_groups.new("m2","ShaderNodeTree")
+            m2Group = bpy.data.node_groups.new("parallax_screen_trans_m2","ShaderNodeTree")
             if vers[0]<4:
                 m2Group.inputs.new('NodeSocketVector','m1')
                 m2Group.inputs.new('NodeSocketVector','i2')    
@@ -1920,10 +1920,10 @@ class ParallaxScreenTransparent:
             CurMat.links.new(i2.outputs[1],m2.inputs[3])
 
         # m3
-        if 'm3' in bpy.data.node_groups.keys():
-            m3Group = bpy.data.node_groups['m3']
+        if 'parallax_screen_trans_m3' in bpy.data.node_groups.keys():
+            m3Group = bpy.data.node_groups['parallax_screen_trans_m3']
         else:
-            m3Group = bpy.data.node_groups.new("m3","ShaderNodeTree")
+            m3Group = bpy.data.node_groups.new("parallax_screen_trans_m3","ShaderNodeTree")
             if vers[0]<4:
                 m3Group.inputs.new('NodeSocketVector','m2')
                 m3Group.inputs.new('NodeSocketVector','i1')    
@@ -1973,7 +1973,8 @@ class ParallaxScreenTransparent:
         m3.node_tree = m3Group 
         CurMat.links.new(m2.outputs[0],m3.inputs[0])
         CurMat.links.new(i1.outputs[0],m3.inputs[1])
-        CurMat.links.new(m2.outputs[1],m3.inputs[2])
+        if len(m2.outputs) > 1:
+            CurMat.links.new(m2.outputs[1],m3.inputs[2])
         CurMat.links.new(i1.outputs[1],m3.inputs[3])
 
 
