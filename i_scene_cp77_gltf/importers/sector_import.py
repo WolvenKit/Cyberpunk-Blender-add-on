@@ -383,7 +383,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
         #nodes=[]
 
         for i,e in enumerate(nodes):
-            print(i)
+            #print(i)
             data = e['Data']
             ntype = data['$type']
             if I_want_to_break_free:
