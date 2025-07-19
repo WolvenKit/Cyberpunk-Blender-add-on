@@ -71,20 +71,22 @@ class MetalBaseDet:
         CurMat.links.new(bColScale.outputs[0],sBaseCol.inputs[2])
 
         # multiply Metalness and MetalnessScale then add MetalnessBias
-        mMulNode = create_node(CurMat.nodes,"ShaderNodeMath", (-550,-100) , operation = 'MULTIPLY')
-        CurMat.links.new(metNode.outputs[0],mMulNode.inputs[0])
-        CurMat.links.new(mScale.outputs[0],mMulNode.inputs[1])
-        mAddNode = create_node(CurMat.nodes,"ShaderNodeMath", (-350,-100) , operation = 'ADD')
-        CurMat.links.new(mMulNode.outputs[0],mAddNode.inputs[0])
-        CurMat.links.new(mBias.outputs[0],mAddNode.inputs[1])
+        if "Metalness" in Data:
+            mMulNode = create_node(CurMat.nodes,"ShaderNodeMath", (-550,-100) , operation = 'MULTIPLY')
+            CurMat.links.new(metNode.outputs[0],mMulNode.inputs[0])
+            CurMat.links.new(mScale.outputs[0],mMulNode.inputs[1])
+            mAddNode = create_node(CurMat.nodes,"ShaderNodeMath", (-350,-100) , operation = 'ADD')
+            CurMat.links.new(mMulNode.outputs[0],mAddNode.inputs[0])
+            CurMat.links.new(mBias.outputs[0],mAddNode.inputs[1])
 
         # multiply Roughness and RoughnessScale then add RoughnessBias
-        rMulNode = create_node(CurMat.nodes,"ShaderNodeMath", (-550,-150) , operation = 'MULTIPLY')
-        CurMat.links.new(rNode.outputs[0],rMulNode.inputs[0])
-        CurMat.links.new(rScale.outputs[0],rMulNode.inputs[1])
-        rAddNode = create_node(CurMat.nodes,"ShaderNodeMath", (-350,-150) , operation = 'ADD')
-        CurMat.links.new(rMulNode.outputs[0],rAddNode.inputs[0])
-        CurMat.links.new(rBias.outputs[0],rAddNode.inputs[1])        
+        if "Roughness" in Data:
+            rMulNode = create_node(CurMat.nodes,"ShaderNodeMath", (-550,-150) , operation = 'MULTIPLY')
+            CurMat.links.new(rNode.outputs[0],rMulNode.inputs[0])
+            CurMat.links.new(rScale.outputs[0],rMulNode.inputs[1])
+            rAddNode = create_node(CurMat.nodes,"ShaderNodeMath", (-350,-150) , operation = 'ADD')
+            CurMat.links.new(rMulNode.outputs[0],rAddNode.inputs[0])
+            CurMat.links.new(rBias.outputs[0],rAddNode.inputs[1])        
 
         # multiply detail texture UV and detailUV
         UVNode = create_node(CurMat.nodes,"ShaderNodeTexCoord",(-800,300))
@@ -148,7 +150,9 @@ class MetalBaseDet:
         
         # final links
         CurMat.links.new(finalColor.outputs[0],pBSDF.inputs['Base Color'])
-        CurMat.links.new(rAddNode.outputs[0],pBSDF.inputs['Roughness'])
-        CurMat.links.new(mAddNode.outputs[0],pBSDF.inputs['Metallic'])
+        if "Roughness" in Data:
+            CurMat.links.new(rAddNode.outputs[0],pBSDF.inputs['Roughness'])
+        if "Metalness" in Data:
+            CurMat.links.new(mAddNode.outputs[0],pBSDF.inputs['Metallic'])
         CurMat.links.new(nMap.outputs[0],pBSDF.inputs['Normal'])
         CurMat.links.new(dColNode.outputs[1],pBSDF.inputs['Alpha'])
