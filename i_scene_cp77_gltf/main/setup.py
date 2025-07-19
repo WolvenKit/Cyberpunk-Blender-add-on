@@ -30,7 +30,17 @@ from ..material_types.televisionad import TelevisionAd
 from ..material_types.window_parallax_interior_proxy import windowParallaxIntProx
 from ..material_types.hologram import Hologram
 from ..material_types.unknown import unknownMaterial
+from ..material_types.pbr_layer import pbr_layer
 
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
 class MaterialBuilder:
     def __init__(self, obj, BasePath,image_format,MeshPath):
@@ -119,6 +129,10 @@ class MaterialBuilder:
                     metalBaseDet = MetalBaseDet(self.BasePath,self.image_format, self.ProjPath)
                     metalBaseDet.create(rawMat["Data"],bpyMat)
 
+                case "base\\materials\\pbr_layer.remt":
+                    pbrLayer = pbr_layer(self.BasePath,self.image_format, self.ProjPath)
+                    pbrLayer.create(rawMat["Data"],bpyMat)
+
                 case "base\\materials\\hair.mt":
                     hair = Hair(self.BasePath,self.image_format, self.ProjPath)
                     hair.create(rawMat["Data"],bpyMat)
@@ -191,7 +205,7 @@ class MaterialBuilder:
                     hologram.create(rawMat["Data"],bpyMat)
 
                 case _:
-                    print('Unhandled mt - ', rawMat["MaterialTemplate"])
+                    print(f'{bcolors.WARNING}Unhandled mt - ', rawMat["MaterialTemplate"])
                     context=bpy.context
                     if context.preferences.addons[__name__.split('.')[0]].preferences.experimental_features:
                         unkown = unknownMaterial(self.BasePath,self.image_format,self.ProjPath)
