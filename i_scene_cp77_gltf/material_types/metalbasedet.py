@@ -10,6 +10,7 @@ class MetalBaseDet:
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes[loc('Principled BSDF')]
+        sockets=bsdf_socket_names()
 
         # TEXTURES
         if "BaseColor" in Data:
@@ -35,6 +36,10 @@ class MetalBaseDet:
         if "DetailNormal" in Data:
             dNImg = imageFromPath(self.BasePath + Data["DetailNormal"],self.image_format, True)
             dNNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-900,-500), label="DetailNormal", image=dNImg)
+        
+        if "Emissive" in Data:
+            EmcolImg=imageFromRelPath(Data["BaseColor"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            EmColNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-900,200), label="Emmisive", image=EmcolImg)
 
 
 
@@ -88,53 +93,59 @@ class MetalBaseDet:
             CurMat.links.new(rMulNode.outputs[0],rAddNode.inputs[0])
             CurMat.links.new(rBias.outputs[0],rAddNode.inputs[1])        
 
-        # multiply detail texture UV and detailUV
-        UVNode = create_node(CurMat.nodes,"ShaderNodeTexCoord",(-800,300))
-        dUVCombine = create_node(CurMat.nodes, "ShaderNodeCombineXYZ",(-700,200))
-        sDetUV = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-600,300), operation="MULTIPLY")
-        CurMat.links.new(dU.outputs[0],dUVCombine.inputs[0])
-        CurMat.links.new(dV.outputs[0],dUVCombine.inputs[1])
-        CurMat.links.new(UVNode.outputs[2],sDetUV.inputs[0])
-        CurMat.links.new(dUVCombine.outputs[0],sDetUV.inputs[1])
-        CurMat.links.new(sDetUV.outputs[0],dColNode.inputs[0])
 
-        # multiply DetailColor and BaseColorScale
-        dColmul = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-550,0), blend_type = 'MULTIPLY')
-        dColmul.inputs[0].default_value = 1
-        CurMat.links.new(dColNode.outputs[0],dColmul.inputs[1])
-        CurMat.links.new(bColScale.outputs[0],dColmul.inputs[2])
+        if "DetailU" in Data:
+            # multiply detail texture UV and detailUV
+            UVNode = create_node(CurMat.nodes,"ShaderNodeTexCoord",(-800,300))
+            dUVCombine = create_node(CurMat.nodes, "ShaderNodeCombineXYZ",(-700,200))
+            sDetUV = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-600,300), operation="MULTIPLY")
+            CurMat.links.new(dU.outputs[0],dUVCombine.inputs[0])
+            CurMat.links.new(dV.outputs[0],dUVCombine.inputs[1])
+            CurMat.links.new(UVNode.outputs[2],sDetUV.inputs[0])
+            CurMat.links.new(dUVCombine.outputs[0],sDetUV.inputs[1])
+            CurMat.links.new(sDetUV.outputs[0],dColNode.inputs[0])
 
-        # connect multiplied UV to DetailNormal
-        CurMat.links.new(sDetUV.outputs[0],dNNode.inputs[0])
+        if "DetailColor" in Data:
+            # multiply DetailColor and BaseColorScale
+            dColmul = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-550,0), blend_type = 'MULTIPLY')
+            dColmul.inputs[0].default_value = 1
+            CurMat.links.new(dColNode.outputs[0],dColmul.inputs[1])
+            CurMat.links.new(bColScale.outputs[0],dColmul.inputs[2])
 
-        # multiply BaseColor and DetailColor
-        finalColor = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-350,50), blend_type = 'MULTIPLY')
-        finalColor.inputs[0].default_value = 1
-        CurMat.links.new(sBaseCol.outputs[0],finalColor.inputs[1])
-        CurMat.links.new(dColmul.outputs[0],finalColor.inputs[2])
+        if "DetailNormal" in Data:
+            # connect multiplied UV to DetailNormal
+            CurMat.links.new(sDetUV.outputs[0],dNNode.inputs[0])
 
-        # combine normal textures
-        nSepNode = create_node(CurMat.nodes,"ShaderNodeSeparateRGB", (-550,-300)) 
-        nDetSepNode = create_node(CurMat.nodes,"ShaderNodeSeparateRGB", (-550,-400)) 
-        redAddNode = create_node(CurMat.nodes,"ShaderNodeMath", (-350,-300), operation = "ADD") 
-        greenAddNode = create_node(CurMat.nodes,"ShaderNodeMath", (-350,-350), operation = "ADD") 
-        blueMulNode = create_node(CurMat.nodes,"ShaderNodeMath", (-350,-400), operation = "MULTIPLY") 
-        nCombNode = create_node(CurMat.nodes,"ShaderNodeCombineRGB", (-150,-350)) 
-        CurMat.links.new(nNode.outputs[0],nSepNode.inputs[0])
-        CurMat.links.new(dNNode.outputs[0],nDetSepNode.inputs[0])
-        CurMat.links.new(nSepNode.outputs[0],redAddNode.inputs[0])      
-        CurMat.links.new(nSepNode.outputs[1],greenAddNode.inputs[0])
-        CurMat.links.new(nSepNode.outputs[2],blueMulNode.inputs[0])
-        CurMat.links.new(nDetSepNode.outputs[0],redAddNode.inputs[1])
-        CurMat.links.new(nDetSepNode.outputs[1],greenAddNode.inputs[1])
-        CurMat.links.new(nDetSepNode.outputs[2],blueMulNode.inputs[1])
-        CurMat.links.new(redAddNode.outputs[0],nCombNode.inputs[0])
-        CurMat.links.new(greenAddNode.outputs[0],nCombNode.inputs[1])
-        CurMat.links.new(blueMulNode.outputs[0],nCombNode.inputs[2])
-        nMap = create_node(CurMat.nodes,"ShaderNodeNormalMap",  (-200,-250))   
-        NRG = CreateRebildNormalGroup(CurMat, -350, -250, "DetailNormal Rebuilt")
-        CurMat.links.new(nCombNode.outputs[0],NRG.inputs[0])
-        CurMat.links.new(NRG.outputs[0],nMap.inputs[1])
+        if "DetailColor" in Data:
+            # multiply BaseColor and DetailColor
+            finalColor = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-350,50), blend_type = 'MULTIPLY')
+            finalColor.inputs[0].default_value = 1
+            CurMat.links.new(sBaseCol.outputs[0],finalColor.inputs[1])
+            CurMat.links.new(dColmul.outputs[0],finalColor.inputs[2])
+
+        if "DetailNormal" in Data:
+            # combine normal textures
+            nSepNode = create_node(CurMat.nodes,"ShaderNodeSeparateRGB", (-550,-300)) 
+            nDetSepNode = create_node(CurMat.nodes,"ShaderNodeSeparateRGB", (-550,-400)) 
+            redAddNode = create_node(CurMat.nodes,"ShaderNodeMath", (-350,-300), operation = "ADD") 
+            greenAddNode = create_node(CurMat.nodes,"ShaderNodeMath", (-350,-350), operation = "ADD") 
+            blueMulNode = create_node(CurMat.nodes,"ShaderNodeMath", (-350,-400), operation = "MULTIPLY") 
+            nCombNode = create_node(CurMat.nodes,"ShaderNodeCombineRGB", (-150,-350)) 
+            CurMat.links.new(nNode.outputs[0],nSepNode.inputs[0])
+            CurMat.links.new(dNNode.outputs[0],nDetSepNode.inputs[0])
+            CurMat.links.new(nSepNode.outputs[0],redAddNode.inputs[0])      
+            CurMat.links.new(nSepNode.outputs[1],greenAddNode.inputs[0])
+            CurMat.links.new(nSepNode.outputs[2],blueMulNode.inputs[0])
+            CurMat.links.new(nDetSepNode.outputs[0],redAddNode.inputs[1])
+            CurMat.links.new(nDetSepNode.outputs[1],greenAddNode.inputs[1])
+            CurMat.links.new(nDetSepNode.outputs[2],blueMulNode.inputs[1])
+            CurMat.links.new(redAddNode.outputs[0],nCombNode.inputs[0])
+            CurMat.links.new(greenAddNode.outputs[0],nCombNode.inputs[1])
+            CurMat.links.new(blueMulNode.outputs[0],nCombNode.inputs[2])
+            nMap = create_node(CurMat.nodes,"ShaderNodeNormalMap",  (-200,-250))   
+            NRG = CreateRebildNormalGroup(CurMat, -350, -250, "DetailNormal Rebuilt")
+            CurMat.links.new(nCombNode.outputs[0],NRG.inputs[0])
+            CurMat.links.new(NRG.outputs[0],nMap.inputs[1])
         
 
         # alpha
@@ -149,10 +160,21 @@ class MetalBaseDet:
         # CurMat.links.new(aThreshold.outputs[0],aSubNode.inputs[1])
         
         # final links
-        CurMat.links.new(finalColor.outputs[0],pBSDF.inputs['Base Color'])
+        if "DetailColor" in Data:
+            CurMat.links.new(finalColor.outputs[0],pBSDF.inputs['Base Color'])
+            CurMat.links.new(dColNode.outputs[1],pBSDF.inputs['Alpha'])
+        else:
+            CurMat.links.new(sBaseCol.outputs[0],pBSDF.inputs['Base Color'])
+
         if "Roughness" in Data:
             CurMat.links.new(rAddNode.outputs[0],pBSDF.inputs['Roughness'])
         if "Metalness" in Data:
             CurMat.links.new(mAddNode.outputs[0],pBSDF.inputs['Metallic'])
-        CurMat.links.new(nMap.outputs[0],pBSDF.inputs['Normal'])
-        CurMat.links.new(dColNode.outputs[1],pBSDF.inputs['Alpha'])
+        if "Emissive" in Data:
+            CurMat.links.new(EmColNode.outputs[0],pBSDF.inputs[sockets['Emission']])
+            pBSDF.inputs["Emission Strength"].default_value = 1.0 # was the default in 3.6 seems to be 0 now
+        if "DetailNormal" in Data:
+            CurMat.links.new(nMap.outputs[0],pBSDF.inputs['Normal'])
+        else:
+            CurMat.links.new(nNode.outputs[0],pBSDF.inputs['Normal'])
+        

@@ -125,7 +125,7 @@ class MaterialBuilder:
                     metalBase = MetalBase(self.BasePath,self.image_format, self.ProjPath, enableMask)
                     metalBase.create(rawMat["Data"],bpyMat)
 
-                case "base\\materials\\metal_base_det.mt":
+                case "base\\materials\\metal_base_det.mt" | "base\materials\lights_interactive.mt":
                     metalBaseDet = MetalBaseDet(self.BasePath,self.image_format, self.ProjPath)
                     metalBaseDet.create(rawMat["Data"],bpyMat)
 
