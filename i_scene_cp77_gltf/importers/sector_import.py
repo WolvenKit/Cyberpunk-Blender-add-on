@@ -26,7 +26,7 @@ from pathlib import Path
 import time
 import traceback
 from pprint import pprint
-from ..main.setup import MaterialBuilder
+from ..main.setup import MaterialBuilder, bcolors
 from ..collisiontools.collisions import set_collider_props
 from .collision_mesh_import import CP77CollisionTriangleMeshJSONimport_by_hashes
 from operator import add
@@ -538,7 +538,10 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                         new_coll['appearance'] = app
                         # Set the appearance property
                         json_apps= None
-                        json_apps =  json.loads(move_coll['json_apps'])
+                        if 'json_apps' in move_coll.keys():
+                            json_apps =  json.loads(move_coll['json_apps'])
+                        else:
+                            print(f'{bcolors.FAIL}No material json found for - ', m)
                         for idx,obj in enumerate(move_coll.objects):
                             obj_copy=obj.copy()
                             obj_copy.data = obj.data.copy()
@@ -550,9 +553,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                         mat_name = 'sidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalk'
                                         #print('Its too damn long', mat_name)
                                         #print(obj_copy.data.materials.keys())
-                                    if 'station' in groupname or 'fluorescent_light_b' in groupname:
-                                        print('Pause here')
-                                        print(mat_name, list(obj_copy.data.materials.keys()), mat_name in obj_copy.data.materials.keys())
+                                    #if 'station' in groupname or 'fluorescent_light_b' in groupname:
+                                    #    print('Pause here')
+                                    #    print(mat_name, list(obj_copy.data.materials.keys()), mat_name in obj_copy.data.materials.keys())
                                     #if mat_name and mat_name in bpy.data.materials:
                                     if len(mat_name)<63 and len(obj_copy.data.materials)>1 and mat_name in obj_copy.data.materials.keys():
                                         for ii in range(len(obj_copy.data.materials)-1,-1,-1):
