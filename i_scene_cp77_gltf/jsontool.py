@@ -46,7 +46,7 @@ class JSONTool:
     @staticmethod
     def load_json(file_path):
         if os.path.exists(file_path) is False:
-            pritn(f"File not found: {file_path}")
+            print(f"File not found: {file_path}")
             return None
         with open(file_path, 'r') as file:
             data = json.load(file)
