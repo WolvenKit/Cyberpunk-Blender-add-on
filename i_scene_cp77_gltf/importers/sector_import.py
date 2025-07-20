@@ -14,7 +14,7 @@
 # 2) If you want collision objects, change want_collisions to True
 # 3) If you want it to generate the _new collections for you to add new stuff in set am_modding to True
 # 4) Run it
-
+from ..main.common import *
 from ..jsontool import JSONTool
 import glob
 import os
@@ -211,89 +211,7 @@ def add_to_list(basename, meshes, dict):
         dict[basename]={'apps':[mesh['appearances']],'sectors':[mesh['sector']]}
 
 
-def get_pos(inst):
-    pos=[0,0,0]
-    if 'Position' in inst.keys():
-        if '$type' in inst['Position'].keys() and inst['Position']['$type']=='WorldPosition':
-            pos[0]=inst['Position']['x']['Bits']/131072*scale_factor
-            pos[1]=inst['Position']['y']['Bits']/131072*scale_factor
-            pos[2]=inst['Position']['z']['Bits']/131072*scale_factor
-        else:
-            if 'Properties' in inst['Position'].keys():
-                pos[0] = inst['Position']['Properties']['X'] /scale_factor
-                pos[1] = inst['Position']['Properties']['Y'] /scale_factor
-                pos[2] = inst['Position']['Properties']['Z'] /scale_factor
-            else:
-                if 'X' in inst['Position'].keys():
-                    pos[0] = inst['Position']['X'] /scale_factor
-                    pos[1] = inst['Position']['Y'] /scale_factor
-                    pos[2] = inst['Position']['Z'] /scale_factor
-                else:
-                    pos[0] = inst['Position']['x'] /scale_factor
-                    pos[1] = inst['Position']['y'] /scale_factor
-                    pos[2] = inst['Position']['z'] /scale_factor
-    elif 'position' in inst.keys():
-        if 'X' in inst['position'].keys():
-                pos[0] = inst['position']['X'] /scale_factor
-                pos[1] = inst['position']['Y'] /scale_factor
-                pos[2] = inst['position']['Z'] /scale_factor
-    elif 'translation' in inst.keys():
-        pos[0] = inst['translation']['X'] /scale_factor
-        pos[1] = inst['translation']['Y'] /scale_factor
-        pos[2] = inst['translation']['Z'] /scale_factor
-    return pos
 
-def get_rot(inst):
-    rot=[0,0,0,0]
-    if 'Orientation' in inst.keys():
-        if 'Properties' in inst['Orientation'].keys():
-            rot[0] = inst['Orientation']['Properties']['r']
-            rot[1] = inst['Orientation']['Properties']['i']
-            rot[2] = inst['Orientation']['Properties']['j']
-            rot[3] = inst['Orientation']['Properties']['k']
-        else:
-            rot[0] = inst['Orientation']['r']
-            rot[1] = inst['Orientation']['i']
-            rot[2] = inst['Orientation']['j']
-            rot[3] = inst['Orientation']['k']
-    elif 'orientation' in inst.keys():
-            rot[0] = inst['orientation']['r']
-            rot[1] = inst['orientation']['i']
-            rot[2] = inst['orientation']['j']
-            rot[3] = inst['orientation']['k']
-    elif 'Rotation' in inst.keys() and 'r' in inst['Rotation'].keys():
-            rot[0] = inst['Rotation']['r']
-            rot[1] = inst['Rotation']['i']
-            rot[2] = inst['Rotation']['j']
-            rot[3] = inst['Rotation']['k']
-    elif 'Rotation' in inst.keys() and 'X' in inst['Rotation'].keys():
-            rot[0] = inst['Rotation']['W']
-            rot[1] = inst['Rotation']['X']
-            rot[2] = inst['Rotation']['Y']
-            rot[3] = inst['Rotation']['Z']
-    elif 'rotation' in inst.keys():
-            rot[0] = inst['rotation']['r']
-            rot[1] = inst['rotation']['i']
-            rot[2] = inst['rotation']['j']
-            rot[3] = inst['rotation']['k']
-    return rot
-
-def get_scale(inst):
-    scale=[0,0,0]
-    if 'Scale' in inst.keys():
-        if 'Properties' in inst['Scale'].keys():
-            scale[0] = inst['Scale']['Properties']['X'] /scale_factor
-            scale[1] = inst['Scale']['Properties']['Y'] /scale_factor
-            scale[2] = inst['Scale']['Properties']['Z'] /scale_factor
-        else:
-            scale[0] = inst['Scale']['X'] /scale_factor
-            scale[1] = inst['Scale']['Y'] /scale_factor
-            scale[2] = inst['Scale']['Z'] /scale_factor
-    elif 'scale' in inst.keys():
-        scale[0] = inst['scale']['X'] /scale_factor
-        scale[1] = inst['scale']['Y'] /scale_factor
-        scale[2] = inst['scale']['Z'] /scale_factor
-    return scale
 
 def get_col(color):
     col=[0,0,0]
@@ -339,7 +257,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
         print('')
     start_time = time.time()
     # Set this to true to limit import to the types listed in the import_types list.
-    limittypes=False
+    limittypes=True
     import_types=None
     import_types=['worldEntityNode'
     ]
