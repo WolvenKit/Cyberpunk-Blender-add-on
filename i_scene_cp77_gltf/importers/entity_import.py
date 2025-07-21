@@ -10,7 +10,7 @@ import traceback
 from math import sin,cos
 from mathutils import Vector, Matrix , Quaternion
 import bmesh
-from ..main.common import loc, show_message
+from ..main.common import *
 from ..jsontool import JSONTool
 from .phys_import import cp77_phys_import
 from ..collisiontools.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
@@ -34,7 +34,8 @@ def create_axes(ent_coll,name):
 # if you've already imported the body/head and set the rig up you can exclude them by putting them in the exclude_meshes list
 #presto_stash=[]
 
-def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], include_collisions=False, include_phys=False, include_entCollider=False, inColl='', remapdepot=False):
+def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], include_collisions=False, include_phys=False, 
+                   include_entCollider=False, inColl='', remapdepot=False, meshes=None, mesh_jsons=None, escaped_path=None, app_path=None, anim_files=None, rigjsons=None):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     with_materials = with_materials
     if not cp77_addon_prefs.non_verbose:
@@ -51,17 +52,21 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
 
     ent_name=os.path.basename(filepath)[:-9]
     if not cp77_addon_prefs.non_verbose:
-        print(f"Importing appearance: {', '.join(appearances)} from entity: {ent_name}")
+        if isinstance(appearances, list):
+            print(f"Importing appearance: {', '.join(appearances)} from entity: {ent_name}")
+        else:
+            print(f"Importing appearance: {appearances} from entity: {ent_name}")
     if filepath is not None:
         ent_apps, ent_components, ent_component_data, res, ent_default = JSONTool.jsonload(filepath, error_messages)
-
+    
     ent_applist=[]
     for app in ent_apps:
         ent_applist.append(app['appearanceName']['$value'])
 
     if len(ent_applist) == 0:
         print(f"No appearances found in entity file {ent_name}. Imported objects may be incomplete or missing.")
-        show_message("No appearances found in entity file. Imported objects may be incomplete or missing. "+ent_name)
+        #show_message("No appearances found in entity file. Imported objects may be incomplete or missing. "+ent_name)
+        # this just isnt true, loads of stuff doesnt have appaearances, and the popup is annoying
 
     #print(ent_applist)
     #presto_stash.append(ent_components)
@@ -70,6 +75,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     ent_colliderComps=[]
     ent_simpleCollComps=[]
     chassis_info=[]
+    includes_license_plates=False
     for comp in ent_components:
         ent_complist.append(comp['name'])
         if 'rig' in comp.keys():
@@ -99,31 +105,36 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
             appearances.append('BASE_COMPONENTS_ONLY')
 
     VS=[]
+    vehicle_slots=None
     for x in ent_components:
-        if 'name' in x.keys() and x['name']['$value']=='vehicle_slots':
+        if 'name' in x.keys() and x['name']['$value']=='vehicle_slots' or x['name']['$value']=='slots':
             VS.append(x)
     if len(VS)>0:
         vehicle_slots= VS[0]['slots']
 
     # find the appearance file jsons
-    escaped_path = glob.escape(path)
-    app_path = glob.glob(os.path.join(escaped_path,"**","*.app.json"), recursive = True)
+    if not escaped_path:
+        escaped_path = glob.escape(path)
+    if not app_path:
+        app_path = glob.glob(os.path.join(escaped_path,"**","*.app.json"), recursive = True)
     if len(app_path)==0:
         print('No Appearance file JSONs found in path')
 
     # find the meshes
-
-    meshes =  glob.glob(os.path.join(escaped_path,"**","*.glb"), recursive = True)
+    if not meshes:
+        meshes =  glob.glob(os.path.join(escaped_path,"**","*.glb"), recursive = True)
     if len(meshes)==0:
         print('No Meshes found in path')
-    mesh_jsons =  glob.glob(os.path.join(escaped_path,"**","*mesh.json"), recursive = True)
+    if not mesh_jsons:
+        mesh_jsons =  glob.glob(os.path.join(escaped_path,"**","*mesh.json"), recursive = True)
 
     # find the anims
     # look through the components and find an anim, and load that,
     # then check for an anim in the project thats using the rig (some things like the arch bike dont ref the anim in the ent)
     # otherwise just skip this section
     #
-    anim_files = glob.glob(os.path.join(escaped_path,"**","*anims.glb"), recursive = True)
+    if not anim_files:
+        anim_files = glob.glob(os.path.join(escaped_path,"**","*anims.glb"), recursive = True)
 
     rig=None
     bones=None
@@ -160,7 +171,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                 rig["ent"] = ent_name + ".ent.json"
 
     # find the rig json associated with the ent
-    rigjsons = glob.glob(os.path.join(escaped_path,"**","*.rig.json"), recursive = True)
+    if not rigjsons:
+        rigjsons = glob.glob(os.path.join(escaped_path,"**","*.rig.json"), recursive = True)
     rig_j=None
     if len(rigjsons)==0 or len(ent_rigs)==0:
         print('no rig json loaded')
@@ -188,7 +200,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                 #link it to the scene
                 coll_scene.children.link(ent_coll)
             # tag it with some custom properties.
-            ent_coll['depotPath']=ent_name
+            ent_coll['depotPath']=after
 
 
             enum_items = []
@@ -240,11 +252,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 ent_app_idx=i
                                 app_name=a['appearanceName']['$value']
                                 continue
-                            if a['name']['$value']==ent_default:
-                                print('appearance matched, id = ',i)
-                                ent_app_idx=i
-                                app_name=a['appearanceName']['$value']
-                                continue
+                            
 
                 app_file = ent_apps[ent_app_idx]['appearanceResource']['DepotPath']['$value']
                 appfilepath=os.path.join(path,app_file).replace('\\',os.sep)+'.json'
@@ -274,8 +282,44 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
             if len(comps)==0:
                 print('falling back to rootchunk components...')
                 comps= ent_components
+            
+            for c in comps:
+                if 'name' in c.keys() and c['name']['$value']=='vehicle_slots' or c['name']['$value']=='slot':
+                    VS.append(c)
+                if 'rig' in c.keys():
+                    rig_path = os.path.join(path, c['rig']['DepotPath']['$value'])
+                    ent_rigs.append(rig_path)
+                    if rig_path in ent_rigs:
+                        print(f"Rig found in app components: {c['rig']['DepotPath']['$value']}")
+                        if rig is None:
+                            rig_j=JSONTool.jsonload(rig_path+'.json', error_messages)
+                            if rig_j is not None:
+                                rig_j=rig_j['Data']['RootChunk']
+                                print('rig json loaded')
+                            # get the armatures already in the model
+                            oldarms= [x for x in bpy.data.objects if 'Armature' in x.name]
+                            animpath=os.path.join(path,c['animations']['gameplay'][0]['animSet']['DepotPath']['$value']+'.glb')
+                            bpy.ops.io_scene_gltf.cp77(with_materials, filepath=animpath, scripting=True)
+                            # find the armature we just loaded
+                            arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
+                            rig=arms[0]
+                            bones=rig.pose.bones
+                            rig["animset"] = animpath
+                            rig["rig"] = rig_path
+                            rig["ent"] = ent_name + ".ent.json"
+                            print('anim rig loaded')
+                        else:
+                            print('another rig already loaded')
+            if not vehicle_slots:
+                if len(VS)>0:
+                    vehicle_slots= VS[0]['slots']
+            
 
             for c in comps:
+                vs_rot=None
+                if 'license_plate' in c['name']['$value']:
+                    includes_license_plates = True
+                    print('License plate component found:', c['name']['$value'])
                 if not (c['$type']=='gameTransformAnimatorComponent' or 'mesh' in c.keys() or 'graphicsMesh' in c.keys()):
                     continue
 
@@ -383,7 +427,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                     bindname=chunk_pt['Data']['bindName']['$value']
                                     # if it has a bindname of vehicle_slots, you may need to find the bone name in the vehicle slots in the root ent components
                                     # this should have been loaded earlier, check for it in the vehicle slots if not just set to the slot value
-                                    if bindname=='vehicle_slots':
+                                    if bindname=='vehicle_slots' or 'slots':
                                         if vehicle_slots:
                                             slotname=chunk_pt['Data']['slotName']['$value']
                                             for slot in vehicle_slots:
@@ -446,12 +490,18 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                                     bpy.context.view_layer.objects.active = obj
                                                     bpy.ops.constraint.childof_set_inverse(constraint="Child Of", owner='OBJECT')
 
+                                    
                                     # things like the tvs have a bindname but no slotname, bindname appears to point at the name of the main component, and its the only one with a transform applied
                                     elif bindname:
                                         #see if we can find a component that matches it
                                         if bindname=='interior_02':
                                             print('interior_02')
                                         bindpt=[cmp for cmp in comps if cmp['name']['$value']==bindname]
+                                        slotname= chunk_pt.get('Data').get('slotName').get('$value')
+                                        if bindpt and slotname:
+                                            # Have a bindpoint and a slotname, so we can use the local transform from the bindpoint
+                                            print('bindpt and slotname found')
+
                                         if bindpt and len(bindpt)==1:
                                             if c['localTransform']['Position']['x']['Bits']==0 and c['localTransform']['Position']['y']['Bits']==0 and c['localTransform']['Position']['z']['Bits']==0 and 'localTransform' in bindpt[0]:
                                                 c['localTransform']['Position']=bindpt[0]['localTransform']['Position']
@@ -511,16 +561,42 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                                 obj['bindname']=bindname
                                                 pt_trans=bones[bindname].head
                                                 pt_rot=bones[bindname].rotation_quaternion
+                                                vs=[slot for slot in vehicle_slots if slot['slotName']['$value']==slotname]
+                                                vs_rot=Quaternion([0,0,0,1])
+                                                vs_pos= Vector([0,0,0])
+                                                vs_scale=Vector([1,1,1])
+                                                if len(vs)>0:
+                                                    vs=vs[0]
+                                                    if 'relativeRotation' in vs.keys():
+                                                        vs_rot[0]=vs['relativeRotation']['i']
+                                                        vs_rot[1]=vs['relativeRotation']['j']
+                                                        vs_rot[2]=vs['relativeRotation']['k']
+                                                        vs_rot[3]=vs['relativeRotation']['r']
+                                                    if 'relativePosition' in vs.keys():
+                                                        vs_pos[0]=vs['relativePosition']['X']
+                                                        vs_pos[1]=vs['relativePosition']['Y']
+                                                        vs_pos[2]=vs['relativePosition']['Z']
+                                                        #print('vs_rot = ',vs_rot)
+                                                vs_mat=Matrix.LocRotScale(Vector([0,0,0]),vs_rot,vs_scale)
+                                                pt_mat=Matrix.LocRotScale(Vector([0,0,0]),pt_rot,Vector(vs_scale))
+                                                vs_z_ang=vs_mat.to_euler().z
+                                                pt_z_ang=pt_mat.to_euler().z
 
-                                                obj.location.x =  obj.location.x+pt_trans[0]
-                                                obj.location.y = obj.location.y+pt_trans[1]
-                                                obj.location.z =  obj.location.z+pt_trans[2]
+                                                obj.location.x =  obj.location.x+pt_trans[0]+vs_pos[0]
+                                                obj.location.y = obj.location.y+pt_trans[1]+vs_pos[1]
+                                                obj.location.z =  obj.location.z+pt_trans[2]+vs_pos[2]
 
                                                 obj.rotation_quaternion.x = btrans['Rotation']['i']
                                                 obj.rotation_quaternion.y = btrans['Rotation']['j']
                                                 obj.rotation_quaternion.z = btrans['Rotation']['k']
                                                 obj.rotation_quaternion.w = btrans['Rotation']['r']
-                                                # Apply child of constraints to them and set the inverse
+                                                
+                                                
+                                                obj.rotation_quaternion=obj.rotation_quaternion*Quaternion(vs_rot)
+                                                #obj.matrix_local=  obj.matrix_local @ vs_mat
+                                                #obj.matrix_world= pt_mat @ obj.matrix_world
+
+                                                #Apply child of constraints to them and set the inverse
                                                 if 'fuel_cap' not in bindname:
                                                     co=obj.constraints.new(type='CHILD_OF')
                                                     co.target=rig
@@ -579,11 +655,16 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 obj.location.x =  obj.location.x+x
                                 obj.location.y = obj.location.y+y
                                 obj.location.z =  obj.location.z+z
-                                if 'Orientation' in c['localTransform'].keys():
+                                # shouldnt need the 0 check, pretty sure I've fuked up a default somewhere, but at this point I just want it to work.
+                                if 'Orientation' in c['localTransform'].keys() and (sum(obj.rotation_quaternion[:])<1.1  and sum(obj.rotation_quaternion[:])>0.9) or (sum(obj.rotation_quaternion[:])<0.1 and sum(obj.rotation_quaternion[:])>-0.1):
+                                    lrot=get_rot(c['localTransform'])
+                                    obj.rotation_quaternion = obj.rotation_quaternion * Quaternion(lrot)
                                     obj.rotation_quaternion.x = c['localTransform']['Orientation']['i']
                                     obj.rotation_quaternion.y = c['localTransform']['Orientation']['j']
                                     obj.rotation_quaternion.z = c['localTransform']['Orientation']['k']
                                     obj.rotation_quaternion.w = c['localTransform']['Orientation']['r']
+                                #if vs_rot:
+                                #    obj.matrix_local =  Matrix.LocRotScale(Vector(0,0,0),Quaternion(vs_rot),Vector(1,1,1)) @ 
                                 if 'scale' in c['localTransform'].keys():
                                     obj.scale.x = c['localTransform']['scale']['X']
                                     obj.scale.y = c['localTransform']['scale']['Y']
@@ -597,6 +678,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 move_coll= coll_scene.children.get( objs[0].users_collection[0].name )
                                 move_coll['depotPath']=c['mesh']['DepotPath']['$value']
                                 move_coll['meshAppearance']=meshApp
+                                move_coll['meshpath']="its an entity"
                                 if bindname:
                                     move_coll['bindname']=bindname
                                 ent_coll.children.link(move_coll)
@@ -661,38 +743,38 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                     co.subtarget= bindname
 
 
+        
+        # am checking for license plates as we go rather than parsing all the components again.
+        if includes_license_plates:
+            license_plates = [obj for obj in bpy.data.objects if 'license_plate' in obj.get('componentName', '')]
+            bumper_f_objs = [obj for obj in bpy.data.objects if 'bumper_f' in obj.get('componentName', '')]
+            bumper_b_objs = [obj for obj in bpy.data.objects if 'bumper_b' in obj.get('componentName', '')]
 
-
-        #can probably a better way to pull this from somewhere but this works for now.
-        license_plates = [obj for obj in bpy.data.objects if 'license_plate' in obj.get('componentName', '')]
-        bumper_f_objs = [obj for obj in bpy.data.objects if 'bumper_f' in obj.get('componentName', '')]
-        bumper_b_objs = [obj for obj in bpy.data.objects if 'bumper_b' in obj.get('componentName', '')]
-
-        if len(license_plates) > 0:
-            for obj in license_plates:
-                #print(obj.name)
-                if not len(obj.constraints)>0:
-                    try:
-                        # use the component name to figure out if this supposed to be attached to the front or back bumper
-                        componentName = obj.get('componentName', '')
-                        bumper_type = 'bumper_f' if 'license_plate_f' in componentName else 'bumper_b'
-                        # Find the correct bumper and match it to the license plate
-                        potential_parents = bumper_f_objs if bumper_type == 'bumper_f' else bumper_b_objs
-                        # Check if there's actually an object to parent the license plate to, if there is set it to obj.parent
-                        if potential_parents:
-                            obj.parent = potential_parents[0]
-                        # I'm pretty certain you have this stored somewhere else already - we should probably look at just adding all of the localTransforms
-                        # to a dict seperate from comp earlier on and just matching them by componnent name whenever we need to apply transforms
-                            lct = next((comp for comp in comps if comp["name"]["$value"] == componentName), None)
-                            #print(lct["localTransform"])
-                            if lct:
-                                obj.location[0] = lct["localTransform"]["Position"]["x"]["Bits"]/ 131072
-                                obj.location[1] = lct["localTransform"]["Position"]["y"]["Bits"]/ 131072
-                                obj.location[2] = lct["localTransform"]["Position"]["z"]["Bits"]/ 131072
-                        else:
-                            print('no bumper found to parent license plate to')
-                    except Exception as e:
-                        print(e)
+            if len(license_plates) > 0:
+                for obj in license_plates:
+                    #print(obj.name)
+                    if not len(obj.constraints)>0:
+                        try:
+                            # use the component name to figure out if this supposed to be attached to the front or back bumper
+                            componentName = obj.get('componentName', '')
+                            bumper_type = 'bumper_f' if 'license_plate_f' in componentName else 'bumper_b'
+                            # Find the correct bumper and match it to the license plate
+                            potential_parents = bumper_f_objs if bumper_type == 'bumper_f' else bumper_b_objs
+                            # Check if there's actually an object to parent the license plate to, if there is set it to obj.parent
+                            if potential_parents:
+                                obj.parent = potential_parents[0]
+                            # I'm pretty certain you have this stored somewhere else already - we should probably look at just adding all of the localTransforms
+                            # to a dict seperate from comp earlier on and just matching them by componnent name whenever we need to apply transforms
+                                lct = next((comp for comp in comps if comp["name"]["$value"] == componentName), None)
+                                #print(lct["localTransform"])
+                                if lct:
+                                    obj.location[0] = lct["localTransform"]["Position"]["x"]["Bits"]/ 131072
+                                    obj.location[1] = lct["localTransform"]["Position"]["y"]["Bits"]/ 131072
+                                    obj.location[2] = lct["localTransform"]["Position"]["z"]["Bits"]/ 131072
+                            else:
+                                print('no bumper found to parent license plate to')
+                        except Exception as e:
+                            print(e)
 
               # find the .phys file jsons
         if include_collisions:

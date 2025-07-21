@@ -88,7 +88,7 @@ class CP77EntityImport(Operator,ImportHelper):
                                 description="Collector to put the imported entity in",
                                 default='',
                                 options={'HIDDEN'})
-
+  
     def draw(self, context):
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
         props = context.scene.cp77_panel_props
@@ -138,7 +138,7 @@ class CP77EntityImport(Operator,ImportHelper):
         bob=self.filepath
         inColl=self.inColl
         #print('Bob - ',bob)
-        importEnt(props.with_materials, bob, apps, excluded, self.include_collisions, self.include_phys, self.include_entCollider, inColl, props.remap_depot)
+        importEnt(props.with_materials, bob, apps, excluded, self.include_collisions, self.include_phys, self.include_entCollider, inColl, props.remap_depot, meshes=None, mesh_jsons=None, escaped_path=None, app_path=None, anim_files=None, rigjsons=None)
 
         return {'FINISHED'}
 
@@ -263,10 +263,10 @@ class CP77Import(Operator, ImportHelper):
         props = context.scene.cp77_panel_props
         SetVulkanBackend(props.use_vulkan)
         SetCyclesRenderer(props.use_cycles, props.update_gi)
-
+        appearances=self.appearances.split(",")
         # turns out that multimesh import of an entire car uses a gazillion duplicates as well...
         JSONTool.start_caching()
-        CP77GLBimport(self, props.with_materials, props.remap_depot, self.exclude_unused_mats, self.image_format, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, self.appearances, self.scripting)
+        CP77GLBimport( props.with_materials, props.remap_depot, self.exclude_unused_mats, self.image_format, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, appearances, self.scripting)
         JSONTool.stop_caching()
 
         return {'FINISHED'}
