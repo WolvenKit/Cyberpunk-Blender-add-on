@@ -20,7 +20,7 @@ def manage_garment_support(existingMeshes, gltf_importer_data):
     gltf_importer = gltf_importer_data
     curMeshCount = 0
     for name in bpy.data.meshes.keys():
-        if name in existingMeshes or "Icosphere" in name:
+        if name in existingMeshes or "Icosphere" in name or'icosaédrica' in name:
             continue
         mesh = bpy.data.meshes[name]
 
