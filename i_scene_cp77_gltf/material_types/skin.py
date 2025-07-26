@@ -15,7 +15,8 @@ class Skin:
 
         sVcol = create_node(CurMat.nodes,"ShaderNodeVertexColor", (-1400,150))
 
-        sSepRGB = create_node(CurMat.nodes,"ShaderNodeSeparateRGB", (-1200,150))
+        sSepRGB = create_node(CurMat.nodes,"ShaderNodeSeparateColor", (-1200,150))
+        sSepRGB.mode = 'RGB'
 
         # This value is completely arbitary in Blender 3.6 and lower. However it's tied to the assets physical size in Blender. SSS is refactored completely in upcoming Blender 4.0
         sMultiply = create_node(CurMat.nodes,"ShaderNodeMath", (-800,150), operation = 'MULTIPLY')
@@ -86,7 +87,8 @@ class Skin:
             rImg=imageFromRelPath(Data["Roughness"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
             rImgNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-1600,50), label="Roughness", image=rImg)
 
-        rmSep =  create_node(CurMat.nodes, "ShaderNodeSeparateRGB", (-1300,50))
+        rmSep =  create_node(CurMat.nodes, "ShaderNodeSeparateColor", (-1300,50))
+        rmSep.mode = 'RGB'
 		
         rmSub =  create_node(CurMat.nodes, "ShaderNodeMath", (-1100,0), operation = 'SUBTRACT')
         rmSub.inputs[1].default_value = (0.5)
