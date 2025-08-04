@@ -13,7 +13,6 @@ from .phys_import import cp77_phys_import
 from ..collisiontools.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from ..main.bartmoss_functions import dataKrash
-#import tracemalloc
 
 def create_axes(ent_coll,name):
     if name not in ent_coll.objects.keys():
@@ -47,7 +46,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
 
     error_messages = []
     JSONTool.start_caching()
-    entPaths = dataKrash('.glb', 'mesh.json', '.app.json', 'anims.glb', '.rig.json', '.phys.json')
+    entPaths = dataKrash(path, ('.glb', 'mesh.json', '.app.json', '.anims.glb', '.rig.json', '.phys.json'))
     ent_name=os.path.basename(filepath)[:-9]
     if not cp77_addon_prefs.non_verbose:
         if isinstance(appearances, list):
@@ -907,11 +906,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         show_message('Errors during import:\n\t' + '\n\t'.join(error_messages))
     if not cp77_addon_prefs.non_verbose:
         if app_name:
-            current, peak = tracemalloc.get_traced_memory()
-            tracemalloc.stop()
-
             print(f"Imported Appearance: {app_name} in {time.time() - start_time} Seconds from {ent_name}.ent")
-            print(f"max memory allocation: {peak / 1024 / 1024:.2f} MB")
         print('-------------------- Finished Importing Cyberpunk 2077 Entity --------------------\n')
 
 # The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
