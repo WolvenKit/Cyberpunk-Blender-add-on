@@ -1,6 +1,7 @@
 import bpy
 from .. animtools import reset_armature
 from ..main.common import show_message
+from ..animtools.tracks import export_anim_tracks
 
 #setup the default options to be applied to all export types
 def default_cp77_options():
@@ -192,7 +193,7 @@ def export_anims(context, filepath, options, armatures):
         if "rootMotionType" not in action:
             action["rootMotionType"] = 'Unknown'
         if "frameClamping" not in action:
-            action["frameClamping"] = True
+            action["frameClamping"] = False
         if "frameClampingStartFrame" not in action:
             action["frameClampingStartFrame"] = -1
         if "frameClampingEndFrame" not in action:
@@ -208,8 +209,13 @@ def export_anims(context, filepath, options, armatures):
         if "fallbackFrameIndices" not in action:
             action["fallbackFrameIndices"] = []
         if "optimizationHints" not in action:
-            action["optimizationHints"] = { "preferSIMD": False, "maxRotationCompression": 1}
-
+            action["optimizationHints"] = { "preferSIMD": False, "maxRotationCompression": 0}
+        try:
+            export_anim_tracks(action)
+            action["optimizationHints"]["maxRotationCompression"] = 0
+        except Exception as e:
+            print(f"Error Importing Animation Tracks for Action [ {action.name} ]: {e}")
+        
     options.update(pose_export_options())
     for armature in armatures:
         reset_armature(armature, context)
@@ -350,4 +356,5 @@ def ExportAll(self, context):
     if len(to_exp) > 0:
         for obj in to_exp:
             filepath = obj.get('projPath', '')  # Use 'projPath' property or empty string if it doesn't exist
+
             export_cyberpunk_glb(filepath=filepath, export_poses=False)
