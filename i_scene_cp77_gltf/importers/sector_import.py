@@ -79,7 +79,7 @@ def get_groupname(meshname, meshAppearance):
 # Get the group name for the mesh based on its name and appearance
 # group, groupname = get_group(meshname,meshAppearance)
 def get_group(meshname,meshAppearance,Masters):
-    groups= [g for g in Masters.children if g['meshpath']==meshname and g['appearance']==meshAppearance]
+    groups= [g for g in Masters.children if 'meshpath' in g.keys() and g['meshpath']==meshname and 'appearance' in g.keys() and g['appearance']==meshAppearance]
     if len(groups)>0:
         group=groups[0]
         groupname = group.name
