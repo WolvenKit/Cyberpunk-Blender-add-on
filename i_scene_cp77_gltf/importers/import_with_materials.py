@@ -15,6 +15,7 @@ from .attribute_import import manage_garment_support
 from ..cyber_props import add_anim_props
 from ..jsontool import JSONTool
 from ..main.common import show_message
+from ..animtools.tracks import import_anim_tracks
 import traceback
 
 def get_anim_info(animations):
@@ -30,6 +31,11 @@ def get_anim_info(animations):
 
         if action:
             add_anim_props(animation, action)
+            try:
+                import_anim_tracks(action)
+            except Exception as e:
+                print(f"Error Importing Animation Tracks for Action [ {action.name} ]: {e}")
+                
             if not cp77_addon_prefs.non_verbose:
                 print("Properties added to", action.name)
         else:
