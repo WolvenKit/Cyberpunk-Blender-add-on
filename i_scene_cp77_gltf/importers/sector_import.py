@@ -257,7 +257,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
         print('')
     start_time = time.time()
     # Set this to true to limit import to the types listed in the import_types list.
-    limittypes=True
+    limittypes=False
     import_types=None
     import_types=['worldEntityNode'
     ]
