@@ -214,7 +214,7 @@ def export_anims(context, filepath, options, armatures):
             export_anim_tracks(action)
             action["optimizationHints"]["maxRotationCompression"] = 0
         except Exception as e:
-            print(f"Error Importing Animation Tracks for Action [ {action.name} ]: {e}")
+            print(f"Error Exporting Animation Tracks / Removing Custom Fcurves for Action [ {action.name} ]: {e}")
         
     options.update(pose_export_options())
     for armature in armatures:
@@ -358,3 +358,4 @@ def ExportAll(self, context):
             filepath = obj.get('projPath', '')  # Use 'projPath' property or empty string if it doesn't exist
 
             export_cyberpunk_glb(filepath=filepath, export_poses=False)
+
