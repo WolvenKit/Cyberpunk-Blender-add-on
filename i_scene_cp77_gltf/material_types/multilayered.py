@@ -605,6 +605,7 @@ class Multilayered:
             NG_inputs[4].max_value = 10 # This value is arbitrary, but more than adequate.
             NG_inputs[10].min_value = 0
             NG_inputs[10].max_value = 1
+            NG_inputs[11].default_value = 1
 
             LayerGroupN = create_node(CurMat.nodes, "ShaderNodeGroup", (-2000,500-100*idx))
             LayerGroupN.width = 400

@@ -17,7 +17,7 @@ from . materialtools import *
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
     "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, Doctor Presto, shotlastc, Rudolph2109, Holopointz, Peatral, John CO., Chase_81",
-    "version": (1, 6, 6),
+    "version": (1, 6, 7),
     "blender": (4, 4, 0),
     "location": "File > Import-Export",
     "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
@@ -95,7 +95,7 @@ def register():
     register_materialtools()
 
     for cls in classes:
-        if cls.__name__ is "JSONTool": # this one is static
+        if cls.__name__ == "JSONTool": # this one is static
             continue
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)

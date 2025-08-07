@@ -54,7 +54,7 @@ imported = None
 appearances = None
 collection = None
 
-def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, image_format='png', filepath='', hide_armatures=True, import_garmentsupport=False, files=[], directory='', appearances=[], scripting=False):
+def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=True, image_format='png', filepath='', hide_armatures=True, import_garmentsupport=False, files=[], directory='', appearances=[], scripting=False):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     context=bpy.context
 
@@ -65,31 +65,29 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
    # obj = None
     start_time = time.time()
     if not scripting:
-        loadfiles=self.files
+        loadfiles=files
     else:
         f={}
-        f['name']=os.path.basename(self.filepath)
+        f['name']=os.path.basename(filepath)
         loadfiles=(f,)
-
+    glbname=os.path.basename(filepath)
     DepotPath=cp77_addon_prefs
-    appearances=self.appearances.split(",")
+    
     if not cp77_addon_prefs.non_verbose:
-        if ".anims.glb" in self.filepath:
+        if ".anims.glb" in filepath:
             print('\n-------------------- Beginning Cyberpunk Animation Import --------------------')
-            print(f"Importing Animations From: {os.path.basename(self.filepath)}")
+            print(f"Importing Animations From: {glbname}")
 
         else:
             print('\n-------------------- Beginning Cyberpunk Model Import --------------------')
             if with_materials==True:
-                print(f"Importing: {os.path.basename(self.filepath)} with materials")
-                print(f"Appearances to Import: {(', '.join(appearances))}")
+                print(f"Importing: {glbname} with materials")
+                print(f"Appearances to Import: ",appearances)
             else:
-                print(f"Importing: {os.path.basename(self.filepath)}")
+                print(f"Importing: {glbname}")
     # prevent crash if no directory supplied when using filepath
-    if len(self.directory)>0 and not scripting:
-        directory = self.directory
-    else:
-        directory = os.path.dirname(self.filepath)
+    if len(directory)==0 or scripting:
+        directory = os.path.dirname(filepath)
 
 
     file_names=[]
@@ -115,7 +113,7 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
     #Kwek: was tempted to do a try-catch, but that is just La-Z
     #Kwek: Added another gate for materials
     for f in loadfiles:
-        filename=os.path.splitext(f['name'])[0]
+        filename=os.path.splitext(os.path.splitext(f['name'])[0])[0]
         filepath = os.path.join(directory, f['name'])
         vers = bpy.app.version
         if vers[0] == 4 and vers[1] >= 2 and vers[1] < 4:
@@ -125,12 +123,12 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
         elif vers[0] == 4 and vers[1] >= 5:
             gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, 'import_unused_materials' :False, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":heuristic, "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':octos, 'bone_shape_scale_factor':1.0, 'import_scene_as_collection':True, 'import_scene_extras':True, 'import_select_created_objects':True, 'import_merge_material_slots':False})
         else:
-            gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":heuristic, "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':octos,})
+            gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":heuristic, "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':octos, 'import_select_created_objects':True,})
         gltf_importer.read()
         gltf_importer.checks()
         existingMeshes = bpy.data.meshes.keys()
 
-        current_file_base_path = os.path.splitext(filepath)[0]
+        current_file_base_path = os.path.join(os.path.dirname(filepath),filename)
         has_material_json = os.path.exists(current_file_base_path + ".Material.json")
 
         existingMaterials = bpy.data.materials.keys()
@@ -229,9 +227,14 @@ def CP77GLBimport(self, with_materials, remap_depot, exclude_unused_mats=True, i
         validmats={}
         # fix the app names as for some reason they have their index added on the end.
         if len(json_apps) > 0:
+            
             appkeys=[k for k in json_apps.keys()]
             for i,k in enumerate(appkeys):
                 json_apps[k[:-1*len(str(i))]]=json_apps.pop(k)
+            
+            # save the json_apps to the collection so that we can use it later
+            collection['json_apps']=json.dumps(json_apps)
+
             #appearances = ({'name':'short_hair'},{'name':'02_ca_limestone'},{'name':'ml_plastic_doll'},{'name':'03_ca_senna'})
             #if appearances defined populate valid mats with the mats for them, otherwise populate with everything used.
             if len(appearances)>0 and 'ALL' not in appearances:
@@ -354,6 +357,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
     for name in names:
 
         bpy.data.meshes[name].materials.clear()
+        # we're not getting the materials from the json, but from the glTF importer data
         extras = gltf_importer.data.meshes[counter].extras
 
         # morphtargets don't have material names. Just use all of them.
@@ -368,6 +372,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
             materialNames = extras["materialNames"]
 
         # remove duplicate material names (why does "extras" end up with 10k "decals" entries when I import the maimai?)
+        # Sim - because of a bug in wkit I'd assume mana
         materialNames = list(dict.fromkeys(materialNames))
 
         # Kwek: I also found that other material hiccups will cause the Collection to fail
