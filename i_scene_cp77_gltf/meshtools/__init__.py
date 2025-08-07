@@ -46,6 +46,11 @@ class CP77_PT_MeshTools(Panel):
                     col.operator("cp77.uv_checker", text="Apply UV Checker")
                 col.operator("cp77.trans_weights", text="Weight Transfer Tool")
 
+                if context.active_object and len([obj for obj in bpy.context.selected_objects if obj.type == 'MESH']) > 1:
+                    col.operator("cp77.safe_join", text="Join Meshes")
+                elif context.active_object and context.active_object.type == 'MESH' and context.active_object.data.materials and any(mat.name.startswith('submesh_') for mat in context.active_object.data.materials if mat):
+                    col.operator("cp77.safe_split", text="Split into submeshes")
+
                 box = layout.box()
                 box.label(text="Mesh Cleanup", icon_value=get_icon("TRAUMA"))
                 col = box.column()
@@ -132,6 +137,33 @@ class CP77AddVertexcolorPreset(Operator):
         split = row.split(factor=0.3,align=True)
         split.label(text="Preset Name:")
         split.prop(self, "preset_name", text="")
+
+class CP77SafeJoin(Operator):
+    bl_idname = "cp77.safe_join"
+    bl_label = "Join Selected Meshes"
+    bl_description = "Join selected meshes while preserving submesh information"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+
+    def execute(self, context):
+        result = safe_join(self, context)
+        return result
+
+class CP77SafeSplit(Operator):
+    bl_idname = "cp77.safe_split"
+    bl_label = "Split Selected Meshes"
+    bl_description = "Split selected mesh back into submeshes"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        result = safe_split(self, context)
+        return result
 
 class CP77WeightTransfer(Operator):
     bl_idname = 'cp77.trans_weights'
