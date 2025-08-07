@@ -5,7 +5,7 @@ from .. exporters import CP77HairProfileExport, mlsetup_export
 from .meshtools import *
 from .verttools import *
 from ..main.bartmoss_functions import *
-from ..main.common import get_classes, get_color_presets, save_presets
+from ..main.common import get_active_collection, get_classes, get_color_presets, get_selected_collection, save_presets
 from bpy.props import (StringProperty, EnumProperty)
 from bpy.types import (Scene, Operator, Panel)
 from ..cyber_props import CP77RefitList
@@ -45,6 +45,7 @@ class CP77_PT_MeshTools(Panel):
                 else:
                     col.operator("cp77.uv_checker", text="Apply UV Checker")
                 col.operator("cp77.trans_weights", text="Weight Transfer Tool")
+                col.operator("cp77.garment_support", text="Create Garment Support")
 
                 if context.active_object and len([obj for obj in bpy.context.selected_objects if obj.type == 'MESH']) > 1:
                     col.operator("cp77.safe_join", text="Join Meshes")
@@ -138,6 +139,28 @@ class CP77AddVertexcolorPreset(Operator):
         split.label(text="Preset Name:")
         split.prop(self, "preset_name", text="")
 
+class CP77GarmentSupport(Operator):
+    bl_idname = 'cp77.garment_support'
+    bl_label = "Cyberpunk 2077 Garment Support Tool"
+    bl_description = "Create a garment support shapekey from a selection"
+    bl_options = {'REGISTER', 'UNDO'}
+    mesh_target: StringProperty(name="Mesh Target")
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        return add_garment_support(context, context.scene.cp77_panel_props.mesh_target)
+
+    def draw(self,context):
+        props = context.scene.cp77_panel_props
+        layout = self.layout
+        row = layout.row(align=True)
+        split = row.split(factor=0.3,align=True)
+        split.label(text="Target Mesh:")
+        split.prop(props, "mesh_target", text="")
+        row = layout.row(align=True)
+
 class CP77SafeJoin(Operator):
     bl_idname = "cp77.safe_join"
     bl_label = "Join Selected Meshes"
@@ -177,10 +200,24 @@ class CP77WeightTransfer(Operator):
         name="Transfer by Submesh Order",
         description="Because Mana Gets what Mana Wants :D",
         default=False)
+
     bl_options = {'REGISTER', 'UNDO'}
 
-
     def invoke(self, context, event):
+        selected_collection = get_selected_collection()
+        active_collection = get_active_collection()
+
+        if active_collection and selected_collection and active_collection.name == selected_collection.name:
+            active_collection = None
+
+        props = context.scene.cp77_panel_props
+
+        if selected_collection and active_collection:
+            props.mesh_source = selected_collection.name
+            props.mesh_target = active_collection.name
+        elif selected_collection:
+            props.mesh_target = selected_collection.name
+
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
@@ -190,6 +227,7 @@ class CP77WeightTransfer(Operator):
 
     def draw(self,context):
         props = context.scene.cp77_panel_props
+
         layout = self.layout
         row = layout.row(align=True)
         split = row.split(factor=0.3,align=True)
