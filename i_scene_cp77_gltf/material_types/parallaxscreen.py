@@ -1115,10 +1115,10 @@ class ParallaxScreen:
         CurMat.links.new(lerp5.outputs[0],vecMul17.inputs[1])
 
         # m2 = (1-(1-i3)*(1-i2));
-        if 'm2' in bpy.data.node_groups.keys():
-            m2Group = bpy.data.node_groups['m2']
+        if 'parallax_screen_m2' in bpy.data.node_groups.keys():
+            m2Group = bpy.data.node_groups['parallax_screen_m2']
         else:           
-            m2Group = bpy.data.node_groups.new("m2","ShaderNodeTree")
+            m2Group = bpy.data.node_groups.new("parallax_screen_m2","ShaderNodeTree")
             if vers[0]<4:
                 m2Group.inputs.new('NodeSocketVector','i3')
                 m2Group.inputs.new('NodeSocketVector','i2')
@@ -1150,10 +1150,10 @@ class ParallaxScreen:
         CurMat.links.new(vecMul15.outputs[0],m2.inputs[1])
 
         # m3 = (1-(1-m2)*(1-i1));
-        if 'm3' in bpy.data.node_groups.keys():
-            m3Group = bpy.data.node_groups['m3']
+        if 'parallax_screen_m3' in bpy.data.node_groups.keys():
+            m3Group = bpy.data.node_groups['parallax_screen_m3']
         else:           
-            m3Group = bpy.data.node_groups.new("m3","ShaderNodeTree")
+            m3Group = bpy.data.node_groups.new("parallax_screen_m3","ShaderNodeTree")
             if vers[0]<4:
                 m3Group.inputs.new('NodeSocketVector','m2')
                 m3Group.inputs.new('NodeSocketVector','i1')    
