@@ -1,5 +1,7 @@
 import bpy
 import json
+from collections import defaultdict
+import re
 import os
 from .verttools import *
 from ..cyber_props import *
@@ -399,3 +401,112 @@ def setup_lattice(r_c, fbx_rot, lattice_object_name, target_body_name, control_p
     if new_lattice:
         bpy.context.object.hide_viewport = True
     return new_lattice
+
+
+material_storage = defaultdict(dict)  # {object_name: {slot_index: material_name}}
+
+def safe_join(self, context):
+
+        # Get selected meshes matching submesh pattern
+        selected_meshes = [
+            obj for obj in context.selected_objects if obj.type == 'MESH' and re.match(r'submesh_\d\d', obj.name)
+        ]
+
+        if not selected_meshes:
+            self.report({'ERROR'}, "No valid submeshes selected (must be named 'submesh_XX')")
+            return {'CANCELLED'}
+
+        # Store original materials and assign submesh materials
+        for obj in selected_meshes:
+            # Store original materials
+            material_storage[obj.name].clear()
+            for i, slot in enumerate(obj.material_slots):
+                if slot.material:
+                    material_storage[obj.name][i] = slot.material.name
+
+            # Create/assign submesh material
+            if  obj.name not in bpy.data.materials:
+                mat = bpy.data.materials.new(name= obj.name)
+                mat.diffuse_color = (0.8, 0.8, 0.8, 1)
+
+            # Clear and assign new material
+            obj.data.materials.clear()
+            obj.data.materials.append(bpy.data.materials[obj.name])
+
+            # Enter edit mode to assign material to all geometry
+            bpy.context.view_layer.objects.active = obj
+            bpy.ops.object.mode_set(mode='EDIT')
+
+            # Select all geometry
+            bpy.ops.mesh.select_all(action='DESELECT')
+            bpy.ops.mesh.select_all(action='SELECT')
+
+            # Assign material to selected faces
+            bpy.context.object.active_material_index = 0
+            bpy.ops.object.material_slot_assign()
+
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+        # Join meshes
+        bpy.ops.object.select_all(action='DESELECT')
+
+        for obj in selected_meshes:
+            obj.select_set(True)
+
+        context.view_layer.objects.active = selected_meshes[0]
+        bpy.ops.object.join()
+
+        return {'FINISHED'}
+
+
+def _restore_original_materials(self, obj):
+    """Restore materials from storage to given object."""
+    if not obj.data.materials:
+        obj.data.materials.clear()
+
+    stored_materials = material_storage.get(obj.name, {})
+
+    # Ensure we have enough material slots
+    max_slot = max(stored_materials.keys(), default=-1) + 1
+    while len(obj.data.materials) < max_slot:
+        obj.data.materials.append(None)
+
+    # Restore materials to correct slots
+    for slot_idx, mat_name in stored_materials.items():
+        if mat_name in bpy.data.materials:
+            obj.data.materials[slot_idx] = bpy.data.materials[mat_name]
+        else:
+            self.report({'WARNING'}, f"Missing material: {mat_name}")
+
+def safe_split(self, context):
+    obj = context.active_object
+
+    if obj is None or obj.type != 'MESH':
+        show_message("No meshes selected. Please select a mesh and try again.")
+        return {'CANCELLED'}
+
+    # Enter edit mode to split by material
+    bpy.ops.object.mode_set(mode='EDIT')
+
+    # Select all geometry and separate by materials
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.separate(type='MATERIAL')
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    # Get newly created objects from the split
+    new_objects = [o for o in context.selected_objects]
+
+    # Process each split object
+    for new_obj in new_objects:
+        # Rename object to match its material
+        if new_obj.data.materials and new_obj.data.materials[0]:
+            new_obj.name = new_obj.data.materials[0].name
+
+
+        new_obj.data.materials.clear()
+        # Restore original materials if available
+        if new_obj.name in material_storage:
+            _restore_original_materials(self, new_obj)
+
+    return {'FINISHED'}
+
