@@ -217,7 +217,7 @@ def CP77RefitChecker(self, context):
 
 def applyModifierAsShapeKey(obj):
     names = getModNames(obj)
-    autoFitters =  [s for s in names if 'AutoFitter' in s]
+    autoFitters =  [s for s in names if 'Autofitter' in s]
 
     if len(autoFitters) == 0:
         print(f"No autofitter found for {obj.name}. Current modifiers are {names}")
