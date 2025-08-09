@@ -250,7 +250,7 @@ def applyRefitter(obj):
 
     # if we have active shape keys: activate 'Basis' and remove it
     if not setActiveShapeKey(obj, 'Basis'):
-        raise Exception("Failed to activate 'Basis' shape key")
+        raise ValueError("Failed to activate 'Basis' shape key")
     bpy.ops.object.shape_key_remove(all=False)
 
     newnames = getShapeKeyNames(obj)
