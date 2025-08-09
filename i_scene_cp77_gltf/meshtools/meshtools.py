@@ -217,7 +217,7 @@ def CP77RefitChecker(self, context):
 
 def applyModifierAsShapeKey(obj):
     names = getModNames(obj)
-    autoFitters =  [s for s in names if 'AutoFitter' in s]
+    autoFitters =  [s for s in names if 'Autofitter' in s]
 
     if len(autoFitters) == 0:
         print(f"No autofitter found for {obj.name}. Current modifiers are {names}")
@@ -234,7 +234,7 @@ def applyRefitter(obj):
     applyModifierAsShapeKey(obj)
     orignames = getShapeKeyNames(obj)
     for name in orignames:
-        if 'AutoFitter' in name:
+        if 'Autofitter' in name:
             refitkey = setActiveShapeKey(obj, name)
             refitkey.value = 1
         if 'Garment' in name:
@@ -255,7 +255,7 @@ def applyRefitter(obj):
         bpy.ops.object.shape_key_remove(all=False)
 
     for name in newnames:
-        if 'AutoFitter' in name:
+        if 'Autofitter' in name:
             refitkey = setActiveShapeKey(obj, name)
             refitkey.name = 'Basis'
         if name not in orignames:
