@@ -234,7 +234,7 @@ def applyRefitter(obj):
     applyModifierAsShapeKey(obj)
     orignames = getShapeKeyNames(obj)
     for name in orignames:
-        if 'AutoFitter' in name:
+        if 'Autofitter' in name:
             refitkey = setActiveShapeKey(obj, name)
             refitkey.value = 1
         if 'Garment' in name:
@@ -255,7 +255,7 @@ def applyRefitter(obj):
         bpy.ops.object.shape_key_remove(all=False)
 
     for name in newnames:
-        if 'AutoFitter' in name:
+        if 'Autofitter' in name:
             refitkey = setActiveShapeKey(obj, name)
             refitkey.name = 'Basis'
         if name not in orignames:
