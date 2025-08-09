@@ -208,10 +208,8 @@ def CP77RefitChecker(self, context):
         if obj.type =='LATTICE':
             if "refitter_type" in obj:
                 refitter.append(obj)
-                print('refitters found in scene:', refitter)
             if "refitter_addon" in obj:
                 addon.append(obj)
-                print('refitter addons found in scene:', addon)
     print(f'refitter result: {refitter} refitter addon: {addon}')
     return refitter, addon
 
