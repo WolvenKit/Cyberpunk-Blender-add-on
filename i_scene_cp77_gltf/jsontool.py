@@ -32,6 +32,8 @@ class JSONTool:
 
     @staticmethod
     def json_ver_validate(json_data):
+        if json_data==None:
+            return False
         if 'Header' not in json_data:
             return False
         header = json_data['Header']
