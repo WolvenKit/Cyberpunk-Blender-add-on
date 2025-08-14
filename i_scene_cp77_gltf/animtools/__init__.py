@@ -326,7 +326,7 @@ class CP77RigLoader(Operator):
             # Find the corresponding .glb file and load it
             selected_rig = rig_files[rig_names.index(selected_rig_name)]
             self.filepath = selected_rig
-            CP77GLBimport(self, exclude_unused_mats=True, image_format='PNG', with_materials=False,
+            CP77GLBimport(self, exclude_unused_mats=True, image_format='PNG',
                           filepath=selected_rig, hide_armatures=False, import_garmentsupport=False, files=[], directory='', appearances="ALL", remap_depot=False, scripting=True)
             if props.fbx_rot:
                 rotate_quat_180(self,context)
