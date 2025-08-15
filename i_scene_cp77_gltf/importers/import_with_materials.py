@@ -72,7 +72,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         loadfiles=(f,)
     glbname=os.path.basename(filepath)
     DepotPath=cp77_addon_prefs
-    
+
     if not cp77_addon_prefs.non_verbose:
         if ".anims.glb" in filepath:
             print('\n-------------------- Beginning Cyberpunk Animation Import --------------------')
@@ -144,7 +144,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
 
         multimesh=False
         meshcount=0
-        # check if we have a multimesh object, and if so, set the flag  
+        # check if we have a multimesh object, and if so, set the flag
         for obj in imported:
             if obj.type == 'MESH' and obj.name.startswith(str(meshcount)+"_"):
                 multimesh = True
@@ -171,7 +171,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         collection = bpy.data.collections.new(filename)
         bpy.context.scene.collection.children.link(collection)
         for o in imported:
-            import_meshes_and_anims(collection, gltf_importer, hide_armatures, o)
+            import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filename)
 
         collection['orig_filepath']=filepath
         collection['numMeshChildren']=objs_in_col(collection, 'MESH')
@@ -227,11 +227,11 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         validmats={}
         # fix the app names as for some reason they have their index added on the end.
         if len(json_apps) > 0:
-            
+
             appkeys=[k for k in json_apps.keys()]
             for i,k in enumerate(appkeys):
                 json_apps[k[:-1*len(str(i))]]=json_apps.pop(k)
-            
+
             # save the json_apps to the collection so that we can use it later
             collection['json_apps']=json.dumps(json_apps)
 
@@ -452,7 +452,7 @@ def blender_4_scale_armature_bones():
                 pb.custom_shape_scale_xyz[2] = .0175
                 pb.use_custom_shape_bone_size = True
 
-def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o):
+def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filename):
     # TODO: check if this is a Cyberpunk import or something else entirely
 
     for parent in o.users_collection:
@@ -469,6 +469,7 @@ def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o):
         bpy.context.scene.render.fps = 30
 
     # if no meshes exist, don't hide the armature
-    elif meshes and 'Armature' in o.name:
+    elif meshes and o.type == 'ARMATURE':
         o.hide_set(hide_armatures)
+        o.name = "Armature__" + filename
 
