@@ -9,46 +9,65 @@ from ..cyber_props import *
 from ..main.common import loc, show_message, get_collection_children
 from ..main.bartmoss_functions import setActiveShapeKey, getShapeKeyNames, getModNames
 from ..jsontool import JSONTool
-def CP77SubPrep(self, context, smooth_factor, merge_distance):
-    scn = context.scene
-    obj = context.object
-    current_mode = context.mode
-    if not obj:
-        show_message("No active object. Please Select a Mesh and try again")
+def CP77SubPrep(self, context, smooth_factor: float, merge_distance: float):
+    angle_deg = max(0.0, min(180.0, float(smooth_factor)))
+    original_mode = get_safe_mode()
+    if original_mode != 'OBJECT':
+        safe_mode_switch('OBJECT')
+
+    targets = [ob for ob in context.selected_objects if ob.type == 'MESH']
+    if not targets:
+        show_message("Select one or more meshes.")
+        if original_mode != 'OBJECT':
+            safe_mode_switch(original_mode)
         return {'CANCELLED'}
-    if obj.type != 'MESH':
-        show_message("The active object is not a mesh.")
-        return {'CANCELLED'}
-    if current_mode != 'EDIT':
-        bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_mode(type="EDGE")
-    bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.mesh.select_non_manifold(extend=False, use_wire=True, use_boundary=True, use_multi_face=False, use_non_contiguous=False, use_verts=False)
-    bpy.ops.mesh.mark_seam(clear=False)
-    bpy.ops.mesh.select_mode(type="VERT")
-    bpy.ops.mesh.select_all(action='SELECT')
 
-    # Store the number of vertices before merging
-    bpy.ops.object.mode_set(mode='OBJECT')
-    before_merge_count = len(obj.data.vertices)
-    bpy.ops.object.mode_set(mode='EDIT')
+    merged_total = 0
+    for ob in targets:
+        me = ob.data
+        # avoid modifying other objects that share this mesh
+        if me.users > 1:
+            ob.data = me = me.copy()
 
-    bpy.ops.mesh.remove_doubles(threshold=merge_distance)
+        # shape-key safety
+        do_merge = merge_distance > 0.0 and not (getattr(me, "shape_keys", None) and me.shape_keys.key_blocks)
 
-    # Update the mesh and calculate the number of merged vertices
-    bpy.ops.object.mode_set(mode='OBJECT')
-    after_merge_count = len(obj.data.vertices)
-    merged_vertices = before_merge_count - after_merge_count
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(me)
+            bm.verts.ensure_lookup_table()
+            bm.edges.ensure_lookup_table()
+            bm.faces.ensure_lookup_table()
 
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.faces_select_linked_flat()
-    bpy.ops.mesh.normals_make_consistent(inside=False)
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.smooth_normals()
-    bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=f"Submesh preparation complete. {merged_vertices} verts merged")
-    if context.mode != current_mode:
-        bpy.ops.object.mode_set(mode=current_mode)
+            start = len(bm.verts)
+            # mark seams at boundaries & wires
+            for e in bm.edges:
+                if len(e.link_faces) == 0 or e.is_boundary:
+                    e.seam = True
+            if do_merge:
+                bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=float(merge_distance))
+            bm.normal_update()
+            for f in bm.faces:
+                f.smooth = True
+
+            bm.to_mesh(me)
+            merged_total += max(0, start - len(bm.verts))
+        finally:
+            bm.free()
+
+        me.update(calc_edges=True, calc_edges_loose=True)
+
+    # apply Shade Auto Smooth to selected meshes
+    active_backup = context.view_layer.objects.active
+    context.view_layer.objects.active = targets[0]
+    bpy.ops.object.shade_auto_smooth(use_auto_smooth=True, angle=radians(angle_deg))
+    context.view_layer.objects.active = active_backup
+
+    show_message(f"Submesh preparation complete. {merged_total} verts merged across {len(targets)} object(s).")
+    if original_mode != 'OBJECT':
+        safe_mode_switch(original_mode)
+    return {'FINISHED'}
+
 
 def CP77ArmatureSet(self, context, reparent):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
