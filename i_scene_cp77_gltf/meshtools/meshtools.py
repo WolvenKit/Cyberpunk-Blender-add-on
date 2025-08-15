@@ -227,10 +227,8 @@ def CP77RefitChecker(self, context):
         if obj.type =='LATTICE':
             if "refitter_type" in obj:
                 refitter.append(obj)
-                print('refitters found in scene:', refitter)
             if "refitter_addon" in obj:
                 addon.append(obj)
-                print('refitter addons found in scene:', addon)
     print(f'refitter result: {refitter} refitter addon: {addon}')
     return refitter, addon
 
@@ -265,14 +263,14 @@ def applyRefitter(obj):
             gskey.value = 0
             gskey = setActiveShapeKey(obj, name)
             bpy.ops.object.shape_key_remove(all=False)
-    newnames = getShapeKeyNames(obj)
     bpy.context.view_layer.objects.active = obj
 
-    # if we have active shape keys: activate 'Basis' and remove the others
-    if obj.data.shape_keys is not None and obj.data.shape_keys.key_blocks is not None:
-        setActiveShapeKey(obj, 'Basis')
-        bpy.ops.object.shape_key_remove(all=False)
+    # if we have active shape keys: activate 'Basis' and remove it
+    if not setActiveShapeKey(obj, 'Basis'):
+        raise ValueError("Failed to activate 'Basis' shape key")
+    bpy.ops.object.shape_key_remove(all=False)
 
+    newnames = getShapeKeyNames(obj)
     for name in newnames:
         if 'Autofitter' in name:
             refitkey = setActiveShapeKey(obj, name)
@@ -282,68 +280,60 @@ def applyRefitter(obj):
             newgs.name = 'GarmentSupport'
 
 def CP77Refit(context, refitter, addon, target_body_path, target_body_name, useAddon, addon_target_body_path, addon_target_body_name, fbx_rot):
-    obj = context.object
-    if not obj:
-        show_message("No active object. Please Select a Mesh and try again")
-        return {'CANCELLED'}
-    if obj.type != 'MESH':
-        show_message("The active object is not a mesh.")
-        return {'CANCELLED'}
-    else:
-        autofitter(context, refitter, addon, target_body_path, useAddon, addon_target_body_path, addon_target_body_name, target_body_name, fbx_rot)
+    autofitter(context, refitter, addon, target_body_path, useAddon, addon_target_body_path, addon_target_body_name, target_body_name, fbx_rot)
 
 def autofitter(context, refitter, addon, target_body_path, useAddon, addon_target_body_path, addon_target_body_name, target_body_name, fbx_rot):
-    if target_body_name == None:
+    if target_body_name is None:
         show_message("No target body selected. Please select a target body and try again.")
         return {'CANCELLED'}
 
     selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
+    if len(selected_meshes) == 0:
+        show_message("No meshes selected. Please select at least one mesh and try again.")
+        return {'CANCELLED'}
+    
     scene = context.scene
-    current_mode = context.mode
     refitter_obj = None
     addon_obj = None
     r_c = None
-    print(fbx_rot)
-    print(refitter, addon)
 
     if len(refitter) != 0:
         for obj in refitter:
             if obj['refitter_type'] == target_body_name:
                 print(obj['refitter_type'], 'refitter found')
                 refitter_obj = obj
+                break
+                
         if refitter_obj:
             print('theres a refitter:', refitter_obj.name, 'type:', refitter_obj['refitter_type'])
-            for mesh in selected_meshes:
+            for mesh in selected_meshes[:]:
                 print('Checking mesh for refits:', mesh.name)
-                refit = False
                 for modifier in mesh.modifiers:
                     if modifier.type == 'LATTICE' and modifier.object == refitter_obj:
-                        refit = True
                         print(mesh.name, 'is already refit for', target_body_name)
-                        continue
-                print(mesh.name, 'Applying refit for', target_body_name)
-                applyRefitter(mesh)
+                        selected_meshes.pop(selected_meshes.index(mesh))
+                        break
     if len(addon) != 0:
         for obj in addon:
-            print('addon object:', obj.name)
             if obj['refitter_addon_type'] == addon_target_body_name:
                 print(obj['refitter_addon_type'], 'refitter addon found')
                 addon_obj = obj
+                break
 
         if addon_obj:
             print('theres a refitter addon:', addon_obj.name, 'type:', addon_obj['refitter_addon_type'])
             for mesh in selected_meshes:
                 print('Checking mesh for refit addons:', mesh.name)
-                refit = False
                 for modifier in mesh.modifiers:
                     if modifier.type == 'LATTICE' and modifier.object == addon_obj:
-                        refit = True
                         print(mesh.name, 'is already refit for', addon_target_body_name)
-                if not refit:
-                    print('refitting:', mesh.name, 'to:', target_body_name)
-                    lattice_modifier = mesh.modifiers.new(addon_obj.name, 'LATTICE')
-                    lattice_modifier.object = addon_obj
-
+                        selected_meshes.pop(selected_meshes.index(mesh))
+                        break
+                        
+    if len(selected_meshes) == 0:
+        show_message("No mesh needs refitting. Please select at least one mesh and try again.")
+        return {'CANCELLED'}
+                        
     for collection in scene.collection.children:
         if collection.name == 'Refitters':
             r_c = collection
@@ -365,7 +355,6 @@ def autofitter(context, refitter, addon, target_body_path, useAddon, addon_targe
 
         lattice_modifier.object = new_lattice
         applyRefitter(mesh)
-            # Create a new lattice object
 
 def add_garment_support(context, target_collection_name):
     target_collection_children = get_collection_children(target_collection_name, "MESH")
