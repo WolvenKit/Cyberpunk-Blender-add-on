@@ -478,7 +478,6 @@ class CP77_OT_submesh_prep(Operator):
         split.label(text="Smooth Factor:")
         split.prop(props,"smooth_factor", text="", slider=True)
 
-
 class CP77RotateObj(Operator):
     bl_label = "Change Orientation"
     bl_idname = "cp77.rotate_obj"
@@ -499,13 +498,6 @@ def register_meshtools():
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
 
-def unregister_meshtools():
-    for cls in reversed(other_classes):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
-    for cls in reversed(operators):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
 def unregister_meshtools():
     for cls in reversed(other_classes):
         if hasattr(bpy.types, cls.__name__):
