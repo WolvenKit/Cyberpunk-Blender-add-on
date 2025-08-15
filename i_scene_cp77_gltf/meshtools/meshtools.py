@@ -117,7 +117,6 @@ def CP77ArmatureSet(self, context, reparent):
         # Link the mesh to the target armature's collection
         target_collection.objects.link(mesh)
 
-
 # find or create the uv checker material instance. We don't need the return value, but we need the material to exist.
 def ensure_uv_checker_material():
     #check if it's already defined
@@ -230,112 +229,224 @@ def CP77RefitChecker(self, context):
     print(f'refitter result: {refitter} refitter addon: {addon}')
     return refitter, addon
 
-def applyModifierAsShapeKey(obj):
-    names = getModNames(obj)
-    autoFitters =  [s for s in names if 'Autofitter' in s]
 
-    if len(autoFitters) == 0:
-        print(f"No autofitter found for {obj.name}. Current modifiers are {names}")
+def keyblocks(obj):
+    sk = obj.data.shape_keys
+    return sk.key_blocks if sk else None
+
+def ensure_basis(obj):
+    kb = keyblocks(obj)
+    if kb:
+        return kb[0]
+    bpy.ops.object.shape_key_add(from_mix=False)
+    return obj.data.shape_keys.key_blocks[0]
+
+def get_shape_key_names(obj):
+    kb = keyblocks(obj)
+    return [k.name for k in kb] if kb else []
+
+def set_active_shape_key(obj, name):
+    kb = keyblocks(obj)
+    if not kb or name not in kb:
+        return None
+    obj.active_shape_key_index = list(kb).index(kb[name])
+    return kb[name]
+
+def unique_key_name(obj, base_name):
+    existing = set(get_shape_key_names(obj))
+    if base_name not in existing:
+        return base_name
+    i = 1
+    while True:
+        cand = f"{base_name}.{i:03d}"
+        if cand not in existing:
+            return cand
+        i += 1
+
+def remove_key(obj, name):
+    kb = keyblocks(obj)
+    if not kb or name not in kb:
         return
+    obj.shape_key_remove(kb[name])
 
-    for refitter in autoFitters:
-        bpy.context.view_layer.objects.active = obj
+def add_key_from_mix(obj, name, values=None):
+    kb = keyblocks(obj)
+    if not kb:
+        basis = ensure_basis(obj)
+        kb = keyblocks(obj)
+    else:
+        basis = kb[0]
+
+    new_name = unique_key_name(obj, name)
+    new_key = obj.shape_key_add(name=new_name, from_mix=False)
+
+    src_keys = list(kb)[1:]
+    val_map = {k.name: (values.get(k.name, k.value) if values else k.value) for k in src_keys}
+
+    n = len(basis.data)
+    for i in range(n):
+        bco = basis.data[i].co
+        out = bco.copy()
+        for k in src_keys:
+            v = val_map.get(k.name, 0.0)
+            if v != 0.0:
+                out += (k.data[i].co - bco) * v
+        new_key.data[i].co = out
+    return new_key
+
+def copy_key_to_basis(obj, src_name):
+    kb = keyblocks(obj)
+    if not kb or src_name not in kb:
+        return False
+    basis = kb[0]
+    src = kb[src_name]
+    if len(basis.data) != len(src.data):
+        raise RuntimeError(f"Vertex count mismatch on {obj.name} for '{src_name}'")
+    for i in range(len(basis.data)):
+        basis.data[i].co = src.data[i].co
+    return True
+
+def apply_modifier_as_shapekey(obj, mod_name, keep_modifier=False):
+    view_layer = bpy.context.view_layer
+    prev_active = view_layer.objects.active
+    preselected = [o for o in view_layer.objects if o.select_get()]
+    prev_mode = getattr(prev_active, "mode", None) if prev_active else None
+    prev_hide_viewport = getattr(obj, "hide_viewport", False)
+    prev_hide = obj.hide_get()
+
+    try:
+        if prev_hide_viewport:
+            obj.hide_viewport = False
+        if prev_hide:
+            obj.hide_set(False)
+
+        for o in preselected:
+            o.select_set(False)
+
+        view_layer.objects.active = obj
         obj.select_set(True)
 
-        bpy.ops.object.modifier_apply_as_shapekey(keep_modifier=False, modifier=refitter)
-        print(f"Applied modifier '{refitter}' as shape key.")
+        result = bpy.ops.object.modifier_apply_as_shapekey(modifier=mod_name)
+        if result != {'FINISHED'}:
+            raise RuntimeError(f"Failed to apply '{mod_name}' on {obj.name}: {result}")
+
+        if not keep_modifier and mod_name in obj.modifiers:
+            obj.modifiers.remove(obj.modifiers[mod_name])
+
+    finally:
+        try:
+            obj.hide_viewport = prev_hide_viewport
+            obj.hide_set(prev_hide)
+        except Exception:
+            pass
+
+        for o in view_layer.objects:
+            o.select_set(False)
+        for o in preselected:
+            o.select_set(True)
+
+        view_layer.objects.active = prev_active
+        if prev_active and prev_mode and prev_mode != 'OBJECT':
+            try:
+                bpy.ops.object.mode_set(mode=prev_mode)
+            except Exception:
+                pass
 
 def applyRefitter(obj):
-    applyModifierAsShapeKey(obj)
-    orignames = getShapeKeyNames(obj)
-    for name in orignames:
-        if 'Autofitter' in name:
-            refitkey = setActiveShapeKey(obj, name)
-            refitkey.value = 1
-        if 'Garment' in name:
-            gskey = setActiveShapeKey(obj, name)
-            gskey.value = 1
+    ensure_basis(obj)
 
-            bpy.ops.object.shape_key_add(from_mix=True)
+    names = get_shape_key_names(obj)
+    auto_names = [n for n in names if 'Autofitter' in n]
+    garm_names = [n for n in names if 'Garment' in n]
 
-            gskey.value = 0
-            gskey = setActiveShapeKey(obj, name)
-            bpy.ops.object.shape_key_remove(all=False)
-    bpy.context.view_layer.objects.active = obj
+    values = {}
+    for n in auto_names + garm_names:
+        values[n] = 1.0
 
-    # if we have active shape keys: activate 'Basis' and remove it
-    if not setActiveShapeKey(obj, 'Basis'):
-        raise ValueError("Failed to activate 'Basis' shape key")
-    bpy.ops.object.shape_key_remove(all=False)
+    gs_key = add_key_from_mix(obj, 'GarmentSupport', values=values)
 
-    newnames = getShapeKeyNames(obj)
-    for name in newnames:
-        if 'Autofitter' in name:
-            refitkey = setActiveShapeKey(obj, name)
-            refitkey.name = 'Basis'
-        if name not in orignames:
-            newgs = setActiveShapeKey(obj, name)
-            newgs.name = 'GarmentSupport'
+    for n in garm_names:
+        remove_key(obj, n)
 
-def CP77Refit(context, refitter, addon, target_body_path, target_body_name, useAddon, addon_target_body_path, addon_target_body_name, fbx_rot):
-    autofitter(context, refitter, addon, target_body_path, useAddon, addon_target_body_path, addon_target_body_name, target_body_name, fbx_rot)
+    if auto_names:
+        # bake first autofitter into Basis
+        baked = auto_names[0]
+        if copy_key_to_basis(obj, baked):
+            remove_key(obj, baked)
 
-def autofitter(context, refitter, addon, target_body_path, useAddon, addon_target_body_path, addon_target_body_name, target_body_name, fbx_rot):
-    if target_body_name is None:
-        show_message("No target body selected. Please select a target body and try again.")
-        return {'CANCELLED'}
+    return gs_key.name if gs_key else None
 
-    selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
-    if len(selected_meshes) == 0:
-        show_message("No meshes selected. Please select at least one mesh and try again.")
-        return {'CANCELLED'}
-    
+def CP77RefitChecker(self, context):
+    scene = context.scene
+    objects = scene.objects
+    refitter = []
+    addon = []
+    for obj in objects:
+        if obj.type =='LATTICE':
+            if "refitter_type" in obj:
+                refitter.append(obj)
+            if "refitter_addon" in obj:
+                addon.append(obj)
+    print(f'refitter result: {refitter} refitter addon: {addon}')
+    return refitter, addon
+
+def CP77Refit(context, refitter, addon, target_body_path, target_body_name, useAddon, addon_target_body_path, addon_target_body_name, fbx_rot, try_auto_apply):
+    autofitter(context, refitter, addon, target_body_path, useAddon, addon_target_body_path, addon_target_body_name, target_body_name, fbx_rot, try_auto_apply)
+
+def autofitter(context, refitter, addon, target_body_path, useAddon, addon_target_body_path, addon_target_body_name, target_body_name, fbx_rot, try_auto_apply):
     scene = context.scene
     refitter_obj = None
     addon_obj = None
     r_c = None
 
-    if len(refitter) != 0:
+    if target_body_name == 'None' and addon_target_body_name is not None:
+        target_body_name = addon_target_body_name
+        target_body_path = addon_target_body_path
+        useAddon = False
+
+
+    selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
+    if not selected_meshes:
+        show_message("No meshes selected. Please select at least one mesh and try again.")
+        return {'CANCELLED'}
+
+    if refitter:
         for obj in refitter:
-            if obj['refitter_type'] == target_body_name:
-                print(obj['refitter_type'], 'refitter found')
+            if obj.get('refitter_type') == target_body_name:
+                print(f"{obj['refitter_type']} refitter found")
                 refitter_obj = obj
                 break
-                
-        if refitter_obj:
-            print('theres a refitter:', refitter_obj.name, 'type:', refitter_obj['refitter_type'])
-            for mesh in selected_meshes[:]:
-                print('Checking mesh for refits:', mesh.name)
-                for modifier in mesh.modifiers:
-                    if modifier.type == 'LATTICE' and modifier.object == refitter_obj:
-                        print(mesh.name, 'is already refit for', target_body_name)
-                        selected_meshes.pop(selected_meshes.index(mesh))
-                        break
-    if len(addon) != 0:
-        for obj in addon:
-            if obj['refitter_addon_type'] == addon_target_body_name:
-                print(obj['refitter_addon_type'], 'refitter addon found')
-                addon_obj = obj
-                break
 
-        if addon_obj:
-            print('theres a refitter addon:', addon_obj.name, 'type:', addon_obj['refitter_addon_type'])
-            for mesh in selected_meshes:
-                print('Checking mesh for refit addons:', mesh.name)
-                for modifier in mesh.modifiers:
-                    if modifier.type == 'LATTICE' and modifier.object == addon_obj:
-                        print(mesh.name, 'is already refit for', addon_target_body_name)
-                        selected_meshes.pop(selected_meshes.index(mesh))
-                        break
-                        
-    if len(selected_meshes) == 0:
+        if refitter_obj:
+            print(f"Refitter found: {refitter_obj.name} (type: {refitter_obj['refitter_type']})")
+            selected_meshes = [
+                mesh for mesh in selected_meshes
+                if not any(
+                    modifier.type == 'LATTICE' and modifier.object == refitter_obj
+                    for modifier in mesh.modifiers)]
+    if useAddon:
+        if addon:
+            for obj in addon:
+                if obj.get('refitter_addon_type') == addon_target_body_name:
+                    print(f"{obj['refitter_addon_type']} refitter addon found")
+                    addon_obj = obj
+                    break
+
+            if addon_obj:
+                print(f"Refitter addon found: {addon_obj.name} (type: {addon_obj['refitter_addon_type']})")
+                selected_meshes = [
+                    mesh for mesh in selected_meshes
+                    if not any(
+                        modifier.type == 'LATTICE' and modifier.object == addon_obj
+                        for modifier in mesh.modifiers
+                    )
+                ]
+
+    if not selected_meshes:
         show_message("No mesh needs refitting. Please select at least one mesh and try again.")
         return {'CANCELLED'}
-                        
-    for collection in scene.collection.children:
-        if collection.name == 'Refitters':
-            r_c = collection
-            break
+
+    r_c = next((c for c in scene.collection.children if c.name == 'Refitters'), None)
     if r_c is None:
         r_c = bpy.data.collections.new('Refitters')
         scene.collection.children.link(r_c)
@@ -352,6 +463,7 @@ def autofitter(context, refitter, addon, target_body_path, useAddon, addon_targe
             lattice_modifier.object = new_lattice
 
         lattice_modifier.object = new_lattice
+    if try_auto_apply:
         applyRefitter(mesh)
 
 def add_garment_support(context, target_collection_name):
@@ -411,7 +523,6 @@ def add_garment_support(context, target_collection_name):
 
     return {'FINISHED'}
 
-
 # re-use previous lattice, or add a new one if there isn't one
 def add_lattice(target_body_path, r_c, fbx_rot, target_body_name):
     for refitter in r_c.objects:
@@ -424,7 +535,6 @@ def add_lattice(target_body_path, r_c, fbx_rot, target_body_name):
     lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w  = JSONTool.jsonload(target_body_path)
     new_lattice = setup_lattice(r_c, fbx_rot, lattice_object_name, target_body_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale,lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w)
     return new_lattice
-
 
 def setup_lattice(r_c, fbx_rot, lattice_object_name, target_body_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale,lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w):
     bpy.ops.object.add(type='LATTICE', enter_editmode=False, location=(0, 0, 0))
@@ -466,7 +576,6 @@ def setup_lattice(r_c, fbx_rot, lattice_object_name, target_body_name, control_p
     if new_lattice:
         bpy.context.object.hide_viewport = True
     return new_lattice
-
 
 material_storage = defaultdict(dict)  # {object_name: {slot_index: material_name}}
 
@@ -522,7 +631,6 @@ def safe_join(self, context):
         bpy.ops.object.join()
 
         return {'FINISHED'}
-
 
 def _restore_original_materials(self, obj):
     """Restore materials from storage to given object."""
