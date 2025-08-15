@@ -347,44 +347,68 @@ class CP77Autofitter(Operator):
         description="If enabled, a base refitter will be applied, followed by an addon",
         default=False
     )
-
+    try_auto_apply: BoolProperty(
+        name="Auto Apply",
+        description="Attempt to apply the refit geometry as the mesh's new basis upon creation",
+        default=False
+    )
+    
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
-        target_body_name = props.refit_json
-        addon_target_body_name = props.refit_addon_json
-        target_body_paths, target_body_names = CP77RefitList(context)
-        addon_target_body_paths, addon_target_body_names = CP77RefitAddonList(context)
-        refitter, addon = CP77RefitChecker(self, context)
 
-        if target_body_name in target_body_names:
-            target_body_path = target_body_paths[target_body_names.index(target_body_name)]
-            if self.useAddon:
-                if addon_target_body_name in addon_target_body_names:
-                    addon_target_body_path = addon_target_body_paths[addon_target_body_names.index(addon_target_body_name)]
+        # Build selectable lists from your UI sources
+        base_paths,  base_names  = CP77RefitList(context)
+        addon_paths, addon_names = CP77RefitAddonList(context)
+
+        # Gather the user’s chosen refitters (paths + names in order)
+        refitter_paths = []
+        names = []
+
+        # Base (required)
+        base_choice = props.refit_json
+        if base_choice in base_names:
+            refitter_paths.append(base_paths[base_names.index(base_choice)])
+            names.append(base_choice)
+        else:
+            self.report({'ERROR'}, f"Base refitter '{base_choice}' not found.")
+            return {'CANCELLED'}
+
+        # Optional addon
+        if self.useAddon:
+            addon_choice = props.refit_addon_json
+            if addon_choice in addon_names:
+                refitter_paths.append(addon_paths[addon_names.index(addon_choice)])
+                names.append(addon_choice)
             else:
-                addon_target_body_path = None
-                addon_target_body_name = None
-
-            CP77Refit(
-                context=context,
-                refitter=refitter,
-                addon=addon,
-                target_body_path=target_body_path,
-                target_body_name=target_body_name,
-                useAddon=self.useAddon,
-                addon_target_body_path=addon_target_body_path,
-                addon_target_body_name=addon_target_body_name,
-                fbx_rot=props.fbx_rot
+                self.report({'ERROR'}, f"Addon refitter '{addon_choice}' not found.")
+                return {'CANCELLED'}
+        refitter, addon = CP77RefitChecker(self, context)
+        CP77Refit(
+            context=context,
+            refitter=refitter,
+            addon=addon,
+            target_body_path=props.target_body_path,                
+            target_body_name=props.target_body_name,
+            useAddon=self.useAddon,
+            addon_target_body_path=props.addon_target_body_path,
+            addon_target_body_name=props.addon_target_body_name,
+            fbx_rot=props.fbx_rot,
+            try_auto_apply=self.try_auto_apply
             )
 
-            return {'FINISHED'}
+        return {'FINISHED'}
 
     def draw(self,context):
         props = context.scene.cp77_panel_props
         layout = self.layout
+        col = layout.column_flow(2)
+        col.prop(props, 'fbx_rot', text="Refit a mesh in FBX orientation")
+        col.prop(self, 'useAddon', text="Use a Refitter Addon")
+        col = layout.column()
+        col.prop(self, 'try_auto_apply', text="Apply to Mesh")
         row = layout.row(align=True)
         split = row.split(factor=0.2,align=True)
         split.label(text="Shape:")
@@ -394,9 +418,6 @@ class CP77Autofitter(Operator):
             split = row.split(factor=0.2,align=True)
             split.label(text="Addon:")
             split.prop(props, 'refit_addon_json', text="")
-        col = layout.column()
-        col.prop(props, 'fbx_rot', text="Refit a mesh in FBX orientation")
-        col.prop(self, 'useAddon', text="Use a Refitter Addon")
 
 class CP77UVTool(Operator):
     bl_idname = 'cp77.uv_checker'
