@@ -71,7 +71,6 @@ class CP77_PT_MeshTools(Panel):
                 col.operator("cp77.add_vertex_color_preset")
                 col.operator("cp77.delete_vertex_color_preset")
 
-
 class CP77DeleteVertexcolorPreset(Operator):
     bl_idname = "cp77.delete_vertex_color_preset"
     bl_label = "Delete Vertex Colour Preset"
@@ -315,7 +314,6 @@ class CP77ApplyVertexcolorPreset(Operator):
         split.label(text="Preset:")
         split.prop(props, "vertex_color_presets", text="")
 
-
 class CP77GroupVerts(Operator):
     bl_idname = "cp77.group_verts"
     bl_parent_id = "CP77_PT_MeshTools"
@@ -400,7 +398,6 @@ class CP77Autofitter(Operator):
         col.prop(props, 'fbx_rot', text="Refit a mesh in FBX orientation")
         col.prop(self, 'useAddon', text="Use a Refitter Addon")
 
-
 class CP77UVTool(Operator):
     bl_idname = 'cp77.uv_checker'
     bl_label = "UV Checker"
@@ -458,6 +455,7 @@ class CP77_OT_submesh_prep(Operator):
     bl_label = "Prep. It!"
     bl_idname = "cp77.submesh_prep"
     bl_parent_id = "CP77_PT_MeshTools"
+    bl_options = {'REGISTER', "UNDO"}
     bl_description = "Mark seams based on edges boundary loops, merge vertices, correct and smooth normals based on the direction of the faces"
 
     def invoke(self, context, event):
@@ -479,6 +477,7 @@ class CP77_OT_submesh_prep(Operator):
         split = row.split(factor=0.7,align=True)
         split.label(text="Smooth Factor:")
         split.prop(props,"smooth_factor", text="", slider=True)
+
 
 class CP77RotateObj(Operator):
     bl_label = "Change Orientation"
