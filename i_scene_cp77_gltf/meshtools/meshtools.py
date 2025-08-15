@@ -1,14 +1,13 @@
 import bpy
-import json
 from collections import defaultdict
 import re
 import os
-
 from .verttools import *
 from ..cyber_props import *
 from ..main.common import loc, show_message, get_collection_children
-from ..main.bartmoss_functions import setActiveShapeKey, getShapeKeyNames, getModNames
+from ..main.bartmoss_functions import setActiveShapeKey, getShapeKeyNames, getModNames, get_safe_mode, safe_mode_switch, restore_previous_context, select_object
 from ..jsontool import JSONTool
+
 def CP77SubPrep(self, context, smooth_factor: float, merge_distance: float):
     angle_deg = max(0.0, min(180.0, float(smooth_factor)))
     original_mode = get_safe_mode()
@@ -67,7 +66,6 @@ def CP77SubPrep(self, context, smooth_factor: float, merge_distance: float):
     if original_mode != 'OBJECT':
         safe_mode_switch(original_mode)
     return {'FINISHED'}
-
 
 def CP77ArmatureSet(self, context, reparent):
     selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
