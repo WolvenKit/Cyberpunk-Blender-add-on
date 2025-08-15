@@ -359,7 +359,7 @@ class CP77Autofitter(Operator):
     def execute(self, context):
         props = context.scene.cp77_panel_props
 
-        # Build selectable lists from your UI sources
+        # Build selectable lists 
         base_paths,  base_names  = CP77RefitList(context)
         addon_paths, addon_names = CP77RefitAddonList(context)
 
