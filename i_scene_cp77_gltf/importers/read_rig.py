@@ -357,6 +357,8 @@ def create_armature_from_data(filepath, bind_pose, create_debug=False):
 
         arm_data['T-Pose'] = True
         if bind_pose == 'A-Pose':
+            if not rig_data.apose_ls and not rig_data.apose_ms:
+                print(f"No A-Pose found in {rig_data.rig_name}.json at {filepath}, falling back to T-Pose")
             # Apply A-pose if present (apply after bind pose)
             pose_matrices = build_apose_matrices(rig_data.apose_ms, rig_data.apose_ls, rig_data.bone_names, rig_data.bone_parents)
             if pose_matrices is not None:
@@ -366,7 +368,7 @@ def create_armature_from_data(filepath, bind_pose, create_debug=False):
                     apply_bone_from_matrix(i, mat, bone_index_map, rig_data.bone_parents, pose_matrices)
                 arm_data['T-Pose'] = False
             else:
-                print(f"No A-Pose found in {rig_data.rig_name}.json at {filepath}")
+                print(f"No A-Pose found in {rig_data.rig_name}.json at {filepath}, falling back to T-Pose")
 
         shape = create_bone_shape()
         assign_part_groups(arm_obj, rig_data.parts)
@@ -421,7 +423,7 @@ def assign_bone_shapes(arm, disable_connect, shape=None):
         #  Use shapes for these ones because it's easier for animating when they're not tiny
         if name in {"Root", "Hips,","Trajectory"}:
             pb.custom_shape = shape
-            pb.custom_shape_scale_xyz = Vector((0.05, 0.05, 0.05))
+            pb.custom_shape_scale_xyz = Vector((0.075, 0.075, 0.075))
             pb.use_custom_shape_bone_size = False
 
         elif name in {"WeaponLeft", "WeaponRight"}:
