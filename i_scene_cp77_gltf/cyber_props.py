@@ -15,7 +15,7 @@ enum_items = [(mat.get("Name", ""), mat.get("Name", ""), "") for mat in physmats
 
 
 def CP77RefitList(context):
-
+    none = None
     Adonis = os.path.join(refit_dir, "adonis.refitter.zip")
     VanillaFemToMasc = os.path.join(refit_dir, "f2m.refitter.zip")
     VanillaFem_BigBoobs = os.path.join(refit_dir, "f_normal_to_big_boobs.refitter.zip")
@@ -31,8 +31,8 @@ def CP77RefitList(context):
     Freyja = os.path.join(refit_dir, "freyja.refitter.zip")
     
     # Return the list of variable names
-    target_body_paths = [ Gymfiend, Freyja, Solo_Ultimate, Adonis, Flat_Chest, Hyst_EBB_RB, Hyst_EBB, Hyst_RB, Lush, VanillaFemToMasc, VanillaMascToFem, VanillaFem_BigBoobs, VanillaFem_SmallBoobs ]
-    target_body_names = [ 'Gymfiend', 'Freyja', 'Solo_Ultimate', 'Adonis', 'Flat_Chest', 'Hyst_EBB_RB', 'Hyst_EBB', 'Hyst_RB', 'Lush', 'VanillaFemToMasc', 'VanillaMascToFem', 'VanillaFem_BigBoobs', 'VanillaFem_SmallBoobs' ]
+    target_body_paths = [ none, Gymfiend, Freyja, Solo_Ultimate, Adonis, Flat_Chest, Hyst_EBB_RB, Hyst_EBB, Hyst_RB, Lush, VanillaFemToMasc, VanillaMascToFem, VanillaFem_BigBoobs, VanillaFem_SmallBoobs ]
+    target_body_names = [ 'None', 'Gymfiend', 'Freyja', 'Solo_Ultimate', 'Adonis', 'Flat_Chest', 'Hyst_EBB_RB', 'Hyst_EBB', 'Hyst_RB', 'Lush', 'VanillaFemToMasc', 'VanillaMascToFem', 'VanillaFem_BigBoobs', 'VanillaFem_SmallBoobs' ]
 
     # Return the list of tuples
     return target_body_paths, target_body_names
