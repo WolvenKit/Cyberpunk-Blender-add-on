@@ -71,7 +71,6 @@ class CP77_PT_MeshTools(Panel):
                 col.operator("cp77.add_vertex_color_preset")
                 col.operator("cp77.delete_vertex_color_preset")
 
-
 class CP77DeleteVertexcolorPreset(Operator):
     bl_idname = "cp77.delete_vertex_color_preset"
     bl_label = "Delete Vertex Colour Preset"
@@ -315,7 +314,6 @@ class CP77ApplyVertexcolorPreset(Operator):
         split.label(text="Preset:")
         split.prop(props, "vertex_color_presets", text="")
 
-
 class CP77GroupVerts(Operator):
     bl_idname = "cp77.group_verts"
     bl_parent_id = "CP77_PT_MeshTools"
@@ -349,44 +347,68 @@ class CP77Autofitter(Operator):
         description="If enabled, a base refitter will be applied, followed by an addon",
         default=False
     )
-
+    try_auto_apply: BoolProperty(
+        name="Auto Apply",
+        description="Attempt to apply the refit geometry as the mesh's new basis upon creation",
+        default=False
+    )
+    
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
-        target_body_name = props.refit_json
-        addon_target_body_name = props.refit_addon_json
-        target_body_paths, target_body_names = CP77RefitList(context)
-        addon_target_body_paths, addon_target_body_names = CP77RefitAddonList(context)
-        refitter, addon = CP77RefitChecker(self, context)
 
-        if target_body_name in target_body_names:
-            target_body_path = target_body_paths[target_body_names.index(target_body_name)]
-            if self.useAddon:
-                if addon_target_body_name in addon_target_body_names:
-                    addon_target_body_path = addon_target_body_paths[addon_target_body_names.index(addon_target_body_name)]
+        # Build selectable lists 
+        base_paths,  base_names  = CP77RefitList(context)
+        addon_paths, addon_names = CP77RefitAddonList(context)
+
+        # Gather the user’s chosen refitters (paths + names in order)
+        refitter_paths = []
+        names = []
+
+        # Base (required)
+        base_choice = props.refit_json
+        if base_choice in base_names:
+            refitter_paths.append(base_paths[base_names.index(base_choice)])
+            names.append(base_choice)
+        else:
+            self.report({'ERROR'}, f"Base refitter '{base_choice}' not found.")
+            return {'CANCELLED'}
+
+        # Optional addon
+        if self.useAddon:
+            addon_choice = props.refit_addon_json
+            if addon_choice in addon_names:
+                refitter_paths.append(addon_paths[addon_names.index(addon_choice)])
+                names.append(addon_choice)
             else:
-                addon_target_body_path = None
-                addon_target_body_name = None
-
-            CP77Refit(
-                context=context,
-                refitter=refitter,
-                addon=addon,
-                target_body_path=target_body_path,
-                target_body_name=target_body_name,
-                useAddon=self.useAddon,
-                addon_target_body_path=addon_target_body_path,
-                addon_target_body_name=addon_target_body_name,
-                fbx_rot=props.fbx_rot
+                self.report({'ERROR'}, f"Addon refitter '{addon_choice}' not found.")
+                return {'CANCELLED'}
+        refitter, addon = CP77RefitChecker(self, context)
+        CP77Refit(
+            context=context,
+            refitter=refitter,
+            addon=addon,
+            target_body_path=props.target_body_path,                
+            target_body_name=props.target_body_name,
+            useAddon=self.useAddon,
+            addon_target_body_path=props.addon_target_body_path,
+            addon_target_body_name=props.addon_target_body_name,
+            fbx_rot=props.fbx_rot,
+            try_auto_apply=self.try_auto_apply
             )
 
-            return {'FINISHED'}
+        return {'FINISHED'}
 
     def draw(self,context):
         props = context.scene.cp77_panel_props
         layout = self.layout
+        col = layout.column_flow(2)
+        col.prop(props, 'fbx_rot', text="Refit a mesh in FBX orientation")
+        col.prop(self, 'useAddon', text="Use a Refitter Addon")
+        col = layout.column()
+        col.prop(self, 'try_auto_apply', text="Apply to Mesh")
         row = layout.row(align=True)
         split = row.split(factor=0.2,align=True)
         split.label(text="Shape:")
@@ -396,10 +418,6 @@ class CP77Autofitter(Operator):
             split = row.split(factor=0.2,align=True)
             split.label(text="Addon:")
             split.prop(props, 'refit_addon_json', text="")
-        col = layout.column()
-        col.prop(props, 'fbx_rot', text="Refit a mesh in FBX orientation")
-        col.prop(self, 'useAddon', text="Use a Refitter Addon")
-
 
 class CP77UVTool(Operator):
     bl_idname = 'cp77.uv_checker'
@@ -458,6 +476,7 @@ class CP77_OT_submesh_prep(Operator):
     bl_label = "Prep. It!"
     bl_idname = "cp77.submesh_prep"
     bl_parent_id = "CP77_PT_MeshTools"
+    bl_options = {'REGISTER', "UNDO"}
     bl_description = "Mark seams based on edges boundary loops, merge vertices, correct and smooth normals based on the direction of the faces"
 
     def invoke(self, context, event):
@@ -500,13 +519,6 @@ def register_meshtools():
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
 
-def unregister_meshtools():
-    for cls in reversed(other_classes):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
-    for cls in reversed(operators):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
 def unregister_meshtools():
     for cls in reversed(other_classes):
         if hasattr(bpy.types, cls.__name__):
