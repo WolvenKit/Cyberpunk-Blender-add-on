@@ -13,7 +13,7 @@ from ..main.common import get_classes
 from ..cyber_props import *
 from ..cyber_prefs import *
 from ..icons.cp77_icons import *
-from .read_rig import create_rig_from_json
+from .read_rig import create_armature_from_data
 
 class CP77ImportRig(Operator):
     bl_idname = "import_scene.rig"
@@ -26,9 +26,21 @@ class CP77ImportRig(Operator):
             options={'HIDDEN'},
             )
     filepath: bpy.props.StringProperty(subtype="FILE_PATH")
+    
+    create_debug: BoolProperty(name="Create Debug Empties",default=False,description="Create Empties at the Joints - Useful for Validating and Debugging Transforms")
+    
+    bind_pose: EnumProperty(
+        name="Rig Bind Pose",
+        items=(("A-Pose", "A-Pose", "Will Fallback to T Pose if Unavailable"),
+                ("T-Pose", "T-Pose", "")),
+        description="Bind Pose to Load",
+        default="T-Pose")
+        
 
     def execute(self, context):
-        create_rig_from_json(self.filepath)
+
+        create_armature_from_data(self.filepath, self.bind_pose, self.create_debug)
+
         return {'FINISHED'}
 
     def invoke(self, context, event):
@@ -37,8 +49,13 @@ class CP77ImportRig(Operator):
 
     def draw(self, context):
         layout = self.layout
-        row = layout.row(align=True)
-        row.operator("import_scene.rig", text="Import Rig from JSON", icon='IMPORT')
+        box = layout.box()
+        box.label(text="Rig Import Options")
+        row = box.row()
+        row.label(text="Bind Pose:")
+        row.prop(self, "bind_pose",text="")
+        row = box.row()
+        row.prop(self, "create_debug")
 
 
 class CP7PhysImport(Operator):
