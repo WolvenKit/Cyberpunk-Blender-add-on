@@ -1,12 +1,12 @@
 import bpy
-from mathutils import Vector, Quaternion, Euler, Matrix
+from mathutils import Vector, Quaternion
 from typing import Dict, List
 from math import radians
 import idprop
 import bmesh
 import os
-import unicodedata
 from collections import defaultdict
+from typing import List, Dict, Set
 
 # Internal state for restoring
 _previous_selection = []
@@ -14,33 +14,85 @@ _previous_active = None
 _previous_mode = None
 _dummy_name = "TemporaryContextObject"
 
+def compute_model_space(local_transforms, bone_parents):
+    """
+    Converts local-space transforms to model-space transforms using bone hierarchy.
+    """
+    model_space = [None] * len(local_transforms)
+    for i, (trans, rot) in enumerate(local_transforms):
+        if bone_parents[i] == -1:
+            # Root bone: LS == MS
+            model_space[i] = (trans.copy(), rot.copy())
+        else:
+            p_trans, p_rot = model_space[bone_parents[i]]
+            ms_trans = p_trans + p_rot @ trans
+            ms_rot = p_rot @ rot
+            model_space[i] = (ms_trans, ms_rot)
+    return model_space
 
-def normalize(path):
-    """Normalize path for cross-platform and Unicode safety."""
+def compute_local_space(model_transforms, bone_parents):
+    """
+    Converts model-space transforms to local-space transforms using bone hierarchy.
+    """
+    local_space = [None] * len(model_transforms)
+    for i, (trans, rot) in enumerate(model_transforms):
+        if bone_parents[i] == -1:
+            local_space[i] = (trans.copy(), rot.copy())
+        else:
+            p_trans, p_rot = model_transforms[bone_parents[i]]
+            inv_p_rot = p_rot.inverted()
+            ls_trans = inv_p_rot @ (trans - p_trans)
+            ls_rot = inv_p_rot @ rot
+            local_space[i] = (ls_trans, ls_rot)
+    return local_space
+
+import os
+import unicodedata
+import logging
+from collections import defaultdict
+from typing import List, Dict
+
+#basic logging to report errors instead of silently passing
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def normalize(path: str) -> str:
+    """
+    Normalize path for cross-platform and Unicode safety, ensuring it is an absolute path.
+    """
+    # os.path.abspath to ensure all paths are full and unambiguous.
     return unicodedata.normalize('NFC', os.path.abspath(os.path.normpath(path)))
 
-def dataKrash(root, extensions):
-    """Recursively find files by extension, matching longest ones first, returning keys with leading dots."""
-    root = normalize(root)
+
+def dataKrash(root: str, extensions: List[str]) -> Dict[str, Set[str]]:
+    """
+    Recursively find files by extension using os.scandir, returning full absolute paths.
+    The output is a dictionary mapping each extension to a SET of file paths.
+    """
+    normalized_root = normalize(root)
+    if not os.path.isdir(normalized_root):
+        logging.error(f"Root directory not found: {normalized_root}")
+        return {}
+
     # Normalize and sort extensions by length (descending)
     norm_exts = sorted({ext.lower() for ext in extensions}, key=len, reverse=True)
-    ext_map = defaultdict(list)
+    ext_map = defaultdict(set)
 
-    def recurse(folder):
+    def recurse(folder: str):
         try:
             for entry in os.scandir(folder):
                 if entry.is_file():
                     name_lower = entry.name.lower()
                     for ext in norm_exts:
                         if name_lower.endswith(ext):
-                            ext_map[ext].append(normalize(entry.path))
+                            full_path = normalize(entry.path)
+                            ext_map[ext].add(full_path)
                             break
                 elif entry.is_dir():
                     recurse(entry.path)
-        except (PermissionError, FileNotFoundError):
-            pass #todo: some useful output here in cases of errors
+        except (PermissionError, FileNotFoundError) as e:
+            logging.warning(f"Could not scan {folder}: {e}")
 
-    recurse(root)
+    recurse(normalized_root)
     return dict(ext_map)
 
 mode_map = {
@@ -127,7 +179,7 @@ def safe_mode_switch(target_mode: str):
     # If the desired mode is already active, do nothing
     if ctx.mode == target_mode:
         return
-    
+
     # If context doesn't support mode switch, create a dummy
     if not bpy.ops.object.mode_set.poll():
         bpy.ops.object.select_all(action='DESELECT')
@@ -150,7 +202,7 @@ def safe_mode_switch(target_mode: str):
 def restore_previous_context():
     """
     Restores the previous selection, active object, and mode.
-    
+
     """
     global _previous_selection, _previous_active, _previous_mode
 
@@ -184,14 +236,14 @@ def get_safe_mode():
 ## I get that these are lazy but they're convenient type checks
 def is_mesh(o: bpy.types.Object) -> bool:
     return isinstance(o.data, bpy.types.Mesh)
- 
+
 def world_mtx(armature, bone):
     return armature.convert_space(bone, bone.matrix, from_space='POSE', to_space='WORLD')
 
 def pose_mtx(armature, bone, mat):
     return armature.convert_space(bone, mat, from_space='WORLD', to_space='POSE')
 
-def is_armature(o: bpy.types.Object) -> bool: # I just found out I could leave annotations like that -> future presto will appreciate knowing wtf I though I was going to return 
+def is_armature(o: bpy.types.Object) -> bool: # I just found out I could leave annotations like that -> future presto will appreciate knowing wtf I though I was going to return
     return isinstance(o.data, bpy.types.Armature)
 
 def has_anims(o: bpy.types.Object) -> bool:
@@ -230,18 +282,18 @@ def calculate_mesh_volume(obj):
     volume = obj.rigid_body.mass
     bpy.ops.rigidbody.objects_remove()
     return volume
-    
+
 ## Returns True if the given object has shape keys, works for meshes and curves
 def hasShapeKeys(obj):
     if obj.id_data.type in ['MESH', 'CURVE']:
         return obj.data.shape_keys != None
-        
+
 def getShapeKeyNames(obj):
     if hasShapeKeys(obj):
         key_names = []
         for key_block in obj.data.shape_keys.key_blocks:
             key_names.append(key_block.name)
-        return key_names       
+        return key_names
     return ""
 
 # Return the name of the shape key data block if the object has shape keys.
@@ -265,43 +317,43 @@ def setActiveShapeKey(obj, name):
 def getShapeKeyProps(obj):
 
     props = {}
-    
+
     if hasShapeKeys(obj):
         for prop in obj.data.shape_keys.key_blocks:
             props[prop.name] = prop.value
-            
+
     return props
 
 # returns a list of the given objects custom properties.
 def getCustomProps(obj):
 
     props = []
-    
+
     for prop in obj.keys():
         if prop not in '_RNA_UI' and isinstance(obj[prop], (int, float, list, idprop.types.IDPropertyArray)):
             props.append(prop)
-            
+
     return props
 
 # returns a list of modifiers for the given object
 def getModNames(obj):
     mods = []
     for mod in obj.modifiers:
-        mods.append(mod.name)        
+        mods.append(mod.name)
     return mods
 
 def getModByName(obj, name):
     for mod in obj.modifiers:
         if mod.name == name:
             return mod
-    return None    
+    return None
 
 # returns a list with the modifier properties of the given modifier.
 def getModProps(modifier):
-    props = []    
+    props = []
     for prop, value in modifier.bl_rna.properties.items():
         if isinstance(value, bpy.types.FloatProperty):
-            props.append(prop)            
+            props.append(prop)
     return props
 
 # checks the active object for a material by name and returns the material if found
@@ -313,7 +365,7 @@ def getMaterial(name):
             return
         mat = obj.material_slots[index].material
         if mat and mat.node_tree and mat.node_tree.name == name:
-            return mat   
+            return mat
 
 def UV_by_bounds(selected_objects):
     current_mode = bpy.context.object.mode
@@ -333,9 +385,9 @@ def UV_by_bounds(selected_objects):
             me = obj.data
             bpy.ops.object.mode_set(mode='EDIT', toggle=False)
             bm = bmesh.from_edit_mesh(me)
-            
+
             uv_layer = bm.loops.layers.uv.verify()
-            
+
             # adjust uv coordinates
             for face in bm.faces:
                 for loop in face.loops:
@@ -345,5 +397,4 @@ def UV_by_bounds(selected_objects):
                     loop_uv.uv[1]=(loop.vert.co.y-min_vertex[1])/(max_vertex[1]-min_vertex[1])
 
             bmesh.update_edit_mesh(me)
-    bpy.ops.object.mode_set(mode=current_mode)   
- 
+    bpy.ops.object.mode_set(mode=current_mode)

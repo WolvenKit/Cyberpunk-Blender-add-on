@@ -1,14 +1,15 @@
+from bpy_extras.io_utils import ImportHelper
 import bpy
 import bpy.utils.previews
 import sys
-from .. exporters import CP77HairProfileExport, mlsetup_export
+import os
 from .meshtools import *
 from .verttools import *
 from ..main.bartmoss_functions import *
 from ..main.common import get_active_collection, get_classes, get_color_presets, get_selected_collection, save_presets
-from bpy.props import (StringProperty, EnumProperty)
-from bpy.types import (Scene, Operator, Panel)
-from ..cyber_props import CP77RefitList
+from bpy.props import (StringProperty)
+from bpy.types import (Operator, Panel)
+from ..cyber_props import CP77RefitList, refit_dir
 from ..icons.cp77_icons import get_icon
 
 class CP77_PT_MeshTools(Panel):
@@ -352,14 +353,14 @@ class CP77Autofitter(Operator):
         description="Attempt to apply the refit geometry as the mesh's new basis upon creation",
         default=False
     )
-    
+
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
 
-        # Build selectable lists 
+        # Build selectable lists
         base_paths,  base_names  = CP77RefitList(context)
         addon_paths, addon_names = CP77RefitAddonList(context)
 
@@ -370,17 +371,21 @@ class CP77Autofitter(Operator):
         # Base (required)
         base_choice = props.refit_json
         if base_choice in base_names:
-            refitter_paths.append(base_paths[base_names.index(base_choice)])
+            target_body_path = base_paths[base_names.index(base_choice)]
+            refitter_paths.append(target_body_path)
             names.append(base_choice)
         else:
             self.report({'ERROR'}, f"Base refitter '{base_choice}' not found.")
             return {'CANCELLED'}
 
         # Optional addon
+        addon_target_body_path = None
+        addon_choice = None
         if self.useAddon:
             addon_choice = props.refit_addon_json
             if addon_choice in addon_names:
-                refitter_paths.append(addon_paths[addon_names.index(addon_choice)])
+                addon_target_body_path = addon_paths[addon_names.index(addon_choice)]
+                refitter_paths.append(addon_target_body_path)
                 names.append(addon_choice)
             else:
                 self.report({'ERROR'}, f"Addon refitter '{addon_choice}' not found.")
@@ -390,11 +395,11 @@ class CP77Autofitter(Operator):
             context=context,
             refitter=refitter,
             addon=addon,
-            target_body_path=props.target_body_path,                
-            target_body_name=props.target_body_name,
+            target_body_path=target_body_path,
+            target_body_name=base_choice,
             useAddon=self.useAddon,
-            addon_target_body_path=props.addon_target_body_path,
-            addon_target_body_name=props.addon_target_body_name,
+            addon_target_body_path=addon_target_body_path,
+            addon_target_body_name=addon_choice,
             fbx_rot=props.fbx_rot,
             try_auto_apply=self.try_auto_apply
             )
@@ -404,7 +409,7 @@ class CP77Autofitter(Operator):
     def draw(self,context):
         props = context.scene.cp77_panel_props
         layout = self.layout
-        col = layout.column_flow(2)
+        col = layout.column_flow(columns=2)
         col.prop(props, 'fbx_rot', text="Refit a mesh in FBX orientation")
         col.prop(self, 'useAddon', text="Use a Refitter Addon")
         col = layout.column()
@@ -418,6 +423,35 @@ class CP77Autofitter(Operator):
             split = row.split(factor=0.2,align=True)
             split.label(text="Addon:")
             split.prop(props, 'refit_addon_json', text="")
+
+class CP77RefitConvert(Operator,ImportHelper):
+    bl_idname = 'cp77.refit_convert'
+    bl_label = "Convert Old Refit"
+    bl_description = "Convert old .zip refit to new format"
+    bl_options = {'REGISTER'}
+
+    filter_glob: StringProperty(
+        default="*.refitter.zip",
+        options={'HIDDEN'},
+        )
+
+    filepath: StringProperty(name= "Filepath",
+                             subtype = 'FILE_PATH')
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def execute(self, context):
+        filepath = self.filepath if self.filepath != "" else refit_dir
+        if os.path.isdir(filepath):
+            for filename in os.listdir(filepath):
+                if filename.endswith('.refitter.zip'):
+                    full_path = os.path.join(filepath, filename)
+                    convert_legacy_lattice(full_path)
+        else:
+            convert_legacy_lattice(filepath)
+        return {"FINISHED"}
 
 class CP77UVTool(Operator):
     bl_idname = 'cp77.uv_checker'
