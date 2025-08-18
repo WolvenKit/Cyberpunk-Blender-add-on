@@ -296,18 +296,19 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                             if rig_j is not None:
                                 rig_j=rig_j['Data']['RootChunk']
                                 print('rig json loaded')
-                            # get the armatures already in the model
-                            oldarms= [x for x in bpy.data.objects if 'Armature' in x.name]
-                            animpath=os.path.join(path,c['animations']['gameplay'][0]['animSet']['DepotPath']['$value']+'.glb')
-                            bpy.ops.io_scene_gltf.cp77(with_materials, filepath=animpath, scripting=True)
-                            # find the armature we just loaded
-                            arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
-                            rig=arms[0]
-                            bones=rig.pose.bones
-                            rig["animset"] = animpath
-                            rig["rig"] = rig_path
-                            rig["ent"] = ent_name + ".ent.json"
-                            print('anim rig loaded')
+                            if c['animations']['gameplay']!=None:
+                                # get the armatures already in the model
+                                oldarms= [x for x in bpy.data.objects if 'Armature' in x.name]
+                                animpath=os.path.join(path,c['animations']['gameplay'][0]['animSet']['DepotPath']['$value']+'.glb')
+                                bpy.ops.io_scene_gltf.cp77(with_materials, filepath=animpath, scripting=True)
+                                # find the armature we just loaded
+                                arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
+                                rig=arms[0]
+                                bones=rig.pose.bones
+                                rig["animset"] = animpath
+                                rig["rig"] = rig_path
+                                rig["ent"] = ent_name + ".ent.json"
+                                print('anim rig loaded')
                         else:
                             print('another rig already loaded')
             if not vehicle_slots:
