@@ -16,20 +16,20 @@ enum_items = [(mat.get("Name", ""), mat.get("Name", ""), "") for mat in physmats
 
 def CP77RefitList(context):
     none = None
-    Adonis = os.path.join(refit_dir, "adonis.refitter.zip")
-    VanillaFemToMasc = os.path.join(refit_dir, "f2m.refitter.zip")
-    VanillaFem_BigBoobs = os.path.join(refit_dir, "f_normal_to_big_boobs.refitter.zip")
-    VanillaFem_SmallBoobs = os.path.join(refit_dir, "f_normal_to_small_boobs.refitter.zip")
-    VanillaMascToFem = os.path.join(refit_dir, "m2f.refitter.zip")
-    Lush = os.path.join(refit_dir, "lush.refitter.zip")
-    Hyst_RB = os.path.join(refit_dir, "hyst_rb.refitter.zip")
-    Hyst_EBB = os.path.join(refit_dir, "hyst_ebb.refitter.zip")
-    Hyst_EBB_RB = os.path.join(refit_dir, "hyst_ebb_rb.refitter.zip")
-    Flat_Chest = os.path.join(refit_dir, "flat_chest.refitter.zip")
-    Solo_Ultimate = os.path.join(refit_dir, "solo_ultimate.refitter.zip")
-    Gymfiend = os.path.join(refit_dir, "gymfiend.refitter.zip")
-    Freyja = os.path.join(refit_dir, "freyja.refitter.zip")
-    
+    Adonis = os.path.join(refit_dir, "adonis.refitter.npz")
+    VanillaFemToMasc = os.path.join(refit_dir, "f2m.refitter.npz")
+    VanillaFem_BigBoobs = os.path.join(refit_dir, "f_normal_to_big_boobs.refitter.npz")
+    VanillaFem_SmallBoobs = os.path.join(refit_dir, "f_normal_to_small_boobs.refitter.npz")
+    VanillaMascToFem = os.path.join(refit_dir, "m2f.refitter.npz")
+    Lush = os.path.join(refit_dir, "lush.refitter.npz")
+    Hyst_RB = os.path.join(refit_dir, "hyst_rb.refitter.npz")
+    Hyst_EBB = os.path.join(refit_dir, "hyst_ebb.refitter.npz")
+    Hyst_EBB_RB = os.path.join(refit_dir, "hyst_ebb_rb.refitter.npz")
+    Flat_Chest = os.path.join(refit_dir, "flat_chest.refitter.npz")
+    Solo_Ultimate = os.path.join(refit_dir, "solo_ultimate.refitter.npz")
+    Gymfiend = os.path.join(refit_dir, "gymfiend.refitter.npz")
+    Freyja = os.path.join(refit_dir, "freyja.refitter.npz")
+
     # Return the list of variable names
     target_body_paths = [ none, Gymfiend, Freyja, Solo_Ultimate, Adonis, Flat_Chest, Hyst_EBB_RB, Hyst_EBB, Hyst_RB, Lush, VanillaFemToMasc, VanillaMascToFem, VanillaFem_BigBoobs, VanillaFem_SmallBoobs ]
     target_body_names = [ 'None', 'Gymfiend', 'Freyja', 'Solo_Ultimate', 'Adonis', 'Flat_Chest', 'Hyst_EBB_RB', 'Hyst_EBB', 'Hyst_RB', 'Lush', 'VanillaFemToMasc', 'VanillaMascToFem', 'VanillaFem_BigBoobs', 'VanillaFem_SmallBoobs' ]
@@ -41,7 +41,7 @@ def CP77RefitAddonList(context):
 
     SoloArmsAddon = os.path.join(refit_dir, "SoloArmsAddon.refitter.zip")
     Hyst_EBBP_Addon = os.path.join(refit_dir, "hyst_ebbp_addon.refitter.zip")
-    
+
     # Return the list of variable names
     addon_target_body_paths = [SoloArmsAddon, Hyst_EBBP_Addon]
     addon_target_body_names = ['SoloArmsAddon','Hyst_EBBP_Addon']
@@ -71,7 +71,7 @@ def SetVulkanBackend(use_vulkan=True):
 def CP77CollectionList(self, context):
     items = []
     excluded_names = ["Collection", "Scene Collection", "glTF_not_exported"]
-    
+
     for collection in bpy.data.collections:
         if collection.name not in excluded_names:
         ## make sure the collection has meshes in it
@@ -92,7 +92,7 @@ def cp77riglist(self, context):
     Rhino = os.path.join(rig_dir, "rhino_full.glb")
     Dex = os.path.join(rig_dir, "dex_full.glb")
     Smasher = os.path.join(rig_dir, "smasher_full.glb")
-    
+
     # Store the variable names in a list
     cp77rigs = [man_base, woman_base, man_big, man_fat, Judy, Songbird, Panam, Jackie, Rhino, Dex, Smasher]
     cp77rig_names = ['man_base', 'woman_base', 'man_big', 'man_fat', 'Judy', 'Songbird', 'Panam', 'Jackie', 'Rhino', 'Dex', 'Adam Smasher']
@@ -107,7 +107,7 @@ def CP77ArmatureList(self, context):
         print(f"Error accessing bpy.data.objects: {e}")
         arms = []
     return arms
-    
+
 
 class CP77_PT_PanelProps(PropertyGroup):
 # collision panel props:
@@ -119,13 +119,13 @@ class CP77_PT_PanelProps(PropertyGroup):
         ('WORLD', "worldCollisionNode", "Generate worldCollisionNode")
         ],
         default='VEHICLE'
-    ) 
-    
+    )
+
     vertex_color_presets: EnumProperty(
         name="Vertex Color Preset",
         items=lambda self, context: update_presets_items() or [(name, name, "") for name in get_colour_presets().keys()]
     )
-    
+
     physics_material: EnumProperty(
         items= enum_items,
         name="Physics Material",
@@ -142,7 +142,7 @@ class CP77_PT_PanelProps(PropertyGroup):
         ],
         default='CONVEX'
     )
-    
+
     simulation_type: EnumProperty(
         name="Simulation Type",
         items=[
@@ -153,7 +153,7 @@ class CP77_PT_PanelProps(PropertyGroup):
         default='Static'
     )
 
-    matchSize: BoolProperty(        
+    matchSize: BoolProperty(
         name="Match the Shape of Existing Mesh",
         description="Match the size of the selected Mesh",
         default=True,
@@ -192,14 +192,14 @@ class CP77_PT_PanelProps(PropertyGroup):
         default=False,
         description="Insert a keyframe on every frame of the active action"
     )
-    
+
     body_list: EnumProperty(
         items=[(name, name, '') for name in cp77riglist(None, None)[1]],
         name="Rig GLB"
     )
-    
+
 # mesh panel props
-    
+
     fbx_rot: BoolProperty(
         name="",
         default=False,
@@ -223,7 +223,7 @@ class CP77_PT_PanelProps(PropertyGroup):
 
     mesh_source: EnumProperty(
         items=CP77CollectionList
-    ) 
+    )
 
     mesh_target: EnumProperty(
         items=CP77CollectionList
@@ -231,15 +231,15 @@ class CP77_PT_PanelProps(PropertyGroup):
 
     merge_distance: FloatProperty(
         name="Merge Distance",
-        default=0.0001, 
-        min=0.0, 
+        default=0.0001,
+        min=0.0,
         max=1.0
     )
 
     smooth_factor: FloatProperty(
-        name="Smooth Factor", 
-        default=0.5, 
-        min=0.0, 
+        name="Smooth Factor",
+        default=0.5,
+        min=0.0,
         max=1.0
     )
 
@@ -307,7 +307,7 @@ def add_anim_props(animation, action):
     track_keys = extras.get("trackKeys", [])
     fallback_frame_indices = extras.get("fallbackFrameIndices", [])
     optimizationHints = extras.get("optimizationHints", [])
-    
+
     # Add properties to the action
     action["schema"] = schema
    # action["schemaVersion"] = schema['version']
@@ -334,8 +334,8 @@ def register_props():
     for cls in other_classes:
         bpy.utils.register_class(cls)
     Scene.cp77_panel_props = PointerProperty(type=CP77_PT_PanelProps)
-    update_presets_items() 
-    
+    update_presets_items()
+
 def unregister_props():
     for cls in reversed(other_classes):
         bpy.utils.unregister_class(cls)
