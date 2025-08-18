@@ -296,8 +296,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                             if rig_j is not None:
                                 rig_j=rig_j['Data']['RootChunk']
                                 print('rig json loaded')
-                            if c['animations']['gameplay']!=None:
-                                # get the armatures already in the model
+                            if c['animations']['gameplay']!=None and len(c['animations']['gameplay'])>0 :                                # get the armatures already in the model
                                 oldarms= [x for x in bpy.data.objects if 'Armature' in x.name]
                                 animpath=os.path.join(path,c['animations']['gameplay'][0]['animSet']['DepotPath']['$value']+'.glb')
                                 bpy.ops.io_scene_gltf.cp77(with_materials, filepath=animpath, scripting=True)
