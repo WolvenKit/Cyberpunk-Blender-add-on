@@ -5,8 +5,8 @@ import os
 from .verttools import *
 from ..cyber_props import *
 from ..main.common import loc, show_message, get_collection_children
-from ..main.bartmoss_functions import setActiveShapeKey, getShapeKeyNames, getModNames, get_safe_mode, safe_mode_switch, restore_previous_context, select_object
-from ..jsontool import JSONTool
+from ..main.bartmoss_functions import get_safe_mode, safe_mode_switch
+from ..main.npz_io import load_lattice_npz, save_lattice_npz
 
 def CP77SubPrep(self, context, smooth_factor: float, merge_distance: float):
     angle_deg = max(0.0, min(180.0, float(smooth_factor)))
@@ -214,21 +214,6 @@ def CP77UvUnChecker(self, context):
                 bpy.ops.object.material_slot_assign()
         if context.mode != current_mode:
             bpy.ops.object.mode_set(mode=current_mode)
-
-def CP77RefitChecker(self, context):
-    scene = context.scene
-    objects = scene.objects
-    refitter = []
-    addon = []
-    for obj in objects:
-        if obj.type =='LATTICE':
-            if "refitter_type" in obj:
-                refitter.append(obj)
-            if "refitter_addon" in obj:
-                addon.append(obj)
-    print(f'refitter result: {refitter} refitter addon: {addon}')
-    return refitter, addon
-
 
 def keyblocks(obj):
     sk = obj.data.shape_keys
@@ -458,13 +443,96 @@ def autofitter(context, refitter, addon, target_body_path, useAddon, addon_targe
         print(f'refitting: {mesh.name} to: {new_lattice["refitter_type"]}')
 
         if useAddon:
-            lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w  = JSONTool.jsonload(addon_target_body_path)
-            new_lattice = setup_lattice(r_c, fbx_rot, lattice_object_name, addon_target_body_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale,lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w)
+            new_lattice = add_lattice(addon_target_body_path, r_c, fbx_rot, addon_target_body_name)
             lattice_modifier.object = new_lattice
 
         lattice_modifier.object = new_lattice
-    if try_auto_apply:
-        applyRefitter(mesh)
+
+        if try_auto_apply:
+            applyRefitter(mesh)
+
+    for mesh in selected_meshes:
+        mesh.select_set(True)
+
+def add_lattice(target_body_path, collection, fbx_rot, target_body_name):
+    """re-use previous lattice, or add a new one if there isn't one"""
+    for refitter in collection.objects:
+        if refitter.name == f"{target_body_name}Autofitter":
+            print(f"{target_body_name}Autofitter already exists")
+            return refitter
+
+    print(f"Creating {target_body_name}Autofitter from file '{target_body_path}'")
+    refitter = load_lattice_npz(target_body_path, name=f"{target_body_name}Autofitter", link_to_collection=collection)
+    refitter["refitter_type"] = target_body_name
+
+    if fbx_rot:
+        refitter.rotation_euler[2] += math.pi
+
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = refitter
+    refitter.select_set(True)
+
+    bpy.context.object.hide_viewport = True
+
+    return refitter
+
+def _legacy_add_lattice(target_body_path, r_c, fbx_rot, target_body_name):
+    """old method to load a '.json in a .zip' lattice refitter"""
+    for refitter in r_c.objects:
+        if refitter.name == f"{target_body_name}Autofitter":
+            print(f"{target_body_name}Autofitter already exists")
+            return refitter
+
+    print(f"Creating {target_body_name}Autofitter from json file (reading {target_body_path})")
+    from ..jsontool import JSONTool
+    # Get the JSON file path for the selected target_body
+    lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w  = JSONTool.jsonload(target_body_path)
+    bpy.ops.object.add(type='LATTICE', enter_editmode=False, location=(0, 0, 0))
+    new_lattice = bpy.context.object
+    new_lattice.name = lattice_object_name
+    new_lattice["refitter_type"] = target_body_name
+    lattice = new_lattice.data
+    try:
+        r_c.objects.link(new_lattice)
+        bpy.context.collection.objects.unlink(new_lattice)
+    except RuntimeError:
+        pass # Ignore error if the object is already in the collection
+
+    # Set the dimensions of the lattice
+    lattice.points_u = lattice_points[0]
+    lattice.points_v = lattice_points[1]
+    lattice.points_w = lattice_points[2]
+    new_lattice.location[0] = lattice_object_location[0]
+    new_lattice.location[1] = lattice_object_location[1]
+    new_lattice.location[2] = lattice_object_location[2]
+    if fbx_rot:
+    # Rotate the Z-axis by 180 degrees (pi radians)
+        new_lattice.rotation_euler = (lattice_object_rotation[0], lattice_object_rotation[1],lattice_object_rotation[2] + 3.14159)
+    else:
+        new_lattice.rotation_euler = (lattice_object_rotation[0], lattice_object_rotation[1],lattice_object_rotation[2])
+    new_lattice.scale[0] = lattice_object_scale[0]
+    new_lattice.scale[1] = lattice_object_scale[1]
+    new_lattice.scale[2] = lattice_object_scale[2]
+
+    # Set interpolation types
+    lattice.interpolation_type_u = lattice_interpolation_u
+    lattice.interpolation_type_v = lattice_interpolation_v
+    lattice.interpolation_type_w = lattice_interpolation_w
+
+    # Create a flat list of lattice points
+    lattice_points = lattice.points
+    flat_lattice_points = [lattice_points[w + v * lattice.points_u + u * lattice.points_u * lattice.points_v] for u in range(lattice.points_u) for v in range(lattice.points_v) for w in range(lattice.points_w)]
+
+    for control_point, lattice_point in zip(control_points, flat_lattice_points):
+        lattice_point.co_deform = control_point
+
+    return new_lattice
+
+def convert_legacy_lattice(filepath):
+    """Convert a legacy .zip lattice file to a new format."""
+    lattice = _legacy_add_lattice(filepath, bpy.context.collection, False, "Legacy")
+    save_lattice_npz(lattice, filepath.replace(".zip", ".npz"))
+    bpy.data.objects.remove(lattice, do_unlink=True)
 
 def add_garment_support(context, target_collection_name):
     target_collection_children = get_collection_children(target_collection_name, "MESH")
@@ -522,60 +590,6 @@ def add_garment_support(context, target_collection_name):
             bpy.ops.object.mode_set(mode=current_mode)
 
     return {'FINISHED'}
-
-# re-use previous lattice, or add a new one if there isn't one
-def add_lattice(target_body_path, r_c, fbx_rot, target_body_name):
-    for refitter in r_c.objects:
-        if refitter.name == f"{target_body_name}Autofitter":
-            print(f"{target_body_name}Autofitter already exists")
-            return refitter
-
-    print(f"Creating {target_body_name}Autofitter from json file (reading {target_body_path})")
-    # Get the JSON file path for the selected target_body
-    lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w  = JSONTool.jsonload(target_body_path)
-    new_lattice = setup_lattice(r_c, fbx_rot, lattice_object_name, target_body_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale,lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w)
-    return new_lattice
-
-def setup_lattice(r_c, fbx_rot, lattice_object_name, target_body_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale,lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w):
-    bpy.ops.object.add(type='LATTICE', enter_editmode=False, location=(0, 0, 0))
-    new_lattice = bpy.context.object
-    new_lattice.name = lattice_object_name
-    new_lattice["refitter_type"] = target_body_name
-    lattice = new_lattice.data
-    r_c.objects.link(new_lattice)
-    bpy.context.collection.objects.unlink(new_lattice)
-
-    # Set the dimensions of the lattice
-    lattice.points_u = lattice_points[0]
-    lattice.points_v = lattice_points[1]
-    lattice.points_w = lattice_points[2]
-    new_lattice.location[0] = lattice_object_location[0]
-    new_lattice.location[1] = lattice_object_location[1]
-    new_lattice.location[2] = lattice_object_location[2]
-    if fbx_rot:
-    # Rotate the Z-axis by 180 degrees (pi radians)
-        new_lattice.rotation_euler = (lattice_object_rotation[0], lattice_object_rotation[1],lattice_object_rotation[2] + 3.14159)
-    else:
-        new_lattice.rotation_euler = (lattice_object_rotation[0], lattice_object_rotation[1],lattice_object_rotation[2])
-    new_lattice.scale[0] = lattice_object_scale[0]
-    new_lattice.scale[1] = lattice_object_scale[1]
-    new_lattice.scale[2] = lattice_object_scale[2]
-
-    # Set interpolation types
-    lattice.interpolation_type_u = lattice_interpolation_u
-    lattice.interpolation_type_v = lattice_interpolation_v
-    lattice.interpolation_type_w = lattice_interpolation_w
-
-    # Create a flat list of lattice points
-    lattice_points = lattice.points
-    flat_lattice_points = [lattice_points[w + v * lattice.points_u + u * lattice.points_u * lattice.points_v] for u in range(lattice.points_u) for v in range(lattice.points_v) for w in range(lattice.points_w)]
-
-    for control_point, lattice_point in zip(control_points, flat_lattice_points):
-        lattice_point.co_deform = control_point
-
-    if new_lattice:
-        bpy.context.object.hide_viewport = True
-    return new_lattice
 
 material_storage = defaultdict(dict)  # {object_name: {slot_index: material_name}}
 
@@ -682,4 +696,3 @@ def safe_split(self, context):
             _restore_original_materials(self, new_obj)
 
     return {'FINISHED'}
-
