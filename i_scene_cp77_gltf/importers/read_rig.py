@@ -4,6 +4,7 @@ import bpy
 import json
 import math
 import time
+import os
 from mathutils import Vector, Quaternion, Matrix
 from ..main.common import loc, show_message
 from ..jsontool import JSONTool
