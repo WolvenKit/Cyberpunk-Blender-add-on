@@ -1,10 +1,11 @@
 import bpy
-from mathutils import Vector, Quaternion
-from typing import Dict, List
-from math import radians
 import idprop
 import bmesh
 import os
+import unicodedata
+import logging
+from mathutils import Vector, Quaternion
+from math import radians
 from collections import defaultdict
 from typing import List, Dict, Set
 
@@ -45,12 +46,6 @@ def compute_local_space(model_transforms, bone_parents):
             ls_rot = inv_p_rot @ rot
             local_space[i] = (ls_trans, ls_rot)
     return local_space
-
-import os
-import unicodedata
-import logging
-from collections import defaultdict
-from typing import List, Dict
 
 #basic logging to report errors instead of silently passing
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
