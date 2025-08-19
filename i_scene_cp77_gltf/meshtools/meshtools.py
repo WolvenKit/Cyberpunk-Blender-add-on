@@ -534,7 +534,7 @@ def convert_legacy_lattice(filepath):
     save_lattice_npz(lattice, filepath.replace(".zip", ".npz"))
     bpy.data.objects.remove(lattice, do_unlink=True)
 
-def add_garment_support(context, target_collection_name):
+def add_shrinkwrap(context, target_collection_name, offset, wrap_method, as_garment_support=True, apply_immediately=True):
     target_collection_children = get_collection_children(target_collection_name, "MESH")
     if not target_collection_children:
         show_message(f"Target collection '{target_collection_name}' not found.")
@@ -555,6 +555,7 @@ def add_garment_support(context, target_collection_name):
         return {'CANCELLED'}
 
     current_mode = context.mode
+    shapekey_name = "GarmentSupport" if as_garment_support else "Shrinkwrap"
 
     try:
         # Remember current mode and switch to OBJECT mode
@@ -562,27 +563,71 @@ def add_garment_support(context, target_collection_name):
             bpy.ops.object.mode_set(mode='OBJECT')
 
         for obj in selected_meshes:
-            # Remove existing 'GarmentSupport' shape key if it exists
-            if obj.data.shape_keys:
-                for shape_key in reversed(obj.data.shape_keys.key_blocks):
-                    obj.shape_key_remove(shape_key)
+            if as_garment_support:
+                # Remove existing 'GarmentSupport' shape key if it exists
+                if obj.data.shape_keys:
+                    for shape_key in reversed(obj.data.shape_keys.key_blocks):
+                        obj.shape_key_remove(shape_key)
 
             # Add shrinkwrap modifier
-            shrinkwrap = obj.modifiers.new(name="GarmentSupport", type='SHRINKWRAP')
+            shrinkwrap = obj.modifiers.new(name=shapekey_name, type='SHRINKWRAP')
             shrinkwrap.target = target_mesh
-            shrinkwrap.wrap_method = 'NEAREST_SURFACEPOINT'
-            shrinkwrap.wrap_mode = 'ON_SURFACE'  # Note: 'Snap Mode' is actually 'wrap_mode' in API
-            shrinkwrap.offset = 0.001
+            shrinkwrap.wrap_method = wrap_method
+            shrinkwrap.wrap_mode = 'ABOVE_SURFACE'
+            shrinkwrap.offset = offset
 
-            # Apply modifier as shape key
+            if not apply_immediately:
+                continue
+
             bpy.context.view_layer.objects.active = obj  # Set active object
+
+            # Check if shape keys exist
+            has_shape_keys = obj.data.shape_keys is not None
+
+            if not has_shape_keys:
+                if as_garment_support:
+                    # Create new GarmentSupport shape key
+                    bpy.ops.object.modifier_apply_as_shapekey(modifier=shrinkwrap.name)
+                else:
+                    # Apply modifier directly to mesh
+                    bpy.ops.object.modifier_apply(modifier=shrinkwrap.name)
+                continue
+
+            # Replace or create GarmentSupport shapekey
+            if as_garment_support:
+                if 'GarmentSupport' in obj.data.shape_keys.key_blocks:
+                    obj.shape_key_remove(obj.data.shape_keys.key_blocks['GarmentSupport'])
+                bpy.ops.object.modifier_apply_as_shapekey(modifier=shrinkwrap.name)
+                continue
+
+            if 'Basis' not in obj.data.shape_keys.key_blocks:
+                # No Basis shape key - apply modifier normally
+                bpy.ops.object.modifier_apply(modifier=shrinkwrap.name)
+                continue
+
+            # Merge with existing Basis shape key
+
+            # Apply modifier as temporary shape key
+            shrinkwrap.name = 'TEMP_MERGE'
             bpy.ops.object.modifier_apply_as_shapekey(modifier=shrinkwrap.name)
+
+            # Get references to shape keys
+            basis = obj.data.shape_keys.key_blocks['Basis']
+            temp = obj.data.shape_keys.key_blocks['TEMP_MERGE']
+
+            # Apply changes to Basis
+            for i, v in enumerate(basis.data):
+                v.co += (temp.data[i].co - basis.data[i].co)
+
+            # Remove temporary shape key
+            obj.shape_key_remove(temp)
 
     except Exception as e:
         # delete the modifier if an error occurred
         if "GarmentSupport" in obj.modifiers:
             obj.modifiers.remove(obj.modifiers["GarmentSupport"])
         show_message("An error occurred while creating garment support: " + str(e))
+        raise e
         return {'CANCELLED'}
     finally:
         # Switch back to original mode
