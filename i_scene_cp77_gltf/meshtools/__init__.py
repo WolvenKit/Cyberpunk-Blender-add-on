@@ -7,7 +7,7 @@ from .meshtools import *
 from .verttools import *
 from ..main.bartmoss_functions import *
 from ..main.common import get_active_collection, get_classes, get_color_presets, get_selected_collection, save_presets
-from bpy.props import (StringProperty)
+from bpy.props import (StringProperty, FloatVectorProperty, FloatProperty, BoolProperty, EnumProperty)
 from bpy.types import (Operator, Panel)
 from ..cyber_props import CP77RefitList, refit_dir
 from ..icons.cp77_icons import get_icon
@@ -36,41 +36,42 @@ class CP77_PT_MeshTools(Panel):
         props = context.scene.cp77_panel_props
 
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
-        if cp77_addon_prefs.show_modtools:
-            if cp77_addon_prefs.show_meshtools:
-                box.label(icon_value=get_icon("SCULPT"), text="Modelling:")
-                col = box.column()
-                col.operator("cp77.set_armature", text="Change Armature Target")
-                if context.active_object and context.active_object.type == 'MESH' and context.object.active_material and context.object.active_material.name == 'UV_Checker':
-                    col.operator("cp77.uv_unchecker",  text="Remove UV Checker")
-                else:
-                    col.operator("cp77.uv_checker", text="Apply UV Checker")
-                col.operator("cp77.trans_weights", text="Weight Transfer Tool")
-                col.operator("cp77.garment_support", text="Create Garment Support")
+        if not cp77_addon_prefs.show_modtools or not cp77_addon_prefs.show_meshtools:
+            return
 
-                if context.active_object and len([obj for obj in bpy.context.selected_objects if obj.type == 'MESH']) > 1:
-                    col.operator("cp77.safe_join", text="Join Meshes")
-                elif context.active_object and context.active_object.type == 'MESH' and context.active_object.data.materials and any(mat.name.startswith('submesh_') for mat in context.active_object.data.materials if mat):
-                    col.operator("cp77.safe_split", text="Split into submeshes")
+        box.label(icon_value=get_icon("SCULPT"), text="Modelling:")
+        col = box.column()
+        col.operator("cp77.set_armature", text="Change Armature Target")
+        if context.active_object and context.active_object.type == 'MESH' and context.object.active_material and context.object.active_material.name == 'UV_Checker':
+            col.operator("cp77.uv_unchecker",  text="Remove UV Checker")
+        else:
+            col.operator("cp77.uv_checker", text="Apply UV Checker")
+        col.operator("cp77.trans_weights", text="Weight Transfer Tool")
+        col.operator("cp77.shrinkwrap", text="Create Shrinkwrap")
 
-                box = layout.box()
-                box.label(text="Mesh Cleanup", icon_value=get_icon("TRAUMA"))
-                col = box.column()
-                col.operator("cp77.submesh_prep")
-                col.operator("cp77.group_verts", text="Group Ungrouped Verts")
-                col.operator("cp77.del_empty_vgroup", text="Delete Unused Vert Groups")
+        if context.active_object and len([obj for obj in bpy.context.selected_objects if obj.type == 'MESH']) > 1:
+            col.operator("cp77.safe_join", text="Join Meshes")
+        elif context.active_object and context.active_object.type == 'MESH' and context.active_object.data.materials and any(mat.name.startswith('submesh_') for mat in context.active_object.data.materials if mat):
+            col.operator("cp77.safe_split", text="Split into submeshes")
 
-                box = layout.box()
-                box.label(text="AKL Autofitter", icon_value=get_icon("REFIT"))
-                col = box.column()
-                col.operator("cp77.auto_fitter", text="Refit Selected Meshes")
+        box = layout.box()
+        box.label(text="Mesh Cleanup", icon_value=get_icon("TRAUMA"))
+        col = box.column()
+        col.operator("cp77.submesh_prep")
+        col.operator("cp77.group_verts", text="Group Ungrouped Verts")
+        col.operator("cp77.del_empty_vgroup", text="Delete Unused Vert Groups")
 
-                box = layout.box()
-                box.label(text="Vertex Colours", icon="BRUSH_DATA")
-                col = box.column()
-                col.operator("cp77.apply_vertex_color_preset")
-                col.operator("cp77.add_vertex_color_preset")
-                col.operator("cp77.delete_vertex_color_preset")
+        box = layout.box()
+        box.label(text="AKL Autofitter", icon_value=get_icon("REFIT"))
+        col = box.column()
+        col.operator("cp77.auto_fitter", text="Refit Selected Meshes")
+
+        box = layout.box()
+        box.label(text="Vertex Colours", icon="BRUSH_DATA")
+        col = box.column()
+        col.operator("cp77.apply_vertex_color_preset")
+        col.operator("cp77.add_vertex_color_preset")
+        col.operator("cp77.delete_vertex_color_preset")
 
 class CP77DeleteVertexcolorPreset(Operator):
     bl_idname = "cp77.delete_vertex_color_preset"
@@ -140,26 +141,86 @@ class CP77AddVertexcolorPreset(Operator):
         split.prop(self, "preset_name", text="")
 
 class CP77GarmentSupport(Operator):
-    bl_idname = 'cp77.garment_support'
-    bl_label = "Cyberpunk 2077 Garment Support Tool"
-    bl_description = "Create a garment support shapekey from a selection"
+    bl_idname = 'cp77.shrinkwrap'
+    bl_label = "Cyberpunk 2077 Shrinkwrap Tool"
+    bl_description = "Shrinkwrap selection on top of another mesh"
     bl_options = {'REGISTER', 'UNDO'}
-    mesh_target: StringProperty(name="Mesh Target")
+
+    mesh_target: StringProperty(name="Mesh Target")  # pyright: ignore[reportInvalidTypeForm]
+
+    as_garment_support: BoolProperty(
+        name="As Garment Support",
+        description="Modifier is GarmentSupport",
+        default=True
+    ) # pyright: ignore[reportInvalidTypeForm]
+
+    apply_immediately: BoolProperty(
+        name="Apply immediately",
+        description="Unchecking this box will preserve the modifier",
+        default=True
+    ) # pyright: ignore[reportInvalidTypeForm]
+
+    offset: FloatProperty(
+        name="Offset",
+        description="Offset distance for shrinkwrap",
+        default=0.0002,
+        step=0.0001,
+        precision=5,
+    ) # pyright: ignore[reportInvalidTypeForm]
+
+    wrap_method: EnumProperty(
+
+        description="How to wrap your mesh?",
+        items=[
+            ('NEAREST_SURFACEPOINT', "Nearest Surface Point", "Shrink the mesh to the nearest target surface."),
+            ('PROJECT', "Project", "Shrink the mesh to the nearest target surface along a given axis."),
+            ('NEAREST_VERTEX', "Nearest Vertex", "Shrink the mesh to the nearest target vertex."),
+            ('TARGET_PROJECT', "Target Normal Project", "Shrink the mesh to the nearest target surface along the interpolated vertex normals of the target.")
+        ],
+        default='NEAREST_SURFACEPOINT'
+    ) # pyright: ignore[reportInvalidTypeForm]
 
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
-        return add_garment_support(context, context.scene.cp77_panel_props.mesh_target)
+        return add_shrinkwrap(
+            context=context,
+            target_collection_name=context.scene.cp77_panel_props.mesh_target,
+            offset=self.offset,
+            wrap_method=self.wrap_method,
+            as_garment_support=self.as_garment_support,
+            apply_immediately=self.apply_immediately
+        )
 
     def draw(self,context):
         props = context.scene.cp77_panel_props
         layout = self.layout
+
         row = layout.row(align=True)
         split = row.split(factor=0.3,align=True)
         split.label(text="Target Mesh:")
         split.prop(props, "mesh_target", text="")
+
         row = layout.row(align=True)
+        split = row.split(factor=0.3,align=True)
+        split.label(text="As Garment Support:")
+        split.prop(self, "as_garment_support")
+
+        row = layout.row(align=True)
+        split = row.split(factor=0.3,align=True)
+        split.label(text="Apply immediately:")
+        split.prop(self, "apply_immediately")
+
+        row = layout.row(align=True)
+        split = row.split(factor=0.3,align=True)
+        split.label(text="Offset:")
+        split.prop(self, "offset")
+
+        row = layout.row(align=True)
+        split = row.split(factor=0.3,align=True)
+        split.label(text="Wrap Method:")
+        split.prop(self, "wrap_method", text="")
 
 class CP77SafeJoin(Operator):
     bl_idname = "cp77.safe_join"
