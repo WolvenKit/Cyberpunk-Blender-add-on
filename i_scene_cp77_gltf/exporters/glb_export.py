@@ -167,15 +167,15 @@ def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=F
             armatures = [obj for obj in objects if obj.type == 'ARMATURE']
             if not armatures:
                 raise ValueError("No armature objects are selected, please select an armature")
-
             export_anims(context, filepath, options, armatures)
 
-        #if export_poses option isn't used, check to make sure there are meshes selected and throw an error if not
-        meshes = [obj for obj in objects if obj.type == 'MESH' and not "Icosphere" in obj.name]
-        if not meshes:
-            raise ValueError("No meshes selected, please select at least one mesh")
+        else:
+            #if export_poses option isn't used, check to make sure there are meshes selected and throw an error if not
+            meshes = [obj for obj in objects if obj.type == 'MESH' and not "Icosphere" in obj.name]
+            if not meshes:
+                raise ValueError("No meshes selected, please select at least one mesh")
 
-        export_meshes(context, filepath, export_visible, limit_selected, static_prop, red_garment_col, apply_transform, meshes, options)
+            export_meshes(context, filepath, export_visible, limit_selected, static_prop, red_garment_col, apply_transform, meshes, options)
     except Exception as e:
         show_message(e.args[0])
         return {'CANCELLED'}

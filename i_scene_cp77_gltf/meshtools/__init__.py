@@ -1,14 +1,15 @@
+from bpy_extras.io_utils import ImportHelper
 import bpy
 import bpy.utils.previews
 import sys
-from .. exporters import CP77HairProfileExport, mlsetup_export
+import os
 from .meshtools import *
 from .verttools import *
 from ..main.bartmoss_functions import *
-from ..main.common import get_classes, get_color_presets, save_presets
-from bpy.props import (StringProperty, EnumProperty)
-from bpy.types import (Scene, Operator, Panel)
-from ..cyber_props import CP77RefitList
+from ..main.common import get_active_collection, get_classes, get_color_presets, get_selected_collection, save_presets
+from bpy.props import (StringProperty, FloatVectorProperty, FloatProperty, BoolProperty, EnumProperty)
+from bpy.types import (Operator, Panel)
+from ..cyber_props import CP77RefitList, refit_dir
 from ..icons.cp77_icons import get_icon
 
 class CP77_PT_MeshTools(Panel):
@@ -35,36 +36,42 @@ class CP77_PT_MeshTools(Panel):
         props = context.scene.cp77_panel_props
 
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
-        if cp77_addon_prefs.show_modtools:
-            if cp77_addon_prefs.show_meshtools:
-                box.label(icon_value=get_icon("SCULPT"), text="Modelling:")
-                col = box.column()
-                col.operator("cp77.set_armature", text="Change Armature Target")
-                if context.active_object and context.active_object.type == 'MESH' and context.object.active_material and context.object.active_material.name == 'UV_Checker':
-                    col.operator("cp77.uv_unchecker",  text="Remove UV Checker")
-                else:
-                    col.operator("cp77.uv_checker", text="Apply UV Checker")
-                col.operator("cp77.trans_weights", text="Weight Transfer Tool")
+        if not cp77_addon_prefs.show_modtools or not cp77_addon_prefs.show_meshtools:
+            return
 
-                box = layout.box()
-                box.label(text="Mesh Cleanup", icon_value=get_icon("TRAUMA"))
-                col = box.column()
-                col.operator("cp77.submesh_prep")
-                col.operator("cp77.group_verts", text="Group Ungrouped Verts")
-                col.operator("cp77.del_empty_vgroup", text="Delete Unused Vert Groups")
+        box.label(icon_value=get_icon("SCULPT"), text="Modelling:")
+        col = box.column()
+        col.operator("cp77.set_armature", text="Change Armature Target")
+        if context.active_object and context.active_object.type == 'MESH' and context.object.active_material and context.object.active_material.name == 'UV_Checker':
+            col.operator("cp77.uv_unchecker",  text="Remove UV Checker")
+        else:
+            col.operator("cp77.uv_checker", text="Apply UV Checker")
+        col.operator("cp77.trans_weights", text="Weight Transfer Tool")
+        col.operator("cp77.shrinkwrap", text="Create Shrinkwrap")
 
-                box = layout.box()
-                box.label(text="AKL Autofitter", icon_value=get_icon("REFIT"))
-                col = box.column()
-                col.operator("cp77.auto_fitter", text="Refit Selected Meshes")
+        if context.active_object and len([obj for obj in bpy.context.selected_objects if obj.type == 'MESH']) > 1:
+            col.operator("cp77.safe_join", text="Join Meshes")
+        elif context.active_object and context.active_object.type == 'MESH' and context.active_object.data.materials and any(mat.name.startswith('submesh_') for mat in context.active_object.data.materials if mat):
+            col.operator("cp77.safe_split", text="Split into submeshes")
 
-                box = layout.box()
-                box.label(text="Vertex Colours", icon="BRUSH_DATA")
-                col = box.column()
-                col.operator("cp77.apply_vertex_color_preset")
-                col.operator("cp77.add_vertex_color_preset")
-                col.operator("cp77.delete_vertex_color_preset")
+        box = layout.box()
+        box.label(text="Mesh Cleanup", icon_value=get_icon("TRAUMA"))
+        col = box.column()
+        col.operator("cp77.submesh_prep")
+        col.operator("cp77.group_verts", text="Group Ungrouped Verts")
+        col.operator("cp77.del_empty_vgroup", text="Delete Unused Vert Groups")
 
+        box = layout.box()
+        box.label(text="AKL Autofitter", icon_value=get_icon("REFIT"))
+        col = box.column()
+        col.operator("cp77.auto_fitter", text="Refit Selected Meshes")
+
+        box = layout.box()
+        box.label(text="Vertex Colours", icon="BRUSH_DATA")
+        col = box.column()
+        col.operator("cp77.apply_vertex_color_preset")
+        col.operator("cp77.add_vertex_color_preset")
+        col.operator("cp77.delete_vertex_color_preset")
 
 class CP77DeleteVertexcolorPreset(Operator):
     bl_idname = "cp77.delete_vertex_color_preset"
@@ -133,6 +140,115 @@ class CP77AddVertexcolorPreset(Operator):
         split.label(text="Preset Name:")
         split.prop(self, "preset_name", text="")
 
+class CP77GarmentSupport(Operator):
+    bl_idname = 'cp77.shrinkwrap'
+    bl_label = "Cyberpunk 2077 Shrinkwrap Tool"
+    bl_description = "Shrinkwrap selection on top of another mesh"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    mesh_target: StringProperty(name="Mesh Target")  # pyright: ignore[reportInvalidTypeForm]
+
+    as_garment_support: BoolProperty(
+        name="As Garment Support",
+        description="Modifier is GarmentSupport",
+        default=True
+    ) # pyright: ignore[reportInvalidTypeForm]
+
+    apply_immediately: BoolProperty(
+        name="Apply immediately",
+        description="Unchecking this box will preserve the modifier",
+        default=True
+    ) # pyright: ignore[reportInvalidTypeForm]
+
+    offset: FloatProperty(
+        name="Offset",
+        description="Offset distance for shrinkwrap",
+        default=0.0002,
+        step=0.0001,
+        precision=5,
+    ) # pyright: ignore[reportInvalidTypeForm]
+
+    wrap_method: EnumProperty(
+
+        description="How to wrap your mesh?",
+        items=[
+            ('NEAREST_SURFACEPOINT', "Nearest Surface Point", "Shrink the mesh to the nearest target surface."),
+            ('PROJECT', "Project", "Shrink the mesh to the nearest target surface along a given axis."),
+            ('NEAREST_VERTEX', "Nearest Vertex", "Shrink the mesh to the nearest target vertex."),
+            ('TARGET_PROJECT', "Target Normal Project", "Shrink the mesh to the nearest target surface along the interpolated vertex normals of the target.")
+        ],
+        default='NEAREST_SURFACEPOINT'
+    ) # pyright: ignore[reportInvalidTypeForm]
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        return add_shrinkwrap(
+            context=context,
+            target_collection_name=context.scene.cp77_panel_props.mesh_target,
+            offset=self.offset,
+            wrap_method=self.wrap_method,
+            as_garment_support=self.as_garment_support,
+            apply_immediately=self.apply_immediately
+        )
+
+    def draw(self,context):
+        props = context.scene.cp77_panel_props
+        layout = self.layout
+
+        row = layout.row(align=True)
+        split = row.split(factor=0.3,align=True)
+        split.label(text="Target Mesh:")
+        split.prop(props, "mesh_target", text="")
+
+        row = layout.row(align=True)
+        split = row.split(factor=0.3,align=True)
+        split.label(text="As Garment Support:")
+        split.prop(self, "as_garment_support")
+
+        row = layout.row(align=True)
+        split = row.split(factor=0.3,align=True)
+        split.label(text="Apply immediately:")
+        split.prop(self, "apply_immediately")
+
+        row = layout.row(align=True)
+        split = row.split(factor=0.3,align=True)
+        split.label(text="Offset:")
+        split.prop(self, "offset")
+
+        row = layout.row(align=True)
+        split = row.split(factor=0.3,align=True)
+        split.label(text="Wrap Method:")
+        split.prop(self, "wrap_method", text="")
+
+class CP77SafeJoin(Operator):
+    bl_idname = "cp77.safe_join"
+    bl_label = "Join Selected Meshes"
+    bl_description = "Join selected meshes while preserving submesh information"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+
+    def execute(self, context):
+        result = safe_join(self, context)
+        return result
+
+class CP77SafeSplit(Operator):
+    bl_idname = "cp77.safe_split"
+    bl_label = "Split Selected Meshes"
+    bl_description = "Split selected mesh back into submeshes"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        result = safe_split(self, context)
+        return result
+
 class CP77WeightTransfer(Operator):
     bl_idname = 'cp77.trans_weights'
     bl_label = "Cyberpunk 2077 Weight Transfer Tool"
@@ -145,10 +261,24 @@ class CP77WeightTransfer(Operator):
         name="Transfer by Submesh Order",
         description="Because Mana Gets what Mana Wants :D",
         default=False)
+
     bl_options = {'REGISTER', 'UNDO'}
 
-
     def invoke(self, context, event):
+        selected_collection = get_selected_collection()
+        active_collection = get_active_collection()
+
+        if active_collection and selected_collection and active_collection.name == selected_collection.name:
+            active_collection = None
+
+        props = context.scene.cp77_panel_props
+
+        if selected_collection and active_collection:
+            props.mesh_source = selected_collection.name
+            props.mesh_target = active_collection.name
+        elif selected_collection:
+            props.mesh_target = selected_collection.name
+
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
@@ -158,6 +288,7 @@ class CP77WeightTransfer(Operator):
 
     def draw(self,context):
         props = context.scene.cp77_panel_props
+
         layout = self.layout
         row = layout.row(align=True)
         split = row.split(factor=0.3,align=True)
@@ -245,7 +376,6 @@ class CP77ApplyVertexcolorPreset(Operator):
         split.label(text="Preset:")
         split.prop(props, "vertex_color_presets", text="")
 
-
 class CP77GroupVerts(Operator):
     bl_idname = "cp77.group_verts"
     bl_parent_id = "CP77_PT_MeshTools"
@@ -279,44 +409,72 @@ class CP77Autofitter(Operator):
         description="If enabled, a base refitter will be applied, followed by an addon",
         default=False
     )
+    try_auto_apply: BoolProperty(
+        name="Auto Apply",
+        description="Attempt to apply the refit geometry as the mesh's new basis upon creation",
+        default=False
+    )
 
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
-        target_body_name = props.refit_json
-        addon_target_body_name = props.refit_addon_json
-        target_body_paths, target_body_names = CP77RefitList(context)
-        addon_target_body_paths, addon_target_body_names = CP77RefitAddonList(context)
-        refitter, addon = CP77RefitChecker(self, context)
 
-        if target_body_name in target_body_names:
-            target_body_path = target_body_paths[target_body_names.index(target_body_name)]
-            if self.useAddon:
-                if addon_target_body_name in addon_target_body_names:
-                    addon_target_body_path = addon_target_body_paths[addon_target_body_names.index(addon_target_body_name)]
+        # Build selectable lists
+        base_paths,  base_names  = CP77RefitList(context)
+        addon_paths, addon_names = CP77RefitAddonList(context)
+
+        # Gather the user’s chosen refitters (paths + names in order)
+        refitter_paths = []
+        names = []
+
+        # Base (required)
+        base_choice = props.refit_json
+        if base_choice in base_names:
+            target_body_path = base_paths[base_names.index(base_choice)]
+            refitter_paths.append(target_body_path)
+            names.append(base_choice)
+        else:
+            self.report({'ERROR'}, f"Base refitter '{base_choice}' not found.")
+            return {'CANCELLED'}
+
+        # Optional addon
+        addon_target_body_path = None
+        addon_choice = None
+        if self.useAddon:
+            addon_choice = props.refit_addon_json
+            if addon_choice in addon_names:
+                addon_target_body_path = addon_paths[addon_names.index(addon_choice)]
+                refitter_paths.append(addon_target_body_path)
+                names.append(addon_choice)
             else:
-                addon_target_body_path = None
-                addon_target_body_name = None
-
-            CP77Refit(
-                context=context,
-                refitter=refitter,
-                addon=addon,
-                target_body_path=target_body_path,
-                target_body_name=target_body_name,
-                useAddon=self.useAddon,
-                addon_target_body_path=addon_target_body_path,
-                addon_target_body_name=addon_target_body_name,
-                fbx_rot=props.fbx_rot
+                self.report({'ERROR'}, f"Addon refitter '{addon_choice}' not found.")
+                return {'CANCELLED'}
+        refitter, addon = CP77RefitChecker(self, context)
+        CP77Refit(
+            context=context,
+            refitter=refitter,
+            addon=addon,
+            target_body_path=target_body_path,
+            target_body_name=base_choice,
+            useAddon=self.useAddon,
+            addon_target_body_path=addon_target_body_path,
+            addon_target_body_name=addon_choice,
+            fbx_rot=props.fbx_rot,
+            try_auto_apply=self.try_auto_apply
             )
 
-            return {'FINISHED'}
+        return {'FINISHED'}
 
     def draw(self,context):
         props = context.scene.cp77_panel_props
         layout = self.layout
+        col = layout.column_flow(columns=2)
+        col.prop(props, 'fbx_rot', text="Refit a mesh in FBX orientation")
+        col.prop(self, 'useAddon', text="Use a Refitter Addon")
+        col = layout.column()
+        col.prop(self, 'try_auto_apply', text="Apply to Mesh")
         row = layout.row(align=True)
         split = row.split(factor=0.2,align=True)
         split.label(text="Shape:")
@@ -326,10 +484,35 @@ class CP77Autofitter(Operator):
             split = row.split(factor=0.2,align=True)
             split.label(text="Addon:")
             split.prop(props, 'refit_addon_json', text="")
-        col = layout.column()
-        col.prop(props, 'fbx_rot', text="Refit a mesh in FBX orientation")
-        col.prop(self, 'useAddon', text="Use a Refitter Addon")
 
+class CP77RefitConvert(Operator,ImportHelper):
+    bl_idname = 'cp77.refit_convert'
+    bl_label = "Convert Old Refit"
+    bl_description = "Convert old .zip refit to new format"
+    bl_options = {'REGISTER'}
+
+    filter_glob: StringProperty(
+        default="*.refitter.zip",
+        options={'HIDDEN'},
+        )
+
+    filepath: StringProperty(name= "Filepath",
+                             subtype = 'FILE_PATH')
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def execute(self, context):
+        filepath = self.filepath if self.filepath != "" else refit_dir
+        if os.path.isdir(filepath):
+            for filename in os.listdir(filepath):
+                if filename.endswith('.refitter.zip'):
+                    full_path = os.path.join(filepath, filename)
+                    convert_legacy_lattice(full_path)
+        else:
+            convert_legacy_lattice(filepath)
+        return {"FINISHED"}
 
 class CP77UVTool(Operator):
     bl_idname = 'cp77.uv_checker'
@@ -388,6 +571,7 @@ class CP77_OT_submesh_prep(Operator):
     bl_label = "Prep. It!"
     bl_idname = "cp77.submesh_prep"
     bl_parent_id = "CP77_PT_MeshTools"
+    bl_options = {'REGISTER', "UNDO"}
     bl_description = "Mark seams based on edges boundary loops, merge vertices, correct and smooth normals based on the direction of the faces"
 
     def invoke(self, context, event):
@@ -430,13 +614,6 @@ def register_meshtools():
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
 
-def unregister_meshtools():
-    for cls in reversed(other_classes):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
-    for cls in reversed(operators):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
 def unregister_meshtools():
     for cls in reversed(other_classes):
         if hasattr(bpy.types, cls.__name__):

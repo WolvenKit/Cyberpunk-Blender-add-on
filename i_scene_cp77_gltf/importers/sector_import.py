@@ -79,7 +79,7 @@ def get_groupname(meshname, meshAppearance):
 # Get the group name for the mesh based on its name and appearance
 # group, groupname = get_group(meshname,meshAppearance)
 def get_group(meshname,meshAppearance,Masters):
-    groups= [g for g in Masters.children if g['meshpath']==meshname and g['appearance']==meshAppearance]
+    groups= [g for g in Masters.children if 'meshpath' in g.keys() and g['meshpath']==meshname and 'appearance' in g.keys() and g['appearance']==meshAppearance]
     if len(groups)>0:
         group=groups[0]
         groupname = group.name
@@ -257,7 +257,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
         print('')
     start_time = time.time()
     # Set this to true to limit import to the types listed in the import_types list.
-    limittypes=True
+    limittypes=False
     import_types=None
     import_types=['worldEntityNode'
     ]
@@ -1337,6 +1337,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                             if not o:
                                                 o = bpy.data.objects.new('NDI_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s), None)
                                             Masters.objects.link(o)
+                                        if meshname not in Masters.objects.keys():
+                                            print(f"Mesh {meshname} not found in Masters, skipping collision import for this shape")
+                                            continue
                                         o=Masters.objects[meshname].copy()
                                         o['nodeType']='worldCollisionNode'
                                         o['nodeIndex']=i
