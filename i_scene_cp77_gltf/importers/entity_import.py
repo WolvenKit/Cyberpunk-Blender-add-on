@@ -107,7 +107,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     VS=[]
     vehicle_slots=None
     for x in ent_components:
-        if 'name' in x.keys() and x['name']['$value']=='vehicle_slots' or x['name']['$value']=='slot':
+        if 'name' in x.keys() and x['name']['$value']=='vehicle_slots' or x['name']['$value']=='slots':
             VS.append(x)
     if len(VS)>0:
         vehicle_slots= VS[0]['slots']
@@ -402,7 +402,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                             bindname=None
                             bindpt=None
                             pt_trans=[0,0,0]
-                            pt_rot=[1,0,0,0]
+                            pt_rot=[0,0,0,0]
                             pt_eul=None
                             pT=c['parentTransform']
                             if pT:
@@ -427,7 +427,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                     bindname=chunk_pt['Data']['bindName']['$value']
                                     # if it has a bindname of vehicle_slots, you may need to find the bone name in the vehicle slots in the root ent components
                                     # this should have been loaded earlier, check for it in the vehicle slots if not just set to the slot value
-                                    if bindname=='vehicle_slots' or 'slot':
+                                    if bindname=='vehicle_slots' or 'slots':
                                         if vehicle_slots:
                                             slotname=chunk_pt['Data']['slotName']['$value']
                                             for slot in vehicle_slots:
@@ -539,7 +539,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                                         if chunk_pt:
                                                             #print('in chunk pt processing')
                                                             bindname=chunk_pt['Data']['bindName']['$value']
-                                                            if bindname=='vehicle_slots' or 'slot':
+                                                            if bindname=='vehicle_slots':
                                                                 if vehicle_slots:
                                                                     slotname=chunk_pt['Data']['slotName']['$value']
                                                                     for slot in vehicle_slots:
@@ -555,58 +555,46 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                                     bidx=bid
                                                     #print('bone found - ',bidx)
                                             btrans=rig_j['boneTransforms'][bidx]
-                                            pt_trans=bones[bindname].head
-                                            pt_rot=bones[bindname].rotation_quaternion
-                                            vs=[slot for slot in vehicle_slots if slot['slotName']['$value']==slotname]
-                                            vs_rot=Quaternion([1,0,0,0])
-                                            vs_pos= Vector([0,0,0])
-                                            vs_scale=Vector([1,1,1])
-                                            if len(vs)>0:
-                                                vs=vs[0]
-                                                if 'relativeRotation' in vs.keys():
-                                                    vs_rot[0]=vs['relativeRotation']['r']
-                                                    vs_rot[1]=vs['relativeRotation']['i']
-                                                    vs_rot[2]=vs['relativeRotation']['j']
-                                                    vs_rot[3]=vs['relativeRotation']['k']
-                                                if 'relativePosition' in vs.keys():
-                                                    vs_pos[0]=vs['relativePosition']['X']
-                                                    vs_pos[1]=vs['relativePosition']['Y']
-                                                    vs_pos[2]=vs['relativePosition']['Z']
-                                                    #print('vs_rot = ',vs_rot)
-                                            vs_mat=Matrix.LocRotScale(Vector([0,0,0]),vs_rot,Vector([1,1,1]))
-                                            pt_mat=Matrix.LocRotScale(Vector([0,0,0]),pt_rot,Vector([1,1,1]))
-                                            vs_z_ang=vs_mat.to_euler().z
-                                            pt_z_ang=pt_mat.to_euler().z
 
-                                            bt_rot=get_rot(btrans)                                            
-                                            bt_mat=Matrix.LocRotScale(Vector([0,0,0]),Quaternion(bt_rot),Vector([1,1,1]))
-                                            if 'Orientation' in c['localTransform'].keys():# and (sum(obj.rotation_quaternion[:])<1.1  and sum(obj.rotation_quaternion[:])>0.99) or (sum(obj.rotation_quaternion[:])<0.1 and sum(obj.rotation_quaternion[:])>-0.01):
-                                                l_rot=get_rot(c['localTransform'])
-                                                lt_mat=Matrix.LocRotScale(Vector([0,0,0]),Quaternion(l_rot),Vector([1,1,1]))
                                             for obj in objs:
                                                 #print(bindname, bones[bindname].head)
                                                 obj['bindname']=bindname
-                                                # the vs transforms are meant to be relative, but I'm not sure what that means for blender.
-                                                #obj.location.x =  obj.location.x+vs_pos[0]
-                                                #obj.location.y = obj.location.y+vs_pos[1] #havent worked out at what point the 'relative 
-                                                #obj.location.z =  obj.location.z+vs_pos[2]
+                                                pt_trans=bones[bindname].head
+                                                pt_rot=bones[bindname].rotation_quaternion
+                                                vs=[slot for slot in vehicle_slots if slot['slotName']['$value']==slotname]
+                                                vs_rot=Quaternion([0,0,0,1])
+                                                vs_pos= Vector([0,0,0])
+                                                vs_scale=Vector([1,1,1])
+                                                if len(vs)>0:
+                                                    vs=vs[0]
+                                                    if 'relativeRotation' in vs.keys():
+                                                        vs_rot[0]=vs['relativeRotation']['i']
+                                                        vs_rot[1]=vs['relativeRotation']['j']
+                                                        vs_rot[2]=vs['relativeRotation']['k']
+                                                        vs_rot[3]=vs['relativeRotation']['r']
+                                                    if 'relativePosition' in vs.keys():
+                                                        vs_pos[0]=vs['relativePosition']['X']
+                                                        vs_pos[1]=vs['relativePosition']['Y']
+                                                        vs_pos[2]=vs['relativePosition']['Z']
+                                                        #print('vs_rot = ',vs_rot)
+                                                vs_mat=Matrix.LocRotScale(Vector([0,0,0]),vs_rot,vs_scale)
+                                                pt_mat=Matrix.LocRotScale(Vector([0,0,0]),pt_rot,Vector(vs_scale))
+                                                vs_z_ang=vs_mat.to_euler().z
+                                                pt_z_ang=pt_mat.to_euler().z
 
-                                                obj.matrix_world =  lt_mat @ obj.matrix_world 
-                                                obj.matrix_world =  pt_mat @ obj.matrix_world 
-                                                obj.matrix_world =  vs_mat @ obj.matrix_world 
-                                                obj.matrix_world =  bt_mat @ obj.matrix_world 
-                                                #print(m)
-                                                #print(l_rot, pt_rot, vs_rot,bt_rot)
-                                                obj['lrot']=l_rot
-                                                obj['pt_rot']=pt_rot
-                                                obj['vs_rot']=vs_rot
-                                                obj['bt_rot']=bt_rot
-                                                #if  (sum(obj.rotation_quaternion[:])<0.001 and sum(obj.rotation_quaternion[:])>-0.001):
-                                                #    obj.rotation_quaternion=Quaternion([1,0,0,0])
+                                                obj.location.x =  obj.location.x+pt_trans[0]+vs_pos[0]
+                                                obj.location.y = obj.location.y+pt_trans[1]+vs_pos[1]
+                                                obj.location.z =  obj.location.z+pt_trans[2]+vs_pos[2]
 
-                                                obj.location.x =  obj.location.x+pt_trans[0]#+vs_pos[0]
-                                                obj.location.y = obj.location.y+pt_trans[1]#+vs_pos[1] #havent worked out at what point the 'relative 
-                                                obj.location.z =  obj.location.z+pt_trans[2]#+vs_pos[2]
+                                                obj.rotation_quaternion.x = btrans['Rotation']['i']
+                                                obj.rotation_quaternion.y = btrans['Rotation']['j']
+                                                obj.rotation_quaternion.z = btrans['Rotation']['k']
+                                                obj.rotation_quaternion.w = btrans['Rotation']['r']
+                                                
+                                                
+                                                obj.rotation_quaternion=obj.rotation_quaternion*Quaternion(vs_rot)
+                                                #obj.matrix_local=  obj.matrix_local @ vs_mat
+                                                #obj.matrix_world= pt_mat @ obj.matrix_world
 
                                                 #Apply child of constraints to them and set the inverse
                                                 if 'fuel_cap' not in bindname:
@@ -654,17 +642,29 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
 
                             # local transforms are in the original mesh coord sys, but get applied after its already re-oriented, mainly only matters for wheels.
                             # this is hacky af as I cant be arsed dealing with doing it properly with quaternions or whatever right now. Feel free to fix it.
+                            if bindname and bones and bindname in bones.keys() and bindname!='Base':
+                                z_ang=bones[bindname].matrix.to_euler().z
+                                x_orig=x
+                                y_orig=y
+                                x=x_orig*cos(z_ang)+y_orig*sin(z_ang)
+                                y=x_orig*sin(z_ang)+y_orig*cos(z_ang)
+                                #print ('Local transform  x= ',x,'y= ',y,' z= ',z)
 
-                            
                             for obj in objs:
                                 #print(obj.name, obj.type)
                                 obj.location.x =  obj.location.x+x
                                 obj.location.y = obj.location.y+y
                                 obj.location.z =  obj.location.z+z
                                 # shouldnt need the 0 check, pretty sure I've fuked up a default somewhere, but at this point I just want it to work.
-                                
-                                
-                                
+                                if 'Orientation' in c['localTransform'].keys() and (sum(obj.rotation_quaternion[:])<1.1  and sum(obj.rotation_quaternion[:])>0.9) or (sum(obj.rotation_quaternion[:])<0.1 and sum(obj.rotation_quaternion[:])>-0.1):
+                                    lrot=get_rot(c['localTransform'])
+                                    obj.rotation_quaternion = obj.rotation_quaternion * Quaternion(lrot)
+                                    obj.rotation_quaternion.x = c['localTransform']['Orientation']['i']
+                                    obj.rotation_quaternion.y = c['localTransform']['Orientation']['j']
+                                    obj.rotation_quaternion.z = c['localTransform']['Orientation']['k']
+                                    obj.rotation_quaternion.w = c['localTransform']['Orientation']['r']
+                                #if vs_rot:
+                                #    obj.matrix_local =  Matrix.LocRotScale(Vector(0,0,0),Quaternion(vs_rot),Vector(1,1,1)) @ 
                                 if 'scale' in c['localTransform'].keys():
                                     obj.scale.x = c['localTransform']['scale']['X']
                                     obj.scale.y = c['localTransform']['scale']['Y']
@@ -729,7 +729,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 mesh_obj['entJSON'] = filepath
 
                                 bindname=c['parentTransform']['Data']['bindName']['$value']
-                                if bindname=='vehicle_slots' or 'slot':
+                                if bindname=='vehicle_slots':
                                     if vehicle_slots:
                                         slotname=c['parentTransform']['Data']['slotName']['$value']
                                         for slot in vehicle_slots:
