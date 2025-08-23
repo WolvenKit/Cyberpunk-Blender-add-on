@@ -292,8 +292,18 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         print(f"GLB Import Time: {(time.time() - start_time)} Seconds")
         print('-------------------- Finished importing Cyberpunk 2077 Model --------------------\n')
 
-def reload_mats():
+def reload_mats(self, context):
     active_obj = bpy.context.active_object
+    if not active_obj or active_obj is None:
+        self.report({'ERROR'}, 'No mesh selected')
+        return {'CANCELLED'}
+    if active_obj.type != 'MESH':
+        self.report({'ERROR'}, 'Selected object is not a mesh')
+        return {'CANCELLED'}
+    if not active_obj.material_slots:
+        self.report({'ERROR'}, 'Selected object has no materials')
+        return {'CANCELLED'}
+
     mat_idx = active_obj.active_material_index
     mat = active_obj.material_slots[mat_idx].material
     old_mat_name = mat.name
@@ -326,7 +336,11 @@ def reload_mats():
 
     # JATO: Copy custom material properties from old mat to new mat. Maybe we could regenerate from file, but I'm having a hard time understanding the code for that within import_mats function
     for k in mat.keys():
-        newmat[k] = mat[k]
+        if k in ('BaseMaterial','DiffuseMap','GlobalNormal','MultilayerMask'):
+            newmat[k] = mat[k]
+
+    # JATO: may be unnecessary
+    active_obj.active_material_index = mat_idx
 
     # JATO: Removing the old material appears to cause a crash TODO: fix context?
     if mat:

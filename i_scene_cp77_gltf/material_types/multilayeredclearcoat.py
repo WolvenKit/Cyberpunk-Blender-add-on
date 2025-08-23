@@ -64,7 +64,8 @@ class MultilayeredClearCoat:
         VecMathN.location = (-500,-45*3)
         VecMathN.operation = 'MULTIPLY'
 
-        NormSepN = NG.nodes.new("ShaderNodeSeparateRGB")
+        NormSepN = NG.nodes.new("ShaderNodeSeparateColor")
+        NormSepN.mode = 'RGB'
         NormSepN.hide=True
         NormSepN.location = (300,-150)
 

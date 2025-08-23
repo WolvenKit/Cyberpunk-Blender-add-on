@@ -57,7 +57,6 @@ class CP77StreamingSectorExport(Operator,ExportHelper):
         exportSectors(self.filepath, use_yaml)
         return {'FINISHED'}
 
-
 class CP77GLBExport(Operator,ExportHelper):
     ### cleaned this up and moved most code to exporters.py
     bl_idname = "export_scene.cp77_glb"
@@ -130,7 +129,6 @@ class CP77GLBExport(Operator,ExportHelper):
         )
         return {'FINISHED'}
 
-
 class CP77HairProfileExport(Operator):
     bl_idname = "export_scene.hp"
     bl_label = "Export Hair Profile"
@@ -142,7 +140,6 @@ class CP77HairProfileExport(Operator):
     def execute(self, context):
         cp77_hp_export(self.filepath)
         return {"FINISHED"}
-
 
 class CP77MlSetupExport(Operator):
     bl_idname = "export_scene.mlsetup"
@@ -175,6 +172,149 @@ class CP77MlSetupExport(Operator):
         cp77_mlsetup_export(self, context, self.filepath, write_mltemplate)
         return {"FINISHED"}
 
+class CP77MlSetupGenerateOverrides(Operator):
+    bl_idname = "generate_layer_overrides.mlsetup"
+    bl_label = "Generate Layer Overrides"
+    bl_description = "Create Override data for MLTemplates found within the selected material."
+
+    def execute(self, context):
+        obj=bpy.context.active_object
+        mat_idx = obj.active_material_index
+        mat=obj.material_slots[mat_idx].material
+
+        cp77_mlsetup_getoverrides(self, context)
+
+        bpy.ops.get_layer_overrides.mlsetup()
+
+        # Do this to trigger update function so active color is set when we first generate overrides
+        bpy.context.scene.multilayer_index_prop = 1
+
+        success_message = "Generated overrides for " + mat.name
+
+        self.report({'INFO'}, success_message)
+        return {'FINISHED'}
+
+class CP77MlSetupSetMLTemplate(Operator):
+    bl_idname = "set_layer_mltemplate.mlsetup"
+    bl_label = "Swap MLTemplate"
+    bl_description = "Swap the MLTemplate used within the selected Multilayered Layer Node Group"
+
+    def execute(self, context):
+        ts = context.tool_settings
+        obj=bpy.context.active_object
+        mat_idx = obj.active_material_index
+        mat=obj.material_slots[mat_idx].material
+        if not mat.get('MLSetup'):
+            self.report({'ERROR'}, 'Multilayered setup not found within selected material.')
+            return {'CANCELLED'}
+
+        node_tree = bpy.context.object.active_material.node_tree
+        selected_node_group = None
+        for node in node_tree.nodes:
+            if node.select and node.type == 'GROUP':
+                selected_node_group = node
+                break # Assuming only one group node can be actively selected at a time
+
+        if selected_node_group == None:
+            self.report({'ERROR'}, 'A valid Multilayered node group was not selected.')
+            return {'CANCELLED'}
+
+        ngmatch = None
+        for ng in bpy.data.node_groups:
+            if ng.name == ts.image_paint.palette.name:
+                ngmatch = ng
+        selected_node_group.node_tree.nodes['Group'].node_tree = ngmatch
+
+        success_message = ""
+
+        self.report({'INFO'}, success_message)
+        return {'FINISHED'}
+
+class CP77MlSetupGetOverrides(Operator):
+    bl_idname = "get_layer_overrides.mlsetup"
+    bl_label = "View Layer Overrides"
+    bl_description = "View the Overrides for the MLTemplate within the selected Multilayered Layer Node Group"
+
+    def execute(self, context):
+        ts = context.tool_settings
+        obj=bpy.context.active_object
+        mat_idx = obj.active_material_index
+        mat=obj.material_slots[mat_idx].material
+        if not mat.get('MLSetup'):
+            self.report({'ERROR'}, 'Multilayered setup not found within selected material.')
+            return {'CANCELLED'}
+
+        node_tree = bpy.context.object.active_material.node_tree
+        selected_node_group = None
+        for node in node_tree.nodes:
+            if node.select and node.type == 'GROUP':
+                selected_node_group = node
+                break # Assuming only one group node can be actively selected at a time
+
+        if selected_node_group == None:
+            self.report({'ERROR'}, 'A valid Multilayered node group was not selected.')
+            return {'CANCELLED'}
+
+        BaseMat = selected_node_group.node_tree.nodes['Group'].node_tree.nodes['Group Input']
+        material = str(BaseMat['mlTemplate'])
+        smallmaterial = ((material.split('\\'))[-1])[:-11]
+
+        match_palette = None
+        for palette in bpy.data.palettes:
+            if palette.name == smallmaterial:
+                match_palette = palette
+        ts.image_paint.palette = match_palette
+
+        success_message = "Overrides found for " + str(selected_node_group.name) + " (" +str(smallmaterial) + ")"
+
+        self.report({'INFO'}, success_message)
+        return {'FINISHED'}
+
+class CP77MlSetupSetColorOverride(Operator):
+    bl_idname = "set_layer_color.mlsetup"
+    bl_label = "Apply Color Override"
+    bl_description = "Apply the current color to the selected Multilayered Layer Node Group"
+
+    def execute(self, context):
+        ts = context.tool_settings
+
+        palette = ts.image_paint.palette
+        if ts.image_paint.palette:
+            colR, colG, colB = palette.colors.active.color
+            active_color = (colR, colG, colB, 1)
+
+        obj=bpy.context.active_object
+        mat_idx = obj.active_material_index
+        mat=obj.material_slots[mat_idx].material
+        nodes=mat.node_tree.nodes
+        if not mat.get('MLSetup'):
+            self.report({'ERROR'}, 'Multilayered setup not found within selected material.')
+            return {'CANCELLED'}
+
+        node_tree = bpy.context.object.active_material.node_tree
+        selected_node_group = None
+        for node in node_tree.nodes:
+            if node.select and node.type == 'GROUP':
+                selected_node_group = node
+                break # Assuming only one group node can be actively selected at a time
+        selected_node_group.inputs['ColorScale'].default_value = active_color
+
+        BaseMat = selected_node_group.node_tree.nodes['Group'].node_tree.nodes['Group Input']
+        material = str(BaseMat['mlTemplate'])
+        smallmaterial = ((material.split('\\'))[-1])[:-11]
+
+        match_palette = None
+
+        for palette in bpy.data.palettes:
+            if palette.name == smallmaterial:
+                match_palette = palette
+
+        ts.image_paint.palette = match_palette
+
+        success_message = "{:.4f}  {:.4f}  {:.4f}".format(colR, colG, colB) + " was set on " + str(selected_node_group.name)
+
+        self.report({'INFO'}, success_message)
+        return {'FINISHED'}
 
 class CP77CollisionExport(Operator):
     bl_idname = "export_scene.collisions"
