@@ -100,6 +100,11 @@ class CP77GLBExport(Operator,ExportHelper):
         default=True,
         description="Applies the transform of the objects. Disable this if you don't care about the location/rotation/scale of the objects"
     )
+    export_tracks: BoolProperty(
+        name="Export Float Tracks",
+        default=False,
+        description="Export Float Tracks From F-Curves to Custom Properties"
+    )
 
     def draw(self, context):
         layout = self.layout
@@ -114,6 +119,8 @@ class CP77GLBExport(Operator,ExportHelper):
             else:
                 row = layout.row(align=True)
                 row.prop(self, "static_prop")
+                row = layout.row(align=True)
+                row.prop(self, "export_tracks")
             row = layout.row(align=True)
             row.prop(self, "apply_transform")
 
@@ -127,6 +134,7 @@ class CP77GLBExport(Operator,ExportHelper):
             limit_selected=self.limit_selected,
             static_prop=self.static_prop,
             apply_transform=self.apply_transform,
+            export_tracks=self.export_tracks,
         )
         return {'FINISHED'}
 
