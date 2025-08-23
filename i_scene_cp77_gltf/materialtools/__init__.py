@@ -8,6 +8,55 @@ from bpy.props import (StringProperty, EnumProperty)
 from bpy.types import (Scene, Operator, Panel)
 from ..cyber_props import CP77RefitList
 from ..icons.cp77_icons import get_icon
+import numpy as np
+
+
+def setup_mldata(self, context):
+    nt = bpy.context.object.active_material.node_tree
+    ml_nodename = 'Mat_Mod_Layer_'
+
+    # JATO: TODO is else statement required?
+    if self.multilayer_index_prop:
+        ml_idx = (bpy.context.scene.multilayer_index_prop) - 1
+    else:
+        self.report({'ERROR'}, 'Multilayered index property not found.')
+        return {'CANCELLED'}
+
+    # JATO: TODO more effecient to deselect all then break when we match?
+    ml_nodegroup = ml_nodename + str(ml_idx)
+    for node in nt.nodes:
+        if node.name == ml_nodegroup:
+            node.select = True
+            colorscale = (node.inputs['ColorScale'].default_value[::])[:-1]
+            #print("matched: ", idx)
+        else:
+            node.select = False
+
+    # JATO: We get overrides after selecting the right layer and before matching palette color
+    bpy.ops.get_layer_overrides.mlsetup()
+
+    active_palette = bpy.context.tool_settings.image_paint.palette
+    if active_palette:
+        palette_colors = active_palette.colors
+        for pal_col in palette_colors:
+            col_tuple= pal_col.color[:]
+            err=sum(np.subtract(col_tuple,colorscale))
+            # JATO: TODO test error tolerance numbers, 0.00005 just a random guess
+            if abs(err)<0.00005:
+                break
+        bpy.context.tool_settings.image_paint.palette.colors.active = pal_col
+
+
+# JATO: TODO idk where this should go, probably somewhere else?
+bpy.types.Scene.multilayer_index_prop = bpy.props.IntProperty(
+    name="Layer",
+    description="Multilayered layer-group index",
+    default=1,
+    min=1,
+    max=20,
+    update=setup_mldata
+)
+
 
 class CP77_PT_MaterialTools(Panel):
     bl_label = "Material Tools"
@@ -27,22 +76,59 @@ class CP77_PT_MaterialTools(Panel):
 
     def draw(self, context):
         layout = self.layout
+        scene = context.scene
         box = layout.box()
         props = context.scene.cp77_panel_props
+
+        # JATO: can be used to display selected node name
+        # nt = bpy.context.object.active_material.node_tree
+        # selected_nodes = [n for n in nt.nodes if n.select]
 
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
         if cp77_addon_prefs.show_modtools:
             if cp77_addon_prefs.show_meshtools:
+                ts = context.tool_settings
+
                 box.label(text="Materials", icon="MATERIAL")
                 col = box.column()
-                col.operator("export_scene.hp")
-                col.operator("export_scene.mlsetup")
                 col.operator("reload_material.cp77")
+                col.operator("export_scene.hp")
+
+                box.label(text="MULTILAYERED")
+                col = box.column()
+
+                col.operator("generate_layer_overrides.mlsetup")
+                col.prop(scene, "multilayer_index_prop")
+
+                rowColor = box.row(align=True)
+
+                # Row for showing currently selected node
+                # rowMat = box.row(align=True)
+                # if selected_nodes:
+                #     rowMat.label(text=f"Selected: {selected_nodes[0].name}")
+                # else:
+                #     rowMat.label(text="No Node Selected")
+
+                # JATO: we probably don't need a button because this op automatically fires now
+                #col.operator("get_layer_overrides.mlsetup")
+                col.operator("set_layer_color.mlsetup")
+                col.operator("set_layer_mltemplate.mlsetup")
+                col.operator("export_scene.mlsetup")
+
+                col.template_ID(ts.image_paint, "palette", new="palette.new")
+
+                palette_box = box.column()
+                palette_box.template_palette(ts.image_paint,"palette",color=True)
+
+                palette = ts.image_paint.palette
+                if ts.image_paint.palette:
+                    colR, colG, colB = palette.colors.active.color
+                    rowColor.label(text="Color  {:.4f}  {:.4f}  {:.4f}".format(colR, colG, colB))
+
 
 operators, other_classes = get_classes(sys.modules[__name__])
 
 def register_materialtools():
-
     for cls in operators:
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
@@ -50,13 +136,7 @@ def register_materialtools():
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
 
-def unregister_materialtools():
-    for cls in reversed(other_classes):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
-    for cls in reversed(operators):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
+
 def unregister_materialtools():
     for cls in reversed(other_classes):
         if hasattr(bpy.types, cls.__name__):
