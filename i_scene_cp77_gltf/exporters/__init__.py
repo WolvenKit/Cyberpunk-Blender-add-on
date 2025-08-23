@@ -130,20 +130,6 @@ class CP77GLBExport(Operator,ExportHelper):
         )
         return {'FINISHED'}
 
-
-class CP77HairProfileExport(Operator):
-    bl_idname = "export_scene.hp"
-    bl_label = "Export Hair Profile"
-    bl_description ="Generates a new .hp.json in your mod project folder which can be imported in Wolvenkit"
-    bl_parent_id = "CP77_PT_MaterialTools"
-
-    filepath: StringProperty(subtype="FILE_PATH")
-
-    def execute(self, context):
-        cp77_hp_export(self.filepath)
-        return {"FINISHED"}
-
-
 class CP77MlSetupExport(Operator):
     bl_idname = "export_scene.mlsetup"
     bl_label = "Export MLSetup"
