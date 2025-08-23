@@ -15,28 +15,105 @@ from .attribute_import import manage_garment_support
 from ..cyber_props import add_anim_props
 from ..jsontool import JSONTool
 from ..main.common import show_message
+from ..animtools.tracks import import_anim_tracks, fix_anim_frame_alignment
 import traceback
 
-def get_anim_info(animations):
-    # Get animations
-    #animations = gltf_importer.data.animations
+
+def get_anim_info(animations, oldanims, import_tracks):
+	"""Integrate track import/alignment when properties are added to actions.
+	Keeps original logic/printing; only adds track import + alignment.
+	"""
+	cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
+	
+	if bpy.app.version >= (4, 4, 0):
+		old_names = {getattr(x, 'name', x) for x in (oldanims or [])}
+		# Only actions created during this import
+		new_actions = [a for a in bpy.data.actions if a.name not in old_names]
+		for anim in (animations or []):
+			base = anim.name
+			found = False
+			for act in new_actions:
+				n = act.name
+				if n == base or (n.startswith(base + ".") and n[len(base) + 1 :].isdigit()):
+					add_anim_props(anim, act)
+					if import_tracks:
+						try:
+							import_anim_tracks(act)
+							fix_anim_frame_alignment(act)
+						except Exception as e:
+							if not cp77_addon_prefs.non_verbose:
+								print(f"Track integration failed for action {n}: {e}")
+						found = True
+						if not cp77_addon_prefs.non_verbose:
+							print(f"Properties added to action: {n} succesfully")
+			if not found and not cp77_addon_prefs.non_verbose:
+				print(f"No action found for {base}")
+		return{'FINISHED'}
+	else:
+		# left in for pre blender 4.4 users
+		for animation in animations:
+			if not cp77_addon_prefs.non_verbose:
+				print(f"Processing animation: {animation.name}")
+
+			# Find an action whose name contains the animation name
+			action = next((act for act in bpy.data.actions if act.name.startswith(animation.name + "_Armature")), None)
+
+			if action:
+				add_anim_props(animation, action)
+				try:
+					import_anim_tracks(action)
+					fix_anim_frame_alignment(action)
+				except Exception as e:
+					if not cp77_addon_prefs.non_verbose:
+						print(f"Track integration failed for action {action.name}: {e}")
+				if not cp77_addon_prefs.non_verbose:
+					print("Properties added to", action.name)
+			else:
+				if not cp77_addon_prefs.non_verbose:
+					print("No action found for", animation.name)
+
+
+def get_anim_info(animations, oldanims):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
-    for animation in animations:
-        if not cp77_addon_prefs.non_verbose:
-            print(f"Processing animation: {animation.name}")
+    if bpy.app.version >= (4, 4, 0):
+        old_names = {getattr(x, 'name', x) for x in (oldanims or [])}
 
-        # Find an action whose name contains the animation name
-        action = next((act for act in bpy.data.actions if act.name.startswith(animation.name + "_Armature")), None)
-
-        if action:
-            add_anim_props(animation, action)
+        # Only actions created during this import
+        new_actions = [a for a in bpy.data.actions if a.name not in old_names]
+    
+        for anim in (animations or []):
+            base = anim.name
+            found = False
+            for act in new_actions:
+                n = act.name
+                if n == base or (n.startswith(base + ".") and n[len(base) + 1 :].isdigit()):
+                    add_anim_props(anim, act)
+                    found = True
+                    if not cp77_addon_prefs.non_verbose:
+                        print(f"Properties added to action: {n} succesfully")
+            if not found and not cp77_addon_prefs.non_verbose:
+                print(f"No action found for {base}")
+        return{'FINISHED'}
+    else: 
+        # Get animations
+        #animations = gltf_importer.data.animations
+        for animation in animations:
             if not cp77_addon_prefs.non_verbose:
-                print("Properties added to", action.name)
-        else:
-            if not cp77_addon_prefs.non_verbose:
-                print("No action found for", animation.name)
+                print(f"Processing animation: {animation.name}")
+    
+            # Find an action whose name contains the animation name
+            action = next((act for act in bpy.data.actions if act.name.startswith(animation.name + "_Armature")), None)
+    
+            if action:
+                add_anim_props(animation, action)
+                if not cp77_addon_prefs.non_verbose:
+                    print("Properties added to", action.name)
+            else:
+                if not cp77_addon_prefs.non_verbose:
+                    print("No action found for", animation.name)
+    
+        print('')
 
-    print('')
 def objs_in_col(top_coll, objtype):
     return sum([len([o for o in col.objects if o.type==objtype]) for col in top_coll.children_recursive])+len([o for o in top_coll.objects if o.type==objtype])
 
@@ -75,6 +152,8 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
 
     if not cp77_addon_prefs.non_verbose:
         if ".anims.glb" in filepath:
+            bpy.context.scene.render.fps = 30
+            oldanims = {act.name for act in bpy.data.actions}
             print('\n-------------------- Beginning Cyberpunk Animation Import --------------------')
             print(f"Importing Animations From: {glbname}")
 
@@ -465,8 +544,7 @@ def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filena
 
     # if animations exist, don't hide the armature and get the extras properties
     if animations:
-        get_anim_info(animations)
-        bpy.context.scene.render.fps = 30
+        get_anim_info(animations, oldanims)
 
     # if no meshes exist, don't hide the armature
     elif meshes and o.type == 'ARMATURE':
