@@ -512,6 +512,14 @@ def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=F
             meshes = [obj for obj in objects if obj.type == 'MESH' and "Icosphere" not in obj.name]
             if not meshes:
                 raise ValueError("No meshes selected, please select at least one mesh")
+=======
+            export_anims(context, filepath, options, armatures)
+
+        else:
+            #if export_poses option isn't used, check to make sure there are meshes selected and throw an error if not
+            meshes = [obj for obj in objects if obj.type == 'MESH' and not "Icosphere" in obj.name]
+            if not meshes:
+                raise ValueError("No meshes selected, please select at least one mesh")
             export_meshes(context, filepath, export_visible, limit_selected, static_prop, red_garment_col, apply_transform, meshes, options)
     except Exception as e:
         show_message(str(e))  # why: robust even if e.args is empty

@@ -2,8 +2,11 @@ import bpy
 import bpy.utils.previews
 import os
 import math
+import re
+import traceback
 import json
 from ..main.common import  (get_resources_dir, get_script_dir, show_message)
+from ..main.bartmoss_functions import get_safe_mode, safe_mode_switch, restore_previous_context
 from bpy.props import (StringProperty, EnumProperty, FloatVectorProperty)
 from ..cyber_props import *
 
@@ -89,44 +92,140 @@ def CP77GroupUngroupedVerts(self, context):
     return {'FINISHED'}
 
 def trans_weights(self, context, vertInterop):
-    current_mode = context.mode
+    """
+    Transfer vertex-group weights between two collections chosen in scene.cp77_panel_props.
+
+      - If both collections are from cyberpunk (named like 'submesh_XX' naming -> pair by index (LOD ignored).
+      - Otherwise -> ordered pairing (1→1, 2→2, ...).
+      - Special-cases:
+          * one source, many targets -> source → all targets
+          * many sources, one target -> each source → that one target (last wins)
+    """
     props = context.scene.cp77_panel_props
-    source_mesh = bpy.data.collections.get(props.mesh_source)
-    target_mesh = bpy.data.collections.get(props.mesh_target)
-    active_objs = context.selected_objects
+    src_col = bpy.data.collections.get(props.mesh_source)
+    tgt_col = bpy.data.collections.get(props.mesh_target)
 
-    if source_mesh and target_mesh:
-        if current_mode != 'OBJECT':
-            bpy.ops.object.mode_set(mode='OBJECT')
+    sources = [o for o in src_col.objects if o.type == 'MESH']
+    targets = [o for o in tgt_col.objects if o.type == 'MESH']
 
+    if not sources or not targets:
+        show_message("Both collections must contain at least one mesh.")
+        return {'CANCELLED'}
+
+    # Save user context and switch to OBJECT safely
+    original_mode = get_safe_mode()
+    original_active = context.view_layer.objects.active
+    original_selection = list(context.selected_objects)
+
+    if original_mode != 'OBJECT':
+        safe_mode_switch('OBJECT')
+
+    # Mapping toggle
+    vert_mapping = 'POLYINTERP_NEAREST' if bool(vertInterop) else 'NEAREST'
+
+    # Submesh parser
+    submesh_rx = re.compile(r'^submesh_(\d+)(?:_LOD_(\d+))?$', re.IGNORECASE)
+    def parse_submesh(name: str):
+        """Return (index:int, lod:int|None) for 'submesh_00_LOD_1', else (None, None)."""
+        m = submesh_rx.match(name)
+        if not m:
+            return None, None
+        idx = int(m.group(1))
+        lod = int(m.group(2)) if m.group(2) is not None else None
+        return idx, lod
+
+    src_all_submesh = all(parse_submesh(o.name)[0] is not None for o in sources)
+    tgt_all_submesh = all(parse_submesh(o.name)[0] is not None for o in targets)
+
+    # Build (source, [targets...]) pairs
+    pairs = []
+
+    if len(sources) == 1 and len(targets) >= 1:
+        pairs.append((sources[0], list(targets)))  # single → all
+    elif len(targets) == 1 and len(sources) >= 1:
+        for s in sources:                          # each source → single
+            pairs.append((s, [targets[0]]))
+    else:
+        if src_all_submesh and tgt_all_submesh:
+            # Pair by submesh index (LOD ignored)
+            src_by_idx = {}
+            for s in sources:
+                idx, _ = parse_submesh(s.name)
+                if idx is not None and idx not in src_by_idx:
+                    src_by_idx[idx] = s
+            tgt_by_idx = {}
+            for t in targets:
+                idx, _ = parse_submesh(t.name)
+                if idx is not None:
+                    tgt_by_idx.setdefault(idx, []).append(t)
+            for idx in sorted(tgt_by_idx.keys()):
+                s = src_by_idx.get(idx)
+                if s:
+                    pairs.append((s, tgt_by_idx[idx]))
+            # indices without a matching source are skipped (simple, predictable)
+        else:
+            # Ordered pairing: 1→1, 2→2, extras ignored
+            for s, t in zip(sources, targets):
+                pairs.append((s, [t]))
+
+    # Execute transfers
+    passes = 0
+    errors = []
+
+    try:
         bpy.ops.object.select_all(action='DESELECT')
+    except Exception:
+        pass
 
-        for source_obj in source_mesh.objects:
-            source_obj.select_set(True)
+    for s, t_list in pairs:
+        try:
+            bpy.ops.object.select_all(action='DESELECT')
+        except Exception:
+            pass
 
-        context.view_layer.objects.active = source_mesh.objects[-1]
+        for t in t_list:
+            t.select_set(True)
 
-        for target_obj in target_mesh.objects:
-            target_obj.select_set(True)
+        try:
+            context.view_layer.objects.active = s
+            s.select_set(True)
 
-        bpy.ops.object.data_transfer(
-            use_reverse_transfer=False,
-            vert_mapping='POLYINTERP_NEAREST',
-            data_type='VGROUP_WEIGHTS',
-            layers_select_dst='NAME',
-            layers_select_src='ALL'
-        )
+            bpy.ops.object.data_transfer(
+                use_reverse_transfer=False,          # ACTIVE (source) → SELECTED (targets)
+                use_object_transform=True,
+                vert_mapping=vert_mapping,
+                data_type='VGROUP_WEIGHTS',
+                layers_select_src='ALL',
+                layers_select_dst='NAME',
+                mix_mode='REPLACE',                  # last pass wins
+                mix_factor=1.0
+            )
+            passes += 1
+        except Exception as e:
+            errors.append(f"{s.name}: {e}")
+        finally:
+            s.select_set(False)   # targets selection reset next loop
+
+    # Restore selection/active and original mode
+    try:
         bpy.ops.object.select_all(action='DESELECT')
-        context.view_layer.objects.active = None
+        for ob in original_selection:
+            if ob and ob.name in bpy.data.objects:
+                ob.select_set(True)
+        context.view_layer.objects.active = original_active
+    except Exception:
+        pass
 
-    for obj in active_objs:
-        obj.select_set(True)
-        context.view_layer.objects.active = obj
+    if original_mode != 'OBJECT':
+        safe_mode_switch(original_mode)
 
-    if context.mode != current_mode:
-        mode_map = {
-            'PAINT_WEIGHT': 'WEIGHT_PAINT',
-            'EDIT_MESH': 'EDIT',
-            'PAINT_VERTEX': 'VERTEX_PAINT'
-        }
-        bpy.ops.object.mode_set(mode=mode_map.get(current_mode, current_mode))
+    # Feedback
+    if errors:
+        show_message(f"Weights transferred ({passes} pass(es)). Errors: {'; '.join(errors[:3])}{'...' if len(errors) > 3 else ''}")
+    else:
+        if src_all_submesh and tgt_all_submesh and len(sources) > 1 and len(targets) > 1:
+            show_message(f"Weights transferred by submesh index across {passes} pass(es).")
+        else:
+            show_message(f"Weights transferred in order across {passes} pass(es).")
+
+    return {'FINISHED'}
