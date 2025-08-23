@@ -1,6 +1,31 @@
 import bpy
+import math  
 from math import *
 from collections import Counter
+
+_DEF_FPS = 30.0  
+_VERBOSE = True
+
+def _set_verbose(val: bool):
+	global _VERBOSE
+	_VERBOSE = bool(val)
+
+def _vprint(msg: str):
+	if _VERBOSE:
+		print(msg)
+
+def _iget(d, key, default=None):
+	"""
+	Getter for IDPropertyGroup/dict/attrs
+	"""
+	try:
+		return d.get(key, default)
+	except AttributeError:
+		try:
+			return d[key]
+		except Exception:
+			return getattr(d, key, default)
+
 """
 	Transfer (& Remove) Track Fcurves to Action Extras
 """
@@ -11,30 +36,31 @@ def export_anim_tracks(action):
 	for t_datapath in fc_tracks:
 		track_index = int(t_datapath.split('"')[-2][1:])
 		fc = action.fcurves.find(data_path=t_datapath)
-		if len(fc.keyframe_points) > 0:
+		if fc and len(fc.keyframe_points) > 0:
 			kf_vals = [kp.co[1] for kp in fc.keyframe_points]
-			tmin,tmax,tavg = [min(kf_vals),max(kf_vals),sum(kf_vals) / len(kf_vals)]
+			tmin, tmax, tavg = [min(kf_vals), max(kf_vals), sum(kf_vals) / len(kf_vals)]
 			if tavg == 0 or tmin == tmax:
-				#constant
-				obj["constTrackKeys"].append({'trackIndex':track_index, 'value': tavg, 'time': 0.0 })
+				# constant
+				obj["constTrackKeys"].append({'trackIndex': track_index, 'value': tavg, 'time': 0.0})
 				num_exported += 1
 			else:
 				num_exported += len(fc.keyframe_points)
 				for kp in fc.keyframe_points:
-					obj["trackKeys"].append({'trackIndex':track_index, 'value': kp.co[1], 'time': kp.co[0] / 30.0 })
+					obj["trackKeys"].append({'trackIndex': track_index, 'value': kp.co[1], 'time': kp.co[0] / 30.0})
 			fc.keyframe_points.clear()
 			fc.update()
-		action.fcurves.remove(fc)
+		if fc:
+			action.fcurves.remove(fc)
 	#
 	action['trackKeys'] = obj["trackKeys"]
 	action['constTrackKeys'] = obj["constTrackKeys"]
 	action["optimizationHints"] = { "preferSIMD": False, "maxRotationCompression": 0}
 	# remove custom group
 	remove_track_action_group(action)
-	print(f'{num_exported} Tracks Exported')
+	_vprint(f'{num_exported} Tracks Exported')
 
 """
-	Create Custom Properties for Tracks on all Armatures
+	Create Custom Properties for Tracks on all Armatures - Why all Armatures?
 """
 def add_track_properties(track_properties=[]):
 	armature_list = [obj for obj in bpy.data.objects if obj.type == 'ARMATURE']
@@ -44,7 +70,19 @@ def add_track_properties(track_properties=[]):
 				if prop_name not in armature:
 					armature[prop_name] = 0.0
 				rna = armature.id_properties_ui(prop_name)
-				rna.update(property_type='FLOAT', is_overridable_library=True, description="", use_soft_limits=False, default_float=(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), min_float=-3.40282e+38, max_float=3.40282e+38, soft_min_float=-3.40282e+38, soft_max_float=3.40282e+38, precision=8, step_float=0.01, subtype='NONE', eval_string="0.0")
+				rna.update(
+					description="",
+					default=0.0,
+					min=-3.40282e+38,
+					max=3.40282e+38,
+					soft_min=-3.40282e+38,
+					soft_max=3.40282e+38,
+					subtype='NONE',
+				)
+				try:
+					armature.property_overridable_library_set(f'["{prop_name}"]', True)
+				except Exception:
+					pass
 			except Exception as e:
 				print(f"Error creating custom track property ({prop_name}) on Armature [{armature.name}]: {e}")
 """
@@ -92,13 +130,28 @@ def import_anim_tracks(action):
 	t_usage = []
 	num_imported = 0
 	if len(track_keys) > 0:
-		t_data = [[t['trackIndex'],t['value'],t['time']] for t in [trk.to_dict() for trk in track_keys]]
+		# Accept list of dicts or IDPropertyGroup items
+		for trk in track_keys:
+			idx = _iget(trk, 'trackIndex')
+			val = _iget(trk, 'value')
+			tim = _iget(trk, 'time')
+			if idx is None:
+				continue
+			t_data.append([idx, val, tim])
 		t_usage = sorted(list(set([t[0] for t in t_data])))
+
 		track_list.extend(t_usage)
 		#print("tracks")
 
 	if len(const_track_keys) > 0:
-		ct_data = [[t['trackIndex'],t['value'],t['time']] for t in [ct.to_dict() for ct in const_track_keys]]
+		# Accept list of dicts or IDPropertyGroup items
+		for ct in const_track_keys:
+			idx = _iget(ct, 'trackIndex')
+			val = _iget(ct, 'value')
+			tim = _iget(ct, 'time')
+			if idx is None:
+				continue
+			ct_data.append([idx, val, tim])
 		const_track_list = sorted(list(set([t[0] for t in ct_data])))
 		track_list.extend(const_track_list)
 		#print("consttracks")
@@ -106,11 +159,7 @@ def import_anim_tracks(action):
 	if len(track_list) == 0:
 		#print("NoTracks")
 		return
-	#print('tracklist')
-	#print(track_list)
 	all_tracks = sorted(list(set(track_list)))
-	#print('all tracks')
-	#print(all_tracks)
 	track_unsorted = {t:[] for t in all_tracks}
 	track_sorted = {t:[] for t in all_tracks}
 	track_props = ['T{:02d}'.format(t) for t in all_tracks]
@@ -194,7 +243,7 @@ def import_anim_tracks(action):
 			for i in range(num_keys):
 				fc.keyframe_points[i].co = track_sorted[trk][i][0], track_sorted[trk][i][1]
 			fc.update()
-	print(f'{num_imported} Tracks Imported')
+	_vprint(f'{num_imported} Tracks Imported')
 
 """
 	POSE BONES - Corrects Timing Misalignment (Inbetween Frames due to quantisation precison loss)
@@ -239,15 +288,15 @@ def fix_anim_frame_alignment(action):
 					omin,omax,oavg = [min(frame_values),max(frame_values),sum(frame_values) / len(frame_values)]
 					vmin,vmax,vavg = [min(frame_values_aligned),max(frame_values_aligned),sum(frame_values_aligned) / len(frame_values_aligned)]
 					if omin == omax:
-						print(f'{bn}-{channel}[{i}] constant org {omin} -> {num_keys} dupes')
+						#_vprint(f'{bn}-{channel}[{i}] constant org {omin} -> {num_keys} dupes')
 						if vmin != vmax:
-							print(f'org {omin} == {omax} but {vmin} != {vmax} Re-Aligned')
+							_vprint(f'org {omin} == {omax} but {vmin} != {vmax} Re-Aligned')
 					if vmin == vmax:
-						print(f'{bn}-{channel}[{i}] constant realiglned  {vmin} -> {num_keys} dupes')
+						#_vprint(f'{bn}-{channel}[{i}] constant realiglned  {vmin} -> {num_keys} dupes')
 						if omin != omax:
-							print(f'org {omin} != {omax} but {vmin} == {vmax} Re-Aligned')
+							_vprint(f'org {omin} != {omax} but {vmin} == {vmax} Re-Aligned')
 					if num_keys == 1:
-						print(f'{bn}-{channel}[{i}] single const {frame_values_aligned[0]} org({frame_values[0]} @ frame {frames_aligned[0]} org({frames_unaligned[0]})')
+						continue#print(f'{bn}-{channel}[{i}] single const {frame_values_aligned[0]} org({frame_values[0]} @ frame {frames_aligned[0]} org({frames_unaligned[0]})')
 					fc.keyframe_points.clear()
 					fc.update()
 					fc.keyframe_points.add(num_keys)
@@ -256,5 +305,4 @@ def fix_anim_frame_alignment(action):
 					fc.update()
 			#
 		if num_fixed > 0:
-			print(f'{dp} Re-Aligned Timing for {num_fixed} Frames')
-#
+			_vprint(f'{dp} Re-Aligned Timing for {num_fixed} Frames')
