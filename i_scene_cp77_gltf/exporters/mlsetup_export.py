@@ -33,7 +33,8 @@ def prefix_mat(material):
 ##################################################################################################################
 def cp77_mlsetup_export(self, context, mlsetuppath, write_mltemplate):
     obj=bpy.context.active_object
-    mat=obj.material_slots[0].material
+    mat_idx = obj.active_material_index
+    mat=obj.material_slots[mat_idx].material
     nodes=mat.node_tree.nodes
     prefixxed=[]
     if not mat.get('MLSetup'):
@@ -82,6 +83,11 @@ def cp77_mlsetup_export(self, context, mlsetuppath, write_mltemplate):
 
             # Set Layer Values
             ColorScale = LayerGroup.inputs['ColorScale']
+            NormalStrength = LayerGroup.inputs['NormalStrength']
+            MetalLevelsIn = LayerGroup.inputs['MetalLevelsIn']
+            MetalLevelsOut = LayerGroup.inputs['MetalLevelsOut']
+            RoughLevelsIn = LayerGroup.inputs['RoughLevelsIn']
+            RoughLevelsOut = LayerGroup.inputs['RoughLevelsOut']
             MatTile = LayerGroup.inputs['MatTile'].default_value
             MbTile = LayerGroup.inputs['MbTile'].default_value
             MicroblendNormalStrength = LayerGroup.inputs['MicroblendNormalStrength'].default_value
@@ -90,9 +96,9 @@ def cp77_mlsetup_export(self, context, mlsetuppath, write_mltemplate):
             OffsetV = LayerGroup.inputs['OffsetV'].default_value
             MicroblendOffsetU = LayerGroup.inputs['MicroblendOffsetU'].default_value
             MicroblendOffsetV = LayerGroup.inputs['MicroblendOffsetV'].default_value
-            NormalStrength = LayerGroup.inputs['NormalStrength'].default_value
             Opacity = LayerGroup.inputs['Opacity'].default_value
             Microblend = bpy.path.abspath(NG['Image Texture'].image.filepath)[:-3]+'xbm'
+
 
             # Write Layer Values
             json_layer['matTile']=MatTile
@@ -103,15 +109,12 @@ def cp77_mlsetup_export(self, context, mlsetuppath, write_mltemplate):
             json_layer['offsetV']=OffsetV
             json_layer['microblendOffsetU']=MicroblendOffsetU
             json_layer['microblendOffsetV']=MicroblendOffsetV
-            # needs to be converted to bytes
-            # json_layer['normalStrength']['$value'=NormalStrength
             json_layer['opacity']=Opacity
             # Need to take the filesystem out of this
             rel_mb=make_rel(Microblend)
             json_layer['microblend']['DepotPath']['$value']=rel_mb
 
             # Print Layer Values
-            #print(ColorScale)
             print('MatTile: '+str(MatTile))
             print('OffsetU: '+str(OffsetU))
             print('OffsetV: '+str(OffsetV))
@@ -120,7 +123,7 @@ def cp77_mlsetup_export(self, context, mlsetuppath, write_mltemplate):
             print('MicroblendOffsetV: '+str(MicroblendOffsetV))
             print('MicroblendNormalStrength: '+str(MicroblendNormalStrength))
             print('MicroblendContrast: '+str(MicroblendContrast))
-            print('NormalStrength: '+str(NormalStrength))
+            #print('NormalStrength: '+str(NormalStrength))
             print('Opacity: '+str(Opacity))
             print('Microblend: '+Microblend)
 
@@ -133,6 +136,12 @@ def cp77_mlsetup_export(self, context, mlsetuppath, write_mltemplate):
 
             # Need to see if this is in the overrides in the mltemplate, if not, add it and reference the new one. and save a local copy of the mltemplate if its not already local
             cs=ColorScale.default_value[::]
+            nstr=NormalStrength.default_value
+            mIn=MetalLevelsIn.default_value[::]
+            mOut=MetalLevelsOut.default_value[::]
+            rIn=RoughLevelsIn.default_value[::]
+            rOut=RoughLevelsOut.default_value[::]
+
             material=BaseMat['mlTemplate']
             print('mlTemplate = ',material)
             json_layer['material']['DepotPath']['$value']=material
@@ -140,22 +149,45 @@ def cp77_mlsetup_export(self, context, mlsetuppath, write_mltemplate):
                 material=prefix_mat(material)
                 print('Material already modified, loading ',material)
 
-            if write_mltemplate:
-                mltemp = JSONTool.openJSON( material + ".json",mode='r',DepotPath=DepotPath, ProjPath=ProjPath)
-                #mltemp = json.loads(mltfile.read())
-                #mltfile.close()
-                mltemplate =mltemp["Data"]["RootChunk"]
-                OverrideTable = createOverrideTable(mltemplate)
-                match=None
-                for og in OverrideTable['ColorScale']:
-                    err=np.sum(np.subtract(OverrideTable['ColorScale'][og],cs))
-                    #print(err)
-                    if abs(err)<0.000001:
-                        match = og
-                if match:
-                    json_layer['colorScale']['$value']= match
-                    print('ColScale = ',match)
-                else:
+            mltemp = JSONTool.openJSON( material + ".json",mode='r',DepotPath=DepotPath, ProjPath=ProjPath)
+            #mltemp = json.loads(mltfile.read())
+            #mltfile.close()
+            mltemplate =mltemp["Data"]["RootChunk"]
+            OverrideTable = createOverrideTable(mltemplate)
+            matchTolerance = 0.00001
+            matchcol=None
+            matchnstr=None
+            matchMIN=None
+            matchMOUT=None
+            matchRIN=None
+            matchROUT=None
+
+            matstring = str(material)
+            smallmatstring = ((matstring.split('\\'))[-1])[:-11]
+            doaddcolor = False
+            if smallmatstring not in bpy.data.palettes:
+                new_palette = bpy.data.palettes.new(name=smallmatstring)
+                doaddcolor = True
+            else:
+                new_palette = bpy.data.palettes[smallmatstring]
+
+
+            for og in OverrideTable['ColorScale']:
+                if doaddcolor:
+                    color = new_palette.colors.new()
+                    coloroverride = (OverrideTable['ColorScale'][og])[:-1]
+                    color.color = coloroverride
+
+                #print('  Overrides: ColorScale', og, (OverrideTable['ColorScale'][og]))
+                err=np.sum(np.subtract(OverrideTable['ColorScale'][og],cs))
+                #print(err)
+                if abs(err)<matchTolerance:
+                    matchcol = og
+            if matchcol:
+                json_layer['colorScale']['$value']= matchcol
+                print('ColScale = ',matchcol)
+            else:
+                if write_mltemplate:
                     #this is linking it so when you edit 0 later both get edited.
                     mltemplate['overrides']['colorScale'].insert(0,copy.deepcopy(mltemplate['overrides']['colorScale'][0]))
                     index=0
@@ -185,6 +217,66 @@ def cp77_mlsetup_export(self, context, mlsetuppath, write_mltemplate):
                     with open(outpath, 'w') as outfile:
                         json.dump(mltemp, outfile,indent=2)
 
+            for og in OverrideTable['NormalStrength']:
+                print('  Overrides: NormalStrength', og, (OverrideTable['NormalStrength'][og]))
+                err=np.sum(np.subtract(OverrideTable['NormalStrength'][og],nstr))
+                #print(err)
+                if abs(err)<matchTolerance:
+                    matchnstr = og
+            if matchnstr:
+                json_layer['normalStrength']['$value']= matchnstr
+                print('NormalStrength = ',matchnstr)
+            else:
+                self.report({'ERROR'}, ('NormalStrength in Layer ' + str(layer) + ' was not exported because a matching Override was not found.'))
+
+            for og in OverrideTable['MetalLevelsIn']:
+                print('  Overrides: MetalLevelsIn', og, (OverrideTable['MetalLevelsIn'][og]))
+                err=np.sum(np.subtract(OverrideTable['MetalLevelsIn'][og],mIn))
+                #print(err)
+                if abs(err)<matchTolerance:
+                    matchMIN = og
+            if matchMIN:
+                json_layer['metalLevelsIn']['$value']= matchMIN
+                print('MetalIN = ',matchMIN)
+            else:
+                self.report({'ERROR'}, ('MetalLevelsIn in Layer ' + str(layer) + ' was not exported because a matching Override was not found.'))
+
+            for og in OverrideTable['MetalLevelsOut']:
+                print('  Overrides: MetalLevelsOut', og, (OverrideTable['MetalLevelsOut'][og]))
+                err=np.sum(np.subtract(OverrideTable['MetalLevelsOut'][og],mOut))
+                #print(err)
+                if abs(err)<matchTolerance:
+                    matchMOUT = og
+            if matchMOUT:
+                json_layer['metalLevelsOut']['$value']= matchMOUT
+                print('MetalOUT = ',matchMOUT)
+            else:
+                self.report({'ERROR'}, ('MetalLevelsOut in Layer ' + str(layer) + ' was not exported because a matching Override was not found.'))
+
+            for og in OverrideTable['RoughLevelsIn']:
+                print('  Overrides: RoughLevelsIn', og, (OverrideTable['RoughLevelsIn'][og]))
+                err=np.sum(np.subtract(OverrideTable['RoughLevelsIn'][og],rIn))
+                #print(err)
+                if abs(err)<matchTolerance:
+                    matchRIN = og
+            if matchRIN:
+                json_layer['roughLevelsIn']['$value']= matchRIN
+                print('RoughIN = ',matchRIN)
+            else:
+                self.report({'ERROR'}, ('RoughLevelsIn in Layer ' + str(layer) + ' was not exported because a matching Override was not found.'))
+
+            for og in OverrideTable['RoughLevelsOut']:
+                print('  Overrides: RoughLevelsOut', og, (OverrideTable['RoughLevelsOut'][og]))
+                err=np.sum(np.subtract(OverrideTable['RoughLevelsOut'][og],rOut))
+                #print(err)
+                if abs(err)<matchTolerance:
+                    matchROUT = og
+            if matchROUT:
+                json_layer['roughLevelsOut']['$value']= matchROUT
+                print('RoughOUT = ',matchROUT)
+            else:
+                self.report({'ERROR'}, ('RoughLevelsOut in Layer ' + str(layer) + ' was not exported because a matching Override was not found.'))
+
 
             print('tile_diff: '+str(tile_diff))
             print('tile_metal: '+str(tile_metal))
@@ -207,7 +299,8 @@ def cp77_mlsetup_getpath(self, context):
     if not obj.material_slots:
         raise ValueError('Selected object has no materials')
 
-    mat=obj.material_slots[0].material
+    mat_idx = obj.active_material_index
+    mat=obj.material_slots[mat_idx].material
 
     if not mat.get('MLSetup'):
         raise ValueError('Multilayered setup not found within selected material.')
@@ -226,3 +319,80 @@ def cp77_mlsetup_getpath(self, context):
         os.makedirs(os.path.dirname(outpath))
 
     return outpath
+
+def cp77_mlsetup_getoverrides(self, context):
+    obj=bpy.context.active_object
+    mat_idx = obj.active_material_index
+    mat=obj.material_slots[mat_idx].material
+    nodes=mat.node_tree.nodes
+    prefixxed=[]
+    if not mat.get('MLSetup'):
+        self.report({'ERROR'}, 'Multilayered setup not found within selected material.')
+        return {'CANCELLED'}
+
+    MLSetup = mat.get('MLSetup')
+    ProjPath=mat.get('ProjPath')
+    DepotPath=mat.get('DepotPath')
+    mlsetup = JSONTool.openJSON( MLSetup+".json",mode='r',DepotPath=DepotPath, ProjPath=ProjPath)
+
+    xllay = mlsetup["Data"]["RootChunk"]["layers"]
+
+    LayerCount = len(xllay)
+
+    print('Obj -'+ obj.name)
+    print('Mat -'+ mat.name)
+
+    layer=0
+    layer_txt=''
+    numLayers= len([x for x in nodes if 'Image Texture' in x.name])
+
+    while layer<numLayers:
+        layernodename=''
+        if layer>1:
+            layer_txt='.'+str(layer-1).zfill(3)
+        if layer>0:
+            layernodename='Image Texture'+layer_txt
+        #
+        print('#')
+        print('# Layer '+str(layer))
+        print('#')
+
+        json_layer=xllay[layer]
+
+        # Layer Mask
+        if layernodename:
+            LayerMask=nodes[layernodename].image.filepath
+            print(LayerMask)
+        LayerGroup=nodes['Mat_Mod_Layer_'+str(layer)]
+        BaseMat = LayerGroup.node_tree.nodes['Group'].node_tree.nodes['Group Input']
+
+        material=BaseMat['mlTemplate']
+        print('mlTemplate = ',material)
+        json_layer['material']['DepotPath']['$value']=material
+        if material in prefixxed:
+            material=prefix_mat(material)
+            print('Material already modified, loading ',material)
+
+        mltemp = JSONTool.openJSON( material + ".json",mode='r',DepotPath=DepotPath, ProjPath=ProjPath)
+        mltemplate =mltemp["Data"]["RootChunk"]
+        OverrideTable = createOverrideTable(mltemplate)
+
+        matstring = str(material)
+        smallmatstring = ((matstring.split('\\'))[-1])[:-11]
+        doaddcolor = False
+        if smallmatstring not in bpy.data.palettes:
+            new_palette = bpy.data.palettes.new(name=smallmatstring)
+            doaddcolor = True
+        else:
+            new_palette = bpy.data.palettes[smallmatstring]
+
+        for og in OverrideTable['ColorScale']:
+            if doaddcolor:
+                color = new_palette.colors.new()
+                coloroverride = (OverrideTable['ColorScale'][og])[:-1]
+                color.color = coloroverride
+            print('  Overrides: ColorScale', og, (OverrideTable['ColorScale'][og]))
+
+        layer+=1
+
+    self.report({'INFO'}, 'MLSETUP Overrides generated')
