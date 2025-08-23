@@ -11,6 +11,23 @@ from ..icons.cp77_icons import get_icon
 import numpy as np
 
 
+last_palette_color = None
+
+def apply_color_mlsetup():
+    bpy.ops.set_layer_color.mlsetup()
+
+def check_palette_col_change(self, context):
+    global last_palette_color
+    ts = context.tool_settings
+    palette = ts.image_paint.palette
+
+    new_palette_color = palette.colors.active.color
+    if new_palette_color != last_palette_color:
+        bpy.app.timers.register(apply_color_mlsetup)
+
+    last_palette_color = palette.colors.active.color
+
+
 def setup_mldata(self, context):
     nt = bpy.context.object.active_material.node_tree
     ml_nodename = 'Mat_Mod_Layer_'
@@ -88,6 +105,7 @@ class CP77_PT_MaterialTools(Panel):
         if cp77_addon_prefs.show_modtools:
             if cp77_addon_prefs.show_meshtools:
                 ts = context.tool_settings
+                palette = ts.image_paint.palette
 
                 box.label(text="Materials", icon="MATERIAL")
                 col = box.column()
@@ -111,16 +129,18 @@ class CP77_PT_MaterialTools(Panel):
 
                 # JATO: we probably don't need a button because this op automatically fires now
                 #col.operator("get_layer_overrides.mlsetup")
-                col.operator("set_layer_color.mlsetup")
-                col.operator("set_layer_mltemplate.mlsetup")
                 col.operator("export_scene.mlsetup")
 
                 col.template_ID(ts.image_paint, "palette", new="palette.new")
+                if ts.image_paint.palette:
+                    col.operator("set_layer_mltemplate.mlsetup")
+                # JATO: shouldn't need this button since we can set color by selecting palette colors
+                # col.operator("set_layer_color.mlsetup")
 
                 palette_box = box.column()
                 palette_box.template_palette(ts.image_paint,"palette",color=True)
 
-                palette = ts.image_paint.palette
+
                 if ts.image_paint.palette:
                     colR, colG, colB = palette.colors.active.color
                     rowColor.label(text="Color  {:.4f}  {:.4f}  {:.4f}".format(colR, colG, colB))
@@ -136,6 +156,7 @@ def register_materialtools():
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
 
+    CP77_PT_MaterialTools.append(check_palette_col_change)
 
 def unregister_materialtools():
     for cls in reversed(other_classes):
