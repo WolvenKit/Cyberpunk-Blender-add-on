@@ -2,7 +2,7 @@ import sys
 import bpy
 import bpy.utils.previews
 from bpy.types import (Operator, OperatorFileListElement, PropertyGroup, Panel)
-from bpy.props import (StringProperty, BoolProperty, CollectionProperty)
+from bpy.props import (StringProperty, BoolProperty, IntProperty, CollectionProperty)
 from ..main.bartmoss_functions import *
 from ..cyber_props import cp77riglist
 from ..icons.cp77_icons import get_icon
@@ -14,10 +14,15 @@ from ..importers.read_rig import *
 from .facial import *
 from .tracksolvers import (
     build_tracks_from_armature,
-    solve_tracks_face,  # keep public name
+    solve_tracks_face,  
 )
-
-
+import os
+from typing import Dict, List, Tuple, Optional
+from .facial import load_wkit_facialsetup, load_wkit_rig_skeleton
+from .tracksolvers import solve_tracks_face
+from .tracks import export_anim_tracks, import_anim_tracks
+from .animtracks import (_ensure_armature, _get_fps, _ensure_custom_prop, _fcurve_for_prop, _keyframe_scalar
+)
 def CP77AnimsList(self, context):
     for action in bpy.data.actions:
         if action.library:
@@ -487,7 +492,6 @@ class CP77AnimNamer(Operator):
         return {'FINISHED'}
 
 
-
 _CACHE = {"rig": None, "setup": None, "rig_path": "", "setup_path": ""}
 
 
@@ -498,21 +502,10 @@ def _set_cache(rig, setup, rig_path: str, setup_path: str):
     _CACHE["setup_path"] = setup_path
 
 
-_CACHE = {"rig": None, "setup": None, "rig_path": "", "setup_path": ""}
-
-
-def _set_cache(rig, setup, rig_path: str, setup_path: str):
-    _CACHE["rig"] = rig
-    _CACHE["setup"] = setup
-    _CACHE["rig_path"] = rig_path
-    _CACHE["setup_path"] = setup_path
-
-
-class CP77_FacialProps(bpy.types.PropertyGroup):
-    rig_json: bpy.props.StringProperty(name="Rig JSON", subtype='FILE_PATH')  # type: ignore
-    facial_json: bpy.props.StringProperty(name="FacialSetup JSON", subtype='FILE_PATH')  # type: ignore
-    main_pose: bpy.props.IntProperty(name="Main Pose", default=1, min=1,max=133, step=1)  # type: ignore
-
+class CP77_FacialProps(PropertyGroup):
+    rig_json: StringProperty(name="Rig JSON", subtype='FILE_PATH')  
+    facial_json: StringProperty(name="FacialSetup JSON", subtype='FILE_PATH')  
+    main_pose: IntProperty(name="Main Pose", default=1, min=1,max=133, step=1)  
 
 class CP77_OT_LoadFacial(Operator):
     bl_idname = "cp77.load_facial"
@@ -536,7 +529,7 @@ class CP77_OT_LoadFacial(Operator):
         return {'FINISHED'}
 
 
-class CP77_OT_ApplyMainPose(Operator):
+class CP77_OT_ApplyMainPose(bpy.types.Operator):
     bl_idname = "cp77.apply_main_pose"
     bl_label = "Apply (Full Solver)"
     bl_options = {'REGISTER', 'UNDO'}
@@ -615,7 +608,7 @@ class CP77_OT_ApplyMainPose(Operator):
     def _pose_mask_from_bank_pose(bank, idx: int) -> Optional[list]:
         q = bank.q[idx]; t = bank.t[idx]; s = bank.s[idx]
         qi = np.zeros_like(q); qi[..., 3] = 1.0
-        changed = (np.abs(q - qi).max(axis=-1) > 1e-6) | (np.abs(t).max(axis=-1) > 1e-9) | (np.abs(s - 1.0).max(axis=-1) > 1e-6)
+        changed = (np.abs(q - qi).max(axis=-1) > 1e-6) | (np.abs(t).max(axis=-1) > 1e-9) | (np.abs(s - 1.0).max(axis=-1) > 1.0e-6)
         ids = np.where(changed)[0]
         return ids.tolist() if ids.size else None
 
@@ -636,6 +629,22 @@ class CP77_OT_ApplyMainPose(Operator):
         dt = t - ref_t
         ds = s / np.where(ref_s == 0.0, 1.0, ref_s)
         return dq, dt, ds
+
+    @staticmethod
+    def _swap_yz_trn_rot(dt: np.ndarray, dq: np.ndarray):
+        """Map JSON space → Blender space: (x, y, z) → (x, -z, y) and rotate quats by +90° around X.
+        Applies to translations and rotations only (scales unchanged).
+        """
+        # translation: [x, -z, y]
+        dt_sw = np.stack([dt[:, 0], -dt[:, 2], dt[:, 1]], axis=-1)
+        # rotation: q' = s * q * s^{-1}, s = rotX(+90°)
+        s = np.array([np.sqrt(0.5, dtype=dq.dtype), 0.0, 0.0, np.sqrt(0.5, dtype=dq.dtype)], dtype=dq.dtype)
+        s_inv = s.copy(); s_inv[:3] *= -1.0
+        s_b = np.broadcast_to(s, dq.shape)
+        s_inv_b = np.broadcast_to(s_inv, dq.shape)
+        q_tmp = CP77_OT_ApplyMainPose._quat_mul(s_b, dq)
+        dq_sw = CP77_OT_ApplyMainPose._quat_mul(q_tmp, s_inv_b)
+        return dt_sw, dq_sw
 
     def execute(self, context):
         if not self._ensure_loaded(context):
@@ -701,8 +710,10 @@ class CP77_OT_ApplyMainPose(Operator):
                                                               setup.face_corrective_bank.s[ci],
                                                               w, mask_ids)
 
-        # Convert LS to deltas against reference and write to pose channels
+        # Convert LS to deltas against reference
         dq, dt, ds = self._local_deltas(rig.ls_q, rig.ls_t, rig.ls_s, q_ls, t_ls, s_ls)
+        # Map JSON space → Blender space (translation & rotation)
+        dt2, dq2 = self._swap_yz_trn_rot(dt, dq)
 
         import mathutils
         if context.object.mode != 'POSE':
