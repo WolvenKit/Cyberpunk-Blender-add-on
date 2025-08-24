@@ -362,18 +362,6 @@ def ExportAll(self, context):
             filepath = obj.get('projPath', '')  # Use 'projPath' property or empty string if it doesn't exist
             export_cyberpunk_glb(filepath=filepath, export_poses=False)
 
-# def ExportAll(self, context):
-#     #Iterate through all objects in the scene
-
-def ExportAll(self, context):
-    # Iterate through all objects in the scene
-    to_exp = [obj for obj in context.scene.objects if obj.type == 'MESH' and ('sourcePath' in obj or 'projPath' in obj)]
-
-    if len(to_exp) > 0:
-        for obj in to_exp:
-            filepath = obj.get('projPath', '')  # Use 'projPath' property or empty string if it doesn't exist
-            export_cyberpunk_glb(filepath=filepath, export_poses=False)
-
 
 
 
