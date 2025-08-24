@@ -723,9 +723,9 @@ class CP77_OT_ApplyMainPose(bpy.types.Operator):
             pb = bones.get(name)
             if pb is None:
                 continue
-            pb.location = mathutils.Vector((float(dt[i, 0]), float(dt[i, 1]), float(dt[i, 2])))
+            pb.location = mathutils.Vector((float(dt2[i, 0]), float(dt2[i, 1]), float(dt2[i, 2])))
             pb.rotation_mode = 'QUATERNION'
-            pb.rotation_quaternion = mathutils.Quaternion((float(dq[i, 3]), float(dq[i, 0]), float(dq[i, 1]), float(dq[i, 2])))
+            pb.rotation_quaternion = mathutils.Quaternion((float(dq2[i, 3]), float(dq2[i, 0]), float(dq2[i, 1]), float(dq2[i, 2])))
             pb.scale = mathutils.Vector((float(ds[i, 0]), float(ds[i, 1]), float(ds[i, 2])))
         obj.update_tag(refresh={'DATA'}); context.view_layer.update()
 
@@ -754,7 +754,7 @@ class CP77_PT_FacialPreview(Panel):
     bl_region_type = 'UI'
     bl_category = 'CP77 Modding'
     bl_parent_id = 'CP77_PT_animspanel'
-    bl_label = 'Facial Preview (Full Solver)'
+    bl_label = 'Facial Pose Tools'
     def draw(self, context):
         layout = self.layout
         props = context.scene.cp77_facial
@@ -767,8 +767,8 @@ class CP77_PT_FacialPreview(Panel):
         col = layout.column(align=True)
         col.prop(props, "main_pose")
         row = layout.row(align=True)
-        row.operator("cp77.apply_main_pose", icon='PLAY')
-        row.operator("cp77.reset_neutral", icon='ARMATURE_DATA')
+        row.operator("cp77.apply_main_pose", text="Apply Facial Pose", icon='PLAY')
+        row.operator("cp77.reset_neutral", text="", icon='ARMATURE_DATA')
 
 operators, other_classes = get_classes(sys.modules[__name__])
 
@@ -780,7 +780,7 @@ def register_animtools():
     for cls in other_classes:
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
-        bpy.types.Scene.cp77_facial = bpy.props.PointerProperty(type=CP77_FacialProps)  # type: ignore
+        bpy.types.Scene.cp77_facial = bpy.props.PointerProperty(type=CP77_FacialProps)  
 
 
 
