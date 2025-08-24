@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
-
+from typing import Optional, List, Dict, Any, Tuple
+import numpy as np
 
 @dataclass
 class MaterialOverride:
@@ -58,21 +58,40 @@ class EntityData:
     appearances: List[AppearanceData] = field(default_factory=list)
     resolved_dependencies: List[ResolvedDependency] = field(default_factory=list)
 
-@dataclass
+@dataclass(slots=True)
 class RigData:
-    rig_name: str
-    disable_connect: bool
-    apose_ms: List[Any]
-    apose_ls: List[Any]
-    bone_transforms: List[Any]
-    bone_parents: List[int]
+    num_bones: int
+    parent_indices: np.ndarray # shape [N], dtype np.int16 canonical
     bone_names: List[str]
-    parts: List[Any]
-    track_names: List[Any]
-    reference_tracks: List[Any]
-    cooking_platform: str
-    distance_category_to_lod_map: List[Any]
-    ik_setups: List[Any]
-    level_of_detail_start_indices: List[Any]
-    ragdoll_desc: List[Any]
-    ragdoll_names: List[Any]
+    track_names: List[str]
+    ls_q: np.ndarray # [N,4]
+    ls_t: np.ndarray # [N,3]
+    ls_s: np.ndarray # [N,3]
+    rig_name: str = ""
+    disable_connect: bool = False
+    apose_ms: List[Any] = field(default_factory=list)
+    apose_ls: List[Any] = field(default_factory=list)
+    bone_transforms: List[Any] = field(default_factory=list)
+    parts: List[Any] = field(default_factory=list)
+    track_names_extra: List[Any] = field(default_factory=list)
+    rig_extra_tracks: List[Any] = field(default_factory=list) 
+    reference_tracks: List[Any] = field(default_factory=list)
+    cooking_platform: str = ""
+    distance_category_to_lod_map: List[Any] = field(default_factory=list)
+    ik_setups: List[Any] = field(default_factory=list)
+    level_of_detail_start_indices: List[Any] = field(default_factory=list)
+    ragdoll_desc: List[Any] = field(default_factory=list)
+    ragdoll_names: List[Any] = field(default_factory=list)
+
+
+def __post_init__(self) -> None:
+    # Normalize array dtypes/shapes
+    self.parent_indices = np.asarray(self.parent_indices, dtype=np.int16).reshape(-1)
+    self.ls_q = np.asarray(self.ls_q, dtype=np.float32).reshape((-1, 4))
+    self.ls_t = np.asarray(self.ls_t, dtype=np.float32).reshape((-1, 3))
+    self.ls_s = np.asarray(self.ls_s, dtype=np.float32).reshape((-1, 3))
+
+
+    # Ensure num_bones agrees with arrays
+    n = len(self.bone_names) if self.bone_names else int(self.parent_indices.shape[0])
+    self.num_bones = int(n)
