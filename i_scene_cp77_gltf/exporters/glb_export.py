@@ -512,7 +512,6 @@ def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=F
             meshes = [obj for obj in objects if obj.type == 'MESH' and "Icosphere" not in obj.name]
             if not meshes:
                 raise ValueError("No meshes selected, please select at least one mesh")
-=======
             export_anims(context, filepath, options, armatures)
 
         else:
@@ -730,4 +729,5 @@ def ExportAll(self, context):
         for obj in to_exp:
             filepath = obj.get('projPath', '')  # Use 'projPath' property or empty string if it doesn't exist
             export_cyberpunk_glb(filepath=filepath, export_poses=False)
+
 
