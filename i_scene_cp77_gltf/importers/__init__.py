@@ -237,6 +237,8 @@ class CP77Import(Operator, ImportHelper):
                                 default="Default"
                                 )
     scripting: BoolProperty(name="Scripting",default=False ,description="Tell it its being called by a script so it can ignore the gui file lists",options={'HIDDEN'})
+    import_tracks: BoolProperty(name="Import Tracks",default=True,description="Import Animation Float Tracks to F-Curves")
+
 
     # switch back to operator draw function to align with other UI features
     def draw(self, context):
@@ -274,7 +276,9 @@ class CP77Import(Operator, ImportHelper):
             col.prop(self, 'import_garmentsupport')
             if cp77_addon_prefs.experimental_features:
                 col.prop(props,"remap_depot")
-
+        box = layout.box()
+        col = box.column()
+        col.prop(self, 'import_tracks')
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
@@ -283,7 +287,7 @@ class CP77Import(Operator, ImportHelper):
         appearances=self.appearances.split(",")
         # turns out that multimesh import of an entire car uses a gazillion duplicates as well...
         JSONTool.start_caching()
-        CP77GLBimport( props.with_materials, props.remap_depot, self.exclude_unused_mats, self.image_format, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, appearances, self.scripting)
+        CP77GLBimport( props.with_materials, props.remap_depot, self.exclude_unused_mats, self.image_format, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, appearances, self.scripting, self.import_tracks)
         JSONTool.stop_caching()
 
         return {'FINISHED'}
