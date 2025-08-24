@@ -93,6 +93,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
     glbname=os.path.basename(filepath)
     DepotPath=cp77_addon_prefs
 
+    oldanims={}
     if not cp77_addon_prefs.non_verbose:
         if ".anims.glb" in filepath:
             bpy.context.scene.render.fps = 30
@@ -193,7 +194,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         collection = bpy.data.collections.new(filename)
         bpy.context.scene.collection.children.link(collection)
         for o in imported:
-            import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filename)
+            import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filename,oldanims)
 
         collection['orig_filepath']=filepath
         collection['numMeshChildren']=objs_in_col(collection, 'MESH')
@@ -488,7 +489,7 @@ def blender_4_scale_armature_bones():
                 pb.custom_shape_scale_xyz[2] = .0175
                 pb.use_custom_shape_bone_size = True
 
-def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filename):
+def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filename,oldanims={}):
     # TODO: check if this is a Cyberpunk import or something else entirely
 
     for parent in o.users_collection:
@@ -500,7 +501,7 @@ def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filena
     meshes = gltf_importer.data.meshes
 
     # if animations exist, don't hide the armature and get the extras properties
-    if animations:
+    if animations and oldanims and len(oldanims)>0:
         get_anim_info(animations, oldanims)
 
     # if no meshes exist, don't hide the armature
