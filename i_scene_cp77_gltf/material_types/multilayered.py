@@ -8,10 +8,11 @@ def np_array_from_image(img_name):
     img = bpy.data.images[img_name]
     return np.array(img.pixels[:])
 
-def mask_mixer_node_group():
-    if "Mask Mixer" in bpy.data.node_groups:
-        return bpy.data.node_groups["Mask Mixer"]
-    mask_mixer = bpy.data.node_groups.new(type = 'ShaderNodeTree', name = "Mask Mixer")
+def mask_mixer_node_group(Mat):
+    if "Mask Mixer 1.6.7" in bpy.data.node_groups:
+        return bpy.data.node_groups["Mask Mixer 1.6.7"]
+    mask_mixer = bpy.data.node_groups.new(type = 'ShaderNodeTree', name = "Mask Mixer 1.6.7")
+    mask_mixer['AddonVersion'] = Mat.get('AddonVersion')
 
     #sockets
     normal_map_socket = mask_mixer.interface.new_socket(name = "Microblend", in_out='OUTPUT', socket_type = 'NodeSocketVector')
@@ -114,10 +115,12 @@ def mask_mixer_node_group():
 
     return mask_mixer
 
-def levels_node_group():
-    if "Levels 2077" in bpy.data.node_groups:
-        return bpy.data.node_groups["Levels 2077"]
-    levels = bpy.data.node_groups.new(type = 'ShaderNodeTree', name = "Levels 2077")
+def levels_node_group(Mat):
+    if "Levels 2077 1.6.7" in bpy.data.node_groups:
+        return bpy.data.node_groups["Levels 2077 1.6.7"]
+    levels = bpy.data.node_groups.new(type = 'ShaderNodeTree', name = "Levels 2077 1.6.7")
+    # Write addonversion from material where group is created
+    levels['AddonVersion'] = Mat.get('AddonVersion')
 
     input_socket = levels.interface.new_socket(name = "Input", in_out='INPUT', socket_type = 'NodeSocketFloat')
     vec2_socket = levels.interface.new_socket(name = "Levels", in_out='INPUT', socket_type = 'NodeSocketVector')
@@ -147,11 +150,13 @@ def levels_node_group():
 
     return levels
 
-def _getOrCreateLayerBlend():
-    if "Layer_Blend" in bpy.data.node_groups:
-        return bpy.data.node_groups["Layer_Blend"]
+def _getOrCreateLayerBlend(Mat):
+    if "Layer Blend 1.6.7" in bpy.data.node_groups:
+        return bpy.data.node_groups["Layer Blend 1.6.7"]
 
-    NG = bpy.data.node_groups.new("Layer_Blend","ShaderNodeTree")#create layer's node group
+    NG = bpy.data.node_groups.new("Layer Blend 1.6.7","ShaderNodeTree")#create layer's node group
+    # Write addonversion from material where group is created
+    NG['AddonVersion'] = Mat.get('AddonVersion')
     vers=bpy.app.version
     if vers[0]<4:
         NG.inputs.new('NodeSocketColor','Color A')
@@ -240,7 +245,6 @@ class Multilayered:
         self.BasePath = str(BasePath)
         self.image_format = image_format
         self.ProjPath = str(ProjPath)
-
 
 
     def createBaseMaterial(self,matTemplateObj,mltemplate):
@@ -380,10 +384,8 @@ class Multilayered:
         return GNN.outputs[0]
 
 
-    def createLayerMaterial(self,LayerName,LayerCount,CurMat,mlmaskpath,normalimgpath, skip_layers):
+    def createLayerMaterial(self,LayerName,LayerCount,CurMat,mlmaskpath,normalimgpath):
         for x in range(LayerCount-1):
-            # if x > 0 and x+1 in skip_layers:
-            #     continue
             MaskTexture=None
             projpath = os.path.join(os.path.splitext(os.path.join(self.ProjPath, mlmaskpath))[0] + '_layers', os.path.split(mlmaskpath)[-1:][0][:-7] + "_" + str(x + 1) + ".png")
             basepath = os.path.join(os.path.splitext(os.path.join(self.BasePath, mlmaskpath))[0] + '_layers', os.path.split(mlmaskpath)[-1:][0][:-7] + "_" + str(x + 1) + ".png")
@@ -400,10 +402,8 @@ class Multilayered:
             MaskN=None
             if MaskTexture:
                 # MaskN = create_node(CurMat.nodes,"ShaderNodeTexImage",(-2400,400-100*x), image = MaskTexture,label="Layer_"+str(x+1))
-                MaskN = create_node(CurMat.nodes,"ShaderNodeTexImage",(-2400,-25-470*x), hide=False, image = MaskTexture)
+                MaskN = create_node(CurMat.nodes,"ShaderNodeTexImage",(-2400,-400*x), hide=False, image = MaskTexture)
                 MaskN.width = 300
-                # if x+1 in skip_layers:
-                #     MaskN.mute = True
 
             #if self.flipMaskY:
             # Mask flip deprecated in WolvenKit deveolpment build 8.7+
@@ -435,6 +435,10 @@ class Multilayered:
 
 
     def create(self,Data,Mat):
+        # JATO: We have to clear gpencil palette to prevent add-on from immediately changing color of layer 1 on import
+        # TODO: Should probably clear palette when material-panel is drawn
+        bpy.context.tool_settings.gpencil_paint.palette = None
+
         Mat['MLSetup']= Data["MultilayerSetup"]
         mlsetup = JSONTool.openJSON( Data["MultilayerSetup"] + ".json",mode='r',DepotPath=self.BasePath, ProjPath=self.ProjPath)
         mlsetup = mlsetup["Data"]["RootChunk"]
@@ -447,9 +451,6 @@ class Multilayered:
         CurMat = Mat.node_tree
 
         file_name = os.path.basename(Data["MultilayerSetup"].replace('\\',os.sep))[:-8]
-
-        # clear layer opacity dictionary
-        skip_layers = []
 
         for idx,x  in enumerate(xllay):
             opacity = x.get("opacity")
@@ -560,10 +561,12 @@ class Multilayered:
                 NG.outputs.new('NodeSocketFloat','Roughness')
                 NG.outputs.new('NodeSocketVector','Normal')
                 NG.outputs.new('NodeSocketVector','Microblend')
-                #NG.outputs.new('NodeSocketFloat','Layer Mask')
+                NG.outputs.new('NodeSocketFloat','Layer Mask')
                 NG_inputs=NG.inputs
 
             else:
+                outputsPanel = NG.interface.new_panel(name='Outputs')
+                outputsPanel.default_closed = True
                 inputsPanel = NG.interface.new_panel(name='Inputs')
                 inputsPanel.default_closed = True
                 overridesPanel = NG.interface.new_panel(name='Overrides')
@@ -595,12 +598,13 @@ class Multilayered:
                 NG.interface.new_socket(name="MicroblendOffsetV", socket_type='NodeSocketFloat', parent=paramsPanel, in_out='INPUT')
                 NG.interface.new_socket(name="Opacity", socket_type='NodeSocketFloat', parent=paramsPanel, in_out='INPUT')
 
-                NG.interface.new_socket(name="Color", socket_type='NodeSocketColor', in_out='OUTPUT')
-                NG.interface.new_socket(name="Metalness", socket_type='NodeSocketFloat', in_out='OUTPUT')
-                NG.interface.new_socket(name="Roughness", socket_type='NodeSocketFloat', in_out='OUTPUT')
-                NG.interface.new_socket(name="Normal", socket_type='NodeSocketVector', in_out='OUTPUT')
-                NG.interface.new_socket(name="Microblend", socket_type='NodeSocketVector', in_out='OUTPUT')
-                #NG.interface.new_socket(name="Layer Mask", socket_type='NodeSocketFloat', in_out='OUTPUT')
+                NG.interface.new_socket(name="Color", socket_type='NodeSocketColor', parent=outputsPanel, in_out='OUTPUT')
+                NG.interface.new_socket(name="Metalness", socket_type='NodeSocketFloat', parent=outputsPanel, in_out='OUTPUT')
+                NG.interface.new_socket(name="Roughness", socket_type='NodeSocketFloat', parent=outputsPanel, in_out='OUTPUT')
+                NG.interface.new_socket(name="Normal", socket_type='NodeSocketVector', parent=outputsPanel, in_out='OUTPUT')
+                NG.interface.new_socket(name="Microblend", socket_type='NodeSocketVector', parent=outputsPanel, in_out='OUTPUT')
+                NG.interface.new_socket(name="Layer Mask", socket_type='NodeSocketFloat', parent=outputsPanel, in_out='OUTPUT')
+
                 NG_inputs=get_inputs(NG)
 
             if LayerIndex == 0:
@@ -620,7 +624,7 @@ class Multilayered:
             NG_inputs[20].max_value = 1 #Opacity
 
 
-            LayerGroupN = create_node(CurMat.nodes, "ShaderNodeGroup", (-2000,500-470*idx), False)
+            LayerGroupN = create_node(CurMat.nodes, "ShaderNodeGroup", (-2000,450-400*idx), False)
             LayerGroupN.width = 400
             LayerGroupN.node_tree = NG
             LayerGroupN.name = "Mat_Mod_Layer_"+str(LayerIndex)
@@ -720,12 +724,6 @@ class Multilayered:
             else:
                 LayerGroupN.inputs['RoughLevelsOut'].default_value = (1,0)
 
-            # if opacity is 0, then the layer has been turned off
-            # if opacity == 0:
-            #     skip_layers.append(idx)
-            #     LayerGroupN.mute = True
-                # LayerIndex += 1
-                # continue
 
             # DEFINES MAIN MULTILAYERED PROPERTIES
 
@@ -740,14 +738,14 @@ class Multilayered:
             MBTexCord = create_node(NG.nodes,"ShaderNodeTexCoord", (-2300,-450))
 
             # Roughness
-            rLevelsIn = levels_node_group()
+            rLevelsIn = levels_node_group(Mat)
             rLevelsInGroup = NG.nodes.new("ShaderNodeGroup")
             rLevelsInGroup.node_tree = rLevelsIn
             rLevelsInGroup.location = (-1100,-150)
             rLevelsInGroup.label = "R Levels In"
             rLevelsInGroup.inputs[1].default_value = (1,0)
 
-            rLevelsOut = levels_node_group()
+            rLevelsOut = levels_node_group(Mat)
             rLevelsOutGroup = NG.nodes.new("ShaderNodeGroup")
             rLevelsOutGroup.node_tree = rLevelsOut
             rLevelsOutGroup.location = (-850,-150)
@@ -755,14 +753,14 @@ class Multilayered:
             rLevelsOutGroup.inputs[1].default_value = (1,0)
 
             # Metalness
-            mLevelsIn = levels_node_group()
+            mLevelsIn = levels_node_group(Mat)
             mLevelsInGroup = NG.nodes.new("ShaderNodeGroup")
             mLevelsInGroup.node_tree = mLevelsIn
             mLevelsInGroup.location = (-1100,0)
             mLevelsInGroup.label = "M Levels In"
             mLevelsInGroup.inputs[1].default_value = (1,0)
 
-            mLevelsOut = levels_node_group()
+            mLevelsOut = levels_node_group(Mat)
             mLevelsOutGroup = NG.nodes.new("ShaderNodeGroup")
             mLevelsOutGroup.node_tree = mLevelsOut
             mLevelsOutGroup.location = (-850,0)
@@ -771,14 +769,14 @@ class Multilayered:
 
 
             # --- Mask Layer ---
-            mask_mixer=mask_mixer_node_group()
+            mask_mixer=mask_mixer_node_group(Mat)
             mask_mixergroup = NG.nodes.new("ShaderNodeGroup")
             mask_mixergroup.name = "Group"
             mask_mixergroup.node_tree = mask_mixer
             mask_mixergroup.location = (-1800, -400)
             mask_mixergroup.width = 300
 
-            BLND = _getOrCreateLayerBlend()
+            BLND = _getOrCreateLayerBlend(Mat)
             LayerGroupBLND = NG.nodes.new("ShaderNodeGroup")
             LayerGroupBLND.location = (-500, 300)
             LayerGroupBLND.node_tree = BLND
@@ -852,6 +850,7 @@ class Multilayered:
             NG.links.new(LayerGroupBLND.outputs['Roughness'],GroupOutN.inputs['Roughness'])
             NG.links.new(LayerGroupBLND.outputs['Normal'],GroupOutN.inputs['Normal'])
             NG.links.new(LayerGroupBLND.outputs['Microblend'],GroupOutN.inputs['Microblend'])
+            NG.links.new(layerMaskReroute.outputs[0],GroupOutN.inputs['Layer Mask'])
 
             NG.links.new(colorReroute.outputs[0],LayerGroupBLND.inputs['Color B'])
             NG.links.new(mLevelsOutGroup.outputs[0],LayerGroupBLND.inputs['Metalness B'])
@@ -877,5 +876,5 @@ class Multilayered:
         else:
             LayerNormal=Data["GlobalNormal"]
 
-        self.createLayerMaterial(file_name+"_Layer_", LayerCount, CurMat, Data["MultilayerMask"], LayerNormal, skip_layers)
+        self.createLayerMaterial(file_name+"_Layer_", LayerCount, CurMat, Data["MultilayerMask"], LayerNormal)
 

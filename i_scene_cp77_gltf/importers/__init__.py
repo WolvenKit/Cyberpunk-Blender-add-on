@@ -302,7 +302,7 @@ WARNING! All data within the active material will be deleted"""
 
     def execute(self, context):
         try:
-            reload_mats()
+            reload_mats(self, context)
 
         except Exception as e:
             print("Exception when trying to import mats: " + str(e))
