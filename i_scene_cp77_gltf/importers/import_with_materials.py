@@ -324,8 +324,23 @@ def reload_mats(self, context):
 
     DepotPath = mat.get('DepotPath')
     BasePath = mat.get('MeshPath')
+    ProjPath = mat.get('ProjPath')
+
+    # JATO: This is a workaround to get MeshPath from collection for old assets before we stored MeshPath within material.
+    if BasePath is None:
+        for collection in bpy.data.collections:
+             if active_obj.name in collection.objects:
+                  MeshPath = collection.get('mesh')
+                  MeshPathNoSuffix = MeshPath[0:MeshPath.rfind('.')]
+                  BasePath = os.path.join(ProjPath, MeshPathNoSuffix)
+                  break
+
     errorMessages = []
     matjsonpath = BasePath + ".Material.json"
+
+    if not os.path.exists(matjsonpath):
+        self.report({'ERROR'}, ('Material.json not found: ' + matjsonpath))
+        return {'CANCELLED'}
 
     # JATO: hard-coded to PNG (who doesnt use PNG?) but could be exposed if we add image_format to material properties
     image_format='png'

@@ -19,12 +19,12 @@ def apply_mltemplate_mlsetup():
 def check_palette_change(self,context):
     global last_palette
     ts = context.tool_settings
-    active_palette = ts.image_paint.palette
+    active_palette = ts.gpencil_paint.palette
 
     if active_palette != last_palette:
         bpy.app.timers.register(apply_mltemplate_mlsetup)
 
-    last_palette = ts.image_paint.palette
+    last_palette = ts.gpencil_paint.palette
 
 
 last_palette_color = None
@@ -35,13 +35,14 @@ def apply_color_mlsetup():
 def check_palette_col_change(self, context):
     global last_palette_color
     ts = context.tool_settings
-    palette = ts.image_paint.palette
+    palette = ts.gpencil_paint.palette
 
-    new_palette_color = palette.colors.active.color
-    if new_palette_color != last_palette_color:
-        bpy.app.timers.register(apply_color_mlsetup)
+    if palette:
+        new_palette_color = palette.colors.active.color
+        if new_palette_color != last_palette_color:
+            bpy.app.timers.register(apply_color_mlsetup)
 
-    last_palette_color = palette.colors.active.color
+        last_palette_color = palette.colors.active.color
 
 
 def bool_function(self, context):
@@ -107,16 +108,17 @@ def setup_mldata(self, context):
     # JATO: We get overrides after selecting the right layer and before matching palette color
     bpy.ops.get_layer_overrides.mlsetup()
 
-    active_palette = bpy.context.tool_settings.image_paint.palette
+    active_palette = bpy.context.tool_settings.gpencil_paint.palette
     if active_palette:
         palette_colors = active_palette.colors
         for pal_col in palette_colors:
             col_tuple= pal_col.color[:]
             err=sum(np.subtract(col_tuple,colorscale))
             # JATO: TODO test error tolerance numbers, 0.00005 just a random guess
-            if abs(err)<0.00005:
+            # JATO: 0.00005 causes color mismatch on panam pants group #3 / layer 4, narrowed to 0.00001
+            if abs(err)<0.00001:
                 break
-        bpy.context.tool_settings.image_paint.palette.colors.active = pal_col
+        bpy.context.tool_settings.gpencil_paint.palette.colors.active = pal_col
 
 
 # JATO: TODO idk where this should go, probably somewhere else?
@@ -168,7 +170,7 @@ class CP77_PT_MaterialTools(Panel):
         if cp77_addon_prefs.show_modtools:
             if cp77_addon_prefs.show_meshtools:
                 ts = context.tool_settings
-                palette = ts.image_paint.palette
+                palette = ts.gpencil_paint.palette
 
                 box.label(text="Materials", icon="MATERIAL")
                 col = box.column()
@@ -195,21 +197,22 @@ class CP77_PT_MaterialTools(Panel):
                 # JATO: we probably don't need a button because this op automatically fires now
                 #col.operator("get_layer_overrides.mlsetup")
 
-                col.template_ID(ts.image_paint, "palette", new="palette.new")
+                col.template_ID(ts.gpencil_paint, "palette", new="palette.new")
                 # JATO: probably don't need this button for applying mltemplate since we are doing this automatically
-                # if ts.image_paint.palette:
+                # if ts.gpencil_paint.palette:
                 #     col.operator("set_layer_mltemplate.mlsetup")
 
                 # JATO: shouldn't need this button since we can set color by selecting palette colors
                 # col.operator("set_layer_color.mlsetup")
 
                 palette_box = box.column()
-                palette_box.template_palette(ts.image_paint,"palette",color=True)
+                palette_box.template_palette(ts.gpencil_paint,"palette",color=True)
 
 
-                if ts.image_paint.palette:
+                if ts.gpencil_paint.palette:
                     colR, colG, colB = palette.colors.active.color
                     rowColor.label(text="Color  {:.4f}  {:.4f}  {:.4f}".format(colR, colG, colB))
+
 
 
 operators, other_classes = get_classes(sys.modules[__name__])
