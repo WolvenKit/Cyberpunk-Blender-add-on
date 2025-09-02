@@ -125,8 +125,10 @@ class MetalBaseDet:
 
         if "DetailNormal" in Data:
             # combine normal textures
-            nSepNode = create_node(CurMat.nodes,"ShaderNodeSeparateRGB", (-550,-300)) 
-            nDetSepNode = create_node(CurMat.nodes,"ShaderNodeSeparateRGB", (-550,-400)) 
+            nSepNode = create_node(CurMat.nodes,"ShaderNodeSeparateColor", (-550,-300)) 
+            nSepNode.mode = 'RGB'
+            nDetSepNode = create_node(CurMat.nodes,"ShaderNodeSeparateColor", (-550,-400)) 
+            nDetSepNode.mode = 'RGB'
             redAddNode = create_node(CurMat.nodes,"ShaderNodeMath", (-350,-300), operation = "ADD") 
             greenAddNode = create_node(CurMat.nodes,"ShaderNodeMath", (-350,-350), operation = "ADD") 
             blueMulNode = create_node(CurMat.nodes,"ShaderNodeMath", (-350,-400), operation = "MULTIPLY") 

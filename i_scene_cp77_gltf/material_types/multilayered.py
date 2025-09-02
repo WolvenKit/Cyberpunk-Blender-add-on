@@ -119,24 +119,30 @@ def levels_node_group():
         return bpy.data.node_groups["Levels 2077"]
     levels = bpy.data.node_groups.new(type = 'ShaderNodeTree', name = "Levels 2077")
 
-    a_socket = levels.interface.new_socket(name = "Input", in_out='INPUT', socket_type = 'NodeSocketFloat')
-    b_socket = levels.interface.new_socket(name = "[0]", in_out='INPUT', socket_type = 'NodeSocketFloat')
-    c_socket = levels.interface.new_socket(name = "[1]", in_out='INPUT', socket_type = 'NodeSocketFloat')
+    input_socket = levels.interface.new_socket(name = "Input", in_out='INPUT', socket_type = 'NodeSocketFloat')
+    vec2_socket = levels.interface.new_socket(name = "Levels", in_out='INPUT', socket_type = 'NodeSocketVector')
+    vec2_socket.dimensions = 2
+    #b_socket = levels.interface.new_socket(name = "[0]", in_out='INPUT', socket_type = 'NodeSocketFloat')
+    #c_socket = levels.interface.new_socket(name = "[1]", in_out='INPUT', socket_type = 'NodeSocketFloat')
     result_socket = levels.interface.new_socket(name = "Result", in_out='OUTPUT', socket_type = 'NodeSocketFloat')
 
     levelsInput = levels.nodes.new("NodeGroupInput")
-    levelsInput.location = (-1500, 0)
+    levelsInput.location = (-1200,0)
 
     levelsOutput = levels.nodes.new("NodeGroupOutput")
-    levelsOutput.location = (100, 0)
+    levelsOutput.location = (100,0)
+
+    levelsSepXYZ = levels.nodes.new("ShaderNodeSeparateXYZ")
+    levelsSepXYZ.location = (-800,-150)
 
     levelsMultAdd = levels.nodes.new("ShaderNodeMath")
     levelsMultAdd.operation = 'MULTIPLY_ADD'
-    levelsMultAdd.location = (-1150, 0)
+    levelsMultAdd.location = (-300,0)
 
     levels.links.new(levelsInput.outputs[0], levelsMultAdd.inputs[0])
-    levels.links.new(levelsInput.outputs[1], levelsMultAdd.inputs[1])
-    levels.links.new(levelsInput.outputs[2], levelsMultAdd.inputs[2])
+    levels.links.new(levelsInput.outputs[1], levelsSepXYZ.inputs[0])
+    levels.links.new(levelsSepXYZ.outputs[0], levelsMultAdd.inputs[1])
+    levels.links.new(levelsSepXYZ.outputs[1], levelsMultAdd.inputs[2])
     levels.links.new(levelsMultAdd.outputs[0], levelsOutput.inputs[0])
 
     return levels
@@ -394,7 +400,7 @@ class Multilayered:
             MaskN=None
             if MaskTexture:
                 # MaskN = create_node(CurMat.nodes,"ShaderNodeTexImage",(-2400,400-100*x), image = MaskTexture,label="Layer_"+str(x+1))
-                MaskN = create_node(CurMat.nodes,"ShaderNodeTexImage",(-2400,-25-440*x), hide=False, image = MaskTexture)
+                MaskN = create_node(CurMat.nodes,"ShaderNodeTexImage",(-2400,-25-470*x), hide=False, image = MaskTexture)
                 MaskN.width = 300
                 # if x+1 in skip_layers:
                 #     MaskN.mute = True
@@ -560,6 +566,10 @@ class Multilayered:
             else:
                 inputsPanel = NG.interface.new_panel(name='Inputs')
                 inputsPanel.default_closed = True
+                overridesPanel = NG.interface.new_panel(name='Overrides')
+                levelsPanel = NG.interface.new_panel(name='Levels')
+                levelsPanel.default_closed = True
+                NG.interface.move_to_parent(item=levelsPanel, parent=overridesPanel, to_position=2)
                 paramsPanel = NG.interface.new_panel(name='Parameters')
                 NG.interface.new_socket(name="Color", socket_type='NodeSocketColor', parent=inputsPanel, in_out='INPUT')
                 NG.interface.new_socket(name="Metalness", socket_type='NodeSocketFloat', parent=inputsPanel, in_out='INPUT')
@@ -567,11 +577,17 @@ class Multilayered:
                 NG.interface.new_socket(name="Normal", socket_type='NodeSocketVector', parent=inputsPanel, in_out='INPUT')
                 NG.interface.new_socket(name="Microblend", socket_type='NodeSocketVector', parent=inputsPanel, in_out='INPUT')
                 NG.interface.new_socket(name="Mask", socket_type='NodeSocketFloat', parent=inputsPanel, in_out='INPUT')
-                NG.interface.new_socket(name="ColorScale", socket_type='NodeSocketColor', parent=paramsPanel, in_out='INPUT')
+
+                NG.interface.new_socket(name="ColorScale", socket_type='NodeSocketColor', parent=overridesPanel, in_out='INPUT')
+                NG.interface.new_socket(name="NormalStrength", socket_type='NodeSocketFloat', parent=overridesPanel, in_out='INPUT')
+                NG.interface.new_socket(name="MetalLevelsIn", socket_type='NodeSocketVector', parent=levelsPanel, in_out='INPUT')
+                NG.interface.new_socket(name="MetalLevelsOut", socket_type='NodeSocketVector', parent=levelsPanel, in_out='INPUT')
+                NG.interface.new_socket(name="RoughLevelsIn", socket_type='NodeSocketVector', parent=levelsPanel, in_out='INPUT')
+                NG.interface.new_socket(name="RoughLevelsOut", socket_type='NodeSocketVector', parent=levelsPanel, in_out='INPUT')
+
                 NG.interface.new_socket(name="MatTile", socket_type='NodeSocketFloat', parent=paramsPanel, in_out='INPUT')
                 NG.interface.new_socket(name="OffsetU", socket_type='NodeSocketFloat', parent=paramsPanel, in_out='INPUT')
                 NG.interface.new_socket(name="OffsetV", socket_type='NodeSocketFloat', parent=paramsPanel, in_out='INPUT')
-                NG.interface.new_socket(name="NormalStrength", socket_type='NodeSocketFloat', parent=paramsPanel, in_out='INPUT')
                 NG.interface.new_socket(name="MicroblendNormalStrength", socket_type='NodeSocketFloat', parent=paramsPanel, in_out='INPUT')
                 NG.interface.new_socket(name="MicroblendContrast", socket_type='NodeSocketFloat', parent=paramsPanel, in_out='INPUT')
                 NG.interface.new_socket(name="MbTile", socket_type='NodeSocketFloat', parent=paramsPanel, in_out='INPUT')
@@ -589,14 +605,22 @@ class Multilayered:
 
             if LayerIndex == 0:
                 NG_inputs[5].default_value = 1
-            NG_inputs[10].min_value = 0 # No reason to invert these maps, not detail maps.
-            NG_inputs[10].max_value = 10 # This value is arbitrary, but more than adequate.
-            NG_inputs[12].min_value = 0
-            NG_inputs[12].max_value = 1
-            NG_inputs[16].min_value = 0
-            NG_inputs[16].max_value = 1
 
-            LayerGroupN = create_node(CurMat.nodes, "ShaderNodeGroup", (-2000,500-440*idx), False)
+            NG_inputs[7].min_value = 0 #NormalStrength  No reason to invert these maps, not detail maps.
+            NG_inputs[7].max_value = 10 #NormalStrength This value is arbitrary, but more than adequate.
+
+            NG_inputs[8].dimensions = 2 #MetalLevelsIn  Changes from Vec3 to Vec2 TODO Can this be set on socket creation?
+            NG_inputs[9].dimensions = 2 #MetalLevelsOut  Changes from Vec3 to Vec2 TODO Can this be set on socket creation?
+            NG_inputs[10].dimensions = 2 #RoughLevelsIn  Changes from Vec3 to Vec2 TODO Can this be set on socket creation?
+            NG_inputs[11].dimensions = 2 #RoughLevelsOut  Changes from Vec3 to Vec2 TODO Can this be set on socket creation?
+
+            NG_inputs[16].min_value = 0 #MicroblendContrast
+            NG_inputs[16].max_value = 1 #MicroblendContrast
+            NG_inputs[20].min_value = 0 #Opacity
+            NG_inputs[20].max_value = 1 #Opacity
+
+
+            LayerGroupN = create_node(CurMat.nodes, "ShaderNodeGroup", (-2000,500-470*idx), False)
             LayerGroupN.width = 400
             LayerGroupN.node_tree = NG
             LayerGroupN.name = "Mat_Mod_Layer_"+str(LayerIndex)
@@ -676,6 +700,26 @@ class Multilayered:
             else:
                 LayerGroupN.inputs['Opacity'].default_value = 1
 
+            if metalLevelsIn != None:
+                LayerGroupN.inputs['MetalLevelsIn'].default_value = OverrideTable["MetalLevelsIn"][metalLevelsIn]
+            else:
+                LayerGroupN.inputs['MetalLevelsIn'].default_value = (1,0)
+
+            if metalLevelsOut != None:
+                LayerGroupN.inputs['MetalLevelsOut'].default_value = OverrideTable["MetalLevelsOut"][metalLevelsOut]
+            else:
+                LayerGroupN.inputs['MetalLevelsOut'].default_value = (1,0)
+
+            if roughLevelsIn != None:
+                LayerGroupN.inputs['RoughLevelsIn'].default_value = OverrideTable["RoughLevelsIn"][roughLevelsIn]
+            else:
+                LayerGroupN.inputs['RoughLevelsIn'].default_value = (1,0)
+
+            if roughLevelsOut != None:
+                LayerGroupN.inputs['RoughLevelsOut'].default_value = OverrideTable["RoughLevelsOut"][roughLevelsOut]
+            else:
+                LayerGroupN.inputs['RoughLevelsOut'].default_value = (1,0)
+
             # if opacity is 0, then the layer has been turned off
             # if opacity == 0:
             #     skip_layers.append(idx)
@@ -701,16 +745,14 @@ class Multilayered:
             rLevelsInGroup.node_tree = rLevelsIn
             rLevelsInGroup.location = (-1100,-150)
             rLevelsInGroup.label = "R Levels In"
-            rLevelsInGroup.inputs[1].default_value = (OverrideTable["RoughLevelsIn"][roughLevelsIn][0])
-            rLevelsInGroup.inputs[2].default_value = (OverrideTable["RoughLevelsIn"][roughLevelsIn][1])
+            rLevelsInGroup.inputs[1].default_value = (1,0)
 
             rLevelsOut = levels_node_group()
             rLevelsOutGroup = NG.nodes.new("ShaderNodeGroup")
             rLevelsOutGroup.node_tree = rLevelsOut
             rLevelsOutGroup.location = (-850,-150)
             rLevelsOutGroup.label = "R Levels Out"
-            rLevelsOutGroup.inputs[1].default_value = (OverrideTable["RoughLevelsOut"][roughLevelsOut][0])
-            rLevelsOutGroup.inputs[2].default_value = (OverrideTable["RoughLevelsOut"][roughLevelsOut][1])
+            rLevelsOutGroup.inputs[1].default_value = (1,0)
 
             # Metalness
             mLevelsIn = levels_node_group()
@@ -718,16 +760,14 @@ class Multilayered:
             mLevelsInGroup.node_tree = mLevelsIn
             mLevelsInGroup.location = (-1100,0)
             mLevelsInGroup.label = "M Levels In"
-            mLevelsInGroup.inputs[1].default_value = (OverrideTable["MetalLevelsIn"][metalLevelsIn][0])
-            mLevelsInGroup.inputs[2].default_value = (OverrideTable["MetalLevelsIn"][metalLevelsIn][1])
+            mLevelsInGroup.inputs[1].default_value = (1,0)
 
             mLevelsOut = levels_node_group()
             mLevelsOutGroup = NG.nodes.new("ShaderNodeGroup")
             mLevelsOutGroup.node_tree = mLevelsOut
             mLevelsOutGroup.location = (-850,0)
             mLevelsOutGroup.label = "M Levels Out"
-            mLevelsOutGroup.inputs[1].default_value = (OverrideTable["MetalLevelsOut"][metalLevelsOut][0])
-            mLevelsOutGroup.inputs[2].default_value = (OverrideTable["MetalLevelsOut"][metalLevelsOut][1])
+            mLevelsOutGroup.inputs[1].default_value = (1,0)
 
 
             # --- Mask Layer ---
@@ -742,6 +782,15 @@ class Multilayered:
             LayerGroupBLND = NG.nodes.new("ShaderNodeGroup")
             LayerGroupBLND.location = (-500, 300)
             LayerGroupBLND.node_tree = BLND
+
+            mLevelsInReroute = NG.nodes.new("NodeReroute")
+            mLevelsInReroute.location = (-1350,-10)
+            mLevelsOutReroute = NG.nodes.new("NodeReroute")
+            mLevelsOutReroute.location = (-1350,-35)
+            rLevelsInReroute = NG.nodes.new("NodeReroute")
+            rLevelsInReroute.location = (-1350,-60)
+            rLevelsOutReroute = NG.nodes.new("NodeReroute")
+            rLevelsOutReroute.location = (-1350,-85)
 
             normalReroute = NG.nodes.new("NodeReroute")
             normalReroute.location = (-700,-350)
@@ -760,12 +809,21 @@ class Multilayered:
             NG.links.new(GroupInN.outputs['Microblend'],LayerGroupBLND.inputs['Microblend A'])
 
             NG.links.new(GroupInN.outputs['ColorScale'],BMN.inputs[0])
+            NG.links.new(GroupInN.outputs['NormalStrength'],BMN.inputs[4])
+            NG.links.new(GroupInN.outputs['MetalLevelsIn'],mLevelsInReroute.inputs[0])
+            NG.links.new(mLevelsInReroute.outputs[0],mLevelsInGroup.inputs[1])
+            NG.links.new(GroupInN.outputs['MetalLevelsOut'],mLevelsOutReroute.inputs[0])
+            NG.links.new(mLevelsOutReroute.outputs[0],mLevelsOutGroup.inputs[1])
+            NG.links.new(GroupInN.outputs['RoughLevelsIn'],rLevelsInReroute.inputs[0])
+            NG.links.new(rLevelsInReroute.outputs[0],rLevelsInGroup.inputs[1])
+            NG.links.new(GroupInN.outputs['RoughLevelsOut'],rLevelsOutReroute.inputs[0])
+            NG.links.new(rLevelsOutReroute.outputs[0],rLevelsOutGroup.inputs[1])
+
             NG.links.new(GroupInN.outputs['MatTile'],BMN.inputs[1])
             if len(BMN.inputs) > 1:
               NG.links.new(GroupInN.outputs['OffsetU'],BMN.inputs[2])
               if len(BMN.inputs) > 2:
                 NG.links.new(GroupInN.outputs['OffsetV'],BMN.inputs[3])
-            NG.links.new(GroupInN.outputs['NormalStrength'],BMN.inputs[4])
             NG.links.new(GroupInN.outputs['MicroblendNormalStrength'],mask_mixergroup.inputs['MicroblendNormalStrength'])
             NG.links.new(GroupInN.outputs['MicroblendContrast'],mask_mixergroup.inputs['MicroblendContrast'])
             NG.links.new(GroupInN.outputs['MbTile'],MBMapping.inputs[3])
