@@ -11,6 +11,22 @@ from ..icons.cp77_icons import get_icon
 import numpy as np
 
 
+last_palette = None
+
+def apply_mltemplate_mlsetup():
+    bpy.ops.set_layer_mltemplate.mlsetup()
+
+def check_palette_change(self,context):
+    global last_palette
+    ts = context.tool_settings
+    active_palette = ts.image_paint.palette
+
+    if active_palette != last_palette:
+        bpy.app.timers.register(apply_mltemplate_mlsetup)
+
+    last_palette = ts.image_paint.palette
+
+
 last_palette_color = None
 
 def apply_color_mlsetup():
@@ -28,6 +44,42 @@ def check_palette_col_change(self, context):
     last_palette_color = palette.colors.active.color
 
 
+def bool_function(self, context):
+    nt = bpy.context.object.active_material.node_tree
+    nodes = nt.nodes
+
+    if context.scene.multilayer_view_mask_prop == True:
+        ml_nodename = 'Mat_Mod_Layer_'
+
+        if not nodes.get('Multilayered Mask Output'):
+            view_mask_output_node = nodes.new(type='ShaderNodeOutputMaterial')
+            view_mask_output_node.name = "Multilayered Mask Output"
+            view_mask_output_node.location = (-1000, 400)
+            view_mask_output_node.is_active_output = True
+        else:
+            view_mask_output_node = nodes.get('Multilayered Mask Output')
+            view_mask_output_node.is_active_output = True
+
+        # JATO: TODO is else statement required?
+        if self.multilayer_index_prop:
+            ml_idx = (bpy.context.scene.multilayer_index_prop) - 1
+        else:
+            self.report({'ERROR'}, 'Multilayered index property not found.')
+            return {'CANCELLED'}
+
+        # JATO: TODO more effecient to deselect all then break when we match?
+        ml_nodegroup = ml_nodename + str(ml_idx)
+        for node in nt.nodes:
+            if node.name == ml_nodegroup:
+                node.select = True
+                nt.links.new(node.outputs[5], view_mask_output_node.inputs[0])
+                #print("matched: ", idx)
+            else:
+                node.select = False
+    else:
+        nodes.remove(nodes.get('Multilayered Mask Output'))
+
+
 def setup_mldata(self, context):
     nt = bpy.context.object.active_material.node_tree
     ml_nodename = 'Mat_Mod_Layer_'
@@ -38,6 +90,9 @@ def setup_mldata(self, context):
     else:
         self.report({'ERROR'}, 'Multilayered index property not found.')
         return {'CANCELLED'}
+
+    if context.scene.multilayer_view_mask_prop == True:
+        bool_function(self, context)
 
     # JATO: TODO more effecient to deselect all then break when we match?
     ml_nodegroup = ml_nodename + str(ml_idx)
@@ -72,6 +127,14 @@ bpy.types.Scene.multilayer_index_prop = bpy.props.IntProperty(
     min=1,
     max=20,
     update=setup_mldata
+)
+
+# JATO: TODO idk where this should go, probably somewhere else?
+bpy.types.Scene.multilayer_view_mask_prop = bpy.props.BoolProperty(
+    name="View Layer Mask",
+    description="View Layer Mask desc",
+    default=False,
+    update=bool_function
 )
 
 
@@ -116,7 +179,9 @@ class CP77_PT_MaterialTools(Panel):
                 col = box.column()
 
                 col.operator("generate_layer_overrides.mlsetup")
+                col.operator("export_scene.mlsetup")
                 col.prop(scene, "multilayer_index_prop")
+                col.prop(scene, "multilayer_view_mask_prop")
 
                 rowColor = box.row(align=True)
 
@@ -129,11 +194,12 @@ class CP77_PT_MaterialTools(Panel):
 
                 # JATO: we probably don't need a button because this op automatically fires now
                 #col.operator("get_layer_overrides.mlsetup")
-                col.operator("export_scene.mlsetup")
 
                 col.template_ID(ts.image_paint, "palette", new="palette.new")
-                if ts.image_paint.palette:
-                    col.operator("set_layer_mltemplate.mlsetup")
+                # JATO: probably don't need this button for applying mltemplate since we are doing this automatically
+                # if ts.image_paint.palette:
+                #     col.operator("set_layer_mltemplate.mlsetup")
+
                 # JATO: shouldn't need this button since we can set color by selecting palette colors
                 # col.operator("set_layer_color.mlsetup")
 
@@ -155,8 +221,9 @@ def register_materialtools():
     for cls in other_classes:
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
-
+    CP77_PT_MaterialTools.append(check_palette_change)
     CP77_PT_MaterialTools.append(check_palette_col_change)
+
 
 def unregister_materialtools():
     for cls in reversed(other_classes):
