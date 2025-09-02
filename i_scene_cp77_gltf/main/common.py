@@ -70,10 +70,14 @@ def get_pos(inst):
         pos[0] = inst['translation']['X'] /scale_factor
         pos[1] = inst['translation']['Y'] /scale_factor
         pos[2] = inst['translation']['Z'] /scale_factor
+    elif 'Translation' in inst.keys():
+        pos[0] = inst['Translation']['X'] /scale_factor
+        pos[1] = inst['Translation']['Y'] /scale_factor
+        pos[2] = inst['Translation']['Z'] /scale_factor
     return pos
 
 def get_rot(inst):
-    rot=[0,0,0,1]
+    rot=[1,0,0,0]
     if 'Orientation' in inst.keys():
         if 'Properties' in inst['Orientation'].keys():
             rot[0] = inst['Orientation']['Properties']['r']
@@ -328,7 +332,8 @@ def CreateRebildNormalGroup(curMat, x = 0, y = 0,name = 'Rebuild Normal Z'):
         Range.clamp = True
         Range.inputs[1].default_value = -1.0
 
-        Sep = group.nodes.new("ShaderNodeSeparateRGB")
+        Sep = group.nodes.new("ShaderNodeSeparateColor")
+        Sep.mode = 'RGB'
         Sep.location = (-600,0)
         Comb = group.nodes.new("ShaderNodeCombineRGB")
         Comb.location = (-300,0)
