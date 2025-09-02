@@ -1,6 +1,7 @@
 
 import bpy
 import os
+import sys
 from ..material_types.multilayered import Multilayered
 from ..material_types.multilayeredclearcoat import MultilayeredClearCoat
 from ..material_types.vehicledestrblendshape import VehicleDestrBlendshape
@@ -50,6 +51,8 @@ class MaterialBuilder:
         self.MeshPath= MeshPath
         before,mid,after=MeshPath.partition('source\\raw\\'.replace('\\',os.sep))
         self.ProjPath=before+mid
+        self.addon_module = sys.modules["i_scene_cp77_gltf"]
+        self.addon_ver = self.addon_module.bl_info['version']
 
     def create(self, mats, materialIndex):
         if mats:
@@ -62,6 +65,7 @@ class MaterialBuilder:
             bpyMat['DepotPath'] = self.BasePath
             bpyMat['ProjPath']= self.ProjPath
             bpyMat['MaterialTemplate'] = rawMat["MaterialTemplate"]
+            bpyMat['AddonVersion'] = self.addon_ver
             bpyMat.use_nodes = True
             no_shadows=False
             material_template = rawMat["MaterialTemplate"].replace('/','\\')
