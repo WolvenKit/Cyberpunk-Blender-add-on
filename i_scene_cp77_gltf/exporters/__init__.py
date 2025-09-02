@@ -174,7 +174,7 @@ class CP77MlSetupExport(Operator):
 
 class CP77MlSetupGenerateOverrides(Operator):
     bl_idname = "generate_layer_overrides.mlsetup"
-    bl_label = "Generate Layer Overrides"
+    bl_label = "Generate Overrides"
     bl_description = "Create Override data for MLTemplates found within the selected material."
 
     def execute(self, context):
@@ -196,8 +196,8 @@ class CP77MlSetupGenerateOverrides(Operator):
 
 class CP77MlSetupSetMLTemplate(Operator):
     bl_idname = "set_layer_mltemplate.mlsetup"
-    bl_label = "Swap MLTemplate"
-    bl_description = "Swap the MLTemplate used within the selected Multilayered Layer Node Group"
+    bl_label = "Apply Selected MLTemplate"
+    bl_description = "Apply the selected MLTemplate within the selected Multilayered Layer Node Group"
 
     def execute(self, context):
         ts = context.tool_settings
@@ -286,7 +286,6 @@ class CP77MlSetupSetColorOverride(Operator):
         obj=bpy.context.active_object
         mat_idx = obj.active_material_index
         mat=obj.material_slots[mat_idx].material
-        nodes=mat.node_tree.nodes
         if not mat.get('MLSetup'):
             self.report({'ERROR'}, 'Multilayered setup not found within selected material.')
             return {'CANCELLED'}
@@ -298,18 +297,6 @@ class CP77MlSetupSetColorOverride(Operator):
                 selected_node_group = node
                 break # Assuming only one group node can be actively selected at a time
         selected_node_group.inputs['ColorScale'].default_value = active_color
-
-        BaseMat = selected_node_group.node_tree.nodes['Group'].node_tree.nodes['Group Input']
-        material = str(BaseMat['mlTemplate'])
-        smallmaterial = ((material.split('\\'))[-1])[:-11]
-
-        match_palette = None
-
-        for palette in bpy.data.palettes:
-            if palette.name == smallmaterial:
-                match_palette = palette
-
-        ts.image_paint.palette = match_palette
 
         success_message = "{:.4f}  {:.4f}  {:.4f}".format(colR, colG, colB) + " was set on " + str(selected_node_group.name)
 
