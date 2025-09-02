@@ -221,7 +221,7 @@ class CP77MlSetupSetMLTemplate(Operator):
 
         ngmatch = None
         for ng in bpy.data.node_groups:
-            if ng.name == ts.image_paint.palette.name:
+            if ng.name == ts.gpencil_paint.palette.name:
                 ngmatch = ng
         selected_node_group.node_tree.nodes['Group'].node_tree = ngmatch
 
@@ -263,7 +263,7 @@ class CP77MlSetupGetOverrides(Operator):
         for palette in bpy.data.palettes:
             if palette.name == smallmaterial:
                 match_palette = palette
-        ts.image_paint.palette = match_palette
+        ts.gpencil_paint.palette = match_palette
 
         success_message = "Overrides found for " + str(selected_node_group.name) + " (" +str(smallmaterial) + ")"
 
@@ -278,8 +278,8 @@ class CP77MlSetupSetColorOverride(Operator):
     def execute(self, context):
         ts = context.tool_settings
 
-        palette = ts.image_paint.palette
-        if ts.image_paint.palette:
+        palette = ts.gpencil_paint.palette
+        if ts.gpencil_paint.palette:
             colR, colG, colB = palette.colors.active.color
             active_color = (colR, colG, colB, 1)
 
