@@ -23,7 +23,7 @@ def get_anim_info(animations, oldanims, import_tracks):
 	Keeps original logic/printing; only adds track import + alignment.
 	"""
 	cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
-	
+
 	if bpy.app.version >= (4, 4, 0):
 		old_names = {getattr(x, 'name', x) for x in (oldanims or [])}
 		# Only actions created during this import
@@ -453,9 +453,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
             if matname in bpy_mats.keys() and 'glass' not in matname and 'MaterialTemplate' not in matname and 'Window' not in matname \
                  and matname[:5] != 'Atlas' and 'decal_diffuse' not in matname and \
                 'BaseMaterial' in bpy_mats[matname].keys() and bpy_mats[matname]['BaseMaterial'] == m['BaseMaterial'] and \
-                    bpy_mats[matname]['GlobalNormal'] == m['GlobalNormal'] and bpy_mats[matname][
-                'MultilayerMask'] == m['MultilayerMask']:
-
+                    bpy_mats[matname]['GlobalNormal'] == m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask'] == m['MultilayerMask']:
                 bpy.data.meshes[name].materials.append(bpy_mats[matname])
             elif matname in bpy_mats.keys() and matname[:5] == 'Atlas' and bpy_mats[matname][
                 'BaseMaterial'] == m['BaseMaterial'] and bpy_mats[matname]['DiffuseMap'] == m['DiffuseMap']:
