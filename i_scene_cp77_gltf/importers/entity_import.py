@@ -697,7 +697,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 cm_list.reverse()
                                 for obj in objs:
                                     subnum = None
-                                    # Try to parse index from object name like 'submesh_00' (case-insensitive)
+                                    # Try to parse index from object name like 'submesh_00'
                                     m = re.search(r"submesh_(\d+)", obj.name, re.IGNORECASE)
                                     if m:
                                         subnum = int(m.group(1))
@@ -711,9 +711,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                                     subnum = int(m2.group(1))
                                                     break
                                     if subnum is None:
-                                        # Unable to resolve submesh index for this object; skip safely
                                         continue
-                                    # If mask bit missing for this index, default to visible (True)
                                     bit = cm_list[subnum] if subnum < len(cm_list) else True
                                     obj.hide_set(not bit)
                                     obj.hide_render = not bit
