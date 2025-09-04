@@ -70,7 +70,7 @@ class MaterialBuilder:
             no_shadows=False
             material_template = rawMat["MaterialTemplate"].replace('/','\\')
             match material_template:
-                case "engine\\materials\\multilayered.mt" | "base\\materials\\vehicle_destr_blendshape.mt" | "base\\materials\\multilayered_clear_coat.mt" |  "base\\materials\\multilayered_terrain.mt":
+                case "engine\\materials\\multilayered.mt" | "base\\materials\\vehicle_destr_blendshape.mt" | "base\\materials\\multilayered_clear_coat.mt" |  "base\\materials\\multilayered_terrain.mt" | "base\\materials\\cloth_wind.mt":
                     multilayered = Multilayered(self.BasePath,self.image_format,self.ProjPath)
                     multilayered.create(rawMat["Data"],bpyMat)
 
