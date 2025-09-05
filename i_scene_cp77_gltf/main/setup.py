@@ -70,7 +70,7 @@ class MaterialBuilder:
             no_shadows=False
             material_template = rawMat["MaterialTemplate"].replace('/','\\')
             match material_template:
-                case "engine\\materials\\multilayered.mt" | "base\\materials\\vehicle_destr_blendshape.mt" | "base\\materials\\multilayered_clear_coat.mt" |  "base\\materials\\multilayered_terrain.mt":
+                case "engine\\materials\\multilayered.mt" | "base\\materials\\vehicle_destr_blendshape.mt" | "base\\materials\\multilayered_clear_coat.mt" |  "base\\materials\\multilayered_terrain.mt" | "base\\materials\\silverhand_overlay_blendable.mt" | "base\\materials\\cloth_tarps.mt":
                     multilayered = Multilayered(self.BasePath,self.image_format,self.ProjPath)
                     multilayered.create(rawMat["Data"],bpyMat)
 
@@ -184,7 +184,7 @@ class MaterialBuilder:
                     meshDecalParallax = MeshDecalParallax(self.BasePath,self.image_format, self.ProjPath)
                     meshDecalParallax.create(rawMat["Data"],bpyMat)
 
-                case  "base\\fx\\shaders\\parallaxscreen.mt" :
+                case  "base\\fx\\shaders\\parallaxscreen.mt" | "base\\materials\\metal_base_ui.mt":
                     parallaxScreen = ParallaxScreen(self.BasePath,self.image_format,self.ProjPath)
                     parallaxScreen.create(rawMat["Data"],bpyMat)
 
