@@ -281,6 +281,53 @@ def CreateShaderNodeTexImage(curMat,path = None, x = 0, y = 0, name = None, imag
 
     return ImgNode
 
+def CreateCullBackfaceGroup(curMat, x = 0, y = 0,name = 'Cull Backface'):
+    group = bpy.data.node_groups.get("Cull Backface")
+
+    if group is None:
+        group = bpy.data.node_groups.new("Cull Backface","ShaderNodeTree")
+
+        GroupInN = group.nodes.new("NodeGroupInput")
+        GroupInN.location = (-1000,0)
+
+        GroupOutN = group.nodes.new("NodeGroupOutput")
+        GroupOutN.location = (0,0)
+        vers=bpy.app.version
+        if vers[0]<4:
+            input_socket = group.inputs.new('NodeSocketFloat','Input')
+            output_socket = group.outputs.new('NodeSocketFloat','Output')
+        else:
+            input_socket = group.interface.new_socket(name="Input",socket_type='NodeSocketFloat', in_out='INPUT')
+            output_socket = group.interface.new_socket(name="Output",socket_type='NodeSocketFloat', in_out='OUTPUT')
+
+        input_socket.default_value = 1.0
+
+        GeometryNode = group.nodes.new("ShaderNodeNewGeometry")
+        GeometryNode.location = (-750,-300)
+
+        OneMinusNode = group.nodes.new("ShaderNodeMath")
+        OneMinusNode.location = (-500,-300)
+        OneMinusNode.operation = 'SUBTRACT'
+        OneMinusNode.inputs[0].default_value = 1.0
+
+        MultiplyNode = group.nodes.new("ShaderNodeMath")
+        MultiplyNode.operation = 'MULTIPLY'
+        MultiplyNode.location = (-250,0)
+
+        group.links.new(GroupInN.outputs[0],MultiplyNode.inputs[0])
+        group.links.new(GeometryNode.outputs[6],OneMinusNode.inputs[1])
+        group.links.new(OneMinusNode.outputs[0],MultiplyNode.inputs[1])
+        group.links.new(MultiplyNode.outputs[0],GroupOutN.inputs[0])
+
+    ShaderGroup = curMat.nodes.new("ShaderNodeGroup")
+    ShaderGroup.location = (x,y)
+    ShaderGroup.hide = True
+    ShaderGroup.node_tree = group
+    ShaderGroup.name = name
+
+    return ShaderGroup
+
+
 def CreateRebildNormalGroup(curMat, x = 0, y = 0,name = 'Rebuild Normal Z'):
     group = bpy.data.node_groups.get("Rebuild Normal Z")
 
