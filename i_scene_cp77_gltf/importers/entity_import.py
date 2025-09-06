@@ -1,6 +1,7 @@
 # Blender Entity import script by Simarilius
 # Updated May 23 with vehicle rig support
 import json
+import re
 import glob
 import os
 import bpy
@@ -695,9 +696,25 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 cm_list = [bool(int(bit)) for bit in bin_str]
                                 cm_list.reverse()
                                 for obj in objs:
-                                    subnum=int(obj.name[8:10])
-                                    obj.hide_set(not cm_list[subnum])
-                                    obj.hide_render=not cm_list[subnum]
+                                    subnum = None
+                                    # Try to parse index from object name like 'submesh_00'
+                                    m = re.search(r"submesh_(\d+)", obj.name, re.IGNORECASE)
+                                    if m:
+                                        subnum = int(m.group(1))
+                                    else:
+                                        # Fallback: try from material names
+                                        mats = getattr(obj.data, 'materials', []) if hasattr(obj, 'data') else []
+                                        for mat in mats:
+                                            if mat and getattr(mat, 'name', None):
+                                                m2 = re.search(r"submesh_(\d+)", mat.name, re.IGNORECASE)
+                                                if m2:
+                                                    subnum = int(m2.group(1))
+                                                    break
+                                    if subnum is None:
+                                        continue
+                                    bit = cm_list[subnum] if subnum < len(cm_list) else True
+                                    obj.hide_set(not bit)
+                                    obj.hide_render = not bit
                         except:
                             print("Failed on ",meshname)
                             print(traceback.print_exc())
