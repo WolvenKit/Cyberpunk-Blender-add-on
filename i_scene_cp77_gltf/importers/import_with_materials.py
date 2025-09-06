@@ -355,7 +355,8 @@ def reload_mats(self, context):
 
     index = 0
     for rawmat in mats:
-        if rawmat["Name"] == old_mat_name:
+        old_mat_name_split = old_mat_name.split('.')[0]
+        if rawmat["Name"] == old_mat_name_split:
             newmat = Builder.create(mats,index)
             break
         index = index + 1
