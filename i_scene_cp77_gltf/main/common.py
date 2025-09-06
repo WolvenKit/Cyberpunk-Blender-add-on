@@ -11,6 +11,7 @@ import inspect
 from mathutils import Vector
 import json
 scale_factor=1.0
+from typing import Literal, get_args
 
 def load_zip(path):
     with zipfile.ZipFile(path, "r") as z:
@@ -69,10 +70,14 @@ def get_pos(inst):
         pos[0] = inst['translation']['X'] /scale_factor
         pos[1] = inst['translation']['Y'] /scale_factor
         pos[2] = inst['translation']['Z'] /scale_factor
+    elif 'Translation' in inst.keys():
+        pos[0] = inst['Translation']['X'] /scale_factor
+        pos[1] = inst['Translation']['Y'] /scale_factor
+        pos[2] = inst['Translation']['Z'] /scale_factor
     return pos
 
 def get_rot(inst):
-    rot=[0,0,0,1]
+    rot=[1,0,0,0]
     if 'Orientation' in inst.keys():
         if 'Properties' in inst['Orientation'].keys():
             rot[0] = inst['Orientation']['Properties']['r']
@@ -276,6 +281,53 @@ def CreateShaderNodeTexImage(curMat,path = None, x = 0, y = 0, name = None, imag
 
     return ImgNode
 
+def CreateCullBackfaceGroup(curMat, x = 0, y = 0,name = 'Cull Backface'):
+    group = bpy.data.node_groups.get("Cull Backface")
+
+    if group is None:
+        group = bpy.data.node_groups.new("Cull Backface","ShaderNodeTree")
+
+        GroupInN = group.nodes.new("NodeGroupInput")
+        GroupInN.location = (-1000,0)
+
+        GroupOutN = group.nodes.new("NodeGroupOutput")
+        GroupOutN.location = (0,0)
+        vers=bpy.app.version
+        if vers[0]<4:
+            input_socket = group.inputs.new('NodeSocketFloat','Input')
+            output_socket = group.outputs.new('NodeSocketFloat','Output')
+        else:
+            input_socket = group.interface.new_socket(name="Input",socket_type='NodeSocketFloat', in_out='INPUT')
+            output_socket = group.interface.new_socket(name="Output",socket_type='NodeSocketFloat', in_out='OUTPUT')
+
+        input_socket.default_value = 1.0
+
+        GeometryNode = group.nodes.new("ShaderNodeNewGeometry")
+        GeometryNode.location = (-750,-300)
+
+        OneMinusNode = group.nodes.new("ShaderNodeMath")
+        OneMinusNode.location = (-500,-300)
+        OneMinusNode.operation = 'SUBTRACT'
+        OneMinusNode.inputs[0].default_value = 1.0
+
+        MultiplyNode = group.nodes.new("ShaderNodeMath")
+        MultiplyNode.operation = 'MULTIPLY'
+        MultiplyNode.location = (-250,0)
+
+        group.links.new(GroupInN.outputs[0],MultiplyNode.inputs[0])
+        group.links.new(GeometryNode.outputs[6],OneMinusNode.inputs[1])
+        group.links.new(OneMinusNode.outputs[0],MultiplyNode.inputs[1])
+        group.links.new(MultiplyNode.outputs[0],GroupOutN.inputs[0])
+
+    ShaderGroup = curMat.nodes.new("ShaderNodeGroup")
+    ShaderGroup.location = (x,y)
+    ShaderGroup.hide = True
+    ShaderGroup.node_tree = group
+    ShaderGroup.name = name
+
+    return ShaderGroup
+
+
 def CreateRebildNormalGroup(curMat, x = 0, y = 0,name = 'Rebuild Normal Z'):
     group = bpy.data.node_groups.get("Rebuild Normal Z")
 
@@ -327,7 +379,8 @@ def CreateRebildNormalGroup(curMat, x = 0, y = 0,name = 'Rebuild Normal Z'):
         Range.clamp = True
         Range.inputs[1].default_value = -1.0
 
-        Sep = group.nodes.new("ShaderNodeSeparateRGB")
+        Sep = group.nodes.new("ShaderNodeSeparateColor")
+        Sep.mode = 'RGB'
         Sep.location = (-600,0)
         Comb = group.nodes.new("ShaderNodeCombineRGB")
         Comb.location = (-300,0)
@@ -772,6 +825,7 @@ def createVecLerpGroup():
 def show_message(message):
     bpy.ops.cp77.message_box('INVOKE_DEFAULT', message=message)
 
+
 def createHash12Group():
     if 'hash12' in bpy.data.node_groups.keys():
         return bpy.data.node_groups['hash12']
@@ -847,3 +901,35 @@ def update_presets_items():
     presets = get_color_presets()
     items = [(name, name, "") for name in presets.keys()]
     return items
+
+
+def get_selected_collection():
+    selected_objects = [ obj for obj in bpy.context.selected_objects if obj != bpy.context.active_object ]
+    if len(selected_objects) == 0:
+        selected_objects.append(bpy.context.active_object)
+
+    collections = [coll for coll in bpy.data.collections if any(obj.name in [o.name for o in coll.objects] for obj in selected_objects)]
+    if (collections is not None and len(collections) == 1):
+        return collections[0]
+
+    return None
+
+def get_active_collection():
+
+    collections = [coll for coll in bpy.data.collections if bpy.context.active_object.name in [o.name for o in coll.objects]]
+    if (collections is not None and len(collections) == 1):
+        return collections[0]
+
+    return None
+
+_TARGET_TYPES = Literal["MESH", "ARMATURE", "ALL"]
+def get_collection_children(target_collection_name, target_type:_TARGET_TYPES = "MESH"):
+    options = get_args(_TARGET_TYPES)
+    assert target_type in options, f"'{target_type}' is not in {options}"
+
+    collection = bpy.data.collections.get(target_collection_name)
+    if collection is None:
+        return None
+
+    selected_children = [obj for obj in collection.objects if target_type == "ALL" or obj.type == target_type]
+    return selected_children

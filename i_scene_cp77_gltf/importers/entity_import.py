@@ -291,18 +291,18 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                             if rig_j is not None:
                                 rig_j=rig_j['Data']['RootChunk']
                                 print('rig json loaded')
-                            # get the armatures already in the model
-                            oldarms= [x for x in bpy.data.objects if 'Armature' in x.name]
-                            animpath=os.path.join(path,c['animations']['gameplay'][0]['animSet']['DepotPath']['$value']+'.glb')
-                            bpy.ops.io_scene_gltf.cp77(with_materials, filepath=animpath, scripting=True)
-                            # find the armature we just loaded
-                            arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
-                            rig=arms[0]
-                            bones=rig.pose.bones
-                            rig["animset"] = animpath
-                            rig["rig"] = rig_path
-                            rig["ent"] = ent_name + ".ent.json"
-                            print('anim rig loaded')
+                            if c['animations']['gameplay']!=None and len(c['animations']['gameplay'])>0 :                                # get the armatures already in the model
+                                oldarms= [x for x in bpy.data.objects if 'Armature' in x.name]
+                                animpath=os.path.join(path,c['animations']['gameplay'][0]['animSet']['DepotPath']['$value']+'.glb')
+                                bpy.ops.io_scene_gltf.cp77(with_materials, filepath=animpath, scripting=True)
+                                # find the armature we just loaded
+                                arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
+                                rig=arms[0]
+                                bones=rig.pose.bones
+                                rig["animset"] = animpath
+                                rig["rig"] = rig_path
+                                rig["ent"] = ent_name + ".ent.json"
+                                print('anim rig loaded')
                         else:
                             print('another rig already loaded')
             if not vehicle_slots:
@@ -690,9 +690,25 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 cm_list = [bool(int(bit)) for bit in bin_str]
                                 cm_list.reverse()
                                 for obj in objs:
-                                    subnum=int(obj.name[8:10])
-                                    obj.hide_set(not cm_list[subnum])
-                                    obj.hide_render=not cm_list[subnum]
+                                    subnum = None
+                                    # Try to parse index from object name like 'submesh_00'
+                                    m = re.search(r"submesh_(\d+)", obj.name, re.IGNORECASE)
+                                    if m:
+                                        subnum = int(m.group(1))
+                                    else:
+                                        # Fallback: try from material names
+                                        mats = getattr(obj.data, 'materials', []) if hasattr(obj, 'data') else []
+                                        for mat in mats:
+                                            if mat and getattr(mat, 'name', None):
+                                                m2 = re.search(r"submesh_(\d+)", mat.name, re.IGNORECASE)
+                                                if m2:
+                                                    subnum = int(m2.group(1))
+                                                    break
+                                    if subnum is None:
+                                        continue
+                                    bit = cm_list[subnum] if subnum < len(cm_list) else True
+                                    obj.hide_set(not bit)
+                                    obj.hide_render = not bit
                         except:
                             print("Failed on ",meshname)
                             print(traceback.print_exc())

@@ -32,11 +32,13 @@ class JSONTool:
 
     @staticmethod
     def json_ver_validate(json_data):
+        if json_data==None:
+            return False
         if 'Header' not in json_data:
             return False
         header = json_data['Header']
         if "WolvenKitVersion" in header and "8.13" not in header["WolvenKitVersion"]:
-            if "8.15" not in header["WolvenKitVersion"] and "8.16" not in header["WolvenKitVersion"]:
+            if "8.15" not in header["WolvenKitVersion"] and "8.16" not in header["WolvenKitVersion"] and "8.17" not in header["WolvenKitVersion"]:
                 return False
         if "MaterialJsonVersion" in header:
             if "1." not in header["MaterialJsonVersion"]:
@@ -81,8 +83,8 @@ class JSONTool:
         '.rig.json',
         '.cfoliage.json',
         '.hp.json',
-        '.streamingblock.json',
-        '.phys.json' '.mlsetup.json',
+        '.phys.json',
+        '.mlsetup.json',
         '.mltemplate.json',
         '.mt.json',
         '.mi.json',
@@ -124,7 +126,7 @@ class JSONTool:
             JSONTool._json_cache[base_name] = data
 
         match file_extension:
-            case '.anims.json' | '.app.json' | '.streamingblock.json' |  '.mesh.json' | '.gradient.json' | '.rig.json' | '.cfoliage.json' | '.hp.json' | '.streamingblock.json':
+            case '.anims.json' | '.app.json' | '.streamingblock.json' |  '.mesh.json' | '.gradient.json' | '.rig.json' | '.cfoliage.json' | '.hp.json':
                 if has_error:
                     JSONTool.create_error(cp77_addon_prefs.non_verbose, base_name, file_extension, invalid_json_error, errorMessages)
                 return data

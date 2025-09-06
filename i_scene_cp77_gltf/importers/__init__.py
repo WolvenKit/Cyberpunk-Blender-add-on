@@ -13,7 +13,7 @@ from ..main.common import get_classes
 from ..cyber_props import *
 from ..cyber_prefs import *
 from ..icons.cp77_icons import *
-from .read_rig import create_rig_from_json
+from .read_rig import create_armature_from_data
 
 class CP77ImportRig(Operator):
     bl_idname = "import_scene.rig"
@@ -26,9 +26,21 @@ class CP77ImportRig(Operator):
             options={'HIDDEN'},
             )
     filepath: bpy.props.StringProperty(subtype="FILE_PATH")
+    
+    create_debug: BoolProperty(name="Create Debug Empties",default=False,description="Create Empties at the Joints - Useful for Validating and Debugging Transforms")
+    
+    bind_pose: EnumProperty(
+        name="Rig Bind Pose",
+        items=(("A-Pose", "A-Pose", "Will Fallback to T Pose if Unavailable"),
+                ("T-Pose", "T-Pose", "")),
+        description="Bind Pose to Load",
+        default="T-Pose")
+        
 
     def execute(self, context):
-        create_rig_from_json(self.filepath)
+
+        create_armature_from_data(self.filepath, self.bind_pose, self.create_debug)
+
         return {'FINISHED'}
 
     def invoke(self, context, event):
@@ -37,8 +49,13 @@ class CP77ImportRig(Operator):
 
     def draw(self, context):
         layout = self.layout
-        row = layout.row(align=True)
-        row.operator("import_scene.rig", text="Import Rig from JSON", icon='IMPORT')
+        box = layout.box()
+        box.label(text="Rig Import Options")
+        row = box.row()
+        row.label(text="Bind Pose:")
+        row.prop(self, "bind_pose",text="")
+        row = box.row()
+        row.prop(self, "create_debug")
 
 
 class CP7PhysImport(Operator):
@@ -220,6 +237,8 @@ class CP77Import(Operator, ImportHelper):
                                 default="Default"
                                 )
     scripting: BoolProperty(name="Scripting",default=False ,description="Tell it its being called by a script so it can ignore the gui file lists",options={'HIDDEN'})
+    import_tracks: BoolProperty(name="Import Tracks",default=True,description="Import Animation Float Tracks to F-Curves")
+
 
     # switch back to operator draw function to align with other UI features
     def draw(self, context):
@@ -257,7 +276,9 @@ class CP77Import(Operator, ImportHelper):
             col.prop(self, 'import_garmentsupport')
             if cp77_addon_prefs.experimental_features:
                 col.prop(props,"remap_depot")
-
+        box = layout.box()
+        col = box.column()
+        col.prop(self, 'import_tracks')
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
@@ -266,7 +287,7 @@ class CP77Import(Operator, ImportHelper):
         appearances=self.appearances.split(",")
         # turns out that multimesh import of an entire car uses a gazillion duplicates as well...
         JSONTool.start_caching()
-        CP77GLBimport( props.with_materials, props.remap_depot, self.exclude_unused_mats, self.image_format, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, appearances, self.scripting)
+        CP77GLBimport( props.with_materials, props.remap_depot, self.exclude_unused_mats, self.image_format, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, appearances, self.scripting, self.import_tracks)
         JSONTool.stop_caching()
 
         return {'FINISHED'}
@@ -281,7 +302,7 @@ WARNING! All data within the active material will be deleted"""
 
     def execute(self, context):
         try:
-            reload_mats()
+            reload_mats(self, context)
 
         except Exception as e:
             print("Exception when trying to import mats: " + str(e))

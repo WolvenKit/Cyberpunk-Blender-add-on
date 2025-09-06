@@ -144,13 +144,14 @@ def safe_mode_switch(target_mode: str):
     except Exception as e:
         print(f"[safe_mode_switch] Failed to switch to mode {target_mode}: {e}")
 
+
     if dummy:
         bpy.data.objects.remove(dummy, do_unlink=True)
 
 def restore_previous_context():
     """
     Restores the previous selection, active object, and mode.
-    
+
     """
     global _previous_selection, _previous_active, _previous_mode
 
@@ -184,14 +185,14 @@ def get_safe_mode():
 ## I get that these are lazy but they're convenient type checks
 def is_mesh(o: bpy.types.Object) -> bool:
     return isinstance(o.data, bpy.types.Mesh)
- 
+
 def world_mtx(armature, bone):
     return armature.convert_space(bone, bone.matrix, from_space='POSE', to_space='WORLD')
 
 def pose_mtx(armature, bone, mat):
     return armature.convert_space(bone, mat, from_space='WORLD', to_space='POSE')
 
-def is_armature(o: bpy.types.Object) -> bool: # I just found out I could leave annotations like that -> future presto will appreciate knowing wtf I though I was going to return 
+def is_armature(o: bpy.types.Object) -> bool: # I just found out I could leave annotations like that -> future presto will appreciate knowing wtf I though I was going to return
     return isinstance(o.data, bpy.types.Armature)
 
 def has_anims(o: bpy.types.Object) -> bool:
@@ -230,18 +231,18 @@ def calculate_mesh_volume(obj):
     volume = obj.rigid_body.mass
     bpy.ops.rigidbody.objects_remove()
     return volume
-    
+
 ## Returns True if the given object has shape keys, works for meshes and curves
 def hasShapeKeys(obj):
     if obj.id_data.type in ['MESH', 'CURVE']:
         return obj.data.shape_keys != None
-        
+
 def getShapeKeyNames(obj):
     if hasShapeKeys(obj):
         key_names = []
         for key_block in obj.data.shape_keys.key_blocks:
             key_names.append(key_block.name)
-        return key_names       
+        return key_names
     return ""
 
 # Return the name of the shape key data block if the object has shape keys.
@@ -265,43 +266,43 @@ def setActiveShapeKey(obj, name):
 def getShapeKeyProps(obj):
 
     props = {}
-    
+
     if hasShapeKeys(obj):
         for prop in obj.data.shape_keys.key_blocks:
             props[prop.name] = prop.value
-            
+
     return props
 
 # returns a list of the given objects custom properties.
 def getCustomProps(obj):
 
     props = []
-    
+
     for prop in obj.keys():
         if prop not in '_RNA_UI' and isinstance(obj[prop], (int, float, list, idprop.types.IDPropertyArray)):
             props.append(prop)
-            
+
     return props
 
 # returns a list of modifiers for the given object
 def getModNames(obj):
     mods = []
     for mod in obj.modifiers:
-        mods.append(mod.name)        
+        mods.append(mod.name)
     return mods
 
 def getModByName(obj, name):
     for mod in obj.modifiers:
         if mod.name == name:
             return mod
-    return None    
+    return None
 
 # returns a list with the modifier properties of the given modifier.
 def getModProps(modifier):
-    props = []    
+    props = []
     for prop, value in modifier.bl_rna.properties.items():
         if isinstance(value, bpy.types.FloatProperty):
-            props.append(prop)            
+            props.append(prop)
     return props
 
 # checks the active object for a material by name and returns the material if found
@@ -313,7 +314,7 @@ def getMaterial(name):
             return
         mat = obj.material_slots[index].material
         if mat and mat.node_tree and mat.node_tree.name == name:
-            return mat   
+            return mat
 
 def UV_by_bounds(selected_objects):
     current_mode = bpy.context.object.mode
@@ -333,9 +334,9 @@ def UV_by_bounds(selected_objects):
             me = obj.data
             bpy.ops.object.mode_set(mode='EDIT', toggle=False)
             bm = bmesh.from_edit_mesh(me)
-            
+
             uv_layer = bm.loops.layers.uv.verify()
-            
+
             # adjust uv coordinates
             for face in bm.faces:
                 for loop in face.loops:
@@ -345,5 +346,4 @@ def UV_by_bounds(selected_objects):
                     loop_uv.uv[1]=(loop.vert.co.y-min_vertex[1])/(max_vertex[1]-min_vertex[1])
 
             bmesh.update_edit_mesh(me)
-    bpy.ops.object.mode_set(mode=current_mode)   
- 
+    bpy.ops.object.mode_set(mode=current_mode)

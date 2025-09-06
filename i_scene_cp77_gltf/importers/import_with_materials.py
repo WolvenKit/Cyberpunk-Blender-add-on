@@ -15,31 +15,64 @@ from .attribute_import import manage_garment_support
 from ..cyber_props import add_anim_props
 from ..jsontool import JSONTool
 from ..main.common import show_message
+from ..animtools.tracks import import_anim_tracks, fix_anim_frame_alignment
 import traceback
 
-def get_anim_info(animations):
-    # Get animations
-    #animations = gltf_importer.data.animations
-    cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
-    for animation in animations:
-        if not cp77_addon_prefs.non_verbose:
-            print(f"Processing animation: {animation.name}")
+def get_anim_info(animations, oldanims, import_tracks):
+	"""Integrate track import/alignment when properties are added to actions.
+	Keeps original logic/printing; only adds track import + alignment.
+	"""
+	cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
 
-        # Find an action whose name contains the animation name
-        action = next((act for act in bpy.data.actions if act.name.startswith(animation.name + "_Armature")), None)
+	if bpy.app.version >= (4, 4, 0):
+		old_names = {getattr(x, 'name', x) for x in (oldanims or [])}
+		# Only actions created during this import
+		new_actions = [a for a in bpy.data.actions if a.name not in old_names]
+		for anim in (animations or []):
+			base = anim.name
+			found = False
+			for act in new_actions:
+				n = act.name
+				if n == base or (n.startswith(base + ".") and n[len(base) + 1 :].isdigit()):
+					add_anim_props(anim, act)
+					if import_tracks:
+						try:
+							import_anim_tracks(act)
+							fix_anim_frame_alignment(act)
+						except Exception as e:
+							if not cp77_addon_prefs.non_verbose:
+								print(f"Track integration failed for action {n}: {e}")
+						found = True
+						if not cp77_addon_prefs.non_verbose:
+							print(f"Properties added to action: {n} succesfully")
+			if not found and not cp77_addon_prefs.non_verbose:
+				print(f"No action found for {base}")
+		return{'FINISHED'}
+	else:
+		# left in for pre blender 4.4 users
+		for animation in animations:
+			if not cp77_addon_prefs.non_verbose:
+				print(f"Processing animation: {animation.name}")
 
-        if action:
-            add_anim_props(animation, action)
-            if not cp77_addon_prefs.non_verbose:
-                print("Properties added to", action.name)
-        else:
-            if not cp77_addon_prefs.non_verbose:
-                print("No action found for", animation.name)
+			# Find an action whose name contains the animation name
+			action = next((act for act in bpy.data.actions if act.name.startswith(animation.name + "_Armature")), None)
 
-    print('')
+			if action:
+				add_anim_props(animation, action)
+				try:
+					import_anim_tracks(action)
+					fix_anim_frame_alignment(action)
+				except Exception as e:
+					if not cp77_addon_prefs.non_verbose:
+						print(f"Track integration failed for action {action.name}: {e}")
+				if not cp77_addon_prefs.non_verbose:
+					print("Properties added to", action.name)
+			else:
+				if not cp77_addon_prefs.non_verbose:
+					print("No action found for", animation.name)
+
 def objs_in_col(top_coll, objtype):
     return sum([len([o for o in col.objects if o.type==objtype]) for col in top_coll.children_recursive])+len([o for o in top_coll.objects if o.type==objtype])
-
 
 # will collapse glTF_not_exported collection in the outliner
 def disable_collection_by_name(collection_name):
@@ -54,10 +87,10 @@ imported = None
 appearances = None
 collection = None
 
-def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=True, image_format='png', filepath='', hide_armatures=True, import_garmentsupport=False, files=[], directory='', appearances=[], scripting=False):
+def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=True, image_format='png', filepath='', hide_armatures=True, import_garmentsupport=False, files=[], directory='', appearances=[], scripting=False, import_tracks=False):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     context=bpy.context
-
+    oldanims = None
     ## switch to pose mode if it's not already
     if context.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
@@ -72,9 +105,12 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         loadfiles=(f,)
     glbname=os.path.basename(filepath)
     DepotPath=cp77_addon_prefs
-    
+
+    oldanims={}
     if not cp77_addon_prefs.non_verbose:
         if ".anims.glb" in filepath:
+            bpy.context.scene.render.fps = 30
+            oldanims = {act.name for act in bpy.data.actions}
             print('\n-------------------- Beginning Cyberpunk Animation Import --------------------')
             print(f"Importing Animations From: {glbname}")
             bpy.context.scene.render.fps = 30
@@ -144,7 +180,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
 
         multimesh=False
         meshcount=0
-        # check if we have a multimesh object, and if so, set the flag  
+        # check if we have a multimesh object, and if so, set the flag
         for obj in imported:
             if obj.type == 'MESH' and obj.name.startswith(str(meshcount)+"_"):
                 multimesh = True
@@ -171,7 +207,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         collection = bpy.data.collections.new(filename)
         bpy.context.scene.collection.children.link(collection)
         for o in imported:
-            import_meshes_and_anims(collection, gltf_importer, hide_armatures, o)
+            import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filename, oldanims, import_tracks)
 
         collection['orig_filepath']=filepath
         collection['numMeshChildren']=objs_in_col(collection, 'MESH')
@@ -227,11 +263,11 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         validmats={}
         # fix the app names as for some reason they have their index added on the end.
         if len(json_apps) > 0:
-            
+
             appkeys=[k for k in json_apps.keys()]
             for i,k in enumerate(appkeys):
                 json_apps[k[:-1*len(str(i))]]=json_apps.pop(k)
-            
+
             # save the json_apps to the collection so that we can use it later
             collection['json_apps']=json.dumps(json_apps)
 
@@ -270,16 +306,41 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         print(f"GLB Import Time: {(time.time() - start_time)} Seconds")
         print('-------------------- Finished importing Cyberpunk 2077 Model --------------------\n')
 
-def reload_mats():
+def reload_mats(self, context):
     active_obj = bpy.context.active_object
+    if not active_obj or active_obj is None:
+        self.report({'ERROR'}, 'No mesh selected')
+        return {'CANCELLED'}
+    if active_obj.type != 'MESH':
+        self.report({'ERROR'}, 'Selected object is not a mesh')
+        return {'CANCELLED'}
+    if not active_obj.material_slots:
+        self.report({'ERROR'}, 'Selected object has no materials')
+        return {'CANCELLED'}
+
     mat_idx = active_obj.active_material_index
     mat = active_obj.material_slots[mat_idx].material
     old_mat_name = mat.name
 
     DepotPath = mat.get('DepotPath')
     BasePath = mat.get('MeshPath')
+    ProjPath = mat.get('ProjPath')
+
+    # JATO: This is a workaround to get MeshPath from collection for old assets before we stored MeshPath within material.
+    if BasePath is None:
+        for collection in bpy.data.collections:
+             if active_obj.name in collection.objects:
+                  MeshPath = collection.get('mesh')
+                  MeshPathNoSuffix = MeshPath[0:MeshPath.rfind('.')]
+                  BasePath = os.path.join(ProjPath, MeshPathNoSuffix)
+                  break
+
     errorMessages = []
     matjsonpath = BasePath + ".Material.json"
+
+    if not os.path.exists(matjsonpath):
+        self.report({'ERROR'}, ('Material.json not found: ' + matjsonpath))
+        return {'CANCELLED'}
 
     # JATO: hard-coded to PNG (who doesnt use PNG?) but could be exposed if we add image_format to material properties
     image_format='png'
@@ -294,7 +355,8 @@ def reload_mats():
 
     index = 0
     for rawmat in mats:
-        if rawmat["Name"] == old_mat_name:
+        old_mat_name_split = old_mat_name.split('.')[0]
+        if rawmat["Name"] == old_mat_name_split:
             newmat = Builder.create(mats,index)
             break
         index = index + 1
@@ -304,7 +366,11 @@ def reload_mats():
 
     # JATO: Copy custom material properties from old mat to new mat. Maybe we could regenerate from file, but I'm having a hard time understanding the code for that within import_mats function
     for k in mat.keys():
-        newmat[k] = mat[k]
+        if k in ('BaseMaterial','DiffuseMap','GlobalNormal','MultilayerMask'):
+            newmat[k] = mat[k]
+
+    # JATO: may be unnecessary
+    active_obj.active_material_index = mat_idx
 
     # JATO: Removing the old material appears to cause a crash TODO: fix context?
     if mat:
@@ -388,9 +454,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
             if matname in bpy_mats.keys() and 'glass' not in matname and 'MaterialTemplate' not in matname and 'Window' not in matname \
                  and matname[:5] != 'Atlas' and 'decal_diffuse' not in matname and \
                 'BaseMaterial' in bpy_mats[matname].keys() and bpy_mats[matname]['BaseMaterial'] == m['BaseMaterial'] and \
-                    bpy_mats[matname]['GlobalNormal'] == m['GlobalNormal'] and bpy_mats[matname][
-                'MultilayerMask'] == m['MultilayerMask']:
-
+                    bpy_mats[matname]['GlobalNormal'] == m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask'] == m['MultilayerMask']:
                 bpy.data.meshes[name].materials.append(bpy_mats[matname])
             elif matname in bpy_mats.keys() and matname[:5] == 'Atlas' and bpy_mats[matname][
                 'BaseMaterial'] == m['BaseMaterial'] and bpy_mats[matname]['DiffuseMap'] == m['DiffuseMap']:
@@ -452,7 +516,8 @@ def blender_4_scale_armature_bones():
                 pb.custom_shape_scale_xyz[2] = .0175
                 pb.use_custom_shape_bone_size = True
 
-def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o):
+
+def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filename, oldanims, import_tracks):
     # TODO: check if this is a Cyberpunk import or something else entirely
 
     for parent in o.users_collection:
@@ -465,10 +530,10 @@ def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o):
 
     # if animations exist, don't hide the armature and get the extras properties
     if animations:
-        get_anim_info(animations)
-        bpy.context.scene.render.fps = 30
+        get_anim_info(animations, oldanims, import_tracks)
 
     # if no meshes exist, don't hide the armature
-    elif meshes and 'Armature' in o.name:
+    elif meshes and o.type == 'ARMATURE':
         o.hide_set(hide_armatures)
+        o.name = "Armature__" + filename
 
