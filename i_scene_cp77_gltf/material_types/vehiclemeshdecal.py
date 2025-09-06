@@ -15,17 +15,21 @@ class VehicleMeshDecal:
         sockets=bsdf_socket_names()
         pBSDF.inputs[sockets['Specular']].default_value = 0
         
-#Diffuse
+        #Diffuse
         mulNode = CurMat.nodes.new("ShaderNodeMath")
         mulNode.operation = 'MULTIPLY'
-        mulNode.location = (-500,450)
+        mulNode.location = (-850,350)
+
+        backfaceGroup = CreateCullBackfaceGroup(CurMat, x = -600, y = 350,name = 'Cull Backface')
+
         if "DiffuseTexture" in Data:
             dcolImg=imageFromRelPath(Data["DiffuseTexture"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
-            dImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,-500), label="DiffuseTexture", image=dcolImg)
+            dImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-1200,400), label="DiffuseTexture", image=dcolImg)
             
             if self.enableMask:
                 CurMat.links.new(dImgNode.outputs[1],mulNode.inputs[1])
-                CurMat.links.new(mulNode.outputs[0],pBSDF.inputs['Alpha'])
+                CurMat.links.new(mulNode.outputs[0],backfaceGroup.inputs[0])
+                CurMat.links.new(backfaceGroup.outputs[0],pBSDF.inputs['Alpha'])
             else:
                 alpha_ramp = create_node(CurMat.nodes,"ShaderNodeValToRGB", (-400,-350),label='MaskRamp')
                 alpha_ramp.color_ramp.elements[1].position=0.004
@@ -49,29 +53,29 @@ class VehicleMeshDecal:
         CurMat.links.new(dImgNode.outputs[0],mixRGB.inputs[2])
         CurMat.links.new(mixRGB.outputs[0],pBSDF.inputs['Base Color'])
 
-#Normal
+        #Normal
         if "NormalTexture" in Data:
-            nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["NormalTexture"],-200,-250,'NormalTexture',self.image_format)
+            nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["NormalTexture"],-800,-250,'NormalTexture',self.image_format)
             CurMat.links.new(nMap.outputs[0],pBSDF.inputs['Normal'])
 
-#Roughness
+        #Roughness
         if "RoughnessTexture" in Data:
             rImg=imageFromRelPath(Data["RoughnessTexture"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
-            rImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,-100), label="RoughnessTexture", image=rImg)
+            rImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-1200,-100), label="RoughnessTexture", image=rImg)
             CurMat.links.new(rImgNode.outputs[0],pBSDF.inputs['Roughness'])
 
-#Metalness
+        #Metalness
         if "MetalnessTexture" in Data:
             mImg=imageFromRelPath(Data["MetalnessTexture"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
-            mImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,200), label="MetalnessTexture", image=mImg)
+            mImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-1200,50), label="MetalnessTexture", image=mImg)
             CurMat.links.new(mImgNode.outputs[0],pBSDF.inputs['Metallic'])
 
-#Unhandled Values
+        #Unhandled Values
         if "NormalAlpha" in Data:
             norAlphaVal = CreateShaderNodeValue(CurMat, Data["NormalAlpha"], -1200,-450, "NormalAlpha")
 
         if "NormalsBlendingMode" in Data:
-            norBlendVal = CreateShaderNodeValue(CurMat, Data["NormalsBlendingMode"], -1200,-250, "NormalsBlendingMode")
+            norBlendVal = CreateShaderNodeValue(CurMat, Data["NormalsBlendingMode"], -1200,-150, "NormalsBlendingMode")
 
         if "RoughnessMetalnessAlpha" in Data:
             rmAlphaVal = CreateShaderNodeValue(CurMat, Data["RoughnessMetalnessAlpha"], -1200,-50, "RoughnessMetalnessAlpha")
@@ -92,6 +96,7 @@ class VehicleMeshDecal:
             gImg=imageFromRelPath(Data["GradientMap"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
             gImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-1200,-800), label="GradientMap", image=gImg)
             color_ramp_node=CreateGradMapRamp(CurMat, gImgNode)
+            color_ramp_node.location = (0,400)
             if Data["UseGradientMap"]==1 and dImgNode:
                 CurMat.links.new(dImgNode.outputs[0], color_ramp_node.inputs[0])
                 CurMat.links.new(color_ramp_node.outputs[0], pBSDF.inputs['Base Color'])
