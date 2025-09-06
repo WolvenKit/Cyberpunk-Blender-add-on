@@ -1,8 +1,8 @@
 import sys
 import bpy
 import bpy.utils.previews
-from bpy.types import (Operator, OperatorFileListElement, Panel)
-from bpy.props import (StringProperty, BoolProperty, CollectionProperty)
+from bpy.types import (Operator, OperatorFileListElement, PropertyGroup, Panel)
+from bpy.props import (StringProperty, BoolProperty, IntProperty, CollectionProperty)
 from ..main.bartmoss_functions import *
 from ..cyber_props import cp77riglist
 from ..icons.cp77_icons import get_icon
@@ -11,15 +11,24 @@ from ..importers.import_with_materials import CP77GLBimport
 from .animtools import *
 from .generate_rigs import create_rigify_rig
 from ..importers.read_rig import *
-
-
+from .facial import *
+from .tracksolvers import (
+    build_tracks_from_armature,
+    solve_tracks_face,  
+)
+import os
+from typing import Dict, List, Tuple, Optional
+from .facial import load_wkit_facialsetup, load_wkit_rig_skeleton
+from .tracksolvers import solve_tracks_face
+from .tracks import export_anim_tracks, import_anim_tracks
+from .animtracks import (_ensure_armature, _get_fps, _ensure_custom_prop, _fcurve_for_prop, _keyframe_scalar
+)
 def CP77AnimsList(self, context):
     for action in bpy.data.actions:
         if action.library:
             continue
         yield action
-
-
+_state = {"rig": None, "setup": None}
 ### Draw a panel to store anims functions
 class CP77_PT_AnimsPanel(Panel):
     bl_idname = "CP77_PT_animspanel"
@@ -141,7 +150,6 @@ class CP77_PT_AnimsPanel(Panel):
                 op.play = False
                 row.operator('cp77.delete_anims', icon='X', text="").name = action.name
 
-
 ### allow deleting animations from the animset panel, regardless of editor context
 class CP77AnimsDelete(Operator):
     bl_idname = 'cp77.delete_anims'
@@ -229,7 +237,6 @@ class LoadAPose(Operator):
 
         self.report({'INFO'}, "A-Pose loaded")
 
-
 class LoadTPose(Operator):
     bl_idname = "cp77.load_tpose"
     bl_label = "Load T-Pose"
@@ -288,7 +295,6 @@ class LoadTPose(Operator):
         self.report({'INFO'}, "A-Pose loaded")
         return
 
-
 # this class is where most of the function is so far - play/pause
 # Todo: fix renaming actions from here
 class CP77Animset(Operator):
@@ -341,7 +347,6 @@ class CP77Animset(Operator):
             self.new_name = ""
             return self.execute(context)
 
-
 class CP77BoneHider(Operator):
     bl_idname = "bone_hider.cp77"
     bl_parent_id = "CP77_PT_animspanel"
@@ -353,7 +358,6 @@ class CP77BoneHider(Operator):
         hide_extra_bones(self, context)
         return{'FINISHED'}
 
-
 class CP77BoneUnhider(Operator):
     bl_idname = "bone_unhider.cp77"
     bl_parent_id = "CP77_PT_animspanel"
@@ -364,7 +368,6 @@ class CP77BoneUnhider(Operator):
     def execute(self, context):
         unhide_extra_bones(self, context)
         return{'FINISHED'}
-
 
 # inserts a keyframe on the current frame
 class CP77Keyframe(Operator):
@@ -389,7 +392,6 @@ class CP77Keyframe(Operator):
         row = layout.row(align=True)
         row.prop(props, "frameall", text="")
 
-
 class CP77ResetArmature(Operator):
     bl_idname = "reset_armature.cp77"
     bl_parent_id = "CP77_PT_animspanel"
@@ -400,7 +402,6 @@ class CP77ResetArmature(Operator):
         reset_armature(self, context)
         return {"FINISHED"}
 
-
 class CP77DeleteUnusedBones(Operator):
     bl_idname = "delete_unused_bones.cp77"
     bl_parent_id = "CP77_PT_animspanel"
@@ -410,7 +411,6 @@ class CP77DeleteUnusedBones(Operator):
     def execute(self, context):
         delete_unused_bones(self, context)
         return {"FINISHED"}
-
 
 class CP77NewAction(Operator):
 
@@ -439,7 +439,6 @@ class CP77NewAction(Operator):
         obj.animation_data.action = new_action
         return {'FINISHED'}
 
-
 class CP77RigLoader(Operator):
     bl_idname = "cp77.rig_loader"
     bl_label = "Load Deform Rig from Resources"
@@ -463,7 +462,7 @@ class CP77RigLoader(Operator):
             # Find the corresponding .glb file and load it
             selected_rig = rig_files[rig_names.index(selected_rig_name)]
             self.filepath = selected_rig
-            CP77GLBimport(self, exclude_unused_mats=True, image_format='PNG',
+            CP77GLBimport(self, exclude_unused_mats=True, image_format='PNG', with_materials=False,
                           filepath=selected_rig, hide_armatures=False, import_garmentsupport=False, files=[], directory='', appearances="ALL", remap_depot=False, scripting=True)
             if props.fbx_rot:
                 rotate_quat_180(self,context)
@@ -482,7 +481,6 @@ class CP77RigLoader(Operator):
         col.prop(self, 'rigify_it', text="Generate Rigify Control Rig")
         col.prop(props, 'fbx_rot', text="Load Rig in FBX Orientation")
 
-
 class CP77AnimNamer(Operator):
     bl_idname = "cp77.anim_namer"
     bl_label = "Fix Action Names"
@@ -494,6 +492,284 @@ class CP77AnimNamer(Operator):
         return {'FINISHED'}
 
 
+_CACHE = {"rig": None, "setup": None, "rig_path": "", "setup_path": ""}
+
+
+def _set_cache(rig, setup, rig_path: str, setup_path: str):
+    _CACHE["rig"] = rig
+    _CACHE["setup"] = setup
+    _CACHE["rig_path"] = rig_path
+    _CACHE["setup_path"] = setup_path
+
+
+class CP77_FacialProps(PropertyGroup):
+    rig_json: StringProperty(name="Rig JSON", subtype='FILE_PATH')  
+    facial_json: StringProperty(name="FacialSetup JSON", subtype='FILE_PATH')  
+    main_pose: IntProperty(name="Main Pose", default=1, min=1,max=133, step=1)  
+
+class CP77_OT_LoadFacial(Operator):
+    bl_idname = "cp77.load_facial"
+    bl_label = "Load Rig + FacialSetup"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        props = context.scene.cp77_facial
+        try:
+            rig = load_wkit_rig_skeleton(props.rig_json or "")
+            setup = load_wkit_facialsetup(props.facial_json or "", rig)
+        except Exception as e:
+            self.report({'ERROR'}, f"Load failed: {e}")
+            return {'CANCELLED'}
+        _set_cache(rig, setup, props.rig_json or "", props.facial_json or "")
+        try:
+            nb = int(getattr(rig, 'num_bones', 0)); mp = int(setup.face_main_bank.q.shape[0])
+        except Exception:
+            nb, mp = 0, 0
+        self.report({'INFO'}, f"Loaded bones={nb}, mainPoses={mp}")
+        return {'FINISHED'}
+
+
+class CP77_OT_ApplyMainPose(bpy.types.Operator):
+    bl_idname = "cp77.apply_main_pose"
+    bl_label = "Apply (Full Solver)"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def _ensure_loaded(self, context) -> bool:
+        if _CACHE["rig"] is not None and _CACHE["setup"] is not None:
+            return True
+        props = context.scene.cp77_facial
+        if props.rig_json and props.facial_json:
+            try:
+                rig = load_wkit_rig_skeleton(props.rig_json)
+                setup = load_wkit_facialsetup(props.facial_json, rig)
+                _set_cache(rig, setup, props.rig_json, props.facial_json)
+                return True
+            except Exception:
+                return False
+        return False
+
+    # --- math helpers (local; names stable) ---
+    @staticmethod
+    def _quat_normalize(q: np.ndarray) -> np.ndarray:
+        n = np.linalg.norm(q, axis=-1, keepdims=True); n[n == 0] = 1.0; return q / n
+
+    @staticmethod
+    def _quat_mul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+        ax, ay, az, aw = np.moveaxis(a, -1, 0); bx, by, bz, bw = np.moveaxis(b, -1, 0)
+        x = aw * bx + ax * bw + ay * bz - az * by
+        y = aw * by - ax * bz + ay * bw + az * bx
+        z = aw * bz + ax * by - ay * bx + az * bw
+        w = aw * bw - ax * bx - ay * by - az * bz
+        return np.stack([x, y, z, w], axis=-1)
+
+    @staticmethod
+    def _slerp(q0: np.ndarray, q1: np.ndarray, t: np.ndarray) -> np.ndarray:
+        dot = np.sum(q0 * q1, axis=-1, keepdims=True)
+        sign = np.where(dot < 0, -1.0, 1.0)
+        q1 = q1 * sign
+        dot = np.clip(np.abs(dot), 0.0, 1.0)
+        eps = 1e-6
+        use_lerp = dot > 1 - eps
+        theta = np.arccos(dot)
+        sin_theta = np.sin(theta)
+        w0 = np.where(use_lerp, 1 - t, np.sin((1 - t) * theta) / np.where(sin_theta == 0, 1, sin_theta))
+        w1 = np.where(use_lerp, t, np.sin(t * theta) / np.where(sin_theta == 0, 1, sin_theta))
+        out = CP77_OT_ApplyMainPose._quat_normalize(q0 * w0 + q1 * w1)
+        return out
+
+    @staticmethod
+    def _additive_local_pose_only(base_q: np.ndarray, base_t: np.ndarray, base_s: np.ndarray,
+                                  add_q: np.ndarray, add_t: np.ndarray, add_s: np.ndarray,
+                                  weight: float, mask_indices: Optional[list] = None):
+        """Apply additive LS deltas with optional sparse bone mask."""
+        ident = np.zeros_like(add_q); ident[..., 3] = 1.0
+        w = float(np.clip(weight, 0.0, 1.0))
+        if w <= 1e-6:
+            return base_q, base_t, base_s
+        if mask_indices is None or len(mask_indices) == 0:
+            tw = np.full((base_q.shape[0], 1), w, dtype=base_q.dtype)
+            dq = CP77_OT_ApplyMainPose._slerp(ident, add_q, tw)
+            out_q = CP77_OT_ApplyMainPose._quat_mul(base_q, dq)
+            out_t = base_t + add_t * tw
+            out_s = base_s * (1.0 + (add_s - 1.0) * tw)
+            return CP77_OT_ApplyMainPose._quat_normalize(out_q), out_t, out_s
+        # sparse path
+        out_q = base_q.copy(); out_t = base_t.copy(); out_s = base_s.copy()
+        for i in mask_indices:
+            if i < 0 or i >= base_q.shape[0]:
+                continue
+            dq = CP77_OT_ApplyMainPose._slerp(ident[i:i+1], add_q[i:i+1], np.array([[w]], dtype=base_q.dtype))
+            out_q[i] = CP77_OT_ApplyMainPose._quat_mul(base_q[i:i+1], dq)[0]
+            out_t[i] = base_t[i] + add_t[i] * w
+            out_s[i] = base_s[i] * (1.0 + (add_s[i] - 1.0) * w)
+        return CP77_OT_ApplyMainPose._quat_normalize(out_q), out_t, out_s
+
+    @staticmethod
+    def _pose_mask_from_bank_pose(bank, idx: int) -> Optional[list]:
+        q = bank.q[idx]; t = bank.t[idx]; s = bank.s[idx]
+        qi = np.zeros_like(q); qi[..., 3] = 1.0
+        changed = (np.abs(q - qi).max(axis=-1) > 1e-6) | (np.abs(t).max(axis=-1) > 1e-9) | (np.abs(s - 1.0).max(axis=-1) > 1.0e-6)
+        ids = np.where(changed)[0]
+        return ids.tolist() if ids.size else None
+
+    @staticmethod
+    def _local_deltas(ref_q: np.ndarray, ref_t: np.ndarray, ref_s: np.ndarray,
+                      q: np.ndarray, t: np.ndarray, s: np.ndarray):
+        rx, ry, rz, rw = np.moveaxis(ref_q, -1, 0)
+        inv_ref = np.stack([-rx, -ry, -rz, rw], axis=-1)
+        ax, ay, az, aw = np.moveaxis(inv_ref, -1, 0)
+        bx, by, bz, bw = np.moveaxis(q, -1, 0)
+        dq = np.stack([
+            aw * bx + ax * bw + ay * bz - az * by,
+            aw * by - ax * bz + ay * bw + az * bx,
+            aw * bz + ax * by - ay * bx + az * bw,
+            aw * bw - ax * bx - ay * by - az * bz,
+        ], axis=-1)
+        dq = CP77_OT_ApplyMainPose._quat_normalize(dq)
+        dt = t - ref_t
+        ds = s / np.where(ref_s == 0.0, 1.0, ref_s)
+        return dq, dt, ds
+
+    @staticmethod
+    def _swap_yz_trn_rot(dt: np.ndarray, dq: np.ndarray):
+        """Map JSON space → Blender space: (x, y, z) → (x, -z, y) and rotate quats by +90° around X.
+        Applies to translations and rotations only (scales unchanged).
+        """
+        # translation: [x, -z, y]
+        dt_sw = np.stack([dt[:, 0], -dt[:, 2], dt[:, 1]], axis=-1)
+        # rotation: q' = s * q * s^{-1}, s = rotX(+90°)
+        s = np.array([np.sqrt(0.5, dtype=dq.dtype), 0.0, 0.0, np.sqrt(0.5, dtype=dq.dtype)], dtype=dq.dtype)
+        s_inv = s.copy(); s_inv[:3] *= -1.0
+        s_b = np.broadcast_to(s, dq.shape)
+        s_inv_b = np.broadcast_to(s_inv, dq.shape)
+        q_tmp = CP77_OT_ApplyMainPose._quat_mul(s_b, dq)
+        dq_sw = CP77_OT_ApplyMainPose._quat_mul(q_tmp, s_inv_b)
+        return dt_sw, dq_sw
+
+    def execute(self, context):
+        if not self._ensure_loaded(context):
+            self.report({'ERROR'}, "Load rig + facialsetup first.")
+            return {'CANCELLED'}
+        rig = _CACHE["rig"]; setup = _CACHE["setup"]
+
+        obj = context.active_object
+        if obj is None or obj.type != 'ARMATURE':
+            self.report({'ERROR'}, 'Select an Armature object.')
+            return {'CANCELLED'}
+
+        # Build tracks from armature custom properties (names from rig.track_names)
+        tracks = build_tracks_from_armature(obj, rig)
+
+        # Optional convenience: force controller of selected main pose to >= 1.0
+        p = int(max(0, context.scene.cp77_facial.main_pose))
+        try:
+            ctrl_trk = int(setup.face_meta.mainposes_track[p])
+            if 0 <= ctrl_trk < tracks.shape[0]:
+                tracks[ctrl_trk] = max(1.0, float(tracks[ctrl_trk]))
+        except Exception:
+            pass
+
+        try:
+            res = solve_tracks_face(setup, rig, tracks)
+        except Exception as e:
+            self.report({'ERROR'}, f'Solver error: {e}')
+            return {'CANCELLED'}
+
+        inbtw = np.asarray(res.get('inbetween_weights', np.zeros((0,), dtype=np.float32)))
+        corr  = np.asarray(res.get('corrective_weights', np.zeros((0,), dtype=np.float32)))
+
+        # Start from reference LS; apply in-between & corrective banks additively
+        q_ls = rig.ls_q.copy(); t_ls = rig.ls_t.copy(); s_ls = rig.ls_s.copy()
+
+        # Apply main in-betweens
+        Pm_bank = getattr(setup.face_main_bank, 'q', np.zeros((0,))).shape[0]
+        Pm_apply = int(min(Pm_bank, inbtw.shape[0]))
+        eps = 1e-6
+        for pi in range(Pm_apply):
+            w = float(inbtw[pi])
+            if w <= eps:
+                continue
+            mask_ids = self._pose_mask_from_bank_pose(setup.face_main_bank, pi)
+            q_ls, t_ls, s_ls = self._additive_local_pose_only(q_ls, t_ls, s_ls,
+                                                              setup.face_main_bank.q[pi],
+                                                              setup.face_main_bank.t[pi],
+                                                              setup.face_main_bank.s[pi],
+                                                              w, mask_ids)
+
+        # Apply correctives
+        Pc_bank = getattr(setup.face_corrective_bank, 'q', np.zeros((0,))).shape[0]
+        Pc_apply = int(min(Pc_bank, corr.shape[0]))
+        for ci in range(Pc_apply):
+            w = float(corr[ci])
+            if w <= eps:
+                continue
+            mask_ids = self._pose_mask_from_bank_pose(setup.face_corrective_bank, ci)
+            q_ls, t_ls, s_ls = self._additive_local_pose_only(q_ls, t_ls, s_ls,
+                                                              setup.face_corrective_bank.q[ci],
+                                                              setup.face_corrective_bank.t[ci],
+                                                              setup.face_corrective_bank.s[ci],
+                                                              w, mask_ids)
+
+        # Convert LS to deltas against reference
+        dq, dt, ds = self._local_deltas(rig.ls_q, rig.ls_t, rig.ls_s, q_ls, t_ls, s_ls)
+        # Map JSON space → Blender space (translation & rotation)
+        dt2, dq2 = self._swap_yz_trn_rot(dt, dq)
+
+        import mathutils
+        if context.object.mode != 'POSE':
+            bpy.ops.object.mode_set(mode='POSE')
+        bones = obj.pose.bones
+        for i, name in enumerate(rig.bone_names):
+            pb = bones.get(name)
+            if pb is None:
+                continue
+            pb.location = mathutils.Vector((float(dt2[i, 0]), float(dt2[i, 1]), float(dt2[i, 2])))
+            pb.rotation_mode = 'QUATERNION'
+            pb.rotation_quaternion = mathutils.Quaternion((float(dq2[i, 3]), float(dq2[i, 0]), float(dq2[i, 1]), float(dq2[i, 2])))
+            pb.scale = mathutils.Vector((float(ds[i, 0]), float(ds[i, 1]), float(ds[i, 2])))
+        obj.update_tag(refresh={'DATA'}); context.view_layer.update()
+
+        self.report({'INFO'}, 'Applied facial pose.')
+        return {'FINISHED'}
+
+class CP77_OT_ResetNeutral(Operator):
+    bl_idname = "cp77.reset_neutral"
+    bl_label = "Reset to Rest"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        obj = context.active_object
+        if obj is None or obj.type != 'ARMATURE':
+            self.report({'ERROR'}, 'Select an Armature object.')
+            return {'CANCELLED'}
+        if context.object.mode != 'POSE':
+            bpy.ops.object.mode_set(mode='POSE')
+        for pb in obj.pose.bones:
+            pb.matrix_basis.identity()
+        obj.update_tag(refresh={'DATA'}); context.view_layer.update()
+        return {'FINISHED'}
+
+class CP77_PT_FacialPreview(Panel):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = 'CP77 Modding'
+    bl_parent_id = 'CP77_PT_animspanel'
+    bl_label = 'Facial Pose Tools'
+    def draw(self, context):
+        layout = self.layout
+        props = context.scene.cp77_facial
+        col = layout.column(align=True)
+        col.prop(props, "rig_json")
+        col.prop(props, "facial_json")
+        row = layout.row(align=True)
+        row.operator("cp77.load_facial", icon='FILE_FOLDER')
+        layout.separator()
+        col = layout.column(align=True)
+        col.prop(props, "main_pose")
+        row = layout.row(align=True)
+        row.operator("cp77.apply_main_pose", text="Apply Facial Pose", icon='PLAY')
+        row.operator("cp77.reset_neutral", text="", icon='ARMATURE_DATA')
+
 operators, other_classes = get_classes(sys.modules[__name__])
 
 
@@ -504,9 +780,13 @@ def register_animtools():
     for cls in other_classes:
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
+        bpy.types.Scene.cp77_facial = bpy.props.PointerProperty(type=CP77_FacialProps)  
+
 
 
 def unregister_animtools():
+    if hasattr(bpy.types.Scene, 'CP77_facial'):
+        del bpy.types.Scene.cp77_facial
     for cls in reversed(other_classes):
         if hasattr(bpy.types, cls.__name__):
             bpy.utils.unregister_class(cls)
