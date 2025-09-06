@@ -21,8 +21,7 @@ from typing import Dict, List, Tuple, Optional
 from .facial import load_wkit_facialsetup, load_wkit_rig_skeleton
 from .tracksolvers import solve_tracks_face
 from .tracks import export_anim_tracks, import_anim_tracks
-from .animtracks import (_ensure_armature, _get_fps, _ensure_custom_prop, _fcurve_for_prop, _keyframe_scalar
-)
+#from .animtracks import (_ensure_armature, _get_fps, _ensure_custom_prop, _fcurve_for_prop, _keyframe_scalar)
 def CP77AnimsList(self, context):
     for action in bpy.data.actions:
         if action.library:
