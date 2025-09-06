@@ -26,6 +26,10 @@ class Invisible:
 
         # Ensure fully transparent rendering in viewport
         Mat.blend_method = 'HASHED'
+
+        # Enable backface culling like the game does
+        Mat.backface_culling = True
+        
         try:
             Mat.shadow_method = 'HASHED'
         except Exception:
