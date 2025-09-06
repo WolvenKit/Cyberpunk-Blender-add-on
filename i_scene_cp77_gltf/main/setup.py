@@ -83,7 +83,6 @@ class MaterialBuilder:
             if context.preferences.addons[__name__.split('.')[0]].preferences.experimental_features:
                 unkown = unknownMaterial(self.BasePath,self.image_format,self.ProjPath)
                 unkown.create(rawMat["Data"],bpyMat)
-
             #set the viewport blend mode to hashed - no more black tattoos and cybergear
             bpyMat.blend_method='HASHED'
             bpyMat['no_shadows']=no_shadows
