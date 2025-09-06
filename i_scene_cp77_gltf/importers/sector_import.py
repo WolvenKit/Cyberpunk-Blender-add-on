@@ -459,7 +459,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                         if 'json_apps' in move_coll.keys():
                             json_apps =  json.loads(move_coll['json_apps'])
                         else:
-                            print(f'{bcolors.FAIL}No material json found for - ', m)
+                            print(f'{bcolors.FAIL}No material json found for - {m}{bcolors.ENDC}')
                         for idx,obj in enumerate(move_coll.objects):
                             obj_copy=obj.copy()
                             obj_copy.data = obj.data.copy()
