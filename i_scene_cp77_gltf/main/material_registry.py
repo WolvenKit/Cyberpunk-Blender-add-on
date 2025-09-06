@@ -32,7 +32,7 @@ from ..material_types.televisionad import TelevisionAd
 from ..material_types.window_parallax_interior_proxy import windowParallaxIntProx
 from ..material_types.hologram import Hologram
 from ..material_types.pbr_layer import pbr_layer
-
+from ..material_types.invisible import Invisible
 
 def _norm(path: str) -> str:
     return path.replace('/', '\\') if path else path
@@ -76,7 +76,8 @@ REGISTRY.register([
     "base\\materials\\vehicle_destr_blendshape.mt",
     "base\\materials\\multilayered_clear_coat.mt",
     "base\\materials\\multilayered_terrain.mt",
-    "base\\materials\\cloth_tarps.mt"
+    "base\\materials\\cloth_tarps.mt",
+    "base\\fx\\_shaders\\blackwall_blendable.mt",
 ], MaterialRule(factory=_factory_bip(Multilayered)))
 
 # Mesh decals
@@ -84,6 +85,9 @@ REGISTRY.register([
     "base\\materials\\mesh_decal.mt",
     "base\\materials\\mesh_decal_blendable.mt",
     "base\\materials\\mesh_decal_wet_character.mt",
+    "base\\materials\\mesh_decal_revealed.mt",
+    "base\\fx\\_shaders\\blackwall_blendable_mesh_decal.mt",
+    "base\\fx\\_shaders\\blackwall_blendable_mesh_decal_gradient.mt",
 ], MaterialRule(factory=_factory_bip_enablemask(MeshDecal), no_shadows=True))
 
 REGISTRY.register([
@@ -103,6 +107,8 @@ REGISTRY.register([
 REGISTRY.register([
     "base\\materials\\skin.mt",
     "base\\materials\\skin_blendable.mt",
+    "base\\materials\\skin_morph.mt",
+    "base\\fx\\_shaders\\blackwall_blendable_skin.mt",
 ], MaterialRule(factory=_factory_bip(Skin)))
 
 # Metal base
@@ -112,6 +118,7 @@ REGISTRY.register([
     "engine\\materials\\metal_base_proxy.mt",
     "base\\materials\\metal_base_parallax.mt",
     "base\\materials\\metal_base_gradientmap_recolor.mt",
+    "base\\fx\\_shaders\\blackwall_blendable_metal_base.mt",
 ], MaterialRule(factory=_factory_bip_enablemask(MetalBase)))
 
 REGISTRY.register([
@@ -128,6 +135,7 @@ REGISTRY.register([
 REGISTRY.register([
     "base\\materials\\hair.mt",
     "base\\materials\\hair_blendable.mt",
+    "base\\fx\\_shaders\\blackwall_blendable_hair.mt",
 ], MaterialRule(factory=_factory_bip(Hair)))
 
 # Mesh decal gradient map recolor
@@ -140,23 +148,27 @@ REGISTRY.register([
 REGISTRY.register([
     "base\\materials\\eye.mt",
     "base\\materials\\eye_blendable.mt",
+    "base\\fx\\_shaders\\blackwall_blendable_eye.mt",
 ], MaterialRule(factory=_factory_bip(Eye)))
 
 # Eye gradient
 REGISTRY.register([
     "base\\materials\\eye_gradient.mt",
     "base\\materials\\eye_gradient_blendable.mt",
+    "base\\fx\\_shaders\\blackwall_blendable_eye_gradient.mt",
 ], MaterialRule(factory=_factory_bip(EyeGradient)))
 
 # Eye shadow
 REGISTRY.register([
     "base\\materials\\eye_shadow.mt",
     "base\\materials\\eye_shadow_blendable.mt",
+    "base\\fx\\_shaders\\blackwall_blendable_eye_wet.mt",
 ], MaterialRule(factory=_factory_bip(EyeShadow)))
 
 # Mesh decal emissive
 REGISTRY.register([
     "base\\materials\\mesh_decal_emissive.mt",
+    "base\\materials\\mesh_decal_emissive_subsurface.mt",
 ], MaterialRule(factory=_factory_bip(MeshDecalEmissive), no_shadows=True))
 
 # Glass
@@ -165,6 +177,7 @@ REGISTRY.register([
     "base\\materials\\vehicle_glass.mt",
     "base\\materials\\glass_blendable.mt",
     "base\\materials\\vehicle_glass_blendable.mt",
+    "base\\fx\\_shaders\\blackwall_blendable_glass.mt",
 ], MaterialRule(factory=_factory_bip(Glass)))
 
 REGISTRY.register([
@@ -218,6 +231,11 @@ REGISTRY.register([
 REGISTRY.register([
     "base\\fx\\shaders\\hologram.mt",
 ], MaterialRule(factory=_factory_bip(Hologram)))
+
+# Invisible
+REGISTRY.register([
+    "base\\fx\\_shaders\\invisible.mt",
+], MaterialRule(factory=_factory_bip(Invisible), no_shadows=True))
 
 
 # Decal registry (baseMaterial path flow)
