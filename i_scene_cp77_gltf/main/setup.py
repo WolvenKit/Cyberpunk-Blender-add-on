@@ -78,7 +78,7 @@ class MaterialBuilder:
                 bpyMat.blend_method='HASHED'
                 bpyMat['no_shadows']=no_shadows
                 return bpyMat
-            print(f'{bcolors.WARNING}Unhandled mt - ', rawMat["MaterialTemplate"])
+            print(f'{bcolors.WARNING}Unhandled mt - {rawMat["MaterialTemplate"]}{bcolors.ENDC}')
             context=bpy.context
             if context.preferences.addons[__name__.split('.')[0]].preferences.experimental_features:
                 unkown = unknownMaterial(self.BasePath,self.image_format,self.ProjPath)
