@@ -94,26 +94,32 @@ class ParallaxScreen:
         vers=bpy.app.version
 
         if "BlinkingSpeed" in Data:
-            blinkingSpeed = CreateShaderNodeValue(CurMat,Data["BlinkingSpeed"],-2000, 450,"BlinkingSpeed") 
+            blinkingSpeed = CreateShaderNodeValue(CurMat,Data["BlinkingSpeed"],-2000, 450,"BlinkingSpeed")
 
         if "HSV_Mod" in Data:
-            HSV_Mod_w = CreateShaderNodeValue(CurMat,Data["HSV_Mod"]["W"],-2000, 150,"HSV_Mod.w") 
-            HSV_Mod_x = CreateShaderNodeValue(CurMat,Data["HSV_Mod"]["X"],-2000, -950,"HSV_Mod.x")  
-            HSV_Mod_y = CreateShaderNodeValue(CurMat,Data["HSV_Mod"]["Y"],-2000, -900,"HSV_Mod.y")  
+            HSV_Mod_w = CreateShaderNodeValue(CurMat,Data["HSV_Mod"]["W"],-2000, 150,"HSV_Mod.w")
+            HSV_Mod_x = CreateShaderNodeValue(CurMat,Data["HSV_Mod"]["X"],-2000, -950,"HSV_Mod.x")
+            HSV_Mod_y = CreateShaderNodeValue(CurMat,Data["HSV_Mod"]["Y"],-2000, -900,"HSV_Mod.y")
 
         if "LayersSeparation" in Data:
-            layersSeparation = CreateShaderNodeValue(CurMat,Data["LayersSeparation"],-2000, 100,"LayersSeparation") 
+            layersSeparation = CreateShaderNodeValue(CurMat,Data["LayersSeparation"],-2000, 100,"LayersSeparation")
 
         if "ScanlinesDensity" in Data:
-            scanlinesDensity = CreateShaderNodeValue(CurMat,Data["ScanlinesDensity"],-2000, 50,"ScanlinesDensity") 
+            if type(Data["ScanlinesDensity"]) is int:
+                scanlinesDensity = CreateShaderNodeValue(CurMat,Data["ScanlinesDensity"],-2000, 50,"ScanlinesDensity")
+            else:
+                scanlinesDensity = CreateShaderNodeValue(CurMat,Data["ScanlinesDensity"]["X"],-2200, -50,"ScanlinesDensity.x")
+                scanlinesDensity_y = CreateShaderNodeValue(CurMat,Data["ScanlinesDensity"]["Y"],-2200, -100,"ScanlinesDensity.y")
+                scanlinesDensity_z = CreateShaderNodeValue(CurMat,Data["ScanlinesDensity"]["Z"],-2200, -150,"ScanlinesDensity.z")
+                scanlinesDensity_w = CreateShaderNodeValue(CurMat,Data["ScanlinesDensity"]["W"],-2200, -200,"ScanlinesDensity.w")
 
         if "ScanlinesIntensity" in Data:
-            scanlinesIntensity = CreateShaderNodeValue(CurMat,Data["ScanlinesIntensity"],-2000, 0,"ScanlinesIntensity") 
+            scanlinesIntensity = CreateShaderNodeValue(CurMat,Data["ScanlinesIntensity"],-2000, 0,"ScanlinesIntensity")
 
         if "IntensityPerLayer" in Data:
-            intensityPerLayer_x = CreateShaderNodeValue(CurMat,Data["IntensityPerLayer"]["X"],-2000, -50,"IntensityPerLayer.x") 
-            intensityPerLayer_y = CreateShaderNodeValue(CurMat,Data["IntensityPerLayer"]["Y"],-2000, -100,"IntensityPerLayer.y") 
-            intensityPerLayer_z = CreateShaderNodeValue(CurMat,Data["IntensityPerLayer"]["Z"],-2000, -150,"IntensityPerLayer.z") 
+            intensityPerLayer_x = CreateShaderNodeValue(CurMat,Data["IntensityPerLayer"]["X"],-2000, -50,"IntensityPerLayer.x")
+            intensityPerLayer_y = CreateShaderNodeValue(CurMat,Data["IntensityPerLayer"]["Y"],-2000, -100,"IntensityPerLayer.y")
+            intensityPerLayer_z = CreateShaderNodeValue(CurMat,Data["IntensityPerLayer"]["Z"],-2000, -150,"IntensityPerLayer.z")
 
         if "ImageScale" in Data:
             imageScale = CreateShaderNodeValue(CurMat,Data["ImageScale"],-2000, -200,"ImageScale")
@@ -122,46 +128,55 @@ class ParallaxScreen:
             scrollSpeed1 = CreateShaderNodeValue(CurMat,Data["ScrollSpeed1"],-2000, -250,"ScrollSpeed1")
 
         if "ScrollStepFactor1" in Data:
-            scrollStepFactor1 = CreateShaderNodeValue(CurMat,Data["ScrollStepFactor1"],-2000, -300,"ScrollStepFactor1")  
+            scrollStepFactor1 = CreateShaderNodeValue(CurMat,Data["ScrollStepFactor1"],-2000, -300,"ScrollStepFactor1")
 
         if "ScrollMaskHeight1" in Data:
-            scrollMaskHeight1 = CreateShaderNodeValue(CurMat,Data["ScrollMaskHeight1"],-2000, -350,"ScrollMaskHeight1")  
+            scrollMaskHeight1 = CreateShaderNodeValue(CurMat,Data["ScrollMaskHeight1"],-2000, -350,"ScrollMaskHeight1")
 
         if "ScrollMaskStartPoint1" in Data:
-            scrollMaskStartPoint1 = CreateShaderNodeValue(CurMat,Data["ScrollMaskStartPoint1"],-2000, -400,"ScrollMaskStartPoint1")  
+            scrollMaskStartPoint1 = CreateShaderNodeValue(CurMat,Data["ScrollMaskStartPoint1"],-2000, -400,"ScrollMaskStartPoint1")
 
         if "ScrollSpeed2" in Data:
             scrollSpeed2 = CreateShaderNodeValue(CurMat,Data["ScrollSpeed2"],-2000, -500,"ScrollSpeed2")
 
         if "ScrollStepFactor2" in Data:
-            scrollStepFactor2 = CreateShaderNodeValue(CurMat,Data["ScrollStepFactor2"],-2000, -550,"ScrollStepFactor2")  
+            scrollStepFactor2 = CreateShaderNodeValue(CurMat,Data["ScrollStepFactor2"],-2000, -550,"ScrollStepFactor2")
 
         if "ScrollMaskHeight2" in Data:
-            scrollMaskHeight2 = CreateShaderNodeValue(CurMat,Data["ScrollMaskHeight2"],-2000, -600,"ScrollMaskHeight2")  
+            scrollMaskHeight2 = CreateShaderNodeValue(CurMat,Data["ScrollMaskHeight2"],-2000, -600,"ScrollMaskHeight2")
 
         if "ScrollMaskStartPoint2" in Data:
-            scrollMaskStartPoint2 = CreateShaderNodeValue(CurMat,Data["ScrollMaskStartPoint2"],-2000, -650,"ScrollMaskStartPoint2")  
+            scrollMaskStartPoint2 = CreateShaderNodeValue(CurMat,Data["ScrollMaskStartPoint2"],-2000, -650,"ScrollMaskStartPoint2")
 
         if "IsBroken" in Data:
             isBroken = CreateShaderNodeValue(CurMat,Data["IsBroken"],-2000, -700,"IsBroken")
 
         if "ScrollVerticalOrHorizontal" in Data:
-            scrollVerticalOrHorizontal = CreateShaderNodeValue(CurMat,Data["ScrollVerticalOrHorizontal"],-2000, -750,"ScrollVerticalOrHorizontal")  
+            scrollVerticalOrHorizontal = CreateShaderNodeValue(CurMat,Data["ScrollVerticalOrHorizontal"],-2000, -750,"ScrollVerticalOrHorizontal")
         
         if "Emissive" in Data:
-            emissive = CreateShaderNodeValue(CurMat,Data["Emissive"],-2000, -800,"Emissive")  
+            emissive = CreateShaderNodeValue(CurMat,Data["Emissive"],-2000, -800,"Emissive")
+
+        if "EmissiveEV" in Data:
+            emissive = CreateShaderNodeValue(CurMat,Data["EmissiveEV"],-2000, -800,"Emissive")
 
         if "EmissiveColor" in Data:
             emissiveColor = CreateShaderNodeRGB(CurMat,Data["EmissiveColor"],-2000, -850,"EmissiveColor")
 
+        if "Tint" in Data:
+            emissiveColor = CreateShaderNodeRGB(CurMat,Data["Tint"],-2000, -850,"EmissiveColor")
+
         if "FixForBlack" in Data:
-            fixForBlack = CreateShaderNodeValue(CurMat,Data["FixForBlack"],-2000, -1000,"FixForBlack")  
+            fixForBlack = CreateShaderNodeValue(CurMat,Data["FixForBlack"],-2000, -1000,"FixForBlack")
 
         if "Metalness" in Data:
-            metalness = CreateShaderNodeValue(CurMat,Data["Metalness"],-2000, -1050,"Metalness")  
+            metalness = CreateShaderNodeValue(CurMat,Data["Metalness"],-2000, -1050,"Metalness")
 
         if "Roughness" in Data:
-            roughness = CreateShaderNodeValue(CurMat,Data["Roughness"],-2000, -1100,"Roughness")  
+            roughness = CreateShaderNodeValue(CurMat,Data["Roughness"],-2000, -1100,"Roughness")
+
+        if "RoughnessScale" in Data:
+            roughness = CreateShaderNodeValue(CurMat,Data["RoughnessScale"],-2000, -1100,"Roughness")
 
         if "ParalaxTexture" in Data:
             parImg=imageFromRelPath(Data["ParalaxTexture"],DepotPath=self.BasePath, ProjPath=self.ProjPath, image_format=self.image_format)
@@ -200,7 +215,8 @@ class ParallaxScreen:
         vecMul = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-1350,150), operation= "MULTIPLY")
         combine = create_node(CurMat.nodes,"ShaderNodeCombineXYZ",(-1200,175))
         CurMat.links.new(vecDot2.outputs["Value"], vecMul.inputs[0])
-        CurMat.links.new(HSV_Mod_w.outputs[0], vecMul.inputs[1])
+        if "HSV_Mod" in Data:
+            CurMat.links.new(HSV_Mod_w.outputs[0], vecMul.inputs[1])
         CurMat.links.new(vecDot.outputs["Value"], combine.inputs[0])
         CurMat.links.new(vecMul.outputs[0], combine.inputs[1])
 
@@ -224,7 +240,7 @@ class ParallaxScreen:
         if 'scroll1' in bpy.data.node_groups.keys():
             scroll1Group = bpy.data.node_groups['scroll1']
         else:
-            scroll1Group = bpy.data.node_groups.new("scroll1","ShaderNodeTree") 
+            scroll1Group = bpy.data.node_groups.new("scroll1","ShaderNodeTree")
             
             if vers[0]<4:
                 scroll1Group.inputs.new('NodeSocketFloat','ScrollSpeed1')
@@ -254,8 +270,10 @@ class ParallaxScreen:
         scroll1 = create_node(CurMat.nodes,"ShaderNodeGroup",(-1500, -200), label="scroll1")
         scroll1.node_tree = scroll1Group
         scroll1.name = "scroll1"
-        CurMat.links.new(scrollSpeed1.outputs[0], scroll1.inputs[0])
-        CurMat.links.new(scrollStepFactor1.outputs[0], scroll1.inputs[1])
+        if "ScrollSpeed1" in Data:
+            CurMat.links.new(scrollSpeed1.outputs[0], scroll1.inputs[0])
+        if "scrollStepFactor1" in Data:
+            CurMat.links.new(scrollStepFactor1.outputs[0], scroll1.inputs[1])
         CurMat.links.new(time.outputs[0], scroll1.inputs[2])
 
         # scrollUV1
@@ -263,7 +281,7 @@ class ParallaxScreen:
             scrollUV1Group = bpy.data.node_groups['scrollUV1']
             scrollUV1Group_inputs=get_inputs(scrollUV1Group)
         else:
-            scrollUV1Group = bpy.data.node_groups.new("scrollUV1","ShaderNodeTree") 
+            scrollUV1Group = bpy.data.node_groups.new("scrollUV1","ShaderNodeTree")
             if vers[0]<4:
                 scrollUV1Group.inputs.new('NodeSocketVector','newUV')
                 scrollUV1Group.inputs.new('NodeSocketFloat','ScrollMaskHeight1')
@@ -309,20 +327,22 @@ class ParallaxScreen:
         scrollUV1.node_tree = scrollUV1Group
         scrollUV1.name = "scrollUV1"
         CurMat.links.new(vecAdd.outputs[0], scrollUV1.inputs['newUV'])
-        CurMat.links.new(scrollMaskHeight1.outputs[0], scrollUV1.inputs['ScrollMaskHeight1'])
+        if "ScrollMaskHeight1" in Data:
+            CurMat.links.new(scrollMaskHeight1.outputs[0], scrollUV1.inputs['ScrollMaskHeight1'])
         CurMat.links.new(scroll1.outputs[0], scrollUV1.inputs['scroll1'])
-        CurMat.links.new(scrollMaskStartPoint1.outputs[0], scrollUV1.inputs['ScrollMaskStartPoint1'])
+        if "ScrollMaskStartPoint1" in Data:
+            CurMat.links.new(scrollMaskStartPoint1.outputs[0], scrollUV1.inputs['ScrollMaskStartPoint1'])
         # scrollUV1X
         if 'scrollUV1X' in bpy.data.node_groups.keys():
             scrollUV1XGroup = bpy.data.node_groups['scrollUV1X']
         else:
-            scrollUV1XGroup = bpy.data.node_groups.new("scrollUV1X","ShaderNodeTree") 
+            scrollUV1XGroup = bpy.data.node_groups.new("scrollUV1X","ShaderNodeTree")
             if vers[0]<4:
                 scrollUV1XGroup.inputs.new('NodeSocketVector','newUV')
                 scrollUV1XGroup.inputs.new('NodeSocketFloat','ScrollMaskHeight1')
                 scrollUV1XGroup.inputs.new('NodeSocketFloat','scroll1')
                 scrollUV1XGroup.inputs.new('NodeSocketFloat','ScrollMaskStartPoint1')
-                scrollUV1XGroup.outputs.new('NodeSocketVector','scrollUV1X')                
+                scrollUV1XGroup.outputs.new('NodeSocketVector','scrollUV1X')
             else:
                 scrollUV1XGroup.interface.new_socket(name="newUV", socket_type='NodeSocketVector', in_out='INPUT')
                 scrollUV1XGroup.interface.new_socket(name="ScrollMaskHeight1", socket_type='NodeSocketFloat', in_out='INPUT')
@@ -360,9 +380,11 @@ class ParallaxScreen:
         scrollUV1X.node_tree = scrollUV1XGroup
         scrollUV1X.name = "scrollUV1X"
         CurMat.links.new(vecAdd.outputs[0], scrollUV1X.inputs[0])
-        CurMat.links.new(scrollMaskHeight1.outputs[0], scrollUV1X.inputs[1])
+        if "ScrollMaskHeight1" in Data:
+            CurMat.links.new(scrollMaskHeight1.outputs[0], scrollUV1X.inputs[1])
         CurMat.links.new(scroll1.outputs[0], scrollUV1X.inputs[2])
-        CurMat.links.new(scrollMaskStartPoint1.outputs[0], scrollUV1X.inputs[3])
+        if "ScrollMaskStartPoint1" in Data:
+            CurMat.links.new(scrollMaskStartPoint1.outputs[0], scrollUV1X.inputs[3])
 
         # scroll2
         if 'scroll2' in bpy.data.node_groups.keys():
@@ -396,15 +418,17 @@ class ParallaxScreen:
         scroll2 = create_node(CurMat.nodes,"ShaderNodeGroup",(-1500, -300), label="scroll2")
         scroll2.node_tree = scroll2Group
         scroll2.name = "scroll2"
-        CurMat.links.new(scrollSpeed2.outputs[0], scroll2.inputs[0])
-        CurMat.links.new(scrollStepFactor2.outputs[0], scroll2.inputs[1])
+        if "ScrollSpeed2" in Data:
+            CurMat.links.new(scrollSpeed2.outputs[0], scroll2.inputs[0])
+        if "ScrollStepFactor2" in Data:
+            CurMat.links.new(scrollStepFactor2.outputs[0], scroll2.inputs[1])
         CurMat.links.new(time.outputs[0], scroll2.inputs[2])
 
         # scrollUV2
         if 'scrollUV2' in bpy.data.node_groups.keys():
             scrollUV2Group = bpy.data.node_groups['scrollUV2']
         else:
-            scrollUV2Group = bpy.data.node_groups.new("scrollUV2","ShaderNodeTree") 
+            scrollUV2Group = bpy.data.node_groups.new("scrollUV2","ShaderNodeTree")
             if vers[0]<4:
                 scrollUV2Group.inputs.new('NodeSocketVector','newUV')
                 scrollUV2Group.inputs.new('NodeSocketFloat','ScrollMaskHeight2')
@@ -448,15 +472,17 @@ class ParallaxScreen:
         scrollUV2.node_tree = scrollUV2Group
         scrollUV2.name = "scrollUV2"
         CurMat.links.new(vecAdd.outputs[0], scrollUV2.inputs[0])
-        CurMat.links.new(scrollMaskHeight2.outputs[0], scrollUV2.inputs[1])
+        if "ScrollMaskHeight2" in Data:
+            CurMat.links.new(scrollMaskHeight2.outputs[0], scrollUV2.inputs[1])
         CurMat.links.new(scroll2.outputs[0], scrollUV2.inputs[2])
-        CurMat.links.new(scrollMaskStartPoint2.outputs[0], scrollUV2.inputs[3])
+        if "ScrollMaskStartPoint2" in Data:
+            CurMat.links.new(scrollMaskStartPoint2.outputs[0], scrollUV2.inputs[3])
 
         # scrollUV2X
         if 'scrollUV2X' in bpy.data.node_groups.keys():
             scrollUV2XGroup = bpy.data.node_groups['scrollUV2X']
         else:
-            scrollUV2XGroup = bpy.data.node_groups.new("scrollUV2X","ShaderNodeTree") 
+            scrollUV2XGroup = bpy.data.node_groups.new("scrollUV2X","ShaderNodeTree")
             if vers[0]<4:
                 scrollUV2XGroup.inputs.new('NodeSocketVector','newUV')
                 scrollUV2XGroup.inputs.new('NodeSocketFloat','ScrollMaskHeight2')
@@ -500,11 +526,13 @@ class ParallaxScreen:
         scrollUV2X.node_tree = scrollUV2XGroup
         scrollUV2X.name = "scrollUV2X"
         CurMat.links.new(vecAdd.outputs[0], scrollUV2X.inputs[0])
-        CurMat.links.new(scrollMaskHeight2.outputs[0], scrollUV2X.inputs[1])
+        if "ScrollMaskHeight2" in Data:
+            CurMat.links.new(scrollMaskHeight2.outputs[0], scrollUV2X.inputs[1])
         CurMat.links.new(scroll2.outputs[0], scrollUV2X.inputs[2])
-        CurMat.links.new(scrollMaskStartPoint2.outputs[0], scrollUV2X.inputs[3])
+        if "ScrollMaskStartPoint2" in Data:
+            CurMat.links.new(scrollMaskStartPoint2.outputs[0], scrollUV2X.inputs[3])
 
-        # rndBlocks  
+        # rndBlocks
         lerpG = createLerpGroup()
         lerp = create_node(CurMat.nodes,"ShaderNodeGroup",(-1050, -450), label="lerp")
         lerp.node_tree = lerpG 
@@ -515,7 +543,7 @@ class ParallaxScreen:
         add7.inputs[1].default_value = 0.375
         CurMat.links.new(time.outputs[0],add7.inputs[0])
         CurMat.links.new(add7.outputs[0],frac2.inputs[0])
-        CurMat.links.new(frac2.outputs[0],lerp.inputs[2]) # rndBlocks   
+        CurMat.links.new(frac2.outputs[0],lerp.inputs[2]) # rndBlocks
 
         # brokenUV
         if 'brokenUV' in bpy.data.node_groups.keys():
@@ -597,7 +625,7 @@ class ParallaxScreen:
         if 'rndColorIndex' in bpy.data.node_groups.keys():
             rndColorIGroup = bpy.data.node_groups['rndColorIndex']
         else:       
-            rndColorIGroup = bpy.data.node_groups.new("rndColorIndex","ShaderNodeTree") 
+            rndColorIGroup = bpy.data.node_groups.new("rndColorIndex","ShaderNodeTree")
             if vers[0]<4:
                 rndColorIGroup.inputs.new('NodeSocketFloat','rndBlocks')
                 rndColorIGroup.inputs.new('NodeSocketFloat','Time')
@@ -736,7 +764,7 @@ class ParallaxScreen:
         if 'rndOff' in bpy.data.node_groups.keys():
             rndOffGroup = bpy.data.node_groups['rndOff']
         else:
-            rndOffGroup = bpy.data.node_groups.new("rndOff","ShaderNodeTree") 
+            rndOffGroup = bpy.data.node_groups.new("rndOff","ShaderNodeTree")
             if vers[0]<4:
                 rndOffGroup.outputs.new('NodeSocketFloat','x')
                 rndOffGroup.outputs.new('NodeSocketFloat','y')
@@ -777,7 +805,7 @@ class ParallaxScreen:
                 randomOffsetGroup.interface.new_socket(name="rndOff.w", socket_type='NodeSocketFloat', in_out='INPUT')
                 randomOffsetGroup.interface.new_socket(name="randomOffset", socket_type='NodeSocketVector', in_out='OUTPUT')
             randomOffsetGroupI = create_node(randomOffsetGroup.nodes, "NodeGroupInput",(-400,0))
-            randomOffsetGroupO = create_node(randomOffsetGroup.nodes, "NodeGroupOutput",(200,0))            
+            randomOffsetGroupO = create_node(randomOffsetGroup.nodes, "NodeGroupOutput",(200,0))
             lerp3 = create_node(randomOffsetGroup.nodes,"ShaderNodeGroup",(-200,0), label="lerp")
             lerp3.node_tree = lerpG
             lerp4 = create_node(randomOffsetGroup.nodes,"ShaderNodeGroup",(-200,-50), label="lerp")
@@ -840,20 +868,20 @@ class ParallaxScreen:
         if 'l1' in bpy.data.node_groups.keys():
             l1Group = bpy.data.node_groups['l1']
         else:     
-            l1Group = bpy.data.node_groups.new("l1","ShaderNodeTree")   
+            l1Group = bpy.data.node_groups.new("l1","ShaderNodeTree")
             if vers[0]<4:
-                l1Group.inputs.new('NodeSocketVector','newUV') 
-                l1Group.outputs.new('NodeSocketVector','l1')    
+                l1Group.inputs.new('NodeSocketVector','newUV')
+                l1Group.outputs.new('NodeSocketVector','l1')
             else:
                 l1Group.interface.new_socket(name="newUV", socket_type='NodeSocketVector', in_out='INPUT')
                 l1Group.interface.new_socket(name="l1", socket_type='NodeSocketVector', in_out='OUTPUT')
 
             l1GroupI = create_node(l1Group.nodes, "NodeGroupInput",(-800,0))
-            l1GroupO = create_node(l1Group.nodes, "NodeGroupOutput",(200,0))  
-            separate3 = create_node(l1Group.nodes,"ShaderNodeSeparateXYZ",(-650,0))                              
+            l1GroupO = create_node(l1Group.nodes, "NodeGroupOutput",(200,0))
+            separate3 = create_node(l1Group.nodes,"ShaderNodeSeparateXYZ",(-650,0))
             clamp2 = create_node(l1Group.nodes,"ShaderNodeClamp",(-500,25))
             clamp3 = create_node(l1Group.nodes,"ShaderNodeClamp",(-500,-25))
-            combine11 = create_node(l1Group.nodes,"ShaderNodeCombineXYZ",(-350,0))   
+            combine11 = create_node(l1Group.nodes,"ShaderNodeCombineXYZ",(-350,0))
             l1Group.links.new(l1GroupI.outputs[0],separate3.inputs[0])
             l1Group.links.new(separate3.outputs[0],clamp2.inputs[0])
             l1Group.links.new(separate3.outputs[1],clamp3.inputs[0])
@@ -874,8 +902,8 @@ class ParallaxScreen:
             if vers[0]<4:
                 l2Group.inputs.new('NodeSocketVector','modUV')
                 l2Group.inputs.new('NodeSocketVector','newUV')
-                l2Group.inputs.new('NodeSocketFloat','l2')  
-                l2Group.outputs.new('NodeSocketVector','newRandomOffset')    
+                l2Group.inputs.new('NodeSocketFloat','l2')
+                l2Group.outputs.new('NodeSocketVector','newRandomOffset')
             else:
                 l2Group.interface.new_socket(name="modUV", socket_type='NodeSocketVector', in_out='INPUT')
                 l2Group.interface.new_socket(name="newUV", socket_type='NodeSocketVector', in_out='INPUT')
@@ -887,10 +915,10 @@ class ParallaxScreen:
             l2GroupO = create_node(l2Group.nodes, "NodeGroupOutput",(200,0))
             vecMul7 = create_node(l2Group.nodes,"ShaderNodeVectorMath",(-600,0),operation="MULTIPLY")
             vecAdd6 = create_node(l2Group.nodes,"ShaderNodeVectorMath",(-450,0),operation="ADD")
-            separate4 = create_node(l2Group.nodes,"ShaderNodeSeparateXYZ",(-300,0))  
+            separate4 = create_node(l2Group.nodes,"ShaderNodeSeparateXYZ",(-300,0))
             clamp4 = create_node(l2Group.nodes,"ShaderNodeClamp",(-150,25))
             clamp5 = create_node(l2Group.nodes,"ShaderNodeClamp",(-150,-25))
-            combine12 = create_node(l2Group.nodes,"ShaderNodeCombineXYZ",(0,0))   
+            combine12 = create_node(l2Group.nodes,"ShaderNodeCombineXYZ",(0,0))
             l2Group.links.new(l2GroupI.outputs[0],vecMul7.inputs[0])
             l2Group.links.new(l2GroupI.outputs[2],vecMul7.inputs[1])
             l2Group.links.new(l2GroupI.outputs[1],vecAdd6.inputs[0])
@@ -932,10 +960,10 @@ class ParallaxScreen:
             vecMul9 = create_node(l3Group.nodes,"ShaderNodeVectorMath",(-450,0),operation="MULTIPLY")
             vecMul9.inputs[1].default_value = (2,2,2)
             vecAdd7 = create_node(l3Group.nodes,"ShaderNodeVectorMath",(-300,0),operation="ADD")
-            separate5 = create_node(l3Group.nodes,"ShaderNodeSeparateXYZ",(-150,0))  
+            separate5 = create_node(l3Group.nodes,"ShaderNodeSeparateXYZ",(-150,0))
             clamp6 = create_node(l3Group.nodes,"ShaderNodeClamp",(-0,25))
             clamp7 = create_node(l3Group.nodes,"ShaderNodeClamp",(-0,-25))
-            combine13 = create_node(l3Group.nodes,"ShaderNodeCombineXYZ",(150,0)) 
+            combine13 = create_node(l3Group.nodes,"ShaderNodeCombineXYZ",(150,0))
             l3Group.links.new(l3GroupI.outputs[0],vecMul8.inputs[0])
             l3Group.links.new(l3GroupI.outputs[2],vecMul8.inputs[1])
             l3Group.links.new(vecMul8.outputs[0],vecMul9.inputs[0])
@@ -956,34 +984,37 @@ class ParallaxScreen:
         CurMat.links.new(layersSeparation.outputs[0],l3.inputs[2])
 
         # i1
-
-        i1 = create_node(CurMat.nodes,"ShaderNodeTexImage",(-800,300), label="i1", image=parImg)
-        colorlessTexG = self.colorlessTexGroup()
-        colorlessTex = create_node(CurMat.nodes,"ShaderNodeGroup",(-550,300), label="colorlessTex")
-        colorlessTex.node_tree = colorlessTexG        
-        CurMat.links.new(l1.outputs[0],i1.inputs[0])
-        CurMat.links.new(i1.outputs[0],colorlessTex.inputs[0])
+        if "ParalaxTexture" in Data:
+            i1 = create_node(CurMat.nodes,"ShaderNodeTexImage",(-800,300), label="i1", image=parImg)
+            colorlessTexG = self.colorlessTexGroup()
+            colorlessTex = create_node(CurMat.nodes,"ShaderNodeGroup",(-550,300), label="colorlessTex")
+            colorlessTex.node_tree = colorlessTexG        
+            CurMat.links.new(l1.outputs[0],i1.inputs[0])
+            CurMat.links.new(i1.outputs[0],colorlessTex.inputs[0])
 
 
         # i2
-        i2 = create_node(CurMat.nodes,"ShaderNodeTexImage",(-800,250), label="i2", image=parImg)
-        CurMat.links.new(l2.outputs[0],i2.inputs[0])
-        colorlessTex2 = create_node(CurMat.nodes,"ShaderNodeGroup",(-550,250), label="colorlessTex")
-        colorlessTex2.node_tree = colorlessTexG        
-        CurMat.links.new(i2.outputs[0],colorlessTex2.inputs[0])
+        if "ParalaxTexture" in Data:
+            i2 = create_node(CurMat.nodes,"ShaderNodeTexImage",(-800,250), label="i2", image=parImg)
+            CurMat.links.new(l2.outputs[0],i2.inputs[0])
+            colorlessTex2 = create_node(CurMat.nodes,"ShaderNodeGroup",(-550,250), label="colorlessTex")
+            colorlessTex2.node_tree = colorlessTexG        
+            CurMat.links.new(i2.outputs[0],colorlessTex2.inputs[0])
 
         # i3
-        i3 = create_node(CurMat.nodes,"ShaderNodeTexImage",(-800,200), label="i3", image=parImg)
-        CurMat.links.new(l3.outputs[0],i3.inputs[0])
-        colorlessTex3 = create_node(CurMat.nodes,"ShaderNodeGroup",(-550,200), label="colorlessTex")
-        colorlessTex3.node_tree = colorlessTexG        
-        CurMat.links.new(i3.outputs[0],colorlessTex3.inputs[0])
+        if "ParalaxTexture" in Data:
+            i3 = create_node(CurMat.nodes,"ShaderNodeTexImage",(-800,200), label="i3", image=parImg)
+            CurMat.links.new(l3.outputs[0],i3.inputs[0])
+            colorlessTex3 = create_node(CurMat.nodes,"ShaderNodeGroup",(-550,200), label="colorlessTex")
+            colorlessTex3.node_tree = colorlessTexG        
+            CurMat.links.new(i3.outputs[0],colorlessTex3.inputs[0])
 
         # if BlinkingSpeed > 0
 
-        iA = create_node(CurMat.nodes,"ShaderNodeTexImage",(-800,350), label="iA", image=blinkImg)
+        if "BlinkingMaskTexture" in Data:
+            iA = create_node(CurMat.nodes,"ShaderNodeTexImage",(-800,350), label="iA", image=blinkImg)
 
-        CurMat.links.new(l1.outputs[0],iA.inputs[0])
+            CurMat.links.new(l1.outputs[0],iA.inputs[0])
         
         if 'if BlinkingSpeed > 0' in bpy.data.node_groups.keys():
             bl1Group = bpy.data.node_groups['if BlinkingSpeed > 0']
@@ -1005,15 +1036,15 @@ class ParallaxScreen:
             bl1GroupI = create_node(bl1Group.nodes, "NodeGroupInput",(-1050,0))
             bl1GroupO = create_node(bl1Group.nodes, "NodeGroupOutput",(300,0))   
             mul10 = create_node(bl1Group.nodes,"ShaderNodeMath",(-950,100),operation = "MULTIPLY")
-            sin = create_node(bl1Group.nodes,"ShaderNodeMath",(-650,100),operation = "SINE")              
-            mul11 = create_node(bl1Group.nodes,"ShaderNodeMath",(-500,100),operation = "MULTIPLY") 
+            sin = create_node(bl1Group.nodes,"ShaderNodeMath",(-650,100),operation = "SINE")
+            mul11 = create_node(bl1Group.nodes,"ShaderNodeMath",(-500,100),operation = "MULTIPLY")
             mul11.inputs[1].default_value = 100
             mul11.use_clamp = True
             separate6 = create_node(bl1Group.nodes,"ShaderNodeSeparateXYZ",(-500,150))
-            floor3 = create_node(bl1Group.nodes,"ShaderNodeMath",(-350,150),operation = "FLOOR") 
+            floor3 = create_node(bl1Group.nodes,"ShaderNodeMath",(-350,150),operation = "FLOOR")
             floor3.use_clamp = True
-            vecMul10 = create_node(bl1Group.nodes,"ShaderNodeVectorMath",(-200,100),operation = "MULTIPLY") 
-            vecAdd8 = create_node(bl1Group.nodes,"ShaderNodeVectorMath",(-150,50),operation = "ADD") 
+            vecMul10 = create_node(bl1Group.nodes,"ShaderNodeVectorMath",(-200,100),operation = "MULTIPLY")
+            vecAdd8 = create_node(bl1Group.nodes,"ShaderNodeVectorMath",(-150,50),operation = "ADD")
             mixRGB = create_node(bl1Group.nodes,"ShaderNodeMixRGB",(200,50)) 
             bl1Group.links.new(bl1GroupI.outputs[1],mul10.inputs[0])
             bl1Group.links.new(bl1GroupI.outputs[0],mul10.inputs[1])
@@ -1031,13 +1062,13 @@ class ParallaxScreen:
             bl1Group.links.new(bl1GroupI.outputs[3],mixRGB.inputs[1])
             bl1Group.links.new(mixRGB.outputs[0],bl1GroupO.inputs[0])
 
-
-        bl1 = create_node(CurMat.nodes,"ShaderNodeGroup",(-350,325), label="if BlinkingSpeed > 0")
-        bl1.node_tree = bl1Group 
-        CurMat.links.new(blinkingSpeed.outputs[0],bl1.inputs[0])
-        CurMat.links.new(time.outputs[0],bl1.inputs[1])
-        CurMat.links.new(iA.outputs[0],bl1.inputs[2])
-        CurMat.links.new(colorlessTex.outputs[0],bl1.inputs[3])
+        if "BlinkingSpeed" in Data:
+            bl1 = create_node(CurMat.nodes,"ShaderNodeGroup",(-350,325), label="if BlinkingSpeed > 0")
+            bl1.node_tree = bl1Group 
+            CurMat.links.new(blinkingSpeed.outputs[0],bl1.inputs[0])
+            CurMat.links.new(time.outputs[0],bl1.inputs[1])
+            CurMat.links.new(iA.outputs[0],bl1.inputs[2])
+            CurMat.links.new(colorlessTex.outputs[0],bl1.inputs[3])
 
         # scanlineUV
         if 'scanlineUV' in bpy.data.node_groups.keys():
@@ -1095,13 +1126,15 @@ class ParallaxScreen:
 
         # i1 * IntensityPerLayer.x;
         vecMul13 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-950,25),operation = "MULTIPLY")
-        CurMat.links.new(bl1.outputs[0],vecMul13.inputs[0])
+        if "BlinkingSpeed" in Data:
+            CurMat.links.new(bl1.outputs[0],vecMul13.inputs[0])
         CurMat.links.new(intensityPerLayer_x.outputs[0],vecMul13.inputs[1])
 
         # i2 * IntensityPerLayer.y * lineMask;
         vecMul14 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-950,-25),operation = "MULTIPLY")
         vecMul15 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-800,-25),operation = "MULTIPLY")
-        CurMat.links.new(colorlessTex2.outputs[0],vecMul14.inputs[0])
+        if "ParalaxTexture" in Data:
+            CurMat.links.new(colorlessTex2.outputs[0],vecMul14.inputs[0])
         CurMat.links.new(intensityPerLayer_y.outputs[0],vecMul14.inputs[1])
         CurMat.links.new(vecMul14.outputs[0],vecMul15.inputs[0])
         CurMat.links.new(lerp5.outputs[0],vecMul15.inputs[1])
@@ -1109,7 +1142,8 @@ class ParallaxScreen:
         # i3 * IntensityPerLayer.z * lineMask;
         vecMul16 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-950,-75),operation = "MULTIPLY")
         vecMul17 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-800,-75),operation = "MULTIPLY")
-        CurMat.links.new(colorlessTex3.outputs[0],vecMul16.inputs[0])
+        if "ParalaxTexture" in Data:
+            CurMat.links.new(colorlessTex3.outputs[0],vecMul16.inputs[0])
         CurMat.links.new(intensityPerLayer_z.outputs[0],vecMul16.inputs[1])
         CurMat.links.new(vecMul16.outputs[0],vecMul17.inputs[0])
         CurMat.links.new(lerp5.outputs[0],vecMul17.inputs[1])
@@ -1156,7 +1190,7 @@ class ParallaxScreen:
             m3Group = bpy.data.node_groups.new("parallax_screen_m3","ShaderNodeTree")
             if vers[0]<4:
                 m3Group.inputs.new('NodeSocketVector','m2')
-                m3Group.inputs.new('NodeSocketVector','i1')    
+                m3Group.inputs.new('NodeSocketVector','i1')
                 m3Group.outputs.new('NodeSocketVector','m3')
             else:
                 m3Group.interface.new_socket(name="m2", socket_type='NodeSocketVector', in_out='INPUT')
@@ -1202,7 +1236,7 @@ class ParallaxScreen:
         minimum3 = create_node(CurMat.nodes,"ShaderNodeMath", (-800, -350),operation="MINIMUM")
         add10 = create_node(CurMat.nodes,"ShaderNodeMath", (-650,-200),operation="ADD")
         add11 = create_node(CurMat.nodes,"ShaderNodeMath", (-650,-300),operation="ADD")
-        mixRGB2 = create_node(CurMat.nodes,"ShaderNodeMixRGB",(-600, -475)) 
+        mixRGB2 = create_node(CurMat.nodes,"ShaderNodeMixRGB",(-600, -475))
         mixRGB2.inputs[1].default_value = (0,0,0,0)
         CurMat.links.new(UVMap.outputs[0],separate8.inputs[0])
         CurMat.links.new(separate8.outputs[0],greaterThan.inputs[0])
@@ -1225,44 +1259,49 @@ class ParallaxScreen:
         CurMat.links.new(add11.outputs[0],mixRGB2.inputs[0])
         
         # connect glitches with texture
-        parTex = create_node(CurMat.nodes,"ShaderNodeTexImage",(-900, -525), label="ParalaxTexture", image=parImg)
-        CurMat.links.new(brokenUV.outputs[0],parTex.inputs[0])
-        colorlessTex4 = create_node(CurMat.nodes,"ShaderNodeGroup",(-650, -525), label="colorlessTex")
-        colorlessTex4.node_tree = colorlessTexG        
-        CurMat.links.new(parTex.outputs[0],colorlessTex4.inputs[0])
-        vecMul20 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-500, -550),operation="MULTIPLY")
-        CurMat.links.new(mixRGB2.outputs[0],vecMul20.inputs[0])
-        CurMat.links.new(colorlessTex4.outputs[0],vecMul20.inputs[1])
+        if "ParalaxTexture" in Data:
+            parTex = create_node(CurMat.nodes,"ShaderNodeTexImage",(-900, -525), label="ParalaxTexture", image=parImg)
+            CurMat.links.new(brokenUV.outputs[0],parTex.inputs[0])
+            colorlessTex4 = create_node(CurMat.nodes,"ShaderNodeGroup",(-650, -525), label="colorlessTex")
+            colorlessTex4.node_tree = colorlessTexG        
+            CurMat.links.new(parTex.outputs[0],colorlessTex4.inputs[0])
+            vecMul20 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-500, -550),operation="MULTIPLY")
+            CurMat.links.new(mixRGB2.outputs[0],vecMul20.inputs[0])
+            CurMat.links.new(colorlessTex4.outputs[0],vecMul20.inputs[1])
 
-        parTex2 = create_node(CurMat.nodes,"ShaderNodeTexImage",(-900, -575), label="ParalaxTexture", image=parImg)
-        colorlessTex6 = create_node(CurMat.nodes,"ShaderNodeGroup",(-650, -575), label="colorlessTex")
-        colorlessTex6.node_tree = colorlessTexG        
-        CurMat.links.new(parTex2.outputs[0],colorlessTex6.inputs[0])
-        vecAdd10 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-1050, -575),operation="ADD")
-        vecMul21 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-500, -600),operation="MULTIPLY")
-        vecMul21.inputs[0].default_value = (.4,.4,.4)
-        vecAdd11 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-350, -512.5),operation="ADD")
+        if "ParalaxTexture" in Data:
+            parTex2 = create_node(CurMat.nodes,"ShaderNodeTexImage",(-900, -575), label="ParalaxTexture", image=parImg)
+            colorlessTex6 = create_node(CurMat.nodes,"ShaderNodeGroup",(-650, -575), label="colorlessTex")
+            colorlessTex6.node_tree = colorlessTexG        
+            CurMat.links.new(parTex2.outputs[0],colorlessTex6.inputs[0])
+            vecAdd10 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-1050, -575),operation="ADD")
+            vecMul21 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-500, -600),operation="MULTIPLY")
+            vecMul21.inputs[0].default_value = (.4,.4,.4)
+            vecAdd11 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-350, -512.5),operation="ADD")
 
-        CurMat.links.new(vecAdd.outputs[0],vecAdd10.inputs[0])
-        CurMat.links.new(newRandomOffset.outputs[0],vecAdd10.inputs[1])
-        CurMat.links.new(vecAdd10.outputs[0],parTex2.inputs[0])
-        CurMat.links.new(colorlessTex6.outputs[0],vecMul21.inputs[1])
-        CurMat.links.new(vecMul20.outputs[0],vecAdd11.inputs[0])
-        CurMat.links.new(vecMul21.outputs[0],vecAdd11.inputs[1])
+        if "ParalaxTexture" in Data:
+            CurMat.links.new(vecAdd.outputs[0],vecAdd10.inputs[0])
+            CurMat.links.new(newRandomOffset.outputs[0],vecAdd10.inputs[1])
+            CurMat.links.new(vecAdd10.outputs[0],parTex2.inputs[0])
+            CurMat.links.new(colorlessTex6.outputs[0],vecMul21.inputs[1])
+            CurMat.links.new(vecMul20.outputs[0],vecAdd11.inputs[0])
+            CurMat.links.new(vecMul21.outputs[0],vecAdd11.inputs[1])
 
         # if isBroken > 0
         mixRGB3 = create_node(CurMat.nodes,"ShaderNodeMixRGB",(-350,-25))
         mixRGB4 = create_node(CurMat.nodes,"ShaderNodeMixRGB",(-350,-75))
         CurMat.links.new(isBroken.outputs[0],mixRGB3.inputs[0])
         CurMat.links.new(m3.outputs[0],mixRGB3.inputs[1])
-        CurMat.links.new(vecAdd11.outputs[0],mixRGB3.inputs[2])
-        CurMat.links.new(add11.outputs[0],mixRGB4.inputs[0])
+        if "ParalaxTexture" in Data:
+            CurMat.links.new(vecAdd11.outputs[0],mixRGB3.inputs[2])
+            CurMat.links.new(add11.outputs[0],mixRGB4.inputs[0])
         CurMat.links.new(m3.outputs[0],mixRGB4.inputs[1])
         CurMat.links.new(mixRGB3.outputs[0],mixRGB4.inputs[2])
 
         # scrollMask
-        scrollMask = create_node(CurMat.nodes,"ShaderNodeTexImage",(-1700, -650), label="ScrollMaskTexture", image=scrollMaskImg)
-        CurMat.links.new(l1.outputs[0],scrollMask.inputs[0])
+        if "ScrollMaskTexture" in Data:
+            scrollMask = create_node(CurMat.nodes,"ShaderNodeTexImage",(-1700, -650), label="ScrollMaskTexture", image=scrollMaskImg)
+            CurMat.links.new(l1.outputs[0],scrollMask.inputs[0])
         # finalScrollUV
         if 'finalScrollUV' in bpy.data.node_groups.keys():
             finalScrollUVGroup = bpy.data.node_groups['finalScrollUV']
@@ -1270,12 +1309,12 @@ class ParallaxScreen:
             finalScrollUVGroup = bpy.data.node_groups.new("finalScrollUV","ShaderNodeTree")
             if vers[0]<4:
                 finalScrollUVGroup.inputs.new('NodeSocketVector','scrollUV2')
-                finalScrollUVGroup.inputs.new('NodeSocketVector','scrollUV1')   
-                finalScrollUVGroup.inputs.new('NodeSocketColor','scrollMask')  
+                finalScrollUVGroup.inputs.new('NodeSocketVector','scrollUV1')
+                finalScrollUVGroup.inputs.new('NodeSocketColor','scrollMask')
                 finalScrollUVGroup.inputs.new('NodeSocketVector','scrollUV2X')
                 finalScrollUVGroup.inputs.new('NodeSocketVector','scrollUV1X')
                 finalScrollUVGroup.inputs.new('NodeSocketVector','ScrollVerticalOrHorizontal')
-                finalScrollUVGroup.outputs.new('NodeSocketVector','finalScrollUV')   
+                finalScrollUVGroup.outputs.new('NodeSocketVector','finalScrollUV')
             else:
                 finalScrollUVGroup.interface.new_socket(name="scrollUV2", socket_type='NodeSocketVector', in_out='INPUT')
                 finalScrollUVGroup.interface.new_socket(name="scrollUV1", socket_type='NodeSocketVector', in_out='INPUT')
@@ -1286,7 +1325,7 @@ class ParallaxScreen:
                 finalScrollUVGroup.interface.new_socket(name="finalScrollUV", socket_type='NodeSocketVector', in_out='OUTPUT')
 
             finalScrollUVGroupI = create_node(finalScrollUVGroup.nodes, "NodeGroupInput",(-1050,0))
-            finalScrollUVGroupO = create_node(finalScrollUVGroup.nodes, "NodeGroupOutput",(-150,0))   
+            finalScrollUVGroupO = create_node(finalScrollUVGroup.nodes, "NodeGroupOutput",(-150,0))
             vecLerp2 = create_node(finalScrollUVGroup.nodes,"ShaderNodeGroup",(-750, 0), label="lerp")
             vecLerp2.node_tree = vecLerpG 
             separate9 = create_node(finalScrollUVGroup.nodes,"ShaderNodeSeparateXYZ",(-900, -50))
@@ -1311,30 +1350,34 @@ class ParallaxScreen:
         finalScrollUV.node_tree = finalScrollUVGroup
         CurMat.links.new(scrollUV2.outputs[0],finalScrollUV.inputs[0])
         CurMat.links.new(scrollUV1.outputs[0],finalScrollUV.inputs[1])
-        CurMat.links.new(scrollMask.outputs[0],finalScrollUV.inputs[2])
+        if "ScrollMaskTexture" in Data:
+            CurMat.links.new(scrollMask.outputs[0],finalScrollUV.inputs[2])
         CurMat.links.new(scrollUV2X.outputs[0],finalScrollUV.inputs[3])
         CurMat.links.new(scrollUV1X.outputs[0],finalScrollUV.inputs[4])
-        CurMat.links.new(scrollVerticalOrHorizontal.outputs[0],finalScrollUV.inputs[5])
+        if "ScrollVerticalOrHorizontal" in Data:
+            CurMat.links.new(scrollVerticalOrHorizontal.outputs[0],finalScrollUV.inputs[5])
 
         # scrollTex
-        scrollTex = create_node(CurMat.nodes,"ShaderNodeTexImage",(-1200, -650), label="ParalaxTexture", image=parImg)
-        CurMat.links.new(finalScrollUV.outputs[0],scrollTex.inputs[0])
-        colorlessTex5 = create_node(CurMat.nodes,"ShaderNodeGroup",(-950, -650), label="colorlessTex")
-        colorlessTex5.node_tree = colorlessTexG        
-        CurMat.links.new(scrollTex.outputs[0],colorlessTex5.inputs[0])
+        if "ParalaxTexture" in Data:
+            scrollTex = create_node(CurMat.nodes,"ShaderNodeTexImage",(-1200, -650), label="ParalaxTexture", image=parImg)
+            CurMat.links.new(finalScrollUV.outputs[0],scrollTex.inputs[0])
+            colorlessTex5 = create_node(CurMat.nodes,"ShaderNodeGroup",(-950, -650), label="colorlessTex")
+            colorlessTex5.node_tree = colorlessTexG
+            CurMat.links.new(scrollTex.outputs[0],colorlessTex5.inputs[0])
 
         # lerp(m3, scrollTex, ( scrollMask.x + scrollMask.y))
         separate10 = create_node(CurMat.nodes,"ShaderNodeSeparateXYZ",(-1350, -700))
         add3 = create_node(CurMat.nodes,"ShaderNodeMath",(-1200, -700),operation= "ADD")
         vecLerpG = createVecLerpGroup()
         vecLerp2 = create_node(CurMat.nodes,"ShaderNodeGroup",(-800, -650), label="lerp")
-        vecLerp2.node_tree = vecLerpG 
-        CurMat.links.new(scrollMask.outputs[0],separate10.inputs[0])
-        CurMat.links.new(separate10.outputs[0],add3.inputs[0])
-        CurMat.links.new(separate10.outputs[1],add3.inputs[1])
-        CurMat.links.new(mixRGB4.outputs[0],vecLerp2.inputs[0])
-        CurMat.links.new(colorlessTex5.outputs[0],vecLerp2.inputs[1])
-        CurMat.links.new(add3.outputs[0],vecLerp2.inputs[2])
+        vecLerp2.node_tree = vecLerpG
+        if "ScrollMaskTexture" in Data:
+            CurMat.links.new(scrollMask.outputs[0],separate10.inputs[0])
+            CurMat.links.new(separate10.outputs[0],add3.inputs[0])
+            CurMat.links.new(separate10.outputs[1],add3.inputs[1])
+            CurMat.links.new(mixRGB4.outputs[0],vecLerp2.inputs[0])
+            CurMat.links.new(colorlessTex5.outputs[0],vecLerp2.inputs[1])
+            CurMat.links.new(add3.outputs[0],vecLerp2.inputs[2])
 
         # m3*clamp(Emissive) * EmissiveColor
         clamp8 = create_node(CurMat.nodes,"ShaderNodeClamp",(-800, -750))
@@ -1358,13 +1401,15 @@ class ParallaxScreen:
         separate11 = create_node(CurMat.nodes,"ShaderNodeSeparateXYZ",(-750, -800))
         combineHSV = create_node(CurMat.nodes,"ShaderNodeCombineHSV",(-600, -800))
         CurMat.links.new(vecMul23.outputs[0],separateHSV.inputs[0])
-        CurMat.links.new(HSV_Mod_y.outputs[0],combine18.inputs[1])
+        if "HSV_Mod" in Data:
+            CurMat.links.new(HSV_Mod_y.outputs[0],combine18.inputs[1])
         CurMat.links.new(separateHSV.outputs[0],combine19.inputs[0])
         CurMat.links.new(separateHSV.outputs[1],combine19.inputs[1])
         CurMat.links.new(separateHSV.outputs[2],combine19.inputs[2])
         CurMat.links.new(combine18.outputs[0],vecMul24.inputs[1])
         CurMat.links.new(combine19.outputs[0],vecMul24.inputs[0])
-        CurMat.links.new(HSV_Mod_x.outputs[0],combine20.inputs[0])
+        if "HSV_Mod" in Data:
+            CurMat.links.new(HSV_Mod_x.outputs[0],combine20.inputs[0])
         CurMat.links.new(vecMul24.outputs[0],vecAdd12.inputs[0])
         CurMat.links.new(combine20.outputs[0],vecAdd12.inputs[1])
         CurMat.links.new(vecAdd12.outputs[0],separate11.inputs[0])
