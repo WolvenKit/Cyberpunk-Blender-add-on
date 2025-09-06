@@ -76,6 +76,7 @@ REGISTRY.register([
     "base\\materials\\vehicle_destr_blendshape.mt",
     "base\\materials\\multilayered_clear_coat.mt",
     "base\\materials\\multilayered_terrain.mt",
+    "base\\materials\\cloth_tarps.mt"
 ], MaterialRule(factory=_factory_bip(Multilayered)))
 
 # Mesh decals
