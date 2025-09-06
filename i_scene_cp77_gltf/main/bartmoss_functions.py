@@ -1,13 +1,12 @@
 import bpy
+from mathutils import Vector, Quaternion, Euler, Matrix
+from typing import Dict, List
+from math import radians
 import idprop
 import bmesh
 import os
 import unicodedata
-import logging
-from mathutils import Vector, Quaternion
-from math import radians
 from collections import defaultdict
-from typing import List, Dict, Set
 
 # Internal state for restoring
 _previous_selection = []
@@ -15,79 +14,33 @@ _previous_active = None
 _previous_mode = None
 _dummy_name = "TemporaryContextObject"
 
-def compute_model_space(local_transforms, bone_parents):
-    """
-    Converts local-space transforms to model-space transforms using bone hierarchy.
-    """
-    model_space = [None] * len(local_transforms)
-    for i, (trans, rot) in enumerate(local_transforms):
-        if bone_parents[i] == -1:
-            # Root bone: LS == MS
-            model_space[i] = (trans.copy(), rot.copy())
-        else:
-            p_trans, p_rot = model_space[bone_parents[i]]
-            ms_trans = p_trans + p_rot @ trans
-            ms_rot = p_rot @ rot
-            model_space[i] = (ms_trans, ms_rot)
-    return model_space
 
-def compute_local_space(model_transforms, bone_parents):
-    """
-    Converts model-space transforms to local-space transforms using bone hierarchy.
-    """
-    local_space = [None] * len(model_transforms)
-    for i, (trans, rot) in enumerate(model_transforms):
-        if bone_parents[i] == -1:
-            local_space[i] = (trans.copy(), rot.copy())
-        else:
-            p_trans, p_rot = model_transforms[bone_parents[i]]
-            inv_p_rot = p_rot.inverted()
-            ls_trans = inv_p_rot @ (trans - p_trans)
-            ls_rot = inv_p_rot @ rot
-            local_space[i] = (ls_trans, ls_rot)
-    return local_space
-
-#basic logging to report errors instead of silently passing
-logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
-
-def normalize(path: str) -> str:
-    """
-    Normalize path for cross-platform and Unicode safety, ensuring it is an absolute path.
-    """
-    # os.path.abspath to ensure all paths are full and unambiguous.
+def normalize(path):
+    """Normalize path for cross-platform and Unicode safety."""
     return unicodedata.normalize('NFC', os.path.abspath(os.path.normpath(path)))
 
-
-def dataKrash(root: str, extensions: List[str]) -> Dict[str, Set[str]]:
-    """
-    Recursively find files by extension using os.scandir, returning full absolute paths.
-    The output is a dictionary mapping each extension to a SET of file paths.
-    """
-    normalized_root = normalize(root)
-    if not os.path.isdir(normalized_root):
-        logging.error(f"Root directory not found: {normalized_root}")
-        return {}
-
+def dataKrash(root, extensions):
+    """Recursively find files by extension, matching longest ones first, returning keys with leading dots."""
+    root = normalize(root)
     # Normalize and sort extensions by length (descending)
     norm_exts = sorted({ext.lower() for ext in extensions}, key=len, reverse=True)
-    ext_map = defaultdict(set)
+    ext_map = defaultdict(list)
 
-    def recurse(folder: str):
+    def recurse(folder):
         try:
             for entry in os.scandir(folder):
                 if entry.is_file():
                     name_lower = entry.name.lower()
                     for ext in norm_exts:
                         if name_lower.endswith(ext):
-                            full_path = normalize(entry.path)
-                            ext_map[ext].add(full_path)
+                            ext_map[ext].append(normalize(entry.path))
                             break
                 elif entry.is_dir():
                     recurse(entry.path)
-        except (PermissionError, FileNotFoundError) as e:
-            logging.warning(f"Could not scan {folder}: {e}")
+        except (PermissionError, FileNotFoundError):
+            pass #todo: some useful output here in cases of errors
 
-    recurse(normalized_root)
+    recurse(root)
     return dict(ext_map)
 
 mode_map = {
@@ -174,7 +127,7 @@ def safe_mode_switch(target_mode: str):
     # If the desired mode is already active, do nothing
     if ctx.mode == target_mode:
         return
-
+    
     # If context doesn't support mode switch, create a dummy
     if not bpy.ops.object.mode_set.poll():
         bpy.ops.object.select_all(action='DESELECT')
@@ -190,6 +143,7 @@ def safe_mode_switch(target_mode: str):
         bpy.ops.object.mode_set(mode=target_mode)
     except Exception as e:
         print(f"[safe_mode_switch] Failed to switch to mode {target_mode}: {e}")
+
 
     if dummy:
         bpy.data.objects.remove(dummy, do_unlink=True)

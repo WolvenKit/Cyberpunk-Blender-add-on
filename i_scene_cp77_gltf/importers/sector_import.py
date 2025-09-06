@@ -265,6 +265,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
     # Enter the path to your projects source\raw\base folder below, needs double slashes between folder names.
     path = os.path.join( os.path.dirname(filepath),'source','raw')
     print('path is ',path)
+    sectorFiles = dataKrash(path, ('.glb', '.mesh.json', '.app.json', '.anims.json','.ent.json', '.anims.glb', '.streamingsector.json','.rig.json', '.phys.json'))
     project=os.path.dirname(filepath)
     # If your importing to edit the sectors and want to add stuff then set the am_modding to True and it will auto create the _new collectors
     # want_collisions when True will import/generate the box and capsule collisions
@@ -278,12 +279,12 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                         s.clip_end = 50000
     props = bpy.context.scene.cp77_panel_props 
     escaped_path = glob.escape(path)    
-    jsonpath = glob.glob(os.path.join(escaped_path, "**", "*.streamingsector.json"), recursive = True)
-    mesh_jsons =  glob.glob(os.path.join(escaped_path,"**","*mesh.json"), recursive = True)
-    anim_files = glob.glob(os.path.join(escaped_path,"**","*anims.glb"), recursive = True)
-    app_path = glob.glob(os.path.join(escaped_path,"**","*.app.json"), recursive = True)
-    rigjsons = glob.glob(os.path.join(escaped_path,"**","*.rig.json"), recursive = True)
-    glbs =  glob.glob(os.path.join(escaped_path,"**","*.glb"), recursive = True)
+    jsonpath = sectorFiles.get('.streamingsector.json', []) 
+    mesh_jsons = sectorFiles.get('.mesh.json', [])
+    anim_files = sectorFiles.get('.anims.glb', [])
+    app_path = sectorFiles.get('.app.json', [])
+    rigjsons = sectorFiles.get('.rig.json', [])
+    glbs =  sectorFiles.get('.glb', [])
     path = os.path.join( os.path.dirname(filepath),'source','raw','base')
     meshes={}
     C = bpy.context
