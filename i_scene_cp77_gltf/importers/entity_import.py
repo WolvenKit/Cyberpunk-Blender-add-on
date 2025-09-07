@@ -156,7 +156,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                             animsinres.append(os.path.join(path,anim))
                         # presto_stash.append(animsinres)
 
-        if len(animsinres)>0:
+        if len(animsinres)>0 and os.path.exists(animsinres[0]):
             bpy.ops.io_scene_gltf.cp77(with_materials, filepath=animsinres[0],scripting=True)
             #find what we just loaded
             arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
@@ -300,15 +300,16 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                             if c['animations']['gameplay']!=None and len(c['animations']['gameplay'])>0 :                                # get the armatures already in the model
                                 oldarms= [x for x in bpy.data.objects if 'Armature' in x.name]
                                 animpath=os.path.join(path,c['animations']['gameplay'][0]['animSet']['DepotPath']['$value']+'.glb')
-                                bpy.ops.io_scene_gltf.cp77(with_materials, filepath=animpath, scripting=True)
-                                # find the armature we just loaded
-                                arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
-                                rig=arms[0]
-                                bones=rig.pose.bones
-                                rig["animset"] = animpath
-                                rig["rig"] = rig_path
-                                rig["ent"] = ent_name + ".ent.json"
-                                print('anim rig loaded')
+                                if os.path.exists(animpath):                                   
+                                    bpy.ops.io_scene_gltf.cp77(with_materials, filepath=animpath, scripting=True)
+                                    # find the armature we just loaded
+                                    arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
+                                    rig=arms[0]
+                                    bones=rig.pose.bones
+                                    rig["animset"] = animpath
+                                    rig["rig"] = rig_path
+                                    rig["ent"] = ent_name + ".ent.json"
+                                    print('anim rig loaded')
                         else:
                             print('another rig already loaded')
             if not vehicle_slots:
