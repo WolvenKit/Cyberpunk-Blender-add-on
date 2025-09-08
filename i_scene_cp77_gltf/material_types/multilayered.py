@@ -648,7 +648,7 @@ class Multilayered:
 
             # SET LAYER GROUP DEFAULT VALUES
 
-            if colorScale != None and colorScale in OverrideTable["ColorScale"].keys():
+            if colorScale != None and colorScale in OverrideTable["ColorScale"]:
                 LayerGroupN.inputs['ColorScale'].default_value = OverrideTable["ColorScale"][colorScale]
                 LayerGroupN['colorScale']=colorScale
             else:
@@ -709,17 +709,17 @@ class Multilayered:
             else:
                 LayerGroupN.inputs['MetalLevelsIn'].default_value = (1,0)
 
-            if metalLevelsOut != None:
+            if metalLevelsOut != None and metalLevelsOut in OverrideTable["MetalLevelsOut"]:
                 LayerGroupN.inputs['MetalLevelsOut'].default_value = OverrideTable["MetalLevelsOut"][metalLevelsOut]
             else:
                 LayerGroupN.inputs['MetalLevelsOut'].default_value = (1,0)
 
-            if roughLevelsIn != None:
+            if roughLevelsIn != None and roughLevelsIn in OverrideTable["RoughLevelsIn"]:
                 LayerGroupN.inputs['RoughLevelsIn'].default_value = OverrideTable["RoughLevelsIn"][roughLevelsIn]
             else:
                 LayerGroupN.inputs['RoughLevelsIn'].default_value = (1,0)
 
-            if roughLevelsOut != None:
+            if roughLevelsOut != None and roughLevelsOut in OverrideTable["RoughLevelsOut"]:
                 LayerGroupN.inputs['RoughLevelsOut'].default_value = OverrideTable["RoughLevelsOut"][roughLevelsOut]
             else:
                 LayerGroupN.inputs['RoughLevelsOut'].default_value = (1,0)
