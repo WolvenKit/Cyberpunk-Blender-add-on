@@ -261,7 +261,7 @@ class CP77_PT_PanelProps(PropertyGroup):
 
     use_vulkan: BoolProperty(
         name="Set Backend to Vulkan",
-        default=True,
+        default=False,
         description="""(Requires Restart) Sets the Blender graphics backend to Vulkan which can compile shaders that fail using OpenGL.
 This setting can also be changed from within system preferences."""
     )
