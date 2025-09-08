@@ -704,7 +704,7 @@ class Multilayered:
             else:
                 LayerGroupN.inputs['Opacity'].default_value = 1
 
-            if metalLevelsIn != None:
+            if metalLevelsIn != None and metalLevelsIn in OverrideTable["MetalLevelsIn"]:
                 LayerGroupN.inputs['MetalLevelsIn'].default_value = OverrideTable["MetalLevelsIn"][metalLevelsIn]
             else:
                 LayerGroupN.inputs['MetalLevelsIn'].default_value = (1,0)
