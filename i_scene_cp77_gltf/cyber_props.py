@@ -61,8 +61,6 @@ def SetCyclesRenderer(use_cycles=True, set_gi_params=False):
         for scene in bpy.data.scenes:
             scene.render.engine = 'CYCLES'
             scene.cycles.device = 'GPU'
-            system_prefs = bpy.context.preferences.system
-            system_prefs.gpu_backend = 'OPENGL'
 
         if set_gi_params:
             cycles = bpy.context.scene.cycles
@@ -73,7 +71,6 @@ def SetVulkanBackend(use_vulkan=True):
     if use_vulkan:
         system_prefs = bpy.context.preferences.system
         system_prefs.gpu_backend = 'VULKAN'
-        
 
 def CP77CollectionList(self, context):
     items = []
@@ -259,14 +256,13 @@ class CP77_PT_PanelProps(PropertyGroup):
     use_cycles: BoolProperty(
         name="Set Render Engine to Cycles",
         default=False,
-        description="""(Requires Restart if Vulkan backend being used)  Sets the Render Engine to Cycles. Imported shaders may fail to compile while using EEVEE without the Vulkan backend.
-This setting can also be changed from within system preferences."""
+        description="Sets the Render Engine to Cycles. Imported shaders may fail to compile while using EEVEE without the Vulkan backend"
     )
 
     use_vulkan: BoolProperty(
         name="Set Backend to Vulkan",
         default=True,
-        description="""(Requires Restart if OpenGL backend being used) Sets the Blender graphics backend to Vulkan which can compile shaders that fail using OpenGL.
+        description="""(Requires Restart) Sets the Blender graphics backend to Vulkan which can compile shaders that fail using OpenGL.
 This setting can also be changed from within system preferences."""
     )
 
