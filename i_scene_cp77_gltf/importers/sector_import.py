@@ -459,7 +459,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                         if 'json_apps' in move_coll.keys():
                             json_apps =  json.loads(move_coll['json_apps'])
                         else:
-                            print(f'{bcolors.FAIL}No material json found for - ', m)
+                            print(f'{bcolors.FAIL}No material json found for - {m}{bcolors.ENDC}')
                         for idx,obj in enumerate(move_coll.objects):
                             obj_copy=obj.copy()
                             obj_copy.data = obj.data.copy()
@@ -679,6 +679,8 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             curve=bpy.data.curves.new('worldSplineNode_','CURVE')
                             curve.splines.new('BEZIER')
                             curve.dimensions = '3D'
+                            curve.twist_mode = 'Z_UP'
+                            curve.resolution_u = 64
                             bzps=curve.splines[0].bezier_points
                             bzps.add(len(mesh_obj.data.vertices)-1)
                             for p_no,v in enumerate(mesh_obj.data.vertices):
