@@ -534,6 +534,30 @@ def convert_legacy_lattice(filepath):
     save_lattice_npz(lattice, filepath.replace(".zip", ".npz"))
     bpy.data.objects.remove(lattice, do_unlink=True)
 
+def create_color_attributes(obj):
+    mesh = obj.data
+
+    # Attribute settings
+    attrs = [
+        ("_GARMENTSUPPORTWEIGHT", (1.0, 0.0, 0.0, 1.0)),    # RGBA (full red, float)
+        ("_GARMENTSUPPORTCAP", (0.0, 0.0, 0.0, 1.0)),       # RGBA (full black, float)
+    ]
+
+    for name, color in attrs:
+        if name in mesh.color_attributes:
+            continue
+
+        mesh.color_attributes.new(
+            name=name,
+            domain='CORNER',           # Face corner domain
+            type='BYTE_COLOR'          # Byte color
+        )
+        attr = mesh.color_attributes[name]
+        # Set all values (loops = face corners)
+        for i in range(len(attr.data)):
+            attr.data[i].color = color
+
+
 def add_shrinkwrap(context, target_collection_name, offset, wrap_method, as_garment_support=True, apply_immediately=True):
     target_collection_children = get_collection_children(target_collection_name, "MESH")
     if not target_collection_children:
@@ -564,6 +588,8 @@ def add_shrinkwrap(context, target_collection_name, offset, wrap_method, as_garm
 
         for obj in selected_meshes:
             if as_garment_support:
+                create_color_attributes(obj)
+                bpy.ops.object.mode_set(mode='OBJECT')
                 # Remove existing 'GarmentSupport' shape key if it exists
                 if obj.data.shape_keys:
                     for shape_key in reversed(obj.data.shape_keys.key_blocks):
@@ -631,8 +657,11 @@ def add_shrinkwrap(context, target_collection_name, offset, wrap_method, as_garm
         return {'CANCELLED'}
     finally:
         # Switch back to original mode
-        if  context.mode != current_mode:
-            bpy.ops.object.mode_set(mode=current_mode)
+        try:
+            if  context.mode != current_mode:
+                bpy.ops.object.mode_set(mode=current_mode)
+        except Exception:
+            pass
 
     return {'FINISHED'}
 
