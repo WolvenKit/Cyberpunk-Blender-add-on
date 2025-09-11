@@ -250,8 +250,8 @@ def create_aposems_empties(obj, bone_names, parent_indices, bone_transforms, col
         empties[i] = empty
 
     for i, trs in enumerate(bone_transforms):
-        t = tr["Translation"]
-        r = tr["Rotation"]
+        t = trs["Translation"]
+        r = trs["Rotation"]
         s = trs["Scale"]
         empty = empties[i]
         bone_name = bone_names[i]
