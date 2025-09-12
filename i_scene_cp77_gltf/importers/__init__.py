@@ -188,6 +188,12 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
         col.prop(self, "with_lights")
         col.prop(self, "am_modding")
         col.prop(props, "with_materials")
+        box = layout.box()
+        col = box.column()
+        col.prop(props, 'use_vulkan')
+        col.prop(props, 'use_cycles')
+        if props.use_cycles:
+            col.prop(props, 'update_gi')
         if cp77_addon_prefs.experimental_features:
             box = layout.box()
             col = box.column()
