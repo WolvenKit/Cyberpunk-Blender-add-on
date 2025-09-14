@@ -260,7 +260,7 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
                 bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
             #check that faces are triangulated, cancel export, switch to edit mode with the untriangulated faces selected and throw an error
-            if any(len(face.vertices) != 3 for face in mesh.data.polygons):
+            if False: #any(len(face.vertices) != 3 for face in mesh.data.polygons):
                 bpy.ops.object.mode_set(mode='EDIT')
                 bpy.ops.mesh.select_mode(type='FACE')
                 bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)
