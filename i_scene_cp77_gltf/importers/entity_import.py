@@ -98,7 +98,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         resolved.append(os.path.join(path,res_p['DepotPath']['$value']))
 
     # if no apps requested populate the list with all available.
-    if len(appearances[0])==0 or appearances[0]=='ALL':
+    if len(appearances[0])==0 or appearances[0].upper()=='ALL':
         appearances=[]
         for app in ent_apps:
             appearances.append(app['appearanceName']['$value'])
@@ -192,7 +192,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
 
     else:
         for x,app_name in enumerate(appearances):
-
+            print(f"\nImporting appearance {x+1} of {len(appearances)}: {app_name}")
+            app_start_time = time.time()
             ent_coll = bpy.data.collections.new(ent_name+'_'+app_name)
             if inColl and inColl in coll_scene.children.keys():
                 par_coll=bpy.data.collections.get(inColl)
@@ -759,7 +760,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                     co=mesh_obj.constraints.new(type='COPY_LOCATION')
                                     co.target=rig
                                     co.subtarget= bindname
-
+            print('Appearance import time:', time.time() - app_start_time, 'Seconds')
 
         
         # am checking for license plates as we go rather than parsing all the components again.
