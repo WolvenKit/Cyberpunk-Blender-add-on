@@ -1206,7 +1206,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 A_Light.color = get_col(color)
                                 A_Light.cycles.use_multiple_importance_sampling = False
                                 A_Light.cycles.max_bounces = 6
-                                A_light.cycles.is_transmission_visible = False
+                                A_Light.cycles.is_transmission_visible = False
 
                                 if area_shape=='ALS_Capsule':
                                     A_Light.shape='RECTANGLE'
