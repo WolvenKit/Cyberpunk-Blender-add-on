@@ -344,195 +344,146 @@ def applyRefitter(obj):
     auto_names = [n for n in names if 'Autofitter' in n]
     garm_names = [n for n in names if 'Garment' in n]
 
-    values = {}
-    for n in auto_names + garm_names:
-        values[n] = 1.0
-
-    gs_key = add_key_from_mix(obj, 'GarmentSupport', values=values)
-
-    for n in garm_names:
-        remove_key(obj, n)
-
     if auto_names:
-        # bake first autofitter into Basis
-        baked = auto_names[0]
-        if copy_key_to_basis(obj, baked):
-            remove_key(obj, baked)
+        auto_values = {n: 1.0 for n in auto_names}
+        temp_mix_key = add_key_from_mix(obj, 'TempAutofitMix', values=auto_values)
+
+        if temp_mix_key:
+            copy_key_to_basis(obj, temp_mix_key.name)
+            remove_key(obj, temp_mix_key.name)
+        
+        for n in auto_names:
+            remove_key(obj, n)
+
+    gs_key = None
+    if garm_names:
+        garm_values = {n: 1.0 for n in garm_names}
+        gs_key = add_key_from_mix(obj, 'GarmentSupport', values=garm_values)
+
+        for n in garm_names:
+            remove_key(obj, n)
 
     return gs_key.name if gs_key else None
 
 def CP77RefitChecker(self, context):
-    scene = context.scene
-    objects = scene.objects
-    refitter = []
-    addon = []
-    for obj in objects:
-        if obj.type =='LATTICE':
+    refitters, addons = [], []
+    for obj in context.scene.objects:
+        if obj.type == 'LATTICE':
             if "refitter_type" in obj:
-                refitter.append(obj)
-            if "refitter_addon" in obj:
-                addon.append(obj)
-    print(f'refitter result: {refitter} refitter addon: {addon}')
-    return refitter, addon
+                refitters.append(obj)
+            elif "refitter_addon" in obj or "refitter_addon_type" in obj:
+                addons.append(obj)
+    print(f'Refitters: {len(refitters)}, Addons: {len(addons)}')
+    return refitters, addons
 
-def CP77Refit(context, refitter, addon, target_body_path, target_body_name, useAddon, addon_target_body_path, addon_target_body_name, fbx_rot, try_auto_apply):
-    autofitter(context, refitter, addon, target_body_path, useAddon, addon_target_body_path, addon_target_body_name, target_body_name, fbx_rot, try_auto_apply)
+def CP77Refit(context, refitter, addon, target_body_path, target_body_name, 
+              useAddon, addon_target_body_path, addon_target_body_name, fbx_rot, try_auto_apply):
+    return autofitter(context, refitter, addon, target_body_path, useAddon, 
+                      addon_target_body_path, addon_target_body_name, target_body_name, fbx_rot, try_auto_apply)
 
-def autofitter(context, refitter, addon, target_body_path, useAddon, addon_target_body_path, addon_target_body_name, target_body_name, fbx_rot, try_auto_apply):
-    scene = context.scene
-    refitter_obj = None
-    addon_obj = None
-    r_c = None
-
-    if target_body_name == 'None' and addon_target_body_name is not None:
-        target_body_name = addon_target_body_name
-        target_body_path = addon_target_body_path
-        useAddon = False
-
-
+def autofitter(context, refitter, addon, target_body_path, useAddon, 
+               addon_target_body_path, addon_target_body_name, target_body_name, fbx_rot, try_auto_apply):
+    
     selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
     if not selected_meshes:
         show_message("No meshes selected. Please select at least one mesh and try again.")
         return {'CANCELLED'}
 
-    if refitter:
-        for obj in refitter:
-            if obj.get('refitter_type') == target_body_name:
-                print(f"{obj['refitter_type']} refitter found")
-                refitter_obj = obj
-                break
+    if 'Refitters' in context.scene.collection.children:
+        r_c = context.scene.collection.children['Refitters']
+    else:
+        r_c = bpy.data.collections.new('Refitters')
+        context.scene.collection.children.link(r_c)
 
-        if refitter_obj:
-            print(f"Refitter found: {refitter_obj.name} (type: {refitter_obj['refitter_type']})")
-            selected_meshes = [
-                mesh for mesh in selected_meshes
-                if not any(
-                    modifier.type == 'LATTICE' and modifier.object == refitter_obj
-                    for modifier in mesh.modifiers)]
+    main_lattice = next((obj for obj in refitter if obj.get('refitter_type') == target_body_name), None)
+    if not main_lattice and target_body_name and target_body_name != 'None':
+        main_lattice = add_lattice(target_body_path, r_c, fbx_rot, target_body_name)
+    
+    addon_lattice = None
     if useAddon:
-        if addon:
-            for obj in addon:
-                if obj.get('refitter_addon_type') == addon_target_body_name:
-                    print(f"{obj['refitter_addon_type']} refitter addon found")
-                    addon_obj = obj
-                    break
+        addon_lattice = next((obj for obj in addon if obj.get('refitter_addon_type') == addon_target_body_name), None)
+        if not addon_lattice and addon_target_body_path:
+            addon_lattice = add_lattice(addon_target_body_path, r_c, fbx_rot, addon_target_body_name)
+            if addon_lattice:
+                addon_lattice["refitter_addon_type"] = addon_target_body_name
 
-            if addon_obj:
-                print(f"Refitter addon found: {addon_obj.name} (type: {addon_obj['refitter_addon_type']})")
-                selected_meshes = [
-                    mesh for mesh in selected_meshes
-                    if not any(
-                        modifier.type == 'LATTICE' and modifier.object == addon_obj
-                        for modifier in mesh.modifiers
-                    )
-                ]
+    meshes_modified_count = 0
+    for mesh in selected_meshes:
+        added_mods_names = []
 
-    if not selected_meshes:
-        show_message("No mesh needs refitting. Please select at least one mesh and try again.")
+        if main_lattice and not any(mod.type == 'LATTICE' and mod.object == main_lattice for mod in mesh.modifiers):
+            mod = mesh.modifiers.new(main_lattice.name, 'LATTICE')
+            mod.object = main_lattice
+            print(f'Refitting: {mesh.name} to: {main_lattice["refitter_type"]}')
+            added_mods_names.append(mod.name)
+        
+        if addon_lattice and not any(mod.type == 'LATTICE' and mod.object == addon_lattice for mod in mesh.modifiers):
+            mod = mesh.modifiers.new(addon_lattice.name, 'LATTICE')
+            mod.object = addon_lattice
+            print(f'Using Refitter Addon: {addon_lattice.name}')
+            added_mods_names.append(mod.name)
+        
+        if added_mods_names:
+            meshes_modified_count += 1
+            if try_auto_apply:
+                for mod_name in added_mods_names:
+                    apply_modifier_as_shapekey(mesh, mod_name)
+                applyRefitter(mesh)
+
+    if meshes_modified_count == 0:
+        show_message("All selected meshes already have the requested modifiers.")
         return {'CANCELLED'}
 
-    r_c = next((c for c in scene.collection.children if c.name == 'Refitters'), None)
-    if r_c is None:
-        r_c = bpy.data.collections.new('Refitters')
-        scene.collection.children.link(r_c)
-
-    new_lattice = add_lattice(target_body_path, r_c, fbx_rot, target_body_name)
-
-    for mesh in selected_meshes:
-        lattice_modifier = mesh.modifiers.new(new_lattice.name,'LATTICE')
-        print(f'refitting: {mesh.name} to: {new_lattice["refitter_type"]}')
-
-        if useAddon:
-            new_lattice = add_lattice(addon_target_body_path, r_c, fbx_rot, addon_target_body_name)
-            lattice_modifier.object = new_lattice
-
-        lattice_modifier.object = new_lattice
-
-        if try_auto_apply:
-            applyRefitter(mesh)
-
-    for mesh in selected_meshes:
-        mesh.select_set(True)
+    bpy.ops.object.select_all(action='DESELECT')
+    for obj in selected_meshes:
+        obj.select_set(True)
+    context.view_layer.objects.active = selected_meshes[0]
+    
+    return {'FINISHED'}
 
 def add_lattice(target_body_path, collection, fbx_rot, target_body_name):
-    """re-use previous lattice, or add a new one if there isn't one"""
-    for refitter in collection.objects:
-        if refitter.name == f"{target_body_name}Autofitter":
-            print(f"{target_body_name}Autofitter already exists")
-            return refitter
+    lattice_name = f"{target_body_name}Autofitter"
+    if lattice_name in collection.objects:
+        print(f"{lattice_name} already exists")
+        return collection.objects[lattice_name]
 
-    print(f"Creating {target_body_name}Autofitter from file '{target_body_path}'")
-    refitter = load_lattice_npz(target_body_path, name=f"{target_body_name}Autofitter", link_to_collection=collection)
+    print(f"Creating {lattice_name} from file '{target_body_path}'")
+    refitter = load_lattice_npz(target_body_path, name=lattice_name, link_to_collection=collection)
     refitter["refitter_type"] = target_body_name
-
-    if fbx_rot:
+    
+    if not fbx_rot:
         refitter.rotation_euler[2] += math.pi
-
+    
     bpy.ops.object.select_all(action='DESELECT')
     bpy.context.view_layer.objects.active = refitter
     refitter.select_set(True)
-
-    bpy.context.object.hide_viewport = True
-
+    refitter.hide_viewport = True
+    
     return refitter
 
-def _legacy_add_lattice(target_body_path, r_c, fbx_rot, target_body_name):
-    """old method to load a '.json in a .zip' lattice refitter"""
-    for refitter in r_c.objects:
-        if refitter.name == f"{target_body_name}Autofitter":
-            print(f"{target_body_name}Autofitter already exists")
-            return refitter
+def create_color_attributes(obj):
+    mesh = obj.data
 
-    print(f"Creating {target_body_name}Autofitter from json file (reading {target_body_path})")
-    from ..jsontool import JSONTool
-    # Get the JSON file path for the selected target_body
-    lattice_object_name, control_points, lattice_points, lattice_object_location, lattice_object_rotation, lattice_object_scale, lattice_interpolation_u, lattice_interpolation_v, lattice_interpolation_w  = JSONTool.jsonload(target_body_path)
-    bpy.ops.object.add(type='LATTICE', enter_editmode=False, location=(0, 0, 0))
-    new_lattice = bpy.context.object
-    new_lattice.name = lattice_object_name
-    new_lattice["refitter_type"] = target_body_name
-    lattice = new_lattice.data
-    try:
-        r_c.objects.link(new_lattice)
-        bpy.context.collection.objects.unlink(new_lattice)
-    except RuntimeError:
-        pass # Ignore error if the object is already in the collection
+    # Attribute settings
+    attrs = [
+        ("_GARMENTSUPPORTWEIGHT", (1.0, 0.0, 0.0, 1.0)),    # RGBA (full red, float)
+        ("_GARMENTSUPPORTCAP", (0.0, 0.0, 0.0, 1.0)),       # RGBA (full black, float)
+    ]
 
-    # Set the dimensions of the lattice
-    lattice.points_u = lattice_points[0]
-    lattice.points_v = lattice_points[1]
-    lattice.points_w = lattice_points[2]
-    new_lattice.location[0] = lattice_object_location[0]
-    new_lattice.location[1] = lattice_object_location[1]
-    new_lattice.location[2] = lattice_object_location[2]
-    if fbx_rot:
-    # Rotate the Z-axis by 180 degrees (pi radians)
-        new_lattice.rotation_euler = (lattice_object_rotation[0], lattice_object_rotation[1],lattice_object_rotation[2] + 3.14159)
-    else:
-        new_lattice.rotation_euler = (lattice_object_rotation[0], lattice_object_rotation[1],lattice_object_rotation[2])
-    new_lattice.scale[0] = lattice_object_scale[0]
-    new_lattice.scale[1] = lattice_object_scale[1]
-    new_lattice.scale[2] = lattice_object_scale[2]
+    for name, color in attrs:
+        if name in mesh.color_attributes:
+            continue
 
-    # Set interpolation types
-    lattice.interpolation_type_u = lattice_interpolation_u
-    lattice.interpolation_type_v = lattice_interpolation_v
-    lattice.interpolation_type_w = lattice_interpolation_w
+        mesh.color_attributes.new(
+            name=name,
+            domain='CORNER',           # Face corner domain
+            type='BYTE_COLOR'          # Byte color
+        )
+        attr = mesh.color_attributes[name]
+        # Set all values (loops = face corners)
+        for i in range(len(attr.data)):
+            attr.data[i].color = color
 
-    # Create a flat list of lattice points
-    lattice_points = lattice.points
-    flat_lattice_points = [lattice_points[w + v * lattice.points_u + u * lattice.points_u * lattice.points_v] for u in range(lattice.points_u) for v in range(lattice.points_v) for w in range(lattice.points_w)]
-
-    for control_point, lattice_point in zip(control_points, flat_lattice_points):
-        lattice_point.co_deform = control_point
-
-    return new_lattice
-
-def convert_legacy_lattice(filepath):
-    """Convert a legacy .zip lattice file to a new format."""
-    lattice = _legacy_add_lattice(filepath, bpy.context.collection, False, "Legacy")
-    save_lattice_npz(lattice, filepath.replace(".zip", ".npz"))
-    bpy.data.objects.remove(lattice, do_unlink=True)
 
 def add_shrinkwrap(context, target_collection_name, offset, wrap_method, as_garment_support=True, apply_immediately=True):
     target_collection_children = get_collection_children(target_collection_name, "MESH")
@@ -564,6 +515,8 @@ def add_shrinkwrap(context, target_collection_name, offset, wrap_method, as_garm
 
         for obj in selected_meshes:
             if as_garment_support:
+                create_color_attributes(obj)
+                bpy.ops.object.mode_set(mode='OBJECT')
                 # Remove existing 'GarmentSupport' shape key if it exists
                 if obj.data.shape_keys:
                     for shape_key in reversed(obj.data.shape_keys.key_blocks):
@@ -631,8 +584,11 @@ def add_shrinkwrap(context, target_collection_name, offset, wrap_method, as_garm
         return {'CANCELLED'}
     finally:
         # Switch back to original mode
-        if  context.mode != current_mode:
-            bpy.ops.object.mode_set(mode=current_mode)
+        try:
+            if  context.mode != current_mode:
+                bpy.ops.object.mode_set(mode=current_mode)
+        except Exception:
+            pass
 
     return {'FINISHED'}
 

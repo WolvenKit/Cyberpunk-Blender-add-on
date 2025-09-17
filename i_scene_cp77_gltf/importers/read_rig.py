@@ -156,6 +156,42 @@ def read_rig(filepath: str) -> RigData:
     )
 
 
+def create_debug_empties(obj, bone_names, bone_parents, bone_transforms, apose_ls, apose_ms, bind_pose):
+    """
+    Creates empties on an imported rig's joints for local and model space,
+    and groups them under a parent collection
+    """
+    debug_collection_name = f"{obj.name}_transform_debugging"
+    debug_collection = bpy.data.collections.get(debug_collection_name)
+    if debug_collection is None:
+        debug_collection = bpy.data.collections.new(debug_collection_name)
+        bpy.context.scene.collection.children.link(debug_collection)
+    debug_collection['owner'] = obj
+    # Helper to create a child collection and link it to Debugging
+    def ensure_debug_subcollection(sub_name, create_fn):
+        if sub_name in bpy.data.collections:
+            sub_col = bpy.data.collections[sub_name]
+        else:
+            sub_col = bpy.data.collections.new(sub_name)
+            debug_collection.children.link(sub_col)
+        create_fn(sub_col)
+
+    if  bind_pose == 'A-Pose':
+        if apose_ls is not None:
+            ensure_debug_subcollection("aPoseLS", lambda col: create_aposels_empties(
+            obj, bone_names, bone_parents, apose_ls, collection_name=col.name
+            ))
+
+        if apose_ms is not None:
+            ensure_debug_subcollection("aPoseMS", lambda col: create_aposems_empties(
+                obj, bone_names, bone_parents, apose_ms, collection_name=col.name
+            ))
+    else:
+        if bone_transforms is not None:
+            ensure_debug_subcollection("tPoseLS", lambda col: create_aposels_empties(
+               obj, bone_names, bone_parents, bone_transforms, collection_name=col.name
+            ))
+
 def create_aposels_empties(obj, bone_names, parent_indices, bone_transforms, collection_name="aPoseLS_Debug"):
     collection = bpy.data.collections.get(collection_name) or bpy.data.collections.new(collection_name)
     if collection.name not in bpy.context.scene.collection.children:
@@ -178,13 +214,15 @@ def create_aposels_empties(obj, bone_names, parent_indices, bone_transforms, col
             child.parent = parent
             child.matrix_parent_inverse = parent.matrix_world.inverted()
 
-    for i, tr in enumerate(bone_transforms):
-        t = tr["Translation"]
-        r = tr["Rotation"]
+    for i, trs in enumerate(bone_transforms):
+        t = trs["Translation"]
+        r = trs["Rotation"]
+        s = trs["Scale"]
         empty = empties[i]
         bone_name = bone_names[i]
         empty.location = (t["X"], t["Y"], t["Z"])
         empty.rotation_quaternion = Quaternion((r["r"], r["i"], r["j"], r["k"]))
+        empty.scale = (s["X"], s["Y"], s["Z"])
         c = empty.constraints.new(type='COPY_TRANSFORMS')
         c.name = f"CopyTransforms_{bone_name}"
         c.target = obj
@@ -195,7 +233,7 @@ def create_aposels_empties(obj, bone_names, parent_indices, bone_transforms, col
         empty['Space: '] = f"{collection_name}"
         empty["raw_translation"] = [t["X"], t["Y"], t["Z"]]
         empty["raw_rotation"] = [r["r"], r["i"], r["j"], r["k"]]
-
+        empty["raw_scale"] = [s["X"], s["Y"], s["Z"]]
 
 def create_aposems_empties(obj, bone_names, parent_indices, bone_transforms, collection_name="aPoseMS_Debug"):
     collection = bpy.data.collections.get(collection_name) or bpy.data.collections.new(collection_name)
@@ -211,13 +249,15 @@ def create_aposems_empties(obj, bone_names, parent_indices, bone_transforms, col
         collection.objects.link(empty)
         empties[i] = empty
 
-    for i, tr in enumerate(bone_transforms):
-        t = tr["Translation"]
-        r = tr["Rotation"]
+    for i, trs in enumerate(bone_transforms):
+        t = trs["Translation"]
+        r = trs["Rotation"]
+        s = trs["Scale"]
         empty = empties[i]
         bone_name = bone_names[i]
         empty.location = (t["X"], t["Y"], t["Z"])
         empty.rotation_quaternion = Quaternion((r["r"], r["i"], r["j"], r["k"]))
+        empty.scale = (s["X"], s["Y"], s["Z"])
         c = empty.constraints.new(type='COPY_TRANSFORMS')
         c.name = f"CopyTransforms_{bone_name}"
         c.target = obj
@@ -228,7 +268,7 @@ def create_aposems_empties(obj, bone_names, parent_indices, bone_transforms, col
         empty['Space: '] = f"{collection_name}"
         empty["raw_translation"] = [t["X"], t["Y"], t["Z"]]
         empty["raw_rotation"] = [r["r"], r["i"], r["j"], r["k"]]
-
+        empty["raw_scale"] = [s["X"], s["Y"], s["Z"]]
 
 def scale_matrix(s: Vector | tuple | list) -> Matrix:
     m = Matrix.Identity(4)
