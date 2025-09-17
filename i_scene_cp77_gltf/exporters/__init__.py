@@ -99,6 +99,13 @@ class CP77GLBExport(Operator,ExportHelper):
         default=True,
         description="Applies the transform of the objects. Disable this if you don't care about the location/rotation/scale of the objects"
     )
+    
+    apply_modifiers: BoolProperty(
+        name="Apply Modifiers",
+        default=True,
+        description="Applies the modifiers of the objects. Disable this if you have shapekeys."
+    )
+
 
     def draw(self, context):
         layout = self.layout
@@ -115,6 +122,7 @@ class CP77GLBExport(Operator,ExportHelper):
                 row.prop(self, "static_prop")
             row = layout.row(align=True)
             row.prop(self, "apply_transform")
+            row.prop(self, "apply_modifiers")
 
 
     def execute(self, context):
@@ -126,6 +134,7 @@ class CP77GLBExport(Operator,ExportHelper):
             limit_selected=self.limit_selected,
             static_prop=self.static_prop,
             apply_transform=self.apply_transform,
+            apply_modifiers=self.apply_transform,
         )
         return {'FINISHED'}
 

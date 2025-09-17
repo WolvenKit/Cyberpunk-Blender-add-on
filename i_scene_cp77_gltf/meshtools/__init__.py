@@ -47,7 +47,7 @@ class CP77_PT_MeshTools(Panel):
         else:
             col.operator("cp77.uv_checker", text="Apply UV Checker")
         col.operator("cp77.trans_weights", text="Weight Transfer Tool")
-        col.operator("cp77.shrinkwrap", text="Create Shrinkwrap")
+        col.operator("cp77.shrinkwrap", text="GarmentSupport/Decal")
 
         if context.active_object and len([obj for obj in bpy.context.selected_objects if obj.type == 'MESH']) > 1:
             col.operator("cp77.safe_join", text="Join Meshes")

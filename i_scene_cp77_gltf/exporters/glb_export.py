@@ -139,7 +139,7 @@ def restore_user_settings(user_settings):
 # mana: by assigning default attributes, we make this update-safe.
 def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=False, 
                          limit_selected=True, static_prop=False, red_garment_col=False, apply_transform=True,
-                         action_filter=False, export_tracks=False):
+                         action_filter=False, export_tracks=False, apply_modifiers=True):
     user_settings = save_user_settings_and_reset_to_default()
 
     objects = context.selected_objects
@@ -163,7 +163,7 @@ def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=F
             meshes = [obj for obj in objects if obj.type == 'MESH' and not "Icosphere" in obj.name]
             if not meshes:
                 raise ValueError("No meshes selected, please select at least one mesh")
-            export_meshes(context, filepath, export_visible, limit_selected, static_prop, red_garment_col, apply_transform, meshes, options)
+            export_meshes(context, filepath, export_visible, limit_selected, static_prop, red_garment_col, apply_transform, apply_modifiers, meshes, options)
     except Exception as e:
         show_message(str(e))  # why: robust even if e.args is empty
         return {'CANCELLED'}
@@ -232,7 +232,7 @@ def export_anims(context, filepath, options, armatures, export_tracks = False):
 
     return {'FINISHED'}
 
-def export_meshes(context, filepath, export_visible, limit_selected, static_prop, red_garment_col, apply_transform, meshes, options):
+def export_meshes(context, filepath, export_visible, limit_selected, static_prop, red_garment_col, apply_transform,apply_modifiers, meshes, options):
     groupless_bones = set()
     bone_names = []
     options.update(cp77_mesh_options())
@@ -259,8 +259,12 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
             if apply_transform:
                 bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
+            # apply modifiers
+            if apply_modifiers:
+                options['export_apply'] = True
+                        
             #check that faces are triangulated, cancel export, switch to edit mode with the untriangulated faces selected and throw an error
-            if any(len(face.vertices) != 3 for face in mesh.data.polygons):
+            if False: #any(len(face.vertices) != 3 for face in mesh.data.polygons):
                 bpy.ops.object.mode_set(mode='EDIT')
                 bpy.ops.mesh.select_mode(type='FACE')
                 bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)

@@ -167,7 +167,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         current_file_base_path = os.path.join(os.path.dirname(filepath),filename)
         has_material_json = os.path.exists(current_file_base_path + ".Material.json")
 
-        existingMaterials = bpy.data.materials.keys()
+        existingMaterials = set(bpy.data.materials.keys())
         BlenderGlTF.create(gltf_importer)
 
         imported=context.selected_objects #the new stuff should be selected
@@ -217,9 +217,8 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
 
         #for sketchfab exports, we want to keep our materials
         if not isExternalImport:
-            for name in bpy.data.materials.keys():
-                if name not in existingMaterials:
-                    bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
+            for name in set(bpy.data.materials.keys()) - existingMaterials:
+                 bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
 
         #Kwek: Gate this--do the block if corresponding Material.json exist
         #Kwek: was tempted to do a try-catch, but that is just La-Z
