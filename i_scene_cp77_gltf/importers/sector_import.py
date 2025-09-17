@@ -1191,8 +1191,8 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 pos=get_pos(light_ndata)
                                 rot=get_rot(light_ndata)
 
-                                A_Light=bpy.data.lights.new(light_name+'_'+str(i),'AREA')
-                                light_obj=bpy.data.objects.new(light_name+'_'+str(i), A_Light)
+                                A_Light=bpy.data.lights.new(str(i)+'_'+light_name,'AREA')
+                                light_obj=bpy.data.objects.new(str(i)+'_'+light_name, A_Light)
                                 Sector_coll.objects.link(light_obj)
                                 light_obj.location=pos
                                 light_obj.rotation_mode='QUATERNION'
@@ -1202,11 +1202,11 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 light_obj.rotation_quaternion = original_rot @ rotation_90_x_local
                                 light_obj['flicker']=light_node['flicker']
                                 light_obj['nodeType']=ntype
-                                A_Light.energy = intensity / 100
+                                A_Light.energy = intensity / 10
                                 A_Light.color = get_col(color)
                                 A_Light.cycles.use_multiple_importance_sampling = False
                                 A_Light.cycles.max_bounces = 6
-                                A_Light.cycles.is_transmission_visible = False
+                                light_obj.visible_transmission = False
 
                                 if area_shape=='ALS_Capsule':
                                     A_Light.shape='RECTANGLE'
