@@ -1,8 +1,5 @@
 # Blender Entity import script by Simarilius
 # Updated May 23 with vehicle rig support
-import json
-import re
-import glob
 import os
 import bpy
 import time
@@ -10,14 +7,12 @@ import math
 import traceback
 from math import sin,cos
 from mathutils import Vector, Matrix , Quaternion
-import bmesh
 from ..main.common import *
 from ..jsontool import JSONTool
 from .phys_import import cp77_phys_import
 from ..collisiontools.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
-
-
+from ..main.bartmoss_functions import dataKrash
 
 def create_axes(ent_coll,name):
     if name not in ent_coll.objects.keys():
@@ -33,7 +28,7 @@ def create_axes(ent_coll,name):
 
 # The appearance list needs to be the appearanceNames for each ent that you want to import, will import all if not specified
 # if you've already imported the body/head and set the rig up you can exclude them by putting them in the exclude_meshes list
-#presto_stash=[]
+#presto_stash=[
 
 def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], include_collisions=False, include_phys=False, 
                    include_entCollider=False, inColl='', remapdepot=False, meshes=None, mesh_jsons=None, escaped_path=None, app_path=None, anim_files=None, rigjsons=None):
@@ -44,13 +39,14 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     C = bpy.context
     coll_scene = C.scene.collection
     start_time = time.time()
+    #tracemalloc.start()
 
     before,mid,after=filepath.partition(os.path.join('source','raw'))
     path=before+mid
 
     error_messages = []
     JSONTool.start_caching()
-
+    entPaths = dataKrash(path, ('.glb', 'mesh.json', '.app.json', '.anims.glb', '.rig.json', '.phys.json'))
     ent_name=os.path.basename(filepath)[:-9]
     if not cp77_addon_prefs.non_verbose:
         if isinstance(appearances, list):
@@ -114,20 +110,18 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         vehicle_slots= VS[0]['slots']
 
     # find the appearance file jsons
-    if not escaped_path:
-        escaped_path = glob.escape(path)
     if not app_path:
-        app_path = glob.glob(os.path.join(escaped_path,"**","*.app.json"), recursive = True)
+        app_path = entPaths.get('.app.json', []) #glob.glob(os.path.join(escaped_path,"**","*.app.json"), recursive = True)
     if len(app_path)==0:
         print('No Appearance file JSONs found in path')
 
     # find the meshes
     if not meshes:
-        meshes =  glob.glob(os.path.join(escaped_path,"**","*.glb"), recursive = True)
+        meshes =  entPaths.get('.glb', [])#glob.glob(os.path.join(escaped_path,"**","*.glb"), recursive = True)
     if len(meshes)==0:
         print('No Meshes found in path')
     if not mesh_jsons:
-        mesh_jsons =  glob.glob(os.path.join(escaped_path,"**","*mesh.json"), recursive = True)
+        mesh_jsons = entPaths.get('.mesh.json', []) #glob.glob(os.path.join(escaped_path,"**","*mesh.json"), recursive = True)
 
     # find the anims
     # look through the components and find an anim, and load that,
@@ -135,7 +129,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     # otherwise just skip this section
     #
     if not anim_files:
-        anim_files = glob.glob(os.path.join(escaped_path,"**","*anims.glb"), recursive = True)
+        anim_files = entPaths.get('.anims.glb', [])#glob.glob(os.path.join(escaped_path,"**","*anims.glb"), recursive = True)
 
     rig=None
     bones=None
@@ -173,14 +167,14 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
 
     # find the rig json associated with the ent
     if not rigjsons:
-        rigjsons = glob.glob(os.path.join(escaped_path,"**","*.rig.json"), recursive = True)
+        rigjsons = entPaths.get('.rig.json', [])#glob.glob(os.path.join(escaped_path,"**","*.rig.json"), recursive = True)
     rig_j=None
     if len(rigjsons)==0 or len(ent_rigs)==0:
         print('no rig json loaded')
     else:
-        entrigjsons=[x for x in rigjsons if x[:-5] in ent_rigs]
-        if len(entrigjsons)>0:
-            for entrig in entrigjsons:
+
+        if len(rigjsons)>0:
+            for entrig in rigjsons:
                 rig_j=JSONTool.jsonload(entrig, error_messages)
                 if rig_j is not None:
                     rig_j=rig_j['Data']['RootChunk']
@@ -801,7 +795,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
             ent_coll.children.link(collision_collection)
             if include_phys:
                 try:
-                    physJsonPaths = glob.glob(escaped_path + "\**\*.phys.json", recursive=True)
+                    physJsonPaths = entPaths.get('.phys.json') #glob.glob(escaped_path + "\**\*.phys.json", recursive=True)
                     if len(physJsonPaths) == 0:
                         print('No phys file JSONs found in path')
                     else:
