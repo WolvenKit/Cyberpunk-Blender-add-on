@@ -102,7 +102,7 @@ def bool_function(self, context):
 def setup_mldata(self, context):
     if bpy.context.object is None:
         return
-    if not bpy.context.object.active_material.get('MLSetup'):
+    if bpy.context.object.active_material and not bpy.context.object.active_material.get('MLSetup'):
         return
     nt = bpy.context.object.active_material.node_tree
     

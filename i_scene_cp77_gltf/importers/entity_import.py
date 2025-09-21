@@ -36,7 +36,8 @@ def create_axes(ent_coll,name):
 #presto_stash=[]
 
 def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], include_collisions=False, include_phys=False, 
-                   include_entCollider=False, inColl='', remapdepot=False, meshes=None, mesh_jsons=None, escaped_path=None, app_path=None, anim_files=None, rigjsons=None):
+                   include_entCollider=False, inColl='', remapdepot=False, meshes=None, mesh_jsons=None, escaped_path=None, 
+                   app_path=None, anim_files=None, rigjsons=None,generate_overrides=False):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     with_materials = with_materials
     if not cp77_addon_prefs.non_verbose:
@@ -383,7 +384,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 #print(meshApp)
                             try:
                                 # TODO: sim, this is broken, pls fix Y_Y
-                                bpy.ops.io_scene_gltf.cp77(with_materials, filepath=meshpath, appearances=meshApp,scripting=True)
+                                bpy.ops.io_scene_gltf.cp77(with_materials, filepath=meshpath, appearances=meshApp,scripting=True,generate_overrides=generate_overrides)
                                 if (len(C.selected_objects) == 0):
                                     show_message(f"Failed to import mesh: {meshpath}")
                                 for obj in C.selected_objects:
