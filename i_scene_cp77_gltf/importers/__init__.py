@@ -93,6 +93,9 @@ class CP77EntityImport(Operator,ImportHelper):
                                 description="Entity Appearances to extract. Needs appearanceName from ent. Comma seperate multiples",
                                 default="default",
                                 )
+
+    generate_overrides: BoolProperty(name="Generate Overrides for Multilayer materials (may be slow)",default=False,description="Imports overrides and palettes for multilayered materials")
+
     exclude_meshes: StringProperty(name= "Meshes_to_Exclude",
                                 description="Meshes to skip during import",
                                 default="",
@@ -117,7 +120,8 @@ class CP77EntityImport(Operator,ImportHelper):
         row = layout.row(align=True)
         box = layout.box()
         col = box.column()
-        col.prop(props, "with_materials")
+        col.prop(props, "with_materials")        
+        col.prop(self, 'generate_overrides')
         box = layout.box()
         col = box.column()
         col.prop(props, "use_vulkan")
@@ -155,7 +159,8 @@ class CP77EntityImport(Operator,ImportHelper):
         bob=self.filepath
         inColl=self.inColl
         #print('Bob - ',bob)
-        importEnt(props.with_materials, bob, apps, excluded, self.include_collisions, self.include_phys, self.include_entCollider, inColl, props.remap_depot, meshes=None, mesh_jsons=None, escaped_path=None, app_path=None, anim_files=None, rigjsons=None)
+        importEnt(props.with_materials, bob, apps, excluded, self.include_collisions, self.include_phys, self.include_entCollider, inColl, props.remap_depot, 
+                    meshes=None, mesh_jsons=None, escaped_path=None, app_path=None, anim_files=None, rigjsons=None, generate_overrides=self.generate_overrides)
 
         return {'FINISHED'}
 
@@ -288,6 +293,7 @@ class CP77Import(Operator, ImportHelper):
         SetCyclesRenderer(props.use_cycles, props.update_gi)
         appearances=self.appearances.split(",")
         # turns out that multimesh import of an entire car uses a gazillion duplicates as well...
+        impinitiated_cache = False
         if not JSONTool._use_cache:
             JSONTool.start_caching()
             impinitiated_cache = True

@@ -300,7 +300,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
             if generate_overrides:
                 try:
                     from ..exporters.mlsetup_export import cp77_mlsetup_generateoverrides
-                    cp77_mlsetup_generateoverrides(bpy.data.window_managers[0], bpy.context)
+                    cp77_mlsetup_generateoverrides(None, bpy.context)
                 except Exception as e:
                     print("Exception when trying to generate multilayer overrides: " + str(e))
                     raise e
