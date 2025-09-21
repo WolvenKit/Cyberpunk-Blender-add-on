@@ -267,7 +267,8 @@ def cp77_mlsetup_getpath(self, context):
     mat=obj.material_slots[mat_idx].material
 
     if not mat.get('MLSetup'):
-        raise ValueError('Multilayered setup not found within selected material.')
+        self.report({'ERROR'}, 'Multilayered setup not found within selected material.')
+        return {'CANCELLED'}
     else:
         MLSetup = mat.get('MLSetup')
         ProjPath=mat.get('ProjPath')
