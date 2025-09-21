@@ -226,6 +226,7 @@ class CP77Import(Operator, ImportHelper):
     hide_armatures: BoolProperty(name="Hide Armatures",default=True,description="Hide the armatures on imported meshes")
 
     import_garmentsupport: BoolProperty(name="Import Garment Support (Experimental)",default=True,description="Imports Garment Support mesh data as color attributes")
+    generate_overrides: BoolProperty(name="Generate Overrides for Multilayer materials (may be slow)",default=False,description="Imports overrides and palettes for multilayered materials")
 
     filepath: StringProperty(subtype = 'FILE_PATH')
 
@@ -257,6 +258,7 @@ class CP77Import(Operator, ImportHelper):
             box = layout.box()
             col = box.column()
             col.prop(props, 'with_materials')
+            col.prop(self, 'generate_overrides')
             col.prop(self, 'exclude_unused_mats')
             box = layout.box()
             col = box.column()
@@ -286,9 +288,12 @@ class CP77Import(Operator, ImportHelper):
         SetCyclesRenderer(props.use_cycles, props.update_gi)
         appearances=self.appearances.split(",")
         # turns out that multimesh import of an entire car uses a gazillion duplicates as well...
-        JSONTool.start_caching()
-        CP77GLBimport( props.with_materials, props.remap_depot, self.exclude_unused_mats, self.image_format, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, appearances, self.scripting, self.import_tracks)
-        JSONTool.stop_caching()
+        if not JSONTool._use_cache:
+            JSONTool.start_caching()
+            impinitiated_cache = True
+        CP77GLBimport( props.with_materials, props.remap_depot, self.exclude_unused_mats, self.image_format, self.filepath, self.hide_armatures, self.import_garmentsupport, self.files, self.directory, appearances, self.scripting, self.import_tracks, self.generate_overrides)
+        if impinitiated_cache:
+            JSONTool.stop_caching()
 
         return {'FINISHED'}
 

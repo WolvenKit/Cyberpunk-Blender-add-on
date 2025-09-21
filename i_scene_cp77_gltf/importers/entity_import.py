@@ -49,7 +49,10 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     path=before+mid
 
     error_messages = []
-    JSONTool.start_caching()
+    entinitiatedcache = False
+    if not JSONTool._use_cache:
+        JSONTool.start_caching()
+        entinitiatedcache = True
 
     ent_name=os.path.basename(filepath)[:-9]
     if not cp77_addon_prefs.non_verbose:
@@ -924,8 +927,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     if rig:
         arm=bpy.data.armatures[rig.name]
         arm.pose_position = 'REST'
-
-    JSONTool.stop_caching()
+    if entinitiatedcache:
+        JSONTool.stop_caching()
     if len(error_messages) > 0:
         show_message('Errors during import:\n\t' + '\n\t'.join(error_messages))
     if not cp77_addon_prefs.non_verbose:

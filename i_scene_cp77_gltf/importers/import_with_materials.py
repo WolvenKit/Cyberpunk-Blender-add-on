@@ -87,7 +87,7 @@ imported = None
 appearances = None
 collection = None
 
-def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=True, image_format='png', filepath='', hide_armatures=True, import_garmentsupport=False, files=[], directory='', appearances=[], scripting=False, import_tracks=False):
+def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=True, image_format='png', filepath='', hide_armatures=True, import_garmentsupport=False, files=[], directory='', appearances=[], scripting=False, import_tracks=False, generate_overrides=False):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     context=bpy.context
     oldanims = None
@@ -142,8 +142,10 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
 
     #mana: error messages - display one popup, not 500k
     errorMessages = []
-
-    JSONTool.start_caching()
+    meshinitiated_cache = False
+    if not JSONTool._use_cache:
+        JSONTool.start_caching()
+        meshinitiated_cache = True
 
     #Kwek: Gate this--do the block iff corresponding Material.json exist
     #Kwek: was tempted to do a try-catch, but that is just La-Z
@@ -294,8 +296,8 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
             except Exception as e:
                 print("Exception when trying to import mats: " + str(e))
                 raise e
-
-    JSONTool.stop_caching()
+    if meshinitiated_cache:
+        JSONTool.stop_caching()
 
 
     if len(errorMessages) > 0:
@@ -345,7 +347,9 @@ def reload_mats(self, context):
     image_format='png'
 
     # JATO: no idea what this does but the glb import function does it so...
-    JSONTool.start_caching()
+    if not JSONTool._use_cache:
+        JSONTool.start_caching()
+        initiated_cache = True
 
     # JATO: probably a better way to do this but idk how and dont want to rewrite the function
     somejunk, otherjunk, mats = JSONTool.jsonload(matjsonpath, errorMessages)
@@ -377,12 +381,13 @@ def reload_mats(self, context):
 
     newmat.name = old_mat_name
 
-    JSONTool.stop_caching()
+    if initiated_cache:
+        JSONTool.stop_caching()
 
     if len(errorMessages) > 0:
         show_message("\n".join(errorMessages))
 
-def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmats,multimesh=False):
+def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmats,multimesh=False,generate_overrides=False):
     failedon = []
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     start_time = time.time()
