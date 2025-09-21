@@ -16,7 +16,6 @@ from ..main.common import get_classes, show_message
 from ..cyber_props import *
 from ..cyber_prefs import *
 from ..icons.cp77_icons import *
-from ..ml
 import ast
 
 class CP77RigJSONExport(Operator,ExportHelper):
