@@ -194,7 +194,7 @@ class CP77MlSetupGenerateOverrides(Operator):
         if not mat.get('MLSetup'):
             self.report({'ERROR'}, 'Multilayered setup not found within selected material.')
             return {'CANCELLED'}
-        cp77_mlsetup_getoverrides(self, context)
+        cp77_mlsetup_generateoverrides(self, context)
 
         bpy.ops.get_layer_overrides.mlsetup()
 
