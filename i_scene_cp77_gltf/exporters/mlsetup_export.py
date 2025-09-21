@@ -299,14 +299,18 @@ def cp77_step_sort(r,g,b, repetitions=1):
         lum = repetitions - lum
     return (h2, lum, v2)
 
-def cp77_mlsetup_getoverrides(self, context):
-    obj=bpy.context.active_object
+def cp77_mlsetup_generateoverrides(self, context,obj=None):
+    if not obj:
+        obj=bpy.context.active_object
     mat_idx = obj.active_material_index
     mat=obj.material_slots[mat_idx].material
     nodes=mat.node_tree.nodes
     prefixxed=[]
     if not mat.get('MLSetup'):
-        self.report({'ERROR'}, 'Multilayered setup not found within selected material.')
+        if self:
+            self.report({'ERROR'}, 'Multilayered setup not found within selected material.')
+        else:
+            print('Multilayered setup not found within selected material.')
         return {'CANCELLED'}
 
     MLSetup = mat.get('MLSetup')
@@ -480,4 +484,7 @@ def cp77_mlsetup_getoverrides(self, context):
 
     success_message = "Generated overrides for " + mat.name + " on " + obj.name
 
-    self.report({'INFO'}, success_message)
+    if self:
+        self.report({'INFO'}, success_message)
+    else:
+        print(success_message)
