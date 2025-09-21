@@ -16,6 +16,7 @@ from ..main.common import get_classes, show_message
 from ..cyber_props import *
 from ..cyber_prefs import *
 from ..icons.cp77_icons import *
+from ..ml
 import ast
 
 class CP77RigJSONExport(Operator,ExportHelper):
@@ -430,11 +431,11 @@ class CP77MlSetupApplyMLTemplate(Operator):
         ts = context.tool_settings
 
         if not ts.gpencil_paint.palette:
-            self.report({'ERROR'}, 'No active palette to match with MLTEMPLATE.')
+            self.report({'WARNING'}, 'No active palette to match with MLTEMPLATE.')
             return {'CANCELLED'}
 
         if 'MLTemplatePath' not in ts.gpencil_paint.palette:
-            self.report({'ERROR'}, 'MLTEMPLATE path not found on active palette.')
+            self.report({'WARNING'}, 'MLTEMPLATE path not found on active palette.')
             return {'CANCELLED'}
 
         obj=bpy.context.active_object
@@ -442,7 +443,7 @@ class CP77MlSetupApplyMLTemplate(Operator):
         mat=obj.material_slots[mat_idx].material
         nodes=mat.node_tree.nodes
         if not mat.get('MLSetup'):
-            self.report({'ERROR'}, 'Multilayered setup not found within selected material.')
+            self.report({'WARNING'}, 'Multilayered setup not found within selected material.')
             return {'CANCELLED'}
 
         node_tree = bpy.context.object.active_material.node_tree
@@ -453,7 +454,7 @@ class CP77MlSetupApplyMLTemplate(Operator):
                 break # Assuming only one group node can be actively selected at a time
 
         if selected_node_group == None:
-            self.report({'ERROR'}, 'A valid Multilayered node group was not selected.')
+            self.report({'WARNING'}, 'A valid Multilayered node group was not selected.')
             return {'CANCELLED'}
 
         ngmatch = None
