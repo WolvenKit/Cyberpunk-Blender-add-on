@@ -32,7 +32,7 @@ def prefix_mat(material):
     b,m,a=material.partition(os.path.basename(material))
     return b+prefix+m
 
-def matchOverride(OverrideTable, key, layer, json_layer, jsonkey, nodevalue, matchTolerance):
+def matchOverride(self,OverrideTable, key, layer, json_layer, jsonkey, nodevalue, matchTolerance):
     match = None
     matcherr=1e6
     for og in OverrideTable[key]:
@@ -236,11 +236,11 @@ def cp77_mlsetup_export(self, context, mlsetuppath, write_mltemplate):
                     with open(outpath, 'w') as outfile:
                         json.dump(mltemp, outfile,indent=2)
 
-            matchOverride(OverrideTable, 'NormalStrength', layer, json_layer, 'normalStrength', nstr, matchTolerance)
-            matchOverride(OverrideTable, 'MetalLevelsIn', layer, json_layer, 'metalLevelsIn', mIn, matchTolerance)
-            matchOverride(OverrideTable, 'MetalLevelsOut', layer, json_layer, 'metalLevelsOut', mOut, matchTolerance)
-            matchOverride(OverrideTable, 'RoughLevelsIn', layer, json_layer, 'roughLevelsIn', rIn, matchTolerance)
-            matchOverride(OverrideTable, 'RoughLevelsOut', layer, json_layer, 'roughLevelsOut', rOut, matchTolerance)
+            matchOverride(self,OverrideTable, 'NormalStrength', layer, json_layer, 'normalStrength', nstr, matchTolerance)
+            matchOverride(self,OverrideTable, 'MetalLevelsIn', layer, json_layer, 'metalLevelsIn', mIn, matchTolerance)
+            matchOverride(self,OverrideTable, 'MetalLevelsOut', layer, json_layer, 'metalLevelsOut', mOut, matchTolerance)
+            matchOverride(self,OverrideTable, 'RoughLevelsIn', layer, json_layer, 'roughLevelsIn', rIn, matchTolerance)
+            matchOverride(self,OverrideTable, 'RoughLevelsOut', layer, json_layer, 'roughLevelsOut', rOut, matchTolerance)
 
             print('tile_diff: '+str(tile_diff))
             print('tile_metal: '+str(tile_metal))
