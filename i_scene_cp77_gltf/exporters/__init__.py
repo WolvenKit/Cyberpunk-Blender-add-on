@@ -187,13 +187,7 @@ class CP77MlSetupGenerateOverrides(Operator):
     bl_label = "Generate Overrides"
     bl_description = "Create Override data for MLTemplates found within the selected material."
 
-    def execute(self, context):
-        obj=bpy.context.active_object
-        mat_idx = obj.active_material_index
-        mat=obj.material_slots[mat_idx].material
-        if not mat.get('MLSetup'):
-            self.report({'ERROR'}, 'Multilayered setup not found within selected material.')
-            return {'CANCELLED'}
+    def execute(self, context):        
         cp77_mlsetup_generateoverrides(self, context)
 
         bpy.ops.get_layer_overrides.mlsetup()
@@ -214,6 +208,8 @@ class CP77MlSetupGetOverrides(Operator):
     def execute(self, context):
         ts = context.tool_settings
         obj=bpy.context.active_object
+        if not obj or obj.material_slots is None or len(obj.material_slots)==0:
+            return {'CANCELLED'}
         mat_idx = obj.active_material_index
         mat=obj.material_slots[mat_idx].material
         if not mat.get('MLSetup'):
