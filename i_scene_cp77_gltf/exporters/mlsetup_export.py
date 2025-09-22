@@ -313,10 +313,10 @@ def cp77_mlsetup_generateoverrides(self, context,objs=None):
         prefixxed=[]
         if not mat.get('MLSetup'):
             if self:
-                self.report({'ERROR'}, 'Multilayered setup not found within selected material.')
+                self.report({'WARNING'}, 'Multilayered setup not found within selected material.')
             else:
                 print('Multilayered setup not found within selected material.')
-            return {'CANCELLED'}
+            continue
 
         MLSetup = mat.get('MLSetup')
         ProjPath=mat.get('ProjPath')
