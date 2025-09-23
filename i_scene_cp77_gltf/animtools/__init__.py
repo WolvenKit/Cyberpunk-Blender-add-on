@@ -231,7 +231,7 @@ class LoadAPose(Operator):
 
         for i, name in enumerate(rig_data.bone_names):
             mat = pose_matrices[i]
-            apply_bone_from_matrix(i, mat, bone_index_map, rig_data.bone_parents, pose_matrices)
+            apply_bone_from_matrix(i, mat, bone_index_map, rig_data.parent_indices, pose_matrices)
         safe_mode_switch("OBJECT")
 
         self.report({'INFO'}, "A-Pose loaded")
@@ -279,7 +279,7 @@ class LoadTPose(Operator):
         
         global_transforms = {}
         for i in range(len(rig_data.bone_names)):
-            mat_red = compute_global_transform(i, rig_data.bone_transforms, rig_data.bone_parents, global_transforms)
+            mat_red = compute_global_transform(i, rig_data.bone_transforms, rig_data.parent_indices, global_transforms)
 
             global_transforms[i] = mat_red
 
@@ -287,7 +287,7 @@ class LoadTPose(Operator):
             transform_data = rig_data.bone_transforms[i]
             if is_identity_transform(transform_data):
                 continue  # leave stub alone
-            apply_bone_from_matrix(i, global_transforms[i], bone_index_map, rig_data.bone_parents, global_transforms)
+            apply_bone_from_matrix(i, global_transforms[i], bone_index_map, rig_data.parent_indices, global_transforms)
             arm_data['T-Pose'] = True
         safe_mode_switch('OBJECT')
         
@@ -461,7 +461,8 @@ class CP77RigLoader(Operator):
             # Find the corresponding .glb file and load it
             selected_rig = rig_files[rig_names.index(selected_rig_name)]
             self.filepath = selected_rig
-            CP77GLBimport(CP77GLBimport(with_materials=False, filepath=selected_rig, scripting=True))
+            CP77GLBimport(self, exclude_unused_mats=True, image_format='PNG',
+                          filepath=selected_rig, hide_armatures=False, import_garmentsupport=False, files=[], directory='', appearances="ALL", remap_depot=False, scripting=True)
             if props.fbx_rot:
                 rotate_quat_180(self,context)
             if self.rigify_it:
