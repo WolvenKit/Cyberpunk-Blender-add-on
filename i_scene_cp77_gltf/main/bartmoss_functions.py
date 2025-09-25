@@ -263,36 +263,6 @@ def dataKrash(root: str, extensions: List[str]) -> Dict[str, Set[str]]:
     recurse(normalized_root)
     return dict(ext_map)
 
-mode_map = {
-    'OBJECT': 'OBJECT',
-    'EDIT_ARMATURE': 'EDIT',
-    'POSE': 'POSE',
-    'EDIT_MESH': 'EDIT',
-    'EDIT_CURVE': 'EDIT',
-    'EDIT_CURVES': 'EDIT',
-    'EDIT_SURFACE': 'EDIT',
-    'EDIT_TEXT': 'EDIT',
-    'EDIT_METABALL': 'EDIT',
-    'EDIT_LATTICE': 'EDIT',
-    'EDIT_GREASE_PENCIL': 'EDIT',
-    'EDIT_POINT_CLOUD': 'EDIT',
-    'EDIT_GPENCIL': 'EDIT',
-    'SCULPT': 'OBJECT',
-    'SCULPT_CURVES': 'OBJECT',
-    'SCULPT_GPENCIL': 'OBJECT',
-    'SCULPT_GREASE_PENCIL': 'OBJECT',
-    'PAINT_WEIGHT': 'OBJECT',
-    'PAINT_VERTEX': 'OBJECT',
-    'PAINT_TEXTURE': 'OBJECT',
-    'PAINT_GPENCIL': 'OBJECT',
-    'PAINT_GREASE_PENCIL': 'OBJECT',
-    'WEIGHT_GPENCIL': 'OBJECT',
-    'WEIGHT_GREASE_PENCIL': 'OBJECT',
-    'VERTEX_GPENCIL': 'OBJECT',
-    'VERTEX_GREASE_PENCIL': 'OBJECT',
-    'PARTICLE': 'OBJECT',
-    }
-
 def parse_transform_data(data: Dict) -> Dict[str, List[float]]:
     """
     Parses a transform dictionary and returns a normalized transform with:
