@@ -143,7 +143,7 @@ class CP77AddVertexcolorPreset(Operator):
 # region active vertex group property
 def get_vertex_groups(context):
     """Dynamic callback function to get vertex groups from selected objects"""
-    items = [('', 'None', 'No vertex group')]
+    items = []
     groups_set = set()
 
     # Collect vertex groups from all selected objects
@@ -152,9 +152,13 @@ def get_vertex_groups(context):
             for vg in obj.vertex_groups:
                 groups_set.add(vg.name)
 
-    if "Group" in groups_set:
-        items.append(("Group", "Group", f"Use 'Group' vertex group"))
-        groups_set.remove("Group")
+    items.append(('None', 'None', 'No vertex group'))
+
+    for vg_name in sorted(groups_set):
+        if vg_name.lower().startswith("group"):
+            items.append((vg_name, vg_name, f"Use '{vg_name}' vertex group"))
+            groups_set.remove(vg_name)
+
     # Add sorted vertex groups to items
     for vg_name in sorted(groups_set):
         items.append((vg_name, vg_name, f"Use '{vg_name}' vertex group"))
@@ -218,7 +222,11 @@ class CP77GarmentSupport(Operator):
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
-        vertex_group = context.scene.vertex_group_props.presets if context.scene.vertex_group_props.presets else None
+        vertex_group = None
+
+        # read vertex group dropdown value
+        if context.scene.vertex_group_props.presets and context.scene.vertex_group_props.presets != 'None':
+            vertex_group = context.scene.vertex_group_props.presets
 
         return add_shrinkwrap(
             context=context,
