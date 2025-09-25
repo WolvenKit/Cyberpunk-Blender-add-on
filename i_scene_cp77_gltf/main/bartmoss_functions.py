@@ -9,11 +9,185 @@ from math import radians
 from collections import defaultdict
 from typing import List, Dict, Set
 
-# Internal state for restoring
-_previous_selection = []
-_previous_active = None
-_previous_mode = None
-_dummy_name = "TemporaryContextObject"
+_stored_context = None
+
+mode_map = {
+    'OBJECT': 'OBJECT',
+    'EDIT_ARMATURE': 'EDIT',
+    'POSE': 'POSE',
+    'EDIT_MESH': 'EDIT',
+    'EDIT_CURVE': 'EDIT',
+    'EDIT_CURVES': 'EDIT',
+    'EDIT_SURFACE': 'EDIT',
+    'EDIT_TEXT': 'EDIT',
+    'EDIT_METABALL': 'EDIT',
+    'EDIT_LATTICE': 'EDIT',
+    'EDIT_GREASE_PENCIL': 'EDIT',
+    'EDIT_POINT_CLOUD': 'EDIT',
+    'EDIT_GPENCIL': 'EDIT',
+    'SCULPT': 'SCULPT',
+    'SCULPT_CURVES': 'SCULPT',
+    'SCULPT_GPENCIL': 'SCULPT',
+    'SCULPT_GREASE_PENCIL': 'SCULPT',
+    'PAINT_WEIGHT': 'WEIGHT_PAINT',
+    'PAINT_VERTEX': 'VERTEX_PAINT',
+    'PAINT_TEXTURE': 'TEXTURE_PAINT',
+    'PAINT_GPENCIL': 'PAINT_GPENCIL',
+    'PAINT_GREASE_PENCIL': 'PAINT_GREASE_PENCIL',
+    'WEIGHT_GPENCIL': 'WEIGHT_PAINT',
+    'WEIGHT_GREASE_PENCIL': 'WEIGHT_PAINT',
+    'VERTEX_GPENCIL': 'VERTEX_PAINT',
+    'VERTEX_GREASE_PENCIL': 'VERTEX_PAINT',
+    'PARTICLE': 'PARTICLE_EDIT',
+}
+
+class CP77Context:
+    """Somewhere to store everything needed to restore the user's state."""
+
+    def __init__(self):
+        self.mode = None
+        self.active_object = None
+        self.selected_objects = []
+        self.object_visibility = {}
+        self.cursor_location = None
+        
+    def store(self):
+        """Store current user state."""
+        context = bpy.context
+        
+        # Store mode
+        self.mode = context.mode  # Store actual mode, not mapped
+        
+        # Store active and selected objects
+        self.active_object = context.view_layer.objects.active
+        self.selected_objects = list(context.selected_objects)
+        
+        # Store visibility for objects we're working with
+        for obj in self.selected_objects:
+            if obj:
+                self.object_visibility[obj.name] = {
+                    'hide_viewport': obj.hide_viewport,
+                    'hide_select': obj.hide_select,
+                    'hide_get': obj.hide_get(),
+                }
+        
+        # Also store active object visibility if not in selection
+        if self.active_object and self.active_object.name not in self.object_visibility:
+            self.object_visibility[self.active_object.name] = {
+                'hide_viewport': self.active_object.hide_viewport,
+                'hide_select': self.active_object.hide_select,
+                'hide_get': self.active_object.hide_get(),
+            }
+        
+        # Store cursor
+        self.cursor_location = tuple(context.scene.cursor.location)
+    
+    def restore(self):
+        """Restore user state."""
+        context = bpy.context
+        
+        # Restore visibility first (before selection)
+        for obj_name, vis_state in self.object_visibility.items():
+            if obj_name in bpy.data.objects:
+                obj = bpy.data.objects[obj_name]
+                try:
+                    obj.hide_viewport = vis_state['hide_viewport']
+                    obj.hide_select = vis_state['hide_select']
+                    obj.hide_set(vis_state['hide_get'])
+                except:
+                    pass  # Object might be deleted
+        
+        # Restore mode (use normalized mode for safety)
+        if self.mode:
+            target_mode = mode_map.get(self.mode, self.mode)
+            current_mode = mode_map.get(context.mode, context.mode)
+            if current_mode != target_mode:
+                try:
+                    bpy.ops.object.mode_set(mode=target_mode)
+                except:
+                    pass  # Mode might not be available
+        
+        # Restore selection
+        try:
+            bpy.ops.object.select_all(action='DESELECT')
+            for obj in self.selected_objects:
+                if obj and obj.name in bpy.data.objects:
+                    obj.select_set(True)
+        except:
+            pass
+        
+        # Restore active object
+        if self.active_object and self.active_object.name in bpy.data.objects:
+            context.view_layer.objects.active = self.active_object
+        
+        # Restore cursor
+        if self.cursor_location:
+            context.scene.cursor.location = self.cursor_location
+
+def store_current_context():
+    """Store the current user context."""
+    global _stored_context
+    _stored_context = CP77Context()
+    _stored_context.store()
+
+def restore_previous_context():
+    """Restore the previously stored context."""
+    global _stored_context
+    if _stored_context:
+        _stored_context.restore()
+        _stored_context = None  # Clear after restoring
+    else:
+        print("Warning: No saved context to restore")
+
+def get_safe_mode():
+    """
+    Get current mode mapped to a valid mode string for bpy.ops.object.mode_set().
+     - now properly maps 'SCULPT', 'VERTEX_PAINT', 'WEIGHT_PAINT', 'TEXTURE_PAINT', 'PARTICLE_EDIT' 
+    """
+    return mode_map.get(bpy.context.mode, 'OBJECT')
+
+def safe_mode_switch(target_mode: str):
+    """
+    Switch to target mode. Handles mode normalization.
+    """
+    if not target_mode:
+        return
+    
+    # Normalize the target mode
+    target_mode = mode_map.get(target_mode, target_mode)
+    
+    # Get current normalized mode
+    current_mode = get_safe_mode()
+    
+    # Already in target mode
+    if current_mode == target_mode:
+        return
+    
+    # Ensure valid context for mode switching
+    if not bpy.context.active_object:
+        # Need an object for mode switching
+        # Try to find one
+        if bpy.context.selected_objects:
+            bpy.context.view_layer.objects.active = bpy.context.selected_objects[0]
+        else:
+            # Create temporary object
+            bpy.ops.mesh.primitive_cube_add(size=0.1, location=(0, 0, 0))
+            temp = bpy.context.active_object
+            temp.name = "TempModeSwitch"
+            temp.hide_viewport = True
+            
+            try:
+                bpy.ops.object.mode_set(mode=target_mode)
+            finally:
+                # Remove temp object
+                bpy.data.objects.remove(temp, do_unlink=True)
+            return
+    
+    # Switch mode
+    try:
+        bpy.ops.object.mode_set(mode=target_mode)
+    except Exception as e:
+        print(f"Failed to switch to mode {target_mode}: {e}")
 
 def compute_model_space(local_transforms, bone_parents):
     """
@@ -56,7 +230,6 @@ def normalize(path: str) -> str:
     """
     # os.path.abspath to ensure all paths are full and unambiguous.
     return unicodedata.normalize('NFC', os.path.abspath(os.path.normpath(path)))
-
 
 def dataKrash(root: str, extensions: List[str]) -> Dict[str, Set[str]]:
     """
@@ -159,75 +332,6 @@ def parse_transform_data(data: Dict) -> Dict[str, List[float]]:
         'scale': parse_scale(data.get('scale', {})),
     }
 
-def safe_mode_switch(target_mode: str):
-    """
-    Safely switches to the given mode. Creates a temporary object if no valid context is available.
-    Stores selection, active object, and mode to restore later.
-    """
-    global _previous_selection, _previous_active, _previous_mode
-    dummy = None
-    ctx = bpy.context
-    _previous_mode = ctx.mode
-    _previous_selection = list(ctx.selected_objects)
-    _previous_active = ctx.active_object
-
-    # If the desired mode is already active, do nothing
-    if ctx.mode == target_mode:
-        return
-
-    # If context doesn't support mode switch, create a dummy
-    if not bpy.ops.object.mode_set.poll():
-        bpy.ops.object.select_all(action='DESELECT')
-        bpy.ops.mesh.primitive_cube_add(size=0.1, location=(0, 0, 0))
-        dummy = bpy.context.active_object
-        dummy.name = _dummy_name
-        dummy.hide_viewport = True
-        dummy.hide_render = True
-        dummy.hide_set(True)
-        dummy.select_set(False)
-
-    try:
-        bpy.ops.object.mode_set(mode=target_mode)
-    except Exception as e:
-        print(f"[safe_mode_switch] Failed to switch to mode {target_mode}: {e}")
-
-    if dummy:
-        bpy.data.objects.remove(dummy, do_unlink=True)
-
-def restore_previous_context():
-    """
-    Restores the previous selection, active object, and mode.
-
-    """
-    global _previous_selection, _previous_active, _previous_mode
-
-    bpy.ops.object.select_all(action='DESELECT')
-    for obj in _previous_selection:
-        if obj.name in bpy.data.objects:
-            obj.select_set(True)
-
-    if _previous_active and _previous_active.name in bpy.data.objects:
-        bpy.context.view_layer.objects.active = _previous_active
-
-    if _previous_mode == get_safe_mode():
-        pass
-    else:
-        # Attempt to restore mode if possible
-        try:
-                safe_mode_switch(_previous_mode)
-        except Exception as e:
-            print(f"[CP77 Blender Addon] Failed to restore mode {_previous_mode}: {e}")
-
-    _previous_selection.clear()
-    _previous_active = None
-    _previous_mode = None
-
-def get_safe_mode():
-    """
-    Maps the current context mode to a valid mode string for bpy.ops.object.mode_set().
-    Returns one of: 'OBJECT', 'EDIT', 'POSE'.
-    """
-    return mode_map.get(bpy.context.mode, 'OBJECT')
 ## I get that these are lazy but they're convenient type checks
 def is_mesh(o: bpy.types.Object) -> bool:
     return isinstance(o.data, bpy.types.Mesh)
