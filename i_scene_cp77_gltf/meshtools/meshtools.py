@@ -485,16 +485,13 @@ def create_color_attributes(obj):
             attr.data[i].color = color
 
 
-def add_shrinkwrap(context, target_collection_name, offset, wrap_method, as_garment_support=True, apply_immediately=True):
+def add_shrinkwrap(context, target_collection_name, offset, wrap_method, as_garment_support=True, apply_immediately=True, vertex_group=None):
     target_collection_children = get_collection_children(target_collection_name, "MESH")
     if not target_collection_children:
         show_message(f"Target collection '{target_collection_name}' not found.")
         return {'CANCELLED'}
     if len(target_collection_children) == 0:
         show_message(f"No meshes found in collection '{target_collection_name}'.")
-        return {'CANCELLED'}
-    if len(target_collection_children) > 1:
-        show_message(f"Target collection '{target_collection_name}' contains multiple meshes. Please join them into a single mesh before proceeding.")
         return {'CANCELLED'}
 
     target_mesh = target_collection_children[0]
@@ -505,6 +502,11 @@ def add_shrinkwrap(context, target_collection_name, offset, wrap_method, as_garm
         show_message("No objects selected, or only the target mesh selected!")
         return {'CANCELLED'}
 
+
+    if len(target_collection_children) > 1:
+        show_message(f"Target collection '{target_collection_name}' contains multiple meshes. Will use the first submesh.\n"
+                     + "If that is not what you want, un-do the operation by pressing Ctrl+Z.")
+
     current_mode = context.mode
     shapekey_name = "GarmentSupport" if as_garment_support else "Shrinkwrap"
 
@@ -514,6 +516,15 @@ def add_shrinkwrap(context, target_collection_name, offset, wrap_method, as_garm
             bpy.ops.object.mode_set(mode='OBJECT')
 
         for obj in selected_meshes:
+            # Add shrinkwrap modifier
+            shrinkwrap = obj.modifiers.new(name=shapekey_name, type='SHRINKWRAP')
+
+            if vertex_group is not None:
+                # vertex group is supposed to be set, but it doesn't exist - leave the object alone
+                if vertex_group not in obj.vertex_groups:
+                    continue
+                shrinkwrap.vertex_group = vertex_group
+
             if as_garment_support:
                 create_color_attributes(obj)
                 bpy.ops.object.mode_set(mode='OBJECT')
@@ -522,8 +533,6 @@ def add_shrinkwrap(context, target_collection_name, offset, wrap_method, as_garm
                     for shape_key in reversed(obj.data.shape_keys.key_blocks):
                         obj.shape_key_remove(shape_key)
 
-            # Add shrinkwrap modifier
-            shrinkwrap = obj.modifiers.new(name=shapekey_name, type='SHRINKWRAP')
             shrinkwrap.target = target_mesh
             shrinkwrap.wrap_method = wrap_method
             shrinkwrap.wrap_mode = 'ABOVE_SURFACE'
@@ -534,10 +543,8 @@ def add_shrinkwrap(context, target_collection_name, offset, wrap_method, as_garm
 
             bpy.context.view_layer.objects.active = obj  # Set active object
 
-            # Check if shape keys exist
-            has_shape_keys = obj.data.shape_keys is not None
-
-            if not has_shape_keys:
+            # No shapekeys
+            if obj.data.shape_keys is None:
                 if as_garment_support:
                     # Create new GarmentSupport shape key
                     bpy.ops.object.modifier_apply_as_shapekey(modifier=shrinkwrap.name)
