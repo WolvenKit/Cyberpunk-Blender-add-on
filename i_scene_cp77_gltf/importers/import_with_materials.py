@@ -113,7 +113,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
             oldanims = {act.name for act in bpy.data.actions}
             print('\n-------------------- Beginning Cyberpunk Animation Import --------------------')
             print(f"Importing Animations From: {glbname}")
-
+            bpy.context.scene.render.fps = 30
         else:
             print('\n-------------------- Beginning Cyberpunk Model Import --------------------')
             if with_materials==True:
