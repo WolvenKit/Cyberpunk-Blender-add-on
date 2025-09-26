@@ -36,7 +36,8 @@ def create_axes(ent_coll,name):
 #presto_stash=[]
 
 def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], include_collisions=False, include_phys=False, 
-                   include_entCollider=False, inColl='', remapdepot=False, meshes=None, mesh_jsons=None, escaped_path=None, app_path=None, anim_files=None, rigjsons=None):
+                   include_entCollider=False, inColl='', remapdepot=False, meshes=None, mesh_jsons=None, escaped_path=None, 
+                   app_path=None, anim_files=None, rigjsons=None,generate_overrides=False):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     with_materials = with_materials
     if not cp77_addon_prefs.non_verbose:
@@ -49,7 +50,10 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     path=before+mid
 
     error_messages = []
-    JSONTool.start_caching()
+    entinitiatedcache = False
+    if not JSONTool._use_cache:
+        JSONTool.start_caching()
+        entinitiatedcache = True
 
     ent_name=os.path.basename(filepath)[:-9]
     if not cp77_addon_prefs.non_verbose:
@@ -380,7 +384,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 #print(meshApp)
                             try:
                                 # TODO: sim, this is broken, pls fix Y_Y
-                                bpy.ops.io_scene_gltf.cp77(with_materials, filepath=meshpath, appearances=meshApp,scripting=True)
+                                bpy.ops.io_scene_gltf.cp77(with_materials, filepath=meshpath, appearances=meshApp,scripting=True,generate_overrides=generate_overrides)
                                 if (len(C.selected_objects) == 0):
                                     show_message(f"Failed to import mesh: {meshpath}")
                                 for obj in C.selected_objects:
@@ -924,8 +928,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     if rig:
         arm=bpy.data.armatures[rig.name]
         arm.pose_position = 'REST'
-
-    JSONTool.stop_caching()
+    if entinitiatedcache:
+        JSONTool.stop_caching()
     if len(error_messages) > 0:
         show_message('Errors during import:\n\t' + '\n\t'.join(error_messages))
     if not cp77_addon_prefs.non_verbose:
