@@ -3,6 +3,7 @@ import bpy
 import bpy.utils.previews
 from bpy.types import (Operator, OperatorFileListElement, PropertyGroup, Panel)
 from bpy.props import (StringProperty, BoolProperty, IntProperty, CollectionProperty)
+from typing import Optional
 from ..main.bartmoss_functions import *
 from ..cyber_props import cp77riglist
 from ..icons.cp77_icons import get_icon
@@ -10,18 +11,9 @@ from ..main.common import get_classes
 from ..importers.import_with_materials import CP77GLBimport
 from .animtools import *
 from .generate_rigs import create_rigify_rig
-from ..importers.read_rig import *
-from .facial import *
-from .tracksolvers import (
-    build_tracks_from_armature,
-    solve_tracks_face,  
-)
-import os
-from typing import Dict, List, Tuple, Optional
 from .facial import load_wkit_facialsetup, load_wkit_rig_skeleton
-from .tracksolvers import solve_tracks_face
-from .tracks import export_anim_tracks, import_anim_tracks
-#from .animtracks import (_ensure_armature, _get_fps, _ensure_custom_prop, _fcurve_for_prop, _keyframe_scalar)
+from .tracksolvers import solve_tracks_face, build_tracks_from_armature
+
 def CP77AnimsList(self, context):
     for action in bpy.data.actions:
         if action.library:
@@ -166,7 +158,6 @@ class CP77AnimsDelete(Operator):
         delete_anim(self, context)
         return{'FINISHED'}
 
-
 class LoadAPose(Operator):
     bl_idname = 'cp77.load_apose'
     bl_label = 'Load A-Pose'
@@ -182,13 +173,7 @@ class LoadAPose(Operator):
             arm_data["T-Pose"] = False
 
             # First always load single base A-pose
-            self.load_apose(arm_obj)
-
-            # Then load multi-source if any extensions exist
-            
-            #if "rig_sources" in arm_data and arm_data["rig_sources"]:
-            #    self.load_multi_source_apose(arm_obj)
-            # todo: reimplement rig merging and decomposing
+            load_apose(self, arm_obj)
 
             return {'FINISHED'}
 
@@ -196,45 +181,6 @@ class LoadAPose(Operator):
             print(traceback.format_exc())
             self.report({'ERROR'}, f"Failed: {e}")
             return {'CANCELLED'}
-
-    def load_apose(self, arm_obj):
-        arm_data = arm_obj.data
-        filepath = arm_data.get('source_rig_file', None)
-        bone_names = arm_data.get('boneNames', [])
-        bone_parents = arm_data.get('boneParentIndexes', [])
-        safe_mode_switch('EDIT')
-        edit_bones = arm_data.edit_bones
-        if not os.path.exists(filepath):
-            self.report({'ERROR'}, f"Invalid path to json source {filepath} not found")
-            return
-
-        rig_data = read_rig(filepath)
-        apose_ms = rig_data.apose_ms
-        apose_ls = rig_data.apose_ls
-        
-
-        if apose_ms is None and apose_ls is None:
-            self.report({'ERROR'}, f"No A-Pose found in {rig_data.rig_name} json source")
-            return
-        
-        bone_index_map = {}
-
-        for i, name in enumerate(rig_data.bone_names):
-            bone = edit_bones.get(name)
-            bone_index_map[i] = bone
-
-        pose_matrices = build_apose_matrices(apose_ms, apose_ls, bone_names, bone_parents)
-        if not pose_matrices:
-            self.report({'ERROR'}, f"Error building A-Pose matrices for {rig_data.rig_name}")
-            print
-            return
-
-        for i, name in enumerate(rig_data.bone_names):
-            mat = pose_matrices[i]
-            apply_bone_from_matrix(i, mat, bone_index_map, rig_data.parent_indices, pose_matrices)
-        safe_mode_switch("OBJECT")
-
-        self.report({'INFO'}, "A-Pose loaded")
 
 class LoadTPose(Operator):
     bl_idname = "cp77.load_tpose"
@@ -246,53 +192,13 @@ class LoadTPose(Operator):
             self.report({'ERROR'}, "This isnt' an armature, can't load T-Pose")
             return {'CANCELLED'}
         try:    
-            self.load_tpose(arm_obj)
+            load_tpose(self, arm_obj)
             return {'FINISHED'}
         
         except Exception as e:
             print(traceback.format_exc())
             self.report({'ERROR'}, f"Failed: {e}")
             return{'CANCELLED'}
-    
-    def load_tpose(self, arm_obj):
-        arm_data = arm_obj.data
-        filepath = arm_data.get('source_rig_file', None)
-        bone_names = arm_data.get('boneNames', [])
-        bone_parents = arm_data.get('boneParentIndexes', [])
-        safe_mode_switch('EDIT')
-        edit_bones = arm_data.edit_bones
-
-
-        # Make sure the path exists
-        if not os.path.exists(filepath):
-            self.report({'ERROR'}, f"Invalid path to json source {filepath} not found")
-            return
-        #Load Fresh Data
-        rig_data = read_rig(filepath)
-
-        bone_index_map = {}
-
-        for i, name in enumerate(rig_data.bone_names):
-            bone = edit_bones.get(name)
-            bone_index_map[i] = bone
-            print(f'index{i} = {bone.name} = {bone}')
-        
-        global_transforms = {}
-        for i in range(len(rig_data.bone_names)):
-            mat_red = compute_global_transform(i, rig_data.bone_transforms, rig_data.parent_indices, global_transforms)
-
-            global_transforms[i] = mat_red
-
-        for i in range(len(rig_data.bone_transforms)):
-            transform_data = rig_data.bone_transforms[i]
-            if is_identity_transform(transform_data):
-                continue  # leave stub alone
-            apply_bone_from_matrix(i, global_transforms[i], bone_index_map, rig_data.parent_indices, global_transforms)
-            arm_data['T-Pose'] = True
-        safe_mode_switch('OBJECT')
-        
-        self.report({'INFO'}, "A-Pose loaded")
-        return
 
 # this class is where most of the function is so far - play/pause
 # Todo: fix renaming actions from here
@@ -753,6 +659,7 @@ class CP77_PT_FacialPreview(Panel):
     bl_region_type = 'UI'
     bl_category = 'CP77 Modding'
     bl_parent_id = 'CP77_PT_animspanel'
+    bl_options = {'DEFAULT_CLOSED'} 
     bl_label = 'Facial Pose Tools'
     def draw(self, context):
         layout = self.layout
