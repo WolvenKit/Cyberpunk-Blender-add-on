@@ -256,6 +256,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
         print('-------------------- Importing Cyberpunk 2077 Streaming Sectors --------------------')
         print('')
     start_time = time.time()
+    JSONTool.start_caching()
     # Set this to true to limit import to the types listed in the import_types list.
     limittypes=False
     import_types=None
@@ -437,9 +438,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
             
             if groupname not in Masters.children.keys() and os.path.exists(meshpath):
                 try:
-                    JSONTool.start_caching()
+                    
                     CP77GLBimport( with_materials=with_mats,remap_depot= props.remap_depot, filepath=meshpath, appearances=apps,scripting=True)
-                    JSONTool.stop_caching()
+                    
                     #bpy.ops.io_scene_gltf.cp77(with_mats, filepath=meshpath, appearances=impapps,scripting=True)
                     objs = C.selected_objects
                     if objs[0].users_collection[0].name!= groupname:
@@ -1422,6 +1423,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                 nextpoint.handle_right = righthandlepos
                 # Set the points to be the same
                 nextpoint.co=endpoint.co
+    JSONTool.stop_caching()
     print(f"Imported Sectors from : {wkit_proj_name} in {time.time() - start_time}")
     print('')
     print('-------------------- Finished Importing Cyberpunk 2077 Streaming Sectors --------------------')
