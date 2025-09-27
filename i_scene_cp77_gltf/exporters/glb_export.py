@@ -3,6 +3,7 @@ from .. animtools import reset_armature
 from ..main.common import show_message
 from ..animtools.tracks import export_anim_tracks
 from ..main.bartmoss_functions import get_safe_mode, safe_mode_switch
+import warnings
 POSE_EXPORT_OPTIONS = {
     'export_animations': True,
     'export_anim_slide_to_zero': True,
@@ -264,11 +265,8 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
                 options['export_apply'] = True
 
             #check that faces are triangulated, cancel export, switch to edit mode with the untriangulated faces selected and throw an error
-            if False: #any(len(face.vertices) != 3 for face in mesh.data.polygons):
-                bpy.ops.object.mode_set(mode='EDIT')
-                bpy.ops.mesh.select_mode(type='FACE')
-                bpy.ops.mesh.select_face_by_sides(number=3, type='NOTEQUAL', extend=False)
-                raise ValueError("All faces must be triangulated before exporting. Untriangulated faces have been selected for you. See https://tinyurl.com/triangulate-faces")
+            if any(len(face.vertices) != 3 for face in mesh.data.polygons):
+                warnings.warn( "Not all faces are triangulated. This can lead to tangent errors, if this occurs triangulate prior to export. See https://tinyurl.com/triangulate-faces", UserWarning)
 
             if red_garment_col:
                 add_garment_cap(mesh)
@@ -361,6 +359,7 @@ def ExportAll(self, context):
         for obj in to_exp:
             filepath = obj.get('projPath', '')  # Use 'projPath' property or empty string if it doesn't exist
             export_cyberpunk_glb(filepath=filepath, export_poses=False)
+
 
 
 
