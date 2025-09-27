@@ -16,6 +16,7 @@ from ..jsontool import JSONTool
 from .phys_import import cp77_phys_import
 from ..collisiontools.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
+from .sector_import import meshes_from_mesheswapps, add_to_list,get_group
 
 
 
@@ -195,40 +196,22 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         pass
 
     else:
+        coll_scene = C.scene.collection
+        mis={}
+        if "MasterInstances" not in coll_scene.children.keys():
+            Masters=bpy.data.collections.new("MasterInstances")
+            coll_scene.children.link(Masters)
+        else:
+            Masters=bpy.data.collections.get("MasterInstances")
+
+        Masters.hide_viewport=False #if its hidden it breaks entity positioning for some reason?!?
+
+        # loop through the appearances we want to import to find & load the meshes/appearances we need
+        meshes={}
+        app_comps={}
+        ent_chunks={}
         for x,app_name in enumerate(appearances):
-            print(f"\nImporting appearance {x+1} of {len(appearances)}: {app_name}")
-            app_start_time = time.time()
-            ent_coll = bpy.data.collections.new(ent_name+'_'+app_name)
-            if inColl and inColl in coll_scene.children.keys():
-                par_coll=bpy.data.collections.get(inColl)
-                par_coll.children.link(ent_coll)
-            else:
-                #link it to the scene
-                coll_scene.children.link(ent_coll)
-            # tag it with some custom properties.
-            ent_coll['depotPath']=after
-
-
-            enum_items = []
-            default_index = None
-
-            for idx, variant in enumerate(ent_applist):
-                enum_items.append((str(idx), variant, f"appearanceName {idx + 1}"))
-                if variant == app_name:  # Check if the variant matches the passed app_name
-                    default_index = str(idx)  # Set the default index if found
-
-            if default_index is None:
-                default_index = '0'
-
-            if len(enum_items)>0:
-                bpy.types.Collection.appearanceName = bpy.props.EnumProperty(
-                    name="Ent Appearances",
-                    items=enum_items,
-                    default=default_index,
-                )
-
-            comps=[]
-
+            app_comps[app_name]=[]
             # try to get components. only cases here.
             if len(ent_apps)==0 and ent_component_data:
                 chunks= ent_component_data
@@ -279,44 +262,116 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                         chunks=None
                         if 'Data' in a_j['Data']['RootChunk']['appearances'][app_idx].keys():
                             if a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['components']:
-                                comps= a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['components']
+                                app_comps[app_name]= ent_components+a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['components']
                             if 'compiledData' in a_j['Data']['RootChunk']['appearances'][app_idx]['Data'].keys():
                                 chunks= a_j['Data']['RootChunk']['appearances'][app_idx]['Data']['compiledData']['Data']['Chunks']
+                                ent_chunks[app_name]=chunks
                                 print('Chunks found')
 
 
-            if len(comps)==0:
+            if len(app_comps[app_name])==0:
                 print('falling back to rootchunk components...')
-                comps= ent_components
+                app_comps[app_name]= ent_components
+            exclude_meshes=[]
+            for c in app_comps[app_name]:                
+                if not ( 'mesh' in c.keys() or 'graphicsMesh' in c.keys()):
+                    continue
+                if 'mesh' in c.keys() or 'graphicsMesh' in c.keys():
+                   # print(c['mesh']['DepotPath']['$value'])
+                    meshname=''
+                    if 'mesh' in c.keys() and isinstance( c['mesh']['DepotPath']['$value'], str):
+                        m=c['mesh']['DepotPath']['$value']
+                        meshname=os.path.join(path, m).replace('\\', os.sep)
+                    elif 'graphicsMesh' in c.keys() and isinstance( c['graphicsMesh']['DepotPath']['$value'], str):
+                        m=c['graphicsMesh']['DepotPath']['$value']
+                        meshname=os.path.join(path, m).replace('\\', os.sep)
+                    if meshname and meshname not in exclude_meshes and os.path.exists(meshname[:-4]+'glb'):
+                        meshApp='default'
+                        if 'meshAppearance' in c.keys():
+                            meshApp=c['meshAppearance']
+                            #print(meshApp)
+                        if(meshname != 0):
+                            if meshname not in meshes:
+                                meshes[meshname] = {'appearances':[meshApp],'sector':'ALL'}                        
+                            else:
+                                meshes[meshname]['appearances'].append(meshApp)
+        
+        meshes_w_apps={}
+
+        for m in meshes:
+            if len(m)>0:
+                    add_to_list(m , meshes, meshes_w_apps)
+        
+        meshes_from_mesheswapps( meshes_w_apps, path, from_mesh_no=0, to_mesh_no=10000000, with_mats=with_materials, glbs=meshes, mesh_jsons=mesh_jsons,
+                                    Masters=Masters,generate_overrides=generate_overrides)
+
+
+        # loop through again to actually build the appearances
+        for x,app_name in enumerate(appearances):
+            print(f"\nImporting appearance {x+1} of {len(appearances)}: {app_name}")
+            app_start_time = time.time()
+            ent_coll = bpy.data.collections.new(ent_name+'_'+app_name)
+            if inColl and inColl in coll_scene.children.keys():
+                par_coll=bpy.data.collections.get(inColl)
+                par_coll.children.link(ent_coll)
+            else:
+                #link it to the scene
+                coll_scene.children.link(ent_coll)
+            # tag it with some custom properties.
+            ent_coll['depotPath']=after
+            chunks=ent_chunks[app_name]
+
+            enum_items = []
+            default_index = None
+
+            for idx, variant in enumerate(ent_applist):
+                enum_items.append((str(idx), variant, f"appearanceName {idx + 1}"))
+                if variant == app_name:  # Check if the variant matches the passed app_name
+                    default_index = str(idx)  # Set the default index if found
+
+            if default_index is None:
+                default_index = '0'
+
+            if len(enum_items)>0:
+                bpy.types.Collection.appearanceName = bpy.props.EnumProperty(
+                    name="Ent Appearances",
+                    items=enum_items,
+                    default=default_index,
+                )
+
+            comps=app_comps[app_name]
             
-            for c in comps:
-                if 'name' in c.keys() and c['name']['$value']=='vehicle_slots' or c['name']['$value']=='slot':
-                    VS.append(c)
-                if 'rig' in c.keys():
-                    rig_path = os.path.join(path, c['rig']['DepotPath']['$value'])
-                    ent_rigs.append(rig_path)
-                    if rig_path in ent_rigs:
-                        print(f"Rig found in app components: {c['rig']['DepotPath']['$value']}")
-                        if rig is None:
-                            rig_j=JSONTool.jsonload(rig_path+'.json', error_messages)
-                            if rig_j is not None:
-                                rig_j=rig_j['Data']['RootChunk']
-                                print('rig json loaded')
-                            if c['animations']['gameplay']!=None and len(c['animations']['gameplay'])>0 :                                # get the armatures already in the model
-                                oldarms= [x for x in bpy.data.objects if 'Armature' in x.name]
-                                animpath=os.path.join(path,c['animations']['gameplay'][0]['animSet']['DepotPath']['$value']+'.glb')
-                                if os.path.exists(animpath):                                   
-                                    bpy.ops.io_scene_gltf.cp77(with_materials, filepath=animpath, scripting=True)
-                                    # find the armature we just loaded
-                                    arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
-                                    rig=arms[0]
-                                    bones=rig.pose.bones
-                                    rig["animset"] = animpath
-                                    rig["rig"] = rig_path
-                                    rig["ent"] = ent_name + ".ent.json"
-                                    print('anim rig loaded')
-                        else:
-                            print('another rig already loaded')
+            if not rig:
+                for c in comps:
+                    if 'name' in c.keys() and c['name']['$value']=='vehicle_slots' or c['name']['$value']=='slot':
+                        VS.append(c)
+                    if 'rig' in c.keys():
+                        rig_path = os.path.join(path, c['rig']['DepotPath']['$value'])
+                        ent_rigs.append(rig_path)
+                        if rig_path in ent_rigs:
+                            print(f"Rig found in app components: {c['rig']['DepotPath']['$value']}")
+                            if rig is None:
+                                rig_j=JSONTool.jsonload(rig_path+'.json', error_messages)
+                                if rig_j is not None:
+                                    rig_j=rig_j['Data']['RootChunk']
+                                    print('rig json loaded')
+                                if c['animations']['gameplay']!=None and len(c['animations']['gameplay'])>0 :                                # get the armatures already in the model
+                                    oldarms= [x for x in bpy.data.objects if 'Armature' in x.name]
+                                    animpath=os.path.join(path,c['animations']['gameplay'][0]['animSet']['DepotPath']['$value']+'.glb')
+                                    if os.path.exists(animpath):                                   
+                                        bpy.ops.io_scene_gltf.cp77(with_materials, filepath=animpath, scripting=True)
+                                        # find the armature we just loaded
+                                        arms=[x for x in bpy.data.objects if 'Armature' in x.name and x not in oldarms]
+                                        rig=arms[0]
+                                        bones=rig.pose.bones
+                                        rig["animset"] = animpath
+                                        rig["rig"] = rig_path
+                                        rig["ent"] = ent_name + ".ent.json"
+                                        print('anim rig loaded')
+                            elif rig['rig']==rig_path:                            
+                                print('using existing rig')
+                            else:
+                                print('another rig',rig['rig'],' is already loaded ',rig_path)
             if not vehicle_slots:
                 if len(VS)>0:
                     vehicle_slots= VS[0]['slots']
@@ -366,7 +421,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                             for pt in obj_fcu.keyframe_points:
                                 pt.interpolation = 'LINEAR'
                 elif 'mesh' in c.keys() or 'graphicsMesh' in c.keys():
-                   # print(c['mesh']['DepotPath']['$value'])
+                    #print(c['mesh']['DepotPath']['$value'])
                     meshname=''
                     if 'mesh' in c.keys() and isinstance( c['mesh']['DepotPath']['$value'], str):
                         m=c['mesh']['DepotPath']['$value']
@@ -384,10 +439,16 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 #print(meshApp)
                             try:
                                 # TODO: sim, this is broken, pls fix Y_Y
-                                bpy.ops.io_scene_gltf.cp77(with_materials, filepath=meshpath, appearances=meshApp,scripting=True,generate_overrides=generate_overrides)
-                                if (len(C.selected_objects) == 0):
-                                    show_message(f"Failed to import mesh: {meshpath}")
-                                for obj in C.selected_objects:
+                                # make this instance from masters rather than loading multiple times
+                                #bpy.ops.io_scene_gltf.cp77(with_materials, filepath=meshpath, appearances=meshApp,scripting=True,generate_overrides=generate_overrides)
+                                group, groupname = get_group(meshname,meshApp,Masters)
+                                if (group):
+                                    new=bpy.data.collections.new(groupname)
+                                    ent_coll.children.link(new)
+                                    for old_obj in group.all_objects:
+                                        obj=old_obj.copy()
+                                        new.objects.link(obj)
+                                for obj in new.objects:
                                     obj['componentName'] = c['name']['$value']
                                     obj['sourcePath'] = meshpath
                                     obj['meshAppearance'] = meshApp
@@ -398,7 +459,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 print('import threw an error:')
                                 print(traceback.print_exc())
                                 continue
-                            objs = C.selected_objects
+                            objs = new.objects
                             if meshname=='v_sportbike2_arch_nemesis__ext01_axle_f_a_01':
                                 print('those annoying front forks')
 
@@ -425,6 +486,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
 
                                                     if chunk['parentTransform']['HandleId']==pT_HId:
                                                         chunk_pt=chunk['parentTransform']
+                                                        break
                                                         #print('HandleId found',chunk['parentTransform']['HandleId'])
 
                                 # if we found it then process it, most chars etc will just skip this
@@ -657,7 +719,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 y=x_orig*sin(z_ang)+y_orig*cos(z_ang)
                                 #print ('Local transform  x= ',x,'y= ',y,' z= ',z)
 
-                            for obj in objs:
+                            for obj in new.objects:
                                 #print(obj.name, obj.type)
                                 obj.location.x =  obj.location.x+x
                                 obj.location.y = obj.location.y+y
@@ -682,14 +744,15 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                     obj.scale.z = c['visualScale']['Z']
 
                             if (len(objs) > 0):
-                                move_coll= coll_scene.children.get( objs[0].users_collection[0].name )
+                                move_coll=new
                                 move_coll['depotPath']=c['mesh']['DepotPath']['$value']
                                 move_coll['meshAppearance']=meshApp
-                                move_coll['meshpath']="its an entity"
+                                if 'meshpath' not in move_coll:
+                                    move_coll['meshpath']="its an entity"
                                 if bindname:
                                     move_coll['bindname']=bindname
-                                ent_coll.children.link(move_coll)
-                                coll_scene.children.unlink(move_coll)
+                                if move_coll.name in coll_scene.children:
+                                    coll_scene.children.unlink(move_coll)
 
                             # New chunkMask reading
                             # convert the value to a list of bools, then apply those statuses to the submeshes.
@@ -932,6 +995,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         JSONTool.stop_caching()
     if len(error_messages) > 0:
         show_message('Errors during import:\n\t' + '\n\t'.join(error_messages))
+   # Masters.hide_viewport=True
     if not cp77_addon_prefs.non_verbose:
         if app_name:
             print(f"Imported Appearance: {app_name} in {time.time() - start_time} Seconds from {ent_name}.ent")
