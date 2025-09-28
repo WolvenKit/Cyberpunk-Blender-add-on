@@ -103,7 +103,7 @@ def add_garment_cap(mesh):
             name=garment_weight_name, domain='CORNER', type='BYTE_COLOR'
         )
 
-    # Paint the entire cap layer red 
+    # Paint the entire cap layer red
     if cap_layer is not None:
         n = len(cap_layer.data)
         if n:
@@ -138,7 +138,7 @@ def restore_user_settings(user_settings):
         bpy.ops.object.mode_set(mode=user_settings['bpy_context'])
 
 # mana: by assigning default attributes, we make this update-safe.
-def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=False, 
+def export_cyberpunk_glb(context, filepath, export_poses=False, export_visible=False,
                          limit_selected=True, static_prop=False, red_garment_col=False, apply_transform=True,
                          action_filter=False, export_tracks=False, apply_modifiers=True):
     user_settings = save_user_settings_and_reset_to_default()
@@ -263,11 +263,11 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
             # apply modifiers
             if apply_modifiers:
                 options['export_apply'] = True
-                        
+
             #check that faces are triangulated, cancel export, switch to edit mode with the untriangulated faces selected and throw an error
             if any(len(face.vertices) != 3 for face in mesh.data.polygons):
                 warnings.warn( "Not all faces are triangulated. This can lead to tangent errors, if this occurs triangulate prior to export. See https://tinyurl.com/triangulate-faces", UserWarning)
-            
+
             if red_garment_col:
                 add_garment_cap(mesh)
 
@@ -344,10 +344,6 @@ def export_meshes(context, filepath, export_visible, limit_selected, static_prop
                     print(e)
         return {'FINISHED'}
 
-    except Exception as e:
-        print(f"{e}")
-        return {'CANCELLED'}
-
     finally:
         if armature is not None and not static_prop:
             armature.hide_set(True)
@@ -363,6 +359,7 @@ def ExportAll(self, context):
         for obj in to_exp:
             filepath = obj.get('projPath', '')  # Use 'projPath' property or empty string if it doesn't exist
             export_cyberpunk_glb(filepath=filepath, export_poses=False)
+
 
 
 

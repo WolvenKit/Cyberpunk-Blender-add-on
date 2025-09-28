@@ -2,6 +2,9 @@ import bpy
 import json
 import re
 from mathutils import Vector, Euler, Quaternion
+from ..importers.read_rig import *
+from ..main.bartmoss_functions import store_current_context, restore_previous_context, get_safe_mode, safe_mode_switch, is_armature
+
 
 animBones = ["Hips", "Spine", "Spine1", "Spine2", "Spine3", "LeftShoulder", "LeftArm", "LeftForeArm", "LeftHand", "WeaponLeft", "LeftInHandThumb", "LeftHandThumb1", "LeftHandThumb2", "LeftInHandIndex", "LeftHandIndex1", "LeftHandIndex2", "LeftHandIndex3", "LeftInHandMiddle", "LeftHandMiddle1", "LeftHandMiddle2", "LeftHandMiddle3", "LeftInHandRing", "LeftHandRing1", "LeftHandRing2", "LeftHandRing3", "LeftInHandPinky", "LeftHandPinky1", "LeftHandPinky2", "LeftHandPinky3", "RightShoulder", "RightArm", "RightForeArm", "RightHand", "WeaponRight", "RightInHandThumb", "RightHandThumb1", "RightHandThumb2", "RightInHandIndex", "RightHandIndex1", "RightHandIndex2", "RightHandIndex3", "RightInHandMiddle", "RightHandMiddle1", "RightHandMiddle2", "RightHandMiddle3", "RightInHandRing", "RightHandRing1", "RightHandRing2", "RightHandRing3", "RightInHandPinky", "RightHandPinky1", "RightHandPinky2", "RightHandPinky3", "Neck", "Neck1", "Head", "LeftEye", "RightEye", "LeftUpLeg", "LeftLeg", "LeftFoot", "LeftHeel", "LeftToeBase", "RightUpLeg", "RightLeg", "RightFoot", "RightHeel", "RightToeBase"]
 
@@ -74,6 +77,72 @@ def reset_armature(self, context):
 
     return {'FINISHED'}
 
+def load_apose(self, arm_obj):
+    arm_data = arm_obj.data
+    filepath = arm_data.get('source_rig_file', None)
+    bone_names = arm_data.get('boneNames', [])
+    bone_parents = arm_data.get('boneParentIndexes', [])
+    store_current_context()
+    safe_mode_switch('EDIT')
+    edit_bones = arm_data.edit_bones
+    if not os.path.exists(filepath):
+        self.report({'ERROR'}, f"Invalid path to json source {filepath} not found")
+        return
+    rig_data = read_rig(filepath)
+    apose_ms = rig_data.apose_ms
+    apose_ls = rig_data.apose_ls
+    
+    if apose_ms is None and apose_ls is None:
+        self.report({'ERROR'}, f"No A-Pose found in {rig_data.rig_name} json source")
+        return
+    
+    bone_index_map = {}
+    for i, name in enumerate(rig_data.bone_names):
+        bone = edit_bones.get(name)
+        bone_index_map[i] = bone
+    pose_matrices = build_apose_matrices(apose_ms, apose_ls, bone_names, bone_parents)
+    if not pose_matrices:
+        self.report({'ERROR'}, f"Error building A-Pose matrices for {rig_data.rig_name}")
+        print
+        return
+    for i, name in enumerate(rig_data.bone_names):
+        mat = pose_matrices[i]
+        apply_bone_from_matrix(i, mat, bone_index_map, rig_data.parent_indices, pose_matrices)
+    restore_previous_context()
+    self.report({'INFO'}, "A-Pose loaded")
+
+def load_tpose(self, arm_obj):
+    arm_data = arm_obj.data
+    filepath = arm_data.get('source_rig_file', None)
+    store_current_context()
+    safe_mode_switch('EDIT')
+    edit_bones = arm_data.edit_bones
+    # Make sure the path exists
+    if not os.path.exists(filepath):
+        self.report({'ERROR'}, f"Invalid path to json source {filepath} not found")
+        return
+    #Load Fresh Data
+    rig_data = read_rig(filepath)
+    bone_index_map = {}
+    for i, name in enumerate(rig_data.bone_names):
+        bone = edit_bones.get(name)
+        bone_index_map[i] = bone
+        print(f'index{i} = {bone.name} = {bone}')
+    
+    global_transforms = {}
+    for i in range(len(rig_data.bone_names)):
+        mat_red = compute_global_transform(i, rig_data.bone_transforms, rig_data.parent_indices, global_transforms)
+        global_transforms[i] = mat_red
+    for i in range(len(rig_data.bone_transforms)):
+        transform_data = rig_data.bone_transforms[i]
+        if is_identity_transform(transform_data):
+            continue  # leave stub alone
+        apply_bone_from_matrix(i, global_transforms[i], bone_index_map, rig_data.parent_indices, global_transforms)
+        arm_data['T-Pose'] = True
+    restore_previous_context()
+    
+    self.report({'INFO'}, "A-Pose loaded")
+    return
 
 ## insert a keyframe at either the corrunt frame or for the entire specified frame length
 def cp77_keyframe(self, context, frameall=False):
