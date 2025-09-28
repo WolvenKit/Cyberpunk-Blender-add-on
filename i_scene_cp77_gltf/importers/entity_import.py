@@ -23,6 +23,7 @@ from .sector_import import meshes_from_mesheswapps, add_to_list,get_group
 def create_axes(ent_coll,name):
     if name not in ent_coll.objects.keys():
         o = bpy.data.objects.new( name , None )
+
         ent_coll.objects.link( o )
         o.empty_display_size = .5
         o.empty_display_type = 'PLAIN_AXES'
@@ -1011,7 +1012,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         JSONTool.stop_caching()
     if len(error_messages) > 0:
         show_message('Errors during import:\n\t' + '\n\t'.join(error_messages))
-   # Masters.hide_viewport=True
+    Masters.hide_viewport=True
     if not cp77_addon_prefs.non_verbose:
         if app_name:
             print(f"Imported Appearance: {app_name} in {time.time() - start_time} Seconds from {ent_name}.ent")

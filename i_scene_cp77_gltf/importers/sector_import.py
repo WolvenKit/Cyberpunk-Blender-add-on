@@ -327,8 +327,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
     # Set this to true to limit import to the types listed in the import_types list.
     limittypes=False
     import_types=None
-    import_types=['worldEntityNode'
-    ]
+    #import_types=['worldEntityNode'    ]
     wkit_proj_name=os.path.basename(filepath)
     # Enter the path to your projects source\raw\base folder below, needs double slashes between folder names.
     path = os.path.join( os.path.dirname(filepath),'source','raw')
@@ -485,7 +484,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
     from_mesh_no=0
     to_mesh_no=100000
 
-    meshes_from_mesheswapps( meshes_w_apps,path, from_no=from_mesh_no, to_no=to_mesh_no, with_mats=with_mats, glbs=glbs, mesh_jsons=mesh_jsons,masters=Masters)
+    meshes_from_mesheswapps( meshes_w_apps,path, from_mesh_no=from_mesh_no, to_mesh_no=to_mesh_no, with_mats=with_mats, glbs=glbs, mesh_jsons=mesh_jsons,Masters=Masters)
 
     empty=[]
     for child in Masters.children:
@@ -581,8 +580,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             try:
                                 #print('Importing ',entpath, ' using app ',app)
                                 incoll='MasterInstances'
-                                importEnt(with_mats, filepath=entpath, appearances=[app], inColl=incoll,meshes=glbs,mesh_jsons=mesh_jsons, escaped_path=escaped_path, app_path=app_path,
-                                 anim_files=anim_files, rigjsons=rigjsons)
+                                importEnt(with_mats, filepath=entpath, appearances=[app], inColl=incoll,meshes=glbs,mesh_jsons=mesh_jsons, escaped_path=escaped_path, app_path=app_path, anim_files=anim_files, rigjsons=rigjsons)
                                 move_coll=Masters.children.get(ent_groupname)
                                 imported=True
                             except:
