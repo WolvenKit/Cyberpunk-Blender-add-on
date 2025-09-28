@@ -791,42 +791,58 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
             for c in ent_component_data:
                 if (c['$type']=='entLightChannelComponent'):
                     print('Light channel found')
-                    if 'shape' in c.keys() and 'Data' in c['shape'].keys() and 'vertices' in c['shape']['Data'].keys():
-                        vertices=c['shape']['Data']['vertices']
-                        if len(vertices)>0 and 'indices' in c['shape']['Data'].keys():
-                            indices=c['shape']['Data']['indices']
-                            if len(indices)>0:
-                                mesh_data = bpy.data.meshes.new(c['name']['$value'])
-                                mesh_obj = bpy.data.objects.new(mesh_data.name, mesh_data)
-                                mesh_obj.display_type = 'WIRE'
-                                mesh_obj.color = (0.005, 0.79105, 1, 1)
-                                mesh_obj.show_wire = True
-                                mesh_obj.show_in_front = True
-                                mesh_obj.display.show_shadows = False
-                                mesh_obj.rotation_mode = 'QUATERNION'
-                                verts=[]
-                                for v in vertices:
-                                    verts.append((v['X'],v['Y'],v['Z']))
-                                edges=[]
-                                Faces=[indices[i:i+3] for i in range(0, len(indices), 3)]
-                                mesh_data.from_pydata(verts, edges, Faces)
-                                mesh_obj['ntype'] = 'entLightChannelComponent'
-                                mesh_obj['name'] = c['name']['$value']
-                                mesh_obj['entJSON'] = filepath
+                    mesh_obj=None
+                    lcgroup=None
+                    lcgroupname=c['name']['$value']
+                    if not lcgroupname in bpy.data.collections.get("MasterInstances").children.keys():
+                        if 'shape' in c.keys() and 'Data' in c['shape'].keys() and 'vertices' in c['shape']['Data'].keys():
+                            vertices=c['shape']['Data']['vertices']
+                            if len(vertices)>0 and 'indices' in c['shape']['Data'].keys():
+                                indices=c['shape']['Data']['indices']
+                                if len(indices)>0:
+                                    lcgroup=bpy.data.collections.new(lcgroupname)
+                                    mesh_data = bpy.data.meshes.new(lcgroupname)
+                                    mesh_obj = bpy.data.objects.new(mesh_data.name, mesh_data)
+                                    mesh_obj.display_type = 'WIRE'
+                                    mesh_obj.color = (0.005, 0.79105, 1, 1)
+                                    mesh_obj.show_wire = True
+                                    mesh_obj.show_in_front = True
+                                    mesh_obj.display.show_shadows = False
+                                    mesh_obj.rotation_mode = 'QUATERNION'
+                                    verts=[]
+                                    for v in vertices:
+                                        verts.append((v['X'],v['Y'],v['Z']))
+                                    edges=[]
+                                    Faces=[indices[i:i+3] for i in range(0, len(indices), 3)]
+                                    mesh_data.from_pydata(verts, edges, Faces)
+                                    mesh_obj['ntype'] = 'entLightChannelComponent'
+                                    mesh_obj['name'] = c['name']['$value']
+                                    mesh_obj['entJSON'] = filepath
 
-                                bindname=c['parentTransform']['Data']['bindName']['$value']
-                                if bindname=='vehicle_slots':
-                                    if vehicle_slots:
-                                        slotname=c['parentTransform']['Data']['slotName']['$value']
-                                        for slot in vehicle_slots:
-                                            if slot['slotName']['$value']==slotname:
-                                                bindname=slot['boneName']['$value']
-
-                                ent_coll.objects.link(mesh_obj)
-                                if bindname and rig:
-                                    co=mesh_obj.constraints.new(type='COPY_LOCATION')
-                                    co.target=rig
-                                    co.subtarget= bindname
+                                    bindname=c['parentTransform']['Data']['bindName']['$value']
+                                    if bindname=='vehicle_slots':
+                                        if vehicle_slots:
+                                            slotname=c['parentTransform']['Data']['slotName']['$value']
+                                            for slot in vehicle_slots:
+                                                if slot['slotName']['$value']==slotname:
+                                                    bindname=slot['boneName']['$value']
+                                                    mesh_obj['bindname']=bindname
+                                    lcgroup.objects.link(mesh_obj)
+                                    Masters.children.link(lcgroup)
+                    if lcgroupname in bpy.data.collections.get("MasterInstances").children.keys():
+                        Mastlcgroup=bpy.data.collections.get(lcgroupname)
+                        if (Mastlcgroup):
+                            lcgroup=bpy.data.collections.new(lcgroupname)
+                            ent_coll.children.link(lcgroup)
+                            for old_obj in Mastlcgroup.all_objects:
+                                obj=old_obj.copy()
+                                lcgroup.objects.link(obj)
+                            mesh_obj=lcgroup.all_objects[0]
+                            bindname=mesh_obj.get('bindname','')
+                        if bindname and rig and lcgroup and mesh_obj:
+                            co=mesh_obj.constraints.new(type='COPY_LOCATION')
+                            co.target=rig
+                            co.subtarget= bindname
             print('Appearance import time:', time.time() - app_start_time, 'Seconds')
 
         
