@@ -140,6 +140,39 @@ class CP77AddVertexcolorPreset(Operator):
         split.label(text="Preset Name:")
         split.prop(self, "preset_name", text="")
 
+# region active vertex group property
+def get_vertex_groups(context):
+    """Dynamic callback function to get vertex groups from selected objects"""
+    items = []
+    groups_set = set()
+
+    # Collect vertex groups from all selected objects
+    for obj in context.selected_objects:
+        if obj.type == 'MESH' and obj.vertex_groups:
+            for vg in obj.vertex_groups:
+                groups_set.add(vg.name)
+
+    items.append(('None', 'None', 'No vertex group'))
+
+    for vg_name in sorted(groups_set):
+        if vg_name.lower().startswith("group"):
+            items.append((vg_name, vg_name, f"Use '{vg_name}' vertex group"))
+            groups_set.remove(vg_name)
+
+    # Add sorted vertex groups to items
+    for vg_name in sorted(groups_set):
+        items.append((vg_name, vg_name, f"Use '{vg_name}' vertex group"))
+
+    return items
+
+class Vertex_Group_Properties(bpy.types.PropertyGroup):
+    presets: bpy.props.EnumProperty(
+        items=lambda self, context: get_vertex_groups(context),
+        name='Vertex Group'
+    ) # pyright: ignore[reportInvalidTypeForm]
+
+#endregion
+
 class CP77GarmentSupport(Operator):
     bl_idname = 'cp77.shrinkwrap'
     bl_label = "Cyberpunk 2077 Shrinkwrap Tool"
@@ -181,20 +214,33 @@ class CP77GarmentSupport(Operator):
     ) # pyright: ignore[reportInvalidTypeForm]
 
     def invoke(self, context, event):
+        try:
+            context.scene.vertex_group_props.presets = ''  # Reset to trigger refresh
+        except Exception as e:
+            pass
+
         return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
+        vertex_group = None
+
+        # read vertex group dropdown value
+        if context.scene.vertex_group_props.presets and context.scene.vertex_group_props.presets != 'None':
+            vertex_group = context.scene.vertex_group_props.presets
+
         return add_shrinkwrap(
             context=context,
             target_collection_name=context.scene.cp77_panel_props.mesh_target,
             offset=self.offset,
             wrap_method=self.wrap_method,
             as_garment_support=self.as_garment_support,
-            apply_immediately=self.apply_immediately
+            apply_immediately=self.apply_immediately,
+            vertex_group=vertex_group
         )
 
     def draw(self,context):
         props = context.scene.cp77_panel_props
+        vg_props = context.scene.vertex_group_props
         layout = self.layout
 
         row = layout.row(align=True)
@@ -221,6 +267,11 @@ class CP77GarmentSupport(Operator):
         split = row.split(factor=0.3,align=True)
         split.label(text="Wrap Method:")
         split.prop(self, "wrap_method", text="")
+
+        row = layout.row(align=True)
+        split = row.split(factor=0.3,align=True)
+        split.label(text="Vertex Group:")
+        split.prop(vg_props, "presets", text="")
 
 class CP77SafeJoin(Operator):
     bl_idname = "cp77.safe_join"
@@ -614,6 +665,8 @@ def register_meshtools():
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
 
+    bpy.types.Scene.vertex_group_props = bpy.props.PointerProperty(type=Vertex_Group_Properties)
+
 def unregister_meshtools():
     for cls in reversed(other_classes):
         if hasattr(bpy.types, cls.__name__):
@@ -621,3 +674,5 @@ def unregister_meshtools():
     for cls in reversed(operators):
         if hasattr(bpy.types, cls.__name__):
             bpy.utils.unregister_class(cls)
+
+    del bpy.types.Scene.vertex_group_props
