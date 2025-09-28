@@ -456,6 +456,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                     if app_path:
                                         obj['appResource'] = app_path[0]
                                     obj['entAppearance'] = app_name
+                                    if 'Armature' in obj.name:
+                                        obj.hide_set(True)
                             except:
                                 print('import threw an error:')
                                 print(traceback.print_exc())
@@ -785,6 +787,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                     bit = cm_list[subnum] if subnum < len(cm_list) else True
                                     obj.hide_set(not bit)
                                     obj.hide_render = not bit
+                            
                         except:
                             print("Failed on ",meshname)
                             print(traceback.print_exc())
