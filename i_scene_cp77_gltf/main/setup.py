@@ -68,6 +68,13 @@ class MaterialBuilder:
             bpyMat['MaterialTemplate'] = rawMat["MaterialTemplate"]
             bpyMat['AddonVersion'] = self.addon_ver
             bpyMat.use_nodes = True
+            if len(bpyMat.node_tree.nodes) ==0:
+                out = bpyMat.node_tree.nodes.new('ShaderNodeOutputMaterial')
+                out.location = (400,0)
+                bpyMat.node_tree.nodes.new('ShaderNodeBsdfPrincipled')
+                bpyMat.node_tree.links.new(bpyMat.node_tree.nodes['Material Output'].inputs['Surface'], bpyMat.node_tree.nodes['Principled BSDF'].outputs['BSDF'])
+            if bpy.app.version[0] > 4:
+                bpyMat.node_tree.nodes["Principled BSDF"].inputs['IOR'].default_value = 1.01  # REMOVE THIS WHEN THEY FIX 5.0 
             no_shadows=False
             material_template = rawMat["MaterialTemplate"].replace('/','\\')
             rule = REGISTRY.resolve(material_template)
