@@ -492,7 +492,7 @@ def validate_mesh(ob, tempshit, eps=1e-10, uv_eps=1e-12):
         issues.append(ValidationIssue(
             'missing_uv',
             f"'{ob.name}' has no UV layer. A UV layer is required for glTF export.",
-            "https://tinyurl.com/need-uv"
+            "https://tinyurl.com/uv-layers"
         ))
     
     # Calculate vertex counts with splits - this accounts for verts which will be added in the gltf on export
