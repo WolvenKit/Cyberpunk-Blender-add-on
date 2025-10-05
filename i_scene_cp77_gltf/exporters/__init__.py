@@ -59,13 +59,11 @@ class CP77StreamingSectorExport(Operator,ExportHelper):
         return {'FINISHED'}
 
 class CP77GLBExport(Operator,ExportHelper):
-    ### cleaned this up and moved most code to exporters.py
     bl_idname = "export_scene.cp77_glb"
     bl_label = "Export for Cyberpunk"
     bl_options = {'REGISTER','UNDO'}
     bl_description = "Export to GLB with optimized settings for use with Wolvenkit for Cyberpunk 2077"
     filename_ext = ".glb"
-    ### adds a checkbox for anim export settings
 
     filter_glob: StringProperty(default="*.glb", options={'HIDDEN'})
 
@@ -76,11 +74,16 @@ class CP77GLBExport(Operator,ExportHelper):
         default=True,
         description="Only Export the Selected Meshes. This is probably the setting you want to use"
     )
-
-    static_prop: BoolProperty(
-        name="Export as Static Prop",
-        default=False,
-        description="No armature export, only use this for exporting props and objects which do not need to move"
+    
+    is_skinned: BoolProperty(
+        name="Skinned Mesh",
+        default=True,
+        description="Ensure armatures and vert groups are exported."
+    )
+    try_fix: BoolProperty(
+        name="Fix Meshes",
+        default=True,
+        description="Try to fix any issues "
     )
 
     export_poses: BoolProperty(
@@ -110,17 +113,19 @@ class CP77GLBExport(Operator,ExportHelper):
 
     def draw(self, context):
         layout = self.layout
-        row = layout.row(align=True)
+        box = layout.box()
+        box.label(text='Export Options')
+        row = box.row(align=True)
         row.prop(self, "export_poses")
         if not self.export_poses:
-            row = layout.row(align=True)
+            row = box.row(align=True)
+            row.prop(self, "is_skinned")
+            row.prop(self, "try_fix")
+            row = box.row(align=True)
             row.prop(self, "limit_selected")
             if not self.limit_selected:
-                row = layout.row(align=True)
+                row = box.row(align=True)
                 row.prop(self, "export_visible")
-            else:
-                row = layout.row(align=True)
-                row.prop(self, "static_prop")
             row = layout.row(align=True)
             row.prop(self, "apply_transform")
             row.prop(self, "apply_modifiers")
@@ -133,7 +138,8 @@ class CP77GLBExport(Operator,ExportHelper):
             export_poses=self.export_poses,
             export_visible=self.export_visible,
             limit_selected=self.limit_selected,
-            static_prop=self.static_prop,
+            is_skinned=self.is_skinned,
+            try_fix=self.try_fix,
             apply_transform=self.apply_transform,
             apply_modifiers=self.apply_transform,
         )
