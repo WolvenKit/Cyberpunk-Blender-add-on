@@ -77,7 +77,7 @@ class RigifyConverter:
         self.rig = None
         self.stats = defaultdict(int)
         self.inverse_map = {v: k for k, v in self.BONE_MAP.items()}
-        self.source_collections = list(source_armature.users_collection)
+        self.source_collections = list(getattr(source_armature, "users_collection", []) or [])
 
     def log(self, msg, lvl="INFO"):
         symbols = {'INFO': '✓', 'WARN': '⚠', 'ERROR': '✗', 'STEP': '➡️'}
@@ -89,7 +89,6 @@ class RigifyConverter:
         try:
             self.create_metarig()
             self.prepare_metarig()
-            self.setup_source_constraints()
             self.generate_and_finalize()
             return self.rig
         except Exception as e:
@@ -101,204 +100,212 @@ class RigifyConverter:
 
     def create_metarig(self):
         self.log("Creating metarig", "STEP")
-        select_objects(self.source)
-        bpy.ops.object.duplicate()
-        self.meta = bpy.context.object
-        self.meta.name = f"{self.source.name}_metarig"
-        self.meta.data.name = self.meta.name
+        src = self.source
+        meta_obj = src.copy()
+        meta_obj.data = src.data.copy()
+        meta_obj.animation_data_clear()
+        meta_obj.name = f"{src.name}_metarig"
+        meta_obj.data.name = meta_obj.name
+        if self.source_collections:
+            for c in self.source_collections:
+                try: c.objects.link(meta_obj)
+                except Exception: pass
+        else:
+            bpy.context.scene.collection.objects.link(meta_obj)
+        self.meta = meta_obj
+        select_objects(self.meta)
 
     def prepare_metarig(self):
         self.log("Preparing metarig", "STEP")
         select_objects(self.meta)
         arm = self.meta.data
-        
+
         safe_mode_switch('EDIT')
         eb = arm.edit_bones
         eb_dict = {b.name: b for b in eb}
-        
         rename_map = {v: k for k, v in self.BONE_MAP.items() if v in eb_dict}
         temp = "__T__"
-        for old, new in rename_map.items():
-            if new not in eb_dict or new in rename_map.values():
-                eb_dict[old].name = f"{temp}{new}"
-        for old, new in rename_map.items():
-            t = f"{temp}{new}"
-            if t in eb: eb[t].name = new
-        self.stats['renamed'] = len(rename_map)
-        
-        # Rebuild dict after rename
+        for old in list(rename_map.keys()):
+            b = eb_dict.get(old)
+            if b: b.name = f"{temp}{rename_map[old]}"
         eb_dict = {b.name: b for b in eb}
-        
+        for old, new in rename_map.items():
+            tagged = f"{temp}{new}"
+            b = eb_dict.get(tagged)
+            if b: b.name = new
+        self.stats['renamed'] = len(rename_map)
+
+        eb_dict = {b.name: b for b in eb}
+
+        # Parent/connect chains
         for chain in self.CHAINS:
             if all(n in eb_dict for n in chain):
-                for i in range(len(chain) - 1):
-                    p, c = eb_dict[chain[i]], eb_dict[chain[i + 1]]
+                for p_name, c_name in zip(chain[:-1], chain[1:]):
+                    p, c = eb_dict[p_name], eb_dict[c_name]
                     c.parent = p
                     p.tail = c.head.copy()
                     c.use_connect = True
-        
-        for s in ['.L', '.R']:
-            foot, heel, toe = f'foot{s}', f'heel{s}', f'toe{s}'
-            if all(n in eb_dict for n in [foot, heel, toe]):
-                f, h, t = eb_dict[foot], eb_dict[heel], eb_dict[toe]
+
+        # Foot > heel/toe parenting
+        for side in ('.L', '.R'):
+            foot, heel, toe = f'foot{side}', f'heel{side}', f'toe{side}'
+            f, h, t = eb_dict.get(foot), eb_dict.get(heel), eb_dict.get(toe)
+            if f and h and t:
                 h.parent = t.parent = f
                 f.tail = h.head.copy()
                 h.tail = t.head.copy()
                 h.use_connect = False
                 t.use_connect = True
-        
-        # Setup collections
-        while arm.collections:
-            arm.collections.remove(arm.collections[0])
-        while arm.rigify_colors:
-            arm.rigify_colors.remove(arm.rigify_colors[0])
-        for name, active, normal in [
-            ("Root", (0.549, 1.0, 1.0), (0.435, 0.184, 0.416)),
-            ("IK", (0.549, 1.0, 1.0), (0.604, 0.0, 0.0)),
-            ("Special", (0.549, 1.0, 1.0), (0.957, 0.788, 0.047)),
-            ("Tweak", (0.549, 1.0, 1.0), (0.039, 0.212, 0.580)),
-            ("FK", (0.549, 1.0, 1.0), (0.118, 0.569, 0.035)),
-            ("Extra", (0.549, 1.0, 1.0), (0.969, 0.251, 0.094))
-        ]:
-            c = arm.rigify_colors.add()
-            c.name, c.active, c.normal, c.select = name, Color(active), Color(normal), Color((0.314, 0.784, 1.0))
-            c.standard_colors_lock = True
-        
-        colls = {}
-        for name, (bones, row, color) in self.COLLECTIONS.items():
-            coll = arm.collections.new(name=name)
-            coll.rigify_ui_row = row
-            coll.rigify_color_set_id = color
-            for bn in bones:
-                if bn in eb_dict:
-                    coll.assign(eb_dict[bn])
-            colls[name] = coll
-        
+
+        # Colours
+        if hasattr(arm, "rigify_colors"):
+            while arm.rigify_colors:
+                arm.rigify_colors.remove(arm.rigify_colors[0])
+            for name, active, normal in [
+                ("Root", (0.549, 1.0, 1.0), (0.435, 0.184, 0.416)),
+                ("IK", (0.549, 1.0, 1.0), (0.604, 0.0, 0.0)),
+                ("Special", (0.549, 1.0, 1.0), (0.957, 0.788, 0.047)),
+                ("Tweak", (0.549, 1.0, 1.0), (0.039, 0.212, 0.580)),
+                ("FK", (0.549, 1.0, 1.0), (0.118, 0.569, 0.035)),
+                ("Extra", (0.549, 1.0, 1.0), (0.969, 0.251, 0.094))
+            ]:
+                c = arm.rigify_colors.add()
+                c.name, c.active, c.normal, c.select = name, Color(active), Color(normal), Color((0.314, 0.784, 1.0))
+                c.standard_colors_lock = True
+
+        # Bone collections
+        if hasattr(arm, "collections"):
+            while arm.collections:
+                arm.collections.remove(arm.collections[0])
+            for name, (bones, row, color) in self.COLLECTIONS.items():
+                coll = arm.collections.new(name=name)
+                coll.rigify_ui_row = row
+                coll.rigify_color_set_id = color
+                for bn in bones:
+                    b = eb_dict.get(bn)
+                    if b: coll.assign(b)
+
         safe_mode_switch('POSE')
         pb = self.meta.pose.bones
         pb_dict = {b.name: b for b in pb}
-        
-        # Assign types
+
         for name, rtype in self.RIGIFY_TYPES.items():
-            if name in pb_dict:
-                pb_dict[name].rigify_type = rtype
-        
-        # Configure parameters
+            p = pb_dict.get(name)
+            if p: p.rigify_type = rtype
+
         for s in ['L', 'R']:
-            for limb in [f'thigh.{s}', f'upper_arm.{s}']:
-                if limb in pb_dict:
-                    p = pb_dict[limb].rigify_parameters
-                    p.rotation_axis = 'x'
-                    p.segments = 2
-                    p.limb_uniform_scale = False
-        
+            for limb in (f'thigh.{s}', f'upper_arm.{s}'):
+                p = pb_dict.get(limb)
+                if p:
+                    prm = p.rigify_parameters
+                    prm.rotation_axis = 'x'
+                    prm.segments = 2
+                    prm.limb_uniform_scale = False
+
         for s in ['.L', '.R']:
             for f in ['thumb.01', 'f_index.01', 'f_middle.01', 'f_ring.01', 'f_pinky.01']:
-                if (bn := f'{f}{s}') in pb_dict:
-                    pb_dict[bn].rigify_parameters.primary_rotation_axis = 'X'
-        
-        # Clear custom shapes
-        for b in pb:
-            b.custom_shape = None
-        
-        safe_mode_switch('OBJECT')
+                p = pb_dict.get(f'{f}{s}')
+                if p: p.rigify_parameters.primary_rotation_axis = 'X'
 
-    def setup_source_constraints(self):
-        self.log("Constraining source to metarig", "STEP")
-        select_objects(self.source)
-        safe_mode_switch('POSE')
-        for bone in self.source.pose.bones:
-            if (meta_name := self.inverse_map.get(bone.name)):
-                while bone.constraints:
-                    bone.constraints.remove(bone.constraints[0])
-                c = bone.constraints.new('COPY_TRANSFORMS')
-                c.target = self.meta
-                c.subtarget = meta_name
-                c.target_space = c.owner_space = 'WORLD'
-                self.stats['source_constraints'] += 1
+        for b in pb: b.custom_shape = None
         safe_mode_switch('OBJECT')
 
     def generate_and_finalize(self):
         self.log("Generating Rigify rig", "STEP")
         select_objects(self.meta)
+        safe_mode_switch('POSE')
+
         objs_before = set(bpy.data.objects)
+        if not hasattr(bpy.ops.pose, "rigify_generate"):
+            raise RuntimeError("Rigify addon not enabled (pose.rigify_generate missing).")
         bpy.ops.pose.rigify_generate()
-        
-        # Find generated rig
-        new_objs = set(bpy.data.objects) - objs_before
-        self.rig = next((o for o in new_objs if o.type == 'ARMATURE'), None)
+
+        new_objs = [o for o in (set(bpy.data.objects) - objs_before) if o.type == 'ARMATURE']
+        self.rig = new_objs[0] if new_objs else None
         if not self.rig:
-            raise RuntimeError("Rigify generation failed")
-        
+            raise RuntimeError("Rigify generation failed to produce an armature")
         self.log(f"Generated '{self.rig.name}'")
-        
-        # Move to correct collection
+
+        # Collections
         for coll in list(self.rig.users_collection):
-            coll.objects.unlink(self.rig)
-        for coll in self.source_collections:
-            coll.objects.link(self.rig)
-        
-        # Post-processing
+            try: coll.objects.unlink(self.rig)
+            except Exception: pass
+        if self.source_collections:
+            for coll in self.source_collections:
+                try: coll.objects.link(self.rig)
+                except Exception: pass
+        else:
+            bpy.context.scene.collection.objects.link(self.rig)
+
+        # Post-processing on rigify
         select_objects(self.rig)
         safe_mode_switch('POSE')
         for b in self.rig.pose.bones:
-            if "IK_Stretch" in b:
-                b["IK_Stretch"] = 0.0
-        safe_mode_switch('OBJECT')
-        
-        select_objects(self.rig)
+            if "IK_Stretch" in b.keys(): b["IK_Stretch"] = 0.0
+
         safe_mode_switch('EDIT')
         arm = self.rig.data
-        
-        # Get/create bone collections
         fk = arm.collections.get("FK") or arm.collections.new("FK")
         ik = arm.collections.get("IK") or arm.collections.new("IK")
         tw = arm.collections.get("Tweak") or arm.collections.new("Tweak")
         fk.rigify_color_set_id, fk.rigify_ui_row = 5, 8
         ik.rigify_color_set_id, ik.rigify_ui_row = 2, 8
         tw.rigify_color_set_id, tw.rigify_ui_row = 4, 9
-        
-        # Single pass through bones
+
         for b in arm.edit_bones:
             nl = b.name.lower()
-            target = (fk if '_fk' in nl else
-                     ik if '_ik' in nl and '_parent' not in nl else
-                     tw if 'tweak' in nl else None)
+            target = fk if '_fk' in nl else (ik if ('_ik' in nl and '_parent' not in nl) else (tw if 'tweak' in nl else None))
             if target:
-                for c in list(b.collections):
-                    c.unassign(b)
+                for c in tuple(b.collections): c.unassign(b)
                 target.assign(b)
                 self.stats[f'{target.name.lower()}_controls'] += 1
-        
-        safe_mode_switch('OBJECT')
-        
-        # Connect metarig to generated rig
-        select_objects(self.meta)
+
         safe_mode_switch('POSE')
-        rig_bones = set(self.rig.data.bones.keys())
-        skip = {'root', 'Trajectory', 'WeaponLeft', 'WeaponRight', 'reference_joint'}
-        
-        for b in self.meta.pose.bones:
-            if b.name in skip:
+
+        self.log("Linking Rigify → Source (Copy Transforms on source bones)", "STEP")
+        rig_bone_names = set(self.rig.data.bones.keys())
+        inv = self.inverse_map  
+        def best_target(base):
+            for cand in (f"DEF-{base}", f"ORG-{base}", f"MCH-{base}", base):
+                if cand in rig_bone_names:
+                    return cand
+            return None
+
+        select_objects(self.source)
+        safe_mode_switch('POSE')
+        for s_bone in self.source.pose.bones:
+            base = inv.get(s_bone.name)
+            if not base:
                 continue
-            target = f"DEF-{b.name}" if f"DEF-{b.name}" in rig_bones else None
-            if target:
-                while b.constraints:
-                    b.constraints.remove(b.constraints[0])
-                c = b.constraints.new('COPY_TRANSFORMS')
-                c.target = self.rig
-                c.subtarget = target
-                c.target_space = c.owner_space = 'POSE'
-                self.stats['meta_constraints'] += 1
-        
+            sub = best_target(base)
+            if not sub:
+                continue
+            for c in list(s_bone.constraints):
+                if c.type == 'COPY_TRANSFORMS' and c.name == "RigifyLink":
+                    s_bone.constraints.remove(c)
+            c = s_bone.constraints.new('COPY_TRANSFORMS')
+            c.name = "RigifyLink"
+            c.target = self.rig
+            c.subtarget = sub
+            c.target_space = 'LOCAL_OWNER_ORIENT'
+            c.owner_space = 'LOCAL'
+            if hasattr(c, "use_offset"): c.use_offset = False
+            if hasattr(c, "mix_mode"): c.mix_mode = 'REPLACE'
+            self.stats['source_constraints'] += 1
         safe_mode_switch('OBJECT')
-        self.meta.hide_set(True)
-        self.meta.hide_viewport = True
+        try:
+            self.meta.hide_set(True)
+            self.meta.hide_viewport = True
+        except Exception:
+            pass
 
     def cleanup(self):
         for obj in [self.rig, self.meta]:
-            if obj and obj.name in bpy.data.objects:
-                bpy.data.objects.remove(obj, do_unlink=True)
+            try:
+                if obj and obj.name in bpy.data.objects:
+                    bpy.data.objects.remove(obj, do_unlink=True)
+            except Exception:
+                pass
 
 
 def cp77_to_rigify():
