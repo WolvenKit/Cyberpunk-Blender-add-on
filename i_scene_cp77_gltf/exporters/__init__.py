@@ -82,7 +82,7 @@ class CP77GLBExport(Operator,ExportHelper):
     )
     try_fix: BoolProperty(
         name="Fix Meshes",
-        default=True,
+        default=False,
         description="Try to fix any issues "
     )
 
