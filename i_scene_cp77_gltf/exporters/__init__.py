@@ -109,6 +109,13 @@ class CP77GLBExport(Operator,ExportHelper):
         default=True,
         description="Applies the modifiers of the objects. Disable this if you have shapekeys."
     )
+    export_tracks: BoolProperty(
+        name="Export Float Tracks",
+        default=True,
+        description="Transfer Float F-Curves Back to Custom Props for Wolvenkit Import"
+    )
+
+    
 
 
     def draw(self, context):
@@ -129,6 +136,8 @@ class CP77GLBExport(Operator,ExportHelper):
             row = layout.row(align=True)
             row.prop(self, "apply_transform")
             row.prop(self, "apply_modifiers")
+        else:
+            row.prop(self, "export_tracks")
 
 
     def execute(self, context):
@@ -142,6 +151,7 @@ class CP77GLBExport(Operator,ExportHelper):
             try_fix=self.try_fix,
             apply_transform=self.apply_transform,
             apply_modifiers=self.apply_transform,
+            export_tracks=self.export_tracks,
         )
         return {'FINISHED'}
 
