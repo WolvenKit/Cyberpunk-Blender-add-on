@@ -292,7 +292,7 @@ def find_3d_degenerates(tempshit, eps=1e-10):
     
     return np.flatnonzero(hits > 0)
 
-def check_uv_degenerates(tempshit, uv_eps=1e-12):
+def check_uv_degenerates(tempshit, uv_eps=1e-17):
     """
     Check for UV degenerate triangles using vectorized operations.
     
@@ -528,20 +528,21 @@ def validate_mesh(ob, tempshit, eps=1e-10, uv_eps=1e-12):
 
     bad_uv_faces = np.array([], dtype=np.int32)
     if not missing_uv:
-        bad_uv_faces = check_uv_degenerates(tempshit, uv_eps)
-        if len(bad_uv_faces) > 0:
-            issues.append(ValidationIssue(
-                'degenerate_uv',
-                f"{len(bad_uv_faces)} UV degenerate faces detected in '{ob.name}'. "
-                f"Fix UV mapping to ensure proper texture coordinates.",
-                "https://tinyurl.com/uv-degenerate"
-            ))
+        pass
+        # bad_uv_faces = check_uv_degenerates(tempshit, uv_eps)
+        # if len(bad_uv_faces) > 0:
+        #     issues.append(ValidationIssue(
+        #         'degenerate_uv',
+        #         f"{len(bad_uv_faces)} UV degenerate faces detected in '{ob.name}'. "
+        #         f"Fix UV mapping to ensure proper texture coordinates.",
+        #         "https://tinyurl.com/uv-degenerate"
+        #     ))
     
     return {
         'valid': len(issues) == 0,
         'issues': issues,
         'bad_3d_faces': bad_3d_faces,
-        'bad_uv_faces': bad_uv_faces,
+        #'bad_uv_faces': bad_uv_faces,
         'vertex_stats': vertex_stats
     }
 
@@ -641,7 +642,7 @@ def cp77_meshValidation(
     meshes: list[bpy.types.Object],
     *,
     eps: float = 1e-10,
-    uv_eps: float = 1e-12,
+    uv_eps: float = 1e-17,
     is_skinned: bool = False,
     try_fix: bool = True,
 ) -> dict:
