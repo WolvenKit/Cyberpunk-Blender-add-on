@@ -34,6 +34,9 @@ EXPORT_DEFAULTS = {
 # Vertex count limit
 VERT_LIMIT = 65535
 
+# Quantization for float comparisons
+_Q = 1_000_000  
+
 # Tolerance values
 WEIGHT_EPSILON = 1e-5
 
@@ -174,75 +177,105 @@ def restore_user_settings(user_settings):
         except:
             pass
 
+_Q = 1_000_000  # quantization to make float comparisons robust
+
+def _loop_verts(tempshit):
+    n_loops = len(tempshit.loops)
+    lv = np.empty(n_loops, dtype=np.int32)
+    tempshit.loops.foreach_get("vertex_index", lv)
+    return lv
+
+def _quantize(arr_f32, scale=_Q):
+    return np.round(arr_f32 * scale).astype(np.int64, copy=False)
+
+def count_per_vertex(vertex_col, attr_cols, n_verts):
+    """
+    Count how many unique attr tuples each vertex has across its loops.
+    vertex_col: (n_loops,) int64/int32 with vertex indices
+    attr_cols: list of 1D int64 arrays (same length as vertex_col)
+    returns: (n_verts,) int32 counts
+    """
+    if not attr_cols:
+        return np.zeros(n_verts, dtype=np.int32)
+    S = np.column_stack([vertex_col] + attr_cols)  # (n_loops, k)
+    U = np.unique(S, axis=0)                       # unique (v, attrs...)
+    counts = np.bincount(U[:, 0].astype(np.int32, copy=False), minlength=n_verts)
+    return counts
+
 def calc_vert_splits(tempshit):
     """
-    Calculate vertex splits using numpy vectorization.
-    
+    glTF splits per-corner attribute: UVs, loop normals, and corner colours 
+    We can measure and predict these splits efficiently and accurately and save confusing problems
+
     Returns:
-        tuple: (used_vert_count, export_vert_count, split_vert_count, new_vert_count)
+      stats: dict of used/export/split/new vert counts
+      reasons: dict mapping reason name -> bool array (per vertex) where True means it causes a split
+      split_count: np.ndarray (n_verts,) total splits per vertex (how many verts it will become on export)
     """
+    # Stop Early if not needed
     if not tempshit.loop_triangles:
-        return 0, 0, 0, 0
-    
+        n_verts = len(tempshit.vertices)
+        zero = np.zeros(n_verts, dtype=np.int32)
+        return (
+            {"used": 0, "export": 0, "split": 0, "new": 0},
+            {"uv0": zero.astype(bool)},  # placeholders
+            zero
+        )
+
     n_loops = len(tempshit.loops)
     n_verts = len(tempshit.vertices)
-    
-    # Get vertex indices for all loops
-    loop_verts = np.empty(n_loops, dtype=np.int32)
-    tempshit.loops.foreach_get("vertex_index", loop_verts)
-    
-    # Build attribute signature for each loop
-    signatures = [loop_verts.astype(np.int64)]
-    
-    # Add UV coordinates if present
-    if tempshit.uv_layers.active:
-        uv_data = np.empty(n_loops * 2, dtype=np.float32)
-        tempshit.uv_layers.active.data.foreach_get("uv", uv_data)
-        uv_data = uv_data.reshape(-1, 2)
-        # Quantize to avoid floating point comparison issues
-        uv_quantized = np.round(uv_data * 1000000).astype(np.int64)
-        signatures.extend([uv_quantized[:, 0], uv_quantized[:, 1]])
-    
-    # Add normals if custom or sharp edges exist
-    has_custom_normals = tempshit.has_custom_normals or any(not p.use_smooth for p in tempshit.polygons)
+
+    # Column 0: loop -> vertex indices
+    loop_verts = _loop_verts(tempshit).astype(np.int64, copy=False)
+
+    # UV sets (all layers, not just active)
+    uv_layers = list(getattr(tempshit, "uv_layers", []))
+    uv_cols = []          # combined per-vertex signature including all uvs
+    uv_reason_cols = {}   # per-layer columns for reason isolation - not used currently
+
+    for i, uvl in enumerate(uv_layers):
+        uv = np.empty(n_loops * 2, dtype=np.float32)
+        uvl.data.foreach_get("uv", uv)
+        uv = uv.reshape(-1, 2)
+        uv_q = _quantize(uv)  # (n_loops, 2)
+        # store separately for reason breakdown if we want it later
+        uv_reason_cols[f"uv{i}"] = [uv_q[:, 0], uv_q[:, 1]]
+        uv_cols.extend([uv_q[:, 0], uv_q[:, 1]])
+
+    # Loop normals if needed
+    normals_cols = []
+    has_custom_normals = getattr(tempshit, "has_custom_normals", False) or any(not p.use_smooth for p in tempshit.polygons)
     if has_custom_normals:
-        normals = np.empty(n_loops * 3, dtype=np.float32)
-        tempshit.loops.foreach_get("normal", normals)
-        normals = normals.reshape(-1, 3)
-        normal_quantized = np.round(normals * 1000000).astype(np.int64)
-        signatures.extend([normal_quantized[:, 0], normal_quantized[:, 1], normal_quantized[:, 2]])
-    
-    # Add corner vertex colors
-    for color_attr in tempshit.color_attributes:
-        if color_attr.domain == 'CORNER':
-            colors = np.empty(n_loops * 4, dtype=np.float32)
-            color_attr.data.foreach_get("color", colors)
-            colors = colors.reshape(-1, 4)[:, :3]  # RGB only
-            color_quantized = np.round(colors * 1000000).astype(np.int64)
-            signatures.extend([color_quantized[:, 0], color_quantized[:, 1], color_quantized[:, 2]])
-    
-    # Create combined signature array
-    signature_array = np.column_stack(signatures)
-    
-    # Find unique vertex/attribute combinations per vertex
-    vertex_splits = np.zeros(n_verts, dtype=np.int32)
-    
-    for v_idx in range(n_verts):
-        mask = loop_verts == v_idx
-        if not np.any(mask):
-            continue
-        
-        vert_signatures = signature_array[mask]
-        unique_sigs = np.unique(vert_signatures, axis=0)
-        vertex_splits[v_idx] = len(unique_sigs)
-    
-    # Calculate statistics
-    used_vert_count = int(np.sum(vertex_splits > 0))
-    export_vert_count = int(np.sum(vertex_splits))
-    split_verts = int(np.sum(vertex_splits > 1))
-    new_verts = export_vert_count - used_vert_count
-    
-    return used_vert_count, export_vert_count, split_verts, new_verts
+        ln = np.empty(n_loops * 3, dtype=np.float32)
+        tempshit.loops.foreach_get("normal", ln)
+        ln = ln.reshape(-1, 3)
+        ln_q = _quantize(ln)
+        normals_cols = [ln_q[:, 0], ln_q[:, 1], ln_q[:, 2]]
+
+    color_layers = [ca for ca in getattr(tempshit, "color_attributes", []) if ca.domain == 'CORNER']
+    color_reason_cols = {}
+    color_cols = []
+    for i, ca in enumerate(color_layers):
+        c = np.empty(n_loops * 4, dtype=np.float32)
+        ca.data.foreach_get("color", c)
+        c = c.reshape(-1, 4)[:, :3]
+        c_q = _quantize(c)
+        color_reason_cols[f"color{i}"] = [c_q[:, 0], c_q[:, 1], c_q[:, 2]]
+        color_cols.extend([c_q[:, 0], c_q[:, 1], c_q[:, 2]])
+
+
+    all_cols = []
+    all_cols.extend(uv_cols)
+    all_cols.extend(normals_cols)
+    all_cols.extend(color_cols)
+
+    total_counts = count_per_vertex(loop_verts, all_cols, n_verts)  # per-vertex split count
+    used = int((total_counts > 0).sum())
+    export = int(total_counts.sum())
+    split = int((total_counts > 1).sum())
+    new = export - used
+
+    return used, export, split, new
 
 def find_3d_degenerates(tempshit, eps=1e-10):
     """
@@ -480,7 +513,6 @@ def validate_mesh(ob, tempshit, eps=1e-10, uv_eps=1e-12):
             'valid': bool,
             'issues': list[ValidationIssue],
             'bad_3d_faces': np.array,
-            'bad_uv_faces': np.array,
             'vertex_stats': dict
         }
     """
