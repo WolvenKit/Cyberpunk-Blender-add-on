@@ -382,7 +382,8 @@ def CreateRebildNormalGroup(curMat, x = 0, y = 0,name = 'Rebuild Normal Z'):
         Sep = group.nodes.new("ShaderNodeSeparateColor")
         Sep.mode = 'RGB'
         Sep.location = (-600,0)
-        Comb = group.nodes.new("ShaderNodeCombineRGB")
+        Comb = group.nodes.new("ShaderNodeCombineColor")
+        Comb.mode= 'RGB'
         Comb.location = (-300,0)
 
         RGBCurvesConvert = group.nodes.new("ShaderNodeRGBCurve")

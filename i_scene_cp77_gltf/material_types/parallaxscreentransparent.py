@@ -2057,7 +2057,8 @@ class ParallaxScreenTransparent:
             hsvGroupO = create_node(hsvGroup.nodes, "NodeGroupOutput",(150,0))  
             hsv_pos_x = -1500
             vecMul10 = create_node(hsvGroup.nodes,"ShaderNodeVectorMath",(hsv_pos_x, 0),operation = "MULTIPLY")
-            separateHSV = create_node(hsvGroup.nodes,"ShaderNodeSeparateHSV",(hsv_pos_x+150, 0))
+            separateHSV = create_node(hsvGroup.nodes,"ShaderNodeSeparateColor",(hsv_pos_x+150, 0))
+            separateHSV.mode = 'HSV'
             combine5 = create_node(hsvGroup.nodes,"ShaderNodeCombineXYZ",(hsv_pos_x+150, 0))
             combine6 = create_node(hsvGroup.nodes,"ShaderNodeCombineXYZ",(hsv_pos_x+300, 0))
             vecAdd3 = create_node(hsvGroup.nodes,"ShaderNodeVectorMath",(hsv_pos_x+450, 0))
@@ -2065,7 +2066,8 @@ class ParallaxScreenTransparent:
             combine7.inputs[0].default_value = 1
             vecMul11 = create_node(hsvGroup.nodes,"ShaderNodeVectorMath",(hsv_pos_x+600, 0),operation = "MULTIPLY")
             separate11 = create_node(hsvGroup.nodes,"ShaderNodeSeparateXYZ",(hsv_pos_x+750, 0))
-            combineHSV = create_node(hsvGroup.nodes,"ShaderNodeCombineHSV",(hsv_pos_x+900, 0))
+            combineHSV = create_node(hsvGroup.nodes,"ShaderNodeCombineColor",(hsv_pos_x+900, 0))
+            combineHSV.mode = 'HSV'
             vecMul12 = create_node(hsvGroup.nodes,"ShaderNodeVectorMath",(hsv_pos_x+1050, 0),operation = "MULTIPLY")
             combine8 = create_node(hsvGroup.nodes,"ShaderNodeCombineXYZ",(hsv_pos_x+1200, -50))
             vecMul13 = create_node(hsvGroup.nodes,"ShaderNodeVectorMath",(hsv_pos_x+1350, 0),operation = "MULTIPLY")
