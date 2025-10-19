@@ -12,7 +12,7 @@ class SpeedTree:
         CurMat = Mat.node_tree
         pBSDF=CurMat.nodes[loc('Principled BSDF')]
         sockets=bsdf_socket_names()
-        pBSDF.inputs[sockets['Specular']].default_value = 0
+        pBSDF.inputs[sockets['Specular']].default_value = 0.5
         
         #Diffuse       
         dTexMapping = CurMat.nodes.new("ShaderNodeMapping")
