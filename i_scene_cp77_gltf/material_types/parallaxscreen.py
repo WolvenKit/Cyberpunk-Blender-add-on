@@ -1390,7 +1390,8 @@ class ParallaxScreen:
         CurMat.links.new(emissiveColor.outputs[0],vecMul23.inputs[1])
 
         # HSV
-        separateHSV = create_node(CurMat.nodes,"ShaderNodeSeparateHSV",(-1350, -800))
+        separateHSV = create_node(CurMat.nodes,"ShaderNodeSeparateColor",(-1350, -800))
+        separateHSV.mode = 'HSV'
         combine18 = create_node(CurMat.nodes,"ShaderNodeCombineXYZ",(-1350, -850))
         combine18.inputs[0].default_value = 1
         combine18.inputs[2].default_value = 1
@@ -1399,7 +1400,8 @@ class ParallaxScreen:
         combine20 = create_node(CurMat.nodes,"ShaderNodeCombineXYZ",(-1050, -850))
         vecAdd12 = create_node(CurMat.nodes,"ShaderNodeVectorMath",(-900, -800),operation="ADD")
         separate11 = create_node(CurMat.nodes,"ShaderNodeSeparateXYZ",(-750, -800))
-        combineHSV = create_node(CurMat.nodes,"ShaderNodeCombineHSV",(-600, -800))
+        combineHSV = create_node(CurMat.nodes,"ShaderNodeCombineColor",(-600, -800))
+        combineHSV.mode='HSV'
         CurMat.links.new(vecMul23.outputs[0],separateHSV.inputs[0])
         if "HSV_Mod" in Data:
             CurMat.links.new(HSV_Mod_y.outputs[0],combine18.inputs[1])
