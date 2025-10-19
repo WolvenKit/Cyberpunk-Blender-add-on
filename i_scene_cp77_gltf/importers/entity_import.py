@@ -125,13 +125,13 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     if not app_path:
         app_path = glob.glob(os.path.join(escaped_path,"**","*.app.json"), recursive = True)
     if len(app_path)==0:
-        print('No Appearance file JSONs found in path')
+        print('No Appearance file JSONs found in path, run the Ent export script first')
 
     # find the meshes
     if not meshes:
         meshes =  glob.glob(os.path.join(escaped_path,"**","*.glb"), recursive = True)
     if len(meshes)==0:
-        print('No Meshes found in path')
+        print('No Meshes found in path, run the Ent export script first')
     if not mesh_jsons:
         mesh_jsons =  glob.glob(os.path.join(escaped_path,"**","*mesh.json"), recursive = True)
 
@@ -1017,8 +1017,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         show_message('Errors during import:\n\t' + '\n\t'.join(error_messages))
     Masters.hide_viewport=True
     if not cp77_addon_prefs.non_verbose:
-        if app_name:
-            print(f"Imported Appearance: {app_name} in {time.time() - start_time} Seconds from {ent_name}.ent")
+        print(f"Imported Entity in {time.time() - start_time} Seconds from {ent_name}.ent")
         print('-------------------- Finished Importing Cyberpunk 2077 Entity --------------------\n')
 
 # The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
