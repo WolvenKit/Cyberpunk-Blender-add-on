@@ -933,8 +933,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     if len(error_messages) > 0:
         show_message('Errors during import:\n\t' + '\n\t'.join(error_messages))
     if not cp77_addon_prefs.non_verbose:
-        if app_name:
-            print(f"Imported Appearance: {app_name} in {time.time() - start_time} Seconds from {ent_name}.ent")
+        print(f"Imported Entity in {time.time() - start_time} Seconds from {ent_name}.ent")
         print('-------------------- Finished Importing Cyberpunk 2077 Entity --------------------\n')
 
 # The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
