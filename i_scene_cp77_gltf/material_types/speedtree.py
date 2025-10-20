@@ -26,6 +26,14 @@ class SpeedTree:
             CurMat.links.new(dImgNode.outputs[0],pBSDF.inputs['Base Color'])
             CurMat.links.new(dImgNode.outputs[1],pBSDF.inputs['Alpha'])
             dImgNode.hide=False
+        
+        if "BaseColor" in Data:
+            dImg = imageFromRelPath(Data["BaseColor"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            dImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,400), label="DiffuseTexture", image=dImg)
+            CurMat.links.new(dTexMapping.outputs[0],dImgNode.inputs[0])
+            CurMat.links.new(dImgNode.outputs[0],pBSDF.inputs['Base Color'])
+            CurMat.links.new(dImgNode.outputs[1],pBSDF.inputs['Alpha'])
+            dImgNode.hide=False
 
         if "UVOffsetX" in Data:
             dTexMapping.inputs[1].default_value[0] = Data["UVOffsetX"]
@@ -47,9 +55,24 @@ class SpeedTree:
             CurMat.links.new(nMap.outputs[0],pBSDF.inputs['Normal'])
             nMap.inputs[1].links[0].from_node.inputs[0].links[0].from_node.hide=False
             nMap.inputs[1].links[0].from_node.inputs[0].links[0].from_node.location = (-800,-200)
+        
+        if "Normal" in Data:
+            nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["Normal"],-300,-350,'NormalMap',self.image_format)
+            CurMat.links.new(nMap.outputs[0],pBSDF.inputs['Normal'])
+            nMap.inputs[1].links[0].from_node.inputs[0].links[0].from_node.hide=False
+            nMap.inputs[1].links[0].from_node.inputs[0].links[0].from_node.location = (-800,-200)
 
         if "TransGlossMap" in Data:
             rImg = imageFromRelPath(Data["TransGlossMap"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
+            rImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,100), label="TransGlossMap", image=rImg, hide = False)
+            
+            mathNode = create_node(CurMat.nodes,"ShaderNodeMath",(-400,100), operation='SUBTRACT', label="Math")
+            mathNode.inputs[0].default_value = 1.0
+            CurMat.links.new(rImgNode.outputs[0],mathNode.inputs[1])
+            CurMat.links.new(mathNode.outputs[0],pBSDF.inputs['Roughness'])
+            
+        if "Roughness" in Data:
+            rImg = imageFromRelPath(Data["Roughness"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
             rImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,100), label="TransGlossMap", image=rImg, hide = False)
             
             mathNode = create_node(CurMat.nodes,"ShaderNodeMath",(-400,100), operation='SUBTRACT', label="Math")
