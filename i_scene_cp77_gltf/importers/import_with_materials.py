@@ -416,6 +416,8 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
                     MultilayerMask = 'None'
                 if 'DiffuseMap' in m['Data'].keys():
                     DiffuseMap = m['Data']['DiffuseMap']
+                elif 'BaseColor' in m['Data'].keys():
+                    DiffuseMap = m['Data']['BaseColor']
                 else:
                     DiffuseMap = 'None'
 
@@ -468,8 +470,8 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
                 'BaseMaterial' in bpy_mats[matname].keys() and bpy_mats[matname]['BaseMaterial'] == m['BaseMaterial'] and \
                     bpy_mats[matname]['GlobalNormal'] == m['GlobalNormal'] and bpy_mats[matname]['MultilayerMask'] == m['MultilayerMask']:
                 bpy.data.meshes[name].materials.append(bpy_mats[matname])
-            elif matname in bpy_mats.keys() and matname[:5] == 'Atlas' and bpy_mats[matname][
-                'BaseMaterial'] == m['BaseMaterial'] and bpy_mats[matname]['DiffuseMap'] == m['DiffuseMap']:
+            elif matname in bpy_mats.keys() and matname[:5] == 'Atlas' and bpy_mats[matname]['BaseMaterial'] == m['BaseMaterial'] and \
+                    bpy_mats[matname]['DiffuseMap'] == m['DiffuseMap']:
                 bpy.data.meshes[name].materials.append(bpy_mats[matname])
             elif matname in bpy_mats.keys() and matname=='decal_diffuse' and bpy_mats[matname]['BaseMaterial'] == m['BaseMaterial'] and \
                 bpy_mats[matname]['DiffuseTexture'] == m['DiffuseTexture']:
