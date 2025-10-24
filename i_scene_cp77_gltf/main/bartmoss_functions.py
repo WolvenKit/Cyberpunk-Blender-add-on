@@ -4,7 +4,7 @@ import bmesh
 import os
 import unicodedata
 import logging
-from mathutils import Vector, Quaternion
+from mathutils import Vector, Quaternion, Matrix, Vector
 from math import radians
 from collections import defaultdict
 from typing import List, Dict, Set
@@ -318,30 +318,197 @@ def is_armature(o: bpy.types.Object) -> bool: # I just found out I could leave a
 def has_anims(o: bpy.types.Object) -> bool:
     return isinstance(o.data, bpy.types.Armature) and o.animation_data is not None
 
-def rotate_quat_180(self,context):
-    if context.selected_objects is not None:
-        for obj in context.selected_objects:
-            obj.rotation_mode = 'QUATERNION'
+def iter_edited_meshes():
+    """Return only the meshes that are actually being edited right now. Useful for bmesh.from_edit_mesh"""
+    c = bpy.context
+    if c.mode == 'EDIT_MESH':
+        objs = getattr(c, "objects_in_mode_unique_data", None)
+        if not objs and c.edit_object:
+            objs = [c.edit_object]
+        return [o for o in (objs or []) if o and o.type == 'MESH']
+    return []
 
-            rotation_quat = Quaternion((0, 0, 1), radians(180))
-            obj.rotation_quaternion = rotation_quat @ obj.rotation_quaternion
-            bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
-            # Update the object to reflect the changes
-            obj.update_tag()
-            obj.update_from_editmode()
+def get_armature_modifier(ob: bpy.types.Object):
+    """
+    Returns the Armature modifier that has an object assigned, else None.
+    """
+    return next((m for m in ob.modifiers
+                 if m.type == 'ARMATURE' and getattr(m, "object", None)), None)
 
-        # Update the scene to see the changes
-        bpy.context.view_layer.update()
+# ENSURE ARMATURE + GROUP/BONE CONSISTENCY -
+def ensure_armature_and_groups(ob: bpy.types.Object):
+    """
+    - Finds the armature modifier and ensures it references the parent armature if present.
+    - Makes the armature visible & selected (no operators).
+    - Validates that every vertex group has a bone with the same name.
+    Raises ValueError on failure.
+    """
+    arm_mod = get_armature_modifier(ob)
+    if not arm_mod:
+        raise ValueError(
+            f"Armature missing from: {ob.name} Armatures are required for movement. "
+            "If this is intentional, try 'export as static prop'. See https://tinyurl.com/armature-missing"
+        )
 
+    arm = arm_mod.object
+
+    # Visibility & selection for export
+    arm.hide_set(False)
+    arm.select_set(True)
+
+    # If parent is an armature, ensure the modifier references it
+    if ob.parent and ob.parent.type == 'ARMATURE' and arm_mod.object != ob.parent:
+        arm_mod.object = ob.parent
+        arm = arm_mod.object
+
+    # Compare vertex group names with armature bone names
+    bone_names = {b.name for b in arm.data.bones}
+    group_names = {g.name for g in ob.vertex_groups}
+    missing = group_names - bone_names
+
+    if missing:
+        lst = ", ".join(sorted(missing))
+        raise ValueError(
+            "The following vertex groups are not assigned to a bone, this will result in blender creating a "
+            f"neutral_bone and cause Wolvenkit import to fail:    {lst}\n"
+            "See https://tinyurl.com/unassigned-bone"
+        )
+
+def _locrotscale(loc, rot, scale):
+    return Matrix.LocRotScale(loc, rot, scale)
+
+def apply_xform_to_mesh(
+    ob: bpy.types.Object,
+    apply_location=True,
+    apply_rotation=True,
+    apply_scale=True,
+    include_delta=True,
+    affect_shape_keys=True,
+    make_single_user=True,
+):
+    """
+    Apply the object's local transform to its mesh data,
+    then reset the object's local transform to identity.
+    """
+    if ob.type != 'MESH':
+        return
+
+    me = ob.data
+    if make_single_user and me.users > 1:
+        ob.data = me.copy()
+        me = ob.data
+
+    # Decompose local (basis) and delta
+    basis = ob.matrix_basis.copy()
+    loc_b = basis.to_translation()
+    rot_b = basis.to_quaternion()
+    scl_b = basis.to_scale()
+
+    if include_delta:
+        dloc = ob.delta_location.copy()
+        drot = ob.delta_rotation_euler.to_quaternion()
+        dscl = ob.delta_scale.copy()
     else:
-        return{'FINISHED'}
+        dloc = Vector((0,0,0))
+        drot = Quaternion((1,0,0,0))
+        dscl = Vector((1,1,1))
+
+    loc = loc_b if apply_location else Vector((0,0,0))
+    rot = rot_b if apply_rotation else Quaternion((1,0,0,0))
+    scl = scl_b if apply_scale    else Vector((1,1,1))
+
+    M = _locrotscale(loc, rot, scl) @ _locrotscale(dloc, drot, dscl)
+
+    # Early out if identity
+    if M.is_identity:
+        return
+
+    # --- Transform geometry ---
+    if ob.mode == 'EDIT':
+        bm = bmesh.from_edit_mesh(me)
+        bm.verts.ensure_lookup_table()
+        bm.transform(M)
+        bm.normal_update()
+        bmesh.update_edit_mesh(me, loop_triangles=False, destructive=False)
+    else:
+        me.transform(M)
+        me.calc_normals()
+
+    # Transform shape keys (keep them aligned with new basis)
+    if affect_shape_keys and me.shape_keys:
+        for kb in me.shape_keys.key_blocks:
+            # Transform absolute positions of each key
+            for kd in kb.data:
+                kd.co = M @ kd.co
+
+    # --- Reset object local transforms to identity ---
+    ob.matrix_basis.identity()
+    if include_delta:
+        ob.delta_location = (0.0, 0.0, 0.0)
+        ob.delta_rotation_euler = (0.0, 0.0, 0.0)
+        ob.delta_scale = (1.0, 1.0, 1.0)
+
+    # clear and let Blender recalc custom split normals
+    if getattr(me, "has_custom_normals", False):
+        me.use_auto_smooth = me.use_auto_smooth  # keep flag
+        me.calc_normals_split()
+        me.free_normals_split()
+
+def rotate_quat_180(self, context):
+    from math import radians
+    q = Quaternion((0, 0, 1), radians(180))
+    M = Matrix.LocRotScale((0,0,0), q, (1,1,1))
+    for obj in context.selected_objects or []:
+        apply_object_xform_to_mesh(obj, M)
+    return {'FINISHED'}
+
+# just a stub now that calls select_objects
+def select_object(obj):
+    return(f"{select_objects(obj)}")
 
 # deselects other objects and fully selects an object in both the viewport and the outliner
-def select_object(obj):
-    for o in bpy.context.selected_objects:
-        o.select_set(False)
-    obj.select_set(True)
-    bpy.context.view_layer.objects.active = obj
+def select_objects(objs, make_first_active=True, clear=True, reveal=False):
+    c = bpy.context
+
+    # Normalize to a list
+    if objs is None:
+        objs = []
+    elif isinstance(objs, (list, tuple, set)):
+        objs = list(objs)
+    else:
+        objs = [objs]
+
+    # Resolve names → objects; filter Nones
+    resolved = []
+    for o in objs:
+        if isinstance(o, bpy.types.Object):
+            ob = o
+        elif isinstance(o, str):
+            ob = bpy.data.objects.get(o)
+        else:
+            ob = None
+        if ob:
+            if reveal:
+                # ensure selectable & visible
+                try:
+                    ob.hide_set(False)
+                except Exception:
+                    pass
+                ob.hide_viewport = False
+                ob.hide_select = False
+            resolved.append(ob)
+
+    if clear:
+        for o in list(c.selected_objects):
+            o.select_set(False)
+
+    for ob in resolved:
+        ob.select_set(True)
+
+    if make_first_active and resolved:
+        c.view_layer.objects.active = resolved[0]
+
+    return resolved
 
 ## returns the volume of a given mesh by applying a rigid body with a material density of 1 and then returning the calculated mass
 def calculate_mesh_volume(obj):
@@ -420,9 +587,13 @@ def getModByName(obj, name):
 # returns a list with the modifier properties of the given modifier.
 def getModProps(modifier):
     props = []
-    for prop, value in modifier.bl_rna.properties.items():
-        if isinstance(value, bpy.types.FloatProperty):
-            props.append(prop)
+    for prop in modifier.bl_rna.properties:
+        if prop.is_readonly:
+            continue
+        if prop.identifier in {'rna_type', 'name', 'type'}:
+            continue
+        if prop.type in {'BOOLEAN', 'INT', 'FLOAT', 'ENUM'}:
+            props.append(prop.identifier)
     return props
 
 # checks the active object for a material by name and returns the material if found
