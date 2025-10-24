@@ -1,4 +1,5 @@
 import sys
+import re
 import bpy
 import bpy.utils.previews
 from bpy.types import (Operator, OperatorFileListElement, PropertyGroup, Panel)
@@ -10,7 +11,7 @@ from ..icons.cp77_icons import get_icon
 from ..main.common import get_classes
 from ..importers.import_with_materials import CP77GLBimport
 from .animtools import *
-from .generate_rigs import create_rigify_rig
+from .generate_rigs import cp77_to_rigify
 from .facial import load_wkit_facialsetup, load_wkit_rig_skeleton
 from .tracksolvers import solve_tracks_face, build_tracks_from_armature
 
@@ -58,6 +59,7 @@ class CP77_PT_AnimsPanel(Panel):
             return
 
         col = box.column()
+        col.operator('rigify_generator.cp77', text='Generate Rigify Rig')
         if 'deformBonesHidden' in obj:
             col.operator('bone_unhider.cp77',text='Unhide Deform Bones')
         else:
@@ -252,6 +254,17 @@ class CP77Animset(Operator):
             self.new_name = ""
             return self.execute(context)
 
+class CP77ToRigify(Operator):
+    bl_idname = "rigify_generator.cp77"
+    bl_parent_id = "CP77_PT_animspanel"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_label = "Generate Rigify"
+    bl_description = "Generate a Rigify Control Rig for the selected Cyberpunk 2077 Armature"
+
+    def execute(self, context):
+        cp77_to_rigify()
+        return{'FINISHED'}
+
 class CP77BoneHider(Operator):
     bl_idname = "bone_hider.cp77"
     bl_parent_id = "CP77_PT_animspanel"
@@ -372,7 +385,7 @@ class CP77RigLoader(Operator):
             if props.fbx_rot:
                 rotate_quat_180(self,context)
             if self.rigify_it:
-                create_rigify_rig(self,context)
+                cp77_to_rigify()
         return {'FINISHED'}
 
     def draw(self,context):
