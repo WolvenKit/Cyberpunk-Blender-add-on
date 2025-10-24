@@ -522,7 +522,7 @@ class CP77Autofitter(Operator):
         props = context.scene.cp77_panel_props
         layout = self.layout
         col = layout.column_flow(columns=2)
-        col.prop(props, 'fbx_rot', text="Refit a mesh in FBX orientation")
+        col.prop(props, 'fbx_rot', text="FBX orientation")
         col.prop(self, 'useAddon', text="Use a Refitter Addon")
         col = layout.column()
         col.prop(self, 'try_auto_apply', text="Apply to Mesh")
