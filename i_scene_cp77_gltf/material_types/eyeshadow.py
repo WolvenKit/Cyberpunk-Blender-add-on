@@ -38,4 +38,4 @@ class EyeShadow:
             CurMat.links.new(msColorNode.outputs[0],mixNode.inputs[2])
             
             CurMat.links.new(mixNode.outputs[0],pBSDF.inputs['Base Color'])
-            CurMat.links.new(mImgNode.outputs[1],mixNode.inputs['Alpha'])
+            CurMat.links.new(mImgNode.outputs[1],pBSDF.inputs['Alpha'])
