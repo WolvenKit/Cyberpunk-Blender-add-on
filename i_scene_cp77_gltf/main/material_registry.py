@@ -214,6 +214,7 @@ REGISTRY.register([
     "base\\materials\\speedtree_3d_v8_twosided.mt",
     "base\\materials\\speedtree_3d_v8_onesided.mt",
     "base\\materials\\speedtree_3d_v8_seams.mt",
+    "base\\materials\\ver_skinned_mov.mt",
 ], MaterialRule(factory=_factory_bip(SpeedTree)))
 
 # Television Ad
