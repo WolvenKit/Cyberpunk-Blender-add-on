@@ -16,7 +16,8 @@ from ..jsontool import JSONTool
 from .phys_import import cp77_phys_import
 from ..collisiontools.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
-from .sector_import import meshes_from_mesheswapps, add_to_list,get_group
+from .import_common import *
+
 
 
 
