@@ -4,7 +4,7 @@ from math import *
 from collections import Counter
 
 _DEF_FPS = 30.0  
-_VERBOSE = True
+_VERBOSE = False
 
 def _set_verbose(val: bool):
     global _VERBOSE
