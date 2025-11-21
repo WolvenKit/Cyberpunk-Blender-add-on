@@ -212,19 +212,15 @@ def calc_vert_splits(tempshit):
       reasons: dict mapping reason name -> bool array (per vertex) where True means it causes a split
       split_count: np.ndarray (n_verts,) total splits per vertex (how many verts it will become on export)
     """
-    # Stop Early if not needed
-    if not tempshit.loop_triangles:
-        n_verts = len(tempshit.vertices)
-        zero = np.zeros(n_verts, dtype=np.int32)
-        return (
-            {"used": 0, "export": 0, "split": 0, "new": 0},
-            {"uv0": zero.astype(bool)},  # placeholders
-            zero
-        )
 
     n_loops = len(tempshit.loops)
     n_verts = len(tempshit.vertices)
 
+
+    # Stop Early if not needed
+    if not tempshit.loop_triangles:
+
+        return n_verts, n_verts, 0, 0
     # Column 0: loop -> vertex indices
     loop_verts = _loop_verts(tempshit).astype(np.int64, copy=False)
 
