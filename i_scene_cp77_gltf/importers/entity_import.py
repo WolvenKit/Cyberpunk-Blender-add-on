@@ -620,11 +620,9 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                                                             bindname=slot['boneName']['$value']
 
                                         ######
-                                        if bindname in bones.keys():
+                                        if bindname in bones.keys() and rig_j is not None and rig_j['boneNames'] is not None:
                                             #print('bindname in bones')
                                             bidx=0
-                                            if rig_j['boneNames'] is None:
-                                                rig_j['boneNames'] = []
                                             for bid, b in enumerate(rig_j['boneNames']):
                                                 if b['$value']==bindname:
                                                     bidx=bid
