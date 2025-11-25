@@ -122,7 +122,8 @@ class CP77_PT_PanelProps(PropertyGroup):
         items=[
         ('VEHICLE', "Vehicle", "Generate .phys formatted collisions for a vehicle mod"),
         ('ENTITY', "entColliderComponent", "Generate entCollisionComponents"),
-        ('WORLD', "worldCollisionNode", "Generate worldCollisionNode")
+        ('WORLD', "worldCollisionNode", "Generate worldCollisionNode"),
+        ('TERRAIN', "worldTerrainCollisionNode", "Generate sector with a worldTerrainCollisionNode")
         ],
         default='VEHICLE'
     )
