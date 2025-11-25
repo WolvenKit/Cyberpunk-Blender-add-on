@@ -50,6 +50,8 @@ def export_selected_terrain(filePath):
         sector['Data']['RootChunk']['nodes'] += [node]
 
         i += 1
+    if not filePath.endswith('.streamingsector.json'):
+        filePath += '.streamingsector.json'
 
     with open(filePath, 'w') as f:
         json.dump(sector, f, indent=4)
