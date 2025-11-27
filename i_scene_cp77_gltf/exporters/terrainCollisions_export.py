@@ -1,5 +1,8 @@
 import bpy
 import random
+
+from mathutils import Quaternion
+
 from ..main.common import *
 from ..cyber_props import *
 from .physxHeightfieldWriter import PhysXWriter
@@ -44,19 +47,16 @@ def generate_terrain_collision(obj, node):
         "samples": [],
     }
 
-    # Create a bmesh from the object
     bm = bmesh.new()
     bm.from_mesh(obj.data)
 
-    # Get all vertex positions
     verts = [v.co for v in bm.verts]
 
     if len(verts) == 0:
-        print("Error: Mesh has no vertices")
+        show_message(f"Error: Mesh {obj.name} has no vertices")
         bm.free()
         return None, None
 
-    # Find bounds
     min_x = min(v.x for v in verts)
     max_x = max(v.x for v in verts)
     min_y = min(v.y for v in verts)
@@ -64,23 +64,17 @@ def generate_terrain_collision(obj, node):
     min_z = min(v.z for v in verts)
     max_z = max(v.z for v in verts)
 
-    print(f"Mesh bounds: X({min_x:.2f}, {max_x:.2f}) Y({min_y:.2f}, {max_y:.2f}) Z({min_z:.2f}, {max_z:.2f})")
-
-    # For each pixel, cast a ray downward and find the highest intersection
     for r in range(rows):
         for c in range(columns):
-            # Convert pixel coordinates to world coordinates
             u = r / rows
             v = c / columns
 
             world_x = min_x + u * (max_x - min_x)
             world_y = min_y + v * (max_y - min_y)
 
-            # Cast ray from top to bottom
             ray_origin = Vector((world_x, world_y, max_z + 1.0))
             ray_direction = Vector((0, 0, -1))
 
-            # Find intersection with mesh
             result, location, normal, index = obj.ray_cast(ray_origin, ray_direction)
 
             if result:
@@ -109,16 +103,14 @@ def generate_terrain_collision(obj, node):
     return None
 
 
-def set_transforms(obj, node):
-    # Create a bmesh from the object
+def set_transforms(obj, nodeData, node):
     bm = bmesh.new()
     bm.from_mesh(obj.data)
 
-    # Get all vertex positions
     verts = [v.co for v in bm.verts]
 
     if len(verts) == 0:
-        print("Error: Mesh has no vertices")
+        show_message(f"Error: Mesh {obj.name} has no vertices")
         bm.free()
         return None, None
 
@@ -137,11 +129,27 @@ def set_transforms(obj, node):
     local_origin = Vector((local_min_x, local_min_y, local_min_z))
     world_origin = obj.matrix_world @ local_origin
 
+    nodeData["Position"]["X"] = world_origin.x
+    nodeData["Position"]["Y"] = world_origin.y
+    nodeData["Position"]["Z"] = world_origin.z
+    nodeData["Position"]["W"] = 1
+
+    nodeData["Bounds"]["Max"]["X"] = world_origin.x
+    nodeData["Bounds"]["Max"]["Y"] = world_origin.y
+    nodeData["Bounds"]["Max"]["Z"] = world_origin.z
+    nodeData["Bounds"]["Max"]["W"] = 1
+
+    nodeData["Bounds"]["Min"]["X"] = world_origin.x
+    nodeData["Bounds"]["Min"]["Y"] = world_origin.y
+    nodeData["Bounds"]["Min"]["Z"] = world_origin.z
+    nodeData["Bounds"]["Min"]["W"] = 1
+
     node["Data"]["actorTransform"]["Position"]["x"]["Bits"] = world_origin.x * 131072
     node["Data"]["actorTransform"]["Position"]["y"]["Bits"] = world_origin.y * 131072
     node["Data"]["actorTransform"]["Position"]["z"]["Bits"] = world_origin.z * 131072
 
-    rot = obj.matrix_world.to_quaternion()
+    # the base rotation of the terrain collision is 90 90 0
+    rot = obj.matrix_world.to_quaternion() @ Quaternion((0.5, 0.5, 0.5, 0.5))
     node["Data"]["actorTransform"]["Orientation"]["i"] = rot.x
     node["Data"]["actorTransform"]["Orientation"]["j"] = rot.y
     node["Data"]["actorTransform"]["Orientation"]["k"] = rot.z
@@ -156,7 +164,7 @@ def generate_sector_node(obj):
     node["Data"]["debugName"]["$value"] = obj.name
 
     generate_terrain_collision(obj, node)
-    set_transforms(obj, node)
+    set_transforms(obj, nodeData, node)
 
     return nodeData, node
 
@@ -170,7 +178,6 @@ def export_selected_terrain(filePath):
     i = 0
     for obj in ctx.selected_objects:
         if obj.type != 'MESH': continue
-        print(obj.name)
         nodeData, node = generate_sector_node(obj)
         if not nodeData or not node: continue
         nodeData['NodeIndex'] = i
