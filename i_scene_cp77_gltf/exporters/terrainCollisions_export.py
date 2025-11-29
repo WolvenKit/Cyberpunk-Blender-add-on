@@ -67,6 +67,9 @@ def generate_terrain_collision(obj, node):
     min_z = min(v.z for v in verts)
     max_z = max(v.z for v in verts)
 
+    quadQuarterStepRow = ((1 / (rows - 2)) * 0.25) * (min_y - max_y)
+    quadQuarterStepCol = ((1 / (columns - 2)) * 0.25) * (max_x - min_x)
+
     for r in range(rows):
         for c in range(columns):
             # sample the center of each quad, but position the outermost row and column outside the UV square
@@ -76,8 +79,15 @@ def generate_terrain_collision(obj, node):
             u = (c - 0.5) / (columns - 2)
             v = (r - 0.5) / (rows - 2)
 
+            preClampU = u
+            preClampV = v
+
             u = min(1.0 - epsilon, max(epsilon, u))
             v = min(1.0 - epsilon, max(epsilon, v))
+
+            heightAvg = 0
+            hitT0 = False
+            hitT1 = False
 
             world_x = min_x + u * (max_x - min_x)
             world_y = min_y + v * (max_y - min_y)
@@ -85,27 +95,88 @@ def generate_terrain_collision(obj, node):
             ray_origin = Vector((world_x, world_y, max_z + 1.0))
             ray_direction = Vector((0, 0, -1))
 
-            result, location, normal, index = obj.ray_cast(ray_origin, ray_direction)
+            if (preClampU != u) or (preClampV != v):
+                # only sample center for edge quads
 
-            if result:
-                # Normalize height to 0-1 range
-                height = (location.z - min_z) / (max_z - min_z) if max_z != min_z else 0.5
-                hf["samples"].append(
-                    {
-                        "height": height * 32767,
-                        "material_index_0": 0,
-                        "material_index_1": 0,
-                    }
-                )
+                result, location, normal, index = obj.ray_cast(ray_origin, ray_direction)
+                if result:
+                    heightAvg = location.z
+                    hitT0 = True
+                    hitT1 = True
+                else:
+                    heightAvg = 0
+                    hitT0 = False
+                    hitT1 = False
             else:
-                # will need to double check if this is the correct index for holes
-                hf["samples"].append(
-                    {
-                        "height": 0,
-                        "material_index_0": 255,
-                        "material_index_1": 255,
-                    }
-                )
+                # sample triangle center, and quad center for inner quads
+                resultCenter, locationCenter, normalCenter, indexCenter = obj.ray_cast(ray_origin, ray_direction)
+
+                rayT0 = ray_origin.copy()
+                rayT0.y += quadQuarterStepRow
+                rayT0.x -= quadQuarterStepCol
+                resultT0, locationT0, normalT0, indexT0 = obj.ray_cast(rayT0, ray_direction)
+
+                rayT1 = ray_origin.copy()
+                rayT1.y -= quadQuarterStepRow
+                rayT1.x += quadQuarterStepCol
+                resultT1, locationT1, normalT1, indexT1 = obj.ray_cast(rayT1, ray_direction)
+
+                rayS0 = ray_origin.copy()
+                rayS0.y -= quadQuarterStepRow
+                rayS0.x -= quadQuarterStepCol
+                resultS0, locationS0, normalS0, indexS0 = obj.ray_cast(rayS0, ray_direction)
+
+                rayS1 = ray_origin.copy()
+                rayS1.y += quadQuarterStepRow
+                rayS1.x += quadQuarterStepCol
+                resultS1, locationS1, normalS1, indexS1 = obj.ray_cast(rayS0, ray_direction)
+
+                """
+                
+                hits = 0
+                if resultCenter:
+                    heightAvg = locationCenter.z
+                    hits += 1
+                if resultT0:
+                    heightAvg += locationT0.z
+                    hits += 1
+                if resultT1:
+                    heightAvg += locationT1.z
+                    hits += 1
+                if resultS0:
+                    heightAvg += locationS0.z
+                    hits += 1
+                if resultS1:
+                    heightAvg += locationS1.z
+                    hits += 1   
+
+                if hits > 1:
+                    heightAvg /= hits
+                
+                """
+
+                hmin = min(locationCenter.z, locationT0.z, locationT1.z, locationS0.z, locationS1.z)
+                hmax = max(locationCenter.z, locationT0.z, locationT1.z, locationS0.z, locationS1.z)
+                hdiff = hmax - hmin
+                heightAvg = hmin + hdiff * 0.8
+
+
+                hitT0 = resultT0
+                hitT1 = resultT1
+
+                # heightAvg = max(locationT0.z, locationT1.z, locationCenter.z)
+                print(f"center {locationCenter.z}, t0 {locationT0.z}, t1 {locationT1.z}, avg {heightAvg}")
+
+            # Normalize height to 0-1 range
+            height = (heightAvg - min_z) / (max_z - min_z) if max_z != min_z else 0.5
+            # will need to double-check if this is the correct index for holes
+            hf["samples"].append(
+                {
+                    "height": height * 32767,
+                    "material_index_0": 0 if hitT0 else 255,
+                    "material_index_1": 0 if hitT1 else 255,
+                }
+            )
 
     bm.free()
 
