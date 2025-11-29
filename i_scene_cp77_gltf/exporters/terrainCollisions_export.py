@@ -74,7 +74,7 @@ def generate_terrain_collision(obj, node):
             # missing triangles.
             # this avoids needing surrounding terrain tiles while being reasonably accurate
             u = (c - 0.5) / (columns - 2)
-            v = ((r - 0.5) / (rows - 2))
+            v = (r - 0.5) / (rows - 2)
 
             u = min(1.0 - epsilon, max(epsilon, u))
             v = min(1.0 - epsilon, max(epsilon, v))
@@ -137,9 +137,8 @@ def set_transforms(obj, nodeData, node):
 
     # Calculate the world position of the local bottom-left corner
     local_origin = Vector((local_min_x, local_min_y, local_min_z))
-    # adjust for outer quads with scale of 2
-    # probably need to account for orientation as well
-    world_origin = (obj.matrix_world @ local_origin) - Vector((2, 2, 0))
+    # adjust for the outermost row and column being outside the terrain mesh
+    world_origin = (obj.matrix_world @ local_origin) - Vector((1, 1, 0))
 
     nodeData["Position"]["X"] = world_origin.x
     nodeData["Position"]["Y"] = world_origin.y
