@@ -166,12 +166,11 @@ def generate_terrain_collision(obj, node):
 
             # Normalize height to 0-1 range
             height = (heightAvg - min_z) / (max_z - min_z) if max_z != min_z else 0.5
-            # will need to double-check if this is the correct index for holes
             hf["samples"].append(
                 {
                     "height": height * 32767,
-                    "material_index_0": 0 if hitT0 else 255,
-                    "material_index_1": 0 if hitT1 else 255,
+                    "material_index_0": 0 if hitT0 else 127,
+                    "material_index_1": 0 if hitT1 else 127,
                 }
             )
 
