@@ -1,6 +1,7 @@
 import bpy
 import random
 
+import mathutils
 from mathutils import Quaternion
 
 from ..main.common import *
@@ -8,6 +9,7 @@ from ..cyber_props import *
 from .physxHeightfieldWriter import PhysXWriter
 
 resources_dir = get_resources_dir()
+epsilon = 1e-4
 
 def getBaseSector():
     with open(os.path.join(get_resources_dir(), 'empty.streamingsector.json'), 'r') as f:
@@ -23,14 +25,15 @@ def getBaseNode():
 
 def generate_terrain_collision(obj, node):
 
-    rows = 72
-    columns = 72
+    # account for edge quads not fully existing
+    rows = 66
+    columns = 66
 
     hf = {
         "rows": rows,
         "columns": columns,
-        "row_limit": rows - 2.0,
-        "col_limit": columns - 2.0,
+        "row_limit": rows,
+        "col_limit": columns,
         "nb_columns": columns,
         "thickness": -1.0,
         "convex_edge_threshold": 0.0,
@@ -66,8 +69,15 @@ def generate_terrain_collision(obj, node):
 
     for r in range(rows):
         for c in range(columns):
-            u = r / rows
-            v = c / columns
+            # sample the center of each quad, but position the outermost row and column outside the UV square
+            # and clamp to mesh edge to generate outermost terrain which cannot be fully built due to
+            # missing triangles.
+            # this avoids needing surrounding terrain tiles while being reasonably accurate
+            u = (c - 0.5) / (columns - 2)
+            v = ((r - 0.5) / (rows - 2))
+
+            u = min(1.0 - epsilon, max(epsilon, u))
+            v = min(1.0 - epsilon, max(epsilon, v))
 
             world_x = min_x + u * (max_x - min_x)
             world_y = min_y + v * (max_y - min_y)
@@ -92,8 +102,8 @@ def generate_terrain_collision(obj, node):
                 hf["samples"].append(
                     {
                         "height": 0,
-                        "material_index_0": 65535,
-                        "material_index_1": 65535,
+                        "material_index_0": 255,
+                        "material_index_1": 255,
                     }
                 )
 
@@ -127,7 +137,9 @@ def set_transforms(obj, nodeData, node):
 
     # Calculate the world position of the local bottom-left corner
     local_origin = Vector((local_min_x, local_min_y, local_min_z))
-    world_origin = obj.matrix_world @ local_origin
+    # adjust for outer quads with scale of 2
+    # probably need to account for orientation as well
+    world_origin = (obj.matrix_world @ local_origin) - Vector((2, 2, 0))
 
     nodeData["Position"]["X"] = world_origin.x
     nodeData["Position"]["Y"] = world_origin.y
