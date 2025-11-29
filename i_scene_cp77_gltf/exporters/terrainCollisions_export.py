@@ -164,9 +164,6 @@ def generate_terrain_collision(obj, node):
                 hitT0 = resultT0
                 hitT1 = resultT1
 
-                # heightAvg = max(locationT0.z, locationT1.z, locationCenter.z)
-                print(f"center {locationCenter.z}, t0 {locationT0.z}, t1 {locationT1.z}, avg {heightAvg}")
-
             # Normalize height to 0-1 range
             height = (heightAvg - min_z) / (max_z - min_z) if max_z != min_z else 0.5
             # will need to double-check if this is the correct index for holes
@@ -252,9 +249,6 @@ def generate_sector_node(obj):
 
 def export_selected_terrain(filePath):
     ctx = bpy.context
-
-    print(filePath)
-    print(len(ctx.selected_objects))
 
     sector = getBaseSector()
     i = 0
