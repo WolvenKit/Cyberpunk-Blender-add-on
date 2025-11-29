@@ -500,7 +500,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                     bindname=chunk_pt['Data']['bindName']['$value']
                                     # if it has a bindname of vehicle_slots, you may need to find the bone name in the vehicle slots in the root ent components
                                     # this should have been loaded earlier, check for it in the vehicle slots if not just set to the slot value
-                                    if bindname=='vehicle_slots' or 'slots':
+                                    if bindname=='vehicle_slots' or bindname=='slots':
                                         if vehicle_slots:
                                             slotname=chunk_pt['Data']['slotName']['$value']
                                             for slot in vehicle_slots:
@@ -510,7 +510,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                             bindname= chunk_pt['Data']['slotName']['$value']
 
                                     # some meshes have boneRigMatrices in the mesh file which means we need jsons for the meshes or we cant access it. oh joy
-                                    elif bindname=="deformation_rig" and (not chunk_pt['Data']['slotName']['$value'] or len(chunk_pt['Data']['slotName']['$value'])==1):
+                                    elif bindname=="deformation_rig" and (not chunk_pt['Data']['slotName']['$value'] or len(chunk_pt['Data']['slotName']['$value'])==1 or chunk_pt['Data']['slotName']['$value']=='None'):
                                         json_name=os.path.join(path, c['mesh']['DepotPath']['$value']+'.json')
                                         #print("in the deformation rig bit",json_name)
                                         if json_name in mesh_jsons:
