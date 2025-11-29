@@ -18,6 +18,7 @@ def save_rig_to_json(output_filepath):
     # TODO: Sim, please look at this, the logic does not seem entirely sound
     if 'source' not in armature_object.data.keys():
          armature_object.data['source'] = output_filepath
+         # Im not Sim, but maybe add the self.report('WARNING', "No source filepath - using output as source")
 
     json_filepath = armature_object.data['source']
     if not os.path.exists(json_filepath):
@@ -31,13 +32,22 @@ def save_rig_to_json(output_filepath):
     updated_bones = []
 
     # Helper function to calculate the depth of a bone in the hierarchy
+    # def get_bone_depth(bone):
+    #     depth = 0
+    #     while bone.parent is not None:
+    #         depth += 1
+    #         bone = bone.parent
+    #     return depth
+    
+    # Calculate depth based on names from the original json
     def get_bone_depth(bone):
-        depth = 0
-        while bone.parent is not None:
-            depth += 1
-            bone = bone.parent
-        return depth
-
+        json_bone_names = rig_data["Data"]["RootChunk"]["boneNames"]
+        values = [bone["$value"] for bone in json_bone_names]
+        try:
+            return values.index(bone.name)
+        # except ValueError: return -1
+        except ValueError: raise ValueError("Bone name mismatch: one of the bones wasn't found in the source file")
+    
     # Iterate over Blender bones and collect data
     for bone in armature_object.pose.bones:
         bone_name = bone.name
@@ -47,8 +57,10 @@ def save_rig_to_json(output_filepath):
         global_translation = bone.head
         global_rotation = bone.matrix.to_quaternion()
 
+        is_root = parent_bone is None
+
         # Calculate relative transform
-        if parent_bone is None:  # Root bone
+        if is_root:
             local_translation = global_translation
             local_rotation = global_rotation
             parent_name = None
@@ -61,6 +73,8 @@ def save_rig_to_json(output_filepath):
             local_rotation = parent_rotation.inverted() @ global_rotation
             parent_name = parent_bone.name
 
+        bone_depth = get_bone_depth(bone)
+
         # Add the bone data to the updated list
         updated_bones.append({
             "name": {
@@ -69,21 +83,15 @@ def save_rig_to_json(output_filepath):
                 "$value": bone_name
             },
             "parent_name": parent_name,  # Temporarily store the parent name
-            "depth": get_bone_depth(bone),  # Store the depth of the bone
+            "depth": bone_depth,  # Store the depth of the bone
             "transform": {
                 "$type": "QsTransform",
-                "Translation": {
-                    "$type": "Vector4",
-                    "X": local_translation.x,
-                    "Y": local_translation.y,
-                    "Z": local_translation.z
-                },
                 "Rotation": {
                     "$type": "Quaternion",
-                    "r": local_rotation.w,
                     "i": local_rotation.x,
                     "j": local_rotation.y,
-                    "k": local_rotation.z
+                    "k": local_rotation.z,
+                    "r": local_rotation.w
                 },
                 "Scale": {
                     "$type": "Vector4",
@@ -91,6 +99,13 @@ def save_rig_to_json(output_filepath):
                     "X": 1,
                     "Y": 1,
                     "Z": 1
+                },
+                "Translation": {
+                    "$type": "Vector4",
+                    "W": 1 if is_root else 0, # for some reason Root's "W" is 1   # rig_data["Data"]["RootChunk"]["boneTransforms"][bone_depth]["Translation"]["W"]
+                    "X": local_translation.x,
+                    "Y": local_translation.y,
+                    "Z": local_translation.z
                 }
             }
         })
