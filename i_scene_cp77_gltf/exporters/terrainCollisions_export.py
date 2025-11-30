@@ -1,12 +1,8 @@
 import bpy
 import random
 import numpy as np
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
-import mathutils
 import re
 from mathutils import Quaternion
-
 from ..main.common import *
 from ..cyber_props import *
 from .physxHeightfieldWriter import PhysXWriter
@@ -14,26 +10,17 @@ from .physxHeightfieldWriter import PhysXWriter
 resources_dir = get_resources_dir()
 epsilon = 1e-4
 
-
 class MaskCache:
     def __init__(self, image):
         self.image = image
         self.size = image.size
-        # Convert to numpy array once - MUCH faster for repeated access
-        import numpy as np
-        # Direct buffer access - no list conversion needed!
-        pixels = np.array(image.pixels[:])  # Get all pixels at once as numpy array
-        # Reshape based on image dimensions
+        pixels = np.array(image.pixels[:])
         self.data = pixels.reshape((self.size[1], self.size[0], -1))
-        # If it's RGBA, take just the first channel
         if self.data.shape[2] > 1:
             self.data = self.data[:, :, 0]
-        # Scale to 0-255 range
         self.data = (self.data * 255).astype(np.uint8)
 
     def sample_region(self, x_start, x_end, y_start, y_end):
-        """Sample a rectangular region and return average value"""
-        # Clamp coordinates
         x_start = max(0, x_start)
         y_start = max(0, y_start)
         x_end = min(self.size[0], x_end)
@@ -258,47 +245,44 @@ def generate_terrain_collision(obj, node):
             t0Mat = len(mask_caches)
             t1Mat = len(mask_caches)
 
-            if (preClampU != u) or (preClampV != v):
-                pass
-            else:
-                centerU = math.ceil(sizeMask * (1 - v))
-                centerV = math.ceil(sizeMask * (1 - u))
+            centerU = math.ceil(sizeMask * (1 - v))
+            centerV = math.ceil(sizeMask * (1 - u))
 
-                # sample texture for t0 - optimized version
-                for mask_cache in mask_caches:
-                    avgValue = mask_cache.sample_region(
-                        centerU - quadHalfStepColPixel,
-                        centerU,
-                        centerV,
-                        centerV + quadHalfStepRowPixel
-                    )
+            # sample texture for t0
+            for mask_cache in mask_caches:
+                avgValue = mask_cache.sample_region(
+                    centerU - quadHalfStepColPixel,
+                    centerU,
+                    centerV,
+                    centerV + quadHalfStepRowPixel
+                )
 
-                    if avgValue is None:
-                        t0Mat -= 1
-                        continue
+                if avgValue is None:
+                    t0Mat -= 1
+                    continue
 
-                    if avgValue > 127:
-                        break
-                    else:
-                        t0Mat -= 1
+                if avgValue > 127:
+                    break
+                else:
+                    t0Mat -= 1
 
-                # sample texture for t1 - optimized version
-                for mask_cache in mask_caches:
-                    avgValue = mask_cache.sample_region(
-                        centerU,
-                        centerU + quadHalfStepColPixel,
-                        centerV - quadHalfStepRowPixel,
-                        centerV
-                    )
+            # sample texture for t1
+            for mask_cache in mask_caches:
+                avgValue = mask_cache.sample_region(
+                    centerU,
+                    centerU + quadHalfStepColPixel,
+                    centerV - quadHalfStepRowPixel,
+                    centerV
+                )
 
-                    if avgValue is None:
-                        t1Mat -= 1
-                        continue
+                if avgValue is None:
+                    t1Mat -= 1
+                    continue
 
-                    if avgValue > 127:
-                        break
-                    else:
-                        t1Mat -= 1
+                if avgValue > 127:
+                    break
+                else:
+                    t1Mat -= 1
 
             # Normalize height to 0-1 range
             height = (heightAvg - min_z) / (max_z - min_z) if max_z != min_z else 0.5
