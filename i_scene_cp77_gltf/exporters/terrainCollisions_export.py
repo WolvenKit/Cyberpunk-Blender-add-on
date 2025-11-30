@@ -285,7 +285,11 @@ def generate_terrain_collision(obj, node):
                     t1Mat -= 1
 
             # Normalize height to 0-1 range
-            height = (heightAvg - min_z) / (max_z - min_z) if max_z != min_z else 0.5
+            if heightAvg != 0:
+                height = (heightAvg - min_z) / (max_z - min_z) if max_z != min_z else 0.5
+            else:
+                height = 0
+
             hf["samples"].append(
                 {
                     "height": height * 32767,
