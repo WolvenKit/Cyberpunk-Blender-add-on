@@ -25,9 +25,33 @@ def getBaseNode():
 
 def generate_terrain_collision(obj, node):
 
-    # account for edge quads not fully existing
-    rows = 66
-    columns = 66
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+
+    verts = [v.co for v in bm.verts]
+
+    if len(verts) == 0:
+        show_message(f"Error: Mesh {obj.name} has no vertices")
+        bm.free()
+        return None, None
+
+    min_x = min(v.x for v in verts)
+    max_x = max(v.x for v in verts)
+    min_y = min(v.y for v in verts)
+    max_y = max(v.y for v in verts)
+    min_z = min(v.z for v in verts)
+    max_z = max(v.z for v in verts)
+
+    bm.transform(obj.matrix_world)
+
+    world_min_z = min(v.z for v in verts)
+    world_max_z = max(v.z for v in verts)
+
+    node["Data"]["heightScale"] = (world_max_z - world_min_z) / 32767.0
+
+    # account for outermost rows and columns not being fully generated
+    rows = math.ceil(((max_x - min_x) / 2)) + 2
+    columns = math.ceil(((max_y - min_y) / 2)) + 2
 
     hf = {
         "rows": rows,
@@ -49,23 +73,6 @@ def generate_terrain_collision(obj, node):
         "max_height": 32767.0,
         "samples": [],
     }
-
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-
-    verts = [v.co for v in bm.verts]
-
-    if len(verts) == 0:
-        show_message(f"Error: Mesh {obj.name} has no vertices")
-        bm.free()
-        return None, None
-
-    min_x = min(v.x for v in verts)
-    max_x = max(v.x for v in verts)
-    min_y = min(v.y for v in verts)
-    max_y = max(v.y for v in verts)
-    min_z = min(v.z for v in verts)
-    max_z = max(v.z for v in verts)
 
     quadQuarterStepRow = ((1 / (rows - 2)) * 0.25) * (min_y - max_y)
     quadQuarterStepCol = ((1 / (columns - 2)) * 0.25) * (max_x - min_x)
@@ -191,19 +198,27 @@ def set_transforms(obj, nodeData, node):
         bm.free()
         return None, None
 
-    local_min_x = min(v.x for v in verts)
-    local_min_y = min(v.y for v in verts)
-    local_min_z = min(v.z for v in verts)
+    min_x = min(v.x for v in verts)
+    max_x = max(v.x for v in verts)
+    min_y = min(v.y for v in verts)
+    max_y = max(v.y for v in verts)
+    min_z = min(v.z for v in verts)
+    max_z = max(v.z for v in verts)
 
-    bm.transform(obj.matrix_world)
+    bm.free()
 
-    world_min_z = min(v.z for v in verts)
-    world_max_z = max(v.z for v in verts)
+    lenX = max_x - min_x
+    lenY = max_y - min_y
+    lenZ = max_z - min_z
 
-    node["Data"]["heightScale"] = (world_max_z - world_min_z) / 32767.0
+    node["Data"]["extents"]["X"] = lenX
+    node["Data"]["extents"]["Y"] = lenY
+    node["Data"]["extents"]["Z"] = lenZ
+
+    nodeData["UkFloat1"] = max(lenX, lenY, lenZ) * 1.2
 
     # Calculate the world position of the local bottom-left corner
-    local_origin = Vector((local_min_x, local_min_y, local_min_z))
+    local_origin = Vector((min_x, min_y, min_z))
     # adjust for the outermost row and column being outside the terrain mesh
     world_origin = (obj.matrix_world @ local_origin) - Vector((1, 1, 0))
 
