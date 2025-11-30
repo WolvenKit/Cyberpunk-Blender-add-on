@@ -5,6 +5,7 @@ from bpy.props import StringProperty
 from bpy.types import Operator
 from .. import show_message
 from .phys_export import export_colliders_to_phys
+from .terrainCollisions_export import export_selected_terrain
 
 def get_collider_collections(context, collider_name):
     collider_collections = []
@@ -29,6 +30,8 @@ def cp77_collision_export(filepath, collision_type):
         collider_name = 'collisions.phys'
         collections = get_collider_collections(context, collider_name)
         export_colliders_to_phys(collections, filepath)
+    if collision_type == 'TERRAIN':
+        export_selected_terrain(filepath)
     if collision_type == 'ENTITY':
         show_message('Exporting of Entity Colliders is not yet supported')
     if collision_type == 'WORLD':

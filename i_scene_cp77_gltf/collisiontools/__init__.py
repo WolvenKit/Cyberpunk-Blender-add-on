@@ -26,6 +26,8 @@ class CP77CollisionGenerator(Operator):
         split = row.split(factor=0.5,align=True)
         split.label(text="Collision Type:")
         split.prop(props, 'collision_type', text="")
+        if props.collision_type == 'TERRAIN':
+            return
         row = layout.row(align=True)
         split = row.split(factor=0.5,align=True)
         split.label(text="Collision Shape:")
