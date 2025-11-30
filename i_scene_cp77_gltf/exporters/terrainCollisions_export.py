@@ -1,7 +1,10 @@
 import bpy
 import random
+import numpy as np
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import mathutils
+import re
 from mathutils import Quaternion
 
 from ..main.common import *
@@ -10,6 +13,37 @@ from .physxHeightfieldWriter import PhysXWriter
 
 resources_dir = get_resources_dir()
 epsilon = 1e-4
+
+
+class MaskCache:
+    def __init__(self, image):
+        self.image = image
+        self.size = image.size
+        # Convert to numpy array once - MUCH faster for repeated access
+        import numpy as np
+        # Direct buffer access - no list conversion needed!
+        pixels = np.array(image.pixels[:])  # Get all pixels at once as numpy array
+        # Reshape based on image dimensions
+        self.data = pixels.reshape((self.size[1], self.size[0], -1))
+        # If it's RGBA, take just the first channel
+        if self.data.shape[2] > 1:
+            self.data = self.data[:, :, 0]
+        # Scale to 0-255 range
+        self.data = (self.data * 255).astype(np.uint8)
+
+    def sample_region(self, x_start, x_end, y_start, y_end):
+        """Sample a rectangular region and return average value"""
+        # Clamp coordinates
+        x_start = max(0, x_start)
+        y_start = max(0, y_start)
+        x_end = min(self.size[0], x_end)
+        y_end = min(self.size[1], y_end)
+
+        if x_start >= x_end or y_start >= y_end:
+            return None
+
+        region = self.data[y_start:y_end, x_start:x_end]
+        return region.mean()
 
 def getBaseSector():
     with open(os.path.join(get_resources_dir(), 'empty.streamingsector.json'), 'r') as f:
@@ -22,6 +56,46 @@ def getBaseNodeData():
 def getBaseNode():
     with open(os.path.join(get_resources_dir(), 'base.worldTerrainCollisionNode.json'), 'r') as f:
         return json.load(f)
+
+def is_multilayer(tex_node):
+    for out in tex_node.outputs:
+        for link in out.links:
+            to_node = link.to_node
+
+            if (to_node.type == "GROUP"
+                and to_node.node_tree
+                and to_node.node_tree.name.lower().startswith("multilayer")):
+                return True
+
+    return False
+
+def sort_images_by_number(images):
+    def extract_number(img):
+        name = os.path.basename(img.filepath) if img.filepath else img.name
+
+        # Look for trailing digits before extension
+        m = re.search(r"(\d+)(?=\.[^.]+$)", name)
+        if not m:
+            return float('inf')  # Images without numbers go last
+        return int(m.group(1))
+
+    return sorted(images, key=extract_number, reverse=True)
+
+def get_masks(mat: bpy.types.Material):
+    images = set()
+
+    if not mat.use_nodes:
+        return images
+
+    node_trees = [mat.node_tree]
+
+    while node_trees:
+        tree = node_trees.pop()
+        for node in tree.nodes:
+            if node.type == 'TEX_IMAGE' and node.image and is_multilayer(node):
+                images.add(node.image)
+
+    return sort_images_by_number(images)
 
 def generate_terrain_collision(obj, node):
 
@@ -74,8 +148,27 @@ def generate_terrain_collision(obj, node):
         "samples": [],
     }
 
-    quadQuarterStepRow = ((1 / (rows - 2)) * 0.25) * (min_y - max_y)
-    quadQuarterStepCol = ((1 / (columns - 2)) * 0.25) * (max_x - min_x)
+    masks = set()
+    for slot in obj.material_slots:
+        if slot.material:
+            masks = get_masks(slot.material)
+
+    mask_caches = []
+    if len(masks) > 0:
+        for mask in masks:
+            mask_caches.append(MaskCache(mask))
+        sizeMask = mask_caches[0].size[0]
+    else:
+        sizeMask = 0
+
+    quadHalfStepRowUV = (1 / (rows - 2)) * 0.5
+    quadHalfStepColUV = (1 / (columns - 2)) * 0.5
+
+    quadHalfStepRowPixel = math.ceil(quadHalfStepRowUV * sizeMask)
+    quadHalfStepColPixel = math.ceil(quadHalfStepColUV * sizeMask)
+
+    quadQuarterStepRowWorld = quadHalfStepRowUV * 0.5 * (min_y - max_y)
+    quadQuarterStepColWorld = quadHalfStepColUV * 0.5 * (max_x - min_x)
 
     for r in range(rows):
         for c in range(columns):
@@ -119,26 +212,26 @@ def generate_terrain_collision(obj, node):
                 resultCenter, locationCenter, normalCenter, indexCenter = obj.ray_cast(ray_origin, ray_direction)
 
                 rayT0 = ray_origin.copy()
-                rayT0.y += quadQuarterStepRow
-                rayT0.x -= quadQuarterStepCol
+                rayT0.y += quadQuarterStepRowWorld
+                rayT0.x -= quadQuarterStepColWorld
                 resultT0, locationT0, normalT0, indexT0 = obj.ray_cast(rayT0, ray_direction)
 
                 rayT1 = ray_origin.copy()
-                rayT1.y -= quadQuarterStepRow
-                rayT1.x += quadQuarterStepCol
+                rayT1.y -= quadQuarterStepRowWorld
+                rayT1.x += quadQuarterStepColWorld
                 resultT1, locationT1, normalT1, indexT1 = obj.ray_cast(rayT1, ray_direction)
 
                 rayS0 = ray_origin.copy()
-                rayS0.y -= quadQuarterStepRow
-                rayS0.x -= quadQuarterStepCol
+                rayS0.y -= quadQuarterStepRowWorld
+                rayS0.x -= quadQuarterStepColWorld
                 resultS0, locationS0, normalS0, indexS0 = obj.ray_cast(rayS0, ray_direction)
 
                 rayS1 = ray_origin.copy()
-                rayS1.y += quadQuarterStepRow
-                rayS1.x += quadQuarterStepCol
+                rayS1.y += quadQuarterStepRowWorld
+                rayS1.x += quadQuarterStepColWorld
                 resultS1, locationS1, normalS1, indexS1 = obj.ray_cast(rayS0, ray_direction)
 
-                
+
                 hits = 0
                 if resultCenter:
                     heightAvg = locationCenter.z
@@ -154,7 +247,7 @@ def generate_terrain_collision(obj, node):
                     hits += 1
                 if resultS1:
                     heightAvg += locationS1.z
-                    hits += 1   
+                    hits += 1
 
                 if hits > 1:
                     heightAvg /= hits
@@ -171,13 +264,58 @@ def generate_terrain_collision(obj, node):
                 hitT0 = resultT0
                 hitT1 = resultT1
 
+            t0Mat = len(mask_caches)
+            t1Mat = len(mask_caches)
+
+            if (preClampU != u) or (preClampV != v):
+                pass
+            else:
+                centerU = math.ceil(sizeMask * u)
+                centerV = math.ceil(sizeMask * v)
+
+                # sample texture for t0 - optimized version
+                for mask_cache in mask_caches:
+                    avgValue = mask_cache.sample_region(
+                        centerU - quadHalfStepColPixel,
+                        centerU,
+                        centerV,
+                        centerV + quadHalfStepRowPixel
+                    )
+
+                    if avgValue is None:
+                        t0Mat -= 1
+                        continue
+
+                    if avgValue > 127:
+                        break
+                    else:
+                        t0Mat -= 1
+
+                # sample texture for t1 - optimized version
+                for mask_cache in mask_caches:
+                    avgValue = mask_cache.sample_region(
+                        centerU,
+                        centerU + quadHalfStepColPixel,
+                        centerV - quadHalfStepRowPixel,
+                        centerV
+                    )
+
+                    if avgValue is None:
+                        t1Mat -= 1
+                        continue
+
+                    if avgValue > 127:
+                        break
+                    else:
+                        t1Mat -= 1
+
             # Normalize height to 0-1 range
             height = (heightAvg - min_z) / (max_z - min_z) if max_z != min_z else 0.5
             hf["samples"].append(
                 {
                     "height": height * 32767,
-                    "material_index_0": 0 if hitT0 else 127,
-                    "material_index_1": 0 if hitT1 else 127,
+                    "material_index_0": t0Mat if hitT0 else 127,
+                    "material_index_1": t1Mat if hitT1 else 127,
                 }
             )
 
