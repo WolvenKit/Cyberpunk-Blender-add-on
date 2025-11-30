@@ -252,15 +252,6 @@ def generate_terrain_collision(obj, node):
                 if hits > 1:
                     heightAvg /= hits
 
-                """
-
-                hmin = min(locationCenter.z, locationT0.z, locationT1.z, locationS0.z, locationS1.z)
-                hmax = max(locationCenter.z, locationT0.z, locationT1.z, locationS0.z, locationS1.z)
-                hdiff = hmax - hmin
-                heightAvg = hmin + hdiff * 0.8
-
-                """
-
                 hitT0 = resultT0
                 hitT1 = resultT1
 
@@ -270,8 +261,8 @@ def generate_terrain_collision(obj, node):
             if (preClampU != u) or (preClampV != v):
                 pass
             else:
-                centerU = math.ceil(sizeMask * u)
-                centerV = math.ceil(sizeMask * v)
+                centerU = math.ceil(sizeMask * (1 - v))
+                centerV = math.ceil(sizeMask * (1 - u))
 
                 # sample texture for t0 - optimized version
                 for mask_cache in mask_caches:
