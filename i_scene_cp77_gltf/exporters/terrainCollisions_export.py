@@ -65,7 +65,7 @@ def generate_terrain_collision(obj, node):
         "format": 1,
         "min_max_bounds": {
             "min": {"x": 0.0, "y": 0.0, "z": 0.0},
-            "max": {"x": rows - 1, "y": 32767.0, "z": columns - 1},
+            "max": {"x": rows, "y": 32767.0, "z": columns},
         },
         "sample_stride": 4,
         "nb_samples": rows * columns,
@@ -138,7 +138,6 @@ def generate_terrain_collision(obj, node):
                 rayS1.x += quadQuarterStepCol
                 resultS1, locationS1, normalS1, indexS1 = obj.ray_cast(rayS0, ray_direction)
 
-                """
                 
                 hits = 0
                 if resultCenter:
@@ -159,7 +158,7 @@ def generate_terrain_collision(obj, node):
 
                 if hits > 1:
                     heightAvg /= hits
-                
+
                 """
 
                 hmin = min(locationCenter.z, locationT0.z, locationT1.z, locationS0.z, locationS1.z)
@@ -167,6 +166,7 @@ def generate_terrain_collision(obj, node):
                 hdiff = hmax - hmin
                 heightAvg = hmin + hdiff * 0.8
 
+                """
 
                 hitT0 = resultT0
                 hitT1 = resultT1
@@ -215,12 +215,12 @@ def set_transforms(obj, nodeData, node):
     node["Data"]["extents"]["Y"] = lenY
     node["Data"]["extents"]["Z"] = lenZ
 
-    nodeData["UkFloat1"] = max(lenX, lenY, lenZ) * 1.2
+    nodeData["UkFloat1"] = max(lenX, lenY, lenZ) * 1.5
 
     # Calculate the world position of the local bottom-left corner
-    local_origin = Vector((min_x, min_y, min_z))
     # adjust for the outermost row and column being outside the terrain mesh
-    world_origin = (obj.matrix_world @ local_origin) - Vector((1, 1, 0))
+    local_origin = Vector((min_x, min_y, min_z)) - Vector((1, 1, 0))
+    world_origin = (obj.matrix_world @ local_origin)
 
     nodeData["Position"]["X"] = world_origin.x
     nodeData["Position"]["Y"] = world_origin.y
