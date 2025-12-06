@@ -922,13 +922,13 @@ def export_cyberpunk_collections_glb(context, filepath, export_poses=False, expo
 
         visible_objects = [f for f in collection.objects if f.type == 'ARMATURE' or (f.type == 'MESH' and f.name.startswith('submesh'))]
         if (len(visible_objects) == 0):
-            exported.append((collection.name, f"No armatures or meshes starting with 'submesh' in {collection.name}"))
+            exported.append((collection.name, f"No armatures or meshes starting with 'submesh'"))
             continue
 
         selected = select_objects(visible_objects, reveal=True, clear=True, context=context)
 
         if len(context.selected_objects) == 0 or len(context.selected_objects) != len(selected) or len(context.selected_objects) != len(visible_objects):
-            exported.append((collection.name, f"Could not select all objects in {collection.name}"))
+            exported.append((collection.name, f"Failed to set child object selection"))
             continue
 
         collection_path = os.path.join(filepath, f"{collection.name}.glb")
