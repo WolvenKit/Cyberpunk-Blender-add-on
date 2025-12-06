@@ -79,12 +79,6 @@ class CP77CollectionExport(Operator, ExportHelper):
         description="Check this to export only collections that are currently visible in view port"
     )
 
-    limit_selected: BoolProperty( # pyright: ignore[reportInvalidTypeForm]
-        name="Limit to Selected Meshes",
-        default=True,
-        description="Only Export the Selected Meshes. This is probably the setting you want to use"
-    )
-
     is_skinned: BoolProperty( # pyright: ignore[reportInvalidTypeForm]
         name="Skinned Mesh",
         default=True,
@@ -100,12 +94,6 @@ class CP77CollectionExport(Operator, ExportHelper):
         name="Animations",
         default=False,
         description="Use this option if you are exporting anims to be imported into wkit as .anim"
-    )
-
-    export_visible: BoolProperty( # pyright: ignore[reportInvalidTypeForm]
-        name="Export Visible Meshes",
-        default=False,
-        description="Use this option to export all visible objects. Only use this if you know why you're using this"
     )
 
     apply_transform: BoolProperty( # pyright: ignore[reportInvalidTypeForm]
@@ -130,23 +118,19 @@ class CP77CollectionExport(Operator, ExportHelper):
         box = layout.box()
         box.label(text='Export Options')
         row = box.row(align=True)
+        row.prop(self, "only_visible")
+        row = box.row(align=True)
         row.prop(self, "export_poses")
-        if not self.export_poses:
-            row = box.row(align=True)
-            row.prop(self, "only_visible")
-            row = box.row(align=True)
-            row.prop(self, "is_skinned")
-            row.prop(self, "try_fix")
-            row = box.row(align=True)
-            row.prop(self, "limit_selected")
-            if not self.limit_selected:
-                row = box.row(align=True)
-                row.prop(self, "export_visible")
-            row = layout.row(align=True)
-            row.prop(self, "apply_transform")
-            row.prop(self, "apply_modifiers")
-        else:
+        if  self.export_poses:
             row.prop(self, "export_tracks")
+            return
+
+        row = box.row(align=True)
+        row.prop(self, "is_skinned")
+        row.prop(self, "try_fix")
+        row = layout.row(align=True)
+        row.prop(self, "apply_transform")
+        row.prop(self, "apply_modifiers")
 
 
     def format_export_results_detailed(self, export_status, directory):
@@ -182,8 +166,6 @@ class CP77CollectionExport(Operator, ExportHelper):
             context=context,
             filepath=self.directory,
             export_poses=self.export_poses,
-            export_visible=self.export_visible,
-            limit_selected=self.limit_selected,
             is_skinned=self.is_skinned,
             try_fix=self.try_fix,
             apply_transform=self.apply_transform,

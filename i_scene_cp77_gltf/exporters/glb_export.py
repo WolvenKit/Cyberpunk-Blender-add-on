@@ -896,8 +896,7 @@ def set_visible(collection, new_visibility_state):
 
     return [f for f in collection.objects if f.visible_get()]
 
-def export_cyberpunk_collections_glb(context, filepath, export_poses=False, export_visible=False,
-    limit_selected=True, is_skinned=True, try_fix=True,
+def export_cyberpunk_collections_glb(context, filepath, export_poses=False, is_skinned=True, try_fix=True,
     red_garment_col=False, apply_transform=True,
     action_filter=False, export_tracks=False, apply_modifiers=True,
     only_visible=False):
@@ -905,6 +904,8 @@ def export_cyberpunk_collections_glb(context, filepath, export_poses=False, expo
     user_settings = save_user_settings_and_reset_to_default()
 
     exported = []
+
+    # store_current_context()
 
     # Ensure object mode
     if get_safe_mode() != 'OBJECT':
@@ -927,17 +928,17 @@ def export_cyberpunk_collections_glb(context, filepath, export_poses=False, expo
 
         selected = select_objects(visible_objects, reveal=True, clear=True, context=context)
 
-        if len(context.selected_objects) == 0 or len(context.selected_objects) != len(selected) or len(context.selected_objects) != len(visible_objects):
+        if len(context.selected_objects) == 0:
             exported.append((collection.name, f"Failed to set child object selection"))
             continue
 
         collection_path = os.path.join(filepath, f"{collection.name}.glb")
         try:
-            export_cyberpunk_glb(context, collection_path, export_poses=export_poses, export_visible=export_visible,
-                limit_selected=limit_selected, is_skinned=is_skinned, try_fix=try_fix,
+            export_cyberpunk_glb(context, collection_path, export_poses=export_poses, export_visible=True,
+                limit_selected=False, is_skinned=is_skinned, try_fix=try_fix,
                 red_garment_col=red_garment_col, apply_transform=apply_transform,
                 action_filter=action_filter, export_tracks=export_tracks, apply_modifiers=apply_modifiers,
-                store_current_context=True
+                called_from_loop=True
             )
             exported.append((collection.name, None))
         except Exception as e:
@@ -956,7 +957,7 @@ def export_cyberpunk_glb(
     action_filter=False, export_tracks=False, apply_modifiers=True, called_from_loop=False
 ):
     """Main export function for CP77 glTF files."""
-    user_settings = None if not called_from_loop else save_user_settings_and_reset_to_default()
+    user_settings = None if called_from_loop else save_user_settings_and_reset_to_default()
 
     objects = context.selected_objects
     options = default_cp77_options()
