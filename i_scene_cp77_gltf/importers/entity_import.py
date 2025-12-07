@@ -321,7 +321,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                 coll_scene.children.link(ent_coll)
             # tag it with some custom properties.
             ent_coll['depotPath']=after
-            chunks=ent_chunks[app_name]
+            chunks=ent_chunks[app_name] if app_name in ent_chunks else {}
 
             enum_items = []
             default_index = None

@@ -95,6 +95,10 @@ class JSONTool:
         if not filepath.endswith('.json') and not filepath.endswith('.zip'):
             raise ValueError(f"{filepath} is not a json, what are you doing?")
 
+        if not os.path.isfile(filepath):
+            raise ValueError(f"File does not exist: {filepath}")
+
+
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
 
         # Extract the base name of the file
