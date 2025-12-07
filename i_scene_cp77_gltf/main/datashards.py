@@ -58,6 +58,30 @@ class EntityData:
     appearances: List[AppearanceData] = field(default_factory=list)
     resolved_dependencies: List[ResolvedDependency] = field(default_factory=list)
 
+@dataclass
+class RigSkeleton:
+    """Minimal rig skeleton data for facial animation
+    
+    Attributes:
+        num_bones: Total bone count
+        parent_indices: Parent bone indices (-1 for root)
+        bone_names: List of bone names
+        track_names: List of animation track names
+        reference_tracks: Default values for each track (from JSON)
+        ls_q: Local-space reference quaternions (N, 4) [x, y, z, w]
+        ls_t: Local-space reference translations (N, 3) [x, y, z]
+        ls_s: Local-space reference scales (N, 3) [x, y, z]
+    """
+    num_bones: int
+    parent_indices: np.ndarray  # (N,) int16
+    bone_names: List[str]
+    track_names: List[str]
+    reference_tracks: np.ndarray  # (M,) float32 - default track values
+    ls_q: np.ndarray  # (N, 4) float32 - quaternions
+    ls_t: np.ndarray  # (N, 3) float32 - translations
+    ls_s: np.ndarray  # (N, 3) float32 - scales
+
+
 @dataclass(slots=True)
 class RigData:
     num_bones: int
