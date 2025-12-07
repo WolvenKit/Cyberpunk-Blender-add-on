@@ -14,7 +14,7 @@ from ..icons.cp77_icons import get_icon
 from ..main.common import get_classes
 from ..importers.import_with_materials import CP77GLBimport
 from .animtools import *
-from .math_utils import *
+from .bartmoss_math import *
 from .generate_rigs import cp77_to_rigify
 from .facial import load_wkit_facialsetup, load_wkit_rig_skeleton, RigSkeleton, FacialSetup
 from .tracksolvers import solve_tracks_face, build_tracks_from_armature
@@ -659,7 +659,7 @@ class CP77_OT_BakeFacialAnimation(Operator):
         
         # Convert to deltas and swap coordinate system
         dq, dt, ds = self._local_deltas(rig.ls_q, rig.ls_t, rig.ls_s, q_ls, t_ls, s_ls)
-        dt2, dq2 = math_utils.swap_yz_trn_rot(dt, dq)
+        dt2, dq2 = bartmoss_math.swap_yz_trn_rot(dt, dq)
         
         # Apply to bones
         bones = obj.pose.bones
@@ -1147,7 +1147,7 @@ class CP77_OT_ApplyMainPose(Operator):
         # Convert LS to deltas against reference
         dq, dt, ds = self._local_deltas(rig.ls_q, rig.ls_t, rig.ls_s, q_ls, t_ls, s_ls)
         # Map JSON space → Blender space (translation & rotation)
-        dt2, dq2 = math_utils.swap_yz_trn_rot(dt, dq)
+        dt2, dq2 = bartmoss_math.swap_yz_trn_rot(dt, dq)
 
         if context.object.mode != 'POSE':
             bpy.ops.object.mode_set(mode='POSE')
@@ -1341,7 +1341,7 @@ class CP77_OT_PreviewFacialPose(Operator):
                 )
         
         dq, dt, ds = CP77_OT_BakeFacialAnimation._local_deltas(rig.ls_q, rig.ls_t, rig.ls_s, q_ls, t_ls, s_ls)
-        dt2, dq2 = math_utils.swap_yz_trn_rot(dt, dq)
+        dt2, dq2 = bartmoss_math.swap_yz_trn_rot(dt, dq)
         
         import mathutils
         bones = obj.pose.bones
