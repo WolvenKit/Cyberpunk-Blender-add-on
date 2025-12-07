@@ -8,6 +8,7 @@ from ..animtools.tracks import export_anim_tracks
 from ..main.bartmoss_functions import (
     store_current_context, restore_previous_context,
     get_safe_mode, safe_mode_switch, select_objects,
+    set_active_collection,
     )
 POSE_EXPORT_OPTIONS = {
     'export_animations': True,
@@ -926,7 +927,11 @@ def export_cyberpunk_collections_glb(context, filepath, export_poses=False, is_s
             exported.append((collection.name, f"No armatures or meshes starting with 'submesh'"))
             continue
 
-        selected = select_objects(visible_objects, reveal=True, clear=True, context=context)
+        if not set_active_collection(collection, context):
+            exported.append((collection.name, f"Failed to set collection as active"))
+            continue
+
+        select_objects(visible_objects, reveal=True, clear=True, context=context)
 
         if len(context.selected_objects) == 0:
             exported.append((collection.name, f"Failed to set child object selection"))
@@ -934,8 +939,8 @@ def export_cyberpunk_collections_glb(context, filepath, export_poses=False, is_s
 
         collection_path = os.path.join(filepath, f"{collection.name}.glb")
         try:
-            export_cyberpunk_glb(context, collection_path, export_poses=export_poses, export_visible=True,
-                limit_selected=False, is_skinned=is_skinned, try_fix=try_fix,
+            export_cyberpunk_glb(context, collection_path, export_poses=export_poses, export_visible=False,
+                limit_selected=True, is_skinned=is_skinned, try_fix=try_fix,
                 red_garment_col=red_garment_col, apply_transform=apply_transform,
                 action_filter=action_filter, export_tracks=export_tracks, apply_modifiers=apply_modifiers,
                 called_from_loop=True

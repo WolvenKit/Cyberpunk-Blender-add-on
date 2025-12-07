@@ -155,7 +155,7 @@ class CP77CollectionExport(Operator, ExportHelper):
 
         # Failed/skipped section (only if needed)
         if export_skipped:
-            parts.append("\nexport skipped or failed:")
+            parts.append("export skipped or failed:")
             parts.append("  " + "\n  ".join([f"✗ {name}: {error}" for name, error in export_skipped]))
 
         return "\n".join(parts)

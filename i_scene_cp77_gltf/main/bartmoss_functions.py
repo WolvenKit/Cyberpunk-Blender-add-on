@@ -466,7 +466,31 @@ def rotate_quat_180(self, context):
 def select_object(obj):
     return(f"{select_objects(obj)}")
 
+def find_layer_collection_by_name(collName, coll):
+    found = None
+    if (coll.name == collName):
+        return coll
+    for layer in coll.children:
+        found = find_layer_collection_by_name(collName, layer)
+        if found:
+            return found
+    return None
+
+def set_active_collection(collection, context=None):
+    c = context or bpy.context
+
+    found = find_layer_collection_by_name(collection.name, c.view_layer.layer_collection)
+    if found is None:
+        return False
+
+    collection.hide_viewport = False
+    found.hide_viewport = False
+    collection.hide_select = False
+    c.view_layer.active_layer_collection = found
+    return True
+
 # deselects other objects and fully selects an object in both the viewport and the outliner
+# if this fails silently, use set_active_collection
 def select_objects(objs, make_first_active=True, clear=True, reveal=False, context=None):
     c = context or bpy.context
 
