@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, Tuple
 import numpy as np
+import mathutils 
 
 @dataclass
 class MaterialOverride:
