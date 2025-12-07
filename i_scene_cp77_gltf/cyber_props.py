@@ -17,7 +17,6 @@ enum_items = [(mat.get("Name", ""), mat.get("Name", ""), "") for mat in physmats
 def CP77animBones():
     return ["Hips", "Spine", "Spine1", "Spine2", "Spine3", "LeftShoulder", "LeftArm", "LeftForeArm", "LeftHand", "WeaponLeft", "LeftInHandThumb", "LeftHandThumb1", "LeftHandThumb2", "LeftInHandIndex", "LeftHandIndex1", "LeftHandIndex2", "LeftHandIndex3", "LeftInHandMiddle", "LeftHandMiddle1", "LeftHandMiddle2", "LeftHandMiddle3", "LeftInHandRing", "LeftHandRing1", "LeftHandRing2", "LeftHandRing3", "LeftInHandPinky", "LeftHandPinky1", "LeftHandPinky2", "LeftHandPinky3", "RightShoulder", "RightArm", "RightForeArm", "RightHand", "WeaponRight", "RightInHandThumb", "RightHandThumb1", "RightHandThumb2", "RightInHandIndex", "RightHandIndex1", "RightHandIndex2", "RightHandIndex3", "RightInHandMiddle", "RightHandMiddle1", "RightHandMiddle2", "RightHandMiddle3", "RightInHandRing", "RightHandRing1", "RightHandRing2", "RightHandRing3", "RightInHandPinky", "RightHandPinky1", "RightHandPinky2", "RightHandPinky3", "Neck", "Neck1", "Head", "LeftEye", "RightEye", "LeftUpLeg", "LeftLeg", "LeftFoot", "LeftHeel", "LeftToeBase", "RightUpLeg", "RightLeg", "RightFoot", "RightHeel", "RightToeBase"]
 
-
 def CP77RefitList(context):
     none = None
     Adonis = os.path.join(refit_dir, "adonis_autofitter.npz")
@@ -54,7 +53,6 @@ def CP77RefitAddonList(context):
 
     # Return the list of tuples
     return addon_target_body_paths, addon_target_body_names
-
 
 def SetCyclesRenderer(use_cycles=True, set_gi_params=False):
     # set the render engine for all scenes to Cycles
@@ -113,7 +111,6 @@ def CP77ArmatureList(self, context):
         print(f"Error accessing bpy.data.objects: {e}")
         arms = []
     return arms
-
 
 class CP77_PT_PanelProps(PropertyGroup):
 # collision panel props:
@@ -331,9 +328,34 @@ def add_anim_props(animation, action):
     action["optimizationHints"] = optimizationHints
     #action["maxRotationCompression"] = optimizationHints['maxRotationCompression']
 
+class RootMotionData(PropertyGroup):
+    hip: StringProperty(
+        name="Hip Bone",
+        description="Bone containing character hip motion",
+        default=""
+    )
+    root: StringProperty(
+        name="Root Bone",
+        description="Root bone for motion transfer",
+        default=""
+    )
+    step: IntProperty(
+        name="Step Size",
+        description="Keyframe interval (1=every frame, higher=faster but less smooth)",
+        default=3, min=1, max=10, soft_max=5
+    )
+    no_rot: BoolProperty(
+        name="Ignore Rotation",
+        description="Transfer position only",
+        default=False
+    )
+    do_vert: BoolProperty(
+        name="Extract Vertical Motion",
+        description="Include Z-axis motion",
+        default=False
+    )
 
 operators, other_classes = get_classes(sys.modules[__name__])
-
 
 def register_props():
     for cls in operators:
@@ -341,11 +363,16 @@ def register_props():
     for cls in other_classes:
         bpy.utils.register_class(cls)
     Scene.cp77_panel_props = PointerProperty(type=CP77_PT_PanelProps)
+    Scene.rm_data = PointerProperty(type=RootMotionData)
     update_presets_items()
 
 def unregister_props():
+    if hasattr(bpy.types.Scene, "rm_data"):
+        del Scene.rm_data
+    if hasattr(bpy.types.Scene, "cp77_panel_props"):
+        del Scene.cp77_panel_props
     for cls in reversed(other_classes):
         bpy.utils.unregister_class(cls)
     for cls in reversed(operators):
         bpy.utils.unregister_class(cls)
-    del Scene.cp77_panel_props
+
