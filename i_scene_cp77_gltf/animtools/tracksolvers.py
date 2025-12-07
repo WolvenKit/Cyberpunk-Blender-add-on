@@ -11,7 +11,7 @@ from .constants import (
     INFLUENCE_LINEAR, INFLUENCE_EXPONENTIAL, INFLUENCE_ORGANIC,
     CORRECTIVE_INFLUENCE_BY_SPEED, CORRECTIVE_INFLUENCE_LINEAR_CORRECTION,
 )
-from .math_utils import clamp, lerp, limit_weight, wrinkle_weight
+from .bartmoss_math import clamp, lerp, limit_weight, wrinkle_weight
 import bpy 
 
 def normalize_track_name(x: Any) -> str:
