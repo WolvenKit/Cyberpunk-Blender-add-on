@@ -51,7 +51,6 @@ class CP77CollisionGenerator(Operator):
                 row.label(text="Height:")
                 row.prop(props, "height", text="")
 
-
 class CP77PhysMatAssign(Operator):
     bl_idname = "object.set_physics_material"
     bl_label = "Set Physics Properties"
@@ -94,7 +93,6 @@ class CP77PhysMatAssign(Operator):
             obj["inertia_Z"] = Iz
             
         return {'FINISHED'}
-
 
 class CP77_PT_CollisionTools(Panel):
     bl_label = "Collision Tools"
@@ -175,8 +173,6 @@ def register_collisiontools():
 
 def unregister_collisiontools():
     for cls in reversed(other_classes):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
+        bpy.utils.unregister_class(cls)
     for cls in reversed(operators):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
+        bpy.utils.unregister_class(cls)

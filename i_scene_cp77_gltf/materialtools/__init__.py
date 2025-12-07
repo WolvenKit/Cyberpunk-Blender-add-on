@@ -414,10 +414,8 @@ def register_materialtools():
 
 def unregister_materialtools():
     for cls in reversed(other_classes):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
+        bpy.utils.unregister_class(cls)
     for cls in reversed(operators):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
+        bpy.utils.unregister_class(cls)
 
     # bpy.msgbus.clear_by_owner(owner)
