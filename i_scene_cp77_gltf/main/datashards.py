@@ -58,6 +58,15 @@ class EntityData:
     appearances: List[AppearanceData] = field(default_factory=list)
     resolved_dependencies: List[ResolvedDependency] = field(default_factory=list)
 
+@dataclass(slots=True)
+class BoneTransformCache:
+    location: mathutils.Vector
+    rotation: mathutils.Quaternion
+    scale: mathutils.Vector
+    matrix: mathutils.Matrix
+    world_matrix: mathutils.Matrix
+
+## TODO: merge RigSkeleton and RigData - this makes no sense to duplicate like this but I did it and someday I need to fix it
 @dataclass
 class RigSkeleton:
     """Minimal rig skeleton data for facial animation
@@ -80,7 +89,6 @@ class RigSkeleton:
     ls_q: np.ndarray  # (N, 4) float32 - quaternions
     ls_t: np.ndarray  # (N, 3) float32 - translations
     ls_s: np.ndarray  # (N, 3) float32 - scales
-
 
 @dataclass(slots=True)
 class RigData:
@@ -106,7 +114,6 @@ class RigData:
     level_of_detail_start_indices: List[Any] = field(default_factory=list)
     ragdoll_desc: List[Any] = field(default_factory=list)
     ragdoll_names: List[Any] = field(default_factory=list)
-
 
 def __post_init__(self) -> None:
     # Normalize array dtypes/shapes
