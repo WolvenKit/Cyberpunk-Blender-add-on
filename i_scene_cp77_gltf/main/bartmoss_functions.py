@@ -50,18 +50,18 @@ class CP77Context:
         self.selected_objects = []
         self.object_visibility = {}
         self.cursor_location = None
-        
+
     def store(self):
         """Store current user state."""
         context = bpy.context
-        
+
         # Store mode
         self.mode = context.mode  # Store actual mode, not mapped
-        
+
         # Store active and selected objects
         self.active_object = context.view_layer.objects.active
         self.selected_objects = list(context.selected_objects)
-        
+
         # Store visibility for objects we're working with
         for obj in self.selected_objects:
             if obj:
@@ -70,7 +70,7 @@ class CP77Context:
                     'hide_select': obj.hide_select,
                     'hide_get': obj.hide_get(),
                 }
-        
+
         # Also store active object visibility if not in selection
         if self.active_object and self.active_object.name not in self.object_visibility:
             self.object_visibility[self.active_object.name] = {
@@ -78,14 +78,14 @@ class CP77Context:
                 'hide_select': self.active_object.hide_select,
                 'hide_get': self.active_object.hide_get(),
             }
-        
+
         # Store cursor
         self.cursor_location = tuple(context.scene.cursor.location)
-    
+
     def restore(self):
         """Restore user state."""
         context = bpy.context
-        
+
         # Restore visibility first (before selection)
         for obj_name, vis_state in self.object_visibility.items():
             if obj_name in bpy.data.objects:
@@ -96,7 +96,7 @@ class CP77Context:
                     obj.hide_set(vis_state['hide_get'])
                 except:
                     pass  # Object might be deleted
-        
+
         # Restore mode (use normalized mode for safety)
         if self.mode:
             target_mode = mode_map.get(self.mode, self.mode)
@@ -106,7 +106,7 @@ class CP77Context:
                     bpy.ops.object.mode_set(mode=target_mode)
                 except:
                     pass  # Mode might not be available
-        
+
         # Restore selection
         try:
             bpy.ops.object.select_all(action='DESELECT')
@@ -115,11 +115,11 @@ class CP77Context:
                     obj.select_set(True)
         except:
             pass
-        
+
         # Restore active object
         if self.active_object and self.active_object.name in bpy.data.objects:
             context.view_layer.objects.active = self.active_object
-        
+
         # Restore cursor
         if self.cursor_location:
             context.scene.cursor.location = self.cursor_location
@@ -142,7 +142,7 @@ def restore_previous_context():
 def get_safe_mode():
     """
     Get current mode mapped to a valid mode string for bpy.ops.object.mode_set().
-     - now properly maps 'SCULPT', 'VERTEX_PAINT', 'WEIGHT_PAINT', 'TEXTURE_PAINT', 'PARTICLE_EDIT' 
+     - now properly maps 'SCULPT', 'VERTEX_PAINT', 'WEIGHT_PAINT', 'TEXTURE_PAINT', 'PARTICLE_EDIT'
     """
     return mode_map.get(bpy.context.mode, 'OBJECT')
 
@@ -152,17 +152,17 @@ def safe_mode_switch(target_mode: str):
     """
     if not target_mode:
         return
-    
+
     # Normalize the target mode
     target_mode = mode_map.get(target_mode, target_mode)
-    
+
     # Get current normalized mode
     current_mode = get_safe_mode()
-    
+
     # Already in target mode
     if current_mode == target_mode:
         return
-    
+
     # Ensure valid context for mode switching
     if not bpy.context.active_object:
         # Need an object for mode switching
@@ -175,14 +175,14 @@ def safe_mode_switch(target_mode: str):
             temp = bpy.context.active_object
             temp.name = "TempModeSwitch"
             temp.hide_viewport = True
-            
+
             try:
                 bpy.ops.object.mode_set(mode=target_mode)
             finally:
                 # Remove temp object
                 bpy.data.objects.remove(temp, do_unlink=True)
             return
-    
+
     # Switch mode
     try:
         bpy.ops.object.mode_set(mode=target_mode)
@@ -466,9 +466,33 @@ def rotate_quat_180(self, context):
 def select_object(obj):
     return(f"{select_objects(obj)}")
 
+def find_layer_collection_by_name(collName, coll):
+    found = None
+    if (coll.name == collName):
+        return coll
+    for layer in coll.children:
+        found = find_layer_collection_by_name(collName, layer)
+        if found:
+            return found
+    return None
+
+def set_active_collection(collection, context=None):
+    c = context or bpy.context
+
+    found = find_layer_collection_by_name(collection.name, c.view_layer.layer_collection)
+    if found is None:
+        return False
+
+    collection.hide_viewport = False
+    found.hide_viewport = False
+    collection.hide_select = False
+    c.view_layer.active_layer_collection = found
+    return True
+
 # deselects other objects and fully selects an object in both the viewport and the outliner
-def select_objects(objs, make_first_active=True, clear=True, reveal=False):
-    c = bpy.context
+# if this fails silently, use set_active_collection
+def select_objects(objs, make_first_active=True, clear=True, reveal=False, context=None):
+    c = context or bpy.context
 
     # Normalize to a list
     if objs is None:
@@ -487,16 +511,19 @@ def select_objects(objs, make_first_active=True, clear=True, reveal=False):
             ob = bpy.data.objects.get(o)
         else:
             ob = None
-        if ob:
-            if reveal:
-                # ensure selectable & visible
-                try:
-                    ob.hide_set(False)
-                except Exception:
-                    pass
-                ob.hide_viewport = False
-                ob.hide_select = False
-            resolved.append(ob)
+
+        if not ob:
+            continue
+
+        if reveal:
+            # ensure selectable & visible
+            try:
+                ob.hide_set(False)
+            except Exception:
+                pass
+            ob.hide_viewport = False
+            ob.hide_select = False
+        resolved.append(ob)
 
     if clear:
         for o in list(c.selected_objects):
@@ -504,6 +531,7 @@ def select_objects(objs, make_first_active=True, clear=True, reveal=False):
 
     for ob in resolved:
         ob.select_set(True)
+        c.view_layer.objects.active = ob
 
     if make_first_active and resolved:
         c.view_layer.objects.active = resolved[0]
