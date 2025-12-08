@@ -906,7 +906,7 @@ def update_presets_items():
 
 def get_selected_collection():
     selected_objects = [ obj for obj in bpy.context.selected_objects if obj != bpy.context.active_object ]
-    if len(selected_objects) == 0:
+    if len(selected_objects) == 0 and bpy.context.active_object is not None:
         selected_objects.append(bpy.context.active_object)
 
     collections = [coll for coll in bpy.data.collections if any(obj.name in [o.name for o in coll.objects] for obj in selected_objects)]
@@ -916,6 +916,8 @@ def get_selected_collection():
     return None
 
 def get_active_collection():
+    if bpy.context.active_object is None:
+        return None
 
     collections = [coll for coll in bpy.data.collections if bpy.context.active_object.name in [o.name for o in coll.objects]]
     if (collections is not None and len(collections) == 1):
