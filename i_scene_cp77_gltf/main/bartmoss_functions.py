@@ -2,12 +2,11 @@ import bpy
 import idprop
 import bmesh
 import os
-import unicodedata
 import logging
+
 from mathutils import Vector, Quaternion, Matrix, Vector
-from math import radians
 from collections import defaultdict
-from typing import List, Dict, Set
+from typing import List, Dict, Set, Optional
 
 _stored_context = None
 
@@ -221,20 +220,119 @@ def compute_local_space(model_transforms, bone_parents):
             local_space[i] = (ls_trans, ls_rot)
     return local_space
 
-#basic logging to report errors instead of silently passing
-logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
+def dataKrash_fast(root: str, extensions: List[str]) -> Dict[str, Set[str]]:
+    """
+    Fast file indexer using os.scandir with minimal overhead.
+    
+    Args:
+        root: Project root directory (should be absolute)
+        extensions: List of extensions like ['.app.json', '.glb', '.rig.json']
+    
+    Returns:
+        Dict mapping extension to set of file paths
+    """
+    if not os.path.isdir(root):
+        logging.error(f"Root directory not found: {root}")
+        return {}
+    
+    # Normalize extensions: ensure leading dot, lowercase
+    ext_set = {ext if ext.startswith('.') else '.' + ext for ext in extensions}
+    ext_set = {ext.lower() for ext in ext_set}
+    
+    # Result dictionary
+    ext_map = defaultdict(set)
+    
+    # Directory skip list
+    skip_dirs = {
+        '__pycache__', '.git', '.svn', 'node_modules', 
+        '.vscode', '.idea', 'archive', 'backup'
+    }
+    
+    def _scan_recursive(folder: str):
+        """Inner recursive scanner."""
+        try:
+            with os.scandir(folder) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_file(follow_symlinks=False):
+                            name_lower = entry.name.lower()
+                            
+                            if '.' in name_lower:
+                                # Get last two components for compound extensions
+                                parts = name_lower.rsplit('.', 2)
+                                matched = False
+                                
+                                if len(parts) >= 3:
+                                    # Try compound extension like '.mesh.json'
+                                    compound_ext = '.' + '.'.join(parts[-2:])
+                                    if compound_ext in ext_set:
+                                        ext_map[compound_ext].add(entry.path)
+                                        matched = True
+                                
+                                if not matched:
+                                    # Try simple extension like '.json'
+                                    simple_ext = '.' + parts[-1]
+                                    if simple_ext in ext_set:
+                                        ext_map[simple_ext].add(entry.path)
+                        
+                        elif entry.is_dir(follow_symlinks=False):
+                            if entry.name not in skip_dirs:
+                                _scan_recursive(entry.path)
+                    
+                    except (PermissionError, OSError) as e:
+                        logging.debug(f"Could not access {entry.path}: {e}")
+                        continue
+        
+        except (PermissionError, OSError) as e:
+            logging.warning(f"Could not scan directory {folder}: {e}")
+    
+    _scan_recursive(root)
+    
+    return dict(ext_map)
 
-def normalize(path: str) -> str:
+# Cached version for reuse across multiple imports
+_file_index_cache = {}
+_cache_root = None
+
+def dataKrash_cached(root: str, extensions: List[str], force_refresh: bool = False) -> Dict[str, Set[str]]:
     """
-    Normalize path for cross-platform and Unicode safety, ensuring it is an absolute path.
+    Cached version of dataKrash for multiple imports from same root.
+    
+    Args:
+        root: Project root directory
+        extensions: List of extensions to index
+        force_refresh: Force rebuilding the cache
+    
+    Returns:
+        Dict mapping extension to set of file paths
     """
-    # os.path.abspath to ensure all paths are full and unambiguous.
-    return unicodedata.normalize('NFC', os.path.abspath(os.path.normpath(path)))
+    global _file_index_cache, _cache_root
+    
+    # Normalize root for comparison
+    root = os.path.abspath(root)
+    
+    # Check if cache is valid
+    if not force_refresh and _cache_root == root and _file_index_cache:
+        # Filter cache to requested extensions
+        ext_set = {ext.lower() for ext in extensions}
+        return {ext: paths for ext, paths in _file_index_cache.items() if ext in ext_set}
+    
+    # Build new cache
+    _cache_root = root
+    _file_index_cache = dataKrash_fast(root, extensions)
+    
+    return _file_index_cache.copy()
+
+def clear_dataKrash_cache():
+    """Clear the file index cache. Call when done with batch imports."""
+    global _file_index_cache, _cache_root
+    _file_index_cache = {}
+    _cache_root = None
 
 def dataKrash(root: str, extensions: List[str]) -> Dict[str, Set[str]]:
     """
     Recursively find files by extension using os.scandir, returning full absolute paths.
-    The output is a dictionary mapping each extension to a SET of file paths.
+    The output is a dictionary mapping each extension to a set of file paths.
     """
     normalized_root = normalize(root)
     if not os.path.isdir(normalized_root):
@@ -263,6 +361,104 @@ def dataKrash(root: str, extensions: List[str]) -> Dict[str, Set[str]]:
     recurse(normalized_root)
     return dict(ext_map)
 
+class PathResolver:
+    """Fast path resolution using file index."""
+    
+    def __init__(self, file_index: Dict[str, Set[str]]):
+        """
+        Initialize resolver with file index from dataKrash.
+        
+        Args:
+            file_index: Dict mapping extensions to sets of file paths
+        """
+        self.file_index = file_index
+        
+        # Build reverse lookup: basename -> full_path
+        self.basename_lookup = {}
+        for ext, paths in file_index.items():
+            for path in paths:
+                basename = os.path.basename(path)
+                if basename not in self.basename_lookup:
+                    self.basename_lookup[basename] = []
+                self.basename_lookup[basename].append(path)
+        
+        # Build normalized reference lookup: depot_path -> full_path
+        self.reference_lookup = {}
+        for ext, paths in file_index.items():
+            for path in paths:
+                # Try to extract depot-relative portion
+                # Example: /full/path/base/characters/judy.mesh -> base/characters/judy.mesh
+                if 'base' in path:
+                    depot_start = path.index('base')
+                    depot_rel = path[depot_start:]
+                    self.reference_lookup[depot_rel] = path
+                elif 'ep1' in path:
+                    depot_start = path.index('ep1')
+                    depot_rel = path[depot_start:]
+                    self.reference_lookup[depot_rel] = path
+    
+    def resolve(self, reference: str) -> str:
+        """
+        Resolve a JSON path reference to actual file path.
+        
+        Args:
+            reference: Path from JSON like "base\\characters\\judy.mesh"
+        
+        Returns:
+            Full filesystem path or None if not found
+        """
+        # Quick normalize just this one reference
+        norm_ref = reference.replace('\\', os.sep).replace('/', os.sep)
+        
+        # Try direct lookup
+        if norm_ref in self.reference_lookup:
+            return self.reference_lookup[norm_ref]
+        
+        # Try basename lookup
+        basename = os.path.basename(norm_ref)
+        candidates = self.basename_lookup.get(basename, [])
+        
+        if len(candidates) == 1:
+            return candidates[0]
+        elif len(candidates) > 1:
+            # Multiple matches - try to find best match by path similarity
+            for candidate in candidates:
+                if norm_ref in candidate:
+                    return candidate
+            # Return first if no exact match
+            return candidates[0]
+        
+        return None
+    
+    def resolve_with_extension(self, reference: str, extension: str) -> str:
+        """
+        Resolve reference with specific extension.
+        
+        Args:
+            reference: Path reference like "base\\characters\\judy"
+            extension: Extension like ".mesh" or ".app.json"
+        
+        Returns:
+            Full filesystem path or None
+        """
+        # Add extension if not present
+        if not reference.endswith(extension):
+            reference = reference + extension
+        
+        return self.resolve(reference)
+    
+    def get_files_by_extension(self, extension: str) -> List[str]:
+        """
+        Get all files with specified extension from index.
+        
+        Args:
+            extension: File extension like '.glb' or '.app.json'
+        
+        Returns:
+            List of file paths
+        """
+        return list(self.file_index.get(extension.lower(), []))
+    
 def parse_transform_data(data: Dict) -> Dict[str, List[float]]:
     """
     Parses a transform dictionary and returns a normalized transform with:
@@ -303,14 +499,24 @@ def parse_transform_data(data: Dict) -> Dict[str, List[float]]:
     }
 
 ## I get that these are lazy but they're convenient type checks
+def valid_armature(context) -> Optional[bpy.types.Object]:
+    obj = context.active_object
+    if not obj or obj.type != 'ARMATURE':
+        return None
+    if not (obj.pose and len(obj.pose.bones) >= 2):
+        return None
+    if not (obj.animation_data and obj.animation_data.action):
+        return None
+    return obj
+
 def is_mesh(o: bpy.types.Object) -> bool:
     return isinstance(o.data, bpy.types.Mesh)
 
-def world_mtx(armature, bone):
-    return armature.convert_space(bone, bone.matrix, from_space='POSE', to_space='WORLD')
+def world_mtx(armature, bone) -> Matrix:
+    return armature.convert_space(pose_bone=bone, matrix=bone.matrix, from_space='POSE', to_space='WORLD')
 
-def pose_mtx(armature, bone, mat):
-    return armature.convert_space(bone, mat, from_space='WORLD', to_space='POSE')
+def pose_mtx(armature, bone, mat: Matrix) -> Matrix:
+    return armature.convert_space(pose_bone=bone, matrix=mat, from_space='WORLD', to_space='POSE')
 
 def is_armature(o: bpy.types.Object) -> bool: # I just found out I could leave annotations like that -> future presto will appreciate knowing wtf I though I was going to return
     return isinstance(o.data, bpy.types.Armature)
