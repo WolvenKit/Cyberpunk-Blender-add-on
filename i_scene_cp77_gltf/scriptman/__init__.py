@@ -45,8 +45,6 @@ def register_scriptman():
 def unregister_scriptman():
     bpy.utils.unregister_class(CP77ScriptManager)
     for cls in reversed(other_classes):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
+        bpy.utils.unregister_class(cls)
     for cls in reversed(operators):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
+        bpy.utils.unregister_class(cls)

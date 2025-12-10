@@ -1,224 +1,201 @@
-import time
-
+from __future__ import annotations
 import bpy
-import mathutils
+from bpy.types import Operator, Panel, PoseBone
+from bpy.props import PointerProperty
+from mathutils import Vector
+from ..main.datashards import BoneTransformCache
+from ..main.bartmoss_functions import pose_mtx, world_mtx, valid_armature
+from ..cyber_props import RootMotionData
+from typing import List, Tuple, Dict
 
-class RootMotionData(bpy.types.PropertyGroup):
-    hip = bpy.props.StringProperty(name="Hip Bone")
-    root = bpy.props.StringProperty(name="Root Bone")
-    copy = bpy.props.StringProperty(name="Debug Character")
-    step = bpy.props.IntProperty(name="Step Size", default=3, min=1)
-    no_rot = bpy.props.BoolProperty(name="Ignore Rotation")
-    do_vert = bpy.props.BoolProperty(name="Extract Vertical Motion")
+def get_frame_range(action) -> Tuple[int, int]:
+    f = action.frame_range
+    return int(f.x), int(f.y)
 
+def generate_frame_list(scene, start: int, end: int) -> List[int]:
+    step = scene.rm_data.step
+    frames = list(range(start, end + 1, step))
+    if frames[-1] != end:
+        frames.append(end)
+    return frames
 
-class CP77HipMotionToRoot(bpy.types.Operator):
-    """Transfer hip bone motion to root bone"""
-    bl_idname = "hip_to_root_motion.cp77"
-    bl_label = "Create Root Motion"
-    bl_description = "Transfer Hip Motion to Root Bone"
+def cache_bone_transforms(context, armature, bone_name: str, frames: List[int]) -> Dict[int, BoneTransformCache]:
+    bone = armature.pose.bones.get(bone_name)
+    if not bone:
+        raise ValueError(f"Bone '{bone_name}' not found")
+    cache: Dict[int, BoneTransformCache] = {}
+    depsgraph = context.evaluated_depsgraph_get()
+    for f in frames:
+        context.scene.frame_set(f)
+        depsgraph.update()
+        cache[f] = BoneTransformCache(
+            bone.location.copy(),
+            bone.rotation_quaternion.copy(),
+            bone.scale.copy(),
+            bone.matrix.copy(),
+            world_mtx(armature, bone).copy(),
+        )
+    return cache
+
+def clear_bone_fcurves(action, bone_name: str):
+    """Remove all animation curves for specified bone cleanly"""
+    target = f'pose.bones["{bone_name}"]'
+    for fc in [c for c in action.fcurves if c.data_path.startswith(target)]:
+        action.fcurves.remove(fc)
+
+def keyframe_bone(pb: PoseBone, frame: int, include_rot: bool = True):
+    pb.keyframe_insert("location", frame=frame)
+    if include_rot:
+        pb.keyframe_insert("rotation_quaternion", frame=frame)
+    pb.keyframe_insert("scale", frame=frame)
+
+class RootMotionOperatorBase(Operator):
     bl_options = {'REGISTER', 'UNDO'}
-
-    skel = None
 
     @classmethod
     def poll(cls, context):
         return valid_armature(context) is not None
 
-    def modal(self, context, event):
-        ref = debug_character(context, self.skel)
+    def validate(self, context):
+        arm = valid_armature(context)
+        if not arm:
+            self.report({'ERROR'}, "Select an animated armature")
+            return None, None, 0, 0
         data = context.scene.rm_data
-        frames = self.skel.animation_data.action.frame_range
+        if not data.root or data.root not in arm.pose.bones:
+            data.root = next(iter(arm.pose.bones)).name
+        if not data.hip or data.hip not in arm.pose.bones:
+            data.hip = list(arm.pose.bones)[1].name if len(arm.pose.bones) > 1 else data.root
+        start, end = get_frame_range(arm.animation_data.action)
+        return arm, data, start, end
 
-        expr = "\"%s\"" % data.hip
-        curves = self.skel.animation_data.action.fcurves
-        for c in curves:
-            if expr in c.data_path:
-                curves.remove(c)
-
-        root = self.skel.pose.bones[data.root]
-        ref_hip = ref.pose.bones[data.hip]
-        ref_hip_vec = (ref_hip.head - ref_hip.tail)
-        ref_hip_vec.z = 0
-        ref_mtx = world_mtx(ref, ref_hip)
-        for f in steps(context, frames):
-            context.scene.frame_set(f)
-
-            mtx = world_mtx(ref, ref_hip)
-            mtx_trans = mathutils.Matrix.Translation(mtx.translation - ref_mtx.translation)
-            if not data.do_vert:
-                mtx_trans.translation.z = 0
-            root.matrix = pose_mtx(self.skel, root, mtx_trans)
-
-            if not data.no_rot:
-                hip_vec = (ref_hip.head - ref_hip.tail)
-                hip_vec.z = 0
-                root.rotation_quaternion = ref_hip_vec.rotation_difference(hip_vec)
-
-            root.scale = (1, 1, 1)
-            root.keyframe_insert(data_path="location")
-            root.keyframe_insert(data_path="rotation_quaternion")
-
-        hip = self.skel.pose.bones[data.hip]
-        for f in range(round(frames.x), round(frames.y) + 1):
-            context.scene.frame_set(f)
-            hip.matrix = pose_mtx(self.skel, hip, world_mtx(ref, ref_hip))
-            hip.keyframe_insert(data_path="rotation_quaternion")
-            hip.keyframe_insert(data_path="location")
-            hip.keyframe_insert(data_path="scale")
-
-        return {'FINISHED'}
-
-    def invoke(self, context, event):
-        self.skel = valid_armature(context)
-        context.scene.frame_set(self.skel.animation_data.action.frame_range.x)
-
-        data = context.scene.rm_data
-        if data.root == "":
-            data.root = self.skel.pose.bones[0].name
-        if data.hip == "":
-            data.hip = self.skel.pose.bones[1].name
-
-        context.window_manager.modal_handler_add(self)
-        return {'RUNNING_MODAL'}
-
-
-class CP77RootToHipMotion(bpy.types.Operator):
-    """Transfer root bone motion to hip bone"""
-    bl_idname = "root_to_hip_motion.cp77"
-    bl_label = "Transfer Root To Hip Motion"
-    bl_description = "Integrate root motion to hip bone"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    skel = None
-
-    @classmethod
-    def poll(cls, context):
-        return valid_armature(context) is not None
-
-    def modal(self, context, event):
-        ref = debug_character(context, self.skel)
-        data = context.scene.rm_data
-
-        root_expr = "\"%s\"" % data.root
-        hip_expr = "\"%s\"" % data.hip
-        curves = self.skel.animation_data.action.fcurves
-        for c in curves:
-            if root_expr in c.data_path or hip_expr in c.data_path:
-                curves.remove(c)
-
-        root = self.skel.pose.bones[data.root]
-        root.keyframe_insert(data_path="rotation_quaternion")
-        root.keyframe_insert(data_path="location")
-        root.keyframe_insert(data_path="scale")
-
-        hip = self.skel.pose.bones[data.hip]
-        ref_hip = ref.pose.bones[data.hip]
-        for f in steps(context, self.skel.animation_data.action.frame_range):
-            context.scene.frame_set(f)
-            ref_mtx = world_mtx(ref, ref_hip)
-
-            hip.matrix = pose_mtx(self.skel, hip, ref_mtx)
-            hip.keyframe_insert(data_path="rotation_quaternion")
-            hip.keyframe_insert(data_path="location")
-            hip.keyframe_insert(data_path="scale")
-
-        root.keyframe_insert(data_path="rotation_quaternion")
-        root.keyframe_insert(data_path="location")
-        root.keyframe_insert(data_path="scale")
-
-        return {'FINISHED'}
-
-    def invoke(self, context, event):
-        self.skel = valid_armature(context)
-        context.scene.frame_set(self.skel.animation_data.action.frame_range.x)
-
-        data = context.scene.rm_data
-        if data.root == "":
-            data.root = self.skel.pose.bones[0].name
-        if data.hip == "":
-            data.hip = self.skel.pose.bones[1].name
-
-        context.window_manager.modal_handler_add(self)
-        return {'RUNNING_MODAL'}
-
-
-class CP77RemoveRootMotion(bpy.types.Operator):
-    """Remove root motion from action, causing it to animate in-place"""
-    bl_idname = "remove_root_motion.cp77"
-    bl_label = "Remove Root Motion"
-    bl_description = "Remove root motion from action, causing it to animate in-place"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    skel = None
-
-    @classmethod
-    def poll(cls, context):
-        return valid_armature(context) is not None
-
-    def modal(self, context, event):
-        data = context.scene.rm_data
-        expr = "\"%s\"" % data.root
-        curves = self.skel.animation_data.action.fcurves
-        for c in curves:
-            if expr in c.data_path:
-                curves.remove(c)
-
-        root = self.skel.pose.bones[data.root]
-        frames = self.skel.animation_data.action.frame_range
-        for f in [round(frames.x), round(frames.y)]:
-            context.scene.frame_set(f)
-            root.keyframe_insert(data_path="rotation_quaternion")
-            root.keyframe_insert(data_path="location")
-            root.keyframe_insert(data_path="scale")
-
-        return {'FINISHED'}
-
-    def invoke(self, context, event):
-        self.skel = valid_armature(context)
-        context.scene.frame_set(self.skel.animation_data.action.frame_range.x)
-
-        data = context.scene.rm_data
-        if data.root == "":
-            data.root = self.skel.pose.bones[0].name
-
-        context.window_manager.modal_handler_add(self)
-        return {'RUNNING_MODAL'}
-
-
-class CP77Remove_ref_character(bpy.types.Operator):
-    """Remove reference character and its properties"""
-    bl_idname = "rm_remove_ref_char.cp77"
-    bl_label = "Finalize Root Motion Operation"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    @classmethod
-    def poll(cls, context):
-        return context.scene.rm_data.copy != ""
+class CP77HipMotionToRoot(RootMotionOperatorBase):
+    """Extract root motion from hip bone animation"""
+    bl_idname = "cp77.hip_to_root_motion"
+    bl_label = "Extract Root Motion"
 
     def execute(self, context):
-        char = bpy.data.objects.get(context.scene.rm_data.copy)
-        context.scene.rm_data.copy = ""
-        if char is None:
+        arm, data, start, end = self.validate(context)
+        if not arm:
             return {'CANCELLED'}
 
-        anim = char.animation_data.action
-        if anim != None:
-            bpy.data.actions.remove(anim, True)
+        try:
+            frames_all = list(range(start, end + 1))
+            keyframes = generate_frame_list(context.scene, start, end)
+            hip_cache = cache_bone_transforms(context, arm, data.hip, frames_all)
 
-        context.scene.objects.unlink(char)
-        bpy.data.objects.remove(char, True)
+            root = arm.pose.bones[data.root]
+            hip = arm.pose.bones[data.hip]
 
+            init_world = hip_cache[start].world_matrix.copy()
+            init_vec = (hip.head - hip.tail).copy()
+            init_vec.z = 0
+
+            clear_bone_fcurves(arm.animation_data.action, data.hip)
+
+            for f in keyframes:
+                context.scene.frame_set(f)
+                c = hip_cache[f]
+                delta = c.world_matrix.translation - init_world.translation
+                if not data.do_vert:
+                    delta.z = 0
+                root.location = delta
+                if not data.no_rot:
+                    vec = (hip.head - hip.tail).copy()
+                    vec.z = 0
+                    root.rotation_quaternion = init_vec.rotation_difference(vec)
+                root.scale = Vector((1, 1, 1))
+                keyframe_bone(root, f, include_rot=not data.no_rot)
+
+            context.view_layer.update()
+            self.report({'INFO'}, f"Root motion extracted ({end - start + 1} frames)")
+            return {'FINISHED'}
+
+        except Exception as e:
+            self.report({'ERROR'}, f"Root motion failed: {e}")
+            import traceback; traceback.print_exc()
+            return {'CANCELLED'}
+
+class CP77RootToHipMotion(RootMotionOperatorBase):
+    """Integrate root motion back into hip bone"""
+    bl_idname = "cp77.root_to_hip_motion"
+    bl_label = "Integrate Root Motion"
+
+    def execute(self, context):
+        arm, data, start, end = self.validate(context)
+        if not arm:
+            return {'CANCELLED'}
+        try:
+            frames_all = list(range(start, end + 1))
+            keyframes = generate_frame_list(context.scene, start, end)
+            hip_cache = cache_bone_transforms(context, arm, data.hip, frames_all)
+
+            clear_bone_fcurves(arm.animation_data.action, data.root)
+            clear_bone_fcurves(arm.animation_data.action, data.hip)
+
+            root = arm.pose.bones[data.root]
+            hip = arm.pose.bones[data.hip]
+
+            for f in keyframes:
+                context.scene.frame_set(f)
+                hip.matrix = pose_mtx(arm, hip, hip_cache[f].world_matrix)
+                keyframe_bone(hip, f)
+
+            for f in (start, end):
+                context.scene.frame_set(f)
+                root.location = (0, 0, 0)
+                root.rotation_quaternion = (1, 0, 0, 0)
+                root.scale = (1, 1, 1)
+                keyframe_bone(root, f)
+
+            context.view_layer.update()
+            self.report({'INFO'}, f"Motion integrated ({end - start + 1} frames)")
+            return {'FINISHED'}
+
+        except Exception as e:
+            self.report({'ERROR'}, f"Integration failed: {e}")
+            import traceback; traceback.print_exc()
+            return {'CANCELLED'}
+
+class CP77RemoveRootMotion(RootMotionOperatorBase):
+    """Remove root motion for in-place animation"""
+    bl_idname = "cp77.remove_root_motion"
+    bl_label = "Remove Root Motion"
+
+    def execute(self, context):
+        arm = valid_armature(context)
+        if not arm:
+            self.report({'ERROR'}, "Select an armature")
+            return {'CANCELLED'}
+
+        data = context.scene.rm_data
+        if data.root not in arm.pose.bones:
+            self.report({'ERROR'}, f"Root bone '{data.root}' missing")
+            return {'CANCELLED'}
+
+        start, end = get_frame_range(arm.animation_data.action)
+        clear_bone_fcurves(arm.animation_data.action, data.root)
+
+        root = arm.pose.bones[data.root]
+        for f in (start, end):
+            context.scene.frame_set(f)
+            root.location = (0, 0, 0)
+            root.rotation_quaternion = (1, 0, 0, 0)
+            root.scale = (1, 1, 1)
+            keyframe_bone(root, f)
+
+        context.view_layer.update()
+        self.report({'INFO'}, "Root motion removed (in-place)")
         return {'FINISHED'}
 
-
-class PANEL_PT_main_panel(bpy.types.Panel):
-    bl_idname = "PANEL_PT_root_motionist_main"
-    bl_label = "Root Motion"
+class PANEL_PT_RootMotion(Panel):
+    bl_idname = "CP77_PT_root_motion"
+    bl_label = "Root Motion Tools"
     bl_category = "CP77 Modding"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_parent = "CP77_PT_animspanel"
+    bl_parent_id = "CP77_PT_animspanel"
+    bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
@@ -226,83 +203,43 @@ class PANEL_PT_main_panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        data = context.scene.rm_data
         obj = context.active_object
 
-        col = layout.column(align=True)
-        col.prop_search(context.scene.rm_data, "root", obj.pose, "bones", text="Root")
-        col.prop_search(context.scene.rm_data, "hip", obj.pose, "bones", text="Hip")
-        #col.prop(obj.animation_data, "action", text="Anim")
+        box = layout.box()
+        box.label(text="Bone Configuration", icon='BONE_DATA')
+        col = box.column(align=True)
+        col.prop_search(data, "root", obj.pose, "bones", text="Root")
+        col.prop_search(data, "hip", obj.pose, "bones", text="Hip")
 
-        col = layout.column(align=True)
-        col.prop(context.scene.rm_data, "step")
-        col.prop(context.scene.rm_data, "no_rot")
-        col.prop(context.scene.rm_data, "do_vert")
-        #layout.separator()
+        box = layout.box()
+        box.label(text="Transfer Options", icon='MODIFIER')
+        col = box.column(align=True)
+        col.prop(data, "step")
+        col.prop(data, "no_rot")
+        col.prop(data, "do_vert")
 
-        col = layout.column(align=True)
-        row = col.row(align=True)
-        row.operator("hip_to_root_motion.cp77", text="Transfer Hip To Root Motion")
-        col.operator("root_to_hip_motion.cp77", text="Transfer Root To Hip Motion")
-        col.operator("remove_root_motion.cp77", text="Animate In-Place")
+        box = layout.box()
+        box.label(text="Operations", icon='ANIM')
+        col = box.column(align=True)
+        col.operator("cp77.hip_to_root_motion", icon='EXPORT')
+        col.operator("cp77.root_to_hip_motion", icon='IMPORT')
+        col.operator("cp77.remove_root_motion", icon='X')
 
-        layout.operator("rm_remove_ref_char.cp77", text="Delete Ref Character")
-
-
-def valid_armature(context):
-    skel = context.active_object
-    if skel is not None and skel.type == 'ARMATURE':
-        if len(skel.pose.bones) >= 2:
-            if skel.animation_data.action is not None:
-                return skel
-    return None
-
-
-def world_mtx(armature, bone):
-    return armature.convert_space(bone, bone.matrix, from_space='POSE', to_space='WORLD')
-
-
-def pose_mtx(armature, bone, mat):
-    return armature.convert_space(bone, mat, from_space='WORLD', to_space='POSE')
-
-
-def debug_character(context, original):
-    char = bpy.data.objects.get(context.scene.rm_data.copy)
-    if char is not None:
-        return char
-    char = original.copy()
-    char.data = original.data.copy()
-    char.animation_data.action = original.animation_data.action.copy()
-    char.name = "skel" + str(int(time.time()))
-    context.scene.rm_data.copy = char.name
-    context.scene.objects.link(char)
-    return char
-
-
-def steps(context, frames):
-    last = round(frames.y)
-    frms = list(range(round(frames.x), last + 1, context.scene.rm_data.step))
-    if frms[-1] != last:
-        frms.append(last)
-    return frms
-
+classes = (
+    CP77HipMotionToRoot,
+    CP77RootToHipMotion,
+    CP77RemoveRootMotion,
+    PANEL_PT_RootMotion,
+)
 
 def register_rm():
-    bpy.utils.register_class(RootMotionData)
-    bpy.utils.register_class(CP77HipMotionToRoot)
-    bpy.utils.register_class(CP77RootToHipMotion)
-    bpy.utils.register_class(CP77RemoveRootMotion)
-    bpy.utils.register_class(CP77Remove_ref_character)
-    bpy.utils.register_class(PANEL_PT_main_panel)
-
-    bpy.types.Scene.rm_data = bpy.props.PointerProperty(type=RootMotionData)
-
+    for cls in classes:
+        bpy.utils.register_class(cls)
+    bpy.types.Scene.rm_data = PointerProperty(type=RootMotionData)
 
 def unregister_rm():
-    del bpy.types.Scene.rm_data
-
-    bpy.utils.unregister_class(RootMotionData)
-    bpy.utils.unregister_class(CP77HipMotionToRoot)
-    bpy.utils.unregister_class(CP77RootToHipMotion)
-    bpy.utils.unregister_class(CP77RemoveRootMotion)
-    bpy.utils.unregister_class(CP77Remove_ref_character)
-    bpy.utils.unregister_class(PANEL_PT_main_panel)
+    if hasattr(bpy.types.Scene, "rm_data"):
+        del bpy.types.Scene.rm_data
+    for cls in reversed(classes):
+        bpy.utils.unregister_class(cls)
