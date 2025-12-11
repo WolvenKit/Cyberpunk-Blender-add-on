@@ -55,7 +55,7 @@ def draw_sphere_collider(name, collision_collection, radius, position, physmat, 
     bm = bmesh.new()
    # position = (transform['position']['X'], transform['position']['Y'], transform['position']['Z'])
     bmesh.ops.create_uvsphere(bm, u_segments=8, v_segments=9, radius=r)
-    name = collision_shape
+    # name = collision_shape
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)
     mesh.update()
@@ -80,7 +80,7 @@ def draw_capsule_collider(name, collision_collection, radius, height, position, 
             vert.co[2] -= delta_Z
         elif vert.co[2] > 0:
             vert.co[2] += delta_Z
-    name = collision_shape
+    # name = collision_shape
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)
     mesh.update()

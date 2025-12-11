@@ -4,6 +4,7 @@ import sys
 from bpy_extras.io_utils import ImportHelper
 from bpy.props import (StringProperty, EnumProperty, BoolProperty, CollectionProperty)
 from bpy.types import (Operator, OperatorFileListElement, TOPBAR_MT_file_import )
+from .collision_mesh_json_import import cp77_collision_mesh_json_import
 from .import_with_materials import *
 from .entity_import import *
 from .sector_import import *
@@ -68,6 +69,22 @@ class CP7PhysImport(Operator):
 
     def execute(self, context):
         cp77_phys_import(self.filepath)
+        return {"FINISHED"}
+
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {"RUNNING_MODAL"}
+
+class CP77NxsImport(Operator):
+    bl_idname = "import_collision.mesh"
+    bl_label = "Import .mesh Collisions"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Import collisions from an exported .mesh.json"
+
+    filepath: StringProperty(subtype="FILE_PATH")
+
+    def execute(self, context):
+        cp77_collision_mesh_json_import(self.filepath)
         return {"FINISHED"}
 
     def invoke(self, context, event):

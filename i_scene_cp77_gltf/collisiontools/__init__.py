@@ -123,6 +123,8 @@ class CP77_PT_CollisionTools(Panel):
                 row = box.row(align=True)
                 row.operator("import_scene.phys")
                 row = box.row(align=True)
+                row.operator("import_collision.mesh")
+                row = box.row(align=True)
                 row.operator("export_scene.collisions")
                 obj = context.active_object
                 if obj and "collisionType" in obj:
