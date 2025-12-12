@@ -94,9 +94,9 @@ def cp77_collision_mesh_json_import(filepath: str):
 
     data = raw_data["Data"]["RootChunk"]["parameters"][0]["Data"]["physicsData"]["Data"]["bodies"][0]["Data"]["collisionShapes"]
 
-    mesh_name = os.path.basename(filepath).split(".")[0]
-    new_collection = bpy.data.collections.new(mesh_name)
-    bpy.context.scene.collection.children.link(new_collection)
+    mesh_name = os.path.basename(filepath).split(".")[0]+'.mesh'
+    collection = bpy.data.collections.new(mesh_name)
+    bpy.context.scene.collection.children.link(collection)
 
     for index in range(len(data) - 1, -1, -1):
         collision_shape = data[index]
@@ -111,21 +111,21 @@ def cp77_collision_mesh_json_import(filepath: str):
             case "physicsColliderMesh":
                 buffer = collision_shape["Data"]["compiledGeometryBuffer"]["Bytes"]
                 verts, faces = parse_nxs(buffer)
-                bpy_obj = draw_mesh_collider(name, new_collection, verts, faces, transform, physmat, collision_type)
+                bpy_obj = draw_mesh_collider(name, collection, verts, faces, transform, physmat, collision_type)
             case "physicsColliderCapsule":
                 height = collision_shape["Data"]["height"]
                 radius = collision_shape["Data"]["radius"]
                 position = (transform['position']['X'], transform['position']['Y'], transform['position']['Z'])
                 orientation = (transform['orientation']['r'], transform['orientation']['j'],
                                transform['orientation']['k'], transform['orientation']['i'])
-                bpy_obj = draw_capsule_collider(name, new_collection, radius, height, position, orientation, physmat, collision_type)
+                bpy_obj = draw_capsule_collider(name, collection, radius, height, position, orientation, physmat, collision_type)
             case "physicsColliderSphere":
                 radius = collision_shape["Data"]["radius"]
                 position = (transform['position']['X'], transform['position']['Y'], transform['position']['Z'])
-                bpy_obj = draw_sphere_collider(name, new_collection, radius, position, physmat, collision_type)
+                bpy_obj = draw_sphere_collider(name, collection, radius, position, physmat, collision_type)
             case "physicsColliderBox":
                 half_extents = collision_shape["Data"]["halfExtents"]
-                bpy_obj = draw_box_collider(name, new_collection, half_extents, transform, physmat, collision_type)
+                bpy_obj = draw_box_collider(name, collection, half_extents, transform, physmat, collision_type)
             case _:
                 show_message(f'{name} collision shape {index} has unknown shape')
                 continue
@@ -133,7 +133,7 @@ def cp77_collision_mesh_json_import(filepath: str):
         bpy_obj["_collider_raw_data"] = json.dumps(collision_shape)
         data.pop(index)
 
-    new_collection["_mesh_json_data"] = json.dumps(raw_data)
+    collection["_mesh_json_data"] = json.dumps(raw_data)
 
 
 

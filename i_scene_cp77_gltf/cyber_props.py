@@ -112,6 +112,33 @@ def CP77ArmatureList(self, context):
         arms = []
     return arms
 
+def Get_Collections(self, context):
+    items = []
+    props = context.scene.cp77_panel_props
+    suffix = ".mesh"
+    for coll in bpy.data.collections:
+            if suffix in coll.name:
+                items.append((coll.name, coll.name, ""))
+    return items
+
+def Get_Collision_Shapes(self, context):
+    props = context.scene.cp77_panel_props
+    if props.collision_type == 'EMBEDDED':
+        return [
+            # ('CONVEX', "Convex Collider", "Generate a Convex Collider") (import/export not supported yet for embedded)
+            ('MESH', "Mesh Collider", "Generate a Mesh Collider"),
+            ('BOX', "Box Collider", "Generate a Box Collider"),
+            ('CAPSULE', "Capsule Collider", "Generate a Capsule Collider"),
+            ('SPHERE', "Sphere Collider", "Generate a Sphere Collider")
+        ]
+    else:
+        return [
+            ('CONVEX', "Convex Collider", "Generate a Convex Collider"),
+            ('BOX', "Box Collider", "Generate a Box Collider"),
+            ('CAPSULE', "Capsule Collider", "Generate a Capsule Collider"),
+            ('SPHERE', "Sphere Collider", "Generate a Sphere Collider")
+            ]
+
 class CP77_PT_PanelProps(PropertyGroup):
 # collision panel props:
     collision_type: EnumProperty(
@@ -121,7 +148,7 @@ class CP77_PT_PanelProps(PropertyGroup):
         ('ENTITY', "entColliderComponent", "Generate entCollisionComponents"),
         ('WORLD', "worldCollisionNode", "Generate worldCollisionNode"),
         ('TERRAIN', "worldTerrainCollisionNode", "Generate sector with a worldTerrainCollisionNode"),
-        ('EMBEDDED', "meshMeshParamPhysics", "Generate embedded cillider for meshMeshParamPhysics")
+        ('EMBEDDED', "Embedded Collider", "Generate embedded cillider for meshMeshParamPhysics")
         ],
         default='VEHICLE'
     )
@@ -139,13 +166,12 @@ class CP77_PT_PanelProps(PropertyGroup):
 
     collision_shape: EnumProperty(
         name="Collision Shape",
-        items=[
-        ('CONVEX', "Convex Collider", "Generate a Convex Collider"),
-        ('BOX', "Box Collider", "Generate a Box Collider"),
-        ('CAPSULE', "Capsule Collider", "Generate a Capsule Collider"),
-        ('SPHERE', "Sphere Collider", "Generate a Sphere Collider")
-        ],
-        default='CONVEX'
+        items=Get_Collision_Shapes
+    )
+
+    target_collection: EnumProperty(
+        name="Target Collection (imported from json file)",
+        items=Get_Collections
     )
 
     simulation_type: EnumProperty(

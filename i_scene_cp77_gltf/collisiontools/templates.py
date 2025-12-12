@@ -9,7 +9,26 @@ COLLIDER_TEMPLATES = {
                 "Bytes": ""
             },
             "faceMaterials": [],
-            "filterData": {},
+            "HandleId": "",
+            "Data": {
+                "$type": "physicsFilterData",
+                "customFilterData": None,
+                "preset": {
+                    "$type": "CName",
+                    "$storage": "string",
+                    "$value": "World Static"
+                },
+                "queryFilter": {
+                    "$type": "physicsQueryFilter",
+                    "mask1": "0",
+                    "mask2": "71942148"
+                },
+                "simulationFilter": {
+                    "$type": "physicsSimulationFilter",
+                    "mask1": "376836",
+                    "mask2": "5070"
+                }
+            },
             "isImported": 0,
             "isQueryShapeOnly": 0,
             "localToBody": {
@@ -49,7 +68,28 @@ COLLIDER_TEMPLATES = {
         "HandleId": "",
         "Data": {
             "$type": "physicsColliderBox",
-            "filterData": {},
+            "filterData": {
+                "HandleId": "",
+                "Data": {
+                    "$type": "physicsFilterData",
+                    "customFilterData": None,
+                    "preset": {
+                        "$type": "CName",
+                        "$storage": "string",
+                        "$value": "World Static"
+                    },
+                    "queryFilter": {
+                        "$type": "physicsQueryFilter",
+                        "mask1": "0",
+                        "mask2": "71942148"
+                    },
+                    "simulationFilter": {
+                        "$type": "physicsSimulationFilter",
+                        "mask1": "376836",
+                        "mask2": "5070"
+                    }
+                }
+            },
             "halfExtents": {
                 "$type": "Vector3",
                 "X": 0,
@@ -94,7 +134,28 @@ COLLIDER_TEMPLATES = {
         "HandleId": "",
         "Data": {
             "$type": "physicsColliderCapsule",
-            "filterData": {},
+            "filterData": {
+                "HandleId": "",
+                "Data": {
+                    "$type": "physicsFilterData",
+                    "customFilterData": None,
+                    "preset": {
+                        "$type": "CName",
+                        "$storage": "string",
+                        "$value": "World Static"
+                    },
+                    "queryFilter": {
+                        "$type": "physicsQueryFilter",
+                        "mask1": "0",
+                        "mask2": "71942148"
+                    },
+                    "simulationFilter": {
+                        "$type": "physicsSimulationFilter",
+                        "mask1": "376836",
+                        "mask2": "5070"
+                    }
+                }
+            },
             "height": 0,
             "isImported": 0,
             "isQueryShapeOnly": 0,
@@ -134,7 +195,28 @@ COLLIDER_TEMPLATES = {
         "HandleId": "0",
         "Data": {
             "$type": "physicsColliderSphere",
-            "filterData": {},
+            "filterData": {
+                "HandleId": "",
+                "Data": {
+                    "$type": "physicsFilterData",
+                    "customFilterData": None,
+                    "preset": {
+                        "$type": "CName",
+                        "$storage": "string",
+                        "$value": "World Static"
+                    },
+                    "queryFilter": {
+                        "$type": "physicsQueryFilter",
+                        "mask1": "0",
+                        "mask2": "71942148"
+                    },
+                    "simulationFilter": {
+                        "$type": "physicsSimulationFilter",
+                        "mask1": "376836",
+                        "mask2": "5070"
+                    }
+                }
+            },
             "isImported": 0,
             "isQueryShapeOnly": 0,
             "localToBody": {

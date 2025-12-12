@@ -56,7 +56,7 @@ def draw_sphere_collider(name, collision_collection, radius, position, physmat, 
     bm = bmesh.new()
    # position = (transform['position']['X'], transform['position']['Y'], transform['position']['Z'])
     bmesh.ops.create_uvsphere(bm, u_segments=8, v_segments=9, radius=r)
-    name = collision_shape
+    #name = collision_shape
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)
     mesh.update()
@@ -121,7 +121,7 @@ def draw_box_collider(name, collision_collection, half_extents, transform, physm
     return box
 
 
-def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, sampleverts, radius, height, physics_material):
+def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, sampleverts, radius, height, physics_material, target_collection):
     if collider_type == 'TERRAIN':
         show_message('Terrain colliders get generated on export.')
         return {'CANCELLED'}
@@ -129,7 +129,7 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
     is_edit_mode = bpy.context.object.mode == 'EDIT'
     selected_objects = context.selected_objects
     bpy.context.space_data.shading.wireframe_color_type = 'OBJECT'
-    colliderCollection = None
+    colliderCollection = None if not target_collection else bpy.data.collections[target_collection]
 
     # Check for a collection ending with ".phys"
     for collection in bpy.data.collections:
@@ -169,7 +169,7 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
         # Calculate the center of the bounding box
         center = (min_vertex + max_vertex) / 2
 
-        if collision_shape == 'CONVEX':
+        if collision_shape in ('CONVEX', 'MESH'):
             if not is_edit_mode:
                 bpy.ops.object.mode_set(mode='EDIT') 
             # Get the bmesh linked to the active object
@@ -219,7 +219,6 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
 
                 if not is_edit_mode:
                     bpy.ops.object.mode_set(mode='OBJECT')
-                      
       
         if collision_shape == "BOX":
             #switch to object mode

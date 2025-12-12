@@ -16,7 +16,7 @@ class CP77CollisionGenerator(Operator):
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
-        CP77CollisionGen(self, context,props.matchSize, props.collision_type, props.collision_shape, props.sampleverts, props.radius, props.height, props.physics_material)
+        CP77CollisionGen(self, context,props.matchSize, props.collision_type, props.collision_shape, props.sampleverts, props.radius, props.height, props.physics_material, props.target_collection)
         return {"FINISHED"}
     
     def draw(self, context):
@@ -36,9 +36,14 @@ class CP77CollisionGenerator(Operator):
         split = row.split(factor=0.5,align=True)
         split.label(text="Material:")
         split.prop(props, 'physics_material', text="")
+        if props.collision_type == 'EMBEDDED':
+            row = layout.row(align=True)
+            split = row.split(factor=0.5, align=True)
+            split.label(text="Target Collection:")
+            split.prop(props, "target_collection", text="")
         row = layout.row(align=True)
         split = row.split(factor=0.5,align=True)
-        if props.collision_shape == 'CONVEX':
+        if props.collision_shape == 'CONVEX' or props.collision_shape == 'MESH':
             row.label(text="Vertices to Sample:")
             row.prop(props,"sampleverts", text="")
 
