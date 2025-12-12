@@ -25,24 +25,23 @@ def draw_mesh_collider(name, collision_collection, vertices, faces, transform, p
                 bm.faces.new(face_verts)
         bm.to_mesh(obj.data)
         bm.free()
-
-def draw_box_collider_in_collection(name, collision_collection, half_extents, transform, physmat, collision_type):
-    collision_shape = "physicsColliderBox"
-    bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0))
-    box = bpy.context.object
-    set_collider_props(box, collision_shape, physmat, collision_type)
-    dimensions = (2 * half_extents['X'], 2 * half_extents['Y'], 2 * half_extents['Z'])
-    box.scale = dimensions
-    box.name = name
-    set_collider_props(box, collision_shape, physmat, collision_type)
-    box.location = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
-    box.rotation_quaternion = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
-    collision_collection.objects.link(box)
-    bpy.context.collection.objects.unlink(box) # Unlink from the current collection
+    return obj
 
 def parse_nxs(buffer):
 
     #Parsing PhysX NXS collider mesh format from buffer
+#     Header:
+#         0x00: "NXS\x01"
+#         0x04: "MESH"
+#         0x08: version(15)
+#         0x0C: body count(1)
+#         0x10: index flag(4 = uint8, 9 = uint16) (not sure, but these values work)
+#         0x14: vertex count
+#         0x18: triangle count
+#     Data:
+#         0x1C: vertices(count * 12 bytes, float32 x 3)
+#         after vertices: indices(triangles * 3 * index_size)
+#         after indices: "BV4 " marker → BVH(ignoring while import)
 
     buffer = base64.b64decode(buffer)
     magic = buffer[0:4]
@@ -91,15 +90,16 @@ def cp77_collision_mesh_json_import(filepath: str):
     #Import embedded colliders from .mesh.json
 
     with open(filepath, "r", encoding="utf-8") as f:
-        data = json.load(f)
+        raw_data = json.load(f)
 
-    data = data["Data"]["RootChunk"]["parameters"][0]["Data"]["physicsData"]["Data"]["bodies"][0]["Data"]["collisionShapes"]
+    data = raw_data["Data"]["RootChunk"]["parameters"][0]["Data"]["physicsData"]["Data"]["bodies"][0]["Data"]["collisionShapes"]
 
     mesh_name = os.path.basename(filepath).split(".")[0]
     new_collection = bpy.data.collections.new(mesh_name)
     bpy.context.scene.collection.children.link(new_collection)
 
-    for index, collision_shape in enumerate(data):
+    for index in range(len(data) - 1, -1, -1):
+        collision_shape = data[index]
         shape = collision_shape["Data"]["$type"]
         transform = collision_shape["Data"]["localToBody"]
 
@@ -111,23 +111,30 @@ def cp77_collision_mesh_json_import(filepath: str):
             case "physicsColliderMesh":
                 buffer = collision_shape["Data"]["compiledGeometryBuffer"]["Bytes"]
                 verts, faces = parse_nxs(buffer)
-                draw_mesh_collider(name, new_collection, verts, faces, transform, physmat, collision_type)
+                bpy_obj = draw_mesh_collider(name, new_collection, verts, faces, transform, physmat, collision_type)
             case "physicsColliderCapsule":
                 height = collision_shape["Data"]["height"]
                 radius = collision_shape["Data"]["radius"]
                 position = (transform['position']['X'], transform['position']['Y'], transform['position']['Z'])
                 orientation = (transform['orientation']['r'], transform['orientation']['j'],
                                transform['orientation']['k'], transform['orientation']['i'])
-                draw_capsule_collider(name, new_collection, radius, height, position, orientation, physmat, collision_type)
+                bpy_obj = draw_capsule_collider(name, new_collection, radius, height, position, orientation, physmat, collision_type)
             case "physicsColliderSphere":
                 radius = collision_shape["Data"]["radius"]
                 position = (transform['position']['X'], transform['position']['Y'], transform['position']['Z'])
-                draw_sphere_collider(name, new_collection, radius, position, physmat, collision_type)
+                bpy_obj = draw_sphere_collider(name, new_collection, radius, position, physmat, collision_type)
             case "physicsColliderBox":
                 half_extents = collision_shape["Data"]["halfExtents"]
-                draw_box_collider_in_collection(name, new_collection, half_extents, transform, physmat, collision_type)
+                bpy_obj = draw_box_collider(name, new_collection, half_extents, transform, physmat, collision_type)
             case _:
                 show_message(f'{name} collision shape {index} has unknown shape')
+                continue
+
+        bpy_obj["_collider_raw_data"] = json.dumps(collision_shape)
+        data.pop(index)
+
+    new_collection["_mesh_json_data"] = json.dumps(raw_data)
+
 
 
 

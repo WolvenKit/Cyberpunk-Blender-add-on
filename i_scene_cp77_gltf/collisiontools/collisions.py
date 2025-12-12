@@ -47,6 +47,7 @@ def draw_convex_collider(name, collision_collection, vertices, physmat, transfor
         bpy.ops.mesh.select_all(action='SELECT')
         bpy.ops.mesh.convex_hull()
         bpy.ops.object.mode_set(mode='OBJECT')
+    return obj
 
 
 def draw_sphere_collider(name, collision_collection, radius, position, physmat, collision_type):
@@ -55,7 +56,7 @@ def draw_sphere_collider(name, collision_collection, radius, position, physmat, 
     bm = bmesh.new()
    # position = (transform['position']['X'], transform['position']['Y'], transform['position']['Z'])
     bmesh.ops.create_uvsphere(bm, u_segments=8, v_segments=9, radius=r)
-    # name = collision_shape
+    name = collision_shape
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)
     mesh.update()
@@ -64,6 +65,8 @@ def draw_sphere_collider(name, collision_collection, radius, position, physmat, 
     sphere.location = position
     set_collider_props(sphere, collision_shape, physmat, collision_type)
     collision_collection.objects.link(sphere)
+    return sphere
+
 
 
 def draw_capsule_collider(name, collision_collection, radius, height, position, rotation, physmat, collision_type):
@@ -99,6 +102,7 @@ def draw_capsule_collider(name, collision_collection, radius, height, position, 
     # Re-enter Edit mode
     if is_edit_mode:
         bpy.ops.object.mode_set(mode='EDIT')
+    return capsule
 
 
 def draw_box_collider(name, collision_collection, half_extents, transform, physmat, collision_type):
@@ -112,8 +116,9 @@ def draw_box_collider(name, collision_collection, half_extents, transform, physm
     set_collider_props(box, collision_shape, physmat, collision_type)
     box.location = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
     box.rotation_quaternion = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
-    # collision_collection.objects.link(box)
-    # bpy.context.collection.objects.unlink(box) # Unlink from the current collection
+    collision_collection.objects.link(box)
+    bpy.context.collection.objects.unlink(box) # Unlink from the current collection
+    return box
 
 
 def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, sampleverts, radius, height, physics_material):

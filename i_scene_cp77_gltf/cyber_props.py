@@ -120,7 +120,8 @@ class CP77_PT_PanelProps(PropertyGroup):
         ('VEHICLE', "Vehicle", "Generate .phys formatted collisions for a vehicle mod"),
         ('ENTITY', "entColliderComponent", "Generate entCollisionComponents"),
         ('WORLD', "worldCollisionNode", "Generate worldCollisionNode"),
-        ('TERRAIN', "worldTerrainCollisionNode", "Generate sector with a worldTerrainCollisionNode")
+        ('TERRAIN', "worldTerrainCollisionNode", "Generate sector with a worldTerrainCollisionNode"),
+        ('EMBEDDED', "meshMeshParamPhysics", "Generate embedded cillider for meshMeshParamPhysics")
         ],
         default='VEHICLE'
     )
