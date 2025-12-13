@@ -1,0 +1,95 @@
+{
+  "Data": {
+    "$type": "worldTerrainCollisionNode",
+    "actorTransform": {
+      "$type": "WorldTransform",
+      "Orientation": {
+        "$type": "Quaternion",
+        "i": 0.5,
+        "j": 0.5,
+        "k": 0.5,
+        "r": 0.5
+      },
+      "Position": {
+        "$type": "WorldPosition",
+        "x": {
+          "$type": "FixedPoint",
+          "Bits": 0
+        },
+        "y": {
+          "$type": "FixedPoint",
+          "Bits": 0
+        },
+        "z": {
+          "$type": "FixedPoint",
+          "Bits": 0
+        }
+      }
+    },
+    "columnScale": 2,
+    "debugName": {
+      "$type": "CName",
+      "$storage": "string",
+      "$value": "TerrainCollisionNode"
+    },
+    "extents": {
+      "$type": "Vector4",
+      "W": 0,
+      "X": 128,
+      "Y": 128,
+      "Z": 128
+    },
+    "heightfieldGeometry": {
+      "Flags": 0,
+      "Bytes": ""
+    },
+    "heightScale": 0.00230645202,
+    "increaseStreamingDistance": 1,
+    "isHostOnly": 0,
+    "isVisibleInGame": 1,
+    "materialIndices": [0,1,0,2,3,3,4,3,1,3,3,5,5,3,3,6],
+    "materials": [
+      {
+        "$type": "CName",
+        "$storage": "string",
+        "$value": "sand.physmat"
+      },
+      {
+        "$type": "CName",
+        "$storage": "string",
+        "$value": "asphalt.physmat"
+      },
+      {
+        "$type": "CName",
+        "$storage": "string",
+        "$value": "mud.physmat"
+      },
+      {
+        "$type": "CName",
+        "$storage": "string",
+        "$value": "dirt.physmat"
+      },
+      {
+        "$type": "CName",
+        "$storage": "string",
+        "$value": "grass.physmat"
+      },
+      {
+        "$type": "CName",
+        "$storage": "string",
+        "$value": "stone.physmat"
+      },
+      {
+        "$type": "CName",
+        "$storage": "string",
+        "$value": "trash.physmat"
+      }
+    ],
+    "proxyScale": null,
+    "rowScale": 2,
+    "sourcePrefabHash": "2052876290493908449",
+    "streamingDistance": 0,
+    "tag": "None",
+    "tagExt": "None"
+  }
+}

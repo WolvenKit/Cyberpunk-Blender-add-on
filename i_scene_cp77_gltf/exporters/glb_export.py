@@ -1,3 +1,4 @@
+import os
 import bpy
 import bmesh
 import numpy as np
@@ -7,6 +8,7 @@ from ..animtools.tracks import export_anim_tracks
 from ..main.bartmoss_functions import (
     store_current_context, restore_previous_context,
     get_safe_mode, safe_mode_switch, select_objects,
+    set_active_collection,
     )
 POSE_EXPORT_OPTIONS = {
     'export_animations': True,
@@ -212,19 +214,15 @@ def calc_vert_splits(tempshit):
       reasons: dict mapping reason name -> bool array (per vertex) where True means it causes a split
       split_count: np.ndarray (n_verts,) total splits per vertex (how many verts it will become on export)
     """
-    # Stop Early if not needed
-    if not tempshit.loop_triangles:
-        n_verts = len(tempshit.vertices)
-        zero = np.zeros(n_verts, dtype=np.int32)
-        return (
-            {"used": 0, "export": 0, "split": 0, "new": 0},
-            {"uv0": zero.astype(bool)},  # placeholders
-            zero
-        )
 
     n_loops = len(tempshit.loops)
     n_verts = len(tempshit.vertices)
 
+
+    # Stop Early if not needed
+    if not tempshit.loop_triangles:
+
+        return n_verts, n_verts, 0, 0
     # Column 0: loop -> vertex indices
     loop_verts = _loop_verts(tempshit).astype(np.int64, copy=False)
 
@@ -890,18 +888,87 @@ def cp77_meshValidation(
                 bpy.data.objects.remove(tempshit, do_unlink=True)
         raise
 
+def set_visible(collection, new_visibility_state):
+    for obj in collection.objects:
+        if obj.type == 'MESH':
+            obj.hide_set(new_visibility_state and not obj.name.startswith('submesh_'))
+        if obj.type == 'ARMATURE':
+            obj.hide_set(not new_visibility_state)
+
+    return [f for f in collection.objects if f.visible_get()]
+
+def export_cyberpunk_collections_glb(context, filepath, export_poses=False, is_skinned=True, try_fix=True,
+    red_garment_col=False, apply_transform=True,
+    action_filter=False, export_tracks=False, apply_modifiers=True,
+    only_visible=False):
+
+    user_settings = save_user_settings_and_reset_to_default()
+
+    exported = []
+
+    # store_current_context()
+
+    # Ensure object mode
+    if get_safe_mode() != 'OBJECT':
+        safe_mode_switch('OBJECT')
+
+    for collection in bpy.data.collections:
+        if (only_visible and collection.hide_viewport) or collection.name.endswith("not_exported"):
+            continue
+
+        oldVisible = collection.hide_viewport
+        oldRender = collection.hide_render
+
+        collection.hide_viewport = False
+        collection.hide_render = False
+
+        visible_objects = [f for f in collection.objects if f.type == 'ARMATURE' or (f.type == 'MESH' and f.name.startswith('submesh'))]
+        if (len(visible_objects) == 0):
+            exported.append((collection.name, f"No armatures or meshes starting with 'submesh'"))
+            continue
+
+        if not set_active_collection(collection, context):
+            exported.append((collection.name, f"Failed to set collection as active"))
+            continue
+
+        select_objects(visible_objects, reveal=True, clear=True, context=context)
+
+        if len(context.selected_objects) == 0:
+            exported.append((collection.name, f"Failed to set child object selection"))
+            continue
+
+        collection_path = os.path.join(filepath, f"{collection.name}.glb")
+        try:
+            export_cyberpunk_glb(context, collection_path, export_poses=export_poses, export_visible=False,
+                limit_selected=True, is_skinned=is_skinned, try_fix=try_fix,
+                red_garment_col=red_garment_col, apply_transform=apply_transform,
+                action_filter=action_filter, export_tracks=export_tracks, apply_modifiers=apply_modifiers,
+                called_from_loop=True
+            )
+            exported.append((collection.name, None))
+        except Exception as e:
+            exported.append((collection.name, str(e)))
+
+        collection.hide_viewport = oldVisible
+        collection.hide_render = oldRender
+
+    restore_user_settings(user_settings)
+    return exported
+
 def export_cyberpunk_glb(
     context, filepath, export_poses=False, export_visible=False,
     limit_selected=True, is_skinned=True, try_fix=True,
     red_garment_col=False, apply_transform=True,
-    action_filter=False, export_tracks=False, apply_modifiers=True
+    action_filter=False, export_tracks=False, apply_modifiers=True, called_from_loop=False
 ):
     """Main export function for CP77 glTF files."""
-    user_settings = save_user_settings_and_reset_to_default()
+    user_settings = None if called_from_loop else save_user_settings_and_reset_to_default()
 
     objects = context.selected_objects
     options = default_cp77_options()
-    store_current_context()
+
+    if not called_from_loop:
+        store_current_context()
 
     # Ensure object mode
     if get_safe_mode() != 'OBJECT':
@@ -923,8 +990,8 @@ def export_cyberpunk_glb(
 
     else:
         # Export meshes
-        meshes = [m for m in objects if m.type == 'MESH' and m not in excluded_objects]
-        if not meshes:
+        meshes = [m for m in objects if m.type == 'MESH' and m not in excluded_objects] or []
+        if  len(meshes) == 0:
             raise ValueError("No meshes selected. Please select at least one mesh.")
 
         export_meshes(
@@ -933,9 +1000,9 @@ def export_cyberpunk_glb(
             apply_modifiers, meshes, options
         )
 
+    if user_settings is not None:
+        restore_user_settings(user_settings)
 
-
-    restore_user_settings(user_settings)
     return {'FINISHED'}
 
 def export_anims(context, filepath, options, armatures, export_tracks=False):

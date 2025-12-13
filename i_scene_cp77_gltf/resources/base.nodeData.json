@@ -1,0 +1,72 @@
+{
+  "Id": "1494330005856",
+  "NodeIndex": 0,
+  "Position": {
+    "$type": "Vector4",
+    "W": 0,
+    "X": 0,
+    "Y": 0,
+    "Z": 0
+  },
+  "Orientation": {
+    "$type": "Quaternion",
+    "i": 0,
+    "j": 0,
+    "k": 0,
+    "r": 1
+  },
+  "Scale": {
+    "$type": "Vector3",
+    "X": 1,
+    "Y": 1,
+    "Z": 1
+  },
+  "Pivot": {
+    "$type": "Vector3",
+    "X": 0,
+    "Y": 0,
+    "Z": 0
+  },
+  "Bounds": {
+    "$type": "Box",
+    "Max": {
+      "$type": "Vector4",
+      "W": 0,
+      "X": 0,
+      "Y": 0,
+      "Z": 0
+    },
+    "Min": {
+      "$type": "Vector4",
+      "W": 0,
+      "X": 0,
+      "Y": 0,
+      "Z": 0
+    }
+  },
+  "QuestPrefabRefHash": {
+    "$type": "NodeRef",
+    "$storage": "uint64",
+    "$value": "0"
+  },
+  "UkHash1": {
+    "$type": "NodeRef",
+    "$storage": "uint64",
+    "$value": "0"
+  },
+  "CookedPrefabData": {
+    "DepotPath": {
+      "$type": "ResourcePath",
+      "$storage": "uint64",
+      "$value": "0"
+    },
+    "Flags": "Default"
+  },
+  "MaxStreamingDistance": 3.40282347E+38,
+  "UkFloat1": 886.809998,
+  "Uk10": 1056,
+  "Uk11": 512,
+  "Uk12": 0,
+  "Uk13": "0",
+  "Uk14": "0"
+}

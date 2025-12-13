@@ -117,6 +117,10 @@ def draw_box_collider(name, collision_collection, half_extents, transform, physm
 
 
 def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, sampleverts, radius, height, physics_material):
+    if collider_type == 'TERRAIN':
+        show_message('Terrain colliders get generated on export.')
+        return {'CANCELLED'}
+
     is_edit_mode = bpy.context.object.mode == 'EDIT'
     selected_objects = context.selected_objects
     bpy.context.space_data.shading.wireframe_color_type = 'OBJECT'

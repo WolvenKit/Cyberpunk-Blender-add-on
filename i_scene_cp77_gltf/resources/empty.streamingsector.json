@@ -1,11 +1,11 @@
 {
   "Header": {
-    "WolvenKitVersion": "8.14.1-nightly.2024-07-21",
-    "WKitJsonVersion": "0.0.8",
-    "GameVersion": 2100,
-    "ExportedDateTime": "2024-01-11T20:29:08.1394444Z",
+    "WolvenKitVersion": "8.17.2-nightly.2025-11-25",
+    "WKitJsonVersion": "0.0.9",
+    "GameVersion": 2310,
+    "ExportedDateTime": "2025-11-25T15:35:53.1775966Z",
     "DataType": "CR2W",
-    "ArchiveFileName": "D:\\cpmod\\archivexlconvert\\source\\archive\\base\\empty.streamingsector"
+    "ArchiveFileName": "F:\\dev0\\prjk\\Wolvenkit Projects\\Hitogashima\\source\\archive\\empty.streamingsector"
   },
   "Data": {
     "Version": 195,
@@ -20,24 +20,21 @@
           "$storage": "uint64",
           "$value": "0"
         },
-        "Flags": "Default"
+        "Flags": "Soft"
       },
-      "level": 2,
+      "level": 0,
       "localInplaceResource": [],
       "nodeData": {
-        "BufferId": "0",
-        "Flags": 4063232,
-        "Type": "WolvenKit.RED4.Archive.Buffer.worldNodeDataBuffer, WolvenKit.RED4, Version=2.1.1.0, Culture=neutral, PublicKeyToken=null",
+        "Flags": 0,
+        "Type": "WolvenKit.RED4.Archive.Buffer.worldNodeDataBuffer, WolvenKit.RED4, Version=8.17.2.0, Culture=neutral, PublicKeyToken=null",
         "Data": [
         ]
       },
       "nodeRefs": [],
-      "nodes": [
-      ],
+      "nodes": [],
       "persistentNodeIndex": 0,
-      "persistentNodes": [],
-      "variantIndices": [0
-      ],
+      "persistentNodes": null,
+      "variantIndices": [0],
       "variantNodes": [],
       "version": 62
     },

@@ -17,8 +17,8 @@ from . materialtools import *
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
     "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, Doctor Presto, shotlastc, Rudolph2109, Holopointz, Peatral, John CO., Chase_81, akikoe.",
-    "version": (1, 7, 2),
-    "blender": (4, 4, 0),
+    "version": (1, 7, 3),
+    "blender": (4, 5, 0),
     "location": "File > Import-Export",
     "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
     "warning": "",
@@ -116,8 +116,7 @@ def unregister():
     unregister_prefs()
 
     for cls in reversed(classes):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
+        bpy.utils.unregister_class(cls)
     unload_icons()
 
 if __name__ == "__main__":
