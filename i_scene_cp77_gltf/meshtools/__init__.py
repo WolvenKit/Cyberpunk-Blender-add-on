@@ -669,10 +669,8 @@ def register_meshtools():
 
 def unregister_meshtools():
     for cls in reversed(other_classes):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
+        bpy.utils.unregister_class(cls)
     for cls in reversed(operators):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
+        bpy.utils.unregister_class(cls)
 
     del bpy.types.Scene.vertex_group_props

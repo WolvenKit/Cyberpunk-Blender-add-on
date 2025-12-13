@@ -58,6 +58,125 @@ class CP77StreamingSectorExport(Operator,ExportHelper):
         exportSectors(self.filepath, use_yaml)
         return {'FINISHED'}
 
+class CP77CollectionExport(Operator, ExportHelper):
+    bl_idname = "export_scene.cp77_collection_glb"
+    bl_label = "Export for Cyberpunk"
+    bl_options = {'REGISTER','UNDO'}
+    bl_description = "Export to GLB with optimized settings for use with Wolvenkit for Cyberpunk 2077"
+    filename_ext = ".glb"
+
+    # For folder export
+    directory: StringProperty(  # pyright: ignore[reportInvalidTypeForm]
+        name="Export Folder",
+        description="Folder where GLB files will be saved",
+        subtype='DIR_PATH',
+        default="",
+    )
+
+    only_visible: BoolProperty(  # pyright: ignore[reportInvalidTypeForm]
+        name="Only Visible",
+        default=False,
+        description="Check this to export only collections that are currently visible in view port"
+    )
+
+    is_skinned: BoolProperty( # pyright: ignore[reportInvalidTypeForm]
+        name="Skinned Mesh",
+        default=True,
+        description="Ensure armatures and vert groups are exported."
+    )
+    try_fix: BoolProperty( # pyright: ignore[reportInvalidTypeForm]
+        name="Fix Meshes",
+        default=False,
+        description="Try to fix any issues "
+    )
+
+    export_poses: BoolProperty( # pyright: ignore[reportInvalidTypeForm]
+        name="Animations",
+        default=False,
+        description="Use this option if you are exporting anims to be imported into wkit as .anim"
+    )
+
+    apply_transform: BoolProperty( # pyright: ignore[reportInvalidTypeForm]
+        name="Apply Transform",
+        default=True,
+        description="Applies the transform of the objects. Disable this if you don't care about the location/rotation/scale of the objects"
+    )
+
+    apply_modifiers: BoolProperty( # pyright: ignore[reportInvalidTypeForm]
+        name="Apply Modifiers",
+        default=True,
+        description="Applies the modifiers of the objects. Disable this if you have shapekeys."
+    )
+    export_tracks: BoolProperty( # pyright: ignore[reportInvalidTypeForm]
+        name="Export Float Tracks",
+        default=True,
+        description="Transfer Float F-Curves Back to Custom Props for Wolvenkit Import"
+    )
+
+    def draw(self, context):
+        layout = self.layout
+        box = layout.box()
+        box.label(text='Export Options')
+        row = box.row(align=True)
+        row.prop(self, "only_visible")
+        row = box.row(align=True)
+        row.prop(self, "export_poses")
+        if  self.export_poses:
+            row.prop(self, "export_tracks")
+            return
+
+        row = box.row(align=True)
+        row.prop(self, "is_skinned")
+        row.prop(self, "try_fix")
+        row = layout.row(align=True)
+        row.prop(self, "apply_transform")
+        row.prop(self, "apply_modifiers")
+
+
+    def format_export_results_detailed(self, export_status, directory):
+        exported = []
+        export_skipped = []
+
+        for name, error in export_status:
+            if error:
+                export_skipped.append((name, error))
+            else:
+                exported.append(name)
+
+        # Build parts
+        parts = []
+
+        # Success section
+        parts.append(f"exported to {directory}:")
+        if exported:
+            parts.append("  " + "\n  ".join([f"✓ {name}" for name in exported]))
+        else:
+            parts.append("  (no successful exports)")
+
+        # Failed/skipped section (only if needed)
+        if export_skipped:
+            parts.append("export skipped or failed:")
+            parts.append("  " + "\n  ".join([f"✗ {name}: {error}" for name, error in export_skipped]))
+
+        return "\n".join(parts)
+
+
+    def execute(self, context):
+        export_status = export_cyberpunk_collections_glb(
+            context=context,
+            filepath=self.directory,
+            export_poses=self.export_poses,
+            is_skinned=self.is_skinned,
+            try_fix=self.try_fix,
+            apply_transform=self.apply_transform,
+            apply_modifiers=self.apply_transform,
+            export_tracks=self.export_tracks,
+            only_visible=self.only_visible,
+        )
+
+        self.report({'INFO'}, self.format_export_results_detailed(export_status, self.filepath))
+        return {'FINISHED'}
+
 class CP77GLBExport(Operator,ExportHelper):
     bl_idname = "export_scene.cp77_glb"
     bl_label = "Export for Cyberpunk"
@@ -74,7 +193,7 @@ class CP77GLBExport(Operator,ExportHelper):
         default=True,
         description="Only Export the Selected Meshes. This is probably the setting you want to use"
     )
-    
+
     is_skinned: BoolProperty(
         name="Skinned Mesh",
         default=True,
@@ -103,7 +222,7 @@ class CP77GLBExport(Operator,ExportHelper):
         default=True,
         description="Applies the transform of the objects. Disable this if you don't care about the location/rotation/scale of the objects"
     )
-    
+
     apply_modifiers: BoolProperty(
         name="Apply Modifiers",
         default=True,
@@ -114,9 +233,6 @@ class CP77GLBExport(Operator,ExportHelper):
         default=True,
         description="Transfer Float F-Curves Back to Custom Props for Wolvenkit Import"
     )
-
-    
-
 
     def draw(self, context):
         layout = self.layout
@@ -203,7 +319,7 @@ class CP77MlSetupGenerateOverrides(Operator):
     bl_label = "Generate Overrides"
     bl_description = "Create Override data for MLTemplates found within the selected material."
 
-    def execute(self, context):        
+    def execute(self, context):
         cp77_mlsetup_generateoverrides(self, context)
 
         bpy.ops.get_layer_overrides.mlsetup()
@@ -537,6 +653,7 @@ class CP77CollisionExport(Operator):
 
 def menu_func_export(self, context):
     self.layout.operator(CP77GLBExport.bl_idname, text="Cyberpunk GLB", icon_value=get_icon("WKIT"))
+    self.layout.operator(CP77CollectionExport.bl_idname, text="Cyberpunk Collections", icon_value=get_icon("WKIT"))
     self.layout.operator(CP77StreamingSectorExport.bl_idname, text="Cyberpunk StreamingSector", icon_value=get_icon("WKIT"))
     self.layout.operator(CP77RigJSONExport.bl_idname, text="Cyberpunk Rig to JSON", icon_value=get_icon("WKIT"))
 
@@ -553,9 +670,7 @@ def register_exporters():
 
 def unregister_exporters():
     for cls in reversed(other_classes):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
+        bpy.utils.unregister_class(cls)
     for cls in reversed(operators):
-        if hasattr(bpy.types, cls.__name__):
-            bpy.utils.unregister_class(cls)
+        bpy.utils.unregister_class(cls)
     TOPBAR_MT_file_export.remove(menu_func_export)
