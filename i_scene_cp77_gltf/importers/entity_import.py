@@ -77,6 +77,20 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         # this just isnt true, loads of stuff doesnt have appaearances, and the popup is annoying
 
     #print(ent_applist)
+
+    for appidx,app in enumerate(appearances):
+        if app not in ent_applist and app.upper() !='ALL' and app !='default':
+            print(f"Appearance {app} not found in entity {ent_name}. Available appearances: {', '.join(ent_applist)}")
+            show_message(f"Appearance {app} not found in entity {ent_name}. Available appearances: {', '.join(ent_applist)}")
+        if app not in ent_applist and app.upper() !='ALL' and app =='default':
+            if ent_default and len(ent_default)>0:
+                print(f"Using default appearance {ent_default} for entity {ent_name}.")
+                appearances[appidx]=ent_default
+                print(appearances)
+            else:
+                print(f"No default appearance specified in entity {ent_name}. Using first available appearance {ent_applist[0]}.")
+                app=ent_applist[0]
+
     #presto_stash.append(ent_components)
     ent_complist=[]
     ent_rigs=[]
@@ -321,7 +335,37 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                 coll_scene.children.link(ent_coll)
             # tag it with some custom properties.
             ent_coll['depotPath']=after
-            chunks=ent_chunks[app_name] if app_name in ent_chunks else {}
+            if len(ent_apps)==0 and ent_component_data:
+                chunks= ent_component_data
+            elif len(ent_apps)>0:
+                ent_app_idx=-1
+                # Find the appearance in the entity app list
+                for i,a in enumerate(ent_apps):
+                    if a['appearanceName']['$value']==app_name:
+                        print('appearance matched, id = ',i)
+                        ent_app_idx=i
+                        continue
+
+                # apparently they sometimes just sack it off and use the name not the appearanceName after all. (single_doors.ent for instance)
+                if ent_app_idx<0:
+                    for i,a in enumerate(ent_apps):
+                        if a['name']['$value']==app_name:
+                            print('appearance matched, id = ',i)
+                            ent_app_idx=i
+                            app_name=a['appearanceName']['$value']
+                            continue
+
+                if ent_app_idx<0:
+                    if app_name != 'default':
+                        ent_app_idx=0
+                    else:
+                        for i,a in enumerate(ent_apps):
+                            if a['name']['$value']==ent_default:
+                                print('appearance matched, id = ',i)
+                                ent_app_idx=i
+                                app_name=a['appearanceName']['$value']
+                                continue
+            chunks=ent_chunks[app_name]
 
             enum_items = []
             default_index = None
@@ -464,7 +508,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 print(traceback.print_exc())
                                 continue
                             objs = new.objects
-                            if meshname=='v_sportbike2_arch_nemesis__ext01_axle_f_a_01':
+                            if 'body_01' in meshname:
                                 print('those annoying front forks')
 
                             # NEW parentTransform stuff - fixes vehicles being exploded
@@ -498,11 +542,11 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                     #print('in chunk pt processing bindName = ',chunk_pt['Data']['bindName'],' slotname= ',chunk_pt['Data']['slotName'])
                                     # parts have a bindname, and sometimes a slotname
                                     bindname=chunk_pt['Data']['bindName']['$value']
+                                    slotname=chunk_pt['Data']['slotName']['$value']
                                     # if it has a bindname of vehicle_slots, you may need to find the bone name in the vehicle slots in the root ent components
                                     # this should have been loaded earlier, check for it in the vehicle slots if not just set to the slot value
                                     if bindname=='vehicle_slots' or bindname=='slots':
                                         if vehicle_slots:
-                                            slotname=chunk_pt['Data']['slotName']['$value']
                                             for slot in vehicle_slots:
                                                 if slot['slotName']['$value']==slotname:
                                                     bindname=slot['boneName']['$value']
@@ -512,7 +556,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                     # some meshes have boneRigMatrices in the mesh file which means we need jsons for the meshes or we cant access it. oh joy
                                     elif bindname=="deformation_rig" and (not chunk_pt['Data']['slotName']['$value'] or len(chunk_pt['Data']['slotName']['$value'])==1 or chunk_pt['Data']['slotName']['$value']=='None'):
                                         json_name=os.path.join(path, c['mesh']['DepotPath']['$value']+'.json')
-                                        #print("in the deformation rig bit",json_name)
+                                        #print:("in the deformation rig bit",json_name)
                                         if json_name in mesh_jsons:
                                             mesh_j = JSONTool.jsonload(json_name, error_messages)
                                             mesh_j=mesh_j['Data']['RootChunk']
@@ -534,20 +578,22 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                                 # print(mx)
                                                 bones=rig.pose.bones
                                                 #there are occasionally more than 1 bone in here, not worked out what/how maps to those
-                                                bone=bones[mesh_j['boneNames'][0]]
-                                                # the transform matrix above is in the orientation of the bone that its linked to, so I'm doing a bodged job of correcting for that here.
-                                                bone_mat_rot=bone.matrix.to_euler()
-                                                #print(bone_mat_rot)
+                                                bn=mesh_j['boneNames'][0]['$value']
                                                 xdisp=0
                                                 ydisp=0
                                                 zdisp=0
 
-                                                if abs(bone_mat_rot.y)>0.001:
-                                                    xdisp = -matrix[1][3]/sin(bone_mat_rot.y)
-                                                if abs(bone_mat_rot.x)>0.001:
-                                                    ydisp = -matrix[1][3]/sin(bone_mat_rot.x)
-                                                if abs(bone_mat_rot.z)>0.001:
-                                                    zdisp = matrix[2][3]/sin(bone_mat_rot.z)
+                                                if bn in bones.keys():
+                                                    bone=bones[mesh_j['boneNames'][0]['$value']]
+                                                    # the transform matrix above is in the orientation of the bone that its linked to, so I'm doing a bodged job of correcting for that here.
+                                                    bone_mat_rot=bone.matrix.to_euler()
+                                                    #print(bone_mat_rot)
+                                                    if abs(bone_mat_rot.y)>0.001:
+                                                        xdisp = -matrix[1][3]/sin(bone_mat_rot.y)
+                                                    if abs(bone_mat_rot.x)>0.001:
+                                                        ydisp = -matrix[1][3]/sin(bone_mat_rot.x)
+                                                    if abs(bone_mat_rot.z)>0.001:
+                                                        zdisp = matrix[2][3]/sin(bone_mat_rot.z)
                                                 #print(xdisp, ydisp ,zdisp)
                                                 # now we have the displacements. move things
                                                 for obj in objs:
@@ -655,9 +701,14 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                                 vs_z_ang=vs_mat.to_euler().z
                                                 pt_z_ang=pt_mat.to_euler().z
 
-                                                obj.location.x =  obj.location.x+pt_trans[0]+vs_pos[0]
-                                                obj.location.y = obj.location.y+pt_trans[1]+vs_pos[1]
-                                                obj.location.z =  obj.location.z+pt_trans[2]+vs_pos[2]
+                                                if obj.location != pt_trans:
+                                                    obj.location.x +=  pt_trans[0]+vs_pos[0]
+                                                    obj.location.y += pt_trans[1]+vs_pos[1]
+                                                    obj.location.z +=  pt_trans[2]+vs_pos[2]
+                                                else:    
+                                                    obj.location.x =   pt_trans[0]+vs_pos[0]
+                                                    obj.location.y = pt_trans[1]+vs_pos[1]
+                                                    obj.location.z =  pt_trans[2]+vs_pos[2]
 
                                                 obj.rotation_quaternion.x = btrans['Rotation']['i']
                                                 obj.rotation_quaternion.y = btrans['Rotation']['j']
@@ -668,14 +719,15 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                                 obj.rotation_quaternion=obj.rotation_quaternion*Quaternion(vs_rot)
                                                 #obj.matrix_local=  obj.matrix_local @ vs_mat
                                                 #obj.matrix_world= pt_mat @ obj.matrix_world
-
+                                                
                                                 #Apply child of constraints to them and set the inverse
                                                 if 'fuel_cap' not in bindname:
-                                                    co=obj.constraints.new(type='CHILD_OF')
-                                                    co.target=rig
-                                                    co.subtarget= bindname
-                                                    bpy.context.view_layer.objects.active = obj
-                                                    bpy.ops.constraint.childof_set_inverse(constraint=loc("Child Of"), owner='OBJECT')
+                                                    if 'Child Of' not in obj.constraints.keys():                                                        
+                                                        co=obj.constraints.new(type='CHILD_OF')
+                                                        co.target=rig
+                                                        co.subtarget= bindname
+                                                        bpy.context.view_layer.objects.active = obj
+                                                        bpy.ops.constraint.childof_set_inverse(constraint=loc("Child Of"), owner='OBJECT')
                                                 else:
                                                     # Apply location constraint to the fuel cap
                                                     co=obj.constraints.new(type='COPY_LOCATION')
@@ -828,6 +880,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                     if bindname=='vehicle_slots':
                                         if vehicle_slots:
                                             slotname=c['parentTransform']['Data']['slotName']['$value']
+                                            if slotname=='None':
+                                                slotname='Base'
                                             for slot in vehicle_slots:
                                                 if slot['slotName']['$value']==slotname:
                                                     bindname=slot['boneName']['$value']
