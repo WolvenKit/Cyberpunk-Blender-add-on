@@ -42,6 +42,9 @@ class CP77_PT_MeshTools(Panel):
         box.label(icon_value=get_icon("SCULPT"), text="Modelling:")
         col = box.column()
         col.operator("cp77.set_armature", text="Change Armature Target")
+        if context.active_object and context.active_object.type == 'MESH':
+            col.operator("cp77.mirror_vertex_groups", text="Mirror Vertex Groups")
+
         if context.active_object and context.active_object.type == 'MESH' and context.object.active_material and context.object.active_material.name == 'UV_Checker':
             col.operator("cp77.uv_unchecker",  text="Remove UV Checker")
         else:
@@ -652,6 +655,48 @@ class CP77RotateObj(Operator):
 
     def execute(self, context):
         rotate_quat_180(self, context)
+        return {'FINISHED'}
+
+class CP77_OT_MirrorVertexGroups(Operator):
+    bl_idname = "cp77.mirror_vertex_groups"
+    bl_label = "Mirror vertex groups"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        active_object = context.active_object
+        if active_object is None or active_object.type != 'MESH':
+            self.report({'ERROR'}, 'Select a mesh object.')
+            return {'CANCELLED'}
+
+        if context.object.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+        vertex_groups = active_object.vertex_groups[:]
+
+        # we'll end up with duplicate names if we rename right away
+        for vertex_group in vertex_groups:
+            if vertex_group.name.startswith('r_'):
+                vertex_group.name = vertex_group.name.replace('r_', 'REPLACEME_l_', 1)
+                continue
+            if vertex_group.name.startswith('l_'):
+                vertex_group.name = vertex_group.name.replace('l_', 'REPLACEME_r_', 1)
+                continue
+            if vertex_group.name.startswith('Left'):
+                vertex_group.name = vertex_group.name.replace('Left', 'REPLACEME_Right', 1)
+                continue
+            if vertex_group.name.startswith('Right'):
+                vertex_group.name = vertex_group.name.replace('Right', 'REPLACEME_Left', 1)
+                continue
+
+        num_replaced = 0
+        for vertex_group in vertex_groups:
+            if not 'REPLACEME_' in vertex_group.name:
+                continue
+            num_replaced += 1
+            vertex_group.name = vertex_group.name.replace('REPLACEME_', '')
+            continue
+
+        self.report({'INFO'}, f'Mirrored {num_replaced} vertex groups.')
         return {'FINISHED'}
 
 operators, other_classes = get_classes(sys.modules[__name__])
