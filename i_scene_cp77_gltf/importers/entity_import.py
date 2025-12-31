@@ -74,14 +74,15 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     if len(ent_applist) == 0:
         print(f"No appearances found in entity file {ent_name}. Imported objects may be incomplete or missing.")
         #show_message("No appearances found in entity file. Imported objects may be incomplete or missing. "+ent_name)
-        # this just isnt true, loads of stuff doesnt have appaearances, and the popup is annoying
+        # this just isnt true, loads of stuff doesnt have appearances, and the popup is annoying
 
     #print(ent_applist)
 
     for appidx,app in enumerate(appearances):
         if app not in ent_applist and app.upper() !='ALL' and app !='default':
             print(f"Appearance {app} not found in entity {ent_name}. Available appearances: {', '.join(ent_applist)}")
-            show_message(f"Appearance {app} not found in entity {ent_name}. Available appearances: {', '.join(ent_applist)}")
+            #show_message(f"Appearance {app} not found in entity {ent_name}. Available appearances: {', '.join(ent_applist)}")
+            # this check is not actually checking all the options for how the app name is stored so its popping this up then loading it fine.
         if app not in ent_applist and app.upper() !='ALL' and app =='default':
             if ent_default and len(ent_default)>0:
                 print(f"Using default appearance {ent_default} for entity {ent_name}.")
