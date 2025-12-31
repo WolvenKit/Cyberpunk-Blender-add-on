@@ -132,7 +132,8 @@ class MetalBaseDet:
             redAddNode = create_node(CurMat.nodes,"ShaderNodeMath", (-350,-300), operation = "ADD") 
             greenAddNode = create_node(CurMat.nodes,"ShaderNodeMath", (-350,-350), operation = "ADD") 
             blueMulNode = create_node(CurMat.nodes,"ShaderNodeMath", (-350,-400), operation = "MULTIPLY") 
-            nCombNode = create_node(CurMat.nodes,"ShaderNodeCombineRGB", (-150,-350)) 
+            nCombNode = create_node(CurMat.nodes,"ShaderNodeCombineColor", (-150,-350)) 
+            nCombNode.mode = 'RGB'
             CurMat.links.new(nNode.outputs[0],nSepNode.inputs[0])
             CurMat.links.new(dNNode.outputs[0],nDetSepNode.inputs[0])
             CurMat.links.new(nSepNode.outputs[0],redAddNode.inputs[0])      
