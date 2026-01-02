@@ -11,6 +11,35 @@ from ..icons.cp77_icons import get_icon
 import numpy as np
 import ast
 
+def get_layernode_by_socket(self,context):
+    if bpy.context.object is None:
+        return
+    if bpy.context.object.active_material is None:
+        return
+    if bpy.context.object.active_material.get('MLSetup') is None:
+        return
+
+    active_object=bpy.context.active_object
+    active_material = active_object.active_material
+
+    nodes = active_material.node_tree.nodes
+    layer_index = bpy.context.scene.multilayer_index_prop
+
+    mlBSDFGroup = nodes.get("Multilayered 1.7.x")
+    if mlBSDFGroup:
+        socket_name = ("Layer "+str(layer_index))
+        socket = mlBSDFGroup.inputs.get(socket_name)
+        layerGroupLink = socket.links[0]
+        linkedLayerGroupName = layerGroupLink.from_node.name
+        LayerGroup=nodes[linkedLayerGroupName]
+        # print(layer_index, " | ", LayerGroup.name)
+
+    if LayerGroup == None:
+        self.report({'ERROR'}, 'A valid Multilayered node group was not found.')
+        return {'CANCELLED'}
+
+    return LayerGroup
+
 
 last_active_object = None
 
@@ -64,78 +93,60 @@ def check_palette_col_change(self, context):
         last_palette_color = palette.colors.active.color
 
 
-def bool_function(self, context):
+def apply_view_mask(self, context):
+    if bpy.context.object is None:
+        return
+    if bpy.context.object.active_material is None:
+        return
+    if bpy.context.object.active_material.get('MLSetup') is None:
+        return
     nt = bpy.context.object.active_material.node_tree
     nodes = nt.nodes
 
-    if context.scene.multilayer_view_mask_prop == True:
-        ml_nodename = 'Mat_Mod_Layer_'
+    LayerGroup = get_layernode_by_socket(self,context)
 
+    if context.scene.multilayer_view_mask_prop == True:
         if not nodes.get('Multilayered Mask Output'):
             view_mask_output_node = nodes.new(type='ShaderNodeOutputMaterial')
             view_mask_output_node.name = "Multilayered Mask Output"
-            view_mask_output_node.location = (-1000, 400)
+            view_mask_output_node.location = (-200, 400)
             view_mask_output_node.is_active_output = True
         else:
             view_mask_output_node = nodes.get('Multilayered Mask Output')
             view_mask_output_node.is_active_output = True
 
-        # JATO: TODO is else statement required?
-        if self.multilayer_index_prop:
-            ml_idx = (bpy.context.scene.multilayer_index_prop) - 1
-        else:
-            self.report({'ERROR'}, 'Multilayered index property not found.')
-            return {'CANCELLED'}
+        # LayerGroup.select = True
+        nt.links.new(LayerGroup.outputs['Layer Mask'], view_mask_output_node.inputs[0])
 
-        # JATO: TODO more effecient to deselect all then break when we match?
-        ml_nodegroup = ml_nodename + str(ml_idx)
-        for node in nt.nodes:
-            if node.name == ml_nodegroup:
-                node.select = True
-                nt.links.new(node.outputs[5], view_mask_output_node.inputs[0])
-                #print("matched: ", idx)
-            else:
-                node.select = False
     else:
         nodes.remove(nodes.get('Multilayered Mask Output'))
 
 def setup_mldata(self, context):
+    if bpy.app.version[0]<5:
+        return
     if bpy.context.object is None:
         return
-    if bpy.context.object.active_material and not bpy.context.object.active_material.get('MLSetup'):
+    if bpy.context.object.active_material is None:
         return
-    nt = bpy.context.object.active_material.node_tree
-    
-    ml_nodename = 'Mat_Mod_Layer_'
+    if bpy.context.object.active_material.get('MLSetup') is None:
+        return
+
+    LayerGroup = get_layernode_by_socket(self,context)
 
     # JATO: TODO test error tolerance numbers
     # JATO: 0.00005 causes color mismatch on panam pants group #3 / layer 4, narrowed to 0.00001
     matchTolerance = 0.00001
 
-    # JATO: TODO is else statement required?
-    if self.multilayer_index_prop:
-        ml_idx = (bpy.context.scene.multilayer_index_prop) - 1
-    else:
-        self.report({'ERROR'}, 'Multilayered index property not found.')
-        return {'CANCELLED'}
-
     if context.scene.multilayer_view_mask_prop == True:
-        bool_function(self, context)
+        apply_view_mask(self, context)
 
-    # JATO: TODO more effecient to deselect all then break when we match?
-    ml_nodegroup = ml_nodename + str(ml_idx)
-    for node in nt.nodes:
-        if node.name == ml_nodegroup:
-            node.select = True
-            colorscale = (node.inputs['ColorScale'].default_value[::])[:-1]
-            normstr = (node.inputs['NormalStrength'].default_value)
-            metin = (node.inputs['MetalLevelsIn'].default_value[::])
-            metout = (node.inputs['MetalLevelsOut'].default_value[::])
-            rouin = (node.inputs['RoughLevelsIn'].default_value[::])
-            rouout = (node.inputs['RoughLevelsOut'].default_value[::])
-            #print("matched: ", idx)
-        else:
-            node.select = False
+    # LayerGroup.select = True
+    colorscale = (LayerGroup.inputs['ColorScale'].default_value[::])[:-1]
+    normstr = (LayerGroup.inputs['NormalStrength'].default_value)
+    metin = (LayerGroup.inputs['MetalLevelsIn'].default_value[::])
+    metout = (LayerGroup.inputs['MetalLevelsOut'].default_value[::])
+    rouin = (LayerGroup.inputs['RoughLevelsIn'].default_value[::])
+    rouout = (LayerGroup.inputs['RoughLevelsOut'].default_value[::])
 
     # JATO: We get overrides after selecting the right layer and before matching palette color
     bpy.ops.get_layer_overrides.mlsetup()
@@ -149,31 +160,26 @@ def setup_mldata(self, context):
             err=np.sum(np.abs(np.subtract(col_tuple,colorscale)))
             if abs(err)<matchTolerance:
                 break
-
         for elem_nrmstr in active_palette['NormalStrengthList']:
             elem_nrmstr_float = float(elem_nrmstr)
             err=np.sum(np.subtract(elem_nrmstr_float,normstr))
             if abs(err)<matchTolerance:
                 break
-
         for elem_metin in active_palette['MetalLevelsInList']:
             elem_metin_list = ast.literal_eval(elem_metin)
             err=np.sum(np.abs(np.subtract(elem_metin_list,metin)))
             if abs(err)<matchTolerance:
                 break
-
         for elem_metout in active_palette['MetalLevelsOutList']:
             elem_metout_list = ast.literal_eval(elem_metout)
             err=np.sum(np.abs(np.subtract(elem_metout_list,metout)))
             if abs(err)<matchTolerance:
                 break
-
         for elem_rouin in active_palette['RoughLevelsInList']:
             elem_rouin_list = ast.literal_eval(elem_rouin)
             err=np.sum(np.abs(np.subtract(elem_rouin_list,rouin)))
             if abs(err)<matchTolerance:
                 break
-
         for elem_rouout in active_palette['RoughLevelsOutList']:
             elem_rouout_list = ast.literal_eval(elem_rouout)
             err=np.sum(np.abs(np.subtract(elem_rouout_list,rouout)))
@@ -253,7 +259,7 @@ bpy.types.Scene.multilayer_view_mask_prop = bpy.props.BoolProperty(
     name="View Layer Mask",
     description="View Layer Mask desc",
     default=False,
-    update=bool_function
+    update=apply_view_mask
 )
 bpy.types.Scene.multilayer_normalstr_enum = bpy.props.EnumProperty(
     name="NormalStrength",
@@ -319,6 +325,7 @@ class CP77_PT_MaterialTools(Panel):
         scene = context.scene
         box = layout.box()
         props = context.scene.cp77_panel_props
+        vers=bpy.app.version
 
         # JATO: can be used to display selected node name
         # nt = bpy.context.object.active_material.node_tree
@@ -334,6 +341,9 @@ class CP77_PT_MaterialTools(Panel):
 
                 box.label(text="Materials", icon="MATERIAL")
                 col = box.column()
+                if vers[0]<5:
+                    col.label(text='Upgrade to Blender 5 for Multilayer features')
+                    return
                 col.operator("reload_material.cp77")
                 col.operator("export_scene.hp")
 
@@ -341,6 +351,7 @@ class CP77_PT_MaterialTools(Panel):
                 col = box.column()
 
                 col.operator("generate_layer_overrides.mlsetup")
+                col.operator("generate_layer_overrides_disconnected.mlsetup")
                 col.operator("export_scene.mlsetup")
 
                 if not active_palette:
@@ -389,7 +400,212 @@ class CP77_PT_MaterialTools(Panel):
                 #     colR, colG, colB = palette.colors.active.color
                 #     rowColor.label(text="Color  {:.4f}  {:.4f}  {:.4f}".format(colR, colG, colB))
 
+class CP77MlSetupGenerateOverrides(Operator):
+    bl_idname = "generate_layer_overrides.mlsetup"
+    bl_label = "Generate Overrides"
+    bl_description = "Create Override data for Layers connected to the Multilayered shader node."
 
+    def execute(self, context):
+        mlsetup_export.cp77_mlsetup_generateoverrides(self, context)
+
+        bpy.ops.get_layer_overrides.mlsetup()
+
+        # Do this to trigger update function so active color is set when we first generate overrides
+        bpy.context.scene.multilayer_index_prop = 1
+
+        return {'FINISHED'}
+
+class CP77MlSetupGenerateOverridesDisconnected(Operator):
+    bl_idname = "generate_layer_overrides_disconnected.mlsetup"
+    bl_label = "Generate Overrides for All Nodes"
+    bl_description = "Create Override data for MLTemplates found within the selected material."
+
+    def execute(self, context):
+        mlsetup_export.cp77_mlsetup_generateoverrides(self, context, include_disconnected=True)
+
+        bpy.ops.get_layer_overrides.mlsetup()
+
+        # Do this to trigger update function so active color is set when we first generate overrides
+        bpy.context.scene.multilayer_index_prop = 1
+
+        return {'FINISHED'}
+
+class CP77MlSetupGetOverrides(Operator):
+    bl_idname = "get_layer_overrides.mlsetup"
+    bl_label = "View Layer Overrides"
+    bl_description = "View the Overrides for the MLTemplate within the selected Multilayered Layer Node Group"
+
+    def execute(self, context):
+        ts = context.tool_settings
+        active_object=bpy.context.active_object
+        if not active_object or active_object.material_slots is None or len(active_object.material_slots)==0:
+            return {'CANCELLED'}
+        active_material = active_object.active_material
+        if not active_material.get('MLSetup'):
+            self.report({'ERROR'}, 'Multilayered setup not found within selected material.')
+            return {'CANCELLED'}
+
+        LayerGroup = get_layernode_by_socket(self,context)
+
+        mlTemplateGroupInputNode = LayerGroup.node_tree.nodes['Group'].node_tree.nodes['Group Input']
+        mlTemplatePath = str(mlTemplateGroupInputNode['mlTemplate'])
+        mlTemplatePathStripped = ((mlTemplatePath.split('\\'))[-1])[:-11]
+
+        microblendtexnode = LayerGroup.node_tree.nodes['Image Texture']
+        bpy.context.scene.multilayer_microblend_pointer = microblendtexnode.image
+
+        # JATO: for performance, first we try getting palette by direct name-match and ensure the mlTemplate path matches
+        # If mlTemplate paths don't match try searching all palettes which can be slow
+        match_palette = None
+        palette_byname = bpy.data.palettes.get(mlTemplatePathStripped)
+        if palette_byname:
+            if palette_byname['MLTemplatePath'] == mlTemplateGroupInputNode['mlTemplate']:
+                match_palette = palette_byname
+        else:
+            for palette in bpy.data.palettes:
+                if palette['MLTemplatePath'] == mlTemplateGroupInputNode['mlTemplate']:
+                    match_palette = palette
+        if match_palette == None:
+            self.report({'WARNING'}, 'A Palette and Node Group with corresponding MLTEMPLATE path were not found.')
+            return {'CANCELLED'}
+
+        ts.gpencil_paint.palette = match_palette
+
+        return {'FINISHED'}
+
+class CP77MlSetupApplyColorOverride(Operator):
+    bl_idname = "apply_color_override.mlsetup"
+    bl_label = "Apply Color Override"
+    bl_description = "Apply the current color override to the selected Multilayered Layer Node Group"
+
+    def execute(self, context):
+        ts = context.tool_settings
+        if 'MLTemplatePath' not in ts.gpencil_paint.palette:
+            self.report({'ERROR'}, 'MLTEMPLATE path not found on active palette.')
+            return {'CANCELLED'}
+        palette = ts.gpencil_paint.palette
+        if ts.gpencil_paint.palette:
+            colR, colG, colB = palette.colors.active.color
+            active_color = (colR, colG, colB, 1)
+
+        LayerGroup = get_layernode_by_socket(self,context)
+
+        LayerGroup.inputs['ColorScale'].default_value = active_color
+
+        return {'FINISHED'}
+
+class CP77MlSetupApplyNormalStrOverride(Operator):
+    bl_idname = "apply_normalstr_override.mlsetup"
+    bl_label = "Apply NormalStrength Override"
+    bl_description = "Apply the NormalStrength override to the selected Multilayered Layer Node Group"
+
+    def execute(self, context):
+        LayerGroup = get_layernode_by_socket(self,context)
+
+        LayerGroup.inputs['NormalStrength'].default_value = float(bpy.context.scene.multilayer_normalstr_enum)
+
+        return {'FINISHED'}
+
+class CP77MlSetupApplyMetalLevelsInOverride(Operator):
+    bl_idname = "apply_metalin_override.mlsetup"
+    bl_label = "Apply MetalLevelsIn Override"
+    bl_description = "Apply the MetalLevelsIn override to the selected Multilayered Layer Node Group"
+
+    def execute(self, context):
+        LayerGroup = get_layernode_by_socket(self,context)
+
+        LayerGroup.inputs['MetalLevelsIn'].default_value = ast.literal_eval(bpy.context.scene.multilayer_metalin_enum)
+
+        return {'FINISHED'}
+
+class CP77MlSetupApplyMetalLevelsOutOverride(Operator):
+    bl_idname = "apply_metalout_override.mlsetup"
+    bl_label = "Apply MetalLevelsOut Override"
+    bl_description = "Apply the MetalLevelsOut override to the selected Multilayered Layer Node Group"
+
+    def execute(self, context):
+        LayerGroup = get_layernode_by_socket(self,context)
+
+        LayerGroup.inputs['MetalLevelsOut'].default_value = ast.literal_eval(bpy.context.scene.multilayer_metalout_enum)
+
+        return {'FINISHED'}
+
+class CP77MlSetupApplyRoughLevelsInOverride(Operator):
+    bl_idname = "apply_roughin_override.mlsetup"
+    bl_label = "Apply RoughLevelsIn Override"
+    bl_description = "Apply the RoughLevelsIn override to the selected Multilayered Layer Node Group"
+
+    def execute(self, context):
+        LayerGroup = get_layernode_by_socket(self,context)
+
+        LayerGroup.inputs['RoughLevelsIn'].default_value = ast.literal_eval(bpy.context.scene.multilayer_roughin_enum)
+
+        return {'FINISHED'}
+
+class CP77MlSetupApplyRoughLevelsOutOverride(Operator):
+    bl_idname = "apply_roughout_override.mlsetup"
+    bl_label = "Apply RoughLevelsOut Override"
+    bl_description = "Apply the RoughLevelsOut override to the selected Multilayered Layer Node Group"
+
+    def execute(self, context):
+        LayerGroup = get_layernode_by_socket(self,context)
+
+        LayerGroup.inputs['RoughLevelsOut'].default_value = ast.literal_eval(bpy.context.scene.multilayer_roughout_enum)
+
+        return {'FINISHED'}
+
+class CP77MlSetupApplyMLTemplate(Operator):
+    bl_idname = "set_layer_mltemplate.mlsetup"
+    bl_label = "Apply Selected MLTemplate"
+    bl_description = "Apply the selected MLTemplate within the selected Multilayered Layer Node Group"
+
+    # JATO: TODO Stop this operator from running when changing layer index in panel UI
+
+    def execute(self, context):
+        ts = context.tool_settings
+        if not ts.gpencil_paint.palette:
+            # self.report({'WARNING'}, 'No active palette to match with MLTEMPLATE.')
+            return {'CANCELLED'}
+        if 'MLTemplatePath' not in ts.gpencil_paint.palette:
+            # self.report({'WARNING'}, 'MLTEMPLATE path not found on active palette.')
+            return {'CANCELLED'}
+        palette_name = ts.gpencil_paint.palette.name
+
+        LayerGroup = get_layernode_by_socket(self,context)
+        if LayerGroup == None:
+            return
+
+        # JATO: for performance, first we try getting node group by direct name-match and ensure the mlTemplate path matches
+        # If mlTemplate paths don't match try searching all node-groups which can be slow
+        ngmatch = None
+        nodeGroup = bpy.data.node_groups.get(palette_name)
+        if nodeGroup['mlTemplate'] == ts.gpencil_paint.palette['MLTemplatePath']:
+            ngmatch = nodeGroup
+        else:
+            for ng in bpy.data.node_groups:
+                if 'mlTemplate' in ng:
+                    if ng['mlTemplate'] == ts.gpencil_paint.palette['MLTemplatePath']:
+                        ngmatch = ng
+        if ngmatch == None:
+            self.report({'WARNING'}, 'A Palette and Node Group with corresponding MLTEMPLATE path were not found.')
+            return {'CANCELLED'}
+
+        LayerGroup.node_tree.nodes['Group'].node_tree = ngmatch
+
+        return {'FINISHED'}
+
+class CP77MlSetupApplyMicroblend(Operator):
+    bl_idname = "apply_microblend.mlsetup"
+    bl_label = "Apply Microblend"
+    bl_description = "Apply the Microblend to the selected Multilayered Layer Node Group"
+
+    def execute(self, context):
+        LayerGroup = get_layernode_by_socket(self,context)
+
+        microblendtexnode = LayerGroup.node_tree.nodes['Image Texture']
+        microblendtexnode.image = bpy.context.scene.multilayer_microblend_pointer
+
+        return {'FINISHED'}
 
 
 operators, other_classes = get_classes(sys.modules[__name__])
@@ -405,17 +621,8 @@ def register_materialtools():
     CP77_PT_MaterialTools.append(check_palette_col_change)
     CP77_PT_MaterialTools.append(active_object_listener)
 
-    # bpy.msgbus.subscribe_rna(
-    #     key=(bpy.types.Context, "active_object"),
-    #     owner=owner,
-    #     args=(),
-    #     notify=selection_changed_callback,
-    # )
-
 def unregister_materialtools():
     for cls in reversed(other_classes):
         bpy.utils.unregister_class(cls)
     for cls in reversed(operators):
         bpy.utils.unregister_class(cls)
-
-    # bpy.msgbus.clear_by_owner(owner)

@@ -618,9 +618,9 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                             print('interior_02')
                                         bindpt=[cmp for cmp in comps if cmp['name']['$value']==bindname]
                                         slotname= chunk_pt.get('Data').get('slotName').get('$value')
-                                        if bindpt and slotname:
+                                        #if bindpt and slotname:
                                             # Have a bindpoint and a slotname, so we can use the local transform from the bindpoint
-                                            print('bindpt and slotname found')
+                                            #print('bindpt and slotname found')
 
                                         if bindpt and len(bindpt)==1:
                                             if c['localTransform']['Position']['x']['Bits']==0 and c['localTransform']['Position']['y']['Bits']==0 and c['localTransform']['Position']['z']['Bits']==0 and 'localTransform' in bindpt[0]:

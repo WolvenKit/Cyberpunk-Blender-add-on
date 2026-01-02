@@ -119,12 +119,9 @@ REGISTRY.register([
     "base\\materials\\metal_base_parallax.mt",
     "base\\materials\\metal_base_gradientmap_recolor.mt",
     "base\\fx\\_shaders\\blackwall_blendable_metal_base.mt",
-], MaterialRule(factory=_factory_bip_enablemask(MetalBase)))
-
-REGISTRY.register([
     "base\\materials\\metal_base_det.mt",
     "base\\materials\\lights_interactive.mt",
-], MaterialRule(factory=_factory_bip(MetalBaseDet)))
+], MaterialRule(factory=_factory_bip_enablemask(MetalBase)))
 
 # PBR layer
 REGISTRY.register([
