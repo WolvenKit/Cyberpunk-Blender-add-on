@@ -240,10 +240,10 @@ def _getOrCreateLayerBlend(Mat):
     return NG
 
 def _getOrCreateLayerBlend5(Mat):
-    if "Layer Blend 1.7.x" in bpy.data.node_groups:
-        return bpy.data.node_groups["Layer Blend 1.7.x"]
+    if "Layer Blend 1.7.3" in bpy.data.node_groups:
+        return bpy.data.node_groups["Layer Blend 1.7.3"]
 
-    NG = bpy.data.node_groups.new("Layer Blend 1.7.x","ShaderNodeTree")
+    NG = bpy.data.node_groups.new("Layer Blend 1.7.3","ShaderNodeTree")
     # Write addonversion from material where group is created
     NG['AddonVersion'] = Mat.get('AddonVersion')
 
@@ -370,9 +370,9 @@ def _getOrCreateLayerBlend5(Mat):
 
 # JATO: This function wraps a pbsdf node inside a nodegroup with bundle sockets for blender 5+
 def ml_pbsdf_node_group(Mat):
-    if "Multilayered 1.7.x" in bpy.data.node_groups:
-        return bpy.data.node_groups["Multilayered 1.7.x"]
-    ml_bsdf = bpy.data.node_groups.new(type = 'ShaderNodeTree', name = "Multilayered 1.7.x")
+    if "Multilayered 1.7.3" in bpy.data.node_groups:
+        return bpy.data.node_groups["Multilayered 1.7.3"]
+    ml_bsdf = bpy.data.node_groups.new(type = 'ShaderNodeTree', name = "Multilayered 1.7.3")
     # Write addonversion from material where group is created
     ml_bsdf['AddonVersion'] = Mat.get('AddonVersion')
 
@@ -625,7 +625,7 @@ class Multilayered:
             ml_main_ng = ml_pbsdf_node_group(CurMat)
             ml_main_ng.color_tag = 'SHADER'
             mlShaderNG = CurMat.nodes.new("ShaderNodeGroup")
-            mlShaderNG.name = "Multilayered 1.7.x"
+            mlShaderNG.name = "Multilayered 1.7.3"
             mlShaderNG.location = (-50, 100)
             mlShaderNG.node_tree = ml_main_ng
             mlShaderNG.show_options = False
