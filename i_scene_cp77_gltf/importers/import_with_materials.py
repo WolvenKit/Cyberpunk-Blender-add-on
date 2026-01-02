@@ -327,13 +327,13 @@ def reload_mats(self, context):
         self.report({'ERROR'}, 'Selected object has no materials')
         return {'CANCELLED'}
 
+    active_material = active_obj.active_material
     mat_idx = active_obj.active_material_index
-    mat = active_obj.material_slots[mat_idx].material
-    old_mat_name = mat.name
+    old_mat_name = active_material.name
 
-    DepotPath = mat.get('DepotPath')
-    BasePath = mat.get('MeshPath')
-    ProjPath = mat.get('ProjPath')
+    DepotPath = active_material.get('DepotPath')
+    BasePath = active_material.get('MeshPath')
+    ProjPath = active_material.get('ProjPath')
 
     # JATO: This is a workaround to get MeshPath from collection for old assets before we stored MeshPath within material.
     if BasePath is None:
@@ -376,16 +376,16 @@ def reload_mats(self, context):
     bpy.data.materials[old_mat_name].user_remap(bpy.data.materials[newmat.name])
 
     # JATO: Copy custom material properties from old mat to new mat. Maybe we could regenerate from file, but I'm having a hard time understanding the code for that within import_mats function
-    for k in mat.keys():
+    for k in active_material.keys():
         if k in ('BaseMaterial','DiffuseMap','GlobalNormal','MultilayerMask'):
-            newmat[k] = mat[k]
+            newmat[k] = active_material[k]
 
     # JATO: may be unnecessary
     active_obj.active_material_index = mat_idx
 
     # JATO: Removing the old material appears to cause a crash TODO: fix context?
-    if mat:
-        bpy.data.materials.remove(mat, do_unlink=True, do_id_user=True, do_ui_user=True)
+    if active_material:
+        bpy.data.materials.remove(active_material, do_unlink=True, do_id_user=True, do_ui_user=True)
 
     newmat.name = old_mat_name
 

@@ -10,14 +10,39 @@ class EyeGradient:
         self.image_format = image_format
 
     def create(self,Data,Mat):
-
-
         # load the gradient profile from the depot
         profile = JSONTool.openJSON(Data["IrisColorGradient"] + ".json",mode='r', DepotPath=self.BasePath, ProjPath=self.ProjPath)
         profile= profile["Data"]["RootChunk"]
         CurMat = Mat.node_tree
+
         pBSDF = CurMat.nodes[loc('Principled BSDF')]
+        pBSDF.subsurface_method = 'RANDOM_WALK_SKIN'
+        pBSDF.inputs['Subsurface Weight'].default_value = 1
+        pBSDF.inputs['Subsurface Scale'].default_value = .002
+        pBSDF.inputs['Subsurface Radius'].default_value[0] = 1.0
+        pBSDF.inputs['Subsurface Radius'].default_value[1] = 0.35
+        pBSDF.inputs['Subsurface Radius'].default_value[2] = 0.2
+        pBSDF.inputs['Subsurface Anisotropy'].default_value = 0.8
+        pBSDF.inputs['Transmission Weight'].default_value = 0.35
+        pBSDF.inputs['Coat Weight'].default_value = 0.25
+        # JATO: setting for blender eevee that improves transmission/refraction look
+        Mat.use_raytrace_refraction = True
+
         sockets=bsdf_socket_names()
+
+        if "Albedo" in Data:
+            aImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["Albedo"],-1000,250,'Albedo',self.image_format)
+
+        if "Roughness" in Data:
+            rImg=imageFromRelPath(Data["Roughness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
+            rImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-1000,0), label="Roughness", image=rImg)
+
+        if "RoughnessScale" in Data:
+            rsNode = CreateShaderNodeValue(CurMat, Data["RoughnessScale"],-650,-200,"RoughnessScale")
+
+        if "Normal" in Data:
+            nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["Normal"],-600,-300,'Normal',self.image_format)
+            CurMat.links.new(nMap.outputs[0],pBSDF.inputs['Normal'])
 
         if "RefractionIndex" in Data:
             pBSDF.inputs['IOR'].default_value = Data["RefractionIndex"]
@@ -25,44 +50,27 @@ class EyeGradient:
         if "Specularity" in Data:
             pBSDF.inputs[sockets["Specular"]].default_value = Data["Specularity"]
 
-#NORMAL/n
-        if "Normal" in Data:
-            nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["Normal"],-150,-250,'Normal',self.image_format)
-            CurMat.links.new(nMap.outputs[0],pBSDF.inputs['Normal'])
+        rSeparateColor = CurMat.nodes.new("ShaderNodeSeparateColor")
+        rSeparateColor.location = (-650,0)
 
-#ROUGHNESS+SCALE/rs
-        if "Roughness" in Data:
-            rImg=imageFromRelPath(Data["Roughness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
-            rImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-450,0), label="Roughness", image=rImg)
+        mathMultiply = CurMat.nodes.new("ShaderNodeMath")
+        mathMultiply.location = (-450,0)
+        mathMultiply.operation = 'MULTIPLY'
 
-        if "RoughnessScale" in Data:
-            rsNode = CreateShaderNodeValue(CurMat, Data["RoughnessScale"],-350,-50,"RoughnessScale")
+        CurMat.links.new(rImgNode.outputs[0],rSeparateColor.inputs[0])
+        CurMat.links.new(rSeparateColor.outputs[1],mathMultiply.inputs[0])
+        CurMat.links.new(rsNode.outputs[0],mathMultiply.inputs[1])
+        CurMat.links.new(mathMultiply.outputs[0],pBSDF.inputs['Roughness'])
 
-        # if both nodes were created, scale the image according to the scale factor
-        # then attach the result to the BSDF shader
-        if rImgNode and rsNode:
-            rsVecNode = CurMat.nodes.new("ShaderNodeVectorMath")
-            rsVecNode.location = (-150, 0)
-            rsVecNode.operation = "SCALE"
-            rsVecNode.hide = True
-
-            CurMat.links.new(rImgNode.outputs[0],rsVecNode.inputs[0])
-            CurMat.links.new(rsNode.outputs[0],rsVecNode.inputs[3])
-            CurMat.links.new(rsVecNode.outputs[0],pBSDF.inputs['Roughness'])
-
-#ALBEDO/a
-        if "Albedo" in Data:
-            aImgNode = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["Albedo"],-550,150,'Albedo',self.image_format)
-
-#IRIS+GRADIENT/igrad
+        #IRIS+GRADIENT/igrad
         if "IrisMask" in Data:
-            iMask = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["IrisMask"],-900,200,'Iris Mask',self.image_format)
+            iMask = CreateShaderNodeTexImage(CurMat,self.BasePath + Data["IrisMask"],-1000,500,'Iris Mask',self.image_format)
             iMask.image.colorspace_settings.name = 'Non-Color'
 
         # if we have color gradient data, add a Color Ramp node
         if "IrisColorGradient" in Data:
             igradNode = CurMat.nodes.new("ShaderNodeValToRGB")
-            igradNode.location = (-550,500)
+            igradNode.location = (-600,500)
             igradNode.label = "gradientEntries"
 
             # delete the other nodes and loop through every gradient color entry
@@ -83,8 +91,8 @@ class EyeGradient:
         # gradients were successfully created, now connect them together
         if iMask and igradNode:
             mixNode = CurMat.nodes.new("ShaderNodeMixRGB")
-            mixNode.blend_type = 'OVERLAY'
-            mixNode.location = (-200,300)
+            mixNode.blend_type = 'MULTIPLY'
+            mixNode.location = (-600,250)
 
             CurMat.links.new(iMask.outputs[0],igradNode.inputs[0])
             CurMat.links.new(iMask.outputs[1], mixNode.inputs[0])

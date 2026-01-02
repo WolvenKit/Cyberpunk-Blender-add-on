@@ -8,146 +8,10 @@ class Skin:
         self.ProjPath = str(ProjPath)
         self.image_format = image_format
 
-    
-    def calculate_vectorized_normal_z_003_node_group(self):
-        """Initialize Calculate Vectorized Normal Z.003 node group"""
-        calculate_vectorized_normal_z_003 = bpy.data.node_groups.new(type = 'ShaderNodeTree', name = "Calculate Vectorized Normal Z.003")
-
-        calculate_vectorized_normal_z_003.color_tag = 'NONE'
-        calculate_vectorized_normal_z_003.description = ""
-        calculate_vectorized_normal_z_003.default_group_node_width = 140
-        # calculate_vectorized_normal_z_003 interface
-
-        # Socket Image
-        image_socket = calculate_vectorized_normal_z_003.interface.new_socket(name="Image", in_out='OUTPUT', socket_type='NodeSocketColor')
-        image_socket.default_value = (0.0, 0.0, 0.0, 1.0)
-        image_socket.attribute_domain = 'POINT'
-        image_socket.default_input = 'VALUE'
-        image_socket.structure_type = 'AUTO'
-
-        # Socket Image
-        image_socket_1 = calculate_vectorized_normal_z_003.interface.new_socket(name="Image", in_out='INPUT', socket_type='NodeSocketVector')
-        image_socket_1.default_value = (0.0, 0.0, 0.0)
-        image_socket_1.min_value = -3.4028234663852886e+38
-        image_socket_1.max_value = 3.4028234663852886e+38
-        image_socket_1.subtype = 'NONE'
-        image_socket_1.attribute_domain = 'POINT'
-        image_socket_1.default_input = 'VALUE'
-        image_socket_1.structure_type = 'AUTO'
-
-        # Initialize calculate_vectorized_normal_z_003 nodes
-
-        # Node Group Input
-        group_input = calculate_vectorized_normal_z_003.nodes.new("NodeGroupInput")
-        group_input.name = "Group Input"
-
-        # Node Group Output
-        group_output = calculate_vectorized_normal_z_003.nodes.new("NodeGroupOutput")
-        group_output.name = "Group Output"
-        group_output.is_active_output = True
-
-        # Node Vector Math
-        vector_math = calculate_vectorized_normal_z_003.nodes.new("ShaderNodeVectorMath")
-        vector_math.name = "Vector Math"
-        vector_math.operation = 'DOT_PRODUCT'
-
-        # Node Math
-        math = calculate_vectorized_normal_z_003.nodes.new("ShaderNodeMath")
-        math.name = "Math"
-        math.operation = 'SUBTRACT'
-        math.use_clamp = False
-        # Value
-        math.inputs[0].default_value = 1.0
-
-        # Node Math.001
-        math_001 = calculate_vectorized_normal_z_003.nodes.new("ShaderNodeMath")
-        math_001.name = "Math.001"
-        math_001.operation = 'SQRT'
-        math_001.use_clamp = False
-
-        # Node Separate Color
-        separate_color = calculate_vectorized_normal_z_003.nodes.new("ShaderNodeSeparateColor")
-        separate_color.name = "Separate Color"
-        separate_color.mode = 'RGB'
-
-        # Node Math.002
-        math_002 = calculate_vectorized_normal_z_003.nodes.new("ShaderNodeMath")
-        math_002.label = "OpenGL to DX"
-        math_002.name = "Math.002"
-        math_002.operation = 'MULTIPLY'
-        math_002.use_clamp = False
-        # Value_001
-        math_002.inputs[1].default_value = -1.0
-
-        # Node Combine Color
-        combine_color = calculate_vectorized_normal_z_003.nodes.new("ShaderNodeCombineColor")
-        combine_color.name = "Combine Color"
-        combine_color.mode = 'RGB'
-
-        # Node Vector Math.001
-        vector_math_001 = calculate_vectorized_normal_z_003.nodes.new("ShaderNodeVectorMath")
-        vector_math_001.name = "Vector Math.001"
-        vector_math_001.operation = 'MULTIPLY_ADD'
-        # Vector_001
-        vector_math_001.inputs[1].default_value = (0.5, 0.5, 0.5)
-        # Vector_002
-        vector_math_001.inputs[2].default_value = (0.5, 0.5, 0.5)
-
-        # Set locations
-        group_input.location = (-1400.0, 0.0)
-        group_output.location = (300.0, 0.0)
-        vector_math.location = (-900.0, -200.0)
-        math.location = (-700.0, -200.0)
-        math_001.location = (-500.0, -200.0)
-        separate_color.location = (-700.0, 100.0)
-        math_002.location = (-500.0, 0.0)
-        combine_color.location = (-300.0, 100.0)
-        vector_math_001.location = (-50.0, 0.0)
-
-        # Set dimensions
-        group_input.width, group_input.height = 140.0, 100.0
-        group_output.width, group_output.height = 140.0, 100.0
-        vector_math.width, vector_math.height = 140.0, 100.0
-        math.width, math.height = 140.0, 100.0
-        math_001.width, math_001.height = 140.0, 100.0
-        separate_color.width, separate_color.height = 140.0, 100.0
-        math_002.width, math_002.height = 140.0, 100.0
-        combine_color.width, combine_color.height = 140.0, 100.0
-        vector_math_001.width, vector_math_001.height = 140.0, 100.0
-
-        # Initialize calculate_vectorized_normal_z_003 links
-
-        # group_input.Image -> separate_color.Color
-        calculate_vectorized_normal_z_003.links.new(group_input.outputs[0], separate_color.inputs[0])
-        # group_input.Image -> vector_math.Vector
-        calculate_vectorized_normal_z_003.links.new(group_input.outputs[0], vector_math.inputs[0])
-        # group_input.Image -> vector_math.Vector
-        calculate_vectorized_normal_z_003.links.new(group_input.outputs[0], vector_math.inputs[1])
-        # vector_math.Value -> math.Value
-        calculate_vectorized_normal_z_003.links.new(vector_math.outputs[1], math.inputs[1])
-        # math.Value -> math_001.Value
-        calculate_vectorized_normal_z_003.links.new(math.outputs[0], math_001.inputs[0])
-        # math_001.Value -> combine_color.Blue
-        calculate_vectorized_normal_z_003.links.new(math_001.outputs[0], combine_color.inputs[2])
-        # separate_color.Red -> combine_color.Red
-        calculate_vectorized_normal_z_003.links.new(separate_color.outputs[0], combine_color.inputs[0])
-        # separate_color.Green -> math_002.Value
-        calculate_vectorized_normal_z_003.links.new(separate_color.outputs[1], math_002.inputs[0])
-        # math_002.Value -> combine_color.Green
-        calculate_vectorized_normal_z_003.links.new(math_002.outputs[0], combine_color.inputs[1])
-        # combine_color.Color -> vector_math_001.Vector
-        calculate_vectorized_normal_z_003.links.new(combine_color.outputs[0], vector_math_001.inputs[0])
-        # vector_math_001.Vector -> group_output.Image
-        calculate_vectorized_normal_z_003.links.new(vector_math_001.outputs[0], group_output.inputs[0])
-
-        return calculate_vectorized_normal_z_003
-
-
-    
-
-    def Skinnodegroup_node_group(self, microdetail_image=None):
-        """Initialize NodeGroup node group"""
-        nodegroup = bpy.data.node_groups.new(type = 'ShaderNodeTree', name = "SkinNodeGroup")
+    def create_skin_node_group(self, microdetail_image=None):
+        if "Skin 2077 1.7.x" in bpy.data.node_groups:
+            return bpy.data.node_groups["Skin 2077 1.7.x"]
+        nodegroup = bpy.data.node_groups.new(type = 'ShaderNodeTree', name = "Skin 2077 1.7.x")
 
         nodegroup.color_tag = 'NONE'
         nodegroup.description = ""
@@ -387,10 +251,7 @@ class Skin:
         vector_math_012.operation = 'MULTIPLY'
 
         # Node Group.001
-        group_001 = nodegroup.nodes.new("ShaderNodeGroup")
-        group_001.name = "Group.001"
-        calculate_vectorized_normal_z_003 = self.calculate_vectorized_normal_z_003_node_group()
-        group_001.node_tree = calculate_vectorized_normal_z_003
+        group_001 = CreateCalculateVecNormalZ(nodegroup)
 
         # Node Vector Math.013
         vector_math_013 = nodegroup.nodes.new("ShaderNodeVectorMath")
@@ -622,8 +483,9 @@ class Skin:
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes[loc('Principled BSDF')]
+        pBSDF.subsurface_method = 'RANDOM_WALK_SKIN'
         pBSDF.inputs['Subsurface Weight'].default_value = 1
-        pBSDF.inputs['Subsurface Scale'].default_value = .01
+        pBSDF.inputs['Subsurface Scale'].default_value = .005
         pBSDF.inputs['Subsurface Radius'].default_value[0] = 1.0
         pBSDF.inputs['Subsurface Radius'].default_value[1] = 0.35
         pBSDF.inputs['Subsurface Radius'].default_value[2] = 0.2
@@ -647,7 +509,7 @@ class Skin:
         if "MicroDetail" in Data:
             mdMapAImg = imageFromRelPath(Data["MicroDetail"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
 
-        skinnodegroup =self.Skinnodegroup_node_group(mdMapAImg if "MicroDetail" in Data else None)
+        skinnodegroup =self.create_skin_node_group(mdMapAImg if "MicroDetail" in Data else None)
         # Node Group
         skingroup = CurMat.nodes.new("ShaderNodeGroup")
         skingroup.name = "SkinGroup"
