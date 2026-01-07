@@ -17,8 +17,7 @@ from .phys_import import cp77_phys_import
 from ..collisiontools.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from .import_common import *
-
-
+from bpy_extras import anim_utils
 
 
 def create_axes(ent_coll,name):
@@ -36,7 +35,7 @@ def create_axes(ent_coll,name):
 
 # The appearance list needs to be the appearanceNames for each ent that you want to import, will import all if not specified
 # if you've already imported the body/head and set the rig up you can exclude them by putting them in the exclude_meshes list
-#presto_stash=[]
+# presto_stash=[]
 
 def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], include_collisions=False, include_phys=False,
                    include_entCollider=False, inColl='', remapdepot=False, meshes=None, mesh_jsons=None, escaped_path=None,
@@ -461,7 +460,9 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                         o.keyframe_insert('rotation_euler', index=axis_no ,frame=duration*24)
                         if o.animation_data.action:
                             obj_action = bpy.data.actions.get(o.animation_data.action.name)
-                            obj_fcu = obj_action.fcurves[0]
+                            obj_slot = o.animation_data.action_slot
+                            channelbag = anim_utils.action_get_channelbag_for_slot(obj_action, obj_slot)
+                            obj_fcu = channelbag.fcurves[0]
                             modifier = obj_fcu.modifiers.new(type='CYCLES')
                             modifier.mode_before = 'REPEAT'
                             modifier.mode_after = 'REPEAT'
