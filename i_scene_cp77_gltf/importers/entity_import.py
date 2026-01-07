@@ -480,6 +480,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                         meshname=os.path.basename(m)
                         meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb').replace('\\', os.sep)
                     if meshname and meshname not in exclude_meshes and os.path.exists(meshpath):
+                        new=None
                         try:
                             meshApp='default'
                             if 'meshAppearance' in c.keys():
@@ -490,7 +491,6 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 # make this instance from masters rather than loading multiple times
                                 #bpy.ops.io_scene_gltf.cp77(with_materials, filepath=meshpath, appearances=meshApp,scripting=True,generate_overrides=generate_overrides)
                                 group, groupname = get_group(meshname,meshApp,Masters)
-                                new=None
                                 if (group):
                                     new=bpy.data.collections.new(groupname)
                                     ent_coll.children.link(new)
@@ -511,7 +511,9 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 print('import threw an error:')
                                 print(traceback.format_exc())
                                 continue
-                            objs = new.objects
+                            objs = []
+                            if new:
+                                objs = new.objects
                             if 'body_01' in meshname:
                                 print('those annoying front forks')
 
@@ -779,29 +781,30 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 y=x_orig*sin(z_ang)+y_orig*cos(z_ang)
                                 #print ('Local transform  x= ',x,'y= ',y,' z= ',z)
 
-                            for obj in new.objects:
-                                #print(obj.name, obj.type)
-                                obj.location.x =  obj.location.x+x
-                                obj.location.y = obj.location.y+y
-                                obj.location.z =  obj.location.z+z
-                                # shouldnt need the 0 check, pretty sure I've fuked up a default somewhere, but at this point I just want it to work.
-                                if 'Orientation' in c['localTransform'].keys() and (sum(obj.rotation_quaternion[:])<1.1  and sum(obj.rotation_quaternion[:])>0.9) or (sum(obj.rotation_quaternion[:])<0.1 and sum(obj.rotation_quaternion[:])>-0.1):
-                                    lrot=get_rot(c['localTransform'])
-                                    obj.rotation_quaternion = obj.rotation_quaternion * Quaternion(lrot)
-                                    obj.rotation_quaternion.x = c['localTransform']['Orientation']['i']
-                                    obj.rotation_quaternion.y = c['localTransform']['Orientation']['j']
-                                    obj.rotation_quaternion.z = c['localTransform']['Orientation']['k']
-                                    obj.rotation_quaternion.w = c['localTransform']['Orientation']['r']
-                                #if vs_rot:
-                                #    obj.matrix_local =  Matrix.LocRotScale(Vector(0,0,0),Quaternion(vs_rot),Vector(1,1,1)) @
-                                if 'scale' in c['localTransform'].keys():
-                                    obj.scale.x = c['localTransform']['scale']['X']
-                                    obj.scale.y = c['localTransform']['scale']['Y']
-                                    obj.scale.z = c['localTransform']['scale']['Z']
-                                if 'visualScale' in c.keys():
-                                    obj.scale.x = c['visualScale']['X']
-                                    obj.scale.y = c['visualScale']['Y']
-                                    obj.scale.z = c['visualScale']['Z']
+                            if new:
+                                for obj in new.objects:
+                                    #print(obj.name, obj.type)
+                                    obj.location.x =  obj.location.x+x
+                                    obj.location.y = obj.location.y+y
+                                    obj.location.z =  obj.location.z+z
+                                    # shouldnt need the 0 check, pretty sure I've fuked up a default somewhere, but at this point I just want it to work.
+                                    if 'Orientation' in c['localTransform'].keys() and (sum(obj.rotation_quaternion[:])<1.1  and sum(obj.rotation_quaternion[:])>0.9) or (sum(obj.rotation_quaternion[:])<0.1 and sum(obj.rotation_quaternion[:])>-0.1):
+                                        lrot=get_rot(c['localTransform'])
+                                        obj.rotation_quaternion = obj.rotation_quaternion * Quaternion(lrot)
+                                        obj.rotation_quaternion.x = c['localTransform']['Orientation']['i']
+                                        obj.rotation_quaternion.y = c['localTransform']['Orientation']['j']
+                                        obj.rotation_quaternion.z = c['localTransform']['Orientation']['k']
+                                        obj.rotation_quaternion.w = c['localTransform']['Orientation']['r']
+                                    #if vs_rot:
+                                    #    obj.matrix_local =  Matrix.LocRotScale(Vector(0,0,0),Quaternion(vs_rot),Vector(1,1,1)) @
+                                    if 'scale' in c['localTransform'].keys():
+                                        obj.scale.x = c['localTransform']['scale']['X']
+                                        obj.scale.y = c['localTransform']['scale']['Y']
+                                        obj.scale.z = c['localTransform']['scale']['Z']
+                                    if 'visualScale' in c.keys():
+                                        obj.scale.x = c['visualScale']['X']
+                                        obj.scale.y = c['visualScale']['Y']
+                                        obj.scale.z = c['visualScale']['Z']
 
                             if (len(objs) > 0):
                                 move_coll=new
