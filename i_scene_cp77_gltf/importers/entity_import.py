@@ -444,7 +444,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                             if 'HandleId' in chunk['animations'][0]['timeline']['items'][0]['impl'].keys():
                                 if int(chunk['animations'][0]['timeline']['items'][0]['impl']['HandleId'])==int(HRID):
                                     chunk_anim=chunk['animations'][0]['timeline']['items'][0]['impl']['Data']
-                    if chunk_anim['$type']=='gameTransformAnimation_RotateOnAxis':
+                    if isinstance(chunk_anim, dict) and chunk_anim['$type']=='gameTransformAnimation_RotateOnAxis':
                         rot_axis=chunk_anim['axis']
                         axis_no=0 # default to x
                         if rot_axis=='Z':
