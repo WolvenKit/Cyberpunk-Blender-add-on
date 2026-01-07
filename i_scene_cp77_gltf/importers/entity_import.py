@@ -17,7 +17,7 @@ from .phys_import import cp77_phys_import
 from ..collisiontools.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from .import_common import *
-
+from bpy_extras import anim_utils
 
 
 
@@ -366,7 +366,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 ent_app_idx=i
                                 app_name=a['appearanceName']['$value']
                                 continue
-            chunks=ent_chunks[app_name]
+            if not chunks:
+                chunks=ent_chunks[app_name]
 
             enum_items = []
             default_index = None
@@ -461,6 +462,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                         o.keyframe_insert('rotation_euler', index=axis_no ,frame=duration*24)
                         if o.animation_data.action:
                             obj_action = bpy.data.actions.get(o.animation_data.action.name)
+                            obj_slot = o.animation_data.action_slot
+                            channelbag = anim_utils.action_get_channelbag_for_slot(obj_action, obj_slot)
                             obj_fcu = obj_action.fcurves[0]
                             modifier = obj_fcu.modifiers.new(type='CYCLES')
                             modifier.mode_before = 'REPEAT'
