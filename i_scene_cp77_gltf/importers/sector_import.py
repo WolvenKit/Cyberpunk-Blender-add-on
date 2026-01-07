@@ -485,7 +485,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 move_coll=Masters.children.get(ent_groupname)
                                 imported=True
                             except:
-                                print(traceback.print_exc())
+                                print(traceback.format_exc())
                                 print(f"Failed during Entity import on {entpath} from app {app}")
                         if imported:
                             instances = [x for x in t if x['NodeIndex'] == i]

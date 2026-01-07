@@ -494,7 +494,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
                                 bpy.data.objects[name].visible_shadow = False
                     except:
                         # Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
-                        print(traceback.print_exc())
+                        print(traceback.format_exc())
                         failedon.append(matname)
                         pass
 
@@ -550,4 +550,3 @@ def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filena
     elif meshes and o.type == 'ARMATURE':
         o.hide_set(hide_armatures)
         o.name = "Armature__" + filename
-

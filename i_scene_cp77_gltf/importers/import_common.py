@@ -101,6 +101,6 @@ def meshes_from_mesheswapps( meshes_w_apps,path='', from_mesh_no=0, to_mesh_no=1
                     coll_scene.children.unlink(move_coll)
                 except:
                     print('failed on ',os.path.basename(meshpath))                    
-                    print(traceback.print_exc())
+                    print(traceback.format_exc())
             elif not os.path.exists(meshpath):
                 print('Mesh ', meshpath, ' does not exist')
