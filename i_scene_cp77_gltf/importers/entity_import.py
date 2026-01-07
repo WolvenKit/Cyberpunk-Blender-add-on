@@ -365,7 +365,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 ent_app_idx=i
                                 app_name=a['appearanceName']['$value']
                                 continue
-            chunks=ent_chunks[app_name]
+            if app_name in ent_chunks.keys():
+                chunks=ent_chunks[app_name]
 
             enum_items = []
             default_index = None
