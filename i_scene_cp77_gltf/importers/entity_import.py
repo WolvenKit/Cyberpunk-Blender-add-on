@@ -490,21 +490,23 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 # make this instance from masters rather than loading multiple times
                                 #bpy.ops.io_scene_gltf.cp77(with_materials, filepath=meshpath, appearances=meshApp,scripting=True,generate_overrides=generate_overrides)
                                 group, groupname = get_group(meshname,meshApp,Masters)
+                                new=None
                                 if (group):
                                     new=bpy.data.collections.new(groupname)
                                     ent_coll.children.link(new)
                                     for old_obj in group.all_objects:
                                         obj=old_obj.copy()
                                         new.objects.link(obj)
-                                for obj in new.objects:
-                                    obj['componentName'] = c['name']['$value']
-                                    obj['sourcePath'] = meshpath
-                                    obj['meshAppearance'] = meshApp
-                                    if app_path:
-                                        obj['appResource'] = app_path[0]
-                                    obj['entAppearance'] = app_name
-                                    if 'Armature' in obj.name:
-                                        obj.hide_set(True)
+                                if new:
+                                    for obj in new.objects:
+                                        obj['componentName'] = c['name']['$value']
+                                        obj['sourcePath'] = meshpath
+                                        obj['meshAppearance'] = meshApp
+                                        if app_path:
+                                            obj['appResource'] = app_path[0]
+                                        obj['entAppearance'] = app_name
+                                        if 'Armature' in obj.name:
+                                            obj.hide_set(True)
                             except:
                                 print('import threw an error:')
                                 print(traceback.print_exc())
