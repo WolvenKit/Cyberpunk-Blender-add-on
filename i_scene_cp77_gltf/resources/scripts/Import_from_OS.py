@@ -104,7 +104,7 @@ def process_object(obj,parent_coll):
                     move_coll=Masters.children.get(ent_groupname)
                     imported=True
                 except:
-                    print(traceback.print_exc())
+                    print(traceback.format_exc())
                     print(f"Failed during Entity import on {entpath} from app {app}")
             if imported:
                 group=move_coll                            

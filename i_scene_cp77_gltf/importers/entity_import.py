@@ -509,7 +509,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                             obj.hide_set(True)
                             except:
                                 print('import threw an error:')
-                                print(traceback.print_exc())
+                                print(traceback.format_exc())
                                 continue
                             objs = new.objects
                             if 'body_01' in meshname:
@@ -847,7 +847,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
 
                         except:
                             print("Failed on ",meshname)
-                            print(traceback.print_exc())
+                            print(traceback.format_exc())
 
             for c in ent_component_data:
                 if (c['$type']=='entLightChannelComponent'):
