@@ -34,6 +34,7 @@ import bmesh
 from .entity_import import importEnt
 from .import_with_materials import *
 from .import_common import *
+from bpy_extras import anim_utils
 
 VERBOSE=True
 scale_factor=1
@@ -67,7 +68,6 @@ def assign_custom_properties(obj, data, sectorName, i, **kwargs ):
     # Assign any additional properties passed as kwargs
     for key, value in kwargs.items():
         obj[key] = value
-
 
 
 def find_debugName(obj):
@@ -215,9 +215,6 @@ def get_meshname(data):
     elif 'entityTemplate' in data.keys() and isinstance(data['entityTemplate'], dict) and'DepotPath' in data['entityTemplate'].keys():
         meshname = data['entityTemplate']['DepotPath']['$value'].replace('\\', os.sep)
     return meshname
-
-
-
 
 
 def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding, with_lights):
@@ -981,7 +978,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                         obj.keyframe_insert('rotation_euler', index=axis_no ,frame=rot_time*24)
                                                         if obj.animation_data.action:
                                                             obj_action = bpy.data.actions.get(obj.animation_data.action.name)
-                                                            obj_fcu = obj_action.fcurves[0]
+                                                            obj_slot = obj.animation_data.action_slot
+                                                            channelbag = anim_utils.action_get_channelbag_for_slot(obj_action, obj_slot)
+                                                            obj_fcu = channelbag.fcurves[0]
                                                             for pt in obj_fcu.keyframe_points:
                                                                 pt.interpolation = 'LINEAR'
 
