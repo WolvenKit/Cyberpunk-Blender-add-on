@@ -402,7 +402,8 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
     for mat in validmats.keys():
         for m in mats: #obj['Materials']:
             if 'Name' not in m.keys():
-                continue
+                # Sometimes a material has no name, so we will use what we expect the material's name to be
+                m["Name"] = mat
             if m['Name'] != mat:
                 continue
             if 'BaseMaterial' in m.keys():
@@ -426,6 +427,9 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
                                   'DiffuseMap': DiffuseMap}
             else:
                 print(m.keys())
+
+    # Remove any materials that are just a bool - failed to populate
+    validmats = {k: v for k, v in validmats.items() if not isinstance(v, bool)}
 
     MatImportList = [k for k in validmats.keys()]
     Builder = MaterialBuilder(mats, DepotPath, str(image_format), BasePath)
