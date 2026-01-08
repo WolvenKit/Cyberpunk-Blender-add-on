@@ -464,7 +464,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                             obj_action = bpy.data.actions.get(o.animation_data.action.name)
                             obj_slot = o.animation_data.action_slot
                             channelbag = anim_utils.action_get_channelbag_for_slot(obj_action, obj_slot)
-                            obj_fcu = obj_action.fcurves[0]
+                            obj_fcu = channelbag.fcurves[0]
                             modifier = obj_fcu.modifiers.new(type='CYCLES')
                             modifier.mode_before = 'REPEAT'
                             modifier.mode_after = 'REPEAT'
