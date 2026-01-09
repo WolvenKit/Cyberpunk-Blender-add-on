@@ -21,11 +21,12 @@ def get_layernode_by_socket(self,context):
 
     active_object=bpy.context.active_object
     active_material = active_object.active_material
+    LayerGroup = None
 
     nodes = active_material.node_tree.nodes
     layer_index = bpy.context.scene.multilayer_index_prop
 
-    mlBSDFGroup = nodes.get("Multilayered 1.7.x")
+    mlBSDFGroup = nodes.get("Multilayered 1.7.3")
     if mlBSDFGroup:
         socket_name = ("Layer "+str(layer_index))
         socket = mlBSDFGroup.inputs.get(socket_name)
@@ -33,10 +34,6 @@ def get_layernode_by_socket(self,context):
         linkedLayerGroupName = layerGroupLink.from_node.name
         LayerGroup=nodes[linkedLayerGroupName]
         # print(layer_index, " | ", LayerGroup.name)
-
-    if LayerGroup == None:
-        self.report({'ERROR'}, 'A valid Multilayered node group was not found.')
-        return {'CANCELLED'}
 
     return LayerGroup
 
@@ -132,6 +129,9 @@ def setup_mldata(self, context):
         return
 
     LayerGroup = get_layernode_by_socket(self,context)
+    if LayerGroup == None:
+        # self.report({'ERROR'}, 'A valid Multilayered node group was not found.')
+        return
 
     # JATO: TODO test error tolerance numbers
     # JATO: 0.00005 causes color mismatch on panam pants group #3 / layer 4, narrowed to 0.00001
@@ -344,6 +344,7 @@ class CP77_PT_MaterialTools(Panel):
                 if vers[0]<5:
                     col.label(text='Upgrade to Blender 5 for Multilayer features')
                     return
+
                 col.operator("reload_material.cp77")
                 col.operator("export_scene.hp")
 
@@ -418,7 +419,7 @@ class CP77MlSetupGenerateOverrides(Operator):
 class CP77MlSetupGenerateOverridesDisconnected(Operator):
     bl_idname = "generate_layer_overrides_disconnected.mlsetup"
     bl_label = "Generate Overrides for All Nodes"
-    bl_description = "Create Override data for MLTemplates found within the selected material."
+    bl_description = "Create Override data for Layers using the mat_mod_layer naming scheme found within the selected material. Useful for generating extra multilayer-resources with a modified MLSETUP json."
 
     def execute(self, context):
         mlsetup_export.cp77_mlsetup_generateoverrides(self, context, include_disconnected=True)

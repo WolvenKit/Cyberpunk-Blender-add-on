@@ -3,19 +3,12 @@ import bpy
 import os
 import sys
 from ..material_types.multilayered import Multilayered
-from ..material_types.multilayeredclearcoat import MultilayeredClearCoat
-from ..material_types.vehicledestrblendshape import VehicleDestrBlendshape
 from ..material_types.skin import Skin
 from ..material_types.meshdecal import MeshDecal
-from ..material_types.meshdecaldoublediffuse import MeshDecalDoubleDiffuse
-from ..material_types.vehiclemeshdecal import VehicleMeshDecal
 from ..material_types.vehiclelights import VehicleLights
 from ..material_types.metalbase import MetalBase
-from ..material_types.metalbasedet import MetalBaseDet
 from ..material_types.hair import Hair
-from ..material_types.meshdecalgradientmaprecolor import MeshDecalGradientMapReColor
 from ..material_types.eye import Eye
-from ..material_types.eyegradient import EyeGradient
 from ..material_types.eyeshadow import EyeShadow
 from ..material_types.meshdecalemissive import MeshDecalEmissive
 from ..material_types.glass import Glass

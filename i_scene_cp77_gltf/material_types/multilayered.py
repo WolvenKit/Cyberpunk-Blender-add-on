@@ -240,29 +240,13 @@ def _getOrCreateLayerBlend(Mat):
     return NG
 
 def _getOrCreateLayerBlend5(Mat):
-    if "Layer Blend 1.7.3" in bpy.data.node_groups:
-        return bpy.data.node_groups["Layer Blend 1.7.3"]
+    ng_name = "Layer Blend 1.7.3"
+    if ng_name in bpy.data.node_groups:
+        return bpy.data.node_groups[ng_name]
 
-    NG = bpy.data.node_groups.new("Layer Blend 1.7.3","ShaderNodeTree")
+    NG = bpy.data.node_groups.new(ng_name,"ShaderNodeTree")
     # Write addonversion from material where group is created
     NG['AddonVersion'] = Mat.get('AddonVersion')
-
-    # NG.interface.new_socket(name="Color A", socket_type='NodeSocketColor', in_out='INPUT')
-    # NG.interface.new_socket(name="Metalness A", socket_type='NodeSocketFloat', in_out='INPUT')
-    # NG.interface.new_socket(name="Roughness A", socket_type='NodeSocketFloat', in_out='INPUT')
-    # NG.interface.new_socket(name="Normal A", socket_type='NodeSocketVector', in_out='INPUT')
-    # NG.interface.new_socket(name="Microblend A", socket_type='NodeSocketVector', in_out='INPUT')
-    # NG.interface.new_socket(name="Color B", socket_type='NodeSocketColor', in_out='INPUT')
-    # NG.interface.new_socket(name="Metalness B", socket_type='NodeSocketFloat', in_out='INPUT')
-    # NG.interface.new_socket(name="Roughness B", socket_type='NodeSocketFloat', in_out='INPUT')
-    # NG.interface.new_socket(name="Normal B", socket_type='NodeSocketVector', in_out='INPUT')
-    # NG.interface.new_socket(name="Microblend B", socket_type='NodeSocketVector', in_out='INPUT')
-    # NG.interface.new_socket(name="Layer Mask", socket_type='NodeSocketFloat', in_out='INPUT')
-    # NG.interface.new_socket(name="Color", socket_type='NodeSocketColor', in_out='OUTPUT')
-    # NG.interface.new_socket(name="Metalness", socket_type='NodeSocketFloat', in_out='OUTPUT')
-    # NG.interface.new_socket(name="Roughness", socket_type='NodeSocketFloat', in_out='OUTPUT')
-    # NG.interface.new_socket(name="Normal", socket_type='NodeSocketVector', in_out='OUTPUT')
-    # NG.interface.new_socket(name="Microblend", socket_type='NodeSocketVector', in_out='OUTPUT')
 
     NG.interface.new_socket(name="Bundle A", socket_type='NodeSocketBundle', in_out='INPUT')
     NG.interface.new_socket(name="Bundle B", socket_type='NodeSocketBundle', in_out='INPUT')
@@ -317,23 +301,8 @@ def _getOrCreateLayerBlend5(Mat):
     NG.links.new(GroupInN.outputs['Bundle A'],GroupSeparateBundle1.inputs[0])
     NG.links.new(GroupInN.outputs['Bundle B'],GroupSeparateBundle2.inputs[0])
 
+    # Is this necessary?
     GroupSeparateBundle1.update()
-
-    # NG.links.new(GroupInN.outputs['Color A'],ColorMixN.inputs[6])
-    # NG.links.new(GroupInN.outputs['Metalness A'],MetalMixN.inputs[2])
-    # NG.links.new(GroupInN.outputs['Roughness A'],RoughMixN.inputs[2])
-    # NG.links.new(GroupInN.outputs['Normal A'],NormalMixN.inputs[4])
-    # NG.links.new(GroupInN.outputs['Microblend A'],MicroblendMixN.inputs[4])
-    # NG.links.new(GroupInN.outputs['Color B'],ColorMixN.inputs[7])
-    # NG.links.new(GroupInN.outputs['Metalness B'],MetalMixN.inputs[3])
-    # NG.links.new(GroupInN.outputs['Roughness B'],RoughMixN.inputs[3])
-    # NG.links.new(GroupInN.outputs['Normal B'],NormalMixN.inputs[5])
-    # NG.links.new(GroupInN.outputs['Microblend B'],MicroblendMixN.inputs[5])
-    # NG.links.new(GroupInN.outputs['Layer Mask'],ColorMixN.inputs['Factor'])
-    # NG.links.new(GroupInN.outputs['Layer Mask'],NormalMixN.inputs['Factor'])
-    # NG.links.new(GroupInN.outputs['Layer Mask'],RoughMixN.inputs['Factor'])
-    # NG.links.new(GroupInN.outputs['Layer Mask'],MetalMixN.inputs['Factor'])
-    # NG.links.new(GroupInN.outputs['Layer Mask'],MicroblendMixN.inputs['Factor'])
 
     NG.links.new(GroupSeparateBundle1.outputs[0],ColorMixN.inputs[6])
     NG.links.new(GroupSeparateBundle1.outputs[1],MetalMixN.inputs[2])
@@ -359,20 +328,14 @@ def _getOrCreateLayerBlend5(Mat):
 
     NG.links.new(GroupCombineBundle.outputs[0],GroupOutN.inputs[0])
 
-
-    # NG.links.new(ColorMixN.outputs[2],GroupOutN.inputs['Color'])
-    # NG.links.new(MetalMixN.outputs[0],GroupOutN.inputs['Metalness'])
-    # NG.links.new(RoughMixN.outputs[0],GroupOutN.inputs['Roughness'])
-    # NG.links.new(NormalMixN.outputs[1],GroupOutN.inputs['Normal'])
-    # NG.links.new(MicroblendMixN.outputs[1],GroupOutN.inputs['Microblend'])
-
     return NG
 
 # JATO: This function wraps a pbsdf node inside a nodegroup with bundle sockets for blender 5+
 def ml_pbsdf_node_group(Mat):
-    if "Multilayered 1.7.3" in bpy.data.node_groups:
-        return bpy.data.node_groups["Multilayered 1.7.3"]
-    ml_bsdf = bpy.data.node_groups.new(type = 'ShaderNodeTree', name = "Multilayered 1.7.3")
+    ng_name = "Multilayered 1.7.3"
+    if ng_name in bpy.data.node_groups:
+        return bpy.data.node_groups[ng_name]
+    ml_bsdf = bpy.data.node_groups.new(type = 'ShaderNodeTree', name = ng_name)
     # Write addonversion from material where group is created
     ml_bsdf['AddonVersion'] = Mat.get('AddonVersion')
 
@@ -625,10 +588,12 @@ class Multilayered:
             ml_main_ng = ml_pbsdf_node_group(CurMat)
             ml_main_ng.color_tag = 'SHADER'
             mlShaderNG = CurMat.nodes.new("ShaderNodeGroup")
+            # JATO: should we be setting node name? maybe ml-editing stuff should look for node tree name instead?
             mlShaderNG.name = "Multilayered 1.7.3"
             mlShaderNG.location = (-50, 100)
             mlShaderNG.node_tree = ml_main_ng
             mlShaderNG.show_options = False
+            CurMat.links.new(mlShaderNG.outputs['BSDF'],CurMat.nodes['Material Output'].inputs[0])
 
         for x in range(LayerCount):
             MaskTexture=None
@@ -638,11 +603,11 @@ class Multilayered:
                 MaskTexture = imageFromPath(projpath, self.image_format, isNormal = True)
             elif os.path.exists(basepath):
                 MaskTexture = imageFromPath(basepath, self.image_format, isNormal = True)
-            else:
-                if 'AppData' in basepath:
-                    print('Mask image not found for layer ',x+1,' DepotPath appears to be in Appdata, this is known to cause issues')
-                else:
-                    print('Mask image not found for layer ',x+1)
+            # else:
+                # if 'AppData' in basepath:
+                    # print('Mask image not found for layer ',x+1,' DepotPath appears to be in Appdata, this is known to cause issues')
+                # else:
+                    # print('Mask image not found for layer ',x+1)
 
             MaskN=None
             if MaskTexture:
@@ -666,18 +631,19 @@ class Multilayered:
                 # JATO: Check for mlsetup with more than 20 layers (probably only ml-resources wk-project)
                 if x<=19:
                     CurMat.links.new(CurMat.nodes["Mat_Mod_Layer_"+str(x)].outputs['Layer'],mlShaderNG.inputs[x + 1])
-                    # JATO: TODO: Put this link somewhere else so it doesn't create a link for every layer loop
-                    CurMat.links.new(mlShaderNG.outputs['BSDF'],CurMat.nodes['Material Output'].inputs[0])
 
             if MaskN:
-                CurMat.links.new(MaskN.outputs[0],CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].inputs['Mask'])
-
-        if LayerCount>1:
-            targetLayer="Mat_Mod_Layer_"+str(LayerCount-1)
-        else:
-            targetLayer="Mat_Mod_Layer_0"
+                try:
+                    CurMat.links.new(MaskN.outputs[0],CurMat.nodes["Mat_Mod_Layer_"+str(x+1)].inputs['Mask'])
+                except:
+                    pass
 
         if vers[0]<5.0:
+            if LayerCount>1:
+                targetLayer="Mat_Mod_Layer_"+str(LayerCount-1)
+            else:
+                targetLayer="Mat_Mod_Layer_0"
+
             targetLayer="Mat_Mod_Layer_"+str(LayerCount)
             CurMat.links.new(CurMat.nodes[targetLayer].outputs['Color'],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
             CurMat.links.new(CurMat.nodes[targetLayer].outputs['Metalness'],CurMat.nodes[loc('Principled BSDF')].inputs['Metallic'])
