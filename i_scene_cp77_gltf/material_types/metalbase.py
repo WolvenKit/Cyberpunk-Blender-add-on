@@ -15,7 +15,7 @@ class MetalBase:
         sockets=bsdf_socket_names()
         isDetailNormal=None
 
-        mixRGB = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-450,400) , blend_type = 'MULTIPLY')
+        mixRGB = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-800,500) , blend_type = 'MULTIPLY')
         mixRGB.inputs[0].default_value = 1
         CurMat.links.new(mixRGB.outputs[0],pBSDF.inputs['Base Color'])
 
@@ -51,10 +51,10 @@ class MetalBase:
             CurMat.links.new(rMulAddNode.outputs[0],pBSDF.inputs['Roughness'])
 
         if "Normal" in Data:
-            nMap = CreateShaderNodeGlobalNormalMap(CurMat,self.BasePath + Data["Normal"],-1400,-200,'Normal',self.image_format)
+            nMap = CreateShaderNodeGlobalNormalMap(CurMat,self.BasePath + Data["Normal"],-1000,-200,'Normal',self.image_format)
             normalVectorize = CurMat.nodes.new("ShaderNodeVectorMath")
             normalVectorize.operation='MULTIPLY_ADD'
-            normalVectorize.location = (-1400,-200)
+            normalVectorize.location = (-1050,-200)
             normalVectorize.hide = True
             normalVectorize.inputs[1].default_value = 2, 2, 0
             normalVectorize.inputs[2].default_value = -1, -1, 0
@@ -87,12 +87,10 @@ class MetalBase:
 
             isDetailNormal = True
 
-
-
         if "BaseColorScale" in Data:
             dColScale = CreateShaderNodeRGB(CurMat, Data["BaseColorScale"],-1400,500,'BaseColorScale',True)
             baseColorGamma = CurMat.nodes.new("ShaderNodeGamma")
-            baseColorGamma.location = (-1100,500)
+            baseColorGamma.location = (-1050,500)
             baseColorGamma.inputs[1].default_value = 2.2
             baseColorGamma.hide = True
             CurMat.links.new(dColScale.outputs[0],baseColorGamma.inputs[0]) 
@@ -118,28 +116,23 @@ class MetalBase:
             rScale = CreateShaderNodeValue(CurMat,Data["RoughnessScale"],-1400, 0,"RoughnessScale")
             CurMat.links.new(rScale.outputs[0],rMulAddNode.inputs[1]) 
 
-        if 'RoughnesssBias' in Data:
-            rBias = CreateShaderNodeValue(CurMat,Data["RoughnesssBias"],-1400, -50,"RoughnesssBias")
+        if 'RoughnessBias' in Data:
+            rBias = CreateShaderNodeValue(CurMat,Data["RoughnessBias"],-1400, -50,"RoughnessBias")
             CurMat.links.new(rBias.outputs[0],rMulAddNode.inputs[2])
 
         if "AlphaThreshold" in Data:
-            aThreshold = CreateShaderNodeValue(CurMat,Data["AlphaThreshold"],-1400, 600,"AlphaThreshold")
+            aThreshold = CreateShaderNodeValue(CurMat,Data["AlphaThreshold"],-1400, 400,"AlphaThreshold")
         else:
-            aThreshold = CreateShaderNodeValue(CurMat,1.0,-1400, 600,"AlphaThreshold")
+            aThreshold = CreateShaderNodeValue(CurMat,1.0,-1400, 400,"AlphaThreshold")
 
-        alphclamp = create_node(CurMat.nodes,"ShaderNodeClamp",(-800, 600))
-        CurMat.links.new(aThreshold.outputs[0],alphclamp.inputs['Min'])
-        if self.enableMask:
-            CurMat.links.new(bColNode.outputs[1],alphclamp.inputs['Value'])
-        else:
-            CurMat.links.new(bColNode.outputs[0],alphclamp.inputs['Value'])
-
-        Clamp2 = create_node(CurMat.nodes,"ShaderNodeClamp",(-600, 500))
-
-        CurMat.links.new(baseColorGamma.outputs[0],Clamp2.inputs['Min'])
-        CurMat.links.new(Clamp2.outputs[0],mixRGB.inputs['Fac'])
-
-        CurMat.links.new(alphclamp.outputs[0],Clamp2.inputs['Value'])
+        maskMapRange = create_node(CurMat.nodes,"ShaderNodeMapRange",(-1050, 400))
+        CurMat.links.new(bColNode.outputs[1],maskMapRange.inputs[0])
+        CurMat.links.new(aThreshold.outputs[0],maskMapRange.inputs[1])
+        # JATO: what is the purpose of this if/else?
+        # if self.enableMask:
+        #     CurMat.links.new(bColNode.outputs[1],alphaClamp.inputs['Value'])
+        # else:
+        #     CurMat.links.new(bColNode.outputs[0],alphaClamp.inputs['Value'])
 
         mulNode = CurMat.nodes.new("ShaderNodeMixRGB")
         mulNode.inputs[0].default_value = 1
@@ -168,7 +161,7 @@ class MetalBase:
         mathSubtract = create_node(CurMat.nodes,"ShaderNodeMath",(-800, -100), operation='SUBTRACT', label="Math")
         mathSubtract.inputs[0].default_value=1
 
-        Clamp001 = create_node(CurMat.nodes,"ShaderNodeClamp",(-800, -50), label="Clamp.001")
+        enableMaskClamp = create_node(CurMat.nodes,"ShaderNodeClamp",(-800, -50))
 
         backfaceGroup = CreateCullBackfaceGroup(CurMat, x = -500, y = -50,name = 'Cull Backface')
 
@@ -192,12 +185,12 @@ class MetalBase:
             CurMat.links.new(dColmul.outputs[0],mixRGB.inputs[1])
 
         CurMat.links.new(EnableMask.outputs['Value'], mathSubtract.inputs[1]) # Enablemask value into math which inverts it
-        CurMat.links.new(mathSubtract.outputs['Value'], Clamp001.inputs[1]) # Inverted value into clamp min, so if 1 its always solic, if 0 will use BaseColor alpha
-        CurMat.links.new(bColNode.outputs['Alpha'], Clamp001.inputs[0]) # alpha into one thats clamped by enableMask value
-        CurMat.links.new(Clamp001.outputs['Result'], backfaceGroup.inputs[0])
+        CurMat.links.new(mathSubtract.outputs['Value'], enableMaskClamp.inputs[1]) # Inverted value into clamp min, so if 1 its always solic, if 0 will use BaseColor alpha
+        CurMat.links.new(maskMapRange.outputs[0], enableMaskClamp.inputs[0])
+        CurMat.links.new(enableMaskClamp.outputs[0], backfaceGroup.inputs[0])
         CurMat.links.new(backfaceGroup.outputs[0], pBSDF.inputs['Alpha'])
         if not image_has_alpha(bcolImg): # if the image doesnt have alpha stick the color in instead
-            CurMat.links.new(bColNode.outputs['Color'],Clamp001.inputs['Value'])
+            CurMat.links.new(bColNode.outputs['Color'],enableMaskClamp.inputs['Value'])
 
 
 used_params=['BaseColor',

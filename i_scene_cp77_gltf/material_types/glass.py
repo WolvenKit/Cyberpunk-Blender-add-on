@@ -13,6 +13,14 @@ class Glass:
         pBDSF=CurMat.nodes[loc('Principled BSDF')]
         sockets=bsdf_socket_names()
         pBDSF.inputs[sockets['Transmission']].default_value = 1
+        # JATO: setting for blender eevee that improves transmission/refraction look
+        Mat.use_raytrace_refraction = True
+
+        isVehicleGlass = False
+
+        # JATO: should be a safe method to test for vehicleglass.mt
+        if "ShatterTexture" in Data:
+            isVehicleGlass = True
 
         if "TintColor" in Data:
             Color = CreateShaderNodeRGB(CurMat, Data["TintColor"],-400,200,'TintColor')
@@ -31,6 +39,8 @@ class Glass:
             rImg = imageFromRelPath(Data["Roughness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
             rImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,50), label="Roughness", image=rImg)
             CurMat.links.new(rImgNode.outputs[0],pBDSF.inputs['Roughness'])
+            if isVehicleGlass:
+                CurMat.links.new(rImgNode.outputs[1],pBDSF.inputs['Roughness'])
 
         if "Normal" in Data:
             nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["Normal"],-200,-300,'Normal',self.image_format)
@@ -41,7 +51,8 @@ class Glass:
             mImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-1200,350), label="MaskTexture", image=mImg)
             facNode = create_node(CurMat.nodes,"ShaderNodeMath", (-450,-100) ,operation = 'MULTIPLY')
             facNode.inputs[0].default_value = 1
-            CurMat.links.new(facNode.outputs[0],pBDSF.inputs['Alpha'])
+            # JATO: unhooked mask-tex because it's making glass invisible (see car windows). TODO figure out how mask-tex is supposed to work
+            # CurMat.links.new(facNode.outputs[0],pBDSF.inputs['Alpha'])
 
             if "MaskOpacity" in Data:
                 maskOpacity = CreateShaderNodeValue(CurMat,Data["MaskOpacity"],-1000, 0,"MaskOpacity")
@@ -59,10 +70,8 @@ class Glass:
             else:
                 CurMat.links.new(mImgNode.outputs[1],facNode.inputs[1])
 
-       
 
-
-# The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
+# The above is the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
 
 if __name__ == "__main__":
     import sys

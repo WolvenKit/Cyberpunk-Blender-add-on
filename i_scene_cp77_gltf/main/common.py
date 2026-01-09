@@ -216,6 +216,7 @@ def imageFromPath(Img,image_format,isNormal = False):
     if not Im:
         Im = bpy.data.images.new(os.path.basename(Img)[:-4],1,1)
         Im.source = "FILE"
+        Im.alpha_mode = 'CHANNEL_PACKED'
         Im.filepath = Img[:-3]+ image_format
         if isNormal:
             Im.colorspace_settings.name = 'Non-Color'
@@ -261,6 +262,7 @@ def imageFromRelPath(ImgPath, image_format='png', isNormal = False, DepotPath=''
     if not Im:
         Im = bpy.data.images.new(os.path.basename(ImgPath)[:-4],1,1)
         Im.source = "FILE"
+        Im.alpha_mode = 'CHANNEL_PACKED'
         if os.path.exists(inProj):
             Im.filepath = inProj
         else:
