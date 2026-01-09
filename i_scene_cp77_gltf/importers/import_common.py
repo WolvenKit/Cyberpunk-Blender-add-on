@@ -48,8 +48,6 @@ def meshes_from_mesheswapps( meshes_w_apps,path='', from_mesh_no=0, to_mesh_no=1
         if i>=from_mesh_no and i<=to_mesh_no and (m[-4:]=='mesh' or m[-13:]=='physicalscene' or m[-6:]=='w2mesh'):
             apps=[]
             for meshApp in meshes_w_apps[m]['apps'][0]:
-                print('meshApp')
-                print(meshApp)
                 if (
                     not isinstance(meshApp, str)
                     and meshApp["$value"] not in apps
