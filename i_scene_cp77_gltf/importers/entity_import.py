@@ -505,15 +505,15 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                     for old_obj in group.all_objects:
                                         obj=old_obj.copy()
                                         new.objects.link(obj)
-                                for obj in new.objects:
-                                    obj['componentName'] = c['name']['$value']
-                                    obj['sourcePath'] = meshpath
-                                    obj['meshAppearance'] = meshApp
-                                    if app_path:
-                                        obj['appResource'] = app_path[0]
-                                    obj['entAppearance'] = app_name
-                                    if 'Armature' in obj.name:
-                                        obj.hide_set(True)
+                                    for obj in new.objects:
+                                        obj['componentName'] = c['name']['$value']
+                                        obj['sourcePath'] = meshpath
+                                        obj['meshAppearance'] = meshApp
+                                        if app_path:
+                                            obj['appResource'] = app_path[0]
+                                        obj['entAppearance'] = app_name
+                                        if 'Armature' in obj.name:
+                                            obj.hide_set(True)
                             except:
                                 print('import threw an error:')
                                 print(traceback.print_exc())
