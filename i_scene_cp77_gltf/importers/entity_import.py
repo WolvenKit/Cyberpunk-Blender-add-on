@@ -504,7 +504,6 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                     for old_obj in group.all_objects:
                                         obj=old_obj.copy()
                                         new.objects.link(obj)
-                                if new:
                                     for obj in new.objects:
                                         obj['componentName'] = c['name']['$value']
                                         obj['sourcePath'] = meshpath
