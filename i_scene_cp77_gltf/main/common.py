@@ -216,6 +216,7 @@ def imageFromPath(Img,image_format,isNormal = False):
     if not Im:
         Im = bpy.data.images.new(os.path.basename(Img)[:-4],1,1)
         Im.source = "FILE"
+        Im.alpha_mode = 'CHANNEL_PACKED'
         Im.filepath = Img[:-3]+ image_format
         if isNormal:
             Im.colorspace_settings.name = 'Non-Color'
@@ -261,6 +262,7 @@ def imageFromRelPath(ImgPath, image_format='png', isNormal = False, DepotPath=''
     if not Im:
         Im = bpy.data.images.new(os.path.basename(ImgPath)[:-4],1,1)
         Im.source = "FILE"
+        Im.alpha_mode = 'CHANNEL_PACKED'
         if os.path.exists(inProj):
             Im.filepath = inProj
         else:
@@ -508,6 +510,16 @@ def CreateShaderNodeNormalMap(curMat,path = None, x = 0, y = 0, name = None,imag
     return nMap
 
 def CreateShaderNodeGlobalNormalMap(curMat,path = None, x = 0, y = 0, name = None,image_format = 'png', nonCol = True):
+    if path is not None:
+        ImgNode = curMat.nodes.new("ShaderNodeTexImage")
+        ImgNode.location = (x - 450, y)
+        ImgNode.width = 350
+        ImgNode.hide = False
+        Img = imageFromPath(path,image_format,nonCol)
+        ImgNode.image = Img
+    return ImgNode
+
+def CreateShaderNodeVectorizedNormalMap(curMat,path = None, x = 0, y = 0, name = None,image_format = 'png', nonCol = True):
     normalVectorize = curMat.nodes.new("ShaderNodeVectorMath")
     normalVectorize.operation='MULTIPLY_ADD'
     normalVectorize.location = (x,y)
@@ -526,6 +538,7 @@ def CreateShaderNodeGlobalNormalMap(curMat,path = None, x = 0, y = 0, name = Non
         curMat.links.new(ImgNode.outputs[0],normalVectorize.inputs[0])
 
     return normalVectorize
+
 
 def image_has_alpha(img):
     b = 32 if img.is_float else 8
