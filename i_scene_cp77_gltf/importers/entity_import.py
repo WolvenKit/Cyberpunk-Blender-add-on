@@ -17,6 +17,7 @@ from .phys_import import cp77_phys_import
 from ..collisiontools.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from .import_common import *
+from bpy_extras import anim_utils
 
 
 
@@ -74,22 +75,29 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     if len(ent_applist) == 0:
         print(f"No appearances found in entity file {ent_name}. Imported objects may be incomplete or missing.")
         #show_message("No appearances found in entity file. Imported objects may be incomplete or missing. "+ent_name)
-        # this just isnt true, loads of stuff doesnt have appaearances, and the popup is annoying
+        # this just isnt true, loads of stuff doesnt have appearances, and the popup is annoying
 
     #print(ent_applist)
 
     for appidx,app in enumerate(appearances):
         if app not in ent_applist and app.upper() !='ALL' and app !='default':
             print(f"Appearance {app} not found in entity {ent_name}. Available appearances: {', '.join(ent_applist)}")
-            show_message(f"Appearance {app} not found in entity {ent_name}. Available appearances: {', '.join(ent_applist)}")
+            #show_message(f"Appearance {app} not found in entity {ent_name}. Available appearances: {', '.join(ent_applist)}")
+            # this check is not actually checking all the options for how the app name is stored so its popping this up then loading it fine.
         if app not in ent_applist and app.upper() !='ALL' and app =='default':
-            if ent_default and len(ent_default)>0:
+            if ent_default and len(ent_default)>0 and ent_default!='None':
                 print(f"Using default appearance {ent_default} for entity {ent_name}.")
                 appearances[appidx]=ent_default
                 print(appearances)
-            else:
-                print(f"No default appearance specified in entity {ent_name}. Using first available appearance {ent_applist[0]}.")
-                app=ent_applist[0]
+            else:                
+                if len(ent_applist)>0:
+                    print(f"No default appearance specified in entity {ent_name}. Using first available appearance {ent_applist[0]}.")
+                    app=ent_applist[0]
+                else:
+                    print(f"No appearances specified in entity {ent_name}. Using root entities.")    
+                    appearances[0]= 'BASE_COMPONENTS_ONLY'          
+                    app='BASE_COMPONENTS_ONLY'
+
 
     #presto_stash.append(ent_components)
     ent_complist=[]
@@ -287,7 +295,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
 
             if len(app_comps[app_name])==0:
                 print('falling back to rootchunk components...')
-                app_comps[app_name]= ent_components
+                app_comps['BASE_COMPONENTS_ONLY']= ent_components
             exclude_meshes=[]
             for c in app_comps[app_name]:
                 if not ( 'mesh' in c.keys() or 'graphicsMesh' in c.keys()):
@@ -365,7 +373,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 ent_app_idx=i
                                 app_name=a['appearanceName']['$value']
                                 continue
-            chunks=ent_chunks[app_name]
+            if not chunks:
+                chunks=ent_chunks[app_name]
 
             enum_items = []
             default_index = None
@@ -460,7 +469,9 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                         o.keyframe_insert('rotation_euler', index=axis_no ,frame=duration*24)
                         if o.animation_data.action:
                             obj_action = bpy.data.actions.get(o.animation_data.action.name)
-                            obj_fcu = obj_action.fcurves[0]
+                            obj_slot = o.animation_data.action_slot
+                            channelbag = anim_utils.action_get_channelbag_for_slot(obj_action, obj_slot)
+                            obj_fcu = channelbag.fcurves[0]
                             modifier = obj_fcu.modifiers.new(type='CYCLES')
                             modifier.mode_before = 'REPEAT'
                             modifier.mode_after = 'REPEAT'
@@ -487,7 +498,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 # TODO: sim, this is broken, pls fix Y_Y
                                 # make this instance from masters rather than loading multiple times
                                 #bpy.ops.io_scene_gltf.cp77(with_materials, filepath=meshpath, appearances=meshApp,scripting=True,generate_overrides=generate_overrides)
-                                group, groupname = get_group(meshname,meshApp,Masters)
+                                group, groupname = get_group(meshpath,meshApp,Masters)
                                 if (group):
                                     new=bpy.data.collections.new(groupname)
                                     ent_coll.children.link(new)
@@ -617,9 +628,9 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                             print('interior_02')
                                         bindpt=[cmp for cmp in comps if cmp['name']['$value']==bindname]
                                         slotname= chunk_pt.get('Data').get('slotName').get('$value')
-                                        if bindpt and slotname:
+                                        #if bindpt and slotname:
                                             # Have a bindpoint and a slotname, so we can use the local transform from the bindpoint
-                                            print('bindpt and slotname found')
+                                            #print('bindpt and slotname found')
 
                                         if bindpt and len(bindpt)==1:
                                             if c['localTransform']['Position']['x']['Bits']==0 and c['localTransform']['Position']['y']['Bits']==0 and c['localTransform']['Position']['z']['Bits']==0 and 'localTransform' in bindpt[0]:

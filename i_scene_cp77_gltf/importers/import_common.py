@@ -11,7 +11,7 @@ def get_groupname(meshname, meshAppearance):
         groupname = os.path.dirname(meshname).split(os.sep)[-1] + '_' + groupname
     if len(meshAppearance)>0:
         groupname += '@' + meshAppearance
-    while len(groupname) > 63:
+    while len(groupname) > 64:
         groupname = groupname[:-1]
     return groupname
 

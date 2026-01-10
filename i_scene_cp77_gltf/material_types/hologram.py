@@ -17,8 +17,6 @@ class Hologram:
         vers = bpy.app.version
         if vers[0] == 4 and vers[1] <= 2:
             Mat.shadow_method = 'HASHED'
-        else:
-            print('set shadows to hashed how in 4.3?')
         mat.blend_method = 'HASHED'
         sockets=bsdf_socket_names()
 
