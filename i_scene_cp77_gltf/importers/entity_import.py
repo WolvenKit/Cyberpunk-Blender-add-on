@@ -521,9 +521,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                             if new is None:
                                 print('collection not found after import - ', meshname)
                                 continue
-                            objs = []
-                            if new:
-                                objs = new.objects
+                            objs = new.objects
                             if 'body_01' in meshname:
                                 print('those annoying front forks')
 
