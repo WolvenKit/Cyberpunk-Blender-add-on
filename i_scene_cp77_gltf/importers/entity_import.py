@@ -517,6 +517,10 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 print('import threw an error:')
                                 print(traceback.format_exc())
                                 continue
+                            print('checking for collection - ', meshname)
+                            if new is None:
+                                print('collection not found after import - ', meshname)
+                                continue
                             objs = []
                             if new:
                                 objs = new.objects
