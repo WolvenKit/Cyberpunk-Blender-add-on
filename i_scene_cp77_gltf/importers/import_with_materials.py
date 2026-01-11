@@ -403,8 +403,8 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
     for mat in validmatnames.keys():
         for m in mats: #obj['Materials']:
             if 'Name' not in m.keys():
-                # Sometimes a material has no name, so we will use what we expect the material's name to be
-                m["Name"] = mat
+                # Sometimes a material has no name, for now we continue out, but we should figure out why
+                continue
             if m['Name'] != mat:
                 continue
             if 'BaseMaterial' in m.keys():
