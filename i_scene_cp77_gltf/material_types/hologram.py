@@ -340,7 +340,7 @@ class Hologram:
         #mix_001.Result -> principled_bsdf_001.Base Color
         holo_blue_002.links.new(mix_001.outputs[2], principled_bsdf_001.inputs[0])
         #mix_001.Result -> principled_bsdf_001.Emission Color
-        holo_blue_002.links.new(mix_001.outputs[2], principled_bsdf_001.inputs[27 if bpy.app.version >= (4, 3, 0) else 26])
+        holo_blue_002.links.new(mix_001.outputs[2], principled_bsdf_001.inputs[27])
         #color_ramp_001.Color -> math_001.Value
         holo_blue_002.links.new(color_ramp_001.outputs[0], math_001.inputs[0])
         #image_texture_001.Color -> mix_001.B
