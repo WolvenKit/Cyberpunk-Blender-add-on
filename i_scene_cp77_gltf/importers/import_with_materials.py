@@ -429,9 +429,6 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
             else:
                 print(m.keys())
 
-    # Remove any materials that are just a bool - failed to populate
-    validmats = {k: v for k, v in validmats.items() if not isinstance(v, bool)}
-
     MatImportList = [k for k in validmats.keys()]
     Builder = MaterialBuilder(mats, DepotPath, str(image_format), BasePath)
     counter = 0
