@@ -403,6 +403,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
     for mat in validmatnames.keys():
         for m in mats: #obj['Materials']:
             if 'Name' not in m.keys():
+                # Sometimes a material has no name, for now we continue out, but we should figure out why
                 continue
             if m['Name'] != mat:
                 continue
@@ -543,4 +544,3 @@ def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filena
     elif meshes and o.type == 'ARMATURE':
         o.hide_set(hide_armatures)
         o.name = "Armature__" + filename
-

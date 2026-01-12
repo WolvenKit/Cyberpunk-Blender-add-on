@@ -48,7 +48,11 @@ def meshes_from_mesheswapps( meshes_w_apps,path='', from_mesh_no=0, to_mesh_no=1
         if i>=from_mesh_no and i<=to_mesh_no and (m[-4:]=='mesh' or m[-13:]=='physicalscene' or m[-6:]=='w2mesh'):
             apps=[]
             for meshApp in meshes_w_apps[m]['apps'][0]:
-                if meshApp['$value'] not in apps and meshApp['$value']!='':                   
+                if (
+                    not isinstance(meshApp, str)
+                    and meshApp["$value"] not in apps
+                    and meshApp["$value"] != ""
+                ):
                     apps.append(meshApp['$value'])
             if m[-13:]=='physicalscene' or m[-6:]=='w2mesh':
                 meshpath=os.path.join(path, m+'.glb').replace('\\', os.sep)
@@ -57,12 +61,12 @@ def meshes_from_mesheswapps( meshes_w_apps,path='', from_mesh_no=0, to_mesh_no=1
                 meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb').replace('\\', os.sep)
             print(meshpath)
             groupname = get_groupname(meshpath, '')
-            
+
             if groupname not in Masters.children.keys() and os.path.exists(meshpath):
                 try:                    
                     CP77GLBimport( with_materials=with_mats,remap_depot= props.remap_depot, filepath=meshpath, appearances=apps,
                                     scripting=True, generate_overrides=generate_overrides)
-                    
+
                     objs = C.selected_objects
                     if objs[0].users_collection[0].name!= groupname:
                         objs[0].users_collection[0].name= groupname
@@ -91,7 +95,7 @@ def meshes_from_mesheswapps( meshes_w_apps,path='', from_mesh_no=0, to_mesh_no=1
                                     mat_name = json_apps.get(app)[idx]
                                     if 'sidewalk' in m:
                                         mat_name = 'sidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalk'
-                                       
+
                                     if len(mat_name)<63 and len(obj_copy.data.materials)>1 and mat_name in obj_copy.data.materials.keys():
                                         for ii in range(len(obj_copy.data.materials)-1,-1,-1):
                                             mat=obj_copy.data.materials.keys()[ii]
