@@ -20,8 +20,6 @@ from .import_common import *
 from bpy_extras import anim_utils
 
 
-
-
 def create_axes(ent_coll,name):
     if name not in ent_coll.objects.keys():
         o = bpy.data.objects.new( name , None )
@@ -37,7 +35,7 @@ def create_axes(ent_coll,name):
 
 # The appearance list needs to be the appearanceNames for each ent that you want to import, will import all if not specified
 # if you've already imported the body/head and set the rig up you can exclude them by putting them in the exclude_meshes list
-#presto_stash=[]
+# presto_stash=[]
 
 def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], include_collisions=False, include_phys=False,
                    include_entCollider=False, inColl='', remapdepot=False, meshes=None, mesh_jsons=None, escaped_path=None,
@@ -453,7 +451,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                             if 'HandleId' in chunk['animations'][0]['timeline']['items'][0]['impl'].keys():
                                 if int(chunk['animations'][0]['timeline']['items'][0]['impl']['HandleId'])==int(HRID):
                                     chunk_anim=chunk['animations'][0]['timeline']['items'][0]['impl']['Data']
-                    if chunk_anim['$type']=='gameTransformAnimation_RotateOnAxis':
+                    if isinstance(chunk_anim, dict) and chunk_anim['$type']=='gameTransformAnimation_RotateOnAxis':
                         rot_axis=chunk_anim['axis']
                         axis_no=0 # default to x
                         if rot_axis=='Z':
@@ -489,6 +487,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                         meshname=os.path.basename(m)
                         meshpath=os.path.join(path, m[:-1*len(os.path.splitext(m)[1])]+'.glb').replace('\\', os.sep)
                     if meshname and meshname not in exclude_meshes and os.path.exists(meshpath):
+                        new=None
                         try:
                             meshApp='default'
                             if 'meshAppearance' in c.keys():
