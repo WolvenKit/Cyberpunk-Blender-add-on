@@ -177,21 +177,25 @@ class MetalBase:
                     mappingNode.inputs[3].default_value = (Data["DetailU"],Data["DetailV"],0)
             CurMat.links.new(texCoord.outputs[2],mappingNode.inputs[0])
             CurMat.links.new(mappingNode.outputs[0],dNNode.inputs[0])
+            CurMat.links.new(mappingNode.outputs[0],dColNode.inputs[0])
 
             dColmul = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-800,650), blend_type = 'MULTIPLY')
             dColmul.inputs[0].default_value = 1
             CurMat.links.new(dColNode.outputs[0],dColmul.inputs[1])
             CurMat.links.new(bColNode.outputs[0],dColmul.inputs[2])
             CurMat.links.new(dColmul.outputs[0],mixRGB.inputs[1])
+            CurMat.links.new(dColNode.outputs[1],maskMapRange.inputs[0])
 
         CurMat.links.new(EnableMask.outputs['Value'], mathSubtract.inputs[1]) # Enablemask value into math which inverts it
         CurMat.links.new(mathSubtract.outputs['Value'], enableMaskClamp.inputs[1]) # Inverted value into clamp min, so if 1 its always solic, if 0 will use BaseColor alpha
         CurMat.links.new(maskMapRange.outputs[0], enableMaskClamp.inputs[0])
         CurMat.links.new(enableMaskClamp.outputs[0], backfaceGroup.inputs[0])
         CurMat.links.new(backfaceGroup.outputs[0], pBSDF.inputs['Alpha'])
-        if not image_has_alpha(bcolImg): # if the image doesnt have alpha stick the color in instead
+        if not image_has_alpha(bcolImg) and not isDetailNormal: # if the image doesnt have alpha stick the color in instead
             CurMat.links.new(bColNode.outputs['Color'],enableMaskClamp.inputs['Value'])
 
+        if not image_has_alpha(dColImg) and isDetailNormal: # same as above but for when using the detailcolor if the image doesnt have alpha stick the color in instead
+            CurMat.links.new(dColNode.outputs['Color'],enableMaskClamp.inputs['Value'])
 
 used_params=['BaseColor',
  'BaseColorScale',

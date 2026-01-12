@@ -466,7 +466,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
             m = validmats[matname]
 
             # Should create a list of mis that dont play nice with this and just check if the mat is using one.
-            if ( matname in bpy_mats.keys() and dict(bpy_mats[matname]['m']) == m ):
+            if ( matname in bpy_mats.keys() and 'm' in bpy_mats[matname].keys() and dict(bpy_mats[matname]['m']) == m ):
                 bpy.data.meshes[name].materials.append(bpy_mats[matname])
             elif matname in validmats.keys():
                 index = 0
