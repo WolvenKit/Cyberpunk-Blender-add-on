@@ -68,16 +68,16 @@ class MetalBase:
             CurMat.links.new(normalMap.outputs[0],pBSDF.inputs['Normal'])
 
         if "DetailNormal" in Data:
-            dNNode = CreateShaderNodeGlobalNormalMap(CurMat,self.BasePath + Data["DetailNormal"],-1400,-500,'Normal',self.image_format)
+            dNNode = CreateShaderNodeGlobalNormalMap(CurMat,self.BasePath + Data["DetailNormal"],-1000,-500,'Normal',self.image_format)
 
             normalDetVectorize = CurMat.nodes.new("ShaderNodeVectorMath")
             normalDetVectorize.operation='MULTIPLY_ADD'
-            normalDetVectorize.location = (-1400,-500)
+            normalDetVectorize.location = (-1050,-500)
             normalDetVectorize.hide = True
             normalDetVectorize.inputs[1].default_value = 2, 2, 0
             normalDetVectorize.inputs[2].default_value = -1, -1, 0
 
-            normalAdd = create_node(CurMat.nodes, "ShaderNodeVectorMath",(-1200,-350),operation='ADD')
+            normalAdd = create_node(CurMat.nodes, "ShaderNodeVectorMath",(-1050,-350),operation='ADD')
 
             CurMat.links.new(dNNode.outputs[0],normalDetVectorize.inputs[0])
             CurMat.links.new(normalVectorize.outputs[0],normalAdd.inputs[0])
@@ -125,9 +125,9 @@ class MetalBase:
         else:
             aThreshold = CreateShaderNodeValue(CurMat,1.0,-1400, 400,"AlphaThreshold")
 
-        maskMapRange = create_node(CurMat.nodes,"ShaderNodeMapRange",(-1050, 400))
-        CurMat.links.new(bColNode.outputs[1],maskMapRange.inputs[0])
-        CurMat.links.new(aThreshold.outputs[0],maskMapRange.inputs[1])
+        maskThreshold = create_node(CurMat.nodes,"ShaderNodeMath",(-1050,400),operation='GREATER_THAN')
+        CurMat.links.new(bColNode.outputs[1],maskThreshold.inputs[0])
+        CurMat.links.new(aThreshold.outputs[0],maskThreshold.inputs[1])
         # JATO: what is the purpose of this if/else?
         # if self.enableMask:
         #     CurMat.links.new(bColNode.outputs[1],alphaClamp.inputs['Value'])
@@ -169,33 +169,35 @@ class MetalBase:
         # It's critical we create these links last so the metalbasedet links overwrite metalbase links
         if isDetailNormal:
             texCoord = CurMat.nodes.new("ShaderNodeTexCoord")
-            texCoord.location = (-2300,-500)
+            texCoord.location = (-2300,0)
             mappingNode = CurMat.nodes.new("ShaderNodeMapping")
-            mappingNode.location = (-2100,-500)
+            mappingNode.location = (-2100,0)
             if "DetailU" in Data:
                 if "DetailV" in Data:
                     mappingNode.inputs[3].default_value = (Data["DetailU"],Data["DetailV"],0)
             CurMat.links.new(texCoord.outputs[2],mappingNode.inputs[0])
-            CurMat.links.new(mappingNode.outputs[0],dNNode.inputs[0])
             CurMat.links.new(mappingNode.outputs[0],dColNode.inputs[0])
+            CurMat.links.new(mappingNode.outputs[0],dNNode.inputs[0])
+
+            alphaMultiply = create_node(CurMat.nodes,"ShaderNodeMath", (-1050,800) , operation = 'MULTIPLY')
+            CurMat.links.new(dColNode.outputs[1],alphaMultiply.inputs[0])
+            CurMat.links.new(bColNode.outputs[1],alphaMultiply.inputs[1])
+            CurMat.links.new(alphaMultiply.outputs[0],maskThreshold.inputs[0])
 
             dColmul = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-800,650), blend_type = 'MULTIPLY')
             dColmul.inputs[0].default_value = 1
             CurMat.links.new(dColNode.outputs[0],dColmul.inputs[1])
             CurMat.links.new(bColNode.outputs[0],dColmul.inputs[2])
             CurMat.links.new(dColmul.outputs[0],mixRGB.inputs[1])
-            CurMat.links.new(dColNode.outputs[1],maskMapRange.inputs[0])
 
         CurMat.links.new(EnableMask.outputs['Value'], mathSubtract.inputs[1]) # Enablemask value into math which inverts it
         CurMat.links.new(mathSubtract.outputs['Value'], enableMaskClamp.inputs[1]) # Inverted value into clamp min, so if 1 its always solic, if 0 will use BaseColor alpha
-        CurMat.links.new(maskMapRange.outputs[0], enableMaskClamp.inputs[0])
+        CurMat.links.new(maskThreshold.outputs[0], enableMaskClamp.inputs[0])
         CurMat.links.new(enableMaskClamp.outputs[0], backfaceGroup.inputs[0])
         CurMat.links.new(backfaceGroup.outputs[0], pBSDF.inputs['Alpha'])
-        if not image_has_alpha(bcolImg) and not isDetailNormal: # if the image doesnt have alpha stick the color in instead
+        if not image_has_alpha(bcolImg): # if the image doesnt have alpha stick the color in instead
             CurMat.links.new(bColNode.outputs['Color'],enableMaskClamp.inputs['Value'])
 
-        if not image_has_alpha(dColImg) and isDetailNormal: # same as above but for when using the detailcolor if the image doesnt have alpha stick the color in instead
-            CurMat.links.new(dColNode.outputs['Color'],enableMaskClamp.inputs['Value'])
 
 used_params=['BaseColor',
  'BaseColorScale',
