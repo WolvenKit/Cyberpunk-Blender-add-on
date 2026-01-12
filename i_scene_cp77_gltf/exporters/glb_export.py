@@ -551,8 +551,8 @@ def validate_mesh(ob, tempshit, eps=1e-10, uv_eps=1e-12):
         issues.append(ValidationIssue(
             'degenerate_3d',
             f"{len(bad_3d_faces)} zero-area faces detected in '{ob.name}'. "
-            f"Remove or fix these faces before export.",
-            ""#"https://tinyurl.com/degenerate-faces"
+            f"Remove or fix these faces before export."
+            "https://tinyurl.com/wkit-io-degen-geometry"
         ))
 
 
