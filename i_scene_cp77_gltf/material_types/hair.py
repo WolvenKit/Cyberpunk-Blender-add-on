@@ -77,12 +77,16 @@ class Hair:
                 element.color =  (float(colr["Red"])/255,float(colr["Green"])/255,float(colr["Blue"])/255,float(1))
             counter = counter + 1
 
+        gammaID = create_node(Ns,"ShaderNodeGamma",(-650,350))
+        gammaID.inputs[1].default_value = 2.2
 
-        mulNode = create_node(Ns,"ShaderNodeMixRGB", (-650,200), blend_type = 'MULTIPLY')
+        # JATO: this is total nonsense but makes panam, judy, hanako, johnny, evelyn, etc. hair look correct... seems the root-to-tip colors are curved somehow?
+        gammaRootToTip = create_node(Ns,"ShaderNodeGamma",(-650,50))
+        gammaRootToTip.inputs[1].default_value = 4.5
+
+        mulNode = create_node(Ns,"ShaderNodeMixRGB", (-450,200), blend_type = 'MULTIPLY')
         mulNode.inputs[0].default_value = 1
 
-        gamma0 = create_node(Ns,"ShaderNodeGamma",(-450,200))
-        gamma0.inputs[1].default_value = 2.2
 
         CurMat.links.new(alphaImgNode.outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Alpha'])
 
@@ -90,11 +94,13 @@ class Hair:
 
         CurMat.links.new(idImgNode.outputs[0],ID.inputs[0])
 
-        CurMat.links.new(ID.outputs[0],mulNode.inputs[1])
-        CurMat.links.new(RootToTip.outputs[0],mulNode.inputs[2])
+        CurMat.links.new(ID.outputs[0],gammaID.inputs[0])
+        CurMat.links.new(RootToTip.outputs[0],gammaRootToTip.inputs[0])
 
-        CurMat.links.new(mulNode.outputs[0],gamma0.inputs[0])
-        CurMat.links.new(gamma0.outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
+        CurMat.links.new(gammaID.outputs[0],mulNode.inputs[1])
+        CurMat.links.new(gammaRootToTip.outputs[0],mulNode.inputs[2])
+
+        CurMat.links.new(mulNode.outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Base Color'])
 
         CurMat.links.new(flowImgNode.outputs[0],flowNormalNode.inputs[1])
         CurMat.links.new(flowNormalNode.outputs[0],CurMat.nodes[loc('Principled BSDF')].inputs['Tangent'])
