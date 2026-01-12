@@ -23,8 +23,8 @@ class Glass:
             isVehicleGlass = True
 
         if "TintColor" in Data:
-            Color = CreateShaderNodeRGB(CurMat, Data["TintColor"],-400,200,'TintColor')
-            CurMat.links.new(Color.outputs[0],pBDSF.inputs['Base Color'])
+            tintColor = CreateShaderNodeRGB(CurMat, Data["TintColor"],-800,600,'TintColor')
+            tintColor.hide = False
 
         if "IOR" in Data:
             safeIOR = (Data['IOR'])
@@ -32,44 +32,52 @@ class Glass:
                 safeIOR = 1
             else:
                 safeIOR = (Data['IOR'])
-            IOR = CreateShaderNodeValue(CurMat, safeIOR,-400,-50,"IOR")
+            IOR = CreateShaderNodeValue(CurMat, safeIOR,-600,-50,"IOR")
             CurMat.links.new(IOR.outputs[0],pBDSF.inputs['IOR'])
 
         if "Roughness" in Data:
             rImg = imageFromRelPath(Data["Roughness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
-            rImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,50), label="Roughness", image=rImg)
+            rImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-1200,0), label="Roughness", image=rImg)
             CurMat.links.new(rImgNode.outputs[0],pBDSF.inputs['Roughness'])
             if isVehicleGlass:
                 CurMat.links.new(rImgNode.outputs[1],pBDSF.inputs['Roughness'])
 
         if "Normal" in Data:
-            nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["Normal"],-200,-300,'Normal',self.image_format)
+            nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["Normal"],-800,-300,'Normal',self.image_format)
             CurMat.links.new(nMap.outputs[0],pBDSF.inputs['Normal'])
-        
+
+        alphaAdd = create_node(CurMat.nodes,"ShaderNodeMath", (-800,150) , operation = 'ADD')
+
+        transmissionMultiply = create_node(CurMat.nodes,"ShaderNodeMath", (-800,300) , operation = 'MULTIPLY')
+
         if "MaskTexture" in Data:
             mImg = imageFromRelPath(Data["MaskTexture"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
             mImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-1200,350), label="MaskTexture", image=mImg)
-            facNode = create_node(CurMat.nodes,"ShaderNodeMath", (-450,-100) ,operation = 'MULTIPLY')
-            facNode.inputs[0].default_value = 1
-            # JATO: unhooked mask-tex because it's making glass invisible (see car windows). TODO figure out how mask-tex is supposed to work
-            # CurMat.links.new(facNode.outputs[0],pBDSF.inputs['Alpha'])
 
-            if "MaskOpacity" in Data:
-                maskOpacity = CreateShaderNodeValue(CurMat,Data["MaskOpacity"],-1000, 0,"MaskOpacity")
-                
-                invNode = create_node(CurMat.nodes,"ShaderNodeMath", (-900,-50) ,operation = 'SUBTRACT')
-                invNode.inputs[0].default_value = 1
-                
-                mulNode = create_node(CurMat.nodes,"ShaderNodeMath", (-650,-100) ,operation = 'MULTIPLY')
-                mulNode.inputs[0].default_value = 1
-                
-                CurMat.links.new(maskOpacity.outputs[0],invNode.inputs[1])
-                CurMat.links.new(invNode.outputs[0],mulNode.inputs[0])
-                CurMat.links.new(mImgNode.outputs[1],mulNode.inputs[1])
-                CurMat.links.new(mulNode.outputs[0],facNode.inputs[1])
-            else:
-                CurMat.links.new(mImgNode.outputs[1],facNode.inputs[1])
+            CurMat.links.new(mImgNode.outputs[1],transmissionMultiply.inputs[0])
 
+            CurMat.links.new(mImgNode.outputs[1],alphaAdd.inputs[0])
+            CurMat.links.new(alphaAdd.outputs[0],pBDSF.inputs['Alpha'])
+
+        mixRGB = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-800,400) , blend_type = 'MULTIPLY')
+        mixRGB.inputs[0].default_value = 1
+        CurMat.links.new(tintColor.outputs[0],mixRGB.inputs[1])
+        CurMat.links.new(mImgNode.outputs[0],mixRGB.inputs[2])
+        CurMat.links.new(mixRGB.outputs[0],pBDSF.inputs['Base Color'])
+
+        transmissionInvert = create_node(CurMat.nodes,"ShaderNodeMath", (-600,300) , operation = 'SUBTRACT')
+        transmissionInvert.inputs[0].default_value = 1
+
+        CurMat.links.new(transmissionMultiply.outputs[0],transmissionInvert.inputs[1])
+        CurMat.links.new(transmissionInvert.outputs[0],pBDSF.inputs['Transmission Weight'])
+
+        if "MaskOpacity" in Data:
+            maskOpacity = CreateShaderNodeValue(CurMat,Data["MaskOpacity"],-800,250,"MaskOpacity")
+            CurMat.links.new(maskOpacity.outputs[0],transmissionMultiply.inputs[1])
+
+        if "Opacity" in Data:
+            opacity = CreateShaderNodeValue(CurMat,Data["Opacity"],-800,100,"Opacity")
+            CurMat.links.new(opacity.outputs[0],alphaAdd.inputs[1])
 
 # The above is the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
 
