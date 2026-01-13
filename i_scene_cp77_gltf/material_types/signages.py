@@ -18,7 +18,6 @@ class Signages:
             dCol = CreateShaderNodeRGB(CurMat, Data["ColorOneStart"], -800, 250, "ColorOneStart")    
         else:
             dCol = CreateShaderNodeRGB(CurMat,{'Red': 255, 'Green': 255, 'Blue': 255, 'Alpha': 255}, -800, 250, "ColorOneStart")
-        CurMat.links.new(dCol.outputs[0],pBSDF.inputs['Base Color'])
           
         alphaNode = create_node(CurMat.nodes,"ShaderNodeMath", (-300, -250) ,operation = 'MULTIPLY')
                                 
@@ -29,7 +28,7 @@ class Signages:
             alphaNode.inputs[1].default_value = 1
 
         mulNode = CurMat.nodes.new("ShaderNodeMixRGB")
-        mulNode.inputs[0].default_value = 0.5
+        mulNode.inputs[0].default_value = 1
         mulNode.blend_type = 'MULTIPLY'
         mulNode.location = (-300, -50)
         CurMat.links.new(dCol.outputs[0],mulNode.inputs[1])
@@ -42,6 +41,7 @@ class Signages:
 
 
         CurMat.links.new(alphaNode.outputs[0], pBSDF.inputs['Alpha'])
+        CurMat.links.new(mulNode.outputs[0], pBSDF.inputs['Base Color'])
         CurMat.links.new(mulNode.outputs[0], pBSDF.inputs[sockets['Emission']])
         
         if "EmissiveEV" in Data:
