@@ -781,7 +781,7 @@ def cp77_meshValidation(
 
                 # If NOT trying to fix, select problem areas and halt
                 if not try_fix:
-                    bad_faces = list(general_result.get('bad_3d_faces', []).tolist())
+                    bad_faces = list(general_result.get('bad_3d_faces', np.array([])).tolist())
                     ungrouped_verts = None
                     if skinned_result:
                         ungrouped_verts = skinned_result.get('ungrouped_verts')
