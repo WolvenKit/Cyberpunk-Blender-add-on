@@ -219,7 +219,7 @@ class WeightTransferManager:
 
     def __init__(self, context):
         self.context = context
-        self.submesh_pattern = re.compile(r'.*submesh_(\d+)(?:_LOD_(\d+))?$', re.IGNORECASE)
+        self.submesh_pattern = re.compile(r'.*submesh_(\d+)(?:_LOD_(\d+))?(?:\.\d+)?$', re.IGNORECASE)
 
     def parse_submesh_index(self, name: str) -> Optional[int]:
         """Extracts the submesh index from a name."""
@@ -230,7 +230,7 @@ class WeightTransferManager:
 
     def build_transfer_pairs(self, sources: List[bpy.types.Object], targets: List[bpy.types.Object], by_submesh: bool) -> List[Tuple[List[bpy.types.Object], List[bpy.types.Object]]]:
         """Build source-target pairs for weight transfer."""
-        
+       
         if by_submesh:
             return self.pair_by_submesh_index(sources, targets)
         return [(sources, targets)]
@@ -257,24 +257,34 @@ class WeightTransferManager:
         return pairs
 
     def transfer_weights(self, sources: List[bpy.types.Object], targets: List[bpy.types.Object], vert_mapping: str):
-        """
-        Executes the transfer using Modern Blender API (temp_override).
-        """
         for target in targets:
+            valid_sources = [s for s in sources if s != target]
+            if not valid_sources:
+                continue
+
+            bpy.ops.object.select_all(action='DESELECT')
+
+            target.hide_viewport = False
+            target.select_set(True)
+            self.context.view_layer.objects.active = target
+
+            for source in valid_sources:
+                source.hide_viewport = False
+                source.select_set(True)
+
             target.vertex_groups.clear()
 
             try:
-                with self.context.temp_override(active_object=target, selected_objects=sources + [target]):
-                    bpy.ops.object.data_transfer(
-                            use_reverse_transfer=False,
-                            use_object_transform=True,
-                            vert_mapping=vert_mapping,
-                            data_type='VGROUP_WEIGHTS',
-                            layers_select_src='ALL',
-                            layers_select_dst='NAME',
-                            mix_mode='REPLACE',
-                            mix_factor=1.0
-                            )
+                bpy.ops.object.data_transfer(
+                        use_reverse_transfer=True,
+                        use_object_transform=True,
+                        vert_mapping=vert_mapping,
+                        data_type='VGROUP_WEIGHTS',
+                        layers_select_src='NAME',
+                        layers_select_dst='ALL',
+                        mix_mode='REPLACE',
+                        mix_factor=1.0
+                        )
             except RuntimeError as e:
                 print(f"Transfer failed for {target.name}: {e}")
 
@@ -298,6 +308,10 @@ def trans_weights(operator, context, vertInterop: bool, bySubmesh: bool):
         operator.report({'ERROR'}, "Collections must contain meshes.")
         return {'CANCELLED'}
 
+    if props.mesh_source == props.mesh_target:
+        operator.report({'ERROR'}, "Source and Target collections cannot be the same!")
+        return {'CANCELLED'}
+
     store_current_context()
 
     try:
@@ -305,6 +319,7 @@ def trans_weights(operator, context, vertInterop: bool, bySubmesh: bool):
 
         manager = WeightTransferManager(context)
         mapping_mode = 'NEAREST' if vertInterop else 'POLYINTERP_NEAREST'
+
         pairs = manager.build_transfer_pairs(sources, targets, by_submesh=bySubmesh)
 
         if not pairs:
@@ -316,7 +331,7 @@ def trans_weights(operator, context, vertInterop: bool, bySubmesh: bool):
             manager.transfer_weights(src_list, tgt_list, mapping_mode)
             count += len(tgt_list)
 
-        operator.report({'INFO'}, f"Transferred weights to {count} meshes (Mode: {mapping_mode}).")
+        operator.report({'INFO'}, f"Transferred weights to {count} meshes.")
         return {'FINISHED'}
 
     except Exception as e:
