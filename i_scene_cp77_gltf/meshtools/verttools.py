@@ -1,7 +1,6 @@
 import bpy
-import math
 import re
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Optional
 from contextlib import contextmanager
 from ..main.common import show_message
 from ..main.bartmoss_functions import (
