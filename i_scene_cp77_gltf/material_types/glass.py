@@ -73,6 +73,7 @@ class Glass:
 
         if "MaskOpacity" in Data:
             maskOpacity = CreateShaderNodeValue(CurMat,Data["MaskOpacity"],-800,250,"MaskOpacity")
+            CurMat.links.new(maskOpacity.outputs[0],mixRGB.inputs[0])
             CurMat.links.new(maskOpacity.outputs[0],transmissionMultiply.inputs[1])
 
         if "Opacity" in Data:
