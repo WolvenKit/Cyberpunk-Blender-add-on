@@ -551,7 +551,7 @@ def validate_mesh(ob, tempshit, eps=1e-10, uv_eps=1e-12):
         issues.append(ValidationIssue(
             'degenerate_3d',
             f"{len(bad_3d_faces)} zero-area faces detected in '{ob.name}'. "
-            f"Remove or fix these faces before export."
+            f"Remove or fix these faces before export.",
             "https://tinyurl.com/wkit-io-degen-geometry"
         ))
 
@@ -781,7 +781,7 @@ def cp77_meshValidation(
 
                 # If NOT trying to fix, select problem areas and halt
                 if not try_fix:
-                    bad_faces = list(general_result.get('bad_3d_faces', []).tolist())
+                    bad_faces = list(general_result.get('bad_3d_faces', np.array([])).tolist())
                     ungrouped_verts = None
                     if skinned_result:
                         ungrouped_verts = skinned_result.get('ungrouped_verts')
