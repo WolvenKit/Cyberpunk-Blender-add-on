@@ -1,7 +1,6 @@
 import bpy
-import math
 import re
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Optional
 from contextlib import contextmanager
 from ..main.common import show_message
 from ..main.bartmoss_functions import (
@@ -215,152 +214,130 @@ def CP77GroupUngroupedVerts(self, context):
     return {'FINISHED'}
 
 class WeightTransferManager:
-    """Manages weight transfer operations between meshes."""
+    """Manages weight transfer """
 
     def __init__(self, context):
         self.context = context
-        self.submesh_pattern = re.compile(r'^submesh_(\d+)(?:_LOD_(\d+))?$', re.IGNORECASE)
+        self.submesh_pattern = re.compile(r'.*submesh_(\d+)(?:_LOD_(\d+))?(?:\.\d+)?$', re.IGNORECASE)
 
-    def parse_submesh_name(self, name: str) -> Tuple[Optional[int], Optional[int]]:
-        """Parse submesh name for index and LOD."""
+    def parse_submesh_index(self, name: str) -> Optional[int]:
+        """Extracts the submesh index from a name."""
         match = self.submesh_pattern.match(name)
-        if not match:
-            return None, None
+        if match:
+            return int(match.group(1))
+        return None
 
-        idx = int(match.group(1))
-        lod = int(match.group(2)) if match.group(2) else None
-        return idx, lod
-
-    def build_transfer_pairs(self, sources: List, targets: List) -> List[Tuple]:
+    def build_transfer_pairs(self, sources: List[bpy.types.Object], targets: List[bpy.types.Object], by_submesh: bool) -> List[Tuple[List[bpy.types.Object], List[bpy.types.Object]]]:
         """Build source-target pairs for weight transfer."""
-        pairs = []
+       
+        if by_submesh:
+            return self.pair_by_submesh_index(sources, targets)
+        return [(sources, targets)]
 
-        # Special case: single source to many targets
-        if len(sources) == 1 and len(targets) >= 1:
-            return [(sources[0], targets)]
-
-        # Special case: many sources to single target
-        if len(targets) == 1 and len(sources) >= 1:
-            return [(s, [targets[0]]) for s in sources]
-
-        # Check if all are submeshes
-        src_all_submesh = all(self.parse_submesh_name(o.name)[0] is not None for o in sources)
-        tgt_all_submesh = all(self.parse_submesh_name(o.name)[0] is not None for o in targets)
-
-        if src_all_submesh and tgt_all_submesh:
-            # Pair by submesh index
-            pairs = self.pair_by_submesh_index(sources, targets)
-        else:
-            # Simple ordered pairing
-            pairs = [(s, [t]) for s, t in zip(sources, targets)]
-
-        return pairs
-
-    def pair_by_submesh_index(self, sources: List, targets: List) -> List[Tuple]:
-        """Pair meshes by submesh index."""
-        # Build index maps
-        src_by_idx = {}
+    def pair_by_submesh_index(self, sources: List[bpy.types.Object], targets: List[bpy.types.Object]) -> List[Tuple[List[bpy.types.Object], List[bpy.types.Object]]]:
+        src_map = {}
         for s in sources:
-            idx, _ = self.parse_submesh_name(s.name)
-            if idx is not None and idx not in src_by_idx:
-                src_by_idx[idx] = s
-
-        tgt_by_idx = {}
-        for t in targets:
-            idx, _ = self.parse_submesh_name(t.name)
+            idx = self.parse_submesh_index(s.name)
             if idx is not None:
-                tgt_by_idx.setdefault(idx, []).append(t)
+                src_map.setdefault(idx, []).append(s)
 
-        # Create pairs
+        tgt_map = {}
+        for t in targets:
+            idx = self.parse_submesh_index(t.name)
+            if idx is not None:
+                tgt_map.setdefault(idx, []).append(t)
+
         pairs = []
-        for idx in sorted(tgt_by_idx.keys()):
-            if idx in src_by_idx:
-                pairs.append((src_by_idx[idx], tgt_by_idx[idx]))
-
+        for idx, target_list in tgt_map.items():
+            if idx in src_map:
+                pairs.append((src_map[idx], target_list))
+            else:
+                print(f"Warning: No source found for Target Submesh {idx}")
         return pairs
 
-    def transfer_weights(self, source, targets, vert_mapping='NEAREST'):
-        """Execute weight transfer"""
+    def transfer_weights(self, sources: List[bpy.types.Object], targets: List[bpy.types.Object], vert_mapping: str):
+        for target in targets:
+            valid_sources = [s for s in sources if s != target]
+            if not valid_sources:
+                continue
 
-        # Select targets and clear existing weights
-        for t in targets:
-            # Deselect all first
             bpy.ops.object.select_all(action='DESELECT')
-            t.select_set(True)
-            t.vertex_groups.clear()
 
-            # Set source as active and select it
-            select_object(source)
-            source.select_set(True)  # Also add to selection for the transfer
+            target.hide_viewport = False
+            target.select_set(True)
+            self.context.view_layer.objects.active = target
 
-            # Transfer weights
-            bpy.ops.object.data_transfer(
-                use_reverse_transfer=False,
-                use_object_transform=True,
-                vert_mapping=vert_mapping,
-                data_type='VGROUP_WEIGHTS',
-                layers_select_src='ALL',
-                layers_select_dst='NAME',
-                mix_mode='REPLACE',
-                mix_factor=1.0
-            )
+            for source in valid_sources:
+                source.hide_viewport = False
+                source.select_set(True)
 
-def trans_weights(self, context, vertInterop):
-    """Transfer vertex weights between collections"""
+            target.vertex_groups.clear()
+
+            try:
+                bpy.ops.object.data_transfer(
+                        use_reverse_transfer=True,
+                        use_object_transform=True,
+                        vert_mapping=vert_mapping,
+                        data_type='VGROUP_WEIGHTS',
+                        layers_select_src='NAME',
+                        layers_select_dst='ALL',
+                        mix_mode='REPLACE',
+                        mix_factor=1.0
+                        )
+            except RuntimeError as e:
+                print(f"Transfer failed for {target.name}: {e}")
+
+def trans_weights(operator, context, vertInterop: bool, bySubmesh: bool):
+    """
+    Does the transfer of weights between meshes.
+    """
     props = context.scene.cp77_panel_props
 
-    # Get collections
     src_col = bpy.data.collections.get(props.mesh_source)
     tgt_col = bpy.data.collections.get(props.mesh_target)
 
     if not src_col or not tgt_col:
-        show_message("Source and target collections must be specified")
+        operator.report({'ERROR'}, "Source or Target collection not found!")
         return {'CANCELLED'}
 
-    # Get meshes
-    sources = [o for o in src_col.objects if is_mesh(o)]
-    targets = [o for o in tgt_col.objects if is_mesh(o)]
+    sources = [o for o in src_col.objects if o.type == 'MESH']
+    targets = [o for o in tgt_col.objects if o.type == 'MESH']
 
     if not sources or not targets:
-        show_message("Both collections must contain at least one mesh")
+        operator.report({'ERROR'}, "Collections must contain meshes.")
         return {'CANCELLED'}
 
-    # Store current context
+    if props.mesh_source == props.mesh_target:
+        operator.report({'ERROR'}, "Source and Target collections cannot be the same!")
+        return {'CANCELLED'}
+
     store_current_context()
 
     try:
-        # Switch to object mode for transfer
         safe_mode_switch('OBJECT')
 
-        # Setup transfer
         manager = WeightTransferManager(context)
-        vert_mapping = 'POLYINTERP_NEAREST' if vertInterop else 'NEAREST'
+        mapping_mode = 'NEAREST' if vertInterop else 'POLYINTERP_NEAREST'
 
-        # Build pairs
-        pairs = manager.build_transfer_pairs(sources, targets)
+        pairs = manager.build_transfer_pairs(sources, targets, by_submesh=bySubmesh)
 
-        # Execute transfers
-        passes = 0
-        errors = []
+        if not pairs:
+            operator.report({'WARNING'}, "No matching pairs found.")
+            return {'CANCELLED'}
 
-        for source, target_list in pairs:
-            try:
-                manager.transfer_weights(source, target_list, vert_mapping)
-                passes += 1
-            except Exception as e:
-                errors.append(f"{source.name}: {str(e)}")
+        count = 0
+        for src_list, tgt_list in pairs:
+            manager.transfer_weights(src_list, tgt_list, mapping_mode)
+            count += len(tgt_list)
 
-        # Report results
-        if errors:
-            show_message(f"Transferred weights ({passes} passes). Errors: {'; '.join(errors[:3])}")
-        else:
-            msg = f"Successfully transferred weights across {passes} pass(es)"
-            if len(pairs) > 1:
-                msg += f" using {'submesh pairing' if any('submesh' in p[0].name for p in pairs) else 'ordered pairing'}"
-            show_message(msg)
+        operator.report({'INFO'}, f"Transferred weights to {count} meshes.")
+        return {'FINISHED'}
+
+    except Exception as e:
+        operator.report({'ERROR'}, f"Transfer Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {'CANCELLED'}
 
     finally:
-        # Restore context
         restore_previous_context()
-
-    return {'FINISHED'}
