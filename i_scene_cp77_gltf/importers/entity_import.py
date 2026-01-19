@@ -456,6 +456,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                         axis_no=0 # default to x
                         if rot_axis=='Z':
                             axis_no=2
+                            
                         elif rot_axis=='Y': #y & z are swapped
                             axis_no=1
 
@@ -652,7 +653,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                             # if bindname isnt in the bones then its a part thats already bound to a bone,
                                             # These inherit the parent and local transforms from the other part, find it and work out what the transform is
                                             for o in comps:
-                                                if o['name']['$value']==bindname:
+                                                if o['name']['$value']==bindname and 'parentTransform' in o.keys():
                                                     pT=o['parentTransform']
                                                     if pT:
 
