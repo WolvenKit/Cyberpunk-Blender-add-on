@@ -972,7 +972,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                         obj.hide_set(True)
                                                     if ntype=='worldRotatingMeshNode':
                                                         orig_rot= obj.rotation_quaternion
-                                                        obj.rotation_mode='XYZ'
+                                                        obj.rotation_mode='YXZ'
                                                         obj.keyframe_insert('rotation_euler', index=axis_no ,frame=1)
                                                         obj.rotation_euler[axis_no] = obj.rotation_euler[axis_no] +math.radians(360)
                                                         obj.keyframe_insert('rotation_euler', index=axis_no ,frame=rot_time*24)
