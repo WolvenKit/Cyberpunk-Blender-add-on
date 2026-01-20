@@ -240,7 +240,7 @@ def _getOrCreateLayerBlend(Mat):
     return NG
 
 def _getOrCreateLayerBlend5(Mat):
-    ng_name = "Layer Blend 1.7.3"
+    ng_name = "Layer Blend 1.8.0"
     if ng_name in bpy.data.node_groups:
         return bpy.data.node_groups[ng_name]
 
@@ -332,7 +332,7 @@ def _getOrCreateLayerBlend5(Mat):
 
 # JATO: This function wraps a pbsdf node inside a nodegroup with bundle sockets for blender 5+
 def ml_pbsdf_node_group(Mat):
-    ng_name = "Multilayered 1.7.3"
+    ng_name = "Multilayered 1.8.0"
     if ng_name in bpy.data.node_groups:
         return bpy.data.node_groups[ng_name]
     ml_bsdf = bpy.data.node_groups.new(type = 'ShaderNodeTree', name = ng_name)
@@ -589,7 +589,7 @@ class Multilayered:
             ml_main_ng.color_tag = 'SHADER'
             mlShaderNG = CurMat.nodes.new("ShaderNodeGroup")
             # JATO: should we be setting node name? maybe ml-editing stuff should look for node tree name instead?
-            mlShaderNG.name = "Multilayered 1.7.3"
+            mlShaderNG.name = "Multilayered 1.8.0"
             mlShaderNG.location = (-50, 100)
             mlShaderNG.node_tree = ml_main_ng
             mlShaderNG.show_options = False

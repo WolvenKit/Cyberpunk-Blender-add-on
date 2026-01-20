@@ -9,7 +9,7 @@ class Skin:
         self.image_format = image_format
 
     def create_skin_node_group(self, microdetail_image=None):
-        ng_name = "Skin 2077 1.7.3"
+        ng_name = "Skin 2077 1.8.0"
         if ng_name in bpy.data.node_groups:
             return bpy.data.node_groups[ng_name]
         nodegroup = bpy.data.node_groups.new(type = 'ShaderNodeTree', name = ng_name)

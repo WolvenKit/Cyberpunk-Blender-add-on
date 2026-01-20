@@ -26,7 +26,7 @@ def get_layernode_by_socket(self,context):
     nodes = active_material.node_tree.nodes
     layer_index = bpy.context.scene.multilayer_index_prop
 
-    mlBSDFGroup = nodes.get("Multilayered 1.7.3")
+    mlBSDFGroup = nodes.get("Multilayered 1.8.0")
     if mlBSDFGroup:
         socket_name = ("Layer "+str(layer_index))
         socket = mlBSDFGroup.inputs.get(socket_name)
