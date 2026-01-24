@@ -420,6 +420,8 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
                     DiffuseMap = m['Data']['DiffuseMap']
                 elif 'BaseColor' in m['Data'].keys():
                     DiffuseMap = m['Data']['BaseColor']
+                elif 'DiffuseTexture' in m['Data'].keys():
+                    DiffuseMap = m['Data']['DiffuseTexture']
                 else:
                     DiffuseMap = 'None'
 
@@ -465,7 +467,8 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
 
             # print('matname: ',matname, validmats[matname])
             m = validmats[matname]
-
+            if matname=='decal_diffuse1':
+                print('debug')
             # Should create a list of mis that dont play nice with this and just check if the mat is using one.
             if ( matname in bpy_mats.keys() and 'm' in bpy_mats[matname].keys() and dict(bpy_mats[matname]['m']) == m ):
                 bpy.data.meshes[name].materials.append(bpy_mats[matname])
@@ -482,7 +485,10 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
                             bpymat['BaseMaterial'] = validmats[matname]['BaseMaterial']
                             bpymat['GlobalNormal'] = validmats[matname]['GlobalNormal']
                             bpymat['MultilayerMask'] = validmats[matname]['MultilayerMask']
-                            bpymat['DiffuseMap'] = validmats[matname]['DiffuseMap']
+                            if 'DiffuseMap' in validmats[matname].keys():
+                                bpymat['DiffuseMap'] = validmats[matname]['DiffuseMap']
+                            if 'DiffuseTexture' in validmats[matname].keys():
+                                bpymat['DiffuseTexture'] = validmats[matname]['DiffuseTexture']
                             bpy.data.meshes[name].materials.append(bpymat)
                             if 'no_shadows' in bpymat.keys() and bpymat['no_shadows'] and name in bpy.data.objects.keys():
                                 bpy.data.objects[name].visible_shadow = False
