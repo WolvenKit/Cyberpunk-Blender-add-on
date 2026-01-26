@@ -551,39 +551,32 @@ def delete_anim(self, context):
     except Exception:
         return {'CANCELLED'}
 
-def _set_bone_visibility(armature_data, hide_state, bone_filter=None):
+def _set_bone_visibility(armature_object, hide_state, bone_filter=None):
     """
     Helper function to set bone visibility.
-    
-    Args:
-        armature_data: Armature data block
-        hide_state: Boolean, True to hide, False to show
-        bone_filter: Optional function to filter which bones to affect
-    """
-    if not armature_data:
-        return
-    
-    # Set visibility for pose bones
-    for bone in armature_data.bones:
-        if bone_filter is None or bone_filter(bone):
-            bone.hide = hide_state
-    
-    # Set visibility for edit bones if in edit mode
-    if hasattr(armature_data, 'edit_bones') and armature_data.edit_bones:
-        for bone in armature_data.edit_bones:
-            if bone_filter is None or bone_filter(bone):
-                bone.hide = hide_state
 
-def hide_extra_bones(self, context):
-    """
-    Hide all bones that are not in the standard animation bone list.
-    
     Args:
-        self: Operator instance
-        context: Blender context
-        
-    Returns:
-        None
+        armature_object: Armature object (not data!)
+        hide_state: Boolean, True to hide, False to show
+        bone_filter: List of bone names to affect. If None, it affects all
+    """
+    if not armature_object:
+        return
+
+    armature_data = armature_object.data
+
+    # Handles Pose and object mode visibility
+    for bone in armature_object.pose.bones:
+        if bone_filter is None or bone.name in bone_filter:
+            bone.hide = hide_state
+    # Handles edit mode visibility
+    for bone in armature_data.bones:
+        if bone_filter is None or bone.name in bone_filter:
+            bone.hide = hide_state
+
+def hide_extra_bones(context):
+    """
+    Hide all bones that are not in the animBones list.
     """
     selected_object = context.active_object
 
@@ -591,29 +584,22 @@ def hide_extra_bones(self, context):
         print("Select an armature object.")
         return
 
-    armature = selected_object.data
-    
-    # Filter function: hide bones not in animBones list
-    def should_hide(bone):
-        return bone.name not in animBones
-    
-    _set_bone_visibility(armature, True, should_hide)
-    
-    # Mark that deform bones are hidden
+    bones_to_hide = [
+        b.name for b in selected_object.pose.bones 
+        if b.name not in animBones
+    ]
+
+    _set_bone_visibility(selected_object, False, bones_to_hide)
+
+    selected_object.update_tag()
+
     selected_object['deformBonesHidden'] = True
-    
-    print(f"Hidden extra bones (kept {len(animBones)} animation bones visible)")
+
+    print(f"Hidden {len(bones_to_hide)} extra bones")
 
 def unhide_extra_bones(self, context):
     """
     Unhide all bones in the armature.
-    
-    Args:
-        self: Operator instance
-        context: Blender context
-        
-    Returns:
-        None
     """
     selected_object = context.active_object
 
@@ -621,21 +607,20 @@ def unhide_extra_bones(self, context):
         print("Select an armature object.")
         return
 
-    armature = selected_object.data
-    
-    # Unhide all bones
-    _set_bone_visibility(armature, False)
-    
+    # Pass None to unhide everything
+    _set_bone_visibility(selected_object, False, None)
+
+    selected_object.update_tag()
+
     # Remove the property
     try:
         bpy.ops.wm.properties_remove(data_path="object", property_name="deformBonesHidden")
     except Exception:
-        # Property might not exist
         if 'deformBonesHidden' in selected_object:
             del selected_object['deformBonesHidden']
-    
-    print("Unhidden all bones")
 
+    print("Unhidden all bones")
+    
 # Utility functions for external use
 def get_animation_bones():
     """
