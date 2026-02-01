@@ -152,7 +152,7 @@ def setup_mldata(self, context):
     bpy.ops.get_layer_overrides.mlsetup()
 
     active_palette = bpy.context.tool_settings.gpencil_paint.palette
-    if active_palette:
+    if active_palette and active_palette.get('MLTemplatePath'):
         palette_colors = active_palette.colors
 
         for pal_col in palette_colors:
@@ -332,74 +332,74 @@ class CP77_PT_MaterialTools(Panel):
         # selected_nodes = [n for n in nt.nodes if n.select]
 
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
-        if cp77_addon_prefs.show_modtools:
-            if cp77_addon_prefs.show_meshtools:
-                ts = context.tool_settings
-                palette = ts.gpencil_paint.palette
+        
+        ts = context.tool_settings
 
-                active_palette = bpy.context.tool_settings.gpencil_paint.palette
+        box.label(text="Materials", icon="MATERIAL")
+        col = box.column()
+        col.operator("reload_material.cp77")
+        if bpy.context.object.active_material.get('MaterialTemplate')=='base\\materials\\hair.mt':
+            col.operator("export_scene.hp")
 
-                box.label(text="Materials", icon="MATERIAL")
-                col = box.column()
-                if vers[0]<5:
-                    col.label(text='Upgrade to Blender 5 for Multilayer features')
-                    return
+        if bpy.context.object.active_material.get('MLSetup'):
+            if vers[0]<5:
+                col.label(text='Upgrade to Blender 5 for Multilayer features')
+                return
+            palette = ts.gpencil_paint.palette
+            active_palette = bpy.context.tool_settings.gpencil_paint.palette
 
-                col.operator("reload_material.cp77")
-                col.operator("export_scene.hp")
+            box.label(text="MULTILAYERED")
+            col = box.column()
 
-                box.label(text="MULTILAYERED")
-                col = box.column()
+            col.operator("generate_layer_overrides.mlsetup")
+            col.operator("generate_layer_overrides_disconnected.mlsetup")
+            col.operator("export_scene.mlsetup")
 
-                col.operator("generate_layer_overrides.mlsetup")
-                col.operator("generate_layer_overrides_disconnected.mlsetup")
-                col.operator("export_scene.mlsetup")
+            if not active_palette:
+                col.label(text='Generate Overrides or select a multilayered object')
+                return
+            if 'MLTemplatePath' not in active_palette:
+                col.label(text='Generate Overrides or select a multilayered object')
+                return
 
-                if not active_palette:
-                    col.label(text='Generate Overrides or select a multilayered object')
-                    return
-                if 'MLTemplatePath' not in active_palette:
-                    col.label(text='Generate Overrides or select a multilayered object')
-                    return
+            col.prop(scene, "multilayer_index_prop")
+            col.prop(scene, "multilayer_view_mask_prop")
 
-                col.prop(scene, "multilayer_index_prop")
-                col.prop(scene, "multilayer_view_mask_prop")
+            rowColor = box.row(align=True)
 
-                rowColor = box.row(align=True)
+            # Row for showing currently selected node
+            # rowMat = box.row(align=True)
+            # if selected_nodes:
+            #     rowMat.label(text=f"Selected: {selected_nodes[0].name}")
+            # else:
+            #     rowMat.label(text="No Node Selected")
 
-                # Row for showing currently selected node
-                # rowMat = box.row(align=True)
-                # if selected_nodes:
-                #     rowMat.label(text=f"Selected: {selected_nodes[0].name}")
-                # else:
-                #     rowMat.label(text="No Node Selected")
+            # JATO: we probably don't need a button because this op automatically fires now
+            #col.operator("get_layer_overrides.mlsetup")
 
-                # JATO: we probably don't need a button because this op automatically fires now
-                #col.operator("get_layer_overrides.mlsetup")
+            col.template_ID(ts.gpencil_paint, "palette", new="palette.new")
 
-                col.template_ID(ts.gpencil_paint, "palette", new="palette.new")
+            col.label(text=str(active_palette['MLTemplatePath']))
+            col.prop(scene, "multilayer_microblend_pointer")
+            col.prop(scene, "multilayer_normalstr_enum")
+            col.prop(scene, "multilayer_metalin_enum")
+            col.prop(scene, "multilayer_metalout_enum")
+            col.prop(scene, "multilayer_roughin_enum")
+            col.prop(scene, "multilayer_roughout_enum")
 
-                col.label(text=str(active_palette['MLTemplatePath']))
-                col.prop(scene, "multilayer_microblend_pointer")
-                col.prop(scene, "multilayer_normalstr_enum")
-                col.prop(scene, "multilayer_metalin_enum")
-                col.prop(scene, "multilayer_metalout_enum")
-                col.prop(scene, "multilayer_roughin_enum")
-                col.prop(scene, "multilayer_roughout_enum")
+            # JATO: probably don't need this button for applying mltemplate since we are doing this automatically
+            # if ts.gpencil_paint.palette:
+            #     col.operator("set_layer_mltemplate.mlsetup")
 
-                # JATO: probably don't need this button for applying mltemplate since we are doing this automatically
-                # if ts.gpencil_paint.palette:
-                #     col.operator("set_layer_mltemplate.mlsetup")
+            # JATO: shouldn't need this button since we can set color by selecting palette colors
+            # col.operator("apply_all_overrides.mlsetup")
 
-                # JATO: shouldn't need this button since we can set color by selecting palette colors
-                # col.operator("apply_all_overrides.mlsetup")
+            palette_box = box.column()
+            palette_box.template_palette(ts.gpencil_paint,"palette",color=True)
 
-                palette_box = box.column()
-                palette_box.template_palette(ts.gpencil_paint,"palette",color=True)
-
-                # if ts.gpencil_paint.palette:
-                #     colR, colG, colB = palette.colors.active.color
-                #     rowColor.label(text="Color  {:.4f}  {:.4f}  {:.4f}".format(colR, colG, colB))
+            # if ts.gpencil_paint.palette:
+            #     colR, colG, colB = palette.colors.active.color
+            #     rowColor.label(text="Color  {:.4f}  {:.4f}  {:.4f}".format(colR, colG, colB))
 
 class CP77MlSetupGenerateOverrides(Operator):
     bl_idname = "generate_layer_overrides.mlsetup"
@@ -453,8 +453,7 @@ class CP77MlSetupGetOverrides(Operator):
         mlTemplatePathStripped = ((mlTemplatePath.split('\\'))[-1])[:-11]
 
         microblendtexnode = LayerGroup.node_tree.nodes['Image Texture']
-        bpy.context.scene.multilayer_microblend_pointer = microblendtexnode.image
-
+        bpy.context.scene.multilayer_microblend_pointer = microblendtexnode.image        
         # JATO: for performance, first we try getting palette by direct name-match and ensure the mlTemplate path matches
         # If mlTemplate paths don't match try searching all palettes which can be slow
         match_palette = None
