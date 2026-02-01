@@ -142,7 +142,7 @@ def cp77_mlsetup_export(self, context, mlsetuppath, write_mltemplate):
     numLayers = 20
     layerBSDF = 1
 
-    mlBSDFGroup = nodes.get("Multilayered 1.7.3")
+    mlBSDFGroup = nodes.get("Multilayered 1.8.0")
     if mlBSDFGroup:
         while numLayers<=20:
             if not mlBSDFGroup.inputs.get('Layer ' + str(numLayers)).is_linked:
@@ -528,7 +528,7 @@ def cp77_mlsetup_generateoverrides(self, context, objs=None, include_disconnecte
         layer = 1
         numLayers = 20
 
-        mlBSDFGroup = nodes.get("Multilayered 1.7.3")
+        mlBSDFGroup = nodes.get("Multilayered 1.8.0")
         if mlBSDFGroup:
             while numLayers<=20:
                 if not mlBSDFGroup.inputs.get('Layer ' + str(numLayers)).is_linked:
