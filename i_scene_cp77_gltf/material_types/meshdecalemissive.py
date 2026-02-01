@@ -57,66 +57,48 @@ class MeshDecalEmissive:
             Mat["anim_speed"] = Data["AnimationSpeed"]
             
             if mapping_node:
-                # Scale: 1/X and 1/Y to zoom into one sprite
-                scale_sock = mapping_node.inputs[3]
-                scale_sock.default_value[0] = 1 / Mat['X_COLUMNS']
-                scale_sock.default_value[1] = 1 / Mat['Y_ROWS']
-
-                # Location: Target the specific socket at index 1
-                loc_sock = mapping_node.inputs[1]
-                
-                # Clear existing drivers on this socket
-                loc_sock.driver_remove("default_value")
-
-                for axis in range(2): # 0 = X, 1 = Y
-                    # --- 2. SCALE DRIVERS ---
-                    s_fcurve = scale_sock.driver_add("default_value", axis)
-                    s_drv = s_fcurve.driver
+                mapping_node.vector_type = 'POINT'
+                # 1. SCALE DRIVERS (Index 3)
+                scale_socket = mapping_node.inputs[3]
+                scale_socket.driver_remove("default_value")
+                for axis in range(2):
+                    s_drv = scale_socket.driver_add("default_value", axis).driver
                     s_drv.type = 'SCRIPTED'
-                    
-                    s_var = s_drv.variables.new()
-                    s_var.name = "dim"
-                    s_var.type = 'SINGLE_PROP'
-                    s_var.targets[0].id_type = 'MATERIAL'
-                    s_var.targets[0].id = Mat
-                    s_var.targets[0].data_path = f'["X_COLUMNS"]' if axis == 0 else f'["Y_ROWS"]'
+                    v = s_drv.variables.new()
+                    v.name, v.type = "dim", 'SINGLE_PROP'
+                    v.targets[0].id_type, v.targets[0].id = 'MATERIAL', Mat
+                    v.targets[0].data_path = '["X_COLUMNS"]' if axis == 0 else '["Y_ROWS"]'
                     s_drv.expression = "1 / max(1, dim)"
 
-                    # --- 3. LOCATION DRIVERS ---
-                    l_fcurve = loc_sock.driver_add("default_value", axis)
-                    l_drv = l_fcurve.driver
+                # 2. LOCATION DRIVERS (Index 1)
+                loc_socket = mapping_node.inputs[1]
+                loc_socket.driver_remove("default_value")
+                for axis in range(2):
+                    l_drv = loc_socket.driver_add("default_value", axis).driver
                     l_drv.type = 'SCRIPTED'
 
-                    vars_map = [
-                        ("speed", '["anim_speed"]'), 
-                        ("cols", '["X_COLUMNS"]'), 
-                        ("rows", '["Y_ROWS"]'),
-                        ("fps", "render.fps") # Get FPS from the Scene via the ID block
-                    ]
-
-                    for v_name, p_path in vars_map:
+                    # Scene Variables (f, fps)
+                    for v_n, p_p in [("f", "frame_current"), ("fps", "render.fps")]:
                         v = l_drv.variables.new()
-                        v.name, v.type = v_name, 'SINGLE_PROP'
-                        
-                        # Use MATERIAL for speed/cols/rows, but SCENE for fps
-                        if v_name == "fps":
-                            v.targets[0].id_type = 'SCENE'
-                            v.targets[0].id = bpy.context.scene
-                            v.targets[0].data_path = "render.fps"
-                        else:
-                            v.targets[0].id_type = 'MATERIAL'
-                            v.targets[0].id = Mat
-                            v.targets[0].data_path = p_path
+                        v.name, v.type = v_n, 'SINGLE_PROP'
+                        v.targets[0].id_type, v.targets[0].id = 'SCENE', bpy.context.scene
+                        v.targets[0].data_path = p_p
 
-                    # Revised Expression (No 'depsgraph' required)
-                    total_sprites = "cols * rows"
-                    time_expr = "((frame - 1) / max(1, fps))"
-                    sprite_index = f"floor({time_expr} * speed * {total_sprites})"  
+                    # Material Variables (sp, nx, ny)
+                    for v_n, p_p in [("sp", '["anim_speed"]'), ("nx", '["X_COLUMNS"]'), ("ny", '["Y_ROWS"]')]:
+                        v = l_drv.variables.new()
+                        v.name, v.type = v_n, 'SINGLE_PROP'
+                        v.targets[0].id_type, v.targets[0].id = 'MATERIAL', Mat
+                        v.targets[0].data_path = p_p
+
+                    # i = floor(time * (1/total_duration) * total_sprites)
+                    i = "floor(max(0, f - 1) / max(1, fps) * sp * (nx * ny))"
+                    
                     if axis == 0:
-                        l_drv.expression = f"({sprite_index} % max(1, cols)) * (1 / max(1, cols))"
+                        l_drv.expression = f"({i} % max(1, nx)) / max(1, nx)"
                     else:
-                        l_drv.expression = f"(1 - (1 / max(1, rows))) - (floor((floor(((frame - 1) / fps) * speed) + 0.001) / max(1, cols)) % max(1, rows)) * (1 / max(1, rows))"
-                        #l_drv.expression = f"-floor({sprite_index} / max(1, cols)) * (1 / max(1, rows))"
+                        l_drv.expression = f"(1.0 - (1.0 / max(1, ny))) - (floor(({i} + 0.001) / max(1, nx)) % max(1, ny)) / max(1, ny)"
 
-                print("Drivers assigned to Location socket successfully.")
+                
+
 
