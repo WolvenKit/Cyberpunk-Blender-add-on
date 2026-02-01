@@ -54,8 +54,15 @@ class MeshDecalEmissive:
             CurMat.links.new(mapping_node.outputs[0],emTexNode.inputs[0])
             Mat['X_COLUMNS'] = Data["AnimationFramesWidth"]
             Mat['Y_ROWS'] = Data["AnimationFramesHeight"]                        
-            Mat["anim_speed"] = Data["AnimationSpeed"]
-            
+            Mat["anim_speed"] = float(Data["AnimationSpeed"])
+            UVScaleX=1.0
+            UVScaleY=1.0
+            if 'UVScaleX' in Data:
+                Mat["UVScaleX"] = float(Data["UVScaleX"])
+                UVScaleX= float(Data["UVScaleX"])
+            if 'UVScaleY' in Data:
+                Mat["UVScaleY"] = float(Data["UVScaleY"])
+                UVScaleY= float(Data["UVScaleY"])   
             if mapping_node:
                 mapping_node.vector_type = 'POINT'
                 # 1. SCALE DRIVERS (Index 3)
@@ -64,11 +71,17 @@ class MeshDecalEmissive:
                 for axis in range(2):
                     s_drv = scale_socket.driver_add("default_value", axis).driver
                     s_drv.type = 'SCRIPTED'
+                    uv = s_drv.variables.new()
+                    uv.name, uv.type = "uvscale", 'SINGLE_PROP'
+                    uv.targets[0].id_type, uv.targets[0].id = 'MATERIAL', Mat
+                    uv.targets[0].data_path = '["UVScaleX"]' if axis == 0 else '["UVScaleY"]'
+
                     v = s_drv.variables.new()
                     v.name, v.type = "dim", 'SINGLE_PROP'
                     v.targets[0].id_type, v.targets[0].id = 'MATERIAL', Mat
                     v.targets[0].data_path = '["X_COLUMNS"]' if axis == 0 else '["Y_ROWS"]'
-                    s_drv.expression = "1 / max(1, dim)"
+
+                    s_drv.expression = "uvscale/dim"
 
                 # 2. LOCATION DRIVERS (Index 1)
                 loc_socket = mapping_node.inputs[1]
