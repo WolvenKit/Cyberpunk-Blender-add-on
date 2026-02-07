@@ -21,6 +21,7 @@ from ..material_types.parallaxscreentransparent import ParallaxScreenTransparent
 from ..material_types.speedtree import SpeedTree
 from ..material_types.decal import Decal
 from ..material_types.decal_gradientmap_recolor import DecalGradientmapRecolor
+from ..material_types.decal_gradientmap_recolor_emissive import DecalGradientmapRecolorEmissive
 from ..material_types.televisionad import TelevisionAd
 from ..material_types.window_parallax_interior_proxy import windowParallaxIntProx
 from ..material_types.hologram import Hologram
@@ -234,5 +235,9 @@ DECAL_REGISTRY.register([
 DECAL_REGISTRY.register([
     "base\\materials\\decal_gradientmap_recolor.mt",
 ], MaterialRule(factory=_factory_bip(DecalGradientmapRecolor)))
+
+DECAL_REGISTRY.register([
+    "base\\materials\\decal_gradientmap_recolor_emissive.mt",
+], MaterialRule(factory=_factory_bip(DecalGradientmapRecolorEmissive)))
 
 
