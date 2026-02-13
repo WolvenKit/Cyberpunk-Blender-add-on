@@ -136,6 +136,15 @@ class CP77_PT_AnimsPanel(Panel):
         for action in available_anims:
             action.use_fake_user:True
             selected = action == active_action
+            # Determine SIMD status for this action
+            _hints = action.get("optimizationHints", None)
+            _is_simd = False
+            if _hints is not None:
+                try:
+                    _is_simd = bool(_hints.get("preferSIMD", False)) if hasattr(_hints, 'get') else bool(_hints["preferSIMD"])
+                except (KeyError, TypeError):
+                    pass
+            _simd_icon = 'FORCE_MAGNETIC' if _is_simd else 'FORCE_CHARGE'
             row = col.row(align=True)
             sub = row.column(align=True)
             sub.ui_units_x = 1.0
@@ -144,6 +153,7 @@ class CP77_PT_AnimsPanel(Panel):
                 op.restore_frame = False
                 if active_action.use_frame_range:
                     row.prop(active_action, 'use_cyclic', icon='CON_FOLLOWPATH', text="")
+                row.operator('cp77.toggle_simd', icon=_simd_icon, text="").name = action.name
             else:
                 icon = 'PLAY' if selected else 'TRIA_RIGHT'
                 op = sub.operator('cp77.set_animset', icon=icon, text="", emboss=True)
@@ -152,7 +162,39 @@ class CP77_PT_AnimsPanel(Panel):
                 op = row.operator('cp77.set_animset', text=action.name)
                 op.name = action.name
                 op.play = False
+                row.operator('cp77.toggle_simd', icon=_simd_icon, text="").name = action.name
                 row.operator('cp77.delete_anims', icon='X', text="").name = action.name
+
+class CP77_OT_ToggleSIMD(Operator):
+    """Toggle SIMD encoding preference for this animation action.
+    When enabled, WolvenKit will encode this animation using the SIMD buffer format
+    (animAnimationBufferSimd) instead of the default compressed format."""
+    bl_idname = "cp77.toggle_simd"
+    bl_label = "Toggle SIMD Encoding"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    name: StringProperty(options={'HIDDEN'})
+
+    def execute(self, context):
+        action = bpy.data.actions.get(self.name)
+        if action is None:
+            self.report({'WARNING'}, f"Action '{self.name}' not found")
+            return {'CANCELLED'}
+        # Ensure optimizationHints dict exists
+        if "optimizationHints" not in action:
+            action["optimizationHints"] = {"preferSIMD": False, "maxRotationCompression": 0}
+        hints = action["optimizationHints"]
+        current = hints.get("preferSIMD", False) if hasattr(hints, 'get') else hints["preferSIMD"]
+        # Toggle
+        new_val = not bool(current)
+        # IDPropertyGroup requires dict reassignment for nested updates
+        action["optimizationHints"] = {
+            "preferSIMD": new_val,
+            "maxRotationCompression": hints.get("maxRotationCompression", 0) if hasattr(hints, 'get') else hints["maxRotationCompression"]
+        }
+        label = "SIMD" if new_val else "Compressed"
+        self.report({'INFO'}, f"'{self.name}' encoding set to {label}")
+        return {'FINISHED'}
 
 class BHLS_OT_Start(Operator):
     bl_idname = "view3d.bhls_start"
