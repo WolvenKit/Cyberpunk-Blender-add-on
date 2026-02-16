@@ -1010,7 +1010,12 @@ def export_anims(context, filepath, options, armatures, export_tracks=False):
     # Set animation defaults on actions
     for action in bpy.data.actions:
         if "schema" not in action:
-            action["schema"] = {"type": "wkit.cp2077.gltf.anims", "version": 4}
+            action["schema"] = {"type": "wkit.cp2077.gltf.anims", "version": 5}
+        else:
+            # Bump existing V4 schemas to V5
+            schema = action.get("schema")
+            if schema and hasattr(schema, 'get') and schema.get("version", 0) < 5:
+                action["schema"] = {"type": "wkit.cp2077.gltf.anims", "version": 5}
         if "animationType" not in action:
             action["animationType"] = "Normal"
         if "rootMotionType" not in action:
@@ -1033,6 +1038,13 @@ def export_anims(context, filepath, options, armatures, export_tracks=False):
             action["fallbackFrameIndices"] = []
         if "optimizationHints" not in action:
             action["optimizationHints"] = {"preferSIMD": False, "maxRotationCompression": 0}
+
+        # Serialize animation events from CollectionProperty → IDProperty for glTF export
+        try:
+            from ..animtools.anim_events import save_events_to_idproperty
+            save_events_to_idproperty(action)
+        except Exception as e:
+            print(f"[CP77] Warning: could not save animation events for '{action.name}': {e}")
 
         if export_tracks:
             try:

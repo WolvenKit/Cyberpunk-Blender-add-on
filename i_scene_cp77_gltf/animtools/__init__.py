@@ -21,6 +21,7 @@ from .tracksolvers import solve_tracks_face, build_tracks_from_armature
 #from .jali_integration import *
 from .draw import (_handle, _running, _draw_callback)
 from . import root_motion
+from . import anim_events
 
 def CP77AnimsList(self, context):
     for action in bpy.data.actions:
@@ -1677,6 +1678,9 @@ def register_animtools():
     # Register root motion tools
     root_motion.register_rm()
 
+    # Register animation events UI
+    anim_events.register_anim_events()
+
 def unregister_animtools():
     """Unregister all animation tool classes"""
     
@@ -1690,6 +1694,9 @@ def unregister_animtools():
             pass
         _handle = None
     
+    # Unregister animation events UI
+    anim_events.unregister_anim_events()
+
     # Unregister root motion tools
     root_motion.unregister_rm()
     
