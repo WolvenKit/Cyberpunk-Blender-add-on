@@ -834,6 +834,8 @@ def load_events_to_collection(action):
     """
     Deserialize action['animEvents'] IDProperty → cp77_anim_events CollectionProperty.
     Called after glTF import stores the IDProperty.
+    Sets action['_cp77_events_loaded'] = True on success so that
+    save_events_to_idproperty knows it is safe to trust the CollectionProperty.
     """
     raw = _get(action, "animEvents")
     if raw is None or not hasattr(raw, '__iter__'):
@@ -978,6 +980,12 @@ def load_events_to_collection(action):
 
     action.cp77_anim_events_index = 0 if len(events) > 0 else -1
 
+    # Mark that deserialization succeeded — save_events_to_idproperty
+    # uses this flag to decide whether the CollectionProperty is
+    # authoritative (user may have edited/removed events) vs. never
+    # populated (load failed, so the original IDProperty must be kept).
+    action["_cp77_events_loaded"] = True
+
     # Sync markers for visualization
     sync_markers_from_events(action)
 
@@ -989,9 +997,24 @@ def save_events_to_idproperty(action):
     """
     events = getattr(action, 'cp77_anim_events', None)
     if events is None or len(events) == 0:
-        # Remove the key if no events, so it doesn't linger
-        if "animEvents" in action:
-            del action["animEvents"]
+        # Only remove the IDProperty if we successfully loaded events
+        # into the CollectionProperty at some point (meaning the user
+        # intentionally removed them).  If events were never loaded
+        # (e.g. load_events_to_collection failed), preserve the
+        # original IDProperty so it round-trips safely.
+        events_were_loaded = _get(action, "_cp77_events_loaded", False)
+        if events_were_loaded:
+            # Safety check: if the original IDProperty still has data
+            # but the CollectionProperty is empty, something unexpected
+            # happened (e.g. Blender lost the data).  Preserve the
+            # original rather than destroying it.
+            existing = _get(action, "animEvents")
+            if existing is not None and hasattr(existing, '__len__') and len(existing) > 0:
+                print(f"[CP77] Warning: '{action.name}' events CollectionProperty is empty "
+                      f"but IDProperty has {len(existing)} events — preserving original")
+                return
+            if "animEvents" in action:
+                del action["animEvents"]
         return
 
     result = []

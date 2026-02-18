@@ -321,7 +321,7 @@ def add_anim_props(animation, action):
     action["frameClampingStartFrame"] = frame_clamping_start_frame
     action["frameClampingEndFrame"] = frame_clamping_end_frame
     action["numExtraJoints"] = num_extra_joints
-    action["numeExtraTracks"] = num_extra_tracks
+    action["numExtraTracks"] = num_extra_tracks
     action["constTrackKeys"] = const_track_keys
     action["trackKeys"] = track_keys
     action["fallbackFrameIndices"] = fallback_frame_indices

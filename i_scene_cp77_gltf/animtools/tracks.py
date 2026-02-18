@@ -2,6 +2,7 @@ import bpy
 import math  
 from math import *
 from collections import Counter
+from .compat import get_action_fcurves
 
 _DEF_FPS = 30.0  
 _VERBOSE = False
@@ -32,10 +33,14 @@ def _iget(d, key, default=None):
 def export_anim_tracks(action):
     obj = {"trackKeys": [], "constTrackKeys": []}
     num_exported = 0
-    fc_tracks = [fc.data_path for fc in action.fcurves if fc.data_path.startswith('["T')]
+    fcurves = get_action_fcurves(action)
+    if fcurves is None:
+        _vprint('export_anim_tracks: no fcurves available')
+        return
+    fc_tracks = [fc.data_path for fc in fcurves if fc.data_path.startswith('["T')]
     for t_datapath in fc_tracks:
         track_index = int(t_datapath.split('"')[-2][1:])
-        fc = action.fcurves.find(data_path=t_datapath)
+        fc = fcurves.find(data_path=t_datapath)
         if fc and len(fc.keyframe_points) > 0:
             kf_vals = [kp.co[1] for kp in fc.keyframe_points]
             tmin, tmax, tavg = [min(kf_vals), max(kf_vals), sum(kf_vals) / len(kf_vals)]
@@ -50,7 +55,7 @@ def export_anim_tracks(action):
             fc.keyframe_points.clear()
             fc.update()
         if fc:
-            action.fcurves.remove(fc)
+            fcurves.remove(fc)
     #
     action['trackKeys'] = obj["trackKeys"]
     action['constTrackKeys'] = obj["constTrackKeys"]
@@ -177,12 +182,16 @@ def import_anim_tracks(action):
     """
         create fcurves (clear existing)
     """
+    fcurves = get_action_fcurves(action)
+    if fcurves is None:
+        _vprint('import_anim_tracks: no fcurves collection available')
+        return
     for track_dp in track_fcurve_idx.values():
-        fc = action.fcurves.find(data_path=track_dp)
+        fc = fcurves.find(data_path=track_dp)
         if not fc is None:
             fc.keyframe_points.clear()
-            action.fcurves.remove(fc)
-        fc = action.fcurves.new(data_path=track_dp)
+            fcurves.remove(fc)
+        fc = fcurves.new(data_path=track_dp)
         fc.group = action_group
         fc.update()
     """
@@ -213,7 +222,7 @@ def import_anim_tracks(action):
                 frame_num = math.floor(f)
             frames_aligned.append(frame_num)
         # fetch fcurve & clear
-        fc = action.fcurves.find(data_path=t_datapath)
+        fc = fcurves.find(data_path=t_datapath)
         fc.keyframe_points.clear()
         fc.update()
         # insert unaligned kf
@@ -239,7 +248,7 @@ def import_anim_tracks(action):
         num_keys = len(track_sorted[trk])
         if num_keys > 0:
             # fetch fcurve
-            fc = action.fcurves.find(data_path=t_datapath)
+            fc = fcurves.find(data_path=t_datapath)
             fc.keyframe_points.add(num_keys)
             num_imported += num_keys 
             for i in range(num_keys):
@@ -252,7 +261,10 @@ def import_anim_tracks(action):
 """
 def fix_anim_frame_alignment(action):
     #from collections import Counter
-    fc_keys = dict(Counter([fc.data_path for fc in action.fcurves if fc.data_path.startswith('pose.bones[')]))
+    fcurves = get_action_fcurves(action)
+    if fcurves is None:
+        return
+    fc_keys = dict(Counter([fc.data_path for fc in fcurves if fc.data_path.startswith('pose.bones[')]))
     #fc_cached_bones = {bn: {n:[] for n in ['location','rotation_quaternion','scale','rotation_axis_angle','rotation_euler']} for bn in fc_bones}
     for dp in fc_keys.keys():
         bn = dp.split('"')[-2]
@@ -261,7 +273,7 @@ def fix_anim_frame_alignment(action):
         sorted_fc = {}
         num_fixed = 0
         for i in range(array_len):
-            fc = action.fcurves.find(data_path=dp, index=i)
+            fc = fcurves.find(data_path=dp, index=i)
             if not fc is None:
                 if len(fc.keyframe_points) > 0:
                     num_fixed = 0
@@ -299,11 +311,18 @@ def fix_anim_frame_alignment(action):
                             _vprint(f'org {omin} != {omax} but {vmin} == {vmax} Re-Aligned')
                     if num_keys == 1:
                         continue#print(f'{bn}-{channel}[{i}] single const {frame_values_aligned[0]} org({frame_values[0]} @ frame {frames_aligned[0]} org({frames_unaligned[0]})')
+                    # Preserve original interpolation mode before clearing.
+                    # CP2077 animations use CONSTANT (→STEP in glTF) for many
+                    # channels; new keyframes default to BEZIER (→LINEAR) if
+                    # not explicitly set.  All keyframes in a channel normally
+                    # share the same interpolation, so we take the first.
+                    orig_interp = fc.keyframe_points[0].interpolation
                     fc.keyframe_points.clear()
                     fc.update()
                     fc.keyframe_points.add(num_keys)
                     for kfp in range(num_keys):
                         fc.keyframe_points[kfp].co = frames_aligned[kfp], frame_values_aligned[kfp]
+                        fc.keyframe_points[kfp].interpolation = orig_interp
                     fc.update()
             #
         if num_fixed > 0:
