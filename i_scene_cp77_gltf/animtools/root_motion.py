@@ -7,6 +7,7 @@ from ..main.datashards import BoneTransformCache
 from ..main.bartmoss_functions import pose_mtx, world_mtx, valid_armature
 from ..cyber_props import RootMotionData
 from typing import List, Tuple, Dict
+from .compat import get_action_fcurves
 
 def get_frame_range(action) -> Tuple[int, int]:
     f = action.frame_range
@@ -39,9 +40,12 @@ def cache_bone_transforms(context, armature, bone_name: str, frames: List[int]) 
 
 def clear_bone_fcurves(action, bone_name: str):
     """Remove all animation curves for specified bone cleanly"""
+    fcurves = get_action_fcurves(action)
+    if fcurves is None:
+        return
     target = f'pose.bones["{bone_name}"]'
-    for fc in [c for c in action.fcurves if c.data_path.startswith(target)]:
-        action.fcurves.remove(fc)
+    for fc in [c for c in fcurves if c.data_path.startswith(target)]:
+        fcurves.remove(fc)
 
 def keyframe_bone(pb: PoseBone, frame: int, include_rot: bool = True):
     pb.keyframe_insert("location", frame=frame)

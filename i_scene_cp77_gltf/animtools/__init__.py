@@ -8,6 +8,7 @@ from bpy.types import (Operator, OperatorFileListElement, PropertyGroup, Panel)
 from bpy.props import (StringProperty, BoolProperty, IntProperty, CollectionProperty, FloatProperty)
 from typing import Optional, Tuple
 import mathutils
+from .compat import get_action_fcurves
 from ..main.bartmoss_functions import *
 from ..cyber_props import cp77riglist
 from ..icons.cp77_icons import get_icon
@@ -945,9 +946,13 @@ class CP77_OT_ClearFacialAnimation(Operator):
             return {'CANCELLED'}
         
         # Remove all F-curves
-        fcurves_to_remove = list(action.fcurves)
+        fcurves = get_action_fcurves(action)
+        if fcurves is None:
+            self.report({'INFO'}, 'No F-curves found (action has no fcurves collection).')
+            return {'CANCELLED'}
+        fcurves_to_remove = list(fcurves)
         for fc in fcurves_to_remove:
-            action.fcurves.remove(fc)
+            fcurves.remove(fc)
         
         self.report({'INFO'}, f'Cleared {len(fcurves_to_remove)} F-curves.')
         return {'FINISHED'}
