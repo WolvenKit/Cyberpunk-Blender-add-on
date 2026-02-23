@@ -54,7 +54,9 @@ def export_anim_tracks(action):
     #
     action['trackKeys'] = obj["trackKeys"]
     action['constTrackKeys'] = obj["constTrackKeys"]
-    action["optimizationHints"] = { "preferSIMD": False, "maxRotationCompression": 0}
+    # Preserve optimizationHints from import (e.g. SIMD flag); only set defaults if missing
+    if "optimizationHints" not in action:
+        action["optimizationHints"] = { "preferSIMD": False, "maxRotationCompression": 0}
     # remove custom group
     remove_track_action_group(action)
     _vprint(f'{num_exported} Tracks Exported')
