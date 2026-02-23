@@ -3,6 +3,7 @@ import json
 import re
 from ..importers.read_rig import *
 from ..main.bartmoss_functions import safe_mode_switch, store_current_context, restore_previous_context
+from .compat import get_action_fcurves
 # Standard animation bones for CP77
 animBones = [
     "Hips", "Spine", "Spine1", "Spine2", "Spine3",
@@ -261,7 +262,10 @@ def remap_action_to_armature(source_action, armature_obj):
     bone_prefix = 'pose.bones["'
     bone_prefix_alt = "pose.bones['"
 
-    for fcurve in new_action.fcurves:
+    fcurves = get_action_fcurves(new_action)
+    if fcurves is None:
+        return new_action
+    for fcurve in fcurves:
         dp = fcurve.data_path
 
         # Remap pose.bones["BoneName"] paths

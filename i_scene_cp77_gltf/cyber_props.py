@@ -321,12 +321,24 @@ def add_anim_props(animation, action):
     action["frameClampingStartFrame"] = frame_clamping_start_frame
     action["frameClampingEndFrame"] = frame_clamping_end_frame
     action["numExtraJoints"] = num_extra_joints
-    action["numeExtraTracks"] = num_extra_tracks
+    action["numExtraTracks"] = num_extra_tracks
     action["constTrackKeys"] = const_track_keys
     action["trackKeys"] = track_keys
     action["fallbackFrameIndices"] = fallback_frame_indices
     action["optimizationHints"] = optimizationHints
     #action["maxRotationCompression"] = optimizationHints['maxRotationCompression']
+
+    # Animation events (V5+)
+    anim_events = extras.get("animEvents", None)
+    if anim_events is not None:
+        action["animEvents"] = anim_events
+
+    # Populate the CollectionProperty + markers from the IDProperty
+    try:
+        from .animtools.anim_events import load_events_to_collection
+        load_events_to_collection(action)
+    except Exception as e:
+        print(f"[CP77] Warning: could not load animation events for '{action.name}': {e}")
 
 class RootMotionData(PropertyGroup):
     hip: StringProperty(

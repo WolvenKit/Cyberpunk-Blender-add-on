@@ -8,6 +8,7 @@ from bpy.types import (Operator, OperatorFileListElement, PropertyGroup, Panel)
 from bpy.props import (StringProperty, BoolProperty, IntProperty, CollectionProperty, FloatProperty)
 from typing import Optional, Tuple
 import mathutils
+from .compat import get_action_fcurves
 from ..main.bartmoss_functions import *
 from ..cyber_props import cp77riglist
 from ..icons.cp77_icons import get_icon
@@ -21,6 +22,7 @@ from .tracksolvers import solve_tracks_face, build_tracks_from_armature
 #from .jali_integration import *
 from .draw import (_handle, _running, _draw_callback)
 from . import root_motion
+from . import anim_events
 
 def CP77AnimsList(self, context):
     for action in bpy.data.actions:
@@ -944,9 +946,13 @@ class CP77_OT_ClearFacialAnimation(Operator):
             return {'CANCELLED'}
         
         # Remove all F-curves
-        fcurves_to_remove = list(action.fcurves)
+        fcurves = get_action_fcurves(action)
+        if fcurves is None:
+            self.report({'INFO'}, 'No F-curves found (action has no fcurves collection).')
+            return {'CANCELLED'}
+        fcurves_to_remove = list(fcurves)
         for fc in fcurves_to_remove:
-            action.fcurves.remove(fc)
+            fcurves.remove(fc)
         
         self.report({'INFO'}, f'Cleared {len(fcurves_to_remove)} F-curves.')
         return {'FINISHED'}
@@ -1677,6 +1683,9 @@ def register_animtools():
     # Register root motion tools
     root_motion.register_rm()
 
+    # Register animation events UI
+    anim_events.register_anim_events()
+
 def unregister_animtools():
     """Unregister all animation tool classes"""
     
@@ -1690,6 +1699,9 @@ def unregister_animtools():
             pass
         _handle = None
     
+    # Unregister animation events UI
+    anim_events.unregister_anim_events()
+
     # Unregister root motion tools
     root_motion.unregister_rm()
     
