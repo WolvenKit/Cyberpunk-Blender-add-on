@@ -31,51 +31,66 @@ class CP77_PT_MeshTools(Panel):
     def draw(self, context):
         layout = self.layout
         box = layout.box()
-        box.operator("cp77.rotate_obj", text="Rotate Selected Objects")
-        box = layout.box()
         props = context.scene.cp77_panel_props
 
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
         if not cp77_addon_prefs.show_modtools or not cp77_addon_prefs.show_meshtools:
             return
 
-        box.label(icon_value=get_icon("SCULPT"), text="Modelling:")
-        col = box.column()
-        col.operator("cp77.set_armature", text="Change Armature Target")
-        if context.active_object and context.active_object.type == 'MESH':
+        has_mesh_selected = (context.active_object and context.active_object.type == 'MESH') or  len([obj for obj in bpy.context.selected_objects if obj.type == 'MESH']) > 1
+
+        if has_mesh_selected:
+
+            box.label(icon_value=get_icon("SCULPT"), text="Modelling:")
+            col = box.column()
+
+            col.operator("cp77.set_armature", text="Change Armature Target")
+
+            col.operator("cp77.shrinkwrap", text="GarmentSupport/Decal")
+
+            col.operator("cp77.trans_weights", text="Weight Transfer Tool")
+
+            if context.object.active_material and context.object.active_material.name == 'UV_Checker':
+                col.operator("cp77.uv_unchecker",  text="Remove UV Checker")
+            else:
+                col.operator("cp77.uv_checker", text="Apply UV Checker")
+
+            if context.active_object.data.materials and any(mat.name.startswith('submesh_') for mat in context.active_object.data.materials if mat):
+                col.operator("cp77.safe_split", text="Split into submeshes")
+            else:
+                col.operator("cp77.safe_join", text="Join Meshes")
+
+
+            box = layout.box()
+            box.label(text="Mirror Tools", icon_value=get_icon("MIRROR"))
+            col = box.column()
+
+            col.operator("cp77.mirror_x_axis", text="Safely mirror")
             col.operator("cp77.mirror_vertex_groups", text="Mirror Vertex Groups")
 
-        if context.active_object and context.active_object.type == 'MESH' and context.object.active_material and context.object.active_material.name == 'UV_Checker':
-            col.operator("cp77.uv_unchecker",  text="Remove UV Checker")
+            box.operator("cp77.rotate_obj", text="Rotate Selected Objects")
+
+            box = layout.box()
+            box.label(text="Mesh Cleanup", icon_value=get_icon("TRAUMA"))
+            col = box.column()
+            col.operator("cp77.submesh_prep")
+            col.operator("cp77.group_verts", text="Group Ungrouped Verts")
+            col.operator("cp77.del_empty_vgroup", text="Delete Unused Vert Groups")
+
+            box = layout.box()
+            box.label(text="AKL Autofitter", icon_value=get_icon("REFIT"))
+            col = box.column()
+            col.operator("cp77.auto_fitter", text="Refit Selected Meshes")
+
+            box = layout.box()
+            box.label(text="Vertex Colours", icon="BRUSH_DATA")
+            col = box.column()
+            col.operator("cp77.apply_vertex_color_preset")
+            col.operator("cp77.add_vertex_color_preset")
+            col.operator("cp77.delete_vertex_color_preset")
+
         else:
-            col.operator("cp77.uv_checker", text="Apply UV Checker")
-        col.operator("cp77.trans_weights", text="Weight Transfer Tool")
-        col.operator("cp77.shrinkwrap", text="GarmentSupport/Decal")
-
-        if context.active_object and len([obj for obj in bpy.context.selected_objects if obj.type == 'MESH']) > 1:
-            col.operator("cp77.safe_join", text="Join Meshes")
-        elif context.active_object and context.active_object.type == 'MESH' and context.active_object.data.materials and any(mat.name.startswith('submesh_') for mat in context.active_object.data.materials if mat):
-            col.operator("cp77.safe_split", text="Split into submeshes")
-
-        box = layout.box()
-        box.label(text="Mesh Cleanup", icon_value=get_icon("TRAUMA"))
-        col = box.column()
-        col.operator("cp77.submesh_prep")
-        col.operator("cp77.group_verts", text="Group Ungrouped Verts")
-        col.operator("cp77.del_empty_vgroup", text="Delete Unused Vert Groups")
-
-        box = layout.box()
-        box.label(text="AKL Autofitter", icon_value=get_icon("REFIT"))
-        col = box.column()
-        col.operator("cp77.auto_fitter", text="Refit Selected Meshes")
-
-        box = layout.box()
-        box.label(text="Vertex Colours", icon="BRUSH_DATA")
-        col = box.column()
-        col.operator("cp77.apply_vertex_color_preset")
-        col.operator("cp77.add_vertex_color_preset")
-        col.operator("cp77.delete_vertex_color_preset")
-
+            box.label(icon_value=get_icon("SCULPT"), text="Select a mesh")
 class CP77DeleteVertexcolorPreset(Operator):
     bl_idname = "cp77.delete_vertex_color_preset"
     bl_label = "Delete Vertex Colour Preset"
@@ -657,6 +672,38 @@ class CP77RotateObj(Operator):
         rotate_quat_180(self, context)
         return {'FINISHED'}
 
+def mirror_vertex_groups(mesh):
+    num_replaced = 0
+    vertex_groups = mesh.vertex_groups[:]
+
+    # we'll end up with duplicate names if we rename right away
+    for vertex_group in vertex_groups:
+        if vertex_group.name.startswith('r_'):
+            vertex_group.name = vertex_group.name.replace('r_', 'REPLACEME_l_', 1)
+            continue
+        if vertex_group.name.startswith('l_'):
+            vertex_group.name = vertex_group.name.replace('l_', 'REPLACEME_r_', 1)
+            continue
+        if vertex_group.name.startswith('Left'):
+            vertex_group.name = vertex_group.name.replace('Left', 'REPLACEME_Right', 1)
+            continue
+        if vertex_group.name.startswith('Right'):
+            vertex_group.name = vertex_group.name.replace('Right', 'REPLACEME_Left', 1)
+            continue
+
+    num_replaced = 0
+    for vertex_group in vertex_groups:
+        if not 'REPLACEME_' in vertex_group.name:
+            continue
+        num_replaced += 1
+        vertex_group.name = vertex_group.name.replace('REPLACEME_', '')
+        # two extra cases just for CDPR
+        if vertex_group.name == 'l_butterfly_top_CRV_top_out_JNT':
+            vertex_group.name = 'l_butterfly_top_CRV_bot_out_JNT'
+        if vertex_group.name == 'r_butterfly_top_CRV_bot_out_JNT':
+            vertex_group.name = 'r_butterfly_top_CRV_top_out_JNT'
+        continue
+    return num_replaced
 class CP77_OT_MirrorVertexGroups(Operator):
     bl_idname = "cp77.mirror_vertex_groups"
     bl_label = "Mirror vertex groups"
@@ -672,36 +719,67 @@ class CP77_OT_MirrorVertexGroups(Operator):
             show_message("No meshes selected")
             return {'CANCELLED'}
 
+        num_replaced = 0
         for mesh in selected_meshes:
-            vertex_groups = mesh.vertex_groups[:]
+            num_replaced = num_replaced + mirror_vertex_groups(mesh)
 
-            # we'll end up with duplicate names if we rename right away
-            for vertex_group in vertex_groups:
-                if vertex_group.name.startswith('r_'):
-                    vertex_group.name = vertex_group.name.replace('r_', 'REPLACEME_l_', 1)
-                    continue
-                if vertex_group.name.startswith('l_'):
-                    vertex_group.name = vertex_group.name.replace('l_', 'REPLACEME_r_', 1)
-                    continue
-                if vertex_group.name.startswith('Left'):
-                    vertex_group.name = vertex_group.name.replace('Left', 'REPLACEME_Right', 1)
-                    continue
-                if vertex_group.name.startswith('Right'):
-                    vertex_group.name = vertex_group.name.replace('Right', 'REPLACEME_Left', 1)
-                    continue
+        self.report({'INFO'}, f'Mirrored {num_replaced} vertex groups.')
+        return {'FINISHED'}
 
-            num_replaced = 0
-            for vertex_group in vertex_groups:
-                if not 'REPLACEME_' in vertex_group.name:
-                    continue
-                num_replaced += 1
-                vertex_group.name = vertex_group.name.replace('REPLACEME_', '')
-                # two extra cases just for CDPR
-                if vertex_group.name == 'l_butterfly_top_CRV_top_out_JNT':
-                    vertex_group.name = 'l_butterfly_top_CRV_bot_out_JNT'
-                if vertex_group.name == 'r_butterfly_top_CRV_bot_out_JNT':
-                    vertex_group.name = 'r_butterfly_top_CRV_top_out_JNT'
-                continue
+class CP77_OT_MirrorXAxis(Operator):
+    bl_idname = "cp77.mirror_x_axis"
+    bl_label = "Safely mirror across X axis"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+
+        if context.object.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+        selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
+        if not selected_meshes:
+            show_message("No meshes selected")
+            return {'CANCELLED'}
+
+        num_replaced = 0
+        for obj in selected_meshes:
+            # Select only the active object
+            bpy.ops.object.select_all(action='DESELECT')
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
+
+            bpy.ops.transform.resize(
+                value=(-1, 1, 1),
+                orient_type='GLOBAL',
+                orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)),
+                orient_matrix_type='GLOBAL',
+                constraint_axis=(True, False, False),
+                mirror=True,
+                use_proportional_edit=False,
+                proportional_edit_falloff='SMOOTH',
+                proportional_size=0.263331,
+                use_proportional_connected=False,
+                use_proportional_projected=False)
+
+            # Step 2: Apply all transforms
+            bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+            # Step 3: Flip normals
+            # Switch to edit mode to flip normals
+            bpy.ops.object.mode_set(mode='EDIT')
+
+            # Select all faces
+            bpy.ops.mesh.select_all(action='SELECT')
+
+            # Flip normals
+            bpy.ops.mesh.flip_normals()
+
+            # Switch back to object mode
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+            num_replaced = num_replaced + mirror_vertex_groups(obj)
+
+        self.report({'INFO'}, f'Mirrored {num_replaced} vertex groups.')
 
         self.report({'INFO'}, f'Mirrored {num_replaced} vertex groups.')
         return {'FINISHED'}
