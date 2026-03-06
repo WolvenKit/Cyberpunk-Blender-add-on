@@ -694,6 +694,11 @@ class CP77_OT_MirrorVertexGroups(Operator):
                 continue
             num_replaced += 1
             vertex_group.name = vertex_group.name.replace('REPLACEME_', '')
+            # two extra cases just for CDPR
+            if vertex_group.name == 'l_butterfly_top_CRV_top_out_JNT':
+                vertex_group.name = 'l_butterfly_top_CRV_bot_out_JNT'
+            if vertex_group.name == 'r_butterfly_top_CRV_bot_out_JNT':
+                vertex_group.name = 'r_butterfly_top_CRV_top_out_JNT'
             continue
 
         self.report({'INFO'}, f'Mirrored {num_replaced} vertex groups.')
