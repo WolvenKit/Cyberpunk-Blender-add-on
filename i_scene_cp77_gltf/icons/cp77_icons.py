@@ -14,6 +14,7 @@ def load_icons():
         custom_icons.load("TRAUMA", os.path.join(icons_dir, "trauma.png"), 'IMAGE')
         custom_icons.load("TECH", os.path.join(icons_dir, "tech.png"), 'IMAGE')
         custom_icons.load("REFIT", os.path.join(icons_dir, "refit.png"), 'IMAGE')
+        custom_icons.load("MIRROR", os.path.join(icons_dir, "mirror.png"), 'IMAGE')
 
 def unload_icons():
     global custom_icons
