@@ -11,7 +11,7 @@ from ..main.common import (
     get_resources_dir
 )
 from ..main.bartmoss_functions import (
-    get_safe_mode, safe_mode_switch,
+    get_safe_mode, safe_mode_switch, select_objects,
     store_current_context, restore_previous_context,
     hasShapeKeys, getShapeKeyNames, getShapeKeyByName, setActiveShapeKey,
     is_mesh
@@ -128,7 +128,7 @@ def CP77ArmatureSet(self, context, reparent):
 
     return {'FINISHED'}
 
-# UV Checker material name constant
+#region UV Checker material name constant
 uv_checker_matname = 'UV_Checker'
 
 def ensure_uv_checker_material():
@@ -259,7 +259,9 @@ def CP77UvUnChecker(self, context):
     finally:
         restore_previous_context()
 
-# Shape key helpers
+#endregion
+
+#region Shape key helpers
 
 def ensure_basis(obj):
     """Ensure basis shapekey exists."""
@@ -378,7 +380,110 @@ def apply_modifier_as_shapekey(obj, mod_name, keep_modifier=False):
             except Exception:
                 pass
 
-# Refitter functions
+def add_shrinkwrap(context, target_collection_name, offset, wrap_method,
+                   as_garment_support=True, apply_immediately=True, vertex_group=None):
+    """Add shrinkwrap"""
+
+    # Get target mesh
+    target_collection_children = get_collection_children(target_collection_name, "MESH")
+    if not target_collection_children:
+        show_message(f"Target collection '{target_collection_name}' not found.")
+        return {'CANCELLED'}
+
+    if len(target_collection_children) == 0:
+        show_message(f"No meshes found in collection '{target_collection_name}'.")
+        return {'CANCELLED'}
+
+    target_mesh = target_collection_children[0]
+
+    if len(target_collection_children) > 1:
+        show_message(f"Target collection contains {len(target_collection_children)} meshes. Using first one.")
+
+    selected_meshes = [obj for obj in context.selected_objects
+                      if obj.type == 'MESH' and obj != target_mesh]
+
+    if not selected_meshes:
+        show_message("No objects selected, or only the target mesh selected!")
+        return {'CANCELLED'}
+
+    shapekey_name = "GarmentSupport" if as_garment_support else "Shrinkwrap"
+
+    # Store current context if we're applying
+    if apply_immediately:
+        store_current_context()
+
+    try:
+        # Switch to object mode if applying
+        if apply_immediately and get_safe_mode() != 'OBJECT':
+            safe_mode_switch('OBJECT')
+
+        for obj in selected_meshes:
+            # Add modifier
+            shrinkwrap = obj.modifiers.new(name=shapekey_name, type='SHRINKWRAP')
+
+            if vertex_group:
+                if vertex_group not in obj.vertex_groups:
+                    continue
+                shrinkwrap.vertex_group = vertex_group
+
+            if as_garment_support:
+                create_color_attributes(obj)
+                # Clear shape keys
+                if hasShapeKeys(obj):
+                    for key in reversed(obj.data.shape_keys.key_blocks):
+                        obj.shape_key_remove(key)
+
+            shrinkwrap.target = target_mesh
+            shrinkwrap.wrap_method = wrap_method
+            shrinkwrap.wrap_mode = 'ABOVE_SURFACE'
+            shrinkwrap.offset = offset
+
+            if not apply_immediately:
+                continue
+
+            # Apply modifier
+            context.view_layer.objects.active = obj
+
+            if not hasShapeKeys(obj):
+                if as_garment_support:
+                    bpy.ops.object.modifier_apply_as_shapekey(modifier=shrinkwrap.name)
+                else:
+                    bpy.ops.object.modifier_apply(modifier=shrinkwrap.name)
+            elif as_garment_support:
+                gs_key = getShapeKeyByName(obj, 'GarmentSupport')
+                if gs_key:
+                    obj.shape_key_remove(gs_key)
+                bpy.ops.object.modifier_apply_as_shapekey(modifier=shrinkwrap.name)
+            else:
+                # Check for basis
+                if not getShapeKeyByName(obj, 'Basis'):
+                    bpy.ops.object.modifier_apply(modifier=shrinkwrap.name)
+                else:
+                    # Merge with basis
+                    shrinkwrap.name = 'TEMP_MERGE'
+                    bpy.ops.object.modifier_apply_as_shapekey(modifier=shrinkwrap.name)
+
+                    basis = obj.data.shape_keys.key_blocks['Basis']
+                    temp = getShapeKeyByName(obj, 'TEMP_MERGE')
+
+                    for i, v in enumerate(basis.data):
+                        v.co += (temp.data[i].co - basis.data[i].co)
+
+                    obj.shape_key_remove(temp)
+
+        return {'FINISHED'}
+
+    except Exception as e:
+        show_message(f"Error: {str(e)}")
+        return {'CANCELLED'}
+
+    finally:
+        if apply_immediately:
+            restore_previous_context()
+
+#endregion
+
+#region Refitter functions
 
 def applyRefitter(obj):
     """Apply refitter"""
@@ -505,6 +610,8 @@ def add_lattice(target_body_path, collection, fbx_rot, target_body_name):
     refitter.hide_viewport = True
     return refitter
 
+#endregion
+
 def create_color_attributes(obj):
     """Create color attributes for garment support."""
     mesh = obj.data
@@ -527,106 +634,7 @@ def create_color_attributes(obj):
         for i in range(len(attr.data)):
             attr.data[i].color = color
 
-def add_shrinkwrap(context, target_collection_name, offset, wrap_method,
-                   as_garment_support=True, apply_immediately=True, vertex_group=None):
-    """Add shrinkwrap"""
-
-    # Get target mesh
-    target_collection_children = get_collection_children(target_collection_name, "MESH")
-    if not target_collection_children:
-        show_message(f"Target collection '{target_collection_name}' not found.")
-        return {'CANCELLED'}
-
-    if len(target_collection_children) == 0:
-        show_message(f"No meshes found in collection '{target_collection_name}'.")
-        return {'CANCELLED'}
-
-    target_mesh = target_collection_children[0]
-
-    if len(target_collection_children) > 1:
-        show_message(f"Target collection contains {len(target_collection_children)} meshes. Using first one.")
-
-    selected_meshes = [obj for obj in context.selected_objects
-                      if obj.type == 'MESH' and obj != target_mesh]
-
-    if not selected_meshes:
-        show_message("No objects selected, or only the target mesh selected!")
-        return {'CANCELLED'}
-
-    shapekey_name = "GarmentSupport" if as_garment_support else "Shrinkwrap"
-
-    # Store current context if we're applying
-    if apply_immediately:
-        store_current_context()
-
-    try:
-        # Switch to object mode if applying
-        if apply_immediately and get_safe_mode() != 'OBJECT':
-            safe_mode_switch('OBJECT')
-
-        for obj in selected_meshes:
-            # Add modifier
-            shrinkwrap = obj.modifiers.new(name=shapekey_name, type='SHRINKWRAP')
-
-            if vertex_group:
-                if vertex_group not in obj.vertex_groups:
-                    continue
-                shrinkwrap.vertex_group = vertex_group
-
-            if as_garment_support:
-                create_color_attributes(obj)
-                # Clear shape keys
-                if hasShapeKeys(obj):
-                    for key in reversed(obj.data.shape_keys.key_blocks):
-                        obj.shape_key_remove(key)
-
-            shrinkwrap.target = target_mesh
-            shrinkwrap.wrap_method = wrap_method
-            shrinkwrap.wrap_mode = 'ABOVE_SURFACE'
-            shrinkwrap.offset = offset
-
-            if not apply_immediately:
-                continue
-
-            # Apply modifier
-            context.view_layer.objects.active = obj
-
-            if not hasShapeKeys(obj):
-                if as_garment_support:
-                    bpy.ops.object.modifier_apply_as_shapekey(modifier=shrinkwrap.name)
-                else:
-                    bpy.ops.object.modifier_apply(modifier=shrinkwrap.name)
-            elif as_garment_support:
-                gs_key = getShapeKeyByName(obj, 'GarmentSupport')
-                if gs_key:
-                    obj.shape_key_remove(gs_key)
-                bpy.ops.object.modifier_apply_as_shapekey(modifier=shrinkwrap.name)
-            else:
-                # Check for basis
-                if not getShapeKeyByName(obj, 'Basis'):
-                    bpy.ops.object.modifier_apply(modifier=shrinkwrap.name)
-                else:
-                    # Merge with basis
-                    shrinkwrap.name = 'TEMP_MERGE'
-                    bpy.ops.object.modifier_apply_as_shapekey(modifier=shrinkwrap.name)
-
-                    basis = obj.data.shape_keys.key_blocks['Basis']
-                    temp = getShapeKeyByName(obj, 'TEMP_MERGE')
-
-                    for i, v in enumerate(basis.data):
-                        v.co += (temp.data[i].co - basis.data[i].co)
-
-                    obj.shape_key_remove(temp)
-
-        return {'FINISHED'}
-
-    except Exception as e:
-        show_message(f"Error: {str(e)}")
-        return {'CANCELLED'}
-
-    finally:
-        if apply_immediately:
-            restore_previous_context()
+#region Join/Split helpers
 
 # Material storage for join/split
 material_storage = defaultdict(dict)
@@ -647,29 +655,32 @@ def safe_join(self, context):
     store_current_context()
 
     try:
-        # Store materials
+        # store materials
         for obj in selected_meshes:
-            material_storage[obj.name].clear()
-            for i, slot in enumerate(obj.material_slots):
-                if slot.material:
-                    material_storage[obj.name][i] = slot.material.name
+            try:
+                material_storage[obj.name] = {}
+                for i, slot in enumerate(obj.material_slots):
+                    if slot.material:
+                        material_storage[obj.name][i] = slot.material.name
 
-            # Create submesh material
-            if obj.name not in bpy.data.materials:
-                mat = bpy.data.materials.new(name=obj.name)
-                mat.diffuse_color = (0.8, 0.8, 0.8, 1)
+                # Create submesh material
+                if obj.name not in bpy.data.materials:
+                    mat = bpy.data.materials.new(name=obj.name)
+                    mat.diffuse_color = (0.8, 0.8, 0.8, 1)
 
-            # Clear and assign
-            obj.data.materials.clear()
-            obj.data.materials.append(bpy.data.materials[obj.name])
+                # Clear and assign
+                obj.data.materials.clear()
+                obj.data.materials.append(bpy.data.materials[obj.name])
 
-            # Assign to faces
-            context.view_layer.objects.active = obj
-            safe_mode_switch('EDIT')
-            bpy.ops.mesh.select_all(action='SELECT')
-            obj.active_material_index = 0
-            bpy.ops.object.material_slot_assign()
-            safe_mode_switch('OBJECT')
+                # Assign to faces
+                context.view_layer.objects.active = obj
+                safe_mode_switch('EDIT')
+                bpy.ops.mesh.select_all(action='SELECT')
+                obj.active_material_index = 0
+                bpy.ops.object.material_slot_assign()
+                safe_mode_switch('OBJECT')
+            except Exception as e:
+                show_message(f"Error: {str(e)}")
 
         # Join
         bpy.ops.object.select_all(action='DESELECT')
@@ -682,7 +693,6 @@ def safe_join(self, context):
 
     finally:
         restore_previous_context()
-
 
 def _restore_original_materials(self, obj):
     """Restore materials from storage."""
@@ -708,34 +718,36 @@ def safe_split(self, context):
     # Store context
     store_current_context()
 
-    try:
-        # Split by material
-        safe_mode_switch('EDIT')
-        bpy.ops.mesh.select_all(action='SELECT')
-        bpy.ops.mesh.separate(type='MATERIAL')
-        safe_mode_switch('OBJECT')
+    # Split by material
+    safe_mode_switch('EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.separate(type='MATERIAL')
+    safe_mode_switch('OBJECT')
 
-        # Process split objects
-        new_objects = list(context.selected_objects)
+    # restore original materials (and names)
+    new_objects = list(context.selected_objects)
 
-        for new_obj in new_objects:
-            # Rename to material
+    for new_obj in new_objects:
+        try:
+            # Restore name from material
             if new_obj.data.materials and new_obj.data.materials[0]:
                 new_obj.name = new_obj.data.materials[0].name
 
-            # Clear and restore
-            new_obj.data.materials.clear()
             if new_obj.name in material_storage:
+                new_obj.data.materials.clear()
                 _restore_original_materials(self, new_obj)
+        except:
+            pass
 
-        return {'FINISHED'}
+    restore_previous_context()
+    if context.object.mode == 'OBJECT':
+        select_objects(new_objects)
 
-    finally:
-        restore_previous_context()
+    return {'FINISHED'}
 
+#endregion
 
-# mirror helpers
-
+#region mirror helpers
 
 def mirror_vertex_groups(mesh):
     num_replaced = 0
@@ -769,3 +781,84 @@ def mirror_vertex_groups(mesh):
             vertex_group.name = 'r_butterfly_top_CRV_top_out_JNT'
         continue
     return num_replaced
+
+#endregion
+
+#region armature helpers
+def delete_unused_bones(self, context):
+    """
+    Deletes bones from the selected armature that do not have corresponding vertex groups
+    in any of its child mesh objects.
+
+    Args:
+        self: Operator instance
+        context: Blender context
+
+    Returns:
+        {'FINISHED'} or {'CANCELLED'}
+    """
+    obj = context.active_object
+    if not obj or obj.type != 'ARMATURE':
+        self.report({'ERROR'}, "Active object must be an armature.")
+        return {'CANCELLED'}
+
+    # Collect all vertex group names from all child meshes
+    all_vertex_groups = set()
+    for child in obj.children:
+        if child.type == 'MESH':
+            all_vertex_groups.update(vg.name for vg in child.vertex_groups)
+
+    if not all_vertex_groups:
+        self.report({'WARNING'}, "No vertex groups found in mesh children.")
+        return {'CANCELLED'}
+
+    original_mode = obj.mode
+
+    # Safely switch to edit mode
+    try:
+        if obj and obj.name in bpy.data.objects and original_mode != 'EDIT':
+            safe_mode_switch('EDIT')
+    except Exception as e:
+        self.report({'ERROR'}, f"Failed to switch to edit mode: {e}")
+        return {'CANCELLED'}
+
+    try:
+        edit_bones = obj.data.edit_bones
+
+        # Build a list of bones to remove
+        bones_to_remove = []
+        for bone in edit_bones:
+            # Strip Blender's automatic .001, .002 suffixes
+            base_name = re.sub(r'\.\d+$', '', bone.name)
+
+            # Keep bone if either its name or base name has a vertex group
+            if bone.name not in all_vertex_groups and base_name not in all_vertex_groups:
+                bones_to_remove.append(bone)
+
+        # Remove bones
+        try:
+            cp77_addon_prefs = context.preferences.addons['i_scene_cp77_gltf'].preferences
+            verbose = not cp77_addon_prefs.non_verbose
+        except (KeyError, AttributeError):
+            verbose = True
+
+        for bone in bones_to_remove:
+            if verbose:
+                print(f"Deleting unused bone: {bone.name}")
+            edit_bones.remove(bone)
+
+    except Exception as e:
+        self.report({'ERROR'}, f"Error during bone deletion: {e}")
+        return {'CANCELLED'}
+
+    finally:
+        # Always restore the original mode
+        try:
+            if obj and obj.name in bpy.data.objects and obj.mode != original_mode:
+                safe_mode_switch(original_mode)
+        except Exception as e:
+            print(f"Warning: Could not restore original mode: {e}")
+
+    self.report({'INFO'}, f"Removed {len(bones_to_remove)} unused bones.")
+    return {'FINISHED'}
+#endregion

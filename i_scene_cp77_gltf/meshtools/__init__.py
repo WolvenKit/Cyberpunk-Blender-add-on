@@ -37,60 +37,73 @@ class CP77_PT_MeshTools(Panel):
         if not cp77_addon_prefs.show_modtools or not cp77_addon_prefs.show_meshtools:
             return
 
-        has_mesh_selected = (context.active_object and context.active_object.type == 'MESH') or  len([obj for obj in bpy.context.selected_objects if obj.type == 'MESH']) > 1
+        # store control flags for display logic below
+        has_meshes_selected = len([obj for obj in bpy.context.selected_objects if obj.type == 'MESH']) > 1
+        has_mesh_selected = (context.active_object and context.active_object.type == 'MESH')
+        has_armature_selected = (context.active_object and context.active_object.type == 'ARMATURE')
 
-        if has_mesh_selected:
+        if has_armature_selected:
 
-            box.label(icon_value=get_icon("SCULPT"), text="Modelling:")
             col = box.column()
+            col.label(text="Clean up Armature", icon_value=get_icon("ARMATURE"))
+            col.operator('delete_unused_bones.cp77', text='Delete unused bones')
 
-            col.operator("cp77.set_armature", text="Change Armature Target")
-
-            col.operator("cp77.shrinkwrap", text="GarmentSupport/Decal")
-
-            col.operator("cp77.trans_weights", text="Weight Transfer Tool")
-
-            if context.object.active_material and context.object.active_material.name == 'UV_Checker':
-                col.operator("cp77.uv_unchecker",  text="Remove UV Checker")
-            else:
-                col.operator("cp77.uv_checker", text="Apply UV Checker")
-
-            if context.active_object.data.materials and any(mat.name.startswith('submesh_') for mat in context.active_object.data.materials if mat):
-                col.operator("cp77.safe_split", text="Split into submeshes")
-            else:
-                col.operator("cp77.safe_join", text="Join Meshes")
-
-
-            box = layout.box()
-            box.label(text="Mirror Tools", icon_value=get_icon("MIRROR"))
-            col = box.column()
-
-            col.operator("cp77.mirror_x_axis", text="Safely mirror")
-            col.operator("cp77.mirror_vertex_groups", text="Mirror Vertex Groups")
-
-            box.operator("cp77.rotate_obj", text="Rotate Selected Objects")
-
-            box = layout.box()
-            box.label(text="Mesh Cleanup", icon_value=get_icon("TRAUMA"))
-            col = box.column()
-            col.operator("cp77.submesh_prep")
-            col.operator("cp77.group_verts", text="Group Ungrouped Verts")
-            col.operator("cp77.del_empty_vgroup", text="Delete Unused Vert Groups")
-
-            box = layout.box()
-            box.label(text="AKL Autofitter", icon_value=get_icon("REFIT"))
-            col = box.column()
-            col.operator("cp77.auto_fitter", text="Refit Selected Meshes")
-
-            box = layout.box()
-            box.label(text="Vertex Colours", icon="BRUSH_DATA")
-            col = box.column()
-            col.operator("cp77.apply_vertex_color_preset")
-            col.operator("cp77.add_vertex_color_preset")
-            col.operator("cp77.delete_vertex_color_preset")
-
-        else:
+        if not has_mesh_selected or has_meshes_selected:
             box.label(icon_value=get_icon("SCULPT"), text="Select a mesh")
+            return
+        col = box.column()
+        col.operator("cp77.set_armature", text="Change Armature Target")
+
+        if context.object.active_material and context.object.active_material.name == 'UV_Checker':
+            col.operator("cp77.uv_unchecker",  text="Remove UV Checker")
+        else:
+            col.operator("cp77.uv_checker", text="Apply UV Checker")
+
+        # Modelling
+        box.label(icon_value=get_icon("SCULPT"), text="Modelling:")
+        col = box.column()
+
+        col.operator("cp77.shrinkwrap", text="GarmentSupport/Decal")
+
+        col.operator("cp77.trans_weights", text="Weight Transfer Tool")
+
+        if has_mesh_selected and context.active_object.data.materials and any(mat.name.startswith('submesh_') for mat in context.active_object.data.materials if mat):
+            col.operator("cp77.safe_split", text="Split into submeshes")
+        elif has_meshes_selected:
+            col.operator("cp77.safe_join", text="Join Meshes")
+
+        # Mirror
+        box = layout.box()
+        box.label(text="Mirror Tools", icon_value=get_icon("MIRROR"))
+        col = box.column()
+
+        col.operator("cp77.mirror_x_axis", text="Safely mirror")
+        col.operator("cp77.mirror_vertex_groups", text="Mirror Vertex Groups")
+
+        box.operator("cp77.rotate_obj", text="Rotate Selected Objects")
+
+        # Cleanup
+        box = layout.box()
+        box.label(text="Mesh Cleanup", icon_value=get_icon("TRAUMA"))
+        col = box.column()
+        col.operator("cp77.submesh_prep")
+        col.operator("cp77.group_verts", text="Group Ungrouped Verts")
+        col.operator("cp77.del_empty_vgroup", text="Delete Unused Vert Groups")
+
+        # Autofitter
+        box = layout.box()
+        box.label(text="AKL Autofitter", icon_value=get_icon("REFIT"))
+        col = box.column()
+        col.operator("cp77.auto_fitter", text="Refit Selected Meshes")
+
+        # Vertex colours
+        box = layout.box()
+        box.label(text="Vertex Colours", icon="BRUSH_DATA")
+        col = box.column()
+        col.operator("cp77.apply_vertex_color_preset")
+        col.operator("cp77.add_vertex_color_preset")
+        col.operator("cp77.delete_vertex_color_preset")
+
 class CP77DeleteVertexcolorPreset(Operator):
     bl_idname = "cp77.delete_vertex_color_preset"
     bl_label = "Delete Vertex Colour Preset"
@@ -234,7 +247,7 @@ class CP77GarmentSupport(Operator):
     def invoke(self, context, event):
         try:
             context.scene.vertex_group_props.presets = ''  # Reset to trigger refresh
-        except Exception as e:
+        except:
             pass
 
         return context.window_manager.invoke_props_dialog(self)
@@ -297,9 +310,9 @@ class CP77SafeJoin(Operator):
     bl_description = "Join selected meshes while preserving submesh information"
     bl_options = {'REGISTER', 'UNDO'}
 
-    def invoke(self, context, event):
-        return context.window_manager.invoke_props_dialog(self)
-
+    # Show a confirmation window before triggering the function
+    # def invoke(self, context, event):
+    #     return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
         result = safe_join(self, context)
@@ -311,8 +324,9 @@ class CP77SafeSplit(Operator):
     bl_description = "Split selected mesh back into submeshes"
     bl_options = {'REGISTER', 'UNDO'}
 
-    def invoke(self, context, event):
-        return context.window_manager.invoke_props_dialog(self)
+    # Show a confirmation window before triggering the function
+    # def invoke(self, context, event):
+    #     return context.window_manager.invoke_props_dialog(self)
 
     def execute(self, context):
         result = safe_split(self, context)
@@ -352,7 +366,7 @@ class CP77WeightTransfer(Operator):
 
     def execute(self, context):
         # Call the trans_weights function with the provided arguments
-        result = trans_weights(self, context, self.properties.vertInterop ) #, self.properties.bySubmesh)
+        trans_weights(self, context, self.properties.vertInterop ) #, self.properties.bySubmesh)
         return {"FINISHED"}
 
     def draw(self,context):
@@ -743,6 +757,16 @@ class CP77_OT_MirrorXAxis(Operator):
 
         self.report({'INFO'}, f'Mirrored {num_replaced} vertex groups across {len(selected_meshes)} mesh(es)')
         return {'FINISHED'}
+
+class CP77DeleteUnusedBones(Operator):
+    bl_idname = "delete_unused_bones.cp77"
+    bl_parent_id = "CP77_PT_animspanel"
+    bl_label = "Delete unused bones"
+    bl_description = "Delete all bones that aren't used by meshes parented to the armature"
+
+    def execute(self, context):
+        delete_unused_bones(self, context)
+        return {"FINISHED"}
 
 operators, other_classes = get_classes(sys.modules[__name__])
 

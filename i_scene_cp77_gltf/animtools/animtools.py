@@ -24,91 +24,14 @@ animBones = [
     "RightUpLeg", "RightLeg", "RightFoot", "RightHeel", "RightToeBase"
 ]
 
-def delete_unused_bones(self, context):
-    """
-    Deletes bones from the selected armature that do not have corresponding vertex groups
-    in any of its child mesh objects.
-    
-    Args:
-        self: Operator instance
-        context: Blender context
-        
-    Returns:
-        {'FINISHED'} or {'CANCELLED'}
-    """
-    obj = context.active_object
-    if not obj or obj.type != 'ARMATURE':
-        self.report({'ERROR'}, "Active object must be an armature.")
-        return {'CANCELLED'}
-
-    # Collect all vertex group names from all child meshes
-    all_vertex_groups = set()
-    for child in obj.children:
-        if child.type == 'MESH':
-            all_vertex_groups.update(vg.name for vg in child.vertex_groups)
-    
-    if not all_vertex_groups:
-        self.report({'WARNING'}, "No vertex groups found in mesh children.")
-        return {'CANCELLED'}
-
-    original_mode = obj.mode
-    
-    # Safely switch to edit mode
-    try:
-        if obj and obj.name in bpy.data.objects and original_mode != 'EDIT':
-            safe_mode_switch('EDIT')
-    except Exception as e:
-        self.report({'ERROR'}, f"Failed to switch to edit mode: {e}")
-        return {'CANCELLED'}
-
-    try:
-        edit_bones = obj.data.edit_bones
-        
-        # Build a list of bones to remove
-        bones_to_remove = []
-        for bone in edit_bones:
-            # Strip Blender's automatic .001, .002 suffixes
-            base_name = re.sub(r'\.\d+$', '', bone.name)
-            
-            # Keep bone if either its name or base name has a vertex group
-            if bone.name not in all_vertex_groups and base_name not in all_vertex_groups:
-                bones_to_remove.append(bone)
-        
-        # Remove bones
-        try:
-            cp77_addon_prefs = context.preferences.addons['i_scene_cp77_gltf'].preferences
-            verbose = not cp77_addon_prefs.non_verbose
-        except (KeyError, AttributeError):
-            verbose = True
-        
-        for bone in bones_to_remove:
-            if verbose:
-                print(f"Deleting unused bone: {bone.name}")
-            edit_bones.remove(bone)
-
-    except Exception as e:
-        self.report({'ERROR'}, f"Error during bone deletion: {e}")
-        return {'CANCELLED'}
-    
-    finally:
-        # Always restore the original mode
-        try:
-            if obj and obj.name in bpy.data.objects and obj.mode != original_mode:
-                safe_mode_switch(original_mode)
-        except Exception as e:
-            print(f"Warning: Could not restore original mode: {e}")
-
-    self.report({'INFO'}, f"Removed {len(bones_to_remove)} unused bones.")
-    return {'FINISHED'}
-
 def reset_armature(self, context):
     """
     Resets all pose bones of the selected armature to their rest position.
-    
+
     Args:
         self: Operator instance
         context: Blender context
-        
+
     Returns:
         {'FINISHED'} or {'CANCELLED'}
     """
@@ -121,13 +44,13 @@ def reset_armature(self, context):
     for pose_bone in obj.pose.bones:
         pose_bone.matrix_basis.identity()
         reset_count += 1
-    
+
 
     return {'FINISHED'}
 
 def create_track_properties(armature_obj, rig, apply_defaults: bool = True):
     """Create custom properties for all tracks on armature
-    
+
     Args:
         armature_obj: Blender armature object
         rig: RigSkeleton with track_names and reference_tracks
@@ -135,27 +58,27 @@ def create_track_properties(armature_obj, rig, apply_defaults: bool = True):
     """
     if not armature_obj or armature_obj.type != 'ARMATURE':
         return
-    
+
     track_names = [
         str(n) if not isinstance(n, dict) else n.get('$value', '')
         for n in rig.track_names
     ]
-    
+
     defaults = rig.reference_tracks if hasattr(rig, 'reference_tracks') else None
-    
+
     for i, track_name in enumerate(track_names):
         if not track_name:
             continue
-        
+
         # Get default value
         default_value = 0.0
         if defaults is not None and i < len(defaults):
             default_value = float(defaults[i])
-        
+
         # Create property if it doesn't exist
         if track_name not in armature_obj:
             armature_obj[track_name] = default_value if apply_defaults else 0.0
-            
+
             # Set UI metadata
             try:
                 ui = armature_obj.id_properties_ui(track_name)
@@ -177,18 +100,18 @@ def create_track_properties(armature_obj, rig, apply_defaults: bool = True):
 def cp77_keyframe(self, context, frameall=False):
     """
     Insert keyframes for the armature, either at current frame or for entire animation.
-    
+
     Args:
         self: Operator instance
         context: Blender context
         frameall: If True, keyframe entire animation range
-        
+
     Returns:
         {'FINISHED'} or {'CANCELLED'}
     """
     current_context = bpy.context.mode
     armature = context.active_object
-    
+
     if not armature or armature.type != 'ARMATURE':
         self.report({'ERROR'}, "Active object must be an armature.")
         return {'CANCELLED'}
@@ -212,34 +135,34 @@ def cp77_keyframe(self, context, frameall=False):
             if not armature.animation_data or not armature.animation_data.action:
                 self.report({'ERROR'}, "Armature has no animation data or action.")
                 return {'CANCELLED'}
-            
+
             action = armature.animation_data.action
             frame_start = int(action.frame_range[0])
             frame_end = int(action.frame_range[1])
-            
+
             # Get step size from scene properties if available
             step = getattr(context.scene, 'cp77_keyframe_step', 1)
-            
+
             # Store current frame
             original_frame = context.scene.frame_current
-            
+
             # Insert keyframes
             keyframe_count = 0
             for frame in range(frame_start, frame_end + 1, step):
                 context.scene.frame_set(frame)
                 bpy.ops.anim.keyframe_insert_by_name(type="WholeCharacterSelected")
                 keyframe_count += 1
-            
+
             # Restore original frame
             context.scene.frame_set(original_frame)
-            
+
             self.report({'INFO'}, f"Inserted keyframes at {keyframe_count} frames.")
             return {'FINISHED'}
-    
+
     except Exception as e:
         self.report({'ERROR'}, f"Keyframe insertion failed: {e}")
         return {'CANCELLED'}
-    
+
     finally:
         # Restore original mode
         if bpy.context.mode != current_context:
@@ -478,11 +401,11 @@ def load_apose(self, arm_obj):
     rig_data = read_rig(filepath)
     apose_ms = rig_data.apose_ms
     apose_ls = rig_data.apose_ls
-    
+
     if apose_ms is None and apose_ls is None:
         self.report({'ERROR'}, f"No A-Pose found in {rig_data.rig_name} json source")
         return
-    
+
     bone_index_map = {}
     for i, name in enumerate(rig_data.bone_names):
         bone = edit_bones.get(name)
@@ -515,7 +438,7 @@ def load_tpose(self, arm_obj):
         bone = edit_bones.get(name)
         bone_index_map[i] = bone
         print(f'index{i} = {bone.name} = {bone}')
-    
+
     global_transforms = {}
     for i in range(len(rig_data.bone_names)):
         mat_red = compute_global_transform(i, rig_data.bone_transforms, rig_data.parent_indices, global_transforms)
@@ -527,28 +450,28 @@ def load_tpose(self, arm_obj):
         apply_bone_from_matrix(i, global_transforms[i], bone_index_map, rig_data.parent_indices, global_transforms)
         arm_data['T-Pose'] = True
     restore_previous_context()
-    
+
     self.report({'INFO'}, "A-Pose loaded")
     return
 
 def delete_anim(self, context):
     """
     Delete an animation action by name.
-    
+
     Args:
         self: Operator instance (must have 'name' attribute)
         context: Blender context
-        
+
     Returns:
         {'FINISHED'} or {'CANCELLED'}
     """
     if not hasattr(self, 'name'):
         return {'CANCELLED'}
-    
+
     action = bpy.data.actions.get(self.name, None)
     if not action:
         return {'CANCELLED'}
-    
+
     try:
         bpy.data.actions.remove(action)
         return {'FINISHED'}
@@ -589,7 +512,7 @@ def hide_extra_bones(context):
         return
 
     bones_to_hide = [
-        b.name for b in selected_object.pose.bones 
+        b.name for b in selected_object.pose.bones
         if b.name not in animBones
     ]
 
@@ -624,12 +547,12 @@ def unhide_extra_bones(self, context):
             del selected_object['deformBonesHidden']
 
     print("Unhidden all bones")
-    
+
 # Utility functions for external use
 def get_animation_bones():
     """
     Get the list of standard animation bones.
-    
+
     Returns:
         List of bone names
     """
@@ -638,10 +561,10 @@ def get_animation_bones():
 def is_animation_bone(bone_name):
     """
     Check if a bone name is in the standard animation bone list.
-    
+
     Args:
         bone_name: Name of the bone to check
-        
+
     Returns:
         Boolean
     """
@@ -650,17 +573,17 @@ def is_animation_bone(bone_name):
 def validate_armature(obj):
     """
     Validate that an object is a usable armature.
-    
+
     Args:
         obj: Blender object to validate
-        
+
     Returns:
         Boolean
     """
     if not obj or obj.type != 'ARMATURE':
         return False
-    
+
     if not obj.data or not obj.data.bones:
         return False
-    
+
     return True
