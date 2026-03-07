@@ -672,38 +672,6 @@ class CP77RotateObj(Operator):
         rotate_quat_180(self, context)
         return {'FINISHED'}
 
-def mirror_vertex_groups(mesh):
-    num_replaced = 0
-    vertex_groups = mesh.vertex_groups[:]
-
-    # we'll end up with duplicate names if we rename right away
-    for vertex_group in vertex_groups:
-        if vertex_group.name.startswith('r_'):
-            vertex_group.name = vertex_group.name.replace('r_', 'REPLACEME_l_', 1)
-            continue
-        if vertex_group.name.startswith('l_'):
-            vertex_group.name = vertex_group.name.replace('l_', 'REPLACEME_r_', 1)
-            continue
-        if vertex_group.name.startswith('Left'):
-            vertex_group.name = vertex_group.name.replace('Left', 'REPLACEME_Right', 1)
-            continue
-        if vertex_group.name.startswith('Right'):
-            vertex_group.name = vertex_group.name.replace('Right', 'REPLACEME_Left', 1)
-            continue
-
-    num_replaced = 0
-    for vertex_group in vertex_groups:
-        if not 'REPLACEME_' in vertex_group.name:
-            continue
-        num_replaced += 1
-        vertex_group.name = vertex_group.name.replace('REPLACEME_', '')
-        # two extra cases just for CDPR
-        if vertex_group.name == 'l_butterfly_top_CRV_top_out_JNT':
-            vertex_group.name = 'l_butterfly_top_CRV_bot_out_JNT'
-        if vertex_group.name == 'r_butterfly_top_CRV_bot_out_JNT':
-            vertex_group.name = 'r_butterfly_top_CRV_top_out_JNT'
-        continue
-    return num_replaced
 class CP77_OT_MirrorVertexGroups(Operator):
     bl_idname = "cp77.mirror_vertex_groups"
     bl_label = "Mirror vertex groups"
