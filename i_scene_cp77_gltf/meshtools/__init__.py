@@ -732,56 +732,48 @@ class CP77_OT_MirrorXAxis(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
+        # Store initial mode to restore later
+        initial_mode = context.object.mode if context.object else 'OBJECT'
 
-        if context.object.mode != 'OBJECT':
+        if context.object and context.object.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
 
-        selected_meshes = [obj for obj in bpy.context.selected_objects if obj.type == 'MESH']
+        selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
         if not selected_meshes:
             show_message("No meshes selected")
             return {'CANCELLED'}
 
         num_replaced = 0
         for obj in selected_meshes:
-            # Select only the active object
+            # Select only the current object
             bpy.ops.object.select_all(action='DESELECT')
             obj.select_set(True)
-            bpy.context.view_layer.objects.active = obj
+            context.view_layer.objects.active = obj
 
+            # Mirror across X axis using negative scale
             bpy.ops.transform.resize(
                 value=(-1, 1, 1),
                 orient_type='GLOBAL',
-                orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)),
-                orient_matrix_type='GLOBAL',
                 constraint_axis=(True, False, False),
-                mirror=True,
-                use_proportional_edit=False,
-                proportional_edit_falloff='SMOOTH',
-                proportional_size=0.263331,
-                use_proportional_connected=False,
-                use_proportional_projected=False)
+                mirror=True  # This ensures proper mirroring of vertices
+            )
 
-            # Step 2: Apply all transforms
+            # Apply transforms to bake the negative scale
             bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
-            # Step 3: Flip normals
-            # Switch to edit mode to flip normals
+            # Flip normals in edit mode
             bpy.ops.object.mode_set(mode='EDIT')
-
-            # Select all faces
             bpy.ops.mesh.select_all(action='SELECT')
-
-            # Flip normals
             bpy.ops.mesh.flip_normals()
-
-            # Switch back to object mode
             bpy.ops.object.mode_set(mode='OBJECT')
 
-            num_replaced = num_replaced + mirror_vertex_groups(obj)
+            num_replaced += mirror_vertex_groups(obj)
 
-        self.report({'INFO'}, f'Mirrored {num_replaced} vertex groups.')
+        # Restore initial mode
+        if context.object:
+            bpy.ops.object.mode_set(mode=initial_mode)
 
-        self.report({'INFO'}, f'Mirrored {num_replaced} vertex groups.')
+        self.report({'INFO'}, f'Mirrored {num_replaced} vertex groups across {len(selected_meshes)} mesh(es)')
         return {'FINISHED'}
 
 operators, other_classes = get_classes(sys.modules[__name__])
