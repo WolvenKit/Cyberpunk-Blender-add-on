@@ -35,7 +35,7 @@ class CP77_PT_MeshTools(Panel):
             return
 
         # store control flags for display logic below
-        has_meshes_selected = len([obj for obj in bpy.context.selected_objects if obj.type == 'MESH']) > 1
+        has_meshes_selected = bpy.context.selected_objects and len([obj for obj in bpy.context.selected_objects if obj.type == 'MESH']) > 1
         has_mesh_selected = (context.active_object and context.active_object.type == 'MESH')
         has_armature_selected = (context.active_object and context.active_object.type == 'ARMATURE')
 
@@ -45,7 +45,7 @@ class CP77_PT_MeshTools(Panel):
             col.label(text="Clean up Armature", icon_value=get_icon("ARMATURE"))
             col.operator('delete_unused_bones.cp77', text='Delete unused bones')
 
-        if not has_mesh_selected or has_meshes_selected:
+        if not (has_mesh_selected or has_meshes_selected):
             box.label(icon_value=get_icon("SCULPT"), text="Select a mesh")
             return
         col = box.column()
