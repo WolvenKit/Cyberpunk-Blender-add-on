@@ -80,7 +80,8 @@ class CP77_PT_MeshTools(Panel):
         col.operator("cp77.mirror_x_axis", text="Safely mirror")
         col.operator("cp77.mirror_vertex_groups", text="Mirror Vertex Groups")
 
-        box.operator("cp77.rotate_obj", text="Rotate Selected Objects")
+        # Currently broken TODO @Presto
+        # box.operator("cp77.rotate_obj", text="Rotate Selected Objects")
 
         # Cleanup
         box = layout.box()
