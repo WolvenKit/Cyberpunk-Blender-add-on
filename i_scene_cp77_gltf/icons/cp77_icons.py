@@ -15,6 +15,7 @@ def load_icons():
         custom_icons.load("TECH", os.path.join(icons_dir, "tech.png"), 'IMAGE')
         custom_icons.load("REFIT", os.path.join(icons_dir, "refit.png"), 'IMAGE')
         custom_icons.load("MIRROR", os.path.join(icons_dir, "mirror.png"), 'IMAGE')
+        custom_icons.load("ARMATURE", os.path.join(icons_dir, "armature.png"), 'IMAGE')
 
 def unload_icons():
     global custom_icons
