@@ -48,62 +48,6 @@ def _assign_action(adt, action):
         except Exception as e:
             print(f"[CP77] Could not create action slot: {e}")
 
-def delete_unused_bones(self, context):
-    obj = context.active_object
-    if not obj or obj.type != 'ARMATURE':
-        self.report({'ERROR'}, "Active object must be an armature.")
-        return {'CANCELLED'}
-
-    all_vertex_groups = set()
-    for child in obj.children:
-        if child.type == 'MESH':
-            all_vertex_groups.update(vg.name for vg in child.vertex_groups)
-
-    if not all_vertex_groups:
-        self.report({'WARNING'}, "No vertex groups found in mesh children.")
-        return {'CANCELLED'}
-
-    original_mode = obj.mode
-
-    try:
-        if obj and obj.name in bpy.data.objects and original_mode != 'EDIT':
-            safe_mode_switch('EDIT')
-    except Exception as e:
-        self.report({'ERROR'}, f"Failed to switch to edit mode: {e}")
-        return {'CANCELLED'}
-
-    try:
-        edit_bones = obj.data.edit_bones
-        bones_to_remove = []
-        for bone in edit_bones:
-            base_name = re.sub(r'\.\d+$', '', bone.name)
-            if bone.name not in all_vertex_groups and base_name not in all_vertex_groups:
-                bones_to_remove.append(bone)
-
-        try:
-            cp77_addon_prefs = context.preferences.addons['i_scene_cp77_gltf'].preferences
-            verbose = not cp77_addon_prefs.non_verbose
-        except (KeyError, AttributeError):
-            verbose = True
-
-        for bone in bones_to_remove:
-            if verbose:
-                print(f"Deleting unused bone: {bone.name}")
-            edit_bones.remove(bone)
-
-    except Exception as e:
-        self.report({'ERROR'}, f"Error during bone deletion: {e}")
-        return {'CANCELLED'}
-
-    finally:
-        try:
-            if obj and obj.name in bpy.data.objects and obj.mode != original_mode:
-                safe_mode_switch(original_mode)
-        except Exception as e:
-            print(f"Warning: Could not restore original mode: {e}")
-
-    self.report({'INFO'}, f"Removed {len(bones_to_remove)} unused bones.")
-    return {'FINISHED'}
 
 def reset_armature(self, context):
     obj = context.active_object

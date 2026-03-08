@@ -251,14 +251,6 @@ class CP77ResetArmature(Operator):
         reset_armature(self, context)
         return {"FINISHED"}
 
-class CP77DeleteUnusedBones(Operator):
-    bl_idname = "delete_unused_bones.cp77"
-    bl_parent_id = "CP77_PT_animspanel"
-    bl_label = "Delete unused bones"
-
-    def execute(self, context):
-        delete_unused_bones(self, context)
-        return {"FINISHED"}
 
 class CP77NewAction(Operator):
     bl_idname = 'cp77.new_action'
