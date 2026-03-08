@@ -181,6 +181,9 @@ class DANGLE_PT_dangle_nodes(bpy.types.Panel):
             st, "dangle_nodes",
             st, "active_dangle_node",
         )
+        col = row.column(align=True)
+        col.operator("dangle.add_node", icon='ADD', text="")
+        col.operator("dangle.remove_node", icon='REMOVE', text="")
 
         dnode = get_active_dangle_node(context)
         if dnode is None:
@@ -220,6 +223,10 @@ class DANGLE_PT_chains(bpy.types.Panel):
             dnode, "chains",
             dnode, "active_chain",
         )
+        col = row.column(align=True)
+        col.operator("dangle.add_chain", icon='ADD', text="")
+        col.operator("dangle.remove_chain", icon='REMOVE', text="")
+        col.operator("dangle.copy_chain", icon='DUPLICATE', text="")
 
 
 class DANGLE_PT_particles(bpy.types.Panel):
@@ -248,6 +255,7 @@ class DANGLE_PT_particles(bpy.types.Panel):
         col = row.column(align=True)
         col.operator("dangle.add_particle", icon='ADD', text="")
         col.operator("dangle.remove_particle", icon='REMOVE', text="")
+        col.operator("dangle.add_selected_bones_to_chain", icon='BONE_DATA', text="")
 
         if not chain.particles:
             return
