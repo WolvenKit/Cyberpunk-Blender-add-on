@@ -2,7 +2,7 @@ import os
 import bpy
 import bmesh
 import numpy as np
-from ..animtools import reset_armature
+from ..animtools.animtools import reset_armature
 from ..main.common import show_message
 from ..animtools.tracks import export_anim_tracks
 from ..animtools.compat import get_action_fcurves
