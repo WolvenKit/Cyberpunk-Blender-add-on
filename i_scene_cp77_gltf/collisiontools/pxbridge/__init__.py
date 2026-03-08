@@ -59,30 +59,11 @@ def register():
     if depsgraph_update_handler not in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.append(depsgraph_update_handler)
 
-    # Persistent handler for load
-    @bpy.app.handlers.persistent
-    def load_handler(dummy):
-        for scn in bpy.data.scenes:
-            scn.physx.is_initialized = False
-            scn.physx.scene_built = False
-
-    if load_handler not in bpy.app.handlers.load_post:
-        bpy.app.handlers.load_post.append(load_handler)
-
-
 def unregister():
     viz.unregister_viz()
 
     if depsgraph_update_handler in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.remove(depsgraph_update_handler)
-
-    for scn in bpy.data.scenes:
-        if scn.physx.is_initialized:
-            try:
-                from . import pxveh34 as _bridge
-                _bridge.shutdown()
-            except Exception:
-                pass
 
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)

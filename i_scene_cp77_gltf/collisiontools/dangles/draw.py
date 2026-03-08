@@ -464,6 +464,10 @@ def _draw_static_rig(arm, st):
 # Global draw handler
 
 def _master_draw_callback():
+    physx_scene = getattr(bpy.context.scene, "physx", None)
+    if physx_scene and not physx_scene.viz_enabled:
+        return
+
     for cache in _DRAW_CACHES.values():
         cache.draw()
     arm = bpy.context.object

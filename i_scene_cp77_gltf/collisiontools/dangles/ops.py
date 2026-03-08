@@ -212,6 +212,36 @@ class DANGLE_OT_export_json(bpy.types.Operator, ExportHelper):
             return {'CANCELLED'}
         return {'FINISHED'}
 
+class DANGLE_OT_add_dangle_node(bpy.types.Operator):
+    bl_idname = "dangle.add_node"
+    bl_label = "Add Node"
+
+    def execute(self, context):
+        rig = get_active_rig(context)
+        if not rig:
+            return {'CANCELLED'}
+        st = rig.dangle_state
+        node = st.dangle_nodes.add()
+        node.name = f"Node_{len(st.dangle_nodes)}"
+        st.active_dangle_node = len(st.dangle_nodes) - 1
+        return {'FINISHED'}
+
+class DANGLE_OT_remove_dangle_node(bpy.types.Operator):
+    bl_idname = "dangle.remove_node"
+    bl_label = "Remove Node"
+
+    def execute(self, context):
+        rig = get_active_rig(context)
+        if not rig:
+            return {'CANCELLED'}
+        st = rig.dangle_state
+        if not st.dangle_nodes:
+            return {'CANCELLED'}
+        st.dangle_nodes.remove(st.active_dangle_node)
+        if st.active_dangle_node > 0:
+            st.active_dangle_node -= 1
+        return {'FINISHED'}
+
 class DANGLE_OT_add_chain(bpy.types.Operator):
     bl_idname = "dangle.add_chain"
     bl_label = "Add Chain"
@@ -369,7 +399,94 @@ class DANGLE_OT_remove_pendulum(bpy.types.Operator):
         p.pendulum_constraints.remove(self.index)
         return {'FINISHED'}
 
+class DANGLE_OT_copy_chain(bpy.types.Operator):
+    bl_idname = "dangle.copy_chain"
+    bl_label = "Copy Chain"
+
+    def execute(self, context):
+        dnode = get_active_dangle_node(context)
+        if not dnode or not dnode.chains:
+            return {'CANCELLED'}
+        
+        src_ch = dnode.chains[dnode.active_chain]
+        new_ch = dnode.chains.add()
+        new_ch.name = src_ch.name + "_copy"
+        new_ch.solver = src_ch.solver
+        
+        for src_p in src_ch.particles:
+            new_p = new_ch.particles.add()
+            new_p.bone_name = src_p.bone_name
+            new_p.mass = src_p.mass
+            new_p.damping = src_p.damping
+            new_p.pull_force = src_p.pull_force
+            new_p.is_pinned = src_p.is_pinned
+            new_p.capsule_radius = src_p.capsule_radius
+            new_p.capsule_height = src_p.capsule_height
+            new_p.capsule_axis_ls = src_p.capsule_axis_ls
+            new_p.dyng_projection_type = src_p.dyng_projection_type
+            new_p.pos_projection_type = src_p.pos_projection_type
+            new_p.direction_reference_bone = src_p.direction_reference_bone
+            
+            for src_link in src_p.link_constraints:
+                new_link = new_p.link_constraints.add()
+                new_link.target_bone = src_link.target_bone
+                new_link.link_type = src_link.link_type
+                new_link.lower_ratio = src_link.lower_ratio
+                new_link.upper_ratio = src_link.upper_ratio
+                new_link.explicit_rest_distance = src_link.explicit_rest_distance
+                new_link.stiffness = src_link.stiffness
+                new_link.look_at_axis = src_link.look_at_axis
+                
+            for src_ell in src_p.ellipsoid_constraints:
+                new_ell = new_p.ellipsoid_constraints.add()
+                new_ell.target_bone = src_ell.target_bone
+                new_ell.radius = src_ell.radius
+                new_ell.scale1 = src_ell.scale1
+                new_ell.scale2 = src_ell.scale2
+                new_ell.ellipsoid_transform_ls_quat = src_ell.ellipsoid_transform_ls_quat
+                new_ell.ellipsoid_transform_ls_offset = src_ell.ellipsoid_transform_ls_offset
+                
+            for src_pen in src_p.pendulum_constraints:
+                new_pen = new_p.pendulum_constraints.add()
+                new_pen.target_bone = src_pen.target_bone
+                new_pen.constraint_type = src_pen.constraint_type
+                new_pen.half_aperture_angle = src_pen.half_aperture_angle
+                new_pen.projection_type = src_pen.projection_type
+                new_pen.cone_collision_radius = src_pen.cone_collision_radius
+                new_pen.cone_collision_height = src_pen.cone_collision_height
+                new_pen.cone_transform_ls_quat = src_pen.cone_transform_ls_quat
+                
+        dnode.active_chain = len(dnode.chains) - 1
+        return {'FINISHED'}
+
+class DANGLE_OT_add_selected_bones_to_chain(bpy.types.Operator):
+    bl_idname = "dangle.add_selected_bones_to_chain"
+    bl_label = "Add Selected Bones"
+
+    def execute(self, context):
+        chain = get_active_chain(context)
+        if not chain:
+            return {'CANCELLED'}
+        
+        added = 0
+        if context.active_object and context.active_object.type == 'ARMATURE' and context.active_object.mode == 'POSE':
+            for pb in context.selected_pose_bones:
+                p = chain.particles.add()
+                p.bone_name = pb.name
+                added += 1
+        else:
+            self.report({'WARNING'}, "Must be in Pose Mode with bones selected.")
+            return {'CANCELLED'}
+            
+        if added > 0:
+            chain.active_particle_index = len(chain.particles) - 1
+            self.report({'INFO'}, f"Added {added} bones to chain.")
+            
+        return {'FINISHED'}
+
 classes = (
+    DANGLE_OT_copy_chain,
+    DANGLE_OT_add_selected_bones_to_chain,
     DANGLE_OT_enable_rig,
     DANGLE_OT_disable_rig,
     DANGLE_OT_preview_play,
@@ -377,6 +494,8 @@ classes = (
     DANGLE_OT_bake_to_keyframes,
     DANGLE_OT_import_json,
     DANGLE_OT_export_json,
+    DANGLE_OT_add_dangle_node,
+    DANGLE_OT_remove_dangle_node,
     DANGLE_OT_add_chain,
     DANGLE_OT_remove_chain,
     DANGLE_OT_add_particle,

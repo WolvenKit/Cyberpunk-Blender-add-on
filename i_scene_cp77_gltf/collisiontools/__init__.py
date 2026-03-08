@@ -49,7 +49,6 @@ class CP77_PT_PhysicsTools(bpy.types.Panel):
             rig = get_active_rig(context)
             if rig:
                 st = rig.dangle_state
-                gbox.prop(st, "gravity_scale", text="Dangle Gravity Scale")
                 gbox.prop(st, "external_force_ws", text="Dangle Wind/Force")
                 gbox.prop(st, "substep_time", text="Dangle Substep Time")
 

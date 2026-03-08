@@ -1,4 +1,4 @@
-﻿import bpy
+import bpy
 import gpu
 import math
 import base64
@@ -14,8 +14,9 @@ LINE_COLOR = (0.0, 1.0, 0.0, 1.0)
 
 def invalidate_visualization_cache():
     """ ensures the viewport gets updated to match where the collider is """
-    global _cache_version
+    global _cache_version, _visualization_cache
     _cache_version += 1
+    _visualization_cache.clear()
 
 
 def update_shader_visuals(self, context):
