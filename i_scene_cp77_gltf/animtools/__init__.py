@@ -106,11 +106,7 @@ class CP77_PT_AnimsPanel(Panel):
             else:
                 col.operator('cp77.load_tpose', text="Switch to T-Pose")
 
-        # Cleanup
-        box = layout.box()
-        box.label(text="Rig Cleanup", icon='BRUSH_DATA')
-        col = box.column()
-        col.operator('delete_unused_bones.cp77', text='Delete Unused Bones')
+
 
     def draw_animation_tab(self, context, layout, obj):
         """Animation playback, management, and keyframing"""
