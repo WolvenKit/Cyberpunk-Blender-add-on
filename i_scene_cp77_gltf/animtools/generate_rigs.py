@@ -9,7 +9,7 @@ from ..main.bartmoss_functions import (
 )
 
 class RigifyConverter:
-    """Optimized Rigify converter with minimal mode switching and efficient operations."""
+    """Rigify converter with minimal mode switching and efficient operations."""
 
     BONE_MAP = {
         'root': 'Root', 'pelvis': 'Hips', 'spine': 'Spine', 'spine.001': 'Spine1',
