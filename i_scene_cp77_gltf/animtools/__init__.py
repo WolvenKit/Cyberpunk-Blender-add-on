@@ -239,8 +239,9 @@ class CP77_PT_AnimsPanel(Panel):
             rig   = _CACHE["rig"]
             setup = _CACHE["setup"]
 
-            # Part selector (face always ready; others shown for future use)
-            part_row = box.row(align=True)
+            # Part selector
+            row = box.row(align=True)
+            part_row = row.split(factor=0.15, align=True)
             part_row.label(text="Part:")
             if hasattr(props, 'preview_part'):
                 sub = part_row.row(align=True)

@@ -413,7 +413,13 @@ def get_track_names(armature_obj):
         return [armature_obj.get(f"trackName_{i}", "") for i in range(count)]
 
     return []
-
+def get_preview_parts(self, context):
+    from .icons.cp77_icons import get_icon
+    return [
+        ('face', "Face", "Face poses", get_icon('FACE'), 0),
+        ('eyes', "Eyes", "Eye poses", get_icon('EYES'), 1),
+        ('tongue', "Tongue", "Tongue poses", get_icon('TONGUE'), 2),
+        ]
 class CP77_FacialProps(PropertyGroup):
     rig_json: StringProperty(
             name="Rig JSON",
@@ -440,16 +446,12 @@ class CP77_FacialProps(PropertyGroup):
             max=2.0,
             description="Pose weight for preview"
             )
+
     preview_part: EnumProperty(
         name = "Part",
         description = "Which set of main poses to browse",
-        items = [
-            ('face',   "Face",   "Face poses",                f"{get_icon('FACE')}",   0),
-            ('eyes',   "Eyes",   "Eye poses",                 f"{get_icon('EYES')}",   1),
-            ('tongue', "Tongue", "Tongue poses",              f"{get_icon('TONGUE')}", 2),
-        ],
-        default = 'face',
-    )  # type: ignore
+        items = get_preview_parts,
+    )
 
     preview_pose_index: IntProperty(
         name = "Pose Index",
