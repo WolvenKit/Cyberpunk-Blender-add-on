@@ -4,9 +4,11 @@ import bmesh
 import os
 import logging
 
-from mathutils import Vector, Quaternion, Matrix, Vector
 from collections import defaultdict
 from typing import List, Dict, Set, Optional
+
+from mathutils import Vector, Quaternion, Matrix
+from math import radians
 
 _stored_context = None
 
@@ -586,91 +588,36 @@ def ensure_armature_and_groups(ob: bpy.types.Object):
 def _locrotscale(loc, rot, scale):
     return Matrix.LocRotScale(loc, rot, scale)
 
-def apply_xform_to_mesh(
-    ob: bpy.types.Object,
-    apply_location=True,
-    apply_rotation=True,
-    apply_scale=True,
-    include_delta=True,
-    affect_shape_keys=True,
-    make_single_user=True,
-):
-    """
-    Apply the object's local transform to its mesh data,
-    then reset the object's local transform to identity.
-    """
-    if ob.type != 'MESH':
+
+def apply_xform_to_object(ob: bpy.types.Object, transform_matrix: Matrix):
+    if not ob:
         return
 
-    me = ob.data
-    if make_single_user and me.users > 1:
-        ob.data = me.copy()
-        me = ob.data
+    ob.matrix_world = transform_matrix @ ob.matrix_world
 
-    # Decompose local (basis) and delta
-    basis = ob.matrix_basis.copy()
-    loc_b = basis.to_translation()
-    rot_b = basis.to_quaternion()
-    scl_b = basis.to_scale()
-
-    if include_delta:
-        dloc = ob.delta_location.copy()
-        drot = ob.delta_rotation_euler.to_quaternion()
-        dscl = ob.delta_scale.copy()
-    else:
-        dloc = Vector((0,0,0))
-        drot = Quaternion((1,0,0,0))
-        dscl = Vector((1,1,1))
-
-    loc = loc_b if apply_location else Vector((0,0,0))
-    rot = rot_b if apply_rotation else Quaternion((1,0,0,0))
-    scl = scl_b if apply_scale    else Vector((1,1,1))
-
-    M = _locrotscale(loc, rot, scl) @ _locrotscale(dloc, drot, dscl)
-
-    # Early out if identity
-    if M.is_identity:
-        return
-
-    # --- Transform geometry ---
-    if ob.mode == 'EDIT':
-        bm = bmesh.from_edit_mesh(me)
-        bm.verts.ensure_lookup_table()
-        bm.transform(M)
-        bm.normal_update()
-        bmesh.update_edit_mesh(me, loop_triangles=False, destructive=False)
-    else:
-        me.transform(M)
-        me.calc_normals()
-
-    # Transform shape keys (keep them aligned with new basis)
-    if affect_shape_keys and me.shape_keys:
-        for kb in me.shape_keys.key_blocks:
-            # Transform absolute positions of each key
-            for kd in kb.data:
-                kd.co = M @ kd.co
-
-    # --- Reset object local transforms to identity ---
-    ob.matrix_basis.identity()
-    if include_delta:
-        ob.delta_location = (0.0, 0.0, 0.0)
-        ob.delta_rotation_euler = (0.0, 0.0, 0.0)
-        ob.delta_scale = (1.0, 1.0, 1.0)
-
-    # clear and let Blender recalc custom split normals
-    if getattr(me, "has_custom_normals", False):
-        me.use_auto_smooth = me.use_auto_smooth  # keep flag
-        me.calc_normals_split()
-        me.free_normals_split()
 
 def rotate_quat_180(self, context):
-    from math import radians
-    q = Quaternion((0, 0, 1), radians(180))
-    M = Matrix.LocRotScale((0,0,0), q, (1,1,1))
-    for obj in context.selected_objects or []:
-        apply_object_xform_to_mesh(obj, M)
-    return {'FINISHED'}
+    selected = list(context.selected_objects)
+    if not selected:
+        return
 
+    store_current_context()
+
+    try:
+        safe_mode_switch('OBJECT')
+
+        select_objects(selected, make_first_active=True, clear=True, reveal=True)
+
+        rot_mat = Matrix.Rotation(radians(180.0), 4, 'Z')
+
+        for obj in selected:
+            apply_xform_to_object(obj, rot_mat)
+
+        bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
+
+    finally:
+        restore_previous_context()
+        
 # just a stub now that calls select_objects
 def select_object(obj):
     return(f"{select_objects(obj)}")
