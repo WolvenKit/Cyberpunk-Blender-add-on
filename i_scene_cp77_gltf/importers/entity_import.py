@@ -14,7 +14,7 @@ import bmesh
 from ..main.common import *
 from ..jsontool import JSONTool
 from .phys_import import cp77_phys_import
-from ..collisiontools.collisions import draw_box_collider, draw_capsule_collider, draw_convex_collider, draw_sphere_collider
+from ..collisiontools.pxbridge.io_phys import import_collider_as_actor
 from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
 from .import_common import *
 from bpy_extras import anim_utils
@@ -981,103 +981,34 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                     return('FINISHED')
                 else:
                     for index, i in enumerate(ent_component_data):
-                    #for comp in ent_component_data:
-                        if i['$type'] == 'entColliderComponent':
-                            new_col = bpy.data.collections.new('entColliderComponent')
-                            collision_collection.children.link(new_col)
+                        if i['$type'] in ('entColliderComponent', 'entSimpleColliderComponent'):
                             collision_type = 'ENTITY'
+                            col_name = i['$type']
+                            
+                            # Find or create a sub-collection for these collider types
+                            new_col = None
+                            for child in collision_collection.children:
+                                if child.name == col_name:
+                                    new_col = child
+                                    break
+                            
+                            if not new_col:
+                                new_col = bpy.data.collections.new(col_name)
+                                collision_collection.children.link(new_col)
+                                
                             cdata = i['colliders'][0]['Data']
                             collision_shape = cdata['$type']
-                            transform = cdata['localToBody']
-                            simulationType = i['simulationType']
                             submeshName = '_' + collision_shape
-                            physmat = cdata['material']['$value']
-                            position = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
-                            rotation = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
-                            #print('cdata:', cdata)
-                            print('collider info:', collision_shape, submeshName, physmat, position, rotation)
-                            if collision_shape == 'physicsColliderBox':
-                                try:
-                                    half_extents = cdata['halfExtents']
-                                    draw_box_collider(submeshName, new_col, half_extents, transform,  physmat, collision_type)
-                                    obj = bpy.context.object
-                                    box = obj
-                                    #set_collider_props(box, collision_shape, physmat, collision_type)
-                                    box['simulationType'] = simulationType
-                                except Exception as e:
-                                    print('uh oh', e)
-                            if collision_shape == 'physicsColliderConvex':
-                                try:
-                                    vertices = cdata['vertices']
-                                    obj = draw_convex_collider(submeshName, new_col, vertices, transform, physmat, collision_type)
-                                    convcol = obj
-                                    #set_collider_props(convcol, collision_shape, physmat, collision_type)
-                                    convcol['simulationType'] = simulationType
-                                except Exception as e:
-                                    print('uh oh', e)
-                            if collision_shape == 'physicsColliderSphere':
-                                try:
-                                    r = cdata['radius']
-                                    submeshName = '_' + collision_shape
-                                    obj = draw_sphere_collider(submeshName, new_col, r, position, physmat, collision_type)
-                                except Exception as e:
-                                    print('uh oh', e)
-                            if collision_shape == 'physicsColliderCapsule':
-                                try:
-                                    r = cdata['radius']
-                                    h = cdata['height']
-                                    submeshName = '_' + collision_shape
-                                    obj = draw_capsule_collider(submeshName, new_col, r, h, position, rotation, physmat, collision_type)
-                                except Exception as e:
-                                    print('uh oh', e)
-                        if i['$type'] == 'entSimpleColliderComponent':
-                            collision_type = 'ENTITY'
-                            new_col = bpy.data.collections.new('entSimpleColliderComponent')
-                            collision_collection.children.link(new_col)
-                            cdata = i['colliders'][0]['Data']
-                            collision_shape = cdata['$type']
-                            transform = cdata['localToBody']
-                            #simulationType = i['simulationType']
-                            submeshName = '_' + collision_shape
-                            physmat = cdata['material']['$value']
-                            position = transform['position']['X'], transform['position']['Y'], transform['position']['Z']
-                            rotation = transform['orientation']['r'], transform['orientation']['j'], transform['orientation']['k'], transform['orientation']['i']
-                            #print('position:', position[0], position[1], position[2], 'rotation', rotation[0], rotation[1], rotation[2], rotation[3])
-                           # print('collider info:', collision_shape, submeshName, physmat, position, rotation)
-                            if collision_shape == 'physicsColliderBox':
-                                try:
-                                    half_extents = cdata['halfExtents']
-                                    draw_box_collider(submeshName, new_col, half_extents, transform,  physmat, collision_type)
-                                    obj = bpy.context.object
-                                    box = obj
-                                    #set_collider_props(box, collision_shape, physmat, collision_type)
-                                   # box['simulationType'] = simulationType
-                                except Exception as e:
-                                    print('uh oh', e)
-                            if collision_shape == 'physicsColliderConvex':
-                                try:
-                                    vertices = cdata['vertices']
-                                    obj = draw_convex_collider(submeshName, new_col, vertices, transform, physmat, collision_type)
-                                    convcol = obj
-                                    #set_collider_props(convcol, collision_shape, physmat, collision_type)
-                                   # convcol['simulationType'] = simulationType
-                                except Exception as e:
-                                    print('uh oh', e)
-                            if collision_shape == 'physicsColliderSphere':
-                                try:
-                                    r = cdata['radius']
-                                    submeshName = '_' + collision_shape
-                                    obj = draw_sphere_collider(submeshName, new_col, r, position, physmat, collision_type)
-                                except Exception as e:
-                                    print('uh oh', e)
-                            if collision_shape == 'physicsColliderCapsule':
-                                try:
-                                    r = cdata['radius']
-                                    h = cdata['height']
-                                    submeshName = '_' + collision_shape
-                                    obj = draw_capsule_collider(submeshName, new_col, r, h, position, rotation, physmat, collision_type)
-                                except Exception as e:
-                                    print('uh oh', e)
+                            
+                            # Pass to pxbridge to create a native PhysX actor instead of a mesh representation
+                            try:
+                                obj = import_collider_as_actor(cdata, submeshName, new_col)
+                                if obj:
+                                    # Add extra properties for reference
+                                    if 'simulationType' in i:
+                                        obj['simulationType'] = i['simulationType']
+                            except Exception as e:
+                                print(f'Error importing {collision_shape} via pxbridge: {e}')
     if rig:
         arm=bpy.data.armatures[rig.name]
         arm.pose_position = 'REST'

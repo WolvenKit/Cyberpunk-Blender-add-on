@@ -18,7 +18,6 @@ def export_colliders_to_phys(collections, filepath):
         # Iterate over objects in the collection
         for obj in bpy.data.collections[collection].objects:
             if 'collisionShape' in obj:
-                bpy.ops.object.set_physics_material()
                 if 'Mass' in obj.keys():
                     total_mass += obj['Mass']
                     inertia_X += obj["inertia_X"]

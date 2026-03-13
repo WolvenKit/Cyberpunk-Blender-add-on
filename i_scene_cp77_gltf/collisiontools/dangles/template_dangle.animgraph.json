@@ -1,0 +1,432 @@
+{
+  "Header": {
+    "WolvenKitVersion": "8.17.2-nightly.2026-02-22",
+    "WKitJsonVersion": "0.0.9",
+    "GameVersion": 2310,
+    "ExportedDateTime": "2026-02-23T05:01:52.4555879Z",
+    "DataType": "CR2W",
+    "ArchiveFileName": "archive\\template_dangle\\template_dangle.animgraph"
+  },
+  "Data": {
+    "Version": 195,
+    "BuildVersion": 0,
+    "RootChunk": {
+      "$type": "animAnimGraph",
+      "additionalAnimDatabases": [],
+      "animFeatures": [],
+      "cookingPlatform": "PLATFORM_PC",
+      "hackAlwaysSample": 0,
+      "hasMixerSlot": 0,
+      "isPaused": 0,
+      "jsonFilesDirectory": "",
+      "nodesToInit": [
+        {
+          "HandleId": "0",
+          "Data": {
+            "$type": "animAnimNode_Root",
+            "debugName": {
+              "$type": "CName",
+              "$storage": "string",
+              "$value": "None"
+            },
+            "id": 4294967295,
+            "nodes": [
+              {
+                "HandleId": "1",
+                "Data": {
+                  "$type": "animAnimNode_Output",
+                  "debugName": {
+                    "$type": "CName",
+                    "$storage": "string",
+                    "$value": "None"
+                  },
+                  "id": 4294967295,
+                  "node": {
+                    "$type": "animPoseLink",
+                    "node": {
+                      "HandleId": "2",
+                      "Data": {
+                        "$type": "animAnimNode_PoseMsToLs",
+                        "debugName": {
+                          "$type": "CName",
+                          "$storage": "string",
+                          "$value": "None"
+                        },
+                        "id": 4294967295,
+                        "inputLink": {
+                          "$type": "animPoseLink",
+                          "node": {
+                            "HandleId": "3",
+                            "Data": {
+                              "$type": "animAnimNode_Dangle",
+                              "dangleConstraint": {
+                                "HandleId": "4",
+                                "Data": {
+                                  "$type": "animDangleConstraint_SimulationDyng",
+                                  "alpha": 1,
+                                  "collisionRoundedShapes": [],
+                                  "dangleAltersTransformsOfItsChildren": 0,
+                                  "debugDrawingEnabled": 1,
+                                  "drawDebugAxis": 0,
+                                  "drawDebugCollisionCapsule": 1,
+                                  "drawDebugCollisionShapes": 0,
+                                  "drawDebugConstraint": 0,
+                                  "drawDebugText": 0,
+                                  "dyngConstraint": {
+                                    "HandleId": "5",
+                                    "Data": {
+                                      "$type": "animDyngConstraintMulti",
+                                      "innerConstraints": []
+                                    }
+                                  },
+                                  "HACK_checkDangleTeleport": 0,
+                                  "jsonCollisionShapes": {
+                                    "DepotPath": {
+                                      "$type": "ResourcePath",
+                                      "$storage": "uint64",
+                                      "$value": "0"
+                                    },
+                                    "Flags": "Default"
+                                  },
+                                  "jsonCollisionShapesLoadedSuccessfully": 1,
+                                  "parentRotationAltersTransformsOfDangleAndItsChildren": 0,
+                                  "parentRotationAltersTransformsOfNonDanglesAndItsChildren": 0,
+                                  "particlesContainer": {
+                                    "$type": "animDyngParticlesContainer",
+                                    "externalForceWS": {
+                                      "$type": "Vector3",
+                                      "X": 0,
+                                      "Y": 0,
+                                      "Z": 0
+                                    },
+                                    "externalForceWsLink": {
+                                      "$type": "animVectorLink",
+                                      "node": null
+                                    },
+                                    "gravityWS": 9.81000042,
+                                    "particles": []
+                                  },
+                                  "rotateParentToLookAtDangle": 1,
+                                  "solverIterations": 1,
+                                  "substepTime": 0.00999999978
+                                }
+                              },
+                              "debugName": {
+                                "$type": "CName",
+                                "$storage": "string",
+                                "$value": "None"
+                              },
+                              "id": 4294967295,
+                              "inputLink": {
+                                "$type": "animPoseLink",
+                                "node": {
+                                  "HandleId": "6",
+                                  "Data": {
+                                    "$type": "animAnimNode_PoseLsToMs",
+                                    "debugName": {
+                                      "$type": "CName",
+                                      "$storage": "string",
+                                      "$value": "None"
+                                    },
+                                    "id": 4294967295,
+                                    "inputLink": {
+                                      "$type": "animPoseLink",
+                                      "node": {
+                                        "HandleId": "7",
+                                        "Data": {
+                                          "$type": "animAnimNode_SharedMetaPose",
+                                          "debugName": {
+                                            "$type": "CName",
+                                            "$storage": "string",
+                                            "$value": "None"
+                                          },
+                                          "id": 4294967295,
+                                          "inputLink": {
+                                            "$type": "animPoseLink",
+                                            "node": {
+                                              "HandleId": "8",
+                                              "Data": {
+                                                "$type": "animAnimNode_ReferencePoseTerminator",
+                                                "debugName": {
+                                                  "$type": "CName",
+                                                  "$storage": "string",
+                                                  "$value": "None"
+                                                },
+                                                "id": 4294967295,
+                                                "poseInfoLogger": null,
+                                                "visAxes": 0,
+                                                "visMask": null,
+                                                "visNames": 0,
+                                                "visPostPose": 0,
+                                                "visPostPoseColor": {
+                                                  "$type": "Color",
+                                                  "Alpha": 0,
+                                                  "Blue": 0,
+                                                  "Green": 0,
+                                                  "Red": 0
+                                                },
+                                                "visPrePose": 0,
+                                                "visPrePoseColor": {
+                                                  "$type": "Color",
+                                                  "Alpha": 0,
+                                                  "Blue": 0,
+                                                  "Green": 0,
+                                                  "Red": 0
+                                                },
+                                                "visRigPartMask": {
+                                                  "$type": "CName",
+                                                  "$storage": "string",
+                                                  "$value": "None"
+                                                },
+                                                "visWhenActive": 1
+                                              }
+                                            }
+                                          },
+                                          "poseInfoLogger": null,
+                                          "visAxes": 0,
+                                          "visMask": null,
+                                          "visNames": 0,
+                                          "visPostPose": 0,
+                                          "visPostPoseColor": {
+                                            "$type": "Color",
+                                            "Alpha": 0,
+                                            "Blue": 0,
+                                            "Green": 0,
+                                            "Red": 0
+                                          },
+                                          "visPrePose": 0,
+                                          "visPrePoseColor": {
+                                            "$type": "Color",
+                                            "Alpha": 0,
+                                            "Blue": 0,
+                                            "Green": 0,
+                                            "Red": 0
+                                          },
+                                          "visRigPartMask": {
+                                            "$type": "CName",
+                                            "$storage": "string",
+                                            "$value": "None"
+                                          },
+                                          "visWhenActive": 0,
+                                          "weightLink": {
+                                            "$type": "animFloatLink",
+                                            "node": null
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "poseInfoLogger": null,
+                                    "visAxes": 0,
+                                    "visMask": null,
+                                    "visNames": 0,
+                                    "visPostPose": 0,
+                                    "visPostPoseColor": {
+                                      "$type": "Color",
+                                      "Alpha": 0,
+                                      "Blue": 0,
+                                      "Green": 0,
+                                      "Red": 0
+                                    },
+                                    "visPrePose": 0,
+                                    "visPrePoseColor": {
+                                      "$type": "Color",
+                                      "Alpha": 0,
+                                      "Blue": 0,
+                                      "Green": 0,
+                                      "Red": 0
+                                    },
+                                    "visRigPartMask": {
+                                      "$type": "CName",
+                                      "$storage": "string",
+                                      "$value": "None"
+                                    },
+                                    "visWhenActive": 0
+                                  }
+                                }
+                              },
+                              "poseInfoLogger": null,
+                              "visAxes": 0,
+                              "visMask": null,
+                              "visNames": 0,
+                              "visPostPose": 0,
+                              "visPostPoseColor": {
+                                "$type": "Color",
+                                "Alpha": 0,
+                                "Blue": 0,
+                                "Green": 0,
+                                "Red": 0
+                              },
+                              "visPrePose": 0,
+                              "visPrePoseColor": {
+                                "$type": "Color",
+                                "Alpha": 0,
+                                "Blue": 0,
+                                "Green": 0,
+                                "Red": 0
+                              },
+                              "visRigPartMask": {
+                                "$type": "CName",
+                                "$storage": "string",
+                                "$value": "None"
+                              },
+                              "visWhenActive": 0
+                            }
+                          }
+                        },
+                        "poseInfoLogger": null,
+                        "visAxes": 0,
+                        "visMask": null,
+                        "visNames": 0,
+                        "visPostPose": 0,
+                        "visPostPoseColor": {
+                          "$type": "Color",
+                          "Alpha": 0,
+                          "Blue": 0,
+                          "Green": 0,
+                          "Red": 0
+                        },
+                        "visPrePose": 0,
+                        "visPrePoseColor": {
+                          "$type": "Color",
+                          "Alpha": 0,
+                          "Blue": 0,
+                          "Green": 0,
+                          "Red": 0
+                        },
+                        "visRigPartMask": {
+                          "$type": "CName",
+                          "$storage": "string",
+                          "$value": "None"
+                        },
+                        "visWhenActive": 0
+                      }
+                    }
+                  },
+                  "poseInfoLogger": null,
+                  "visAxes": 0,
+                  "visMask": null,
+                  "visNames": 0,
+                  "visPostPose": 0,
+                  "visPostPoseColor": {
+                    "$type": "Color",
+                    "Alpha": 0,
+                    "Blue": 0,
+                    "Green": 0,
+                    "Red": 0
+                  },
+                  "visPrePose": 0,
+                  "visPrePoseColor": {
+                    "$type": "Color",
+                    "Alpha": 0,
+                    "Blue": 0,
+                    "Green": 0,
+                    "Red": 0
+                  },
+                  "visRigPartMask": {
+                    "$type": "CName",
+                    "$storage": "string",
+                    "$value": "None"
+                  },
+                  "visWhenActive": 0
+                }
+              },
+              {
+                "HandleRefId": "8"
+              },
+              {
+                "HandleRefId": "7"
+              },
+              {
+                "HandleRefId": "6"
+              },
+              {
+                "HandleRefId": "2"
+              },
+              {
+                "HandleRefId": "3"
+              }
+            ],
+            "outputNode": {
+              "$type": "animPoseLink",
+              "node": null
+            },
+            "poseInfoLogger": null,
+            "visAxes": 0,
+            "visMask": null,
+            "visNames": 0,
+            "visPostPose": 0,
+            "visPostPoseColor": {
+              "$type": "Color",
+              "Alpha": 0,
+              "Blue": 0,
+              "Green": 0,
+              "Red": 0
+            },
+            "visPrePose": 0,
+            "visPrePoseColor": {
+              "$type": "Color",
+              "Alpha": 0,
+              "Blue": 0,
+              "Green": 0,
+              "Red": 0
+            },
+            "visRigPartMask": {
+              "$type": "CName",
+              "$storage": "string",
+              "$value": "None"
+            },
+            "visWhenActive": 0
+          }
+        },
+        {
+          "HandleRefId": "1"
+        },
+        {
+          "HandleRefId": "2"
+        },
+        {
+          "HandleRefId": "3"
+        },
+        {
+          "HandleRefId": "6"
+        },
+        {
+          "HandleRefId": "7"
+        },
+        {
+          "HandleRefId": "8"
+        }
+      ],
+      "oneFrameToggle": 0,
+      "rootNode": {
+        "HandleRefId": "0"
+      },
+      "staticCommandsRig": {
+        "DepotPath": {
+          "$type": "ResourcePath",
+          "$storage": "uint64",
+          "$value": "0"
+        },
+        "Flags": "Default"
+      },
+      "timeDeltaMultiplier": 1,
+      "useAnimCommands": 0,
+      "useAnimCommandsForCrowd": 0,
+      "useAnimStaticCommands": 0,
+      "useLunaticMode": 0,
+      "variables": {
+        "HandleId": "9",
+        "Data": {
+          "$type": "animAnimVariableContainer",
+          "boolVariables": [],
+          "floatVariables": [],
+          "intVariables": [],
+          "quaternionVariables": [],
+          "transformVariables": [],
+          "vectorVariables": []
+        }
+      }
+    },
+    "EmbeddedFiles": []
+  }
+}
