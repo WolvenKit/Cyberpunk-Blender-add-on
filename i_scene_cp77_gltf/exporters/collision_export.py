@@ -36,4 +36,6 @@ def cp77_collision_export(filepath, collision_type):
         show_message('Exporting of Entity Colliders is not yet supported')
     if collision_type == 'WORLD':
         show_message('Exporting of collision nodes is not yet supported')
+    if collision_type == 'EMBEDDED':
+        show_message('Exporting of Embedded colliders is not yet supported')
 

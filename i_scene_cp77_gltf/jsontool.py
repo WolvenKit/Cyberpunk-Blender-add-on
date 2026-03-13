@@ -167,6 +167,10 @@ class JSONTool:
                 nodes = data["Data"]["RootChunk"]["nodes"]
                 return t, nodes
 
+            case '.mesh.json':
+                if has_error:
+                    JSONTool.create_error(cp77_addon_prefs.non_verbose, base_name, file_extension, invalid_material_error, errorMessages)
+                return data
 
             case '.Material.json':
                 if has_error:

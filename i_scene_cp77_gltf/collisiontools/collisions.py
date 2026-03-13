@@ -129,7 +129,8 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
     is_edit_mode = bpy.context.object.mode == 'EDIT'
     selected_objects = context.selected_objects
     bpy.context.space_data.shading.wireframe_color_type = 'OBJECT'
-    colliderCollection = None if not target_collection else bpy.data.collections[target_collection]
+    colliderCollection = (None if not target_collection
+                          else bpy.data.collections[target_collection])
 
     # Check for a collection ending with ".phys"
     for collection in bpy.data.collections:
@@ -181,6 +182,11 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
 
             verts_to_sample = int(sampleverts)
 
+            name = ("physicsColliderConvex"
+                if collision_shape == 'CONVEX'
+                else "physicsColliderMesh"
+            )
+
             # Check if we have enough vertices
             if len(selected_verts) < verts_to_sample:
                 print("Sample number is higher than selected vertices count!")
@@ -195,12 +201,12 @@ def CP77CollisionGen(self, context, matchSize, collider_type, collision_shape, s
                 coords = [v.co.copy() for v in sampled_verts]
 
                 # Create a new mesh with these vertices
-                mesh = bpy.data.meshes.new(name="physicsColliderConvex")
+                mesh = bpy.data.meshes.new(name)
                 mesh.from_pydata(coords, [], [])
 
 
                 # Link it to scene
-                convcol = bpy.data.objects.new("physicsColliderConvex", mesh)
+                convcol = bpy.data.objects.new(name, mesh)
                 convcol.matrix_world = matrix
                 shape = "physicsColliderConvex"
                 set_collider_props(convcol, shape, physics_material, collider_type)

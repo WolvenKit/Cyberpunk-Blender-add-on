@@ -112,13 +112,18 @@ def CP77ArmatureList(self, context):
         arms = []
     return arms
 
-def Get_Collections(self, context):
+def Get_Embedded_Collision_Collections(self, context):
     items = []
     props = context.scene.cp77_panel_props
-    suffix = ".mesh"
-    for coll in bpy.data.collections:
-            if suffix in coll.name:
-                items.append((coll.name, coll.name, ""))
+    for mesh_coll in bpy.data.collections:
+        if ".mesh" in mesh_coll.name:
+            stack = list(mesh_coll.children)
+            while stack:
+                coll = stack.pop()
+                if len(coll.children) == 0:
+                    items.append((coll.name, coll.name, f'{mesh_coll.name} -> {coll.name}'))
+                else:
+                    stack.extend(coll.children)
     return items
 
 def Get_Collision_Shapes(self, context):
@@ -170,8 +175,8 @@ class CP77_PT_PanelProps(PropertyGroup):
     )
 
     target_collection: EnumProperty(
-        name="Target Collection (imported from json file)",
-        items=Get_Collections
+        name="Target Collection (the collection must be imported from a JSON file)",
+        items=Get_Embedded_Collision_Collections
     )
 
     simulation_type: EnumProperty(
