@@ -129,8 +129,10 @@ def parse_collider(data, collection, index):
         case "physicsColliderBox":
             half_extents = data["Data"]["halfExtents"]
             bpy_obj = draw_box_collider(name, collection, half_extents, transform, physmat, collision_type)
+        case "physicsColliderConvex":
+            show_message(f'Skipping collision shape #{index}: convex colliders are not yet supported')
         case _:
-            show_message(f'{name} collision shape {index} has unknown shape')
+            show_message(f'Skipping collision shape #{index}: unknown shape')
     
     if bpy_obj:
         save_json_to_bpy_obj(bpy_obj, data)
@@ -159,10 +161,10 @@ def parse_collection(data, path, parent_collection, leafCallback):
             elif isinstance(current_data[key], dict):
                 current_data = current_data[key]
             else:
-                show_message(f'{parent_collection.name} has {key} at path {path[:i]} with unknown type')
+                show_message(f'{parent_collection.name} has "{key}" key at path {path[:i]} with unknown type')
                 break
         except KeyError:
-            show_message(f'{parent_collection.name} does not have {key} at path {path[:i]}')
+            raise ValueError(f'{parent_collection.name} does not have "{key}" key at path {path[:i]}')
 
  
 def cp77_collision_mesh_json_import(filepath: str):
@@ -170,17 +172,15 @@ def cp77_collision_mesh_json_import(filepath: str):
 
     raw_data = JSONTool.openJSON(filepath)
     
-    full_path = ["Data", "RootChunk", "parameters", "Data", "physicsData", "Data", "bodies", "Data", "collisionShapes"]
-    path = []
+    path = ["Data", "RootChunk", "parameters", "Data", "physicsData", "Data", "bodies", "Data", "collisionShapes"]
 
     mesh_name = os.path.basename(filepath).split(".")[0]+'.mesh'
     mesh_collection = bpy.data.collections.new(mesh_name)
     bpy.context.scene.collection.children.link(mesh_collection)
 
-    for i, key in enumerate(full_path):
-        if key in raw_data:
-            path = full_path[i:]
-            break
-    
-    parse_collection(raw_data, path, mesh_collection, parse_collider)
+    try:
+        parse_collection(raw_data, path, mesh_collection, parse_collider)
+    except ValueError as e:
+        bpy.data.collections.remove(mesh_collection)
+        show_message(str(e))
     
