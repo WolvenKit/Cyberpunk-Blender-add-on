@@ -7,7 +7,6 @@ from ..main.datashards import BoneTransformCache
 from ..main.bartmoss_functions import pose_mtx, world_mtx, valid_armature
 from ..cyber_props import RootMotionData
 from typing import List, Tuple, Dict
-from .compat import get_action_fcurves
 
 def get_frame_range(action) -> Tuple[int, int]:
     f = action.frame_range
@@ -40,12 +39,9 @@ def cache_bone_transforms(context, armature, bone_name: str, frames: List[int]) 
 
 def clear_bone_fcurves(action, bone_name: str):
     """Remove all animation curves for specified bone cleanly"""
-    fcurves = get_action_fcurves(action)
-    if fcurves is None:
-        return
     target = f'pose.bones["{bone_name}"]'
-    for fc in [c for c in fcurves if c.data_path.startswith(target)]:
-        fcurves.remove(fc)
+    for fc in [c for c in action.fcurves if c.data_path.startswith(target)]:
+        action.fcurves.remove(fc)
 
 def keyframe_bone(pb: PoseBone, frame: int, include_rot: bool = True):
     pb.keyframe_insert("location", frame=frame)
@@ -192,49 +188,11 @@ class CP77RemoveRootMotion(RootMotionOperatorBase):
         self.report({'INFO'}, "Root motion removed (in-place)")
         return {'FINISHED'}
 
-class PANEL_PT_RootMotion(Panel):
-    bl_idname = "CP77_PT_root_motion"
-    bl_label = "Root Motion Tools"
-    bl_category = "CP77 Modding"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_parent_id = "CP77_PT_animspanel"
-    bl_options = {'DEFAULT_CLOSED'}
-
-    @classmethod
-    def poll(cls, context):
-        return valid_armature(context) is not None
-
-    def draw(self, context):
-        layout = self.layout
-        data = context.scene.rm_data
-        obj = context.active_object
-
-        box = layout.box()
-        box.label(text="Bone Configuration", icon='BONE_DATA')
-        col = box.column(align=True)
-        col.prop_search(data, "root", obj.pose, "bones", text="Root")
-        col.prop_search(data, "hip", obj.pose, "bones", text="Hip")
-
-        box = layout.box()
-        box.label(text="Transfer Options", icon='MODIFIER')
-        col = box.column(align=True)
-        col.prop(data, "step")
-        col.prop(data, "no_rot")
-        col.prop(data, "do_vert")
-
-        box = layout.box()
-        box.label(text="Operations", icon='ANIM')
-        col = box.column(align=True)
-        col.operator("cp77.hip_to_root_motion", icon='EXPORT')
-        col.operator("cp77.root_to_hip_motion", icon='IMPORT')
-        col.operator("cp77.remove_root_motion", icon='X')
 
 classes = (
     CP77HipMotionToRoot,
     CP77RootToHipMotion,
     CP77RemoveRootMotion,
-    PANEL_PT_RootMotion,
 )
 
 def register_rm():

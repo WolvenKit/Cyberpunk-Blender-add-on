@@ -17,11 +17,6 @@ import bpy
 def normalize_track_name(x: Any) -> str:
     """Extract string from track name 
     
-    Args:
-        x: Track name (string or dict with $value key)
-    
-    Returns:
-        Normalized string name
     """
     if isinstance(x, dict):
         return str(x.get("$value") or x.get("value") or "")
@@ -30,11 +25,6 @@ def normalize_track_name(x: Any) -> str:
 def build_track_name_map(rig) -> Dict[str, int]:
     """Build name→index mapping from rig track names
     
-    Args:
-        rig: Rig info object with track_names attribute
-    
-    Returns:
-        Dictionary mapping track names to indices
     """
     names = [normalize_track_name(n) for n in getattr(rig, "track_names", []) or []]
     return {n: i for i, n in enumerate(names) if n}
@@ -42,12 +32,6 @@ def build_track_name_map(rig) -> Dict[str, int]:
 def safe_track_index(name_map: Dict[str, int], name: str) -> int:
     """Safe track index lookup
     
-    Args:
-        name_map: Name to index mapping
-        name: Track name to look up
-    
-    Returns:
-        Track index, or -1 if not found
     """
     return int(name_map.get(name, -1))
 
@@ -59,13 +43,6 @@ def apply_envelope_weights(
     lod_weight: float = 0.0
 ) -> None:
     """Apply muzzle envelope scaling to tracks
-
-    Args:
-        meta: Face metadata with envelopes_track, envelopes_type, envelopes_lod
-        muzzles: Muzzle values array [jaw, lips, eyes, brows, eyeDirs, none]
-        tracks: Track array (modified in-place)
-        lod: Current level of detail
-        lod_weight: Blend weight for current LOD
     """
     M = tracks.shape[0]
     
@@ -107,11 +84,6 @@ def apply_global_limits(
 ) -> None:
     """Constrain track weights using min/mid/max limit values
     
-    Args:
-        meta: Face metadata with global_limits_* arrays
-        envelopes: [jawMult, lipsMult, 1, 1, 1, 1]
-        muzzle_lips: Muzzle lips value for lerp
-        tracks: Track array (modified in-place)
     """
     M = tracks.shape[0]
     
@@ -137,9 +109,6 @@ def apply_influences(meta, tracks: np.ndarray) -> None:
     
     Three influence types: LINEAR, EXPONENTIAL, ORGANIC
     
-    Args:
-        meta: Face metadata with influenced_poses_* arrays
-        tracks: Track array (modified in-place)
     """
     M = tracks.shape[0]
     idx = 0
@@ -187,10 +156,6 @@ def apply_upper_lower_face_envelopes(
 ) -> None:
     """Apply upper/lower face envelope scaling
        
-    Args:
-        meta: Face metadata with upper_lower_* arrays
-        face_part_weights: [none=1.0, upper, lower]
-        tracks: Track array (modified in-place)
     """
     M = tracks.shape[0]
     
@@ -215,11 +180,6 @@ def apply_lipsync_overrides(
     
     Formula: mainPose *= lerp(lipsyncEnv, 1.0, overrideValue)
     
-    Args:
-        meta: Face metadata with lipsync_overrides_mapping
-        lipsync_envelope: Lipsync envelope value (0-1)
-        in_tracks: Input track array (read-only)
-        tracks: Output track array (modified in-place)
     """
     if lipsync_envelope == 0.0:
         return
@@ -245,10 +205,6 @@ def apply_lipsync_poses(
     
     Formula: mainPose = clamp(mainPose + lipsyncPose, 0, 1)
     
-    Args:
-        meta: Face metadata with lipsync_pose_sides
-        in_tracks: Input track array
-        tracks: Output track array (modified in-place)
     """
     M = tracks.shape[0]
     
@@ -267,12 +223,6 @@ def apply_lipsync_poses(
 def calculate_inbetween_weights(meta, tracks: np.ndarray) -> np.ndarray:
     """Calculate in-between weights from main pose weights
        
-    Args:
-        meta: Face metadata with mainposes_* arrays
-        tracks: Current track weights
-    
-    Returns:
-        Array of in-between weights
     """
     M = tracks.shape[0]
     total_inbtw = int(np.sum(meta.mainposes_num_inbtw.astype(np.int64)))
@@ -338,15 +288,6 @@ def calculate_corrective_weights(
 ) -> np.ndarray:
     """Calculate corrective pose weights
     
-    Args:
-        meta: Face metadata with corrective_* arrays
-        tracks: Current track weights
-        inbetween_weights: Calculated in-between weights
-        num_correctives: Total corrective poses
-        lod: Current level of detail
-    
-    Returns:
-        Array of corrective weights
     """
     M = tracks.shape[0]
     correctives = np.ones(num_correctives, dtype=np.float64)
@@ -445,11 +386,6 @@ def calculate_wrinkle_weights(
     wrinkle_start_idx: int
 ) -> None:
     """Calculate wrinkle output tracks
-
-    Args:
-        meta: Face metadata with wrinkle_mapping
-        tracks: Track array (modified in-place)
-        wrinkle_start_idx: Starting index for wrinkle tracks
     """
     M = tracks.shape[0]
     wrinkle_mapping = meta.wrinkle_mapping
@@ -467,17 +403,6 @@ def solve_tracks_face(
     tracks_in: np.ndarray
 ) -> dict:
     """Main facial track solver
-
-    Args:
-        setup: FacialSetup with face_meta and pose banks
-        rig_info: Rig skeleton info
-        tracks_in: Input track array (not modified)
-    
-    Returns:
-        Dict with:
-            - tracks: Solved track weights (M,)
-            - inbetween_weights: In-between pose weights (P,)
-            - corrective_weights: Corrective pose weights (C,)
     """
     face = setup.face_meta
     name_map = build_track_name_map(rig_info)
@@ -545,12 +470,6 @@ def solve_tracks_face(
 def build_tracks_from_armature(obj, rig) -> np.ndarray:
     """Build track array from Blender armature custom properties
     
-    Args:
-        obj: Blender armature object (or None to auto-detect)
-        rig: Rig info with track_names
-    
-    Returns:
-        NumPy array of track values
     """
     names = [normalize_track_name(n) for n in list(getattr(rig, "track_names", []) or [])]
     out = np.zeros((len(names),), dtype=np.float32)
