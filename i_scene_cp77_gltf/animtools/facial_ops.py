@@ -1,13 +1,3 @@
-"""
-cp77 facial_ops.py
-==================
-Facial animation operators — bridges the existing UI to the new
-facial_setup_loader / rig_binding / pose_preview / solver backends.
-
-Public names (used by the panel in __init__.py):
-    _CACHE, _PREVIEW_SNAPSHOT
-    _get_pose_count, _get_pose_track_name
-"""
 from __future__ import annotations
 import sys
 import time
@@ -39,8 +29,6 @@ except ImportError:
     JALIToCp77Bridge = None
     JALIAnimationPipeline = None
 
-# Module-level cache — thin wrapper around rig_binding cache so the existing
-# __init__.py panel code that does _CACHE["rig"] / _CACHE["setup"] still works.
 _CACHE: dict = {
     "rig":   None,   # RigData
     "setup": None,   # FacialSetupData
@@ -368,7 +356,7 @@ class CP77_OT_ResetTracksToDefaults(Operator):
 
 
 class CP77_OT_BakeFacialAnimation(Operator):
-    """Bake facial animation over frame range using sermo_solve_numpy."""
+    """Bake facial animation over frame range using facial_solve_numpy."""
     bl_idname = "cp77.bake_facial_animation"
     bl_label = "Bake Facial Animation"
     bl_options = {'REGISTER', 'UNDO'}
@@ -412,7 +400,7 @@ class CP77_OT_BakeFacialAnimation(Operator):
             context.scene.frame_set(frame)
 
             in_tracks = rig_binding.read_tracks(obj, cache)
-            bone_quats, bone_trans, out_tracks = _solver.sermo_solve_numpy(
+            bone_quats, bone_trans, out_tracks = _solver.facial_solve_numpy(
                 cache.setup, cache.rig, cache.track_segments,
                 in_tracks, lod=0,
             )
@@ -619,9 +607,9 @@ class CP77_OT_PreviewFacialPose(Operator):
 
     def _apply_solved_pose(self, context, cache, obj,
                            tracks_in: np.ndarray) -> bool:
-        """Run sermo solver and write bone transforms."""
+        """Run facial solver and write bone transforms."""
         try:
-            bone_quats, bone_trans, out_tracks = _solver.sermo_solve_numpy(
+            bone_quats, bone_trans, out_tracks = _solver.facial_solve_numpy(
                 cache.setup, cache.rig, cache.track_segments,
                 tracks_in, lod=0,
             )
