@@ -328,11 +328,16 @@ def reload_mats(self, context):
         return {'CANCELLED'}
 
     active_material = active_obj.active_material
-    mat_idx = active_obj.active_material_index
-    old_mat_name = active_material.name
 
-    DepotPath = active_material.get('DepotPath')
+    orig_mat_name = active_material.name
+    # JATO: "m" customprop introduced in addon ver 1.8. much safer to use than the bpy material.name
+    if 'm' in active_material.keys():
+        orig_mat_name = str(active_material['m']['Name'])
+
+    active_material.name = "to_be_deleted"
+
     BasePath = active_material.get('MeshPath')
+    DepotPath = active_material.get('DepotPath')
     ProjPath = active_material.get('ProjPath')
 
     # JATO: This is a workaround to get MeshPath from collection for old assets before we stored MeshPath within material.
@@ -354,46 +359,36 @@ def reload_mats(self, context):
     # JATO: hard-coded to PNG (who doesnt use PNG?) but could be exposed if we add image_format to material properties
     image_format='png'
 
-    # JATO: no idea what this does but the glb import function does it so...
+    # JATO: no idea what caching does but the glb import function does it so...
+    # JATO: probably a better way to do this but idk how and dont want to rewrite the function
     if not JSONTool._use_cache:
         JSONTool.start_caching()
         initiated_cache = True
-
-    # JATO: probably a better way to do this but idk how and dont want to rewrite the function
     somejunk, otherjunk, mats = JSONTool.jsonload(matjsonpath, errorMessages)
-
     Builder = MaterialBuilder(mats, DepotPath, str(image_format), BasePath)
+    if initiated_cache:
+        JSONTool.stop_caching()
+    if len(errorMessages) > 0:
+        show_message("\n".join(errorMessages))
 
     index = 0
     for rawmat in mats:
-        old_mat_name_split = old_mat_name.split('.')[0]
-        if rawmat["Name"] == old_mat_name_split:
+        #old_mat_name_split = old_mat_name.split('.')[0]
+        if rawmat["Name"] == orig_mat_name:
             newmat = Builder.create(mats,index)
             break
         index = index + 1
 
-    # JATO: Remap all users of old material to new material because multiple submeshes can share the same old material
-    bpy.data.materials[old_mat_name].user_remap(bpy.data.materials[newmat.name])
-
+    if 'newmat' not in locals():
+        self.report({'ERROR'}, "New material not created")
+        return {'CANCELLED'}
     # JATO: Copy custom material properties from old mat to new mat. Maybe we could regenerate from file, but I'm having a hard time understanding the code for that within import_mats function
     for k in active_material.keys():
         if k in ('BaseMaterial','DiffuseMap','GlobalNormal','MultilayerMask'):
             newmat[k] = active_material[k]
 
-    # JATO: may be unnecessary
-    active_obj.active_material_index = mat_idx
+    return newmat
 
-    # JATO: Removing the old material appears to cause a crash TODO: fix context?
-    if active_material:
-        bpy.data.materials.remove(active_material, do_unlink=True, do_id_user=True, do_ui_user=True)
-
-    newmat.name = old_mat_name
-
-    if initiated_cache:
-        JSONTool.stop_caching()
-
-    if len(errorMessages) > 0:
-        show_message("\n".join(errorMessages))
 
 def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmatnames,multimesh=False,generate_overrides=False):
     failedon = []

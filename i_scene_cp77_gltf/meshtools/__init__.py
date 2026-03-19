@@ -1,8 +1,6 @@
 from bpy_extras.io_utils import ImportHelper
 import bpy
 import bpy.utils.previews
-import sys
-import os
 from .meshtools import *
 from .verttools import *
 from ..main.bartmoss_functions import *
@@ -31,7 +29,6 @@ class CP77_PT_MeshTools(Panel):
     def draw(self, context):
         layout = self.layout
         box = layout.box()
-        props = context.scene.cp77_panel_props
 
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
         if not cp77_addon_prefs.show_modtools or not cp77_addon_prefs.show_meshtools:
@@ -757,16 +754,6 @@ class CP77_OT_MirrorXAxis(Operator):
 
         self.report({'INFO'}, f'Mirrored {num_replaced} vertex groups across {len(selected_meshes)} mesh(es)')
         return {'FINISHED'}
-
-class CP77DeleteUnusedBones(Operator):
-    bl_idname = "delete_unused_bones.cp77"
-    bl_parent_id = "CP77_PT_animspanel"
-    bl_label = "Delete unused bones"
-    bl_description = "Delete all bones that aren't used by meshes parented to the armature"
-
-    def execute(self, context):
-        delete_unused_bones(self, context)
-        return {"FINISHED"}
 
 operators, other_classes = get_classes(sys.modules[__name__])
 
