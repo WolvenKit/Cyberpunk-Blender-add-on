@@ -1,14 +1,13 @@
 """
 Real-time solver via frame_change_post handler.
-Reads keyframed float track values, runs the Sermo pipeline,
-and writes bone transforms back to Blender pose bones every frame.
+Reads keyframed float track values, runs the facial pipeline,
+and writes bone transforms back to pose bones every frame.
 """
 
 from __future__ import annotations
 
 import time
 from typing import Optional
-
 import numpy as np
 import bpy
 import bpy.app.handlers
@@ -62,7 +61,7 @@ _PART_LIPSYNC = 2   # lip region — no multiplier, always 1.0
 _solving = False
 
 
-# Quaternion helpers (numpy, no Blender API)
+# Quaternion helpers
 
 def _quat_mul_batch(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """
@@ -113,7 +112,7 @@ def _lerp(a: float, b: float, t: float) -> float:
     return a + t * (b - a)
 
 
-# Stage implementations (operate on numpy arrays in-place)
+# Stage implementations (operates on numpy arrays in-place)
 
 def _stage_3_envelope_weights(
     part,
@@ -406,7 +405,7 @@ def _stage_14_corrective_influences(
       3: simple clamp (1 - inf_sum)
     """
     # Type encoding from CorrectiveInfluencedPoses.Type in the JSON:
-    # Observed values: 0, 1, 2, 3 — map to sermo.py flag combinations
+    # Observed values: 0, 1, 2, 3 — map to facial.py flag combinations
     # 0 → by_speed=True,  linear_correction=False  (exponential)
     # 1 → by_speed=False, linear_correction=True   (linear opp)
     # 2 → by_speed=True,  linear_correction=True   (linear opp squared = organic)
@@ -529,7 +528,7 @@ def _solve_part(
     lod:        int,
     lod_weight: float,
 ) -> None:
-    """Run all 17 stages for one sermo part (tongue / eyes / face)."""
+    """Run all 17 stages for one facial part (tongue / eyes / face)."""
 
     #  Extract envelope scalars 
     upper_face    = _clamp02(float(out_tracks[_T_UPPER_FACE]))
@@ -587,7 +586,7 @@ def _solve_part(
 
 # Public numpy solver
 
-def sermo_solve_numpy(
+def facial_solve_numpy(
     setup,
     rig,
     seg,
@@ -596,9 +595,7 @@ def sermo_solve_numpy(
     lod_weight: float = 0.0,
 ):
     """
-    Full Sermo solve.  Pure numpy — no Blender API calls.
-
-    Parameters
+    Full facial solve.  Pure numpy.
     """
     num_bones  = rig.num_bones
     num_tracks = rig.num_tracks
@@ -611,7 +608,7 @@ def sermo_solve_numpy(
     # out_tracks starts as a copy of in_tracks — modified in-place by each stage
     out_tracks = in_tracks.copy()
 
-    # Execute parts in C++ order: tongue (0), eyes (1), face (2)
+    # Execute parts in order: tongue (0), eyes (1), face (2)
     for part in (setup.tongue, setup.eyes, setup.face):
         _solve_part(
             part, setup, seg,
@@ -621,9 +618,6 @@ def sermo_solve_numpy(
         )
 
     return bone_quats, bone_trans, out_tracks
-
-
-# Blender write-back
 
 def write_bones(
     arm_obj:    bpy.types.Object,
@@ -649,9 +643,9 @@ def write_bones(
         pbone.rotation_mode = "QUATERNION"
         # xyzw → Blender (w, x, y, z)
         q = bone_quats[int(bone_idx)]
-        pbone.rotation_quaternion = (float(q[3]), float(q[0]), float(q[1]), float(q[2]))
+        pbone.rotation_quaternion = (float(q[3]), float(q[2]), float(-q[0]), float(q[1]))
         t = bone_trans[int(bone_idx)]
-        pbone.location = (float(t[0]), float(t[1]), float(t[2]))
+        pbone.location = (float(t[2]), float(-t[0]), float(t[1]))
         written += 1
 
     return written
@@ -662,7 +656,7 @@ def write_bones(
 @persistent
 def solve_frame(scene, depsgraph=None):
     """
-    frame_change_post handler.  Runs the full Sermo solve for every bound
+    frame_change_post handler.  Runs the full facial solve for every bound
     armature in the scene.
 
     Timing is stored in bpy.app.driver_namespace["cp77_facial_last_ms"]
@@ -694,7 +688,7 @@ def solve_frame(scene, depsgraph=None):
             in_tracks = rig_binding.read_tracks(arm_obj, cache)
 
             # Solve
-            bone_quats, bone_trans, out_tracks = sermo_solve_numpy(
+            bone_quats, bone_trans, out_tracks = facial_solve_numpy(
                 cache.setup,
                 cache.rig,
                 cache.track_segments,
@@ -774,7 +768,7 @@ def restore_handler_on_load() -> None:
 # Operators
 
 class FACIAL_OT_ToggleSolver(Operator):
-    """Enable or disable the real-time Sermo facial solver"""
+    """Enable or disable the real-time facial facial solver"""
     bl_idname  = "cp77_facial.toggle_solver"
     bl_label   = "Toggle Solver"
     bl_options = {"REGISTER"}
@@ -798,7 +792,7 @@ class FACIAL_OT_ToggleSolver(Operator):
 
 
 class FACIAL_OT_SolveNow(Operator):
-    """Run a single Sermo solve on the current frame (one-shot, no handler needed)"""
+    """Run a single facial solve on the current frame (one-shot, no handler needed)"""
     bl_idname  = "cp77_facial.solve_now"
     bl_label   = "Solve Now"
     bl_options = {"REGISTER", "UNDO"}

@@ -1,15 +1,3 @@
-"""
-cp77_facial/pose_preview.py
-============================
-Stage 3 — Single-pose preview for the CP77 facial rig.
-
-Applies one main pose at full weight (1.0) directly to Blender pose bones,
-including all corrective poses that are exclusively driven by this pose.
-Supports all three parts: face, eyes, tongue.
-
-Architecture
-"""
-
 from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
@@ -19,74 +7,13 @@ import bpy
 from bpy.props import EnumProperty, IntProperty
 from bpy.types import Operator
 from mathutils import Quaternion, Vector
-
+from . import solver as _solver
 from . import rig_binding
 
 
 # Module-level snapshot store
 # { armature_name: { bone_name: (Quaternion, Vector, str) } }
 _snapshots: Dict[str, Dict[str, Tuple]] = {}
-
-
-# Numpy helpers (no Blender API)
-
-def _xyzw_to_blender_quat(xyzw: np.ndarray) -> Quaternion:
-    """Convert numpy [x, y, z, w] to Blender Quaternion(w, x, y, z)."""
-    return Quaternion((float(xyzw[3]), float(xyzw[0]), float(xyzw[1]), float(xyzw[2])))
-
-
-def _build_bone_deltas(
-    pose_arrays,
-    ib_index: int,
-) -> Dict[int, Tuple[Quaternion, Vector]]:
-    """
-    Extract (delta_quat, delta_trans) for every bone touched by inbetween
-    pose `ib_index`.
-
-    Returns {bone_idx: (Quaternion, Vector)}.
-    """
-    start = int(pose_arrays.row_ptr[ib_index])
-    end   = int(pose_arrays.row_ptr[ib_index + 1])
-
-    result: Dict[int, Tuple[Quaternion, Vector]] = {}
-    for k in range(start, end):
-        bone_idx = int(pose_arrays.pose_bones[k])
-        dq = _xyzw_to_blender_quat(pose_arrays.pose_quats[k])
-        dt = Vector((
-            float(pose_arrays.pose_trans[k, 0]),
-            float(pose_arrays.pose_trans[k, 1]),
-            float(pose_arrays.pose_trans[k, 2]),
-        ))
-        result[bone_idx] = (dq, dt)
-    return result
-
-
-def _apply_corrective_deltas(
-    pose_arrays,
-    corrective_index: int,
-    deltas: Dict[int, Tuple[Quaternion, Vector]],
-) -> None:
-    """
-    Additively stack transforms from corrective pose `corrective_index` onto
-    the deltas dict in-place (rotation: multiply, translation: add).
-    """
-    start = int(pose_arrays.row_ptr[corrective_index])
-    end   = int(pose_arrays.row_ptr[corrective_index + 1])
-
-    for k in range(start, end):
-        bone_idx = int(pose_arrays.pose_bones[k])
-        dq = _xyzw_to_blender_quat(pose_arrays.pose_quats[k])
-        dt = Vector((
-            float(pose_arrays.pose_trans[k, 0]),
-            float(pose_arrays.pose_trans[k, 1]),
-            float(pose_arrays.pose_trans[k, 2]),
-        ))
-        if bone_idx in deltas:
-            eq, et = deltas[bone_idx]
-            deltas[bone_idx] = (eq @ dq, et + dt)
-        else:
-            deltas[bone_idx] = (dq, dt)
-
 
 def _find_gce_solo_correctives(part, target_track: int) -> List[int]:
     """
@@ -99,7 +26,6 @@ def _find_gce_solo_correctives(part, target_track: int) -> List[int]:
         if (e - s) == 1 and int(part.gcorr_tracks[s]) == target_track:
             results.append(c)
     return results
-
 
 def _find_ice_correctives(part, target_ib: int) -> List[int]:
     """
@@ -115,9 +41,6 @@ def _find_ice_correctives(part, target_ib: int) -> List[int]:
                 results.append(c)
                 break
     return results
-
-
-# Snapshot helpers (Blender API)
 
 def _snapshot_pose(
     obj: bpy.types.Object,
@@ -137,7 +60,6 @@ def _snapshot_pose(
                 prev_mode,
             )
     return snapshot
-
 
 def _restore_pose(obj: bpy.types.Object, snapshot: Dict[str, Tuple]) -> None:
     """Restore pose bone state from a _snapshot_pose result."""
@@ -167,67 +89,45 @@ def _reset_bones_to_rest(obj: bpy.types.Object, bone_names: List[str]) -> None:
 # Core preview / clear
 
 def preview_apply_pose(
-    obj: bpy.types.Object,
-    cache: rig_binding.BindingCache,
-    part_name: str,
+    obj:        bpy.types.Object,
+    cache:      rig_binding.BindingCache,
+    part_name:  str,
     pose_index: int,
 ) -> Tuple[bool, str]:
-    """
-    Apply main pose `pose_index` of `part_name` at full weight (1.0),
-    including all solo correctives, to the armature's pose bones.
-
-    Saves the current pose before applying so preview_clear() can restore it.
-
-    Returns (success, message).
-    """
-    # Resolve part
     part = _get_part(cache.setup, part_name)
     if part is None:
         return False, f"Unknown part '{part_name}'"
-
     if pose_index < 0 or pose_index >= part.num_main_poses:
         return False, (
             f"Pose index {pose_index} out of range "
             f"[0, {part.num_main_poses - 1}] for part '{part_name}'"
         )
 
-    # Save snapshot (only if not already previewing — preserves original pose)
     if obj.name not in _snapshots:
         _snapshots[obj.name] = _snapshot_pose(obj, cache.used_bone_names)
 
-    # Reset only the bones this part touches
     part_bone_names = _part_bone_names(part, cache)
     _reset_bones_to_rest(obj, part_bone_names)
 
-    # Compute target inbetween index (last inbetween = threshold 1.0)
+    # Build dense bone arrays from the sparse pose at full weight (last inbetween)
+    N = cache.rig.num_bones
+    bone_quats = np.zeros((N, 4), dtype=np.float32)
+    bone_quats[:, 3] = 1.0
+    bone_trans = np.zeros((N, 3), dtype=np.float32)
+
+    pa      = part.main_poses
+    target_ib = int(part.ib_row_ptr[pose_index + 1]) - 1
+    start   = int(pa.row_ptr[target_ib])
+    end     = int(pa.row_ptr[target_ib + 1])
+
+    if end > start:
+        bones = pa.pose_bones[start:end].astype(int)
+        bone_quats[bones] = pa.pose_quats[start:end]
+        bone_trans[bones] = pa.pose_trans[start:end]
+
+    written = _solver.write_bones(obj, cache, bone_quats, bone_trans)
+
     target_track = int(part.main_tracks[pose_index])
-    target_ib    = int(part.ib_row_ptr[pose_index + 1]) - 1
-
-    # Build delta buffer from the main pose only (no correctives in preview)
-    deltas = _build_bone_deltas(part.main_poses, target_ib)
-
-    # Write back to pose bones
-    pb          = obj.pose.bones
-    bone_names  = cache.rig.bone_names
-    written     = 0
-    skipped     = 0
-
-    for bone_idx, (dq, dt) in deltas.items():
-        if bone_idx >= cache.rig.num_bones:
-            skipped += 1
-            continue
-        name = str(bone_names[bone_idx])
-        if name not in pb:
-            skipped += 1
-            continue
-        pbone = pb[name]
-        pbone.rotation_mode = "QUATERNION"
-        # From rest (identity @ delta = delta), so we assign directly
-        pbone.rotation_quaternion = dq
-        pbone.location = dt
-        written += 1
-
-    # Update scene state
     scene_props = getattr(bpy.context.scene, "cp77_facial", None)
     if scene_props is not None:
         scene_props.preview_active     = True
@@ -237,12 +137,7 @@ def preview_apply_pose(
     _tag_redraw()
 
     track_name = str(cache.rig.track_names[target_track])
-    msg = (
-        f"Preview: {part_name}[{pose_index}] '{track_name}' — "
-        f"{written} bone(s)"
-        + (f", {skipped} bone(s) skipped" if skipped else "")
-    )
-    return True, msg
+    return True, f"Preview: {part_name}[{pose_index}] '{track_name}' — {written} bone(s)"
 
 
 def preview_clear(
