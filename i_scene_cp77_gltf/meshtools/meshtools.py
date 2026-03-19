@@ -481,39 +481,49 @@ def add_shrinkwrap(context, target_collection_name, offset, wrap_method,
         if apply_immediately:
             restore_previous_context()
 
-#endregion
-
-#region Refitter functions
-
 def applyRefitter(obj):
     """Apply refitter"""
-    ensure_basis(obj)
+    prev_mode = obj.mode
+    if prev_mode != 'OBJECT':
+        safe_mode_switch('OBJECT')
 
-    names = getShapeKeyNames(obj) or []
-    auto_names = [n for n in names if 'Autofitter' in n]
-    garm_names = [n for n in names if 'Garment' in n]
+    try:
+        basis = ensure_basis(obj)
 
-    if auto_names:
-        auto_values = {n: 1.0 for n in auto_names}
-        temp_mix_key = add_key_from_mix(obj, 'TempAutofitMix', values=auto_values)
+        names = getShapeKeyNames(obj) or []
+        auto_names = [n for n in names if 'Autofitter' in n]
+        garm_names = [n for n in names if 'Garment' in n]
+
+        temp_mix_key = None
+        if auto_names:
+            auto_values = {n: 1.0 for n in auto_names}
+            temp_mix_key = add_key_from_mix(obj, 'TempAutofitMix', values=auto_values)
+
+
+        if garm_names:
+            garm_values = {n: 1.0 for n in garm_names}
+            gs_key = add_key_from_mix(obj, 'TempGarmentSupport', values=garm_values)
+            for n in garm_names:
+                remove_key(obj, n)
+            if gs_key and gs_key.name != 'GarmentSupport':
+                gs_key.name = 'GarmentSupport'
+            if gs_key:
+                gs_key.value = 0.0
 
         if temp_mix_key:
             copy_key_to_basis(obj, temp_mix_key.name)
-            remove_key(obj, temp_mix_key.name)
-
+            if basis:
+                remove_key(obj, 'Basis')
+            temp_mix_key.name = 'Basis'
         for n in auto_names:
             remove_key(obj, n)
 
-    gs_key = None
-    if garm_names:
-        garm_values = {n: 1.0 for n in garm_names}
-        gs_key = add_key_from_mix(obj, 'GarmentSupport', values=garm_values)
-
-        for n in garm_names:
-            remove_key(obj, n)
-
-    return gs_key.name if gs_key else None
-
+    finally:
+        if prev_mode != 'OBJECT':
+            try:
+                safe_mode_switch(prev_mode)
+            except Exception:
+                pass
 def CP77RefitChecker(self, context):
     """Check for existing refitters."""
     refitters, addons = [], []
@@ -534,6 +544,8 @@ def CP77Refit(context, refitter, addon, target_body_path, target_body_name,
 def autofitter(context, refitter, addon, target_body_path, useAddon,
                addon_target_body_path, addon_target_body_name, target_body_name, fbx_rot, try_auto_apply):
     store_current_context()
+    if get_safe_mode() != 'OBJECT':
+        safe_mode_switch('OBJECT')
     selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
     if not selected_meshes:
         show_message("No meshes selected. Please select at least one mesh and try again.")
@@ -589,7 +601,7 @@ def autofitter(context, refitter, addon, target_body_path, useAddon,
     for obj in selected_meshes:
         obj.select_set(True)
     context.view_layer.objects.active = selected_meshes[0]
-
+    restore_previous_context()
     return {'FINISHED'}
 
 def add_lattice(target_body_path, collection, fbx_rot, target_body_name):
