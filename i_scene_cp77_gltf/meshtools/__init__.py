@@ -366,7 +366,7 @@ class CP77WeightTransfer(Operator):
 
     def execute(self, context):
         # Call the trans_weights function with the provided arguments
-        trans_weights(self, context, self.properties.vertInterop ) #, self.properties.bySubmesh)
+        trans_weights(self, context, self.properties.vertInterop, self.properties.bySubmesh)
         return {"FINISHED"}
 
     def draw(self,context):
