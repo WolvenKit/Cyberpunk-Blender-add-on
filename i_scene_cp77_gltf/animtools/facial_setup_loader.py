@@ -1,20 +1,3 @@
-"""
-facial_setup_loader.py
-======================
-Parse WolvenKit-exported CP77 .facialsetup and animRig JSON files into
-numpy arrays ready for the vectorized Sermo compute pipeline.
-
-Usage
------
-    from facial_setup_loader import load_facial_setup, load_rig
-
-    rig   = load_rig("skeleton_rig.json")
-    setup = load_facial_setup("facialsetup.json", rig)
-
-    # setup.face / setup.eyes / setup.tongue  -> SermoPartData
-    # rig.bone_names, rig.track_names, rig.ref_quats, rig.ref_trans ...
-"""
-
 from __future__ import annotations
 
 import json
@@ -24,9 +7,6 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-
-# Constants (mirror sermo.h)
-
 NUM_ENVELOPE_TRACKS    = 13
 NUM_ENVELOPE_WEIGHTS   = 6   # face, upper, lower, lipsync, JALI_jaw, JALI_lips
 WEIGHT_THRESHOLD       = 0.001
@@ -35,9 +15,9 @@ FACIAL_VERSION         = 8
 # Envelope type indices (bakedData Envelope field)
 ENV_FACE        = 0
 ENV_LIPSYNC     = 1
-ENV_JALI_JAW    = 2  # unused label — maps to JALI jaw slider
+ENV_JALI_JAW    = 2
 ENV_UPPER_FACE  = 3
-ENV_LOWER_FACE  = 4  # actually "lowerFace" envelope
+ENV_LOWER_FACE  = 4  # "lowerFace" envelope
 ENV_MUZZLE      = 5  # muzzle multiplier group
 
 # Influence type (InfluencedPoses.Type)
@@ -108,7 +88,7 @@ class PoseArrays:
     pose_quats[k]  → quaternion delta (xyzw, float32)
     pose_trans[k]  → translation delta (xyz,  float32)
 
-    num_poses == number of inbetween-expanded poses (e.g. 133 for face main)
+    num_poses == number of inbetween-expanded poses
     """
     num_poses:   int
     row_ptr:     np.ndarray   # [num_poses + 1]  int32
@@ -116,22 +96,19 @@ class PoseArrays:
     pose_quats:  np.ndarray   # [total_transforms, 4] float32 xyzw
     pose_trans:  np.ndarray   # [total_transforms, 3] float32
 
-
-# Per-part sermo lookup tables
-
 @dataclass
-class SermoPartData:
+class facialPartData:
     """
-    All sermo pipeline lookup tables for one part (face / eyes / tongue),
+    All facial pipeline lookup tables for one part (face / eyes / tongue),
     stored as numpy arrays for vectorized evaluation.
 
-    Array sizes correspond to the actual rig — Songbird face part has ~121
-    main poses, 133 inbetween poses, 255 correctives, etc.
+    Array sizes correspond to the actual rig
+    Songbird face part has ~121 main poses, 133 inbetween poses, 255 correctives, etc.
     """
 
     part_name: str   # 'face' | 'eyes' | 'tongue'
 
-    #  Stage 3: Envelope → track weight gates 
+    # Envelope → track weight gates
     # Each entry maps a track to the envelope that gates it.
     # env_lods: tracks with lod > current LOD are skipped.
     env_num:    int
@@ -142,12 +119,12 @@ class SermoPartData:
     #  Stage 4: Global limits (JALI jaw / lips sliders) 
     limit_num:      int
     limit_tracks:   np.ndarray   # [limit_num] int16
-    limit_envelope: np.ndarray   # [limit_num] uint8   which envelope controls
+    limit_envelope: np.ndarray   # [limit_num] uint8 which envelope controls
     limit_min:      np.ndarray   # [limit_num] float32
     limit_mid:      np.ndarray   # [limit_num] float32
     limit_max:      np.ndarray   # [limit_num] float32
 
-    #  Stage 5/9: Influence suppression (CSR) 
+    # Influence suppression (CSR)
     # For track infl_tracks[i], sum influencer weights from
     # infl_indices[infl_row_ptr[i] : infl_row_ptr[i+1]].
     infl_num:      int
@@ -156,17 +133,17 @@ class SermoPartData:
     infl_row_ptr:  np.ndarray   # [infl_num + 1] int32
     infl_indices:  np.ndarray   # [total_infl_indices] int16
 
-    #  Stage 6: Upper/lower face envelopes 
+    # Upper/lower face envelopes
     ulf_num:    int
     ulf_tracks: np.ndarray   # [ulf_num] int16
     ulf_parts:  np.ndarray   # [ulf_num] uint8   PART_* constant
 
-    #  Stage 7/8: Lipsync pose sides 
+    # Lipsync pose sides
     lps_num:    int
     lps_tracks: np.ndarray   # [lps_num] int16
     lps_sides:  np.ndarray   # [lps_num] uint8   SIDE_* constant
 
-    #  Stage 10: Main pose inbetween expansion 
+    # Main pose inbetween expansion
     # num_main_poses: logical pose count (121 face main)
     # num_ib_poses:   inbetween-expanded count (133 face, flat)
     # num_scope_mults: gaps across all multi-inbetween poses (12 face)
@@ -183,7 +160,7 @@ class SermoPartData:
     sm_row_ptr:       np.ndarray   # [num_main_poses + 1] int32  into ib_scope_mults
     ib_scope_mults:   np.ndarray   # [num_scope_mults] float32
 
-    #  Stage 12: Global corrective entries (CSR) 
+    # Global corrective entries (CSR)
     # corrective pose c is active when ALL tracks in
     # gcorr_tracks[gcorr_row_ptr[c] : gcorr_row_ptr[c+1]] have non-zero weight.
     num_correctives:   int
@@ -191,13 +168,13 @@ class SermoPartData:
     gcorr_tracks:      np.ndarray   # [total_gcorr] int16
     gcorr_flags:       np.ndarray   # [total_gcorr] uint8   Unknown field from JSON
 
-    #  Stage 13: Inbetween corrective entries (CSR) 
+    # Inbetween corrective entries (CSR)
     # Indexed by inbetween-expanded pose index (0..num_ib_poses-1).
     icorr_row_ptr:  np.ndarray   # [num_ib_poses + 1] int32
     icorr_tracks:   np.ndarray   # [total_icorr] int16
     icorr_flags:    np.ndarray   # [total_icorr] uint8   Unknown field
 
-    #  Stage 14: Corrective influence suppression (CSR) 
+    # Corrective influence suppression (CSR)
     # corr_infl_indices[i] = which corrective pose to suppress
     num_corr_infl:         int
     corr_infl_pose_idx:    np.ndarray   # [num_corr_infl] int32   corrective to suppress
@@ -205,11 +182,11 @@ class SermoPartData:
     corr_infl_row_ptr:     np.ndarray   # [num_corr_infl + 1] int32
     corr_infl_influencers: np.ndarray   # [total_corr_infl_idx] int32  influencer corrective indices
 
-    #  Stage 15/16: Pose transforms (CSR, inbetween-expanded) 
+    #  Pose transforms (CSR, inbetween-expanded)
     main_poses:       PoseArrays   # num_poses  num_ib_poses
     corrective_poses: PoseArrays   # num_poses  num_correctives
 
-    #  Stage 17: Wrinkle mapping 
+    #  Wrinkle mapping
     # wrinkle_track_offset[i]: the main pose TRACK driving wrinkle i.
     # The output wrinkle track index = wrinkle_start_track + i.
     wrinkle_count:        int
@@ -221,12 +198,12 @@ class SermoPartData:
 
 @dataclass
 class FacialSetupData:
-    """Complete parsed facial setup, ready for sermo_compute."""
+    """Complete parsed facial setup, ready for facial_compute."""
 
     version:       int
-    face:          SermoPartData
-    eyes:          SermoPartData
-    tongue:        SermoPartData
+    face:          facialPartData
+    eyes:          facialPartData
+    tongue:        facialPartData
 
     # Global data
     used_bone_indices:          np.ndarray   # [N] int16  subset of rig bones used
@@ -309,7 +286,7 @@ def _build_csr_multi(num_rows: int, entries, row_key, val_keys):
 def _parse_pose_arrays(wk_part: dict) -> PoseArrays:
     """
     Convert mainPosesData or correctivePosesData for one part (Face/Tongue/Eyes)
-    into a CSR PoseArrays.  Each pose uses LOD0 transforms (NumTransforms).
+    into a CSR PoseArrays.
     """
     poses_raw      = wk_part["Poses"]
     transforms_raw = wk_part["Transforms"]
@@ -346,24 +323,24 @@ def _parse_pose_arrays(wk_part: dict) -> PoseArrays:
     )
 
 
-# Sermo part parser
+# facial part parser
 
-def _parse_sermo_part(
+def _parse_facial_part(
     part_name: str,
     baked: dict,           # bakedData.Data.{Face|Eyes|Tongue}
     main_wk: dict,         # mainPosesData.Data.{Face|Eyes|Tongue}
     corr_wk: dict,         # correctivePosesData.Data.{Face|Eyes|Tongue}
     tracks_mapping: dict,  # bakedData global tracksMapping
-) -> SermoPartData:
+) -> facialPartData:
 
-    #  Envelopes per track (Stage 3) 
+    #  Envelopes per track
     ept = baked["EnvelopesPerTrackMapping"]
     env_num    = len(ept)
     env_tracks = np.array([e["Track"]        for e in ept], dtype=np.int16)
     env_lods   = np.array([e["LevelOfDetail"] for e in ept], dtype=np.uint8)
     env_types  = np.array([e["Envelope"]     for e in ept], dtype=np.uint8)
 
-    #  Global limits (Stage 4) 
+    #  Global limits
     gl = baked["GlobalLimits"]
     limit_num      = len(gl)
     limit_tracks   = np.array([e["Track"]    for e in gl], dtype=np.int16)
@@ -372,7 +349,7 @@ def _parse_sermo_part(
     limit_mid      = np.array([e["Mid"]      for e in gl], dtype=np.float32)
     limit_max      = np.array([e["Max"]      for e in gl], dtype=np.float32)
 
-    #  Influence suppression (Stage 5/9) — CSR 
+    #  Influence suppression
     ip = baked["InfluencedPoses"]
     ii = baked["InfluenceIndices"]
     infl_num    = len(ip)
@@ -397,8 +374,8 @@ def _parse_sermo_part(
     lps_tracks = np.array([e["Track"] for e in lps], dtype=np.int16)
     lps_sides  = np.array([e["Side"]  for e in lps], dtype=np.uint8)
 
-    #  Main pose inbetween expansion (Stage 10) 
-    amp   = baked["AllMainPoses"]           # 121 logical main poses
+    #  Main pose inbetween expansion
+    amp   = baked["AllMainPoses"]           # 121 main poses
     ampi  = baked["AllMainPosesInbetweens"] # 133 flat inbetween thresholds
     amsm  = baked["AllMainPosesInbetweenScopeMultipliers"]  # 12 scope mults
 
@@ -418,7 +395,7 @@ def _parse_sermo_part(
     np.cumsum(num_gaps, out=sm_row_ptr[1:])
     ib_scope_mults = np.array(amsm, dtype=np.float32)
 
-    #  Global corrective entries (Stage 12) — CSR 
+    #  Global corrective entries
     gc = baked["GlobalCorrectiveEntries"]
     num_correctives = len(corr_wk["Poses"])
 
@@ -428,9 +405,9 @@ def _parse_sermo_part(
     gcorr_tracks = np.array(gcorr_tracks_list, dtype=np.int16)
     gcorr_flags  = np.array(gcorr_flags_list,  dtype=np.uint8)
 
-    #  Inbetween corrective entries (Stage 13) — CSR 
+    # Inbetween corrective entries
     # Also indexed by corrective pose index (same as GCE).
-    # ICE.Track = flat inbetween-expanded pose index providing the weight.
+    # ICE.Track = flat inbetween-expanded pose index providing the weight
     ic = baked["InbetweenCorrectiveEntries"]
     icorr_row_ptr, (icorr_tracks_list, icorr_flags_list) = _build_csr_multi(
         num_correctives, ic, "Index", ["Track", "Unknown"]
@@ -438,7 +415,7 @@ def _parse_sermo_part(
     icorr_tracks = np.array(icorr_tracks_list, dtype=np.int16)
     icorr_flags  = np.array(icorr_flags_list,  dtype=np.uint8)
 
-    #  Corrective influence suppression (Stage 14) — CSR 
+    #  Corrective influences
     ci  = baked["CorrectiveInfluencedPoses"]
     cii = baked["CorrectiveInfluenceIndices"]
     num_corr_infl       = len(ci)
@@ -450,11 +427,11 @@ def _parse_sermo_part(
         corr_infl_row_ptr[i + 1] = corr_infl_row_ptr[i] + e["NumInfluences"]
     corr_infl_influencers = np.array(cii, dtype=np.int32)
 
-    #  Pose transform arrays (Stages 15/16) 
+    #  Pose transform arrays
     main_poses       = _parse_pose_arrays(main_wk)
     corrective_poses = _parse_pose_arrays(corr_wk)
 
-    #  Wrinkle mapping (Stage 17) 
+    #  Wrinkle mapping
     wrk               = baked["Wrinkles"]
     wrinkle_count         = len(wrk)
     wrinkle_source_tracks = np.array(wrk, dtype=np.int16)
@@ -463,7 +440,7 @@ def _parse_sermo_part(
     num_lips = tracks_mapping["numLipsyncOverrides"] # 86
     wrinkle_start_track = num_env + num_main + num_lips  # 240
 
-    return SermoPartData(
+    return facialPartData(
         part_name = part_name,
 
         env_num    = env_num,
@@ -528,7 +505,7 @@ def _parse_sermo_part(
 
 def load_rig(path: str | Path) -> RigData:
     """
-    Parse a WolvenKit-exported animRig JSON into RigData.
+    Parse a WolvenKit-exported rig JSON into RigData.
 
     Parameters
     """
@@ -612,22 +589,21 @@ def load_facial_setup(path: str | Path, rig: Optional[RigData] = None) -> Facial
     corr_data = rc["correctivePosesData"]["Data"]
 
     # Parse each part: Face, Eyes, Tongue
-    # Note: WolvenKit uses title-case keys — "Face", "Eyes", "Tongue"
-    face = _parse_sermo_part(
+    face = _parse_facial_part(
         "face",
         baked["Face"],
         main_data["Face"],
         corr_data["Face"],
         tracks_mapping,
     )
-    eyes = _parse_sermo_part(
+    eyes = _parse_facial_part(
         "eyes",
         baked["Eyes"],
         main_data["Eyes"],
         corr_data["Eyes"],
         tracks_mapping,
     )
-    tongue = _parse_sermo_part(
+    tongue = _parse_facial_part(
         "tongue",
         baked["Tongue"],
         main_data["Tongue"],
@@ -653,7 +629,7 @@ def load_facial_setup(path: str | Path, rig: Optional[RigData] = None) -> Facial
 # Smoke test / summary
 
 def _print_summary(setup: FacialSetupData, rig: RigData) -> None:
-    print(f"=== FacialSetupData (v{setup.version}) ===")
+    print(f" FacialSetupData (v{setup.version}) ")
     print(f"  Used bones:          {len(setup.used_bone_indices)}")
     print(f"  Lipsync overrides:   {len(setup.lipsync_override_idx_map)}")
     print(f"  Joint regions:       {len(setup.joint_regions)}")
@@ -668,13 +644,13 @@ def _print_summary(setup: FacialSetupData, rig: RigData) -> None:
         print(f"  [{part.part_name}]")
         print(f"    Envelope mappings:  {part.env_num}")
         print(f"    Global limits:      {part.limit_num}")
-        print(f"    Influence groups:   {part.infl_num}  ({len(part.infl_indices)} total influencers)")
-        print(f"    Main poses (logic): {part.num_main_poses}")
-        print(f"    Main poses (ib):    {part.num_ib_poses}  ({mp.row_ptr[-1]} total transforms)")
+        print(f"    Influence poses:   {part.infl_num}  ({len(part.infl_indices)} total influencers)")
+        print(f"    Main poses: {part.num_main_poses}")
+        print(f"    Main pose inbetweens:    {part.num_ib_poses}  ({mp.row_ptr[-1]} total transforms)")
         print(f"    Scope multipliers:  {len(part.ib_scope_mults)}")
         print(f"    Correctives:        {part.num_correctives}  ({cp.row_ptr[-1]} total transforms)")
-        print(f"    GCE entries:        {len(part.gcorr_tracks)}")
-        print(f"    ICE entries:        {len(part.icorr_tracks)}")
+        print(f"    Global Corrective entries:        {len(part.gcorr_tracks)}")
+        print(f"    Inbetween Corrective entries:        {len(part.icorr_tracks)}")
         print(f"    Corr. influences:   {part.num_corr_infl}")
         print(f"    Wrinkles:           {part.wrinkle_count}")
         print()
@@ -684,35 +660,3 @@ def _print_summary(setup: FacialSetupData, rig: RigData) -> None:
     print(f"  Tracks:  {rig.num_tracks}")
     print(f"  LOD starts: {rig.lod_start_indices.tolist()}")
     print(f"  Track[0:6]: {rig.track_names[:6].tolist()}")
-
-
-if __name__ == "__main__":
-    import sys
-    facial_path = sys.argv[1] if len(sys.argv) > 1 else \
-        "/mnt/user-data/uploads/h0_001_wa_a__songbird_rigsetup_facialsetup__1___1_.json"
-    rig_path = sys.argv[2] if len(sys.argv) > 2 else \
-        "/mnt/user-data/uploads/h0_001_wa_a__songbird_skeleton_rig.json"
-
-    rig   = load_rig(rig_path)
-    setup = load_facial_setup(facial_path, rig)
-    _print_summary(setup, rig)
-
-    # Spot-check: first face main pose drives track 13, inbetween threshold 1.0
-    f = setup.face
-    print("--- Spot checks ---")
-    print(f"face.main_tracks[0]   = {f.main_tracks[0]}  (expect 13)")
-    print(f"face.ib_thresholds[0] = {f.ib_thresholds[0]:.4f}  (expect 1.0)")
-    print(f"face.main_poses.row_ptr[:5] = {f.main_poses.row_ptr[:5]}")
-    print(f"face.main_poses.pose_bones[:6] = {f.main_poses.pose_bones[:6]}")
-    print(f"face.main_poses.pose_quats[0]  = {f.main_poses.pose_quats[0]}  (xyzw)")
-    print()
-    # Inbetween expansion spot-check: pose 14 (track 27) has 2 inbetweens
-    print(f"main_pose[14] track={f.main_tracks[14]}")
-    start, end = int(f.ib_row_ptr[14]), int(f.ib_row_ptr[15])
-    print(f"  ib range [{start}:{end}]  thresholds={f.ib_thresholds[start:end].tolist()}")
-    sm_s, sm_e = int(f.sm_row_ptr[14]), int(f.sm_row_ptr[15])
-    print(f"  scope_mults={f.ib_scope_mults[sm_s:sm_e].tolist()}")
-    print()
-    # Corrective spot-check: corrective 0 requires tracks 25 and 27
-    print(f"gcorr tracks for corr[0]: {f.gcorr_tracks[f.gcorr_row_ptr[0]:f.gcorr_row_ptr[1]].tolist()}")
-    print(f"gcorr tracks for corr[2]: {f.gcorr_tracks[f.gcorr_row_ptr[2]:f.gcorr_row_ptr[3]].tolist()}")

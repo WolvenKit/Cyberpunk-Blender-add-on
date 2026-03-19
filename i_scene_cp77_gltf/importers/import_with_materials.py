@@ -12,7 +12,7 @@ from ..main.setup import MaterialBuilder
 from ..main.bartmoss_functions import UV_by_bounds
 from .import_from_external import *
 from .attribute_import import manage_garment_support
-from ..cyber_props import add_anim_props
+from ..cyber_props import add_anim_props, add_skin_props
 from ..jsontool import JSONTool
 from ..main.common import show_message
 from ..animtools.tracks import import_anim_tracks, fix_anim_frame_alignment
@@ -533,6 +533,7 @@ def blender_4_scale_armature_bones():
 
 def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filename, oldanims, import_tracks):
     # TODO: check if this is a Cyberpunk import or something else entirely
+    cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
 
     for parent in o.users_collection:
         parent.objects.unlink(o)
@@ -541,6 +542,17 @@ def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filena
     # We should probably break the base import out into a separate function, have it check the gltf file and then send the info either to anim import or import with materials, but this works too
     animations = gltf_importer.data.animations
     meshes = gltf_importer.data.meshes
+
+    if o.type == 'ARMATURE' and hasattr(gltf_importer.data, 'skins') and gltf_importer.data.skins:
+        for skin in gltf_importer.data.skins:
+            try:
+                add_skin_props(skin, o)
+                if not cp77_addon_prefs.non_verbose:
+                    print(f"Skin properties added to armature: {o.name}")
+                break  # typically one skin per armature
+            except Exception as e:
+                if not cp77_addon_prefs.non_verbose:
+                    print(f"could not add skin properties to '{o.name}': {e}")
 
     # if animations exist, don't hide the armature and get the extras properties
     if animations:
