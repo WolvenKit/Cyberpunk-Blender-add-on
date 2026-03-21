@@ -256,23 +256,24 @@ def _stage_7_lipsync_overrides(
 
 
 def _stage_8_lipsync_poses(
-    part,
-    in_tracks:   np.ndarray,
-    out_tracks:  np.ndarray,
-    seg,
-) -> None:
+        part,
+        in_tracks: np.ndarray,
+        out_tracks: np.ndarray,
+        seg,
+        ) -> None:
     """
     Stage 8: Add lipsync animation pose weights directly on top of main pose weights.
-    lipsync_track_idx = lovr_start + (main_track - num_envelope_tracks)
+    lipsync_track_idx = lout_start + (main_track - num_envelope_tracks)
     """
-    num_env   = seg.envelope_end   # 13
-    ovr_start = seg.lipsync_ovr_start  # 154
+    num_env = seg.envelope_end  # 13
+    lout_start = seg.lipsync_out_start  # e.g., 240
 
-    lps_tracks = part.lps_tracks   # main pose track indices
-    # lipsync override track index for each pose
-    ovr_indices = (lps_tracks.astype(np.int32) - num_env) + ovr_start
+    lps_tracks = part.lps_tracks  # main pose track indices
 
-    lipsync_weights = in_tracks[ovr_indices].astype(np.float32)
+    # Map the main pose track index to its matching lipsync output track
+    lps_out_indices = (lps_tracks.astype(np.int32) - num_env) + lout_start
+
+    lipsync_weights = in_tracks[lps_out_indices].astype(np.float32)
     cur = out_tracks[lps_tracks].astype(np.float32)
     out_tracks[lps_tracks] = np.clip(cur + lipsync_weights, 0.0, 1.0)
 

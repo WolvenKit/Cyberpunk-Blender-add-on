@@ -438,7 +438,7 @@ def _parse_facial_part(
     num_env  = tracks_mapping["numEnvelopes"]        # 13
     num_main = tracks_mapping["numMainPoses"]        # 141
     num_lips = tracks_mapping["numLipsyncOverrides"] # 86
-    wrinkle_start_track = num_env + num_main + num_lips  # 240
+    wrinkle_start_track = num_env + num_main + num_lips + num_main
 
     return facialPartData(
         part_name = part_name,
