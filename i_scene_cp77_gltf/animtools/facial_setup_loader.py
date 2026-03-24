@@ -31,15 +31,15 @@ SIDE_LEFT  = 1
 SIDE_RIGHT = 2
 
 # Upper/lower face part (UpperLowerFace.Part)
-PART_UPPER  = 0
-PART_LOWER  = 1
+PART_LOWER   = 0
+PART_UPPER   = 1
 PART_LIPSYNC = 2   # lip/jaw region — gets lipsync zone envelope
 
 # Corrective influence type flags
-CORR_INFL_BY_SPEED        = 0
-CORR_INFL_LINEAR          = 1
-CORR_INFL_LINEAR_CORRECTION = 2
-CORR_INFL_ORGANIC         = 3
+CORR_INFL_BY_SPEED          = 0
+CORR_INFL_LINEAR_CORRECTION = 1
+CORR_INFL_BOTH              = 2
+CORR_INFL_SIMPLE            = 3
 
 
 # Rig data
