@@ -106,11 +106,11 @@ class JALIAnimationPipeline:
                 envelope_value = 0.0
 
                 if t_attack <= t < t_apex:
-                    envelope_value = smoothstep((t - t_attack) / phoneme.onset) * phoneme.power
+                    envelope_value = smoothstep(0.0, 1.0, (t - t_attack) / phoneme.onset) * phoneme.power
                 elif t_apex <= t < t_sustain:
                     envelope_value = phoneme.power
                 elif t_sustain <= t < t_decay:
-                    envelope_value = smoothstep(1.0 - ((t - t_sustain) / (t_decay - t_sustain))) * phoneme.power
+                    envelope_value = smoothstep(0.0, 1.0, 1.0 - ((t - t_sustain) / (t_decay - t_sustain))) * phoneme.power
 
                 if envelope_value <= 0.0:
                     continue
