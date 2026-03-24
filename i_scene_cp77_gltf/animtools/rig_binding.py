@@ -193,42 +193,39 @@ def _track_description(track_idx: int, track_name: str, seg: TrackSegments) -> s
 
 
 def register_track_properties(obj: bpy.types.Object, rig, seg: TrackSegments) -> None:
-    def register_track_properties(obj: bpy.types.Object, rig, seg: TrackSegments) -> None:
-        """
-        Create a float custom property on `obj` for every track in the rig.
+    """
+    Create a float custom property on `obj` for every track in the rig.
+    Input tracks (envelopes, main poses, lipsync overrides) get full
+    keyframeable float properties with correct min/max ranges.
+    Output tracks (lipsync outputs, wrinkles) are registered read-only
+    with a [0,1] range — the solver writes them each frame.
+    """
+    track_names = rig.track_names  # numpy object array of str
+    for i, name in enumerate(track_names):
+        name = str(name)
+        current = obj.get(name)
 
-        Input tracks (envelopes, main poses, lipsync overrides) get full
-        keyframeable float properties with correct min/max ranges.
+        if current is None:
+            obj[name] = 0.0
+        elif not isinstance(current, float):
+            obj[name] = float(current)
 
-        Output tracks (lipsync outputs, wrinkles) are registered read-only
-        with a [0,1] range — the solver writes them each frame.
-        """
-        track_names = rig.track_names  # numpy object array of str
+        mn, mx, smn, smx = _track_prop_range(i, seg)
+        desc = _track_description(i, name, seg)
 
-        for i, name in enumerate(track_names):
-            name = str(name)
-            current = obj.get(name)
+        ui = obj.id_properties_ui(name)
 
-            if current is None:
-                obj[name] = 0.0
-            elif not isinstance(current, float):
-                obj[name] = float(current)
+        try:
+            ui.update(
+                    min=float(mn),
+                    max=float(mx),
+                    soft_min=float(smn),
+                    soft_max=float(smx),
+                    description=desc,
+                    )
+        except TypeError as e:
+            print(f"[CP77 Facial] ui.update skipped for '{name}': {e}")
 
-            mn, mx, smn, smx = _track_prop_range(i, seg)
-            desc = _track_description(i, name, seg)
-
-            ui = obj.id_properties_ui(name)
-
-            try:
-                ui.update(
-                        min=float(mn),
-                        max=float(mx),
-                        soft_min=float(smn),
-                        soft_max=float(smx),
-                        description=desc,
-                        )
-            except TypeError as e:
-                print(f"[CP77 Facial] ui.update skipped for '{name}': {e}")
 
 
 def unregister_track_properties(obj: bpy.types.Object, rig) -> None:
