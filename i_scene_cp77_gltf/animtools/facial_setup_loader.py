@@ -243,7 +243,7 @@ def _vec3_wk(v: dict, keys=("X", "Y", "Z")) -> np.ndarray:
 
 
 def _vec4_wk(v: dict) -> np.ndarray:
-    return np.array([v["X"], v["Y"], v["Z"]], dtype=np.float32)
+    return np.array([v["X"], v["Y"], v["Z"], v.get("W", 1.0)], dtype=np.float32)
 
 
 def _build_csr(num_rows: int, row_col_pairs) -> tuple[np.ndarray, np.ndarray]:
