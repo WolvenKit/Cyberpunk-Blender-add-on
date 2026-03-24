@@ -240,7 +240,8 @@ def _stage_7_lipsync_overrides(
 ) -> None:
     """
     Stage 7: Override tracks suppress main pose weights based on lipsync activity.
-    formula: main_weight *= lerp(lipsync_env, 1.0, in_tracks[override_track])
+    formula: main_weight *= lerp(1.0, override_v, lipsync_env)
+    At lipsync_env=0 → scale=1.0 (no suppression), at lipsync_env=1 → scale=override_v.
     """
     if lipsync_env == 0.0:
         return
@@ -251,7 +252,7 @@ def _stage_7_lipsync_overrides(
     for j, main_track in enumerate(ovr_map):
         ovr_track   = ovr_start + j
         override_v  = float(in_tracks[ovr_track])
-        scale       = _lerp(lipsync_env, 1.0, override_v)
+        scale       = _lerp(1.0, override_v, lipsync_env)
         out_tracks[int(main_track)] *= scale
 
 
