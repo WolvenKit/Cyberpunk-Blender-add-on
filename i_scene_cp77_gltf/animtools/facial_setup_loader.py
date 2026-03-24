@@ -13,12 +13,19 @@ WEIGHT_THRESHOLD       = 0.001
 FACIAL_VERSION         = 8
 
 # Envelope type indices (bakedData Envelope field)
-ENV_FACE        = 0
-ENV_LIPSYNC     = 1
-ENV_JALI_JAW    = 2
-ENV_UPPER_FACE  = 3
-ENV_LOWER_FACE  = 4  # "lowerFace" envelope
-ENV_MUZZLE      = 5  # muzzle multiplier group
+ENV_FACE_ENVELOPE  = 0
+ENV_UPPER_FACE     = 1
+ENV_LOWER_FACE     = 2
+ENV_ANTI_STRETCH   = 3
+ENV_LIPSYNC        = 4
+ENV_LIPSYNC_LEFT   = 5
+ENV_LIPSYNC_RIGHT  = 6
+ENV_JALI_JAW       = 7
+ENV_JALI_LIPS      = 8
+ENV_MUZZLE_LIPS    = 9
+ENV_MUZZLE_EYES    = 10
+ENV_MUZZLE_BROWS   = 11
+ENV_MUZZLE_EYE_DIR = 12
 
 # Influence type (InfluencedPoses.Type)
 INFL_LINEAR      = 0
