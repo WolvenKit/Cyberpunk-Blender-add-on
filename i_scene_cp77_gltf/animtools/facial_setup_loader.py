@@ -338,15 +338,16 @@ def _parse_facial_part(
     main_wk: dict,         # mainPosesData.Data.{Face|Eyes|Tongue}
     corr_wk: dict,         # correctivePosesData.Data.{Face|Eyes|Tongue}
     tracks_mapping: dict,  # bakedData global tracksMapping
+    part_info: dict,       # info.{face|eyes|tongue}  (OneSermoBufferInfo)
 ) -> facialPartData:
-
+ 
     #  Envelopes per track
     ept = baked["EnvelopesPerTrackMapping"]
     env_num    = len(ept)
     env_tracks = np.array([e["Track"]        for e in ept], dtype=np.int16)
     env_lods   = np.array([e["LevelOfDetail"] for e in ept], dtype=np.uint8)
     env_types  = np.array([e["Envelope"]     for e in ept], dtype=np.uint8)
-
+ 
     #  Global limits
     gl = baked["GlobalLimits"]
     limit_num      = len(gl)
@@ -355,63 +356,63 @@ def _parse_facial_part(
     limit_min      = np.array([e["Min"]      for e in gl], dtype=np.float32)
     limit_mid      = np.array([e["Mid"]      for e in gl], dtype=np.float32)
     limit_max      = np.array([e["Max"]      for e in gl], dtype=np.float32)
-
+ 
     #  Influence suppression
     ip = baked["InfluencedPoses"]
     ii = baked["InfluenceIndices"]
     infl_num    = len(ip)
     infl_tracks = np.array([e["Track"] for e in ip], dtype=np.int16)
     infl_types  = np.array([e["Type"]  for e in ip], dtype=np.uint8)
-
+ 
     # Build CSR row_ptr from NumInfluences
     infl_row_ptr = np.zeros(infl_num + 1, dtype=np.int32)
     for i, e in enumerate(ip):
         infl_row_ptr[i + 1] = infl_row_ptr[i] + e["NumInfluences"]
     infl_indices = np.array(ii, dtype=np.int16)
-
+ 
     #  Upper/lower face envelopes (Stage 6) 
     ulf = baked["UpperLowerFace"]
     ulf_num    = len(ulf)
     ulf_tracks = np.array([e["Track"] for e in ulf], dtype=np.int16)
     ulf_parts  = np.array([e["Part"]  for e in ulf], dtype=np.uint8)
-
+ 
     #  Lipsync pose sides (Stage 7/8) 
     lps = baked["LipsyncPosesSides"]
     lps_num    = len(lps)
     lps_tracks = np.array([e["Track"] for e in lps], dtype=np.int16)
     lps_sides  = np.array([e["Side"]  for e in lps], dtype=np.uint8)
-
+ 
     #  Main pose inbetween expansion
     amp   = baked["AllMainPoses"]           # 121 main poses
     ampi  = baked["AllMainPosesInbetweens"] # 133 flat inbetween thresholds
     amsm  = baked["AllMainPosesInbetweenScopeMultipliers"]  # 12 scope mults
-
+ 
     num_main_poses = len(amp)
     main_tracks    = np.array([e["Track"] for e in amp], dtype=np.int16)
     num_inbetweens = np.array([e["NumInbetweens"] for e in amp], dtype=np.int32)
-
+ 
     # Build ib_row_ptr (CSR into thresholds)
     ib_row_ptr = np.zeros(num_main_poses + 1, dtype=np.int32)
     np.cumsum(num_inbetweens, out=ib_row_ptr[1:])
     num_ib_poses   = int(ib_row_ptr[-1])
     ib_thresholds  = np.array(ampi, dtype=np.float32)
-
+ 
     # Build sm_row_ptr (CSR into scope multipliers — one per intra-pose gap)
     num_gaps      = num_inbetweens - 1           # gaps per main pose
     sm_row_ptr    = np.zeros(num_main_poses + 1, dtype=np.int32)
     np.cumsum(num_gaps, out=sm_row_ptr[1:])
     ib_scope_mults = np.array(amsm, dtype=np.float32)
-
+ 
     #  Global corrective entries
     gc = baked["GlobalCorrectiveEntries"]
     num_correctives = len(corr_wk["Poses"])
-
+ 
     gcorr_row_ptr, (gcorr_tracks_list, gcorr_flags_list) = _build_csr_multi(
         num_correctives, gc, "Index", ["Track", "Unknown"]
     )
     gcorr_tracks = np.array(gcorr_tracks_list, dtype=np.int16)
     gcorr_flags  = np.array(gcorr_flags_list,  dtype=np.uint8)
-
+ 
     # Inbetween corrective entries
     # Also indexed by corrective pose index (same as GCE).
     # ICE.Track = flat inbetween-expanded pose index providing the weight
@@ -421,61 +422,58 @@ def _parse_facial_part(
     )
     icorr_tracks = np.array(icorr_tracks_list, dtype=np.int16)
     icorr_flags  = np.array(icorr_flags_list,  dtype=np.uint8)
-
+ 
     #  Corrective influences
     ci  = baked["CorrectiveInfluencedPoses"]
     cii = baked["CorrectiveInfluenceIndices"]
     num_corr_infl       = len(ci)
     corr_infl_pose_idx  = np.array([e["Index"] for e in ci], dtype=np.int32)
     corr_infl_types     = np.array([e["Type"]  for e in ci], dtype=np.uint8)
-
+ 
     corr_infl_row_ptr = np.zeros(num_corr_infl + 1, dtype=np.int32)
     for i, e in enumerate(ci):
         corr_infl_row_ptr[i + 1] = corr_infl_row_ptr[i] + e["NumInfluences"]
     corr_infl_influencers = np.array(cii, dtype=np.int32)
-
+ 
     #  Pose transform arrays
     main_poses       = _parse_pose_arrays(main_wk)
     corrective_poses = _parse_pose_arrays(corr_wk)
-
+ 
     #  Wrinkle mapping
     wrk               = baked["Wrinkles"]
     wrinkle_count         = len(wrk)
     wrinkle_source_tracks = np.array(wrk, dtype=np.int16)
-    num_env  = tracks_mapping["numEnvelopes"]        # 13
-    num_main = tracks_mapping["numMainPoses"]        # 141
-    num_lips = tracks_mapping["numLipsyncOverrides"] # 86
-    wrinkle_start_track = num_env + num_main + num_lips + num_main
-
+    wrinkle_start_track   = int(part_info["wrinkleStartingIndex"])
+ 
     return facialPartData(
         part_name = part_name,
-
+ 
         env_num    = env_num,
         env_tracks = env_tracks,
         env_lods   = env_lods,
         env_types  = env_types,
-
+ 
         limit_num      = limit_num,
         limit_tracks   = limit_tracks,
         limit_envelope = limit_envelope,
         limit_min      = limit_min,
         limit_mid      = limit_mid,
         limit_max      = limit_max,
-
+ 
         infl_num     = infl_num,
         infl_tracks  = infl_tracks,
         infl_types   = infl_types,
         infl_row_ptr = infl_row_ptr,
         infl_indices = infl_indices,
-
+ 
         ulf_num    = ulf_num,
         ulf_tracks = ulf_tracks,
         ulf_parts  = ulf_parts,
-
+ 
         lps_num    = lps_num,
         lps_tracks = lps_tracks,
         lps_sides  = lps_sides,
-
+ 
         num_main_poses  = num_main_poses,
         num_ib_poses    = num_ib_poses,
         main_tracks     = main_tracks,
@@ -483,50 +481,50 @@ def _parse_facial_part(
         ib_thresholds   = ib_thresholds,
         sm_row_ptr      = sm_row_ptr,
         ib_scope_mults  = ib_scope_mults,
-
+ 
         num_correctives = num_correctives,
         gcorr_row_ptr   = gcorr_row_ptr,
         gcorr_tracks    = gcorr_tracks,
         gcorr_flags     = gcorr_flags,
-
+ 
         icorr_row_ptr = icorr_row_ptr,
         icorr_tracks  = icorr_tracks,
         icorr_flags   = icorr_flags,
-
+ 
         num_corr_infl         = num_corr_infl,
         corr_infl_pose_idx    = corr_infl_pose_idx,
         corr_infl_types       = corr_infl_types,
         corr_infl_row_ptr     = corr_infl_row_ptr,
         corr_infl_influencers = corr_infl_influencers,
-
+ 
         main_poses       = main_poses,
         corrective_poses = corrective_poses,
-
+ 
         wrinkle_count         = wrinkle_count,
         wrinkle_source_tracks = wrinkle_source_tracks,
         wrinkle_start_track   = wrinkle_start_track,
     )
-
-
+ 
+ 
 # Public loaders
-
+ 
 def load_rig(path: str | Path) -> RigData:
     """
     Parse a WolvenKit-exported rig JSON into RigData.
-
+ 
     Parameters
     """
     with open(path, "r", encoding="utf-8") as f:
         raw = json.load(f)
-
+ 
     rc = raw["Data"]["RootChunk"]
-
+ 
     # Bone names & parents
     bone_names_raw = rc["boneNames"]
     num_bones      = len(bone_names_raw)
     bone_names     = np.array([_cname(b) for b in bone_names_raw], dtype=object)
     bone_parents   = np.array(rc["boneParentIndexes"], dtype=np.int16)
-
+ 
     # Reference pose from boneTransforms (bone-space QsTransform)
     bt = rc["boneTransforms"]
     ref_quats  = np.empty((num_bones, 4), dtype=np.float32)
@@ -539,19 +537,19 @@ def load_rig(path: str | Path) -> RigData:
         ref_trans[i]  = (t["X"], t["Y"], t["Z"])
         s = xform["Scale"]
         ref_scales[i] = (s["X"], s["Y"], s["Z"])
-
+ 
     # Track names
     track_names_raw = rc["trackNames"]
     num_tracks  = len(track_names_raw)
     track_names = np.array([_cname(t) for t in track_names_raw], dtype=object)
-
+ 
     # LOD split indices
     lod_starts = np.array(rc.get("levelOfDetailStartIndices", []), dtype=np.int32)
-
+ 
     # Build lookup maps
     bone_index_map  = {n: i for i, n in enumerate(bone_names)}
     track_index_map = {n: i for i, n in enumerate(track_names)}
-
+ 
     return RigData(
         bone_names          = bone_names,
         bone_parents        = bone_parents,
@@ -565,36 +563,36 @@ def load_rig(path: str | Path) -> RigData:
         _bone_index_map     = bone_index_map,
         _track_index_map    = track_index_map,
     )
-
-
+ 
+ 
 def load_facial_setup(path: str | Path, rig: Optional[RigData] = None) -> FacialSetupData:
     """
     Parse a WolvenKit-exported .facialsetup JSON into FacialSetupData.
-
+ 
     Parameters
     """
     with open(path, "r", encoding="utf-8") as f:
         raw = json.load(f)
-
+ 
     rc = raw["Data"]["RootChunk"]
-
+ 
     version = rc["version"]
     if version != FACIAL_VERSION:
         import warnings
         warnings.warn(f"Expected facialsetup version {FACIAL_VERSION}, got {version}")
-
+ 
     # Global arrays
     used_bones = np.array(rc["usedTransformIndices"], dtype=np.int16)
-
+ 
     baked         = rc["bakedData"]["Data"]
     joint_regions = np.array(baked["JointRegions"], dtype=np.uint8)
     lipsync_map   = np.array(baked["LipsyncOverridesIndexMapping"], dtype=np.int16)
-
+ 
     tracks_mapping = rc["info"]["tracksMapping"]
-
+ 
     main_data = rc["mainPosesData"]["Data"]
     corr_data = rc["correctivePosesData"]["Data"]
-
+ 
     # Parse each part: Face, Eyes, Tongue
     face = _parse_facial_part(
         "face",
@@ -602,6 +600,7 @@ def load_facial_setup(path: str | Path, rig: Optional[RigData] = None) -> Facial
         main_data["Face"],
         corr_data["Face"],
         tracks_mapping,
+        rc["info"]["face"],
     )
     eyes = _parse_facial_part(
         "eyes",
@@ -609,6 +608,7 @@ def load_facial_setup(path: str | Path, rig: Optional[RigData] = None) -> Facial
         main_data["Eyes"],
         corr_data["Eyes"],
         tracks_mapping,
+        rc["info"]["eyes"],
     )
     tongue = _parse_facial_part(
         "tongue",
@@ -616,8 +616,9 @@ def load_facial_setup(path: str | Path, rig: Optional[RigData] = None) -> Facial
         main_data["Tongue"],
         corr_data["Tongue"],
         tracks_mapping,
+        rc["info"]["tongue"],
     )
-
+ 
     return FacialSetupData(
         version        = version,
         face           = face,
@@ -631,10 +632,10 @@ def load_facial_setup(path: str | Path, rig: Optional[RigData] = None) -> Facial
         num_main_poses           = tracks_mapping["numMainPoses"],
         num_wrinkle_tracks       = tracks_mapping["numWrinkles"],
     )
-
-
+ 
+ 
 # Smoke test / summary
-
+ 
 def _print_summary(setup: FacialSetupData, rig: RigData) -> None:
     print(f" FacialSetupData (v{setup.version}) ")
     print(f"  Used bones:          {len(setup.used_bone_indices)}")
@@ -644,7 +645,7 @@ def _print_summary(setup: FacialSetupData, rig: RigData) -> None:
     print(f"  Main pose tracks:    {setup.num_main_poses}")
     print(f"  Wrinkle tracks:      {setup.num_wrinkle_tracks}")
     print()
-
+ 
     for part in (setup.face, setup.eyes, setup.tongue):
         mp = part.main_poses
         cp = part.corrective_poses
@@ -661,7 +662,7 @@ def _print_summary(setup: FacialSetupData, rig: RigData) -> None:
         print(f"    Corr. influences:   {part.num_corr_infl}")
         print(f"    Wrinkles:           {part.wrinkle_count}")
         print()
-
+ 
     print(f"=== RigData ===")
     print(f"  Bones:   {rig.num_bones}")
     print(f"  Tracks:  {rig.num_tracks}")
