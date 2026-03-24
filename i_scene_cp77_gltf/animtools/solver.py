@@ -36,8 +36,6 @@ _T_MUZZLE_BROWS     = 11
 _T_MUZZLE_EYE_DIR   = 12
 
 # other_muzzles lookup: indexed by env_type (0-5)
-#   0=MUZZLE_LIPS, 1=MUZZLE_JAW → 1.0 (handled by stage 4)
-#   2=MUZZLE_EYES, 3=MUZZLE_BROWS, 4=MUZZLE_EYE_DIRECTIONS, 5=MUZZLE_NONE → see below
 _MUZZLE_EYES      = 2
 _MUZZLE_BROWS     = 3
 _MUZZLE_EYE_DIR   = 4
@@ -52,10 +50,9 @@ _SIDE_MID   = 0
 _SIDE_LEFT  = 1
 _SIDE_RIGHT = 2
 
-# Face part constants (UpperLowerFace.Part)
-_PART_LOWER  = 0
-_PART_UPPER  = 1
-_PART_LIPSYNC = 2   # lip region — no multiplier, always 1.0
+_PART_NONE    = 0   
+_PART_UPPER   = 1
+_PART_LOWER   = 2
 
 # Handler re-registration guard
 _solving = False
@@ -186,7 +183,7 @@ def _stage_4_global_limits(
         )
         current = out_tracks[t_idx]
         if current > max_w:
-            out_tracks[t_idx] = _lerp(muzzle_lips, current, max_w)
+            out_tracks[t_idx] = _lerp(current, max_w, muzzle_lips)
 
 
 def _stage_5_9_influences(part, out_tracks: np.ndarray) -> None:
@@ -224,8 +221,7 @@ def _stage_6_upper_lower(
     out_tracks:  np.ndarray,
 ) -> None:
     """Stage 6: Multiply each pose by its upper/lower face envelope."""
-    # face_part_weights[PART_LOWER=0, PART_UPPER=1, PART_LIPSYNC=2]
-    fw = np.array([lower_face, upper_face, 1.0], dtype=np.float32)
+    fw = np.array([1.0, upper_face, lower_face], dtype=np.float32)
     mults = fw[part.ulf_parts]   # [M] per-entry multiplier
     cur   = out_tracks[part.ulf_tracks].astype(np.float32)
     out_tracks[part.ulf_tracks] = np.clip(cur * mults, 0.0, 1.0)
@@ -400,22 +396,14 @@ def _stage_14_corrective_influences(
     Stage 14: Suppress corrective poses that are opposed by other active correctives.
     Modifies corr_weights in-place.
 
-    Influence types (loader's corr_infl_types field):
-      0: by_speed (exponential suppression)
-      1: linear_correction only
-      2: linear_correction + by_speed (organic)
-      3: simple clamp (1 - inf_sum)
+    Result by flags value:
+      0 (neither):  simple clamp  → min(w, 1-s)
+      1 (speed):    exponential   → w *= 1 - s²
+      2 (linear):   linear corr   → w *= (1-s)
+      3 (both):     organic       → w *= (1-s)²
     """
-    # Type encoding from CorrectiveInfluencedPoses.Type in the JSON:
-    # Observed values: 0, 1, 2, 3 — map to facial.py flag combinations
-    # 0 → by_speed=True,  linear_correction=False  (exponential)
-    # 1 → by_speed=False, linear_correction=True   (linear opp)
-    # 2 → by_speed=True,  linear_correction=True   (linear opp squared = organic)
-    # 3 → by_speed=False, linear_correction=False  (simple min clamp)
-    _BY_SPEED        = 0
-    _LINEAR_CORR     = 1
-    _BOTH            = 2
-    _SIMPLE          = 3
+    _FLAG_BY_SPEED          = 1
+    _FLAG_LINEAR_CORRECTION = 2
 
     row_ptr      = part.corr_infl_row_ptr
     influencers  = part.corr_infl_influencers
@@ -432,20 +420,22 @@ def _stage_14_corrective_influences(
         e = int(row_ptr[i + 1])
         inf_sum = float(np.sum(corr_weights[influencers[s:e]]))
 
-        itype = int(types[i])
-        if itype == _BY_SPEED:
-            current *= 1.0 - inf_sum * inf_sum
-        elif itype == _LINEAR_CORR:
+        flags = int(types[i])
+        by_speed          = bool(flags & _FLAG_BY_SPEED)
+        linear_correction = bool(flags & _FLAG_LINEAR_CORRECTION)
+
+        if linear_correction:
             opp = 1.0 - inf_sum
             current *= opp
-        elif itype == _BOTH:
-            opp = 1.0 - inf_sum
-            current *= opp * opp
-        else:  # _SIMPLE
+            if by_speed:
+                current *= opp          # total: current *= (1-s)²
+        else:
             if inf_sum >= 1.0:
                 current = 0.0
-            else:
-                current = min(current, 1.0 - inf_sum)
+            elif not by_speed:
+                current = min(current, 1.0 - inf_sum)   # simple clamp
+            else:  # by_speed only
+                current *= 1.0 - inf_sum * inf_sum       # exponential
 
         corr_weights[c] = max(0.0, current)
 
