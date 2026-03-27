@@ -1,8 +1,3 @@
-##################################################################################################################
-# Initial attempt at getting MLSetup info back out of blender.
-# Simarilius, July 2023
-##################################################################################################################
-
 import bpy
 import json
 import os
@@ -12,26 +7,21 @@ import colorsys
 import math
 import copy
 from ..jsontool import JSONTool
-from ..main.common import createOverrideTable, show_message
+from ..main.common import createOverrideTable
 
-
-##################################################################################################################
+# JATO: prefix is never exposed in the UI but it's an interesting idea - keeping for now
 # When saving a local copy of a mltemplate the prefix below will be used, use '' to get original names.
 prefix = ''
 
-# When saving the mlSetup if out_prefix is defined it will be used, set to '' to save over original
+def prefix_mat(MLTemplate):
+    b,m,a=MLTemplate.partition(os.path.basename(MLTemplate))
+    return b+prefix+m
 
-out_prefix = ''
-
-##################################################################################################################
-
+# JATO: this function is used to get the microblend path. but it's possible to not have textures in the base folders
+# TODO see if we can reliably get the relative path if it doesn't include "base\\"
 def make_rel(filepath):
     before,mid,after=filepath.partition('base\\')
     return mid+after
-
-def prefix_mat(material):
-    b,m,a=material.partition(os.path.basename(material))
-    return b+prefix+m
 
 def matchOverride(self,OverrideTable, key, layer, json_layer, jsonkey, nodevalue, matchTolerance):
     match = None
@@ -52,8 +42,185 @@ def matchOverride(self,OverrideTable, key, layer, json_layer, jsonkey, nodevalue
     else:
         self.report({'ERROR'}, (key + ' in Layer ' + str(layer) + ' was not exported because a matching Override was not found.'))
 
+def cp77_step_sort(r,g,b, repetitions=1):
+    lum = math.sqrt( .241 * r + .691 * g + .068 * b )
+    h, s, v = colorsys.rgb_to_hsv(r,g,b)
+    if s<.01:
+        h2=-1
+    else:
+        h2 = int(h * repetitions)
+    lum2 = int(lum * repetitions)
+    v2 = int(v * repetitions)
+    if h2 % 2 == 1:
+        v2 = repetitions - v2
+        lum = repetitions - lum
+    return (h2, lum, v2)
 
-##################################################################################################################
+def cp77_create_palette(MLTemplate, OverrideTable):
+    mltemplate_name = (((str(MLTemplate)).split('\\'))[-1])[:-11]
+
+    # JATO: TODO we should do a safer check here using the mltemplate path prop
+    if mltemplate_name in bpy.data.palettes:
+        return
+
+    new_palette = bpy.data.palettes.new(name=mltemplate_name)
+    new_palette['MLTemplatePath'] = MLTemplate
+
+    ListNormalStrength = []
+    ListMetalLevelsIn = []
+    ListMetalLevelsOut = []
+    ListRoughLevelsIn = []
+    ListRoughLevelsOut = []
+
+    for og in OverrideTable['NormalStrength']:
+        ListNormalStrength.append(str(OverrideTable['NormalStrength'][og]))
+    for og in OverrideTable['MetalLevelsIn']:
+        ListMetalLevelsIn.append(str(OverrideTable['MetalLevelsIn'][og]))
+    for og in OverrideTable['MetalLevelsOut']:
+        ListMetalLevelsOut.append(str(OverrideTable['MetalLevelsOut'][og]))
+    for og in OverrideTable['RoughLevelsIn']:
+        ListRoughLevelsIn.append(str(OverrideTable['RoughLevelsIn'][og]))
+    for og in OverrideTable['RoughLevelsOut']:
+        ListRoughLevelsOut.append(str(OverrideTable['RoughLevelsOut'][og]))
+
+    # JATO: We could sort the override values but it might make sense to keep the first override in place because it's the default
+    # ListNormalStrength.sort()
+
+    new_palette['NormalStrengthList'] = ListNormalStrength
+    new_palette['MetalLevelsInList'] = ListMetalLevelsIn
+    new_palette['MetalLevelsOutList'] = ListMetalLevelsOut
+    new_palette['RoughLevelsInList'] = ListRoughLevelsIn
+    new_palette['RoughLevelsOutList'] = ListRoughLevelsOut
+
+    # JATO: try sorting blocks
+    # Get length of color blocks dynamically
+    block_len = 1
+    for colorscale in OverrideTable['ColorScale']:
+        if not colorscale.endswith('_null'):
+            block_len += 1
+        else:
+            break
+
+    print(block_len," : ",mltemplate_name)
+
+    # Sort color _nulls by Hue
+    color_nulls = []
+    for colorscale in OverrideTable['ColorScale']:
+        if colorscale.endswith('_null'):
+            repetitions = 8 #magic number bad
+            red, green, blue = (OverrideTable['ColorScale'][colorscale])[:-1]
+            key = cp77_step_sort(red, green, blue, repetitions)
+            color_nulls.append((colorscale,key))
+    color_nulls.sort(key=lambda x: x[1])
+
+    # Add all colors to master list by _nulls Hue order
+    col_by_hue_list = []
+    for k in color_nulls:
+        color_split = (k[0]).split('_')[0]
+        for colorscale in OverrideTable['ColorScale']:
+            colorscale_split = colorscale.split('_')[0]
+            if colorscale_split == color_split:
+                col_by_hue_list.append(OverrideTable['ColorScale'][colorscale])
+
+    # Re-order colors by Saturation
+    block_idx = 0
+    color_sorted_list = []
+    for colorvalue in col_by_hue_list:
+        block_loop_idx = 0
+        block_pos = block_loop_idx * block_len
+
+        alt_sort_substrings = {
+            "annodised",
+            "cliff_",
+            "dust_",
+            "dirt_",
+            "ebony_",
+            "factory_floor_old",
+            "factory_floor_rough",
+            "factory_floor_cracked",
+            "grass_",
+            "gravel",
+            "grime_",
+            "mirror",
+            "mud_",
+            "patina",
+            "pebbles",
+            "plaster_exterior_01_300",
+            "plaster_exterior_damp_01_300",
+            "plaster_exterior_neutral_01_300",
+            "plaster_exterior_damp_neutral_01_300",
+            "plaster_exterior_patched_neutral_01_300",
+            "plaster_exterior_rough_neutral_01_300_copy",
+            "rock_"
+            "sand_",
+            "soil_",
+            "trash_"
+            "terrain",
+            "water",
+            "windows"
+        }
+
+        steel_sort_substrings = {
+            "steel_dented_01_100",
+            "steel_dented_coroded_01_100",
+            "steel_dented_rusty_01_100",
+            "steel_galvanized_corrugated_01_300",
+            "steel_galvanized_corrugated_02_300",
+            "steel_galvanized_corrugated_rust_01_300",
+            "steel_galvanized_corrugated_rust_02_300",
+            "iron_old"
+        }
+
+        # JATO: used LLM to refactor my insane list appending, dictionary works much better
+        # This maps: material_type -> { block_idx: offset }
+        OFFSET_MAPS = {
+            "alt":           {0: 0, 1: 0, 2: 2, 3: 1, 4: 2},
+            "concrete":      {0: 0, 1: 0, 2: 2, 3: 1, 4: 2},
+            "steel":         {0: 0, 1: 1, 2: 1, 3: 0, 4: 2},
+            "asphalt_paint": {0: 0, 1: 1, 2: 0, 3: 2},
+            # Default is nested by block_len: { block_len: { block_idx: offset } }
+            "default": {
+                5: {0: 0, 1: 1, 2: 1, 3: 1},
+                6: {0: 0, 1: 1, 2: 2, 3: 2, 4: 4},
+                8: {0: 0, 1: 1, 2: 2, 3: 3, 4: 3, 5: 2, 6: 4},
+                9: {0: 0, 1: 1, 2: 1, 3: 1, 4: 0, 5: 0, 6: 3, 7: 0},
+            }
+        }
+
+        category = None
+        if any(s in mltemplate_name for s in alt_sort_substrings):
+            category = "alt"
+        elif any(s in mltemplate_name for s in steel_sort_substrings):
+            category = "steel"
+        elif "asphalt_paint_01_300" in mltemplate_name:
+            category = "asphalt_paint"
+        elif "concrete" in mltemplate_name and not any(x in mltemplate_name for x in ["dyed", "painted"]):
+            category = "concrete"
+
+        offset = 0
+        if category:
+            offset = OFFSET_MAPS[category].get(block_idx, 0)
+            color_sorted_list.insert(block_pos + offset, colorvalue)
+        else:
+            len_map = OFFSET_MAPS["default"].get(block_len)
+            if len_map:
+                offset = len_map.get(block_idx, 0)
+                color_sorted_list.insert(block_pos + offset, colorvalue)
+            else:
+                color_sorted_list.append(colorvalue)
+
+        block_idx += 1
+        if block_idx > (block_len - 1):
+            block_idx = 0
+            block_loop_idx += 1
+
+    for val in color_sorted_list:
+        color = new_palette.colors.new()
+        coloroverride = val[:-1]
+        color.color = coloroverride
+        #print('  Overrides: ColorScale', colorscale, (OverrideTable['ColorScale'][colorscale]))
+
+
 def cp77_mlsetup_export(self, context, mlsetuppath, write_mltemplate):
     active_object = bpy.context.active_object
     active_material = active_object.active_material
@@ -221,7 +388,6 @@ def cp77_mlsetup_export(self, context, mlsetuppath, write_mltemplate):
         json_layer['microblendOffsetU']=MicroblendOffsetU
         json_layer['microblendOffsetV']=MicroblendOffsetV
         json_layer['opacity']=Opacity
-        # Need to take the filesystem out of this
         rel_mb=make_rel(Microblend)
         json_layer['microblend']['DepotPath']['$value']=rel_mb
         json_layer['material']['DepotPath']['$value']=MLTemplate
@@ -292,7 +458,7 @@ def cp77_mlsetup_export(self, context, mlsetuppath, write_mltemplate):
                 json_layer['colorScale']['$value']= name
                 print(cs[::])
 
-                if  os.path.basename(MLTemplate)[:len(prefix)]==prefix:
+                if os.path.basename(MLTemplate)[:len(prefix)]==prefix:
                     outpath= os.path.join(ProjPath,MLTemplate)+".json"
                 else:
                     newmaterial=prefix_mat(MLTemplate)
@@ -314,189 +480,13 @@ def cp77_mlsetup_export(self, context, mlsetuppath, write_mltemplate):
 
         layerBSDF += 1
 
-
     outpath = mlsetuppath
-
     with open(outpath, 'w') as outfile:
             json.dump(mlsetup, outfile,indent=2)
             print('')
             print('Saved to ',outpath)
     success_message = "Exported MLSETUP from " + active_material.name + " on " + active_object.name
     self.report({'INFO'}, success_message)
-
-def cp77_mlsetup_getpath(self, context):
-    obj=bpy.context.active_object
-    if not obj or obj is None:
-        raise ValueError("No object selected")
-    if not obj.material_slots:
-        raise ValueError('Selected object has no materials')
-
-    mat_idx = obj.active_material_index
-    mat=obj.material_slots[mat_idx].material
-
-    if not mat.get('MLSetup'):
-        self.report({'ERROR'}, 'Multilayered setup not found within selected material.')
-        return {'CANCELLED'}
-    else:
-        MLSetup = mat.get('MLSetup')
-        ProjPath=mat.get('ProjPath')
-
-    if os.path.basename(MLSetup)[:len(out_prefix)]==out_prefix:
-        outpath= os.path.join(ProjPath,MLSetup)+".json"
-    else:
-        b,m,a=MLSetup.partition(os.path.basename(MLSetup))
-        newmlsetup=b+out_prefix+m
-        outpath= os.path.join(ProjPath,newmlsetup)+".json"
-
-    if not os.path.exists(os.path.dirname(outpath)):
-        os.makedirs(os.path.dirname(outpath))
-
-    return outpath
-
-def cp77_step_sort(r,g,b, repetitions=1):
-    lum = math.sqrt( .241 * r + .691 * g + .068 * b )
-    h, s, v = colorsys.rgb_to_hsv(r,g,b)
-    if s<.01:
-        h2=-1
-    else:
-        h2 = int(h * repetitions)
-    lum2 = int(lum * repetitions)
-    v2 = int(v * repetitions)
-    if h2 % 2 == 1:
-        v2 = repetitions - v2
-        lum = repetitions - lum
-    return (h2, lum, v2)
-
-def cp77_sort_colors(MLTemplate, OverrideTable):
-    mltemplate_name = (((str(MLTemplate)).split('\\'))[-1])[:-11]
-    add_col_to_palette = False
-    if mltemplate_name not in bpy.data.palettes:
-        new_palette = bpy.data.palettes.new(name=mltemplate_name)
-        new_palette['MLTemplatePath'] = MLTemplate
-
-        ListNormalStrength = []
-        ListMetalLevelsIn = []
-        ListMetalLevelsOut = []
-        ListRoughLevelsIn = []
-        ListRoughLevelsOut = []
-
-        for og in OverrideTable['NormalStrength']:
-            ListNormalStrength.append(str(OverrideTable['NormalStrength'][og]))
-        for og in OverrideTable['MetalLevelsIn']:
-            ListMetalLevelsIn.append(str(OverrideTable['MetalLevelsIn'][og]))
-        for og in OverrideTable['MetalLevelsOut']:
-            ListMetalLevelsOut.append(str(OverrideTable['MetalLevelsOut'][og]))
-        for og in OverrideTable['RoughLevelsIn']:
-            ListRoughLevelsIn.append(str(OverrideTable['RoughLevelsIn'][og]))
-        for og in OverrideTable['RoughLevelsOut']:
-            ListRoughLevelsOut.append(str(OverrideTable['RoughLevelsOut'][og]))
-
-        # JATO: We could sort the override values but it might make sense to keep the first override in place because it's the default
-        # ListNormalStrength.sort()
-
-        new_palette['NormalStrengthList'] = ListNormalStrength
-        new_palette['MetalLevelsInList'] = ListMetalLevelsIn
-        new_palette['MetalLevelsOutList'] = ListMetalLevelsOut
-        new_palette['RoughLevelsInList'] = ListRoughLevelsIn
-        new_palette['RoughLevelsOutList'] = ListRoughLevelsOut
-
-        # JATO: printing to check the props are on the palettes
-        # for x in new_palette['NormalStrengthList']:
-        #     print(x, 'this is x')
-        # for x in new_palette['MetalLevelsInList']:
-        #     print(x, 'this is x')
-        # for y in new_palette['MetalLevelsOutList']:
-        #     print(y, 'this is y')
-        # for z in new_palette['RoughLevelsInList']:
-        #     print(z, 'this is z')
-        # for w in OverrideTable['RoughLevelsOut']:
-        #     print(w, 'this is w')
-
-        add_col_to_palette = True
-    else:
-        new_palette = bpy.data.palettes[mltemplate_name]
-
-    # JATO: try sorting blocks
-    # Get length of color blocks dynamically
-    block_len = 1
-    for colorscale in OverrideTable['ColorScale']:
-        if not colorscale.endswith('_null'):
-            block_len += 1
-        else:
-            break
-
-    # Sort color _nulls by Hue
-    color_nulls = []
-    for colorscale in OverrideTable['ColorScale']:
-        if colorscale.endswith('_null'):
-            repetitions = 8 #magic number bad
-            red, green, blue = (OverrideTable['ColorScale'][colorscale])[:-1]
-            key = cp77_step_sort(red, green, blue, repetitions)
-            color_nulls.append((colorscale,key))
-    color_nulls.sort(key=lambda x: x[1])
-
-    # Add all colors to master list by _nulls Hue order
-    col_by_hue_list = []
-    for k in color_nulls:
-        color_split = (k[0]).split('_')[0]
-        for colorscale in OverrideTable['ColorScale']:
-            colorscale_split = colorscale.split('_')[0]
-            if colorscale_split == color_split:
-                col_by_hue_list.append(OverrideTable['ColorScale'][colorscale])
-
-    # Re-order colors by Saturation
-    block_idx = 0
-    color_sorted_list = []
-    for colorvalue in col_by_hue_list:
-        block_loop_idx = 0
-        block_pos = block_loop_idx * block_len
-
-        # These sort methods work for most 6/8 len color-blocks
-        # TODO: Handle special templates with alternate palettes like dirt
-        if block_len == 6:
-            if block_idx == 0:
-                color_sorted_list.insert((block_pos + 0), colorvalue)
-            elif block_idx == 1:
-                color_sorted_list.insert((block_pos + 1), colorvalue)
-            elif block_idx == 2:
-                color_sorted_list.insert((block_pos + 2), colorvalue)
-            elif block_idx == 3:
-                color_sorted_list.insert((block_pos + 2), colorvalue)
-            elif block_idx == 4:
-                color_sorted_list.insert((block_pos + 4), colorvalue)
-            else:
-                color_sorted_list.insert((block_pos + 0), colorvalue)
-        elif block_len == 8:
-            if block_idx == 0:
-                color_sorted_list.insert((block_pos + 0), colorvalue)
-            elif block_idx == 1:
-                color_sorted_list.insert((block_pos + 1), colorvalue)
-            elif block_idx == 2:
-                color_sorted_list.insert((block_pos + 2), colorvalue)
-            elif block_idx == 3:
-                color_sorted_list.insert((block_pos + 3), colorvalue)
-            elif block_idx == 4:
-                color_sorted_list.insert((block_pos + 3), colorvalue)
-            elif block_idx == 5:
-                color_sorted_list.insert((block_pos + 2), colorvalue)
-            elif block_idx == 6:
-                color_sorted_list.insert((block_pos + 4), colorvalue)
-            else:
-                color_sorted_list.insert((block_pos + 0), colorvalue)
-        else:
-            color_sorted_list.append(colorvalue)
-
-        block_idx += 1
-        if block_idx > (block_len - 1):
-            block_idx = 0
-            block_loop_idx += 1
-
-    for val in color_sorted_list:
-        if add_col_to_palette:
-            color = new_palette.colors.new()
-            coloroverride = val[:-1]
-            color.color = coloroverride
-        #print('  Overrides: ColorScale', colorscale, (OverrideTable['ColorScale'][colorscale]))
 
 def cp77_mlsetup_generateoverrides(self, context, objs=None, include_disconnected=False):
     if not objs:
@@ -508,9 +498,8 @@ def cp77_mlsetup_generateoverrides(self, context, objs=None, include_disconnecte
             continue
         active_material = obj.active_material
         nodes=active_material.node_tree.nodes
-        prefixxed=[]
 
-        print('Generating Override Data from' + active_material.name + " on " + obj.name)
+        print('Generating Override Data from ' + active_material.name + " on " + obj.name)
 
         if not active_material.get('MLSetup'):
             if self:
@@ -564,17 +553,13 @@ def cp77_mlsetup_generateoverrides(self, context, objs=None, include_disconnecte
             MLTemplate = mlTemplateGroup['mlTemplate']
             # print(" ",MLTemplate)
 
-            if MLTemplate in prefixxed:
-                MLTemplate=prefix_mat(MLTemplate)
-                print('Material already modified, loading ',MLTemplate)
-
             json_layer['material']['DepotPath']['$value']=MLTemplate
 
             mltempjson = JSONTool.openJSON( MLTemplate + ".json",mode='r',DepotPath=DepotPath, ProjPath=ProjPath)
             mltemplatedata =mltempjson['Data']['RootChunk']
             OverrideTable = createOverrideTable(mltemplatedata)
 
-            cp77_sort_colors(MLTemplate,OverrideTable)
+            cp77_create_palette(MLTemplate,OverrideTable)
 
             layer += 1
 
