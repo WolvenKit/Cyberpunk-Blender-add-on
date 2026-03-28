@@ -10,16 +10,14 @@ from typing import Tuple
 
 from ..main.common import get_classes
 from .compat import get_action_fcurves
-
-# New backends
 from . import rig_binding
 from . import pose_preview
 from . import solver as _solver
 from .facial_setup_loader import load_rig, load_facial_setup
 
-# Optional JALI dependencies — may not be installed
+# Optional JALI dependencies
 try:
-    from .jali import JALI_DEPS as PARSELMOUTH_AVAILABLE
+    from .jali import JALI_DEPS_INSTALLED as PARSELMOUTH_AVAILABLE
     from .jali import AcousticPhonemeDetector, TranscriptAligner
     from .jali_integration import JALIToCp77Bridge, JALIAnimationPipeline
 except ImportError:
