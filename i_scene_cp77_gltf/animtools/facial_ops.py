@@ -10,6 +10,7 @@ from typing import Tuple
 
 from ..main.common import get_classes
 from .compat import get_action_fcurves
+
 from . import rig_binding
 from . import pose_preview
 from . import solver as _solver
@@ -543,31 +544,33 @@ class CP77_OT_PreviewFacialPose(Operator):
         ja *= self.intensity
         li *= self.intensity
 
-        bridge = JALIToCp77Bridge()
+        # Build input tracks: set JALI envelope controls
+        tracks_in = np.zeros(rig.num_tracks, dtype=np.float32)
 
-        track_names = [str(n) for n in rig.track_names]
+        bridge = JALIToCp77Bridge(rig, setup)
 
-        ja_curve = np.array([ja], dtype=np.float32)
-        li_curve = np.array([li], dtype=np.float32)
+        # Activate lipsync mode and set JALI sliders (range 0-2, neutral=1)
+        env_idx = bridge.get_track_index('lipSyncEnvelope')
+        jaw_idx = bridge.get_track_index('jaliJaw')
+        lip_idx = bridge.get_track_index('jaliLips')
 
-        tracks = bridge.jali_to_tracks(ja_curve, li_curve, track_names)
+        if env_idx >= 0:
+            tracks_in[env_idx] = 1.0
+        if jaw_idx >= 0:
+            tracks_in[jaw_idx] = 1.0 + ja   # neutral=1.0, full open=2.0
+        if lip_idx >= 0:
+            tracks_in[lip_idx] = 1.0 + li   # neutral=1.0, full pucker=2.0
 
-        for i, name in enumerate(track_names):
-            if not name:
-                continue
-            value = float(tracks[0, i])
+        # Write to custom properties so the solver can read them
+        for i in range(rig.num_tracks):
+            name = str(rig.track_names[i])
+            val = float(tracks_in[i])
             if name not in obj:
-                obj[name] = value
-                if hasattr(obj, 'id_properties_ui'):
-                    ui = obj.id_properties_ui(name)
-                    ui.update(min=0.0, max=1.0, soft_min=0.0, soft_max=1.0)
-            else:
-                obj[name] = value
+                obj[name] = val
+            elif val != 0.0:
+                obj[name] = val
 
-        if context.object.mode != 'POSE':
-            bpy.ops.object.mode_set(mode='POSE')
-
-        result = self._apply_solved_pose(context, cache, obj, tracks[0, :])
+        result = self._apply_solved_pose(context, cache, obj, tracks_in)
 
         if result:
             self.report({'INFO'}, f'Applied {self.pose_type} pose (JA={ja:.2f}, LI={li:.2f})')
