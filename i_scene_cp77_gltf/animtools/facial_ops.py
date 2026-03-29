@@ -18,15 +18,29 @@ from .facial_setup_loader import load_rig, load_facial_setup
 
 # Optional JALI dependencies
 try:
-    from .jali import JALI_DEPS_INSTALLED as PARSELMOUTH_AVAILABLE
-    from .jali import AcousticPhonemeDetector, TranscriptAligner
-    from .jali_integration import JALIToCp77Bridge, JALIAnimationPipeline
+    from .jali_core import (
+        PARSELMOUTH_AVAILABLE,
+        ARPABET_JALI_MAP,
+        create_phoneme_event,
+        AcousticPhonemeDetector,
+        TranscriptAligner,
+    )
+    from .jali_bridge import (
+        JALIToCp77Bridge,
+        JALIAnimationPipeline,
+        keyframe_tracks,
+    )
+    JALI_AVAILABLE = True
 except ImportError:
     PARSELMOUTH_AVAILABLE = False
+    ARPABET_JALI_MAP = {}
+    create_phoneme_event = None
     AcousticPhonemeDetector = None
     TranscriptAligner = None
     JALIToCp77Bridge = None
     JALIAnimationPipeline = None
+    keyframe_tracks = None
+    JALI_AVAILABLE = False
 
 _CACHE: dict = {
     "rig":   None,   # RigData
@@ -465,7 +479,8 @@ class CP77_OT_ClearFacialAnimation(Operator):
         return context.window_manager.invoke_confirm(self, event)
 
 
-# JALI operators — optional, require praat-parselmouth
+# JALI operators
+
 
 class CP77_OT_PreviewFacialPose(Operator):
     """Preview facial poses in real-time for testing and verification"""
@@ -524,8 +539,8 @@ class CP77_OT_PreviewFacialPose(Operator):
     def execute(self, context):
         obj = context.active_object
 
-        if JALIToCp77Bridge is None:
-            self.report({'ERROR'}, "JALI not available — install praat-parselmouth")
+        if not JALI_AVAILABLE:
+            self.report({'ERROR'}, "JALI modules not available")
             return {'CANCELLED'}
 
         if not _cache_ensure_loaded(context):
@@ -544,32 +559,26 @@ class CP77_OT_PreviewFacialPose(Operator):
         ja *= self.intensity
         li *= self.intensity
 
-        # Build input tracks: set JALI envelope controls
-        tracks_in = np.zeros(rig.num_tracks, dtype=np.float32)
+        # Use the bridge to map JA/LI → track weights
+        track_names = [str(n) if not isinstance(n, dict) else n.get('$value', '')
+                       for n in rig.track_names]
 
-        bridge = JALIToCp77Bridge(rig, setup)
+        bridge = JALIToCp77Bridge()
+        ja_curve = np.array([ja], dtype=np.float32)
+        li_curve = np.array([li], dtype=np.float32)
 
-        # Activate lipsync mode and set JALI sliders (range 0-2, neutral=1)
-        env_idx = bridge.get_track_index('lipSyncEnvelope')
-        jaw_idx = bridge.get_track_index('jaliJaw')
-        lip_idx = bridge.get_track_index('jaliLips')
+        tracks_in = bridge.jali_to_tracks(ja_curve, li_curve, track_names)[0]
 
-        if env_idx >= 0:
-            tracks_in[env_idx] = 1.0
-        if jaw_idx >= 0:
-            tracks_in[jaw_idx] = 1.0 + ja   # neutral=1.0, full open=2.0
-        if lip_idx >= 0:
-            tracks_in[lip_idx] = 1.0 + li   # neutral=1.0, full pucker=2.0
+        # All override tracks [154-239] at 1.0 (passthrough)
+        for i in range(154, min(240, rig.num_tracks)):
+            tracks_in[i] = 1.0
 
-        # Write to custom properties so the solver can read them
-        for i in range(rig.num_tracks):
-            name = str(rig.track_names[i])
-            val = float(tracks_in[i])
-            if name not in obj:
-                obj[name] = val
-            elif val != 0.0:
-                obj[name] = val
+        # Write track values to custom properties so the solver reads them
+        for i, name in enumerate(track_names):
+            if name:
+                obj[name] = float(tracks_in[i])
 
+        # Run solver to compute bone transforms from current track values
         result = self._apply_solved_pose(context, cache, obj, tracks_in)
 
         if result:
@@ -578,31 +587,21 @@ class CP77_OT_PreviewFacialPose(Operator):
         return {'FINISHED'}
 
     def _get_jali_params(self) -> Tuple[float, float]:
-        try:
-            from .jali import PHONEME_JALI_MAP as ARPABET_JALI_MAP
-        except ImportError:
-            ARPABET_JALI_MAP = {}
-
         if self.pose_type == 'CUSTOM':
             return self.custom_jaw, self.custom_lip
 
-        pose_map = {
-            'NEUTRAL': (0.3, 0.0),
-            'AA': (1.0, 0.0),
-            'IY': (0.15, 0.9),
-            'UW': (0.2, -0.95),
-            'M': (0.0, 0.0),
-            'F': (0.1, 0.1),
-            'S': (0.05, 0.4),
-            'TH': (0.15, 0.0),
-            'SMILE': (0.3, 0.8),
-            'POUT': (0.2, -0.9),
-            'JAW_OPEN': (1.0, 0.0),
-            }
-
-        if self.pose_type in ARPABET_JALI_MAP:
+        # Check jali_core canonical map first (has all Arpabet phonemes)
+        if ARPABET_JALI_MAP and self.pose_type in ARPABET_JALI_MAP:
             jali = ARPABET_JALI_MAP[self.pose_type]
             return jali.jaw, jali.lip
+
+        # Fallback preset map for non-phoneme pose types
+        pose_map = {
+            'NEUTRAL': (0.0, 0.0),
+            'SMILE': (0.0, 1.0),
+            'POUT': (0.0, -1.0),
+            'JAW_OPEN': (1.0, 0.0),
+            }
 
         return pose_map.get(self.pose_type, (0.3, 0.0))
 
@@ -685,6 +684,10 @@ class CP77_OT_GenerateJALILipSync(Operator):
                 context.active_object.type == 'ARMATURE')
 
     def execute(self, context):
+        if not JALI_AVAILABLE:
+            self.report({'ERROR'}, "JALI modules not available")
+            return {'CANCELLED'}
+
         if not PARSELMOUTH_AVAILABLE:
             self.report({'ERROR'}, "Install parselmouth: pip install praat-parselmouth")
             return {'CANCELLED'}
@@ -729,18 +732,14 @@ class CP77_OT_GenerateJALILipSync(Operator):
                     fps=context.scene.render.fps
                     )
 
-            tracks, inbetweens, correctives = pipeline.generate_animation(
+            tracks = pipeline.generate_animation(
                     phoneme_events,
                     audio_path=audio_path
                     )
 
             if self.jaw_multiplier != 1.0 or self.lip_multiplier != 1.0:
-                self.report(
-                        {'INFO'},
-                        f"Applying multipliers (Jaw: {self.jaw_multiplier:.2f}, Lip: {self.lip_multiplier:.2f})"
-                        )
-
-                track_names = [str(n) for n in rig.track_names]
+                track_names = [str(n) if not isinstance(n, dict) else n.get('$value', '')
+                               for n in rig.track_names]
 
                 for i, name in enumerate(track_names):
                     if 'jaw' in name.lower():
@@ -748,17 +747,22 @@ class CP77_OT_GenerateJALILipSync(Operator):
                     elif 'lips' in name.lower() or 'mouth' in name.lower():
                         tracks[:, i] *= self.lip_multiplier
 
-            self.report({'INFO'}, "Applying animation to armature...")
-            pipeline.apply_to_armature(
+            # Keyframe the track custom properties for the solver
+            self.report({'INFO'}, "Keyframing tracks...")
+            n_keyed = keyframe_tracks(
                     context.active_object,
+                    rig,
                     tracks,
-                    start_frame=context.scene.frame_start
+                    start_frame=context.scene.frame_start,
                     )
 
             duration = phoneme_events[-1].end + 0.5
             context.scene.frame_end = int(duration * context.scene.render.fps) + 10
 
-            self.report({'INFO'}, f"Lipsync complete ({duration:.2f}s, {len(phoneme_events)} phonemes)")
+            self.report({'INFO'},
+                        f"Lipsync complete — {n_keyed} tracks keyed, "
+                        f"{duration:.2f}s, {len(phoneme_events)} phonemes. "
+                        f"Enable the solver or bake to see results.")
             return {'FINISHED'}
 
         except Exception as e:
@@ -792,5 +796,5 @@ class CP77_OT_GenerateJALILipSync(Operator):
         col.prop(self, "lip_multiplier", slider=True)
 
 
-#  Collect for get_classes (used by __init__.py registration) 
+#  Collect for get_classes
 operators, other_classes = get_classes(sys.modules[__name__])
