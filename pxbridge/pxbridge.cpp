@@ -792,6 +792,40 @@ py::dict PhysXManager::getCookedGeometry(const std::string& type,
       mesh->release();
     }
   }
+  else if (type == "TRIANGLE")
+  {
+    if (PxTriangleMesh* mesh = mPhysics->createTriangleMesh(input))
+    {
+      const PxVec3* verts = mesh->getVertices();
+      for (PxU32 i = 0; i < mesh->getNbVertices(); i++)
+      {
+        out_verts.push_back(verts[i].x);
+        out_verts.push_back(verts[i].y);
+        out_verts.push_back(verts[i].z);
+      }
+      const void* tris = mesh->getTriangles();
+      PxU32 nbTris = mesh->getNbTriangles();
+      bool has16 = mesh->getTriangleMeshFlags() & PxTriangleMeshFlag::e16_BIT_INDICES;
+      for (PxU32 i = 0; i < nbTris; i++)
+      {
+        if (has16)
+        {
+          const PxU16* idx = static_cast<const PxU16*>(tris);
+          out_indices.push_back(idx[i * 3]);
+          out_indices.push_back(idx[i * 3 + 1]);
+          out_indices.push_back(idx[i * 3 + 2]);
+        }
+        else
+        {
+          const PxU32* idx = static_cast<const PxU32*>(tris);
+          out_indices.push_back(idx[i * 3]);
+          out_indices.push_back(idx[i * 3 + 1]);
+          out_indices.push_back(idx[i * 3 + 2]);
+        }
+      }
+      mesh->release();
+    }
+  }
   return py::dict("vertices"_a = out_verts, "indices"_a = out_indices);
 }
 
