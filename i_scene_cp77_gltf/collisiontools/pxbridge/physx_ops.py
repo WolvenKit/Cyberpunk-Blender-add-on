@@ -383,6 +383,8 @@ class PHYSX_OT_cook_mesh(bpy.types.Operator):
             if cooked:
                 shape.cooked_data = base64.b64encode(cooked).decode('ascii')
                 shape.is_cooked = True
+                shape.local_pos = (0, 0, 0)
+                shape.local_rot = (1.0, 0.0, 0.0, 0.0)
                 viz.invalidate_visualization_cache()
                 self.report({'INFO'}, "Cooking Complete")
         except Exception as e:
