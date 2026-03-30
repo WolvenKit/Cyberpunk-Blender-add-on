@@ -585,106 +585,191 @@ class AcousticPhonemeDetector:
 class TranscriptAligner:
     def __init__(self, audio_path: str, transcript: str):
         if not PARSELMOUTH_AVAILABLE:
-            raise ImportError("Install parselmouth: pip install praat-parselmouth")
-
+            raise ImportError("parselmouth is required")
+            
         self.audio_path = audio_path
         self.transcript = transcript
-        self.sound = parselmouth.Sound(audio_path)
-        self.duration = self.sound.get_total_duration()
+        self.time_step = 0.01
+
+        self.profiles = {
+            'SIL': [0.0, 0.0, 0.0],
+            'VOWEL': [1.0, 1.0, 0.2],
+            'FRICATIVE_UNVOICED': [0.4, 0.0, 1.0],
+            'FRICATIVE_VOICED': [0.5, 0.8, 0.8],
+            'STOP_UNVOICED': [0.1, 0.0, 0.4],
+            'STOP_VOICED': [0.2, 0.5, 0.3],
+            'SONORANT': [0.8, 1.0, 0.1]
+        }
+
+        self.vowels = {'AA', 'AE', 'AH', 'AO', 'AW', 'AY', 'EH', 'ER', 'EY', 'IH', 'IY', 'OW', 'OY', 'UH', 'UW', 'AX', 'IX'}
+        self.fric_unvoiced = {'S', 'SH', 'F', 'TH', 'HH'}
+        self.fric_voiced = {'Z', 'ZH', 'V', 'DH'}
+        self.stop_unvoiced = {'P', 'T', 'K', 'CH'}
+        self.stop_voiced = {'B', 'D', 'G', 'JH'}
 
     def align_phonemes(self) -> List[PhonemeEvent]:
-        words = self.transcript.strip().split()
-        if not words:
+        features, times = self._extract_features()
+        if len(features) == 0:
             return []
 
-        intensity = self.sound.to_intensity()
-        textgrid = call(
-            intensity, "To TextGrid (silences)",
-            -25, 0.1, 0.05, "silent", "sounding"
-            )
+        phonemes = self._g2p(self.transcript)
+        target_features = self._build_target_sequence(phonemes)
 
-        intervals = []
-        num_intervals = call(textgrid, "Get number of intervals", 1)
-        for i in range(1, num_intervals + 1):
-            label = call(textgrid, "Get label of interval", 1, i)
-            if label == "sounding":
-                start = call(textgrid, "Get start time of interval", 1, i)
-                end = call(textgrid, "Get end time of interval", 1, i)
-                intervals.append((start, end))
+        path = self._dtw(target_features, features)
 
-        if not intervals:
-            intervals = [(0.0, self.duration)]
+        return self._path_to_events(path, phonemes, times)
 
-        events: List[PhonemeEvent] = []
-        total_capacity = sum(e - s for s, e in intervals)
-        time_per_word = total_capacity / len(words)
+    def _extract_features(self) -> Tuple[np.ndarray, np.ndarray]:
+        sound = parselmouth.Sound(self.audio_path)
+        duration = sound.get_total_duration()
+        
+        intensity_obj = sound.to_intensity(time_step=self.time_step)
+        pitch_obj = sound.to_pitch(time_step=self.time_step)
+        
+        try:
+            hf_sound = sound.filter_band(8000, 20000)
+            hf_intensity_obj = hf_sound.to_intensity(time_step=self.time_step)
+            has_hf = True
+        except Exception:
+            has_hf = False
 
-        current_time = intervals[0][0]
-        interval_idx = 0
+        num_frames = int(duration / self.time_step)
+        times = np.linspace(0, duration, num_frames)
+        features = np.zeros((num_frames, 3), dtype=np.float32)
 
+        for i, t in enumerate(times):
+            i_val = intensity_obj.get_value(t)
+            p_val = pitch_obj.get_value_at_time(t)
+            
+            features[i, 0] = i_val if not np.isnan(i_val) else 0.0
+            features[i, 1] = 1.0 if not np.isnan(p_val) and p_val > 0 else 0.0
+            
+            if has_hf:
+                hf_val = hf_intensity_obj.get_value(t)
+                features[i, 2] = hf_val if not np.isnan(hf_val) else 0.0
+
+        if np.max(features[:, 0]) > 0:
+            min_i = np.min(features[:, 0])
+            max_i = np.max(features[:, 0])
+            if max_i > min_i:
+                features[:, 0] = (features[:, 0] - min_i) / (max_i - min_i)
+                
+        if has_hf and np.max(features[:, 2]) > 0:
+            min_hf = np.min(features[:, 2])
+            max_hf = np.max(features[:, 2])
+            if max_hf > min_hf:
+                features[:, 2] = (features[:, 2] - min_hf) / (max_hf - min_hf)
+
+        return features, times
+
+    def _g2p(self, text: str) -> List[str]:
+        words = text.lower().strip('.,!?;:').split()
+        phonemes = ['SIL']
+        
         for word in words:
-            phonemes = self._word_to_phonemes(word)
-            word_duration = time_per_word
-            phoneme_duration = word_duration / len(phonemes)
+            i = 0
+            while i < len(word):
+                if i < len(word) - 1:
+                    digraph = word[i:i+2]
+                    if digraph == 'th': phonemes.append('TH'); i += 2; continue
+                    if digraph == 'sh': phonemes.append('SH'); i += 2; continue
+                    if digraph == 'ch': phonemes.append('CH'); i += 2; continue
+                
+                char = word[i]
+                if char in 'aeiou':
+                    vowel_map = {'a': 'AE', 'e': 'EH', 'i': 'IH', 'o': 'AA', 'u': 'UH'}
+                    phonemes.append(vowel_map.get(char, 'AH'))
+                elif char.isalpha():
+                    cons_map = {
+                        'b': 'B', 'c': 'K', 'd': 'D', 'f': 'F', 'g': 'G',
+                        'h': 'HH', 'j': 'JH', 'k': 'K', 'l': 'L', 'm': 'M',
+                        'n': 'N', 'p': 'P', 'q': 'K', 'r': 'R', 's': 'S',
+                        't': 'T', 'v': 'V', 'w': 'W', 'x': 'K', 'y': 'Y', 'z': 'Z'
+                    }
+                    phonemes.append(cons_map.get(char, 'T'))
+                i += 1
+            phonemes.append('SIL')
+            
+        return phonemes
 
-            for phoneme in phonemes:
-                if (current_time >= intervals[interval_idx][1]
-                        and interval_idx < len(intervals) - 1):
-                    interval_idx += 1
-                    current_time = intervals[interval_idx][0]
+    def _get_phoneme_profile(self, phoneme: str) -> List[float]:
+        if phoneme == 'SIL':
+            return self.profiles['SIL']
+        if phoneme in self.vowels:
+            return self.profiles['VOWEL']
+        if phoneme in self.fric_unvoiced:
+            return self.profiles['FRICATIVE_UNVOICED']
+        if phoneme in self.fric_voiced:
+            return self.profiles['FRICATIVE_VOICED']
+        if phoneme in self.stop_unvoiced:
+            return self.profiles['STOP_UNVOICED']
+        if phoneme in self.stop_voiced:
+            return self.profiles['STOP_VOICED']
+        return self.profiles['SONORANT']
 
-                start = current_time
-                end = min(
-                    current_time + phoneme_duration,
-                    intervals[interval_idx][1]
-                    )
+    def _build_target_sequence(self, phonemes: List[str]) -> np.ndarray:
+        targets = np.zeros((len(phonemes), 3), dtype=np.float32)
+        for i, p in enumerate(phonemes):
+            targets[i] = self._get_phoneme_profile(p)
+        return targets
 
-                if end > start:
-                    stressed = phoneme[-1] in '12' if phoneme else False
-                    events.append(
-                            create_phoneme_event(
-                                    phoneme, start, end, stressed
-                                    )
-                            )
+    def _dtw(self, target: np.ndarray, source: np.ndarray) -> List[Tuple[int, int]]:
+        n_target = target.shape[0]
+        n_source = source.shape[0]
 
-                current_time = end
+        D = np.full((n_target + 1, n_source + 1), np.inf)
+        D[0, 0] = 0
+
+        for i in range(1, n_target + 1):
+            for j in range(1, n_source + 1):
+                cost = np.linalg.norm(target[i-1] - source[j-1])
+                D[i, j] = cost + min(D[i-1, j], D[i, j-1], D[i-1, j-1])
+
+        path = []
+        i, j = n_target, n_source
+        while i > 0 and j > 0:
+            path.append((i-1, j-1))
+            min_val = min(D[i-1, j-1], D[i-1, j], D[i, j-1])
+            if min_val == D[i-1, j-1]:
+                i, j = i-1, j-1
+            elif min_val == D[i-1, j]:
+                i -= 1
+            else:
+                j -= 1
+        
+        path.reverse()
+        return path
+
+    def _path_to_events(self, path: List[Tuple[int, int]], phonemes: List[str], times: np.ndarray) -> List[PhonemeEvent]:
+        events = []
+        current_phoneme_idx = -1
+        start_frame = 0
+        num_frames = len(times)
+
+        for tgt_idx, src_idx in path:
+            if tgt_idx != current_phoneme_idx:
+                if current_phoneme_idx != -1:
+                    start_time = times[start_frame]
+                    end_time = times[min(src_idx, num_frames - 1)]
+                    
+                    if end_time > start_time:
+                        events.append(create_phoneme_event(
+                            phoneme=phonemes[current_phoneme_idx],
+                            start=start_time,
+                            end=end_time
+                        ))
+                
+                current_phoneme_idx = tgt_idx
+                start_frame = src_idx
+
+        if current_phoneme_idx != -1 and start_frame < num_frames:
+            start_time = times[start_frame]
+            end_time = times[-1]
+            if end_time > start_time:
+                events.append(create_phoneme_event(
+                    phoneme=phonemes[current_phoneme_idx],
+                    start=start_time,
+                    end=end_time
+                ))
 
         return events
-
-    @staticmethod
-    def _word_to_phonemes(word: str) -> List[str]:
-        word = word.lower().strip('.,!?;:')
-        phonemes = []
-        i = 0
-        while i < len(word):
-            if i < len(word) - 1:
-                digraph = word[i:i + 2]
-                if digraph == 'th':
-                    phonemes.append('TH');
-                    i += 2;
-                    continue
-                elif digraph == 'sh':
-                    phonemes.append('SH');
-                    i += 2;
-                    continue
-                elif digraph == 'ch':
-                    phonemes.append('CH');
-                    i += 2;
-                    continue
-
-            char = word[i]
-            if char in 'aeiou':
-                vowel_map = {
-                    'a': 'AE', 'e': 'EH', 'i': 'IH', 'o': 'AA', 'u': 'UH'}
-                phonemes.append(vowel_map.get(char, 'AH'))
-            elif char.isalpha():
-                cons_map = {
-                    'b': 'B', 'c': 'K', 'd': 'D', 'f': 'F', 'g': 'G',
-                    'h': 'HH', 'j': 'JH', 'k': 'K', 'l': 'L', 'm': 'M',
-                    'n': 'N', 'p': 'P', 'q': 'K', 'r': 'R', 's': 'S',
-                    't': 'T', 'v': 'V', 'w': 'W', 'x': 'K', 'y': 'Y',
-                    'z': 'Z'}
-                phonemes.append(cons_map.get(char, 'T'))
-            i += 1
-
-        return phonemes or ['AH']
