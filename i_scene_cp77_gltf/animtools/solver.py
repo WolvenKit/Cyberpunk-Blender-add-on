@@ -1,9 +1,3 @@
-"""
-Real-time solver via frame_change_post handler.
-Reads keyframed float track values, runs the facial pipeline,
-and writes bone transforms back to pose bones every frame.
-"""
-
 from __future__ import annotations
 
 import time
@@ -36,6 +30,8 @@ _T_MUZZLE_BROWS     = 11
 _T_MUZZLE_EYE_DIR   = 12
 
 # other_muzzles lookup: indexed by env_type (0-5)
+#   0=MUZZLE_LIPS, 1=MUZZLE_JAW → 1.0 (handled by stage 4)
+#   2=MUZZLE_EYES, 3=MUZZLE_BROWS, 4=MUZZLE_EYE_DIRECTIONS, 5=MUZZLE_NONE
 _MUZZLE_EYES      = 2
 _MUZZLE_BROWS     = 3
 _MUZZLE_EYE_DIR   = 4
@@ -50,7 +46,7 @@ _SIDE_MID   = 0
 _SIDE_LEFT  = 1
 _SIDE_RIGHT = 2
 
-_PART_NONE    = 0   
+_PART_NONE    = 0   # passthrough (1.0)
 _PART_UPPER   = 1
 _PART_LOWER   = 2
 
@@ -77,12 +73,20 @@ def _quat_mul_batch(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 def _quat_nlerp_batch(a: np.ndarray, b: np.ndarray, t: float) -> np.ndarray:
     """
     Normalized lerp between a[N,4] and b[N,4] at scalar blend t.
+    Now Including shortest-path alignment and zero-collapse fallback.
     """
-    interp = a + t * (b - a)
-    norms  = np.linalg.norm(interp, axis=1, keepdims=True)
-    norms[norms < 1e-8] = 1.0
-    return interp / norms
 
+    dot_products = np.sum(a * b, axis=1, keepdims=True)
+    b_corrected = np.where(dot_products < 0, -b, b)
+
+    interp = a + t * (b_corrected - a)
+    norms = np.linalg.norm(interp, axis=1, keepdims=True)
+    _norms = np.where(norms < 1e-8, 1.0, norms)
+    result = interp / _norms
+
+    result = np.where(norms < 1e-8, a, result)
+
+    return result
 
 # Per-part helpers
 
@@ -220,7 +224,9 @@ def _stage_6_upper_lower(
     lower_face:  float,
     out_tracks:  np.ndarray,
 ) -> None:
-    """Stage 6: Multiply each pose by its upper/lower face envelope."""
+    """Stage 6: Multiply each pose by its upper/lower face envelope.
+    Part 0 = passthrough (1.0), Part 1 = upper, Part 2 = lower.
+    """
     fw = np.array([1.0, upper_face, lower_face], dtype=np.float32)
     mults = fw[part.ulf_parts]   # [M] per-entry multiplier
     cur   = out_tracks[part.ulf_tracks].astype(np.float32)
@@ -350,7 +356,7 @@ def _stage_12_13_correctives(
 
     corr_weights = np.ones(n_corr, dtype=np.float32)
 
-    #  Stage 12: GCE 
+    #  Stage 12: GCE
     gcorr_row_ptr = part.gcorr_row_ptr
     gcorr_tracks  = part.gcorr_tracks
     gcorr_flags   = part.gcorr_flags
@@ -366,7 +372,7 @@ def _stage_12_13_correctives(
             parent_w = float(out_tracks[int(gcorr_tracks[k])])
             corr_weights[c] *= max(0.0, min(1.0, parent_w))
 
-    #  Stage 13: ICE 
+    #  Stage 13: ICE
     icorr_row_ptr = part.icorr_row_ptr
     icorr_tracks  = part.icorr_tracks
     icorr_flags   = part.icorr_flags
@@ -522,7 +528,7 @@ def _solve_part(
 ) -> None:
     """Run all 17 stages for one facial part (tongue / eyes / face)."""
 
-    #  Extract envelope scalars 
+    #  Extract envelope scalars
     upper_face    = _clamp02(float(out_tracks[_T_UPPER_FACE]))
     lower_face    = _clamp02(float(out_tracks[_T_LOWER_FACE]))
     lipsync_env   = _clamp01(float(out_tracks[_T_LIPSYNC_ENV]))
@@ -533,46 +539,46 @@ def _solve_part(
     muzzle_brows  = _clamp01(float(out_tracks[_T_MUZZLE_BROWS]))
     muzzle_eye_dir= _clamp01(float(out_tracks[_T_MUZZLE_EYE_DIR]))
 
-    #  Stage 3 
+    #  Stage 3
     _stage_3_envelope_weights(
         part, in_tracks, lod, lod_weight,
         muzzle_eyes, muzzle_brows, muzzle_eye_dir, out_tracks
     )
 
-    #  Stage 4 
+    #  Stage 4
     _stage_4_global_limits(part, jali_jaw, jali_lips, muzzle_lips, lipsync_env, out_tracks)
 
-    #  Stage 5 
+    #  Stage 5
     _stage_5_9_influences(part, out_tracks)
 
-    #  Stage 6 
+    #  Stage 6
     _stage_6_upper_lower(part, upper_face, lower_face, out_tracks)
 
-    #  Stage 7 
+    #  Stage 7
     _stage_7_lipsync_overrides(setup, lipsync_env, in_tracks, out_tracks, seg)
 
-    #  Stage 8 
+    #  Stage 8
     _stage_8_lipsync_poses(part, in_tracks, out_tracks, seg)
 
-    #  Stage 9 (second pass of influences) 
+    #  Stage 9 (second pass of influences)
     _stage_5_9_influences(part, out_tracks)
 
-    #  Stage 10 
+    #  Stage 10
     ib_weights = _stage_10_inbetween_weights(part, out_tracks)
 
-    #  Stages 11–14 
+    #  Stages 11–14
     corr_weights = _stage_12_13_correctives(part, out_tracks, ib_weights, lod)
     if part.num_corr_infl > 0:
         _stage_14_corrective_influences(part, corr_weights)
 
-    #  Stage 15 
+    #  Stage 15
     _stage_15_16_blend_transforms(part.main_poses, ib_weights, bone_quats, bone_trans)
 
-    #  Stage 16 
+    #  Stage 16
     if part.num_correctives > 0:
         _stage_15_16_blend_transforms(part.corrective_poses, corr_weights, bone_quats, bone_trans)
 
-    #  Stage 17 
+    #  Stage 17
     _stage_17_wrinkles(part, out_tracks, part.wrinkle_start_track)
 
 
@@ -611,6 +617,7 @@ def facial_solve_numpy(
 
     return bone_quats, bone_trans, out_tracks
 
+
 def write_bones(
     arm_obj:    bpy.types.Object,
     cache:      rig_binding.BindingCache,
@@ -635,12 +642,13 @@ def write_bones(
         pbone.rotation_mode = "QUATERNION"
         # xyzw → Blender (w, x, y, z)
         q = bone_quats[int(bone_idx)]
-        pbone.rotation_quaternion = (float(q[3]), float(q[2]), float(-q[0]), float(q[1]))
+        pbone.rotation_quaternion = (float(q[3]), float(q[2]), float(q[0]), float(q[1]))
         t = bone_trans[int(bone_idx)]
-        pbone.location = (float(t[2]), float(-t[0]), float(t[1]))
+        pbone.location = (float(-t[2]), float(t[0]), float(t[1]))
         written += 1
 
     return written
+
 
 
 # frame_change_post handler
