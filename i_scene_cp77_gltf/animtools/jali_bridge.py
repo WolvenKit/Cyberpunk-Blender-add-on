@@ -5,12 +5,10 @@ from dataclasses import dataclass
 
 try:
     import bpy
-
     BPY_AVAILABLE = True
 except ImportError:
     BPY_AVAILABLE = False
 
-from .compat import get_action_fcurves
 from .constants import (
     ENV_FACE_ENVELOPE as IDX_FACE_ENVELOPE,
     ENV_UPPER_FACE as IDX_UPPER_FACE,
@@ -43,10 +41,8 @@ from .constants import (
     TONGUE_MID_THICK as IDX_TONGUE_THICK,
     )
 
-
 def build_jali_track_mappings() -> List[Dict]:
-    """Build JALI -> CP77 track mappings """
-
+    """Build comprehensive JALI → CP77 track mappings"""
     mappings = []
 
     mappings.append(
@@ -627,7 +623,6 @@ def build_jali_track_mappings() -> List[Dict]:
 
     return mappings
 
-
 BILABIALS = frozenset({'M', 'B', 'P'})
 LABIODENTALS = frozenset({'F', 'V'})
 SIBILANTS = frozenset({'S', 'Z', 'SH', 'ZH', 'CH', 'JH'})
@@ -638,9 +633,8 @@ GLIDES = frozenset({'W', 'Y', 'R'})
 ROUNDED_VOWELS = frozenset({'UW', 'OW', 'OY', 'AO', 'AW'})
 WIDE_VOWELS = frozenset({'IY', 'EY', 'AE', 'EH', 'IH'})
 
-
 def get_phoneme_track_overrides() -> Dict[str, Dict[str, float]]:
-    """Get phoneme-specific track overrides """
+    """Get phoneme-specific track overrides"""
     overrides = {}
 
     for phoneme in BILABIALS:
@@ -759,10 +753,8 @@ def get_phoneme_track_overrides() -> Dict[str, Dict[str, float]]:
 
     return overrides
 
-
 class JALIToCp77Bridge:
-    """Maps JALI (JA, LI) field to CP77 LipsyncPoseOutput tracks """
-
+    """Maps JALI (JA, LI) field to CP77 LipsyncPoseOutput tracks"""
     LIPSYNC_POSE_SUFFIX = 'LipsyncPoseOutput'
 
     def __init__(self):
@@ -787,7 +779,6 @@ class JALIToCp77Bridge:
 
         if IDX_JALI_JAW < num_tracks:
             tracks[:, IDX_JALI_JAW] = np.clip(ja_curve, 0.0, 1.0)
-
         if IDX_JALI_LIPS < num_tracks:
             tracks[:, IDX_JALI_LIPS] = np.clip(li_curve + 1.0, 0.0, 2.0)
 
@@ -878,10 +869,7 @@ class JALIToCp77Bridge:
 
         return tracks
 
-
 class JALIAnimationPipeline:
-    """ JALI -> CP77 animation pipeline """
-
     def __init__(self, rig, setup, fps: float = 30.0):
         self.rig = rig
         self.setup = setup
@@ -902,21 +890,18 @@ class JALIAnimationPipeline:
         if not phoneme_events:
             raise ValueError("No phoneme events provided")
 
-        phoneme_events = self.coarticulator.apply_rules(phoneme_events)
-
-        if audio_path:
-            from .jali_core import AcousticAnalyzer
-            try:
-                analyzer = AcousticAnalyzer(audio_path)
-                phoneme_events = analyzer.modulate_events(phoneme_events)
-            except Exception as e:
-                pass
-
         duration = phoneme_events[-1].end + 0.5
-        times, ja_curve, li_curve = self.blender.blend_jali_parameters(
-                phoneme_events,
-                duration
-                )
+
+        unique = set(e.phoneme for e in phoneme_events
+                     if e.phoneme not in ('SIL', 'SP'))
+        has_real_phonemes = len(unique) > 2
+
+        if has_real_phonemes:
+            ja_curve, li_curve = self._curves_from_phonemes(
+                phoneme_events, audio_path, duration)
+        else:
+            ja_curve, li_curve = self._curves_from_audio(
+                phoneme_events, audio_path, duration)
 
         track_names = [str(n) if not isinstance(n, dict) else n.get('$value', '')
                        for n in self.rig.track_names]
@@ -927,15 +912,95 @@ class JALIAnimationPipeline:
         for i in range(154, min(240, num_tracks)):
             tracks[:, i] = 1.0
 
-        tracks = self.bridge.add_phoneme_overrides(
-                tracks,
-                phoneme_events,
-                track_names,
-                self.fps
-                )
+        if has_real_phonemes:
+            tracks = self.bridge.add_phoneme_overrides(
+                    tracks, phoneme_events, track_names, self.fps)
 
         return tracks
 
+    def _curves_from_phonemes(self, events, audio_path, duration):
+        events = self.coarticulator.apply_rules(events)
+
+        if audio_path:
+            from .jali_core import AcousticAnalyzer
+            try:
+                analyzer = AcousticAnalyzer(audio_path)
+                events = analyzer.modulate_events(events)
+            except Exception as e:
+                pass
+
+        _times, ja, li = self.blender.blend_jali_parameters(events, duration)
+        return ja, li
+
+    def _curves_from_audio(self, events, audio_path, duration):
+        import math
+
+        num_frames = int(duration * self.fps) + 1
+        times = np.linspace(0, duration, num_frames, dtype=np.float32)
+
+        sounding = np.zeros(num_frames, dtype=bool)
+        for ev in events:
+            if ev.phoneme not in ('SIL', 'SP'):
+                s = max(0, int(ev.start * self.fps))
+                e = min(int(ev.end * self.fps) + 1, num_frames)
+                sounding[s:e] = True
+
+        ja = np.zeros(num_frames, dtype=np.float32)
+        li = np.zeros(num_frames, dtype=np.float32)
+
+        if not audio_path:
+            ja[sounding] = 0.4
+            return ja, li
+
+        from .jali_core import PARSELMOUTH_AVAILABLE
+        if not PARSELMOUTH_AVAILABLE:
+            ja[sounding] = 0.4
+            return ja, li
+
+        import parselmouth
+        from parselmouth.praat import call
+
+        sound = parselmouth.Sound(audio_path)
+        intensity = sound.to_intensity(time_step=0.01)
+        pitch = sound.to_pitch(time_step=0.01)
+
+        int_vals, pitch_vals = [], []
+        for t in times[sounding]:
+            iv = intensity.get_value(float(t))
+            pv = pitch.get_value_at_time(float(t))
+            if not math.isnan(iv):
+                int_vals.append(iv)
+            if not math.isnan(pv) and pv > 0:
+                pitch_vals.append(pv)
+
+        int_mean = np.mean(int_vals) if int_vals else 60.0
+        int_std = max(np.std(int_vals), 1.0) if int_vals else 10.0
+        pitch_mean = np.mean(pitch_vals) if pitch_vals else 150.0
+        pitch_std = max(np.std(pitch_vals), 10.0) if pitch_vals else 50.0
+
+        for i, t in enumerate(times):
+            if not sounding[i]:
+                continue
+            iv = intensity.get_value(float(t))
+            pv = pitch.get_value_at_time(float(t))
+
+            if not math.isnan(iv):
+                z = (iv - int_mean) / int_std
+                ja[i] = float(np.clip(0.3 + 0.35 * z, 0.05, 1.0))
+            else:
+                ja[i] = 0.3
+
+            if not math.isnan(pv) and pv > 0:
+                z = (pv - pitch_mean) / pitch_std
+                li[i] = float(np.clip(0.3 * z, -0.8, 0.8))
+
+        kernel = np.ones(5) / 5.0
+        ja = np.convolve(ja, kernel, mode='same').astype(np.float32)
+        li = np.convolve(li, kernel, mode='same').astype(np.float32)
+        ja[~sounding] = 0.0
+        li[~sounding] = 0.0
+
+        return ja, li
 
 def keyframe_tracks(
         armature_obj,
@@ -944,16 +1009,45 @@ def keyframe_tracks(
         start_frame: int = 1,
         threshold: float = 0.005,
         ):
+    """Keyframe JALI track weights onto the armature's custom properties."""
+    if not BPY_AVAILABLE:
+        raise ImportError("Blender not available")
+
+    from .animtools import _assign_action
+    from .tracks import get_action_fcurves, _bulk_set_keyframes
 
     if not armature_obj.animation_data:
         armature_obj.animation_data_create()
-    if not armature_obj.animation_data.action:
-        armature_obj.animation_data.action = bpy.data.actions.new(
-                name="JALI_Lipsync"
-                )
 
     action = armature_obj.animation_data.action
+    if action is None:
+        action = bpy.data.actions.new(name="JALI_Lipsync")
+        action.use_fake_user = True
+        _assign_action(armature_obj.animation_data, action)
+
     fcurves = get_action_fcurves(action)
+    if fcurves is None and hasattr(action, 'layers'):
+        try:
+            if len(action.layers) == 0:
+                action.layers.new(name="Layer")
+            layer = action.layers[0]
+            if len(layer.strips) == 0:
+                layer.strips.new(type='KEYFRAME')
+            strip = layer.strips[0]
+            if len(strip.channelbags) == 0 and hasattr(action, 'slots'):
+                slot = None
+                if len(action.slots) > 0:
+                    slot = action.slots[0]
+                else:
+                    slot = action.slots.new(name=action.name, id_type='OBJECT')
+                strip.channelbags.new(slot=slot)
+                adt = armature_obj.animation_data
+                if hasattr(adt, 'action_slot'):
+                    adt.action_slot = slot
+            fcurves = get_action_fcurves(action)
+        except Exception as e:
+            pass
+
     if fcurves is None:
         return 0
 
@@ -968,46 +1062,33 @@ def keyframe_tracks(
             continue
 
         values = tracks[:, track_idx]
-
-        vmax = float(np.max(np.abs(values)))
-        if vmax < 0.001:
+        if float(np.max(np.abs(values))) < 0.001:
             continue
-        if float(np.ptp(values)) < 0.001:
-            if vmax < 0.001:
-                continue
-
-        if name not in armature_obj:
-            armature_obj[name] = 0.0
-            if hasattr(armature_obj, 'id_properties_ui'):
-                ui = armature_obj.id_properties_ui(name)
-                ui.update(min=0.0, max=2.0, soft_min=0.0, soft_max=1.0)
 
         data_path = f'["{name}"]'
-        fc = fcurves.find(data_path)
+
+        fc = fcurves.find(data_path=data_path)
         if fc is not None:
             fc.keyframe_points.clear()
             fcurves.remove(fc)
-        fc = fcurves.new(data_path)
+        fc = fcurves.new(data_path=data_path)
 
-        keys = []
+        frames = []
+        vals = []
         prev = None
         for i in range(num_frames):
             v = float(values[i])
             if i == 0 or i == num_frames - 1:
-                keys.append((start_frame + i, v))
+                frames.append(float(start_frame + i))
+                vals.append(v)
                 prev = v
             elif prev is None or abs(v - prev) > threshold:
-                keys.append((start_frame + i, v))
+                frames.append(float(start_frame + i))
+                vals.append(v)
                 prev = v
 
-        if keys:
-            fc.keyframe_points.add(len(keys))
-            for i, (frame, val) in enumerate(keys):
-                kf = fc.keyframe_points[i]
-                kf.co = (frame, val)
-                kf.interpolation = 'LINEAR'
+        if frames:
+            _bulk_set_keyframes(fc, frames, vals, interpolation='LINEAR')
             tracks_keyed += 1
-
-        fc.update()
 
     return tracks_keyed
