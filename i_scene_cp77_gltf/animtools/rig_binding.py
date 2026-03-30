@@ -227,7 +227,6 @@ def register_track_properties(obj: bpy.types.Object, rig, seg: TrackSegments) ->
             print(f"[CP77 Facial] ui.update skipped for '{name}': {e}")
 
 
-
 def unregister_track_properties(obj: bpy.types.Object, rig) -> None:
     """Remove all facial track custom properties from the armature object."""
     track_names = rig.track_names
