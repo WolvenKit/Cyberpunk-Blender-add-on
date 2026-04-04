@@ -19,6 +19,8 @@ from .facial_ops import (
     _PREVIEW_SNAPSHOT,
     _get_pose_count,
     _get_pose_track_name,
+    PARSELMOUTH_AVAILABLE,
+    G2P_AVAILABLE,
 )
 from .animtools import CP77AnimsList
 class CP77_PT_AnimsPanel(Panel):
@@ -290,7 +292,7 @@ class CP77_PT_AnimsPanel(Panel):
                 reset_row.operator("cp77.reset_neutral",         text="Rest Pose",       icon='ARMATURE_DATA')
                 reset_row.operator("cp77.reset_tracks_defaults", text="Reset Defaults",  icon='FILE_REFRESH')
 
-        #Animation Baking 
+        #Animation Baking
         header, panel = layout.panel("facial_baking", default_closed=False)
         header.label(text="Animation Baking", icon='REC')
 
@@ -305,9 +307,27 @@ class CP77_PT_AnimsPanel(Panel):
         header.label(text="JALI Lipsync", icon_value=get_icon("RELIC"))
 
         if panel:
-            if not loaded:
+            # Dependency status
+            deps_ok = PARSELMOUTH_AVAILABLE
+            if not deps_ok:
+                box = panel.box()
+                box.label(text="Dependencies required:", icon='ERROR')
+                row = box.row()
+                row.label(text="parselmouth",
+                          icon='CHECKMARK' if PARSELMOUTH_AVAILABLE else 'X')
+                row = box.row()
+                row.label(text="g2p_en (optional)",
+                          icon='CHECKMARK' if G2P_AVAILABLE else 'X')
+                box.operator("cp77_facial.install_jali_deps",
+                             text="Install Dependencies", icon='IMPORT')
+            elif not loaded:
                 panel.label(text="Load a facial setup first.", icon='INFO')
             else:
+                if not G2P_AVAILABLE:
+                    row = panel.row()
+                    row.label(text="g2p_en not installed — transcript mode unavailable",
+                              icon='INFO')
+
                 col = panel.column(align=True)
                 col.operator("cp77.generate_jali_lipsync",
                              text="Generate JALI Lipsync")
@@ -488,7 +508,7 @@ def unregister_animtools():
         except RuntimeError:
             pass
 
-    # Unregister new backend modules (reverse order of register)
+    # Unregister backend modules (reverse order of register)
     _solver_mod.unregister()
     pose_preview.unregister()
     rig_binding.unregister()
