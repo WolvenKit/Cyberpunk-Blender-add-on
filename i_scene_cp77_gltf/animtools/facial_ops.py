@@ -16,9 +16,11 @@ from . import pose_preview
 from . import solver as _solver
 from .facial_setup_loader import load_rig, load_facial_setup
 
+# Optional JALI dependencies
 try:
     from .jali_core import (
         PARSELMOUTH_AVAILABLE,
+        G2P_AVAILABLE,
         ARPABET_JALI_MAP,
         create_phoneme_event,
         AcousticPhonemeDetector,
@@ -32,6 +34,7 @@ try:
     JALI_AVAILABLE = True
 except ImportError:
     PARSELMOUTH_AVAILABLE = False
+    G2P_AVAILABLE = False
     ARPABET_JALI_MAP = {}
     create_phoneme_event = None
     AcousticPhonemeDetector = None
@@ -42,9 +45,10 @@ except ImportError:
     JALI_AVAILABLE = False
 
 _CACHE: dict = {
-    "rig":   None,
-    "setup": None,
+    "rig":   None,   # RigData
+    "setup": None,   # FacialSetupData
 }
+
 
 def _sync_cache_from_binding(obj_name: str) -> bool:
     """Copy rig_binding cache entries into _CACHE dict for UI compat."""
@@ -55,7 +59,12 @@ def _sync_cache_from_binding(obj_name: str) -> bool:
         return True
     return False
 
+
+# Alias for the preview snapshot store — __init__.py imports this
 _PREVIEW_SNAPSHOT = pose_preview._snapshots
+
+
+# Shared facial helpers — used by the panel in __init__.py
 
 def _get_pose_count(setup, part: str = "face") -> int:
     """Number of main poses for *part* (face/eyes/tongue)."""
@@ -63,6 +72,7 @@ def _get_pose_count(setup, part: str = "face") -> int:
     if part_data is not None:
         return part_data.num_main_poses
     return 0
+
 
 def _get_pose_track_name(setup, rig, part: str, pose_index: int) -> str:
     """Human-readable track name for a main pose, or empty string."""
@@ -74,21 +84,25 @@ def _get_pose_track_name(setup, rig, part: str, pose_index: int) -> str:
         return str(rig.track_names[track_idx])
     return ""
 
+
 def _cache_ensure_loaded(context) -> bool:
     """Return True if cache is populated; try to load from active armature."""
     obj = context.active_object
     if obj is None or obj.type != 'ARMATURE':
         return _CACHE.get("rig") is not None
 
+    # Check if rig_binding already has it cached
     if _sync_cache_from_binding(obj.name):
         return True
 
+    # Try to restore from persisted paths on the armature
     if rig_binding.is_bound(obj):
         result = rig_binding.restore_cache_from_object(obj)
         if result is not None:
             _sync_cache_from_binding(obj.name)
             return True
 
+    # Try to load from scene properties
     props = getattr(context.scene, 'cp77_facial', None)
     if props is None:
         return False
@@ -105,6 +119,7 @@ def _cache_ensure_loaded(context) -> bool:
         except Exception:
             pass
     return False
+
 
 def _bind_to_object(context, obj, rig, setup, setup_path, rig_path):
     """Full bind: register props, build cache, update _CACHE dict."""
@@ -134,6 +149,9 @@ def _bind_to_object(context, obj, rig, setup, setup_path, rig_path):
 
     _CACHE["rig"]   = rig
     _CACHE["setup"] = setup
+
+
+# Operators
 
 class CP77_OT_LoadFacial(Operator):
     bl_idname = "cp77.load_facial"
@@ -188,6 +206,7 @@ class CP77_OT_LoadFacial(Operator):
             import traceback; traceback.print_exc()
             return {'CANCELLED'}
 
+
 class CP77_OT_ApplyMainPose(Operator):
     """Apply the selected pose at full weight via pose_preview backend."""
     bl_idname  = "cp77.apply_main_pose"
@@ -218,6 +237,7 @@ class CP77_OT_ApplyMainPose(Operator):
         ok, msg = pose_preview.preview_apply_pose(obj, cache, part, pose_index)
         self.report({'INFO'} if ok else {'ERROR'}, msg)
         return {'FINISHED'} if ok else {'CANCELLED'}
+
 
 class CP77_OT_BrowsePose(Operator):
     """Step forward or backward through main poses."""
@@ -266,6 +286,7 @@ class CP77_OT_BrowsePose(Operator):
         self.report({'INFO'} if ok else {'ERROR'}, msg)
         return {'FINISHED'} if ok else {'CANCELLED'}
 
+
 class CP77_OT_ClearPosePreview(Operator):
     """Restore the pose that existed before the last preview."""
     bl_idname  = "cp77.clear_pose_preview"
@@ -285,6 +306,7 @@ class CP77_OT_ClearPosePreview(Operator):
         obj   = context.active_object
         cache = rig_binding.get_cache(obj.name)
         if cache is None:
+            # Fallback: reset all bones to identity
             if context.object.mode != 'POSE':
                 bpy.ops.object.mode_set(mode='POSE')
             for pb in obj.pose.bones:
@@ -298,6 +320,7 @@ class CP77_OT_ClearPosePreview(Operator):
         ok, msg = pose_preview.preview_clear(obj, cache)
         self.report({'INFO'}, msg)
         return {'FINISHED'}
+
 
 class CP77_OT_ResetNeutral(Operator):
     bl_idname = "cp77.reset_neutral"
@@ -316,6 +339,7 @@ class CP77_OT_ResetNeutral(Operator):
         obj.update_tag(refresh={'DATA'})
         context.view_layer.update()
         return {'FINISHED'}
+
 
 class CP77_OT_ResetTracksToDefaults(Operator):
     """Reset all facial track custom properties to zero."""
@@ -344,6 +368,7 @@ class CP77_OT_ResetTracksToDefaults(Operator):
 
         self.report({'INFO'}, f"Reset {count} tracks to zero")
         return {'FINISHED'}
+
 
 class CP77_OT_BakeFacialAnimation(Operator):
     """Bake facial animation over frame range using facial_solve_numpy."""
@@ -425,6 +450,7 @@ class CP77_OT_BakeFacialAnimation(Operator):
         layout.prop(self, "frame_end")
         layout.prop(self, "keyframe_step")
 
+
 class CP77_OT_ClearFacialAnimation(Operator):
     """Clear all facial animation keyframes."""
     bl_idname = "cp77.clear_facial_animation"
@@ -453,6 +479,10 @@ class CP77_OT_ClearFacialAnimation(Operator):
 
     def invoke(self, context, event):
         return context.window_manager.invoke_confirm(self, event)
+
+
+# JALI operators
+
 
 class CP77_OT_PreviewFacialPose(Operator):
     """Preview facial poses in real-time for testing and verification"""
@@ -531,6 +561,7 @@ class CP77_OT_PreviewFacialPose(Operator):
         ja *= self.intensity
         li *= self.intensity
 
+        # Use the bridge to map JA/LI → track weights
         track_names = [str(n) if not isinstance(n, dict) else n.get('$value', '')
                        for n in rig.track_names]
 
@@ -540,13 +571,16 @@ class CP77_OT_PreviewFacialPose(Operator):
 
         tracks_in = bridge.jali_to_tracks(ja_curve, li_curve, track_names)[0]
 
+        # All override tracks [154-239] at 1.0 (passthrough)
         for i in range(154, min(240, rig.num_tracks)):
             tracks_in[i] = 1.0
 
+        # Write track values to custom properties so the solver reads them
         for i, name in enumerate(track_names):
             if name:
                 obj[name] = float(tracks_in[i])
 
+        # Run solver to compute bone transforms from current track values
         result = self._apply_solved_pose(context, cache, obj, tracks_in)
 
         if result:
@@ -558,10 +592,12 @@ class CP77_OT_PreviewFacialPose(Operator):
         if self.pose_type == 'CUSTOM':
             return self.custom_jaw, self.custom_lip
 
+        # Check jali_core canonical map first (has all Arpabet phonemes)
         if ARPABET_JALI_MAP and self.pose_type in ARPABET_JALI_MAP:
             jali = ARPABET_JALI_MAP[self.pose_type]
             return jali.jaw, jali.lip
 
+        # Fallback preset map for non-phoneme pose types
         pose_map = {
             'NEUTRAL': (0.0, 0.0),
             'SMILE': (0.0, 1.0),
@@ -602,6 +638,7 @@ class CP77_OT_PreviewFacialPose(Operator):
 
         layout.separator()
         layout.prop(self, "intensity", slider=True)
+
 
 class CP77_OT_GenerateJALILipSync(Operator):
     """Generate JALI-based lipsync animation for CP77 facial system"""
@@ -677,9 +714,17 @@ class CP77_OT_GenerateJALILipSync(Operator):
             self.report({'INFO'}, "Detecting phonemes from audio...")
 
             if self.use_transcript and self.transcript.strip():
-                aligner = TranscriptAligner(audio_path, self.transcript)
-                phoneme_events = aligner.align_phonemes()
-                self.report({'INFO'}, f"Aligned {len(phoneme_events)} phonemes with transcript")
+                if not G2P_AVAILABLE:
+                    self.report({'WARNING'},
+                                "g2p_en not installed — falling back to acoustic detection. "
+                                "Install with: pip install g2p_en")
+                    detector = AcousticPhonemeDetector(audio_path)
+                    phoneme_events = detector.detect_phonemes()
+                    self.report({'INFO'}, f"Detected {len(phoneme_events)} phonemes (acoustic-only)")
+                else:
+                    aligner = TranscriptAligner(audio_path, self.transcript)
+                    phoneme_events = aligner.align_phonemes()
+                    self.report({'INFO'}, f"Aligned {len(phoneme_events)} phonemes with transcript")
             else:
                 detector = AcousticPhonemeDetector(audio_path)
                 phoneme_events = detector.detect_phonemes()
@@ -712,6 +757,7 @@ class CP77_OT_GenerateJALILipSync(Operator):
                     elif 'lips' in name.lower() or 'mouth' in name.lower():
                         tracks[:, i] *= self.lip_multiplier
 
+            # Keyframe the track custom properties for the solver
             self.report({'INFO'}, "Keyframing tracks...")
             n_keyed = keyframe_tracks(
                     context.active_object,
@@ -722,6 +768,9 @@ class CP77_OT_GenerateJALILipSync(Operator):
 
             duration = phoneme_events[-1].end + 0.5
             context.scene.frame_end = int(duration * context.scene.render.fps) + 10
+
+            # Add audio to sequencer so it plays with the animation
+            self._add_audio_strip(context.scene, audio_path)
 
             self.report({'INFO'},
                         f"Lipsync complete — {n_keyed} tracks keyed, "
@@ -759,4 +808,113 @@ class CP77_OT_GenerateJALILipSync(Operator):
         col.prop(self, "jaw_multiplier", slider=True)
         col.prop(self, "lip_multiplier", slider=True)
 
+
+    @staticmethod
+    def _add_audio_strip(scene, audio_path: str) -> None:
+        """Add audio file to the scene's sequence editor for playback."""
+        try:
+            if not scene.sequence_editor:
+                scene.sequence_editor_create()
+
+            seq = scene.sequence_editor
+
+            # Blender 5.x renamed the strips collection — discover it
+            strips = None
+            for attr in ('strips', 'sequences', 'strips_all'):
+                coll = getattr(seq, attr, None)
+                if coll is not None and hasattr(coll, 'new_sound'):
+                    strips = coll
+                    break
+
+            # Fallback: search all attributes for a collection with new_sound
+            if strips is None:
+                for attr in dir(seq):
+                    if attr.startswith('_'):
+                        continue
+                    try:
+                        coll = getattr(seq, attr)
+                        if hasattr(coll, 'new_sound'):
+                            strips = coll
+                            break
+                    except Exception:
+                        continue
+
+            if strips is None:
+                print(f"[JALI] Could not find strips collection on "
+                      f"SequenceEditor (attrs: {[a for a in dir(seq) if not a.startswith('_')]})")
+                return
+
+            # Remove any existing JALI audio strips
+            if hasattr(strips, '__iter__'):
+                for strip in list(strips):
+                    if getattr(strip, 'name', '').startswith("JALI_Audio"):
+                        strips.remove(strip)
+
+            strips.new_sound(
+                "JALI_Audio",
+                audio_path,
+                channel=1,
+                frame_start=scene.frame_start,
+            )
+        except Exception as e:
+            print(f"[JALI] Could not add audio strip: {e}")
+
+
+class JALI_OT_InstallDependencies(Operator):
+    """Install JALI lipsync dependencies (parselmouth, g2p_en)"""
+    bl_idname = "cp77_facial.install_jali_deps"
+    bl_label = "Install JALI Dependencies"
+    bl_description = "Install parselmouth and g2p_en via pip"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        import subprocess
+        import ensurepip
+
+        python = sys.executable
+        errors = []
+
+        # Ensure pip is available
+        try:
+            ensurepip.bootstrap(upgrade=True)
+        except Exception:
+            pass  # may already be bootstrapped
+
+        packages = [
+            ("praat-parselmouth", "parselmouth"),
+            ("g2p_en", "g2p_en"),
+        ]
+
+        for pip_name, import_name in packages:
+            try:
+                __import__(import_name)
+                self.report({'INFO'}, f"{pip_name} already installed")
+                continue
+            except ImportError:
+                pass
+
+            self.report({'INFO'}, f"Installing {pip_name}...")
+            try:
+                subprocess.check_call(
+                    [python, "-m", "pip", "install", "--user", pip_name],
+                    timeout=120,
+                )
+                self.report({'INFO'}, f"{pip_name} installed successfully")
+            except Exception as e:
+                errors.append(f"{pip_name}: {e}")
+                self.report({'WARNING'}, f"Failed to install {pip_name}: {e}")
+
+        if errors:
+            self.report({'WARNING'},
+                        f"Some packages failed: {'; '.join(errors)}. "
+                        f"You may need to restart Blender.")
+        else:
+            self.report({'INFO'},
+                        "All JALI dependencies installed. "
+                        "Please restart Blender to activate them.")
+
+        return {'FINISHED'}
+
+
+#  Collect for get_classes
 operators, other_classes = get_classes(sys.modules[__name__])
