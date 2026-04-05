@@ -145,7 +145,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         escaped_path = glob.escape(path)
     if not app_path:
         app_path = glob.glob(os.path.join(escaped_path,"**","*.app.json"), recursive = True)
-    if len(app_path)==0:
+    if len(app_path)==0 and len(ent_apps)>0:
         print('No Appearance file JSONs found in path, run the Ent export script first')
 
     # find the meshes
@@ -393,6 +393,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                 )
 
             comps=app_comps[app_name]
+            comps_lookup = {o['name']['$value']: o for o in comps}
 
             if not rig:
                 for c in comps:
@@ -620,29 +621,27 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
 
                                                     co=obj.constraints.new(type='CHILD_OF')
                                                     co.target=rig
-                                                    co.subtarget= mesh_j['boneNames'][0]
+                                                    co.subtarget= mesh_j['boneNames'][0]['$value']
                                                     bpy.context.view_layer.objects.active = obj
                                                     bpy.ops.constraint.childof_set_inverse(constraint="Child Of", owner='OBJECT')
 
 
                                     # things like the tvs have a bindname but no slotname, bindname appears to point at the name of the main component, and its the only one with a transform applied
-                                    elif bindname:
+                                    elif bindname and chunk_pt.get('Data').get('slotName').get('$value')!=None:
                                         #see if we can find a component that matches it
                                         if bindname=='interior_02':
                                             print('interior_02')
-                                        bindpt=[cmp for cmp in comps if cmp['name']['$value']==bindname]
+                                        bindpt=comps_lookup.get(bindname)
                                         slotname= chunk_pt.get('Data').get('slotName').get('$value')
                                         #if bindpt and slotname:
                                             # Have a bindpoint and a slotname, so we can use the local transform from the bindpoint
                                             #print('bindpt and slotname found')
 
                                         if bindpt and len(bindpt)==1:
-                                            if c['localTransform']['Position']['x']['Bits']==0 and c['localTransform']['Position']['y']['Bits']==0 and c['localTransform']['Position']['z']['Bits']==0 and 'localTransform' in bindpt[0]:
-                                                c['localTransform']['Position']=bindpt[0]['localTransform']['Position']
-                                            if c['localTransform']['Orientation']['i']==0 and c['localTransform']['Orientation']['j']==0 and c['localTransform']['Orientation']['k']==0 and c['localTransform']['Orientation']['r']==1 and 'localTransform' in bindpt[0]:
-                                                c['localTransform']['Orientation']=bindpt[0]['localTransform']['Orientation']
-
-
+                                            if c['localTransform']['Position']['x']['Bits']==0 and c['localTransform']['Position']['y']['Bits']==0 and c['localTransform']['Position']['z']['Bits']==0 and 'localTransform' in bindpt:
+                                                c['localTransform']['Position']=bindpt['localTransform']['Position']
+                                            if c['localTransform']['Orientation']['i']==0 and c['localTransform']['Orientation']['j']==0 and c['localTransform']['Orientation']['k']==0 and c['localTransform']['Orientation']['r']==1 and 'localTransform' in bindpt:
+                                                c['localTransform']['Orientation']=bindpt['localTransform']['Orientation']
                                     #print('bindname = ',bindname)
                                     if rig:
                                         bones=rig.pose.bones
@@ -652,33 +651,34 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                             #print('bindname ',bindname, ' not in boneNames')
                                             # if bindname isnt in the bones then its a part thats already bound to a bone,
                                             # These inherit the parent and local transforms from the other part, find it and work out what the transform is
-                                            for o in comps:
-                                                if o['name']['$value']==bindname and 'parentTransform' in o.keys():
-                                                    pT=o['parentTransform']
-                                                    if pT:
+                                            
+                                            o=comps_lookup.get(bindname)
+                                            if o and 'parentTransform' in o.keys():
+                                                pT=o['parentTransform']
+                                                if pT:
 
-                                                        x=o['localTransform']['Position']['x']['Bits']/131072
-                                                        y=o['localTransform']['Position']['y']['Bits']/131072
-                                                        z=o['localTransform']['Position']['z']['Bits']/131072
+                                                    x=o['localTransform']['Position']['x']['Bits']/131072
+                                                    y=o['localTransform']['Position']['y']['Bits']/131072
+                                                    z=o['localTransform']['Position']['z']['Bits']/131072
 
-                                                        pT_HId=pT['HandleRefId']
-                                                        #print(bindname, 'pT_HId = ',pT_HId)
-                                                        chunk_pt = 0
-                                                        for chunk in chunks:
-                                                            if 'parentTransform' in chunk.keys() and isinstance( chunk['parentTransform'], dict):
-                                                                if 'HandleId' in chunk['parentTransform'].keys():
-                                                                    if chunk['parentTransform']['HandleId']==pT_HId:
-                                                                        chunk_pt=chunk['parentTransform']
-                                                                        #print('HandleId found',chunk['parentTransform']['HandleId'])
-                                                        if chunk_pt:
-                                                            #print('in chunk pt processing')
-                                                            bindname=chunk_pt['Data']['bindName']['$value']
-                                                            if bindname=='vehicle_slots':
-                                                                if vehicle_slots:
-                                                                    slotname=chunk_pt['Data']['slotName']['$value']
-                                                                    for slot in vehicle_slots:
-                                                                        if slot['slotName']['$value']==slotname:
-                                                                            bindname=slot['boneName']['$value']
+                                                    pT_HId=pT['HandleRefId']
+                                                    #print(bindname, 'pT_HId = ',pT_HId)
+                                                    chunk_pt = 0
+                                                    for chunk in chunks:
+                                                        if 'parentTransform' in chunk.keys() and isinstance( chunk['parentTransform'], dict):
+                                                            if 'HandleId' in chunk['parentTransform'].keys():
+                                                                if chunk['parentTransform']['HandleId']==pT_HId:
+                                                                    chunk_pt=chunk['parentTransform']
+                                                                    #print('HandleId found',chunk['parentTransform']['HandleId'])
+                                                    if chunk_pt:
+                                                        #print('in chunk pt processing')
+                                                        bindname=chunk_pt['Data']['bindName']['$value']
+                                                        if bindname=='vehicle_slots':
+                                                            if vehicle_slots:
+                                                                slotname=chunk_pt['Data']['slotName']['$value']
+                                                                for slot in vehicle_slots:
+                                                                    if slot['slotName']['$value']==slotname:
+                                                                        bindname=slot['boneName']['$value']
 
                                         ######
                                         if bindname in bones.keys() and rig_j is not None and rig_j['boneNames'] is not None:
@@ -757,7 +757,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
 
                                     # Deal with TransformAnimators
                                     #if 'TransformAnimator' in bindname:
-                                    if bindpt and bindpt[0]['$type']=='gameTransformAnimatorComponent':
+                                    if bindpt and bindpt['$type']=='gameTransformAnimatorComponent':
                                         ta=[tacmp for tacmp in comps if tacmp['name']['$value']==bindname ][0]
                                         x=ta['localTransform']['Position']['x']['Bits']/131072
                                         y=ta['localTransform']['Position']['y']['Bits']/131072
