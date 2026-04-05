@@ -51,9 +51,9 @@ class CP77IOSuitePreferences(AddonPreferences):
         default=True,
     )
 
-    show_collisiontools: BoolProperty(
-        name= "Show the Collision Tools Panel",
-        description="Show the Collision tools panel",
+    show_physicstools: BoolProperty(
+        name= "Show the Physics Tools Panel",
+        description="Show the Physics tools panel",
         default=True,
     )
 
@@ -106,7 +106,7 @@ class CP77IOSuitePreferences(AddonPreferences):
             col = row.column(align=True)
             col.prop(self, "context_only")
             col.prop(self, "show_meshtools")
-            col.prop(self, "show_collisiontools")
+            col.prop(self, "show_physicstools")
             col.prop(self, "show_animtools")
 
 def register_prefs():

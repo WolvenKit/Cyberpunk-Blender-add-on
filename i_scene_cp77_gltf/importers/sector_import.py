@@ -27,7 +27,7 @@ import time
 import traceback
 from pprint import pprint
 from ..main.setup import MaterialBuilder, bcolors
-from ..collisiontools.collisions import set_collider_props
+from ..collisiontools.pxbridge.io_phys import import_collider_as_actor
 from .collision_mesh_import import CP77CollisionTriangleMeshJSONimport_by_hashes
 from operator import add
 import bmesh
@@ -1203,42 +1203,85 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 sector_Hash=e['Data']['sectorHash']
                                 arot=get_rot(act)
                                 for s,shape in enumerate(act['Shapes']):
-                                    if 'Size' in shape.keys():
-                                        ssize=(2*shape['Size']['X']*act['Scale']['X'],2*shape['Size']['Y']*act['Scale']['Y'],2*shape['Size']['Z']*act['Scale']['Z'])
-                                    else:
-                                        ssize=None
+                                    # We don't need ssize anymore because pxbridge handles scale internally!
                                     spos=get_pos(shape)
                                     srot=get_rot(shape)
                                     arot_q = Quaternion((arot[0],arot[1],arot[2],arot[3]))
                                     srot_q = Quaternion((srot[0],srot[1],srot[2],srot[3]))
                                     rot= arot_q @ srot_q
                                     loc=(spos[0]+x,spos[1]+y,spos[2]+z)
-                                    if shape['ShapeType']=='Box' or shape['ShapeType']=='Capsule' or shape['ShapeType']=='Sphere':
-                                        #print('Box Collision Node')
-                                        #pprint(act['Shapes'])
+                                    
+                                    # convert back from game type to native representation for bridge
+                                    physx_shape_type = shape['ShapeType']
+                                    bridge_shape_type = 'physicsColliderBox'
+                                    
+                                    if physx_shape_type in ('Box', 'Capsule', 'Sphere'):
+                                        shape_data = shape
+                                        
+                                        if physx_shape_type == 'Box':
+                                            bridge_shape_type = 'physicsColliderBox'
+                                            if 'Size' in shape:
+                                                # Bridge expects halfExtents vector Dict
+                                                shape_data = {
+                                                    'X': shape['Size']['X']*act['Scale']['X'],
+                                                    'Y': shape['Size']['Y']*act['Scale']['Y'],
+                                                    'Z': shape['Size']['Z']*act['Scale']['Z']
+                                                }
+                                            else:
+                                                shape_data = {'X': 0.5, 'Y': 0.5, 'Z': 0.5}
 
-                                        if shape['ShapeType']=='Box':
-                                            bpy.ops.mesh.primitive_cube_add(size=1/scale_factor, scale=(ssize[0],ssize[1],ssize[2]),location=(loc[0],loc[1],loc[2]))
-                                        elif shape['ShapeType']=='Capsule':
-                                            bpy.ops.mesh.primitive_cylinder_add(radius=5/scale_factor, depth=1/scale_factor, scale=(ssize[0],ssize[1],ssize[2]),location=loc)
-                                        elif shape['ShapeType']=='Sphere':
-                                            bpy.ops.mesh.primitive_uv_sphere_add(radius=5/scale_factor, scale=(ssize[0],ssize[1],ssize[2]),location=loc)
-                                        crash=C.selected_objects[0]
-                                        crash.name='NodeDataIndex_'+str(inst['nodeDataIndex'])+'_Actor_'+str(idx)+'_Shape_'+str(s)
-                                        par_coll=crash.users_collection[0]
-                                        par_coll.objects.unlink(crash)
-                                        sector_Collisions_coll.objects.link(crash)
-                                        crash['nodeIndex']=i
-                                        crash['nodeDataIndex']=inst['nodeDataIndex']
-                                        crash['ShapeType']=shape['ShapeType']
-                                        crash['ShapeNo']=s
-                                        crash['ActorIdx']=idx
-                                        crash['sectorName']=sectorName
-                                        crash['matrix']=crash.matrix_world
-                                        crash.rotation_mode='QUATERNION'
-                                        crash.rotation_quaternion=rot
-                                        set_collider_props(crash, shape['ShapeType'], shape['Materials'][0]['$value'], 'WORLD')
+                                        elif physx_shape_type == 'Capsule':
+                                            bridge_shape_type = 'physicsColliderCapsule'
+                                            radius = 0.5
+                                            if 'Size' in shape:
+                                                radius = shape['Size']['X']*act['Scale']['X']
+                                            shape_data = {'radius': radius, 'height': 1.0}
 
+                                        elif physx_shape_type == 'Sphere':
+                                            bridge_shape_type = 'physicsColliderSphere'
+                                            radius = 0.5
+                                            if 'Size' in shape:
+                                                radius = shape['Size']['X']*act['Scale']['X']
+                                            shape_data = {'radius': radius}
+                                            
+                                        submeshName = f'NodeDataIndex_{inst["nodeDataIndex"]}_Actor_{idx}_Shape_{s}'
+                                        physmat = shape.get('Materials', [{'$value': 'Default'}])[0]['$value']
+                                        
+                                        # It might make sense to create an empty parent object acting as the actor to hold these shapes
+                                        act_name = f'NodeDataIndex_{inst["nodeDataIndex"]}_Actor_{idx}'
+                                        act_obj = None
+                                        for child in sector_Collisions_coll.objects:
+                                            if child.name == act_name:
+                                                act_obj = child
+                                                break
+                                        if not act_obj:
+                                            act_obj = bpy.data.objects.new(act_name, None)
+                                            sector_Collisions_coll.objects.link(act_obj)
+                                            act_obj.location = (x, y, z)
+                                            act_obj.rotation_mode = "QUATERNION"
+                                            act_obj.rotation_quaternion = arot_q
+                                            act_obj['nodeType'] = 'worldCollisionNode'
+                                            act_obj['nodeIndex'] = i
+                                            act_obj['nodeDataIndex'] = inst['nodeDataIndex']
+                                            act_obj['ActorIdx'] = idx
+                                            act_obj['sectorName'] = sectorName
+                                        
+                                        # Add the actual shape representation
+                                        try:
+                                            # Using the updated signature
+                                            shape_cdata = shape_data
+                                            if isinstance(shape_cdata, dict) and ('$type' not in shape_cdata):
+                                                shape_cdata['$type'] = bridge_shape_type
+                                                shape_cdata['localToBody'] = {
+                                                    'position': {'X': spos[0], 'Y': spos[1], 'Z': spos[2]},
+                                                    'orientation': {'r': srot[0], 'i': srot[1], 'j': srot[2], 'k': srot[3]}
+                                                }
+                                                shape_cdata['material'] = {'$value': physmat}
+                                            # The function expects cdata, submeshName, new_col, optionally obj
+                                            obj = import_collider_as_actor(shape_cdata, submeshName, sector_Collisions_coll, act_obj)
+                                        except Exception as e:
+                                            print('Error importing collision shape:', e)
+                                            
                                     else:
                                         #print(f"unsupported shape {shape['ShapeType']}")
                                         meshname=sector_Hash+'_'+shape['Hash']
@@ -1262,8 +1305,6 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                         o.location = (loc[0],loc[1],loc[2])
                                         o.rotation_mode = "QUATERNION"
                                         o.rotation_quaternion = rot
-                                        if ssize:
-                                            o.scale = (ssize[0],ssize[1],ssize[2])
 
 
                     case _:
