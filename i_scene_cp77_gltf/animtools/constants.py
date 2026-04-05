@@ -67,11 +67,9 @@ TONGUE_MID_TWIST_L: int = 151
 TONGUE_MID_TWIST_R: int = 152
 TONGUE_MID_THICK: int = 153
 
-# =============================================================================
 # PHONEME CLASSIFICATION SETS
 # Based on JALI Paper Figure 10 phoneme categories
 # Reference: Edwards et al. "JALI" SIGGRAPH 2016
-# =============================================================================
 
 BILABIALS: FrozenSet[str] = frozenset({'M', 'B', 'P'})
 """Bilabials MUST close lips (Paper §4.2 Constraint 1)"""

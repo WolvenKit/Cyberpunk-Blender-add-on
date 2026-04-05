@@ -2,9 +2,10 @@ import os
 import bpy
 import bmesh
 import numpy as np
-from ..animtools import reset_armature
+from ..animtools.animtools import reset_armature
 from ..main.common import show_message
 from ..animtools.tracks import export_anim_tracks
+from ..animtools.compat import get_action_fcurves
 from ..main.bartmoss_functions import (
     store_current_context, restore_previous_context,
     get_safe_mode, safe_mode_switch, select_objects,
@@ -92,7 +93,19 @@ def cp77_mesh_options():
 
 def pose_export_options():
     """Get pose export options (returns copy to avoid mutation)."""
-    return POSE_EXPORT_OPTIONS.copy()
+    opts = POSE_EXPORT_OPTIONS.copy()
+    major, minor = bpy.app.version[:2]
+    if (major, minor) >= (3, 4):
+        # Disable Blender's glTF keyframe optimiser which collapses
+        # near-constant LINEAR channels to STEP, destroying subtle
+        # additive animation deltas.
+        opts['export_optimize_animation_size'] = False
+        # Export fcurves directly instead of baking every channel to
+        # per-frame samples.  Without this (default True in Blender 3.4+),
+        # ALL channels are sampled at every frame, destroying STEP
+        # interpolation, inflating file size, and losing keyframe sparsity.
+        opts['export_force_sampling'] = False
+    return opts
 
 _excluded_objects_cache = None
 _excluded_cache_timestamp = 0
@@ -1010,7 +1023,12 @@ def export_anims(context, filepath, options, armatures, export_tracks=False):
     # Set animation defaults on actions
     for action in bpy.data.actions:
         if "schema" not in action:
-            action["schema"] = {"type": "wkit.cp2077.gltf.anims", "version": 4}
+            action["schema"] = {"type": "wkit.cp2077.gltf.anims", "version": 5}
+        else:
+            # Bump existing V4 schemas to V5
+            schema = action.get("schema")
+            if schema and hasattr(schema, 'get') and schema.get("version", 0) < 5:
+                action["schema"] = {"type": "wkit.cp2077.gltf.anims", "version": 5}
         if "animationType" not in action:
             action["animationType"] = "Normal"
         if "rootMotionType" not in action:
@@ -1034,18 +1052,82 @@ def export_anims(context, filepath, options, armatures, export_tracks=False):
         if "optimizationHints" not in action:
             action["optimizationHints"] = {"preferSIMD": False, "maxRotationCompression": 0}
 
+        # Serialize animation events from CollectionProperty → IDProperty for glTF export
+        try:
+            from ..animtools.anim_events import save_events_to_idproperty
+            save_events_to_idproperty(action)
+        except Exception as e:
+            print(f"[CP77] Warning: could not save animation events for '{action.name}': {e}")
+
+        # Ensure animEvents key always exists (WolvenKit expects it).
+        # Animations with no events get an empty list; those with events
+        # were already written by save_events_to_idproperty above.
+        if "animEvents" not in action:
+            action["animEvents"] = []
+
+        # Clean up internal-only IDProperties so they don't leak into the GLB extras
+        for _key in ('_cp77_events_loaded', 'numeExtraTracks'):
+            if _key in action:
+                del action[_key]
+
         if export_tracks:
             try:
-                if any(fc.data_path and fc.data_path.startswith('["T') for fc in action.fcurves):
+                _fc = get_action_fcurves(action)
+                if _fc and any(fc.data_path and fc.data_path.startswith('["T') for fc in _fc):
                     export_anim_tracks(action)
             except Exception as e:
                 print(f"export_anim_tracks failed for {action.name}: {e}")
 
     options.update(pose_export_options())
 
+    # ── Pre-export: pad single-keyframe CONSTANT channels to 2 keyframes ──
+    # Blender's glTF exporter unconditionally bakes any channel with ≤1
+    # keyframes (needs_baking() in fcurves/channels.py).  CP2077 additive
+    # animations store constant bone values as a single STEP keyframe.
+    # Without padding, every such channel gets sampled at every frame and
+    # exported as LINEAR, destroying the sparse STEP representation.
+    #
+    # Fix: duplicate the single keyframe at the action's last frame so the
+    # exporter sees 2 CONSTANT keyframes → exports as 2-keyframe STEP.
+    _padded_actions = []   # list of (action, [(fcurve, index)]) for cleanup
+    _total_padded = 0
+    for action in bpy.data.actions:
+        _action_fc = get_action_fcurves(action)
+        if _action_fc is None:
+            print(f"[CP77 padding] SKIP action '{action.name}': get_action_fcurves returned None")
+            continue
+        padded_curves = []
+        frame_end = action.frame_range[1]
+        _fc_list = list(_action_fc)
+        _pose_fcs = [fc for fc in _fc_list if fc.data_path.startswith('pose.bones[')]
+        for fc in _pose_fcs:
+            kps = fc.keyframe_points
+            if len(kps) == 1 and kps[0].interpolation == 'CONSTANT':
+                val = kps[0].co[1]
+                # Add a second keyframe at the last frame with the same value
+                kps.add(1)
+                kps[-1].co = (frame_end, val)
+                kps[-1].interpolation = 'CONSTANT'
+                fc.update()
+                padded_curves.append((fc, fc.array_index))
+        if padded_curves:
+            _padded_actions.append((action, padded_curves))
+            _total_padded += len(padded_curves)
+            print(f"[CP77 padding] action '{action.name}': padded {len(padded_curves)}/{len(_pose_fcs)} channels (frame_end={frame_end})")
+    print(f"[CP77 padding] Total: {_total_padded} channels padded across {len(_padded_actions)} actions")
+
     for armature in armatures:
         reset_armature(armature, context)
         bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
+
+        # ── Post-export: remove the padding keyframes we added ──
+        for action, curves in _padded_actions:
+            for fc, _ in curves:
+                kps = fc.keyframe_points
+                if len(kps) == 2:
+                    kps.remove(kps[-1])
+                    fc.update()
+
         return {'FINISHED'}
 
     return {'FINISHED'}
