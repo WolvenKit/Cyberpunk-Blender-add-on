@@ -1,50 +1,19 @@
 from __future__ import annotations
+
+from typing import Dict, List, Optional
+
 import numpy as np
-from typing import List, Dict, Tuple, Optional
-from dataclasses import dataclass
-
-try:
-    import bpy
-
-    BPY_AVAILABLE = True
-except ImportError:
-    BPY_AVAILABLE = False
 
 from .constants import (
-    ENV_FACE_ENVELOPE as IDX_FACE_ENVELOPE,
+    ENV_FACE_ENVELOPE as IDX_FACE_ENVELOPE, ENV_JALI_JAW as IDX_JALI_JAW, ENV_JALI_LIPS as IDX_JALI_LIPS,
+    ENV_LIPSYNC_ENVELOPE as IDX_LIPSYNC_ENVELOPE, ENV_LOWER_FACE as IDX_LOWER_FACE,
+    ENV_MUZZLE_BROWS as IDX_MUZZLE_BROWS, ENV_MUZZLE_EYES as IDX_MUZZLE_EYES, ENV_MUZZLE_LIPS as IDX_MUZZLE_LIPS,
     ENV_UPPER_FACE as IDX_UPPER_FACE,
-    ENV_LOWER_FACE as IDX_LOWER_FACE,
-    ENV_ANTI_STRETCH as IDX_ANTI_STRETCH,
-    ENV_LIPSYNC_ENVELOPE as IDX_LIPSYNC_ENVELOPE,
-    ENV_LIPSYNC_LEFT as IDX_LIPSYNC_LEFT_ENV,
-    ENV_LIPSYNC_RIGHT as IDX_LIPSYNC_RIGHT_ENV,
-    ENV_JALI_JAW as IDX_JALI_JAW,
-    ENV_JALI_LIPS as IDX_JALI_LIPS,
-    ENV_MUZZLE_LIPS as IDX_MUZZLE_LIPS,
-    ENV_MUZZLE_EYES as IDX_MUZZLE_EYES,
-    ENV_MUZZLE_BROWS as IDX_MUZZLE_BROWS,
-    ENV_MUZZLE_EYE_DIRS as IDX_MUZZLE_EYE_DIRS,
-    TONGUE_MID_BASE_L as IDX_TONGUE_BASE_L,
-    TONGUE_MID_BASE_R as IDX_TONGUE_BASE_R,
-    TONGUE_MID_BASE_DN as IDX_TONGUE_BASE_DN,
-    TONGUE_MID_BASE_UP as IDX_TONGUE_BASE_UP,
-    TONGUE_MID_BASE_FWD as IDX_TONGUE_BASE_FWD,
-    TONGUE_MID_BASE_FRONT as IDX_TONGUE_BASE_FRONT,
-    TONGUE_MID_BASE_BACK as IDX_TONGUE_BASE_BACK,
-    TONGUE_MID_FWD as IDX_TONGUE_FWD,
-    TONGUE_MID_LIFT as IDX_TONGUE_LIFT,
-    TONGUE_MID_TIP_L as IDX_TONGUE_TIP_L,
-    TONGUE_MID_TIP_R as IDX_TONGUE_TIP_R,
-    TONGUE_MID_TIP_DN as IDX_TONGUE_TIP_DN,
-    TONGUE_MID_TIP_UP as IDX_TONGUE_TIP_UP,
-    TONGUE_MID_TWIST_L as IDX_TONGUE_TWIST_L,
-    TONGUE_MID_TWIST_R as IDX_TONGUE_TWIST_R,
-    TONGUE_MID_THICK as IDX_TONGUE_THICK,
     )
 
 
 def build_jali_track_mappings() -> List[Dict]:
-    """Build JALI → CP77 track mappings calibrated against game lipsync data.
+    """Build JALI  -> CP77 track mappings calibrated against game lipsync data.
 
     Game lipsync.json shows JA slider range 0–0.43, LI range −0.09–0.48.
     LipsyncPoseOutput peaks: jaw_mid_open=0.45, corner_up=0.53, pull=0.32,
@@ -60,7 +29,7 @@ def build_jali_track_mappings() -> List[Dict]:
         mappings.append({'track_name': name, 'weight_func': fn})
 
     # ── JAW ────────────────────────────────────────────────────────────
-    # jaw_mid_open: game peak 0.45 at AA (ja=1.0) → scale 0.45
+    # jaw_mid_open: game peak 0.45 at AA (ja=1.0)  -> scale 0.45
     _m('jaw_mid_open',    lambda ja, li: ja * 0.45)
     # jaw_mid_close: active when jaw near-closed (bilabials)
     _m('jaw_mid_close',   lambda ja, li: max(0, 1.0 - ja / 0.15) * 0.6)
@@ -227,6 +196,10 @@ def get_phoneme_track_overrides() -> Dict[str, Dict[str, float]]:
     overrides = {}
 
     # Bilabials (M, B, P) — game shows together_dn peaks >1.0
+    # Wide-lip tracks are explicitly cleared so the dominance blend
+    # from surrounding vowels doesn't carry the wide shape through
+    # the closure (e.g. "way be" — EY decay  -> B  -> IY rise must
+    # have a clean reset at the bilabial).
     for phoneme in BILABIALS:
         overrides[phoneme] = {
             'lips_together_up': 1.0,
@@ -238,9 +211,18 @@ def get_phoneme_track_overrides() -> Dict[str, Dict[str, float]]:
             'lips_apart_up': 0.0,
             'lips_apart_dn': 0.0,
             'neck_tighten': 0.2,
+            # Clear wide-lip influence during closure
+            'lips_l_pull': 0.0,
+            'lips_r_pull': 0.0,
+            'lips_l_corner_up': 0.0,
+            'lips_r_corner_up': 0.0,
+            'lips_l_corner_stretch': 0.0,
+            'lips_r_corner_stretch': 0.0,
+            'lips_l_stretch': 0.0,
+            'lips_r_stretch': 0.0,
         }
 
-    # Labiodentals (F, V) — lower lip to teeth
+    # Labiodentals (F, V) — lower lip to teeth, also not wide
     for phoneme in LABIODENTALS:
         overrides[phoneme] = {
             'lips_l_lower_raise': 0.10,    # game peak 0.10
@@ -249,6 +231,15 @@ def get_phoneme_track_overrides() -> Dict[str, Dict[str, float]]:
             'jaw_mid_open': 0.08,
             'lips_apart_up': 0.15,
             'lips_apart_dn': 0.12,
+            # Clear wide-lip influence
+            'lips_l_pull': 0.0,
+            'lips_r_pull': 0.0,
+            'lips_l_corner_up': 0.0,
+            'lips_r_corner_up': 0.0,
+            'lips_l_corner_stretch': 0.0,
+            'lips_r_corner_stretch': 0.0,
+            'lips_l_stretch': 0.0,
+            'lips_r_stretch': 0.0,
         }
 
     # Sibilants S, Z — narrow jaw, stretched
@@ -263,7 +254,7 @@ def get_phoneme_track_overrides() -> Dict[str, Dict[str, float]]:
             'lips_apart_dn': 0.10,
         }
 
-    # Postalveolar SH, ZH, CH, JH — slight pucker
+    # Postalveolar SH, ZH, CH, JH — slight pucker, lips rounded not wide
     for phoneme in {'SH', 'ZH', 'CH', 'JH'}:
         overrides[phoneme] = {
             'jaw_mid_open': 0.12,
@@ -273,6 +264,15 @@ def get_phoneme_track_overrides() -> Dict[str, Dict[str, float]]:
             'lips_r_funnel': 0.04,
             'lips_apart_up': 0.15,
             'lips_apart_dn': 0.15,
+            # Clear wide-lip influence (puckered shape)
+            'lips_l_pull': 0.0,
+            'lips_r_pull': 0.0,
+            'lips_l_corner_up': 0.0,
+            'lips_r_corner_up': 0.0,
+            'lips_l_corner_stretch': 0.0,
+            'lips_r_corner_stretch': 0.0,
+            'lips_l_stretch': 0.0,
+            'lips_r_stretch': 0.0,
         }
 
     # Dentals (TH, DH) — tongue forward
@@ -408,7 +408,7 @@ class JALIToCp77Bridge:
         num_frames = len(ja_curve)
         num_tracks = len(track_names)
 
-        # Create track name → index mapping
+        # Create track name  -> index mapping
         track_map = {name: i for i, name in enumerate(track_names)}
 
         # Initialize track weights (all zeros)
@@ -489,11 +489,13 @@ class JALIToCp77Bridge:
             track_names: List[str],
             fps: float
             ) -> np.ndarray:
-        """Add phoneme-specific overrides for precise articulations
+        """Add phoneme-specific overrides for precise articulations.
 
-        Applies hard constraints from phoneme_overrides dictionary.
-        These take precedence over JALI curve-based mappings.
-        Writes to LipsyncPoseOutput tracks.
+        Applies hard constraints from phoneme_overrides dictionary with
+        smooth fade in / fade out so the values ramp into and out of
+        their target instead of creating step changes at frame boundaries.
+
+        Envelope shape: sin² rise  -> hold  -> cos² fall (trapezoidal).
 
         Args:
             tracks: Current track weights (N, M)
@@ -507,68 +509,78 @@ class JALIToCp77Bridge:
         track_map = {name: i for i, name in enumerate(track_names)}
         num_frames = tracks.shape[0]
 
+        # Fade duration: 60ms gives a smooth ramp at 24-60fps
+        fade_seconds = 0.060
+        fade_frames = max(1, int(round(fade_seconds * fps)))
+
         for event in phoneme_events:
-            phoneme = event.phoneme.rstrip('012')  # Strip stress markers
+            phoneme = event.phoneme.rstrip('012')
 
             if phoneme not in self.phoneme_overrides:
                 continue
 
             overrides = self.phoneme_overrides[phoneme]
 
-            # Calculate frame range
             start_frame = int(event.start * fps)
             end_frame = int(event.end * fps)
 
-            # Clamp to valid range
             start_frame = max(0, min(start_frame, num_frames - 1))
             end_frame = max(start_frame + 1, min(end_frame, num_frames))
 
-            if start_frame >= end_frame:
+            n = end_frame - start_frame
+            if n <= 0:
                 continue
 
-            # Apply overrides to LipsyncPoseOutput tracks
+            # Trapezoidal envelope: 0  -> 1 (sin²)  -> hold  -> 1  -> 0 (cos²)
+            # fi must be small enough that fade-in and fade-out do not
+            # overlap, otherwise both edges write 0 across the same
+            # frames and the override has no effect on the middle.
+            # Use (n - 1) // 2 to guarantee at least one full-strength
+            # frame between the two ramps.
+            fi = min(fade_frames, (n - 1) // 2)
+            envelope = np.ones(n, dtype=np.float32)
+            if fi > 0:
+                ramp = np.sin(0.5 * np.pi * np.arange(fi, dtype=np.float32) / fi) ** 2
+                envelope[:fi] = ramp
+                envelope[-fi:] = ramp[::-1]
+
             for base_name, target_weight in overrides.items():
-                # Get the LipsyncPoseOutput track name
                 lipsync_track_name = self._get_lipsync_track_name(base_name)
                 idx = track_map.get(lipsync_track_name)
-
                 if idx is None:
-                    # Fallback to main track for non-lipsync tracks (e.g., some tongue)
                     idx = track_map.get(base_name)
                     if idx is None:
                         continue
 
-                # Determine override behavior
-                current_max = np.max(tracks[start_frame:end_frame, idx])
+                current = tracks[start_frame:end_frame, idx]
 
                 if target_weight == 0.0:
-                    # Force to zero (e.g., jaw closed for bilabials)
-                    tracks[start_frame:end_frame, idx] = 0.0
-                elif target_weight > current_max:
-                    # Override with higher value (ensure constraint is met)
-                    tracks[start_frame:end_frame, idx] = target_weight
+                    # Soft closure: blend current  -> 0  -> current via envelope.
+                    # At env=1 (middle), value = 0 (forced closure).
+                    # At env=0 (edges), value = current (no change).
+                    tracks[start_frame:end_frame, idx] = current * (1.0 - envelope)
                 else:
-                    # Max blend (keep higher)
+                    # Soft override: ramp toward target, max-blend with current.
+                    # Existing higher values are preserved at all frames.
+                    target_curve = envelope * target_weight
                     tracks[start_frame:end_frame, idx] = np.maximum(
-                            tracks[start_frame:end_frame, idx],
-                            target_weight
-                            )
+                            current, target_curve)
 
         return tracks
 
 
 class JALIAnimationPipeline:
-    """Complete JALI → CP77 animation pipeline
+    """Complete JALI  -> CP77 animation pipeline
 
     Workflow:
         1. Phoneme detection (external - Praat, MFA, etc.)
-        2. Phoneme → JALI parameters (jali_core.py)
+        2. Phoneme  -> JALI parameters (jali_core.py)
         3. Co-articulation rules (jali_core.py)
         4. Acoustic modulation (jali_core.py)
-        5. Dominance blending → (JA, LI) curves (jali_core.py)
-        6. JALI → CP77 track mapping (this module)
+        5. Dominance blending  -> (JA, LI) curves (jali_core.py)
+        6. JALI  -> CP77 track mapping (this module)
         7. Phoneme-specific overrides (this module)
-        8. Track solver → In-between + Correctives (tracksolvers.py)
+        8. Track solver  -> In-between + Correctives (tracksolvers.py)
         9. Bone transform application (facial.py)
     """
 
@@ -599,7 +611,7 @@ class JALIAnimationPipeline:
         """Generate track weight curves from phonemes.
 
         Two paths:
-        - Real phoneme data (MFA, etc.): coarticulation → dominance blending
+        - Real phoneme data (MFA, etc.): coarticulation  -> dominance blending
         - Acoustic-only (detector gives all AH/SIL): per-frame amplitude/pitch
 
         Returns an (N, M) array of per-frame track values.
@@ -621,8 +633,8 @@ class JALIAnimationPipeline:
             ja_curve, li_curve = self._curves_from_audio(
                 phoneme_events, audio_path, duration)
 
-        # JALI → CP77 track mapping (writes to LipsyncPoseOutput tracks)
-        print("[JALI] Stage 4: JALI → CP77 track mapping...")
+        # JALI  -> CP77 track mapping (writes to LipsyncPoseOutput tracks)
+        print("[JALI] Stage 4: JALI  -> CP77 track mapping...")
         track_names = [str(n) if not isinstance(n, dict) else n.get('$value', '')
                        for n in self.rig.track_names]
 
@@ -722,7 +734,7 @@ class JALIAnimationPipeline:
         print(f"[JALI]   Intensity: mean={int_mean:.1f} std={int_std:.1f}")
         print(f"[JALI]   Pitch: mean={pitch_mean:.1f} std={pitch_std:.1f}")
 
-        # Per-frame: amplitude → JA, pitch deviation → LI
+        # Per-frame: amplitude  -> JA, pitch deviation  -> LI
         for i, t in enumerate(times):
             if not sounding[i]:
                 continue
@@ -731,7 +743,7 @@ class JALIAnimationPipeline:
 
             if not math.isnan(iv):
                 z = (iv - int_mean) / int_std
-                # Map: mean intensity → JA=0.3, loud → 0.65, quiet → 0.1
+                # Map: mean intensity  -> JA=0.3, loud  -> 0.65, quiet  -> 0.1
                 ja[i] = float(np.clip(0.3 + 0.35 * z, 0.05, 1.0))
             else:
                 ja[i] = 0.3
@@ -765,6 +777,10 @@ def keyframe_tracks(
     This creates an action (with proper 5.x slot) and inserts sparse
     keyframes so the real-time solver can read them on each frame.
 
+    FCurves are placed in the "Track Keys" action group so that
+    export_anim_tracks can find them and restore the correct
+    trackIndex via the armature's trackNames dict.
+
     Args:
         armature_obj: Blender armature object
         rig: RigData with track_names
@@ -779,9 +795,13 @@ def keyframe_tracks(
         raise ImportError("Blender not available")
 
     from .animtools import _assign_action
-    from .tracks import get_action_fcurves, _bulk_set_keyframes
+    from .tracks import (
+        get_action_fcurves,
+        _bulk_set_keyframes,
+        add_track_action_group,
+    )
 
-    # --- Ensure action with proper 5.x slot ---
+    #  Ensure action with proper 5.x slot 
     if not armature_obj.animation_data:
         armature_obj.animation_data_create()
 
@@ -794,6 +814,9 @@ def keyframe_tracks(
     # On Blender 5.x, a brand-new action has no layers.
     # get_action_fcurves needs layers[0].strips[0].channelbags[0].
     # Bootstrap the structure if missing.
+    #
+    # NOTE: get_action_fcurves MUST be called BEFORE add_track_action_group
+    # because on 5.x it creates the channelbag where groups live.
     fcurves = get_action_fcurves(action)
     if fcurves is None and hasattr(action, 'layers'):
         try:
@@ -810,7 +833,6 @@ def keyframe_tracks(
                 else:
                     slot = action.slots.new(name=action.name, id_type='OBJECT')
                 strip.channelbags.new(slot=slot)
-                # Re-bind slot to animation_data
                 adt = armature_obj.animation_data
                 if hasattr(adt, 'action_slot'):
                     adt.action_slot = slot
@@ -822,7 +844,9 @@ def keyframe_tracks(
         print("[JALI] ERROR: Cannot access action fcurves")
         return 0
 
-    # --- Build track name list ---
+    action_group = add_track_action_group(action)
+
+    #  Build track name list 
     track_names = [str(n) if not isinstance(n, dict) else n.get('$value', '')
                    for n in rig.track_names]
 
@@ -844,6 +868,9 @@ def keyframe_tracks(
             fc.keyframe_points.clear()
             fcurves.remove(fc)
         fc = fcurves.new(data_path=data_path)
+
+        if action_group is not None:
+            fc.group = action_group
 
         # Sparse keyframe extraction — only key on significant change
         frames = []
