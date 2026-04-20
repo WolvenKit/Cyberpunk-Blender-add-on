@@ -688,15 +688,9 @@ class CP77_PT_MaterialTools(Panel):
         box2 = layout.box()
         col = box2.column()
         rowTitle = col.row()
+        rowTitle.enabled = my_props.multilayer_object_bool
         rowTitle.label(text="MULTILAYERED")
-
-        row_overrides = col.row()
-        row_overrides.enabled = my_props.multilayer_object_bool
-        if my_props.multilayer_overrides_disconnected_bool == False:
-            row_overrides.operator("generate_layer_overrides.mlsetup")
-        else:
-            row_overrides.operator("generate_layer_overrides_disconnected.mlsetup")
-        row_overrides.prop(my_props, "multilayer_overrides_disconnected_bool", text="", icon="MESH_MONKEY", toggle=True)
+        rowTitle.operator("generate_layer_overrides_disconnected.mlsetup", text="", icon="MESH_MONKEY")
 
         row_export = col.row()
         row_export.enabled = my_props.multilayer_object_bool
@@ -715,8 +709,10 @@ class CP77_PT_MaterialTools(Panel):
         if not active_palette:
             row_error = col.row()
             row_error.alignment = 'CENTER'
-            row_error.scale_y= 3
-            row_error.label(text='Generate Overrides to access Multilayer Editing')
+            row_error.scale_y = 1
+            row_error.label(text='No palettes found - invalid resources', icon='ERROR')
+            row_error = col.row()
+            row_error.operator("generate_layer_overrides.mlsetup", text='Try Generate Overrides')
             return
         if 'MLTemplatePath' not in active_palette:
             row_error = col.row()
@@ -730,6 +726,7 @@ class CP77_PT_MaterialTools(Panel):
         row_mltemplate.scale_x = 1.75
         row_mltemplate.scale_y = 1.75
         row_mltemplate_split = row_mltemplate.split(factor=0.75)
+
         if my_props.multilayer_has_generated_overrides:
             row_mltemplate_split.label(text=f"Palette could not be generated", icon='ERROR')
             row_mltemplate_split.prop(my_props, "multilayer_index_int", text="")
