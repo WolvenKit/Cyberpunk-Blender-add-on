@@ -933,7 +933,7 @@ PhysXManager& getManager()
   return instance;
 }
 
-PYBIND11_MODULE(pxveh34, m)
+PYBIND11_MODULE(pxbridge, m)
 {
   m.def("init", []() { return getManager().init(); });
   m.def("shutdown", []() { getManager().shutdown(); });

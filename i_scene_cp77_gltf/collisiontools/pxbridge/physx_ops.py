@@ -16,7 +16,7 @@ class PHYSX_OT_init_scene(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            from . import pxveh34 as _bridge
+            from . import pxbridge as _bridge
             if _bridge.init():
                 context.scene.physx.is_initialized = True
                 g = context.scene.physx.gravity
@@ -78,7 +78,7 @@ class PHYSX_OT_build_scene(bpy.types.Operator):
     def execute(self, context):
         bpy.ops.physx.validate_scene()
         try:
-            from . import pxveh34 as _bridge
+            from . import pxbridge as _bridge
             _bridge.reset()
             g = context.scene.physx.gravity
             _bridge.set_gravity(g[0], g[1], g[2])
@@ -149,7 +149,7 @@ class PHYSX_OT_run_steps(bpy.types.Operator):
         px_s = context.scene.physx
         if not px_s.is_initialized: return {'CANCELLED'}
         try:
-            from . import pxveh34 as _bridge
+            from . import pxbridge as _bridge
             dt = 1.0 / 60.0
             for _ in range(px_s.sim_steps):
                 _bridge.start_step(dt)
@@ -205,7 +205,7 @@ class PHYSX_OT_sim_step(bpy.types.Operator):
             return self.cancel(context)
         if event.type in {'ESC', 'RIGHTMOUSE'}:
             return self.cancel(context)
-        from . import pxveh34 as _bridge
+        from . import pxbridge as _bridge
 
         # Manipulator
         if event.type == 'MOUSEMOVE':
@@ -290,7 +290,7 @@ class PHYSX_OT_sim_step(bpy.types.Operator):
             context.window_manager.event_timer_remove(self._timer)
             self._timer = None
         if self._cursor_handle != "0":
-            from . import pxveh34 as _bridge
+            from . import pxbridge as _bridge
             try:
                 _bridge.remove_actor(int(self._cursor_handle))
             except:
@@ -322,7 +322,7 @@ class PHYSX_OT_apply_force(bpy.types.Operator):
                 h = item.actor_handle
                 break
         if h == "0": return {'CANCELLED'}
-        from . import pxveh34 as _bridge
+        from . import pxbridge as _bridge
         f = px_s.force_value
         p = context.scene.cursor.location if px_s.use_force_pos else Vector((0, 0, 0))
         _bridge.apply_force(int(h), [f[0], f[1], f[2]], int(px_s.force_mode), px_s.use_force_pos, [p.x, p.y, p.z])
@@ -335,7 +335,7 @@ class PHYSX_OT_update_gravity(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            from . import pxveh34 as _bridge
+            from . import pxbridge as _bridge
             g = context.scene.physx.gravity
             _bridge.set_gravity(g[0], g[1], g[2])
         except:
@@ -349,7 +349,7 @@ class PHYSX_OT_cook_mesh(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            from . import pxveh34 as _bridge
+            from . import pxbridge as _bridge
             if not _bridge.init(): return {'CANCELLED'}
             obj = context.object
             shape = obj.physx.shapes[obj.physx.shape_index]
@@ -445,7 +445,7 @@ class PHYSX_OT_calc_dynamics(bpy.types.Operator):
         obj = context.object
         px = obj.physx
         try:
-            from . import pxveh34 as _bridge
+            from . import pxbridge as _bridge
             shapes_data = []
             densities = []
             for shape in px.shapes:
@@ -520,7 +520,7 @@ class PHYSX_OT_reset_session(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            from . import pxveh34 as _bridge
+            from . import pxbridge as _bridge
             _bridge.reset()
             context.scene.physx.active_actor_count = 0
             context.scene.physx.scene_built = False
