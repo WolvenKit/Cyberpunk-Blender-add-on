@@ -1,8 +1,6 @@
 import bpy
 import bmesh
 import math
-import re
-import os
 from collections import defaultdict
 from .verttools import *
 from ..cyber_props import *
