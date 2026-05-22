@@ -1,8 +1,10 @@
 from __future__ import annotations
-import numpy as np
+
 import math
-from typing import List, Tuple, Dict, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import Dict, List, Tuple
+
+import numpy as np
 
 try:
     import parselmouth
@@ -52,10 +54,9 @@ class PhonemeEvent:
     dominance: float = 0.5
 
     # Acoustic modulation
-    amplitude: float = 1.0  # Paper §4.3: intensity-based
     pitch: float = 0.0  # Paper §4.3: pitch deviation
 
-    # Phoneme classification (for co-articulation rules)
+    # Phoneme classification
     is_vowel: bool = False
     is_bilabial: bool = False
     is_labiodental: bool = False
@@ -64,6 +65,7 @@ class PhonemeEvent:
     is_lip_heavy: bool = False
     is_obstruent_nasal: bool = False
     lexically_stressed: bool = False
+    stress_level: int = 0  # 0=unstressed, 1=secondary, 2=primary
     word_prominent: bool = True  # Paper §4.2: de-stressed words
 
     # Context (set by co-articulation engine)
@@ -71,19 +73,33 @@ class PhonemeEvent:
     prev_is_vowel: bool = False
     word_index: int = -1  # Word boundary tracking for Rule 8
 
+    # Pause boundary times — used to clamp onset/decay so phoneme
+    # influence does not bleed across silence boundaries.
+    prev_pause_end: float = float('-inf')
+    next_pause_start: float = float('inf')
+
+    # Natural phoneme bounds — preserved across coarticulation extensions.
+    # `start` and `end` may be extended by Rule 2 (lip-heavy), but the
+    # apex location and sustain duration must remain anchored to the
+    # acoustic phoneme position.  Set to -1 means "not set".
+    original_start: float = -1.0
+    original_end: float = -1.0
+
     @property
     def duration(self) -> float:
         return self.end - self.start
 
     @property
     def apex(self) -> float:
-        """Paper §4.2: apex coincides with beginning of the sound.
-        Onset begins BEFORE the apex (120-150ms earlier)."""
-        return self.start
+        """Paper §4.2: apex coincides with beginning of the natural sound"""
+        return self.original_start if self.original_start >= 0 else self.start
 
     @property
     def sustain_end(self) -> float:
-        """Paper §4.2: apex sustained to 75% through phoneme"""
+        """Paper §4.2: apex sustained to 75% through phoneme."""
+        if self.original_start >= 0 and self.original_end >= 0:
+            orig_dur = self.original_end - self.original_start
+            return self.original_start + 0.75 * orig_dur
         return self.start + 0.75 * self.duration
 
     @property
@@ -108,14 +124,14 @@ class PhonemeEvent:
         return 0.150 if self.is_lip_heavy else 0.120
 
 
-# PHONEME → JALI MAPPING (from paper Figure 4)
+# PHONEME  -> JALI MAPPING (from paper Figure 4)
 
 ARPABET_JALI_MAP: Dict[str, JALIViseme] = {
     # Silence
     'SIL': JALIViseme(0.0, 0.0, 0.0),
     'SP': JALIViseme(0.0, 0.0, 0.0),
 
-    # CONSONANTS - High Dominance
+    # CONSONANTS - High Dominance  
 
     # Bilabials - MUST close lips (paper §4.2, Constraint 1)
     'M': JALIViseme(0.0, 0.0, 1.0),  # MMM viseme
@@ -153,7 +169,7 @@ ARPABET_JALI_MAP: Dict[str, JALIViseme] = {
     'Y': JALIViseme(0.1, 0.5, 0.6),
     'HH': JALIViseme(0.4, 0.0, 0.2),
 
-    # === VOWELS - Low Dominance ===
+    # VOWELS - Low Dominance  
 
     # Low vowels (max jaw) - AAA/AHH visemes
     'AA': JALIViseme(1.0, 0.0, 0.15),  # "father"
@@ -196,7 +212,7 @@ VOWELS = frozenset(
         )
 PAUSES = frozenset({'SIL', 'SP', '.', ',', '!', '?', ';', ':'})
 
-# Phoneme → Viseme mapping (paper Figure 4)
+# Phoneme  -> Viseme mapping (paper Figure 4)
 # Many phonemes map to one viseme — duplicates are merged on VISEME
 PHONEME_TO_VISEME = {
     'AE': 'AAA', 'EY': 'AAA',
@@ -224,7 +240,6 @@ def _get_viseme(phoneme: str) -> str:
     """Map phoneme to viseme group (paper Figure 4)."""
     return PHONEME_TO_VISEME.get(phoneme.rstrip('012'), phoneme)
 
-
 # DOMINANCE BLENDER (Paper §4.2)
 
 class DominanceBlender:
@@ -235,7 +250,7 @@ class DominanceBlender:
     75% of phoneme duration, then 120ms decay.  Lip-heavy: 150ms
     onset and offset."
 
-    Each phoneme's curve extends BEYOND its own boundaries so that
+    Each phoneme's curve extends beyond its own boundaries so that
     adjacent curves overlap — this is what prevents jitter.
     """
 
@@ -249,50 +264,65 @@ class DominanceBlender:
             ) -> np.ndarray:
         """Paper §4.2 speech motion curve.
 
-        Shape:  onset (sin²) → sustain (1.0) → decay (sin²)
+        Shape:  onset (sin²)  -> sustain (1.0)  -> decay (cos²)
 
-        Timing:
-          onset_start = phoneme.start - onset_time
-          apex        = phoneme.start           (onset reaches 1.0)
-          sustain_end = phoneme.start + 0.75 * duration
-          decay_end   = sustain_end + decay_time
+        Apex and sustain end are anchored to the original phoneme bounds
+        (event.apex == original_start, event.sustain_end == 75% of
+        original_duration).  Onset and decay can extend beyond the
+        natural bounds when Rule 2 (lip-heavy) extends event.start/end.
 
-        Curves intentionally extend beyond phoneme boundaries so
-        neighbours overlap and the weighted average blends smoothly.
+        For non-extended phonemes, this reduces to the standard 120ms
+        pre-onset and 120ms post-sustain decay.
         """
-        dur = max(event.end - event.start, 0.001)
-
-        # Paper: lip-heavy 150ms, default 120ms
         is_lip_heavy = getattr(event, 'is_lip_heavy', False)
-        onset_time = 0.150 if is_lip_heavy else 0.120
-        decay_time = 0.150 if is_lip_heavy else 0.120
+        natural_onset = 0.150 if is_lip_heavy else 0.120
+        natural_decay = 0.150 if is_lip_heavy else 0.120
 
-        t_onset_start = event.start - onset_time
-        t_apex = event.start
-        t_sustain_end = event.start + 0.75 * dur
-        t_decay_end = t_sustain_end + decay_time
+        t_apex = event.apex                    # original_start (natural)
+        t_sustain_end = event.sustain_end       # 75% of natural duration
+
+        # Onset begins at natural pre-onset or at the extended start,
+        # whichever is earlier.  This lets lip-heavy phonemes have a
+        # longer anticipation window without losing the natural sustain.
+        natural_onset_start = t_apex - natural_onset
+        t_onset_start = min(natural_onset_start, event.start)
+
+        # Decay ends at natural post-decay OR at the extended end,
+        # whichever is later.  Same idea for hysteresis.
+        natural_decay_end = t_sustain_end + natural_decay
+        t_decay_end = max(natural_decay_end, event.end)
+
+        # Clamp to pause boundaries.  Phoneme onsets and decays model
+        # anticipatory and lingering articulation
+        prev_pause_end = getattr(event, 'prev_pause_end', float('-inf'))
+        next_pause_start = getattr(event, 'next_pause_start', float('inf'))
+        if t_onset_start < prev_pause_end:
+            t_onset_start = prev_pause_end
+        if t_decay_end > next_pause_start:
+            t_decay_end = next_pause_start
+
+        onset_dur = max(t_apex - t_onset_start, 0.001)
+        decay_dur = max(t_decay_end - t_sustain_end, 0.001)
 
         envelope = np.zeros_like(times)
 
-        # Onset phase: sin² from 0 → 1
+        # Onset: sin² ramp from 0  -> 1
         onset_mask = (times >= t_onset_start) & (times < t_apex)
-        if onset_time > 0:
-            progress = (times[onset_mask] - t_onset_start) / onset_time
+        if onset_mask.any():
+            progress = (times[onset_mask] - t_onset_start) / onset_dur
             envelope[onset_mask] = np.sin(0.5 * np.pi * np.clip(progress, 0, 1)) ** 2
 
-        # Sustain phase: hold at 1.0
+        # Sustain: hold at 1.0 across the natural plateau
         sustain_mask = (times >= t_apex) & (times <= t_sustain_end)
         envelope[sustain_mask] = 1.0
 
-        # Decay phase: sin² from 1 → 0
+        # Decay: cos² ramp from 1  -> 0
         decay_mask = (times > t_sustain_end) & (times <= t_decay_end)
-        if decay_time > 0:
-            progress = (times[decay_mask] - t_sustain_end) / decay_time
+        if decay_mask.any():
+            progress = (times[decay_mask] - t_sustain_end) / decay_dur
             envelope[decay_mask] = np.cos(0.5 * np.pi * np.clip(progress, 0, 1)) ** 2
 
-        # Scale by dominance only — amplitude modulates the target
-        # values (jaw, lip) via stress conventions or acoustic analysis,
-        # Dominance controls how strongly this phoneme resists coarticulation from neighbors.
+        # Scale by dominance
         return envelope * event.dominance
 
     def blend_jali_parameters(
@@ -349,12 +379,24 @@ class CoarticulationEngine:
         if not events:
             return events
 
+        # Snapshot original acoustic timing.  Coarticulation may extend
+        # start/end (lip-heavy Rule 2, duplicate merge Rule 1), but apex
+        # and sustain duration must stay anchored to the natural span.
+        for event in events:
+            if event.original_start < 0:
+                event.original_start = event.start
+            if event.original_end < 0:
+                event.original_end = event.end
+
         # Set classification flags
         for event in events:
             self._classify_phoneme(event)
 
         # Set context info
         self._set_context(events)
+
+        # Infer de-stressed words from per-word stress profile
+        self._infer_word_prominence(events)
 
         # Apply rules in order
         self._substitute_pauses(events)    # Figure 10: pause substitution
@@ -371,8 +413,9 @@ class CoarticulationEngine:
 
     @staticmethod
     def _classify_phoneme(event: PhonemeEvent):
-        """Set classification flags"""
-        p = event.phoneme.rstrip('012')  # Strip stress markers
+        """Set classification flags. Phoneme is already stripped of
+        stress markers by create_phoneme_event."""
+        p = event.phoneme
 
         event.is_vowel = p in VOWELS
         event.is_bilabial = p in BILABIALS
@@ -382,14 +425,20 @@ class CoarticulationEngine:
         event.is_lip_heavy = p in LIP_HEAVY
         event.is_obstruent_nasal = p in OBSTRUENTS_NASALS
 
-        # Lexical stress from Arpabet suffix
-        if event.phoneme and event.phoneme[-1] in '12':
-            event.lexically_stressed = True
-            event.phoneme = p
-
     @staticmethod
     def _set_context(events: List[PhonemeEvent]):
-        """Set prev_is_pause/prev_is_vowel context"""
+        """Set prev_is_pause / prev_is_vowel and pause boundary times.
+
+        prev_pause_end / next_pause_start record the times of the
+        nearest pause on each side, so that compute_dominance_curve
+        can clamp onset/decay to those boundaries.  Phonemes that
+        have no pause on a given side keep -inf / +inf, which means
+        no clamp applies.
+        """
+        n = len(events)
+
+        # First pass: prev/is-vowel flags and prev_pause_end (forward scan)
+        last_pause_end = float('-inf')
         for i, event in enumerate(events):
             if i == 0:
                 event.prev_is_pause = True
@@ -399,41 +448,79 @@ class CoarticulationEngine:
                 event.prev_is_pause = prev.phoneme in PAUSES
                 event.prev_is_vowel = prev.is_vowel
 
+            event.prev_pause_end = last_pause_end
+            if event.phoneme in PAUSES:
+                last_pause_end = event.end
+
+        # Second pass: next_pause_start (backward scan)
+        next_pause_start = float('inf')
+        for i in range(n - 1, -1, -1):
+            event = events[i]
+            event.next_pause_start = next_pause_start
+            if event.phoneme in PAUSES:
+                next_pause_start = event.start
+
+    @staticmethod
     @staticmethod
     def _substitute_pauses(events: List[PhonemeEvent]):
-        """Figure 10: Pause substitution — pauses take neighbor's shape.
+        """Figure 10: Pause substitution.
 
         Paper Convention 3: "Pauses leave the mouth open"
-        Figure 10: if Pi is Pause → Pi = Pi-1; if Pi-1 is Pause → Pi = Pi+1
+
+        INTERIOR pauses (have non-pause neighbours on BOTH sides):
+        Speech is about to resume, so the jaw is held slightly open
+        (inherited from a neighbour) to avoid snapping shut between
+        words.  Lip is forced to neutral so a vowel's wide/round
+        shape doesn't carry through the silence.
+
+        EXTERIOR pauses (leading or trailing silence with no
+        non-pause neighbour on one side):
+        The speaker is at rest — before utterance start or after
+        utterance end.  Jaw and lip both relax to closed/neutral.
+        Otherwise the trailing silence holds the mouth open
+        indefinitely after the sentence ends.
         """
+        n = len(events)
         for i, event in enumerate(events):
             if event.phoneme not in PAUSES:
                 continue
 
-            # Take shape from previous neighbor (mouth stays open)
-            if i > 0 and events[i - 1].phoneme not in PAUSES:
-                event.jaw = events[i - 1].jaw
-                event.lip = events[i - 1].lip
-            # Or from next neighbor
-            elif i < len(events) - 1 and events[i + 1].phoneme not in PAUSES:
-                event.jaw = events[i + 1].jaw
-                event.lip = events[i + 1].lip
+            has_prev_speech = any(
+                events[j].phoneme not in PAUSES for j in range(i))
+            has_next_speech = any(
+                events[j].phoneme not in PAUSES for j in range(i + 1, n))
+            is_interior = has_prev_speech and has_next_speech
 
-            # Convention 3: reduce but don't close
-            event.jaw = max(event.jaw * 0.7, 0.15)
-            event.dominance = 0.05  # very weak — easily overridden
+            if is_interior:
+                # Inherit jaw from previous non-pause neighbour
+                if i > 0 and events[i - 1].phoneme not in PAUSES:
+                    event.jaw = events[i - 1].jaw
+                elif i < n - 1 and events[i + 1].phoneme not in PAUSES:
+                    event.jaw = events[i + 1].jaw
+
+                event.lip = 0.0
+                event.jaw = max(event.jaw * 0.7, 0.15)
+                event.dominance = 0.05
+            else:
+                # Leading or trailing silence — speaker at rest
+                event.jaw = 0.0
+                event.lip = 0.0
+                event.dominance = 0.05
 
     @staticmethod
     def _merge_duplicates(events: List[PhonemeEvent]):
         """Rule 1: Merge consecutive duplicate VISEMES (not phonemes).
 
         Paper Figure 10: if viseme(Pi) == viseme(Pi-1), merge.
-        E.g. /p/ followed by /m/ are both viseme MMM → merge.
+        Ex: /p/ followed by /m/ are both viseme MMM  -> merge.
+        Both `end` and `original_end` are extended so the merged
+        viseme's natural sustain region covers the full combined span.
         """
         i = 0
         while i < len(events) - 1:
             if _get_viseme(events[i].phoneme) == _get_viseme(events[i + 1].phoneme):
                 events[i].end = events[i + 1].end
+                events[i].original_end = events[i + 1].original_end
                 events.pop(i + 1)
             else:
                 i += 1
@@ -446,6 +533,10 @@ class CoarticulationEngine:
         but UX and t still exist as separate articulatory events.
         The lip-heavy viseme's temporal influence expands, but
         neighboring phonemes keep their jaw and tongue contributions.
+
+        Pauses act as hard boundaries — lip-heavy influence does not
+        extend across silences, since the speaker has had time to
+        relax during a pause.
         """
         for i, event in enumerate(events):
             if not event.is_lip_heavy:
@@ -454,13 +545,15 @@ class CoarticulationEngine:
             # Extend start to previous phoneme's start
             if i > 0:
                 prev = events[i - 1]
-                if not (prev.is_bilabial or prev.is_labiodental):
+                if (prev.phoneme not in PAUSES
+                        and not (prev.is_bilabial or prev.is_labiodental)):
                     event.start = prev.start
 
             # Extend end to next phoneme's end
             if i < len(events) - 1:
                 nxt = events[i + 1]
-                if not (nxt.is_bilabial or nxt.is_labiodental):
+                if (nxt.phoneme not in PAUSES
+                        and not (nxt.is_bilabial or nxt.is_labiodental)):
                     event.end = nxt.end
 
     @staticmethod
@@ -469,6 +562,10 @@ class CoarticulationEngine:
 
         Rule 3: Replace lip shape of non-bilabial/labiodental neighbors
         Rule 4: Simultaneously articulate with bilabial/labiodental neighbors
+
+        Pauses are excluded — _substitute_pauses sets pause lip values
+        explicitly (interior pauses get neutral, exterior pauses get
+        rest position).  Overwriting them here would undo that.
         """
         for i, event in enumerate(events):
             if not event.is_lip_heavy:
@@ -477,15 +574,18 @@ class CoarticulationEngine:
             # Previous neighbor
             if i > 0:
                 prev = events[i - 1]
-                if not (prev.is_bilabial or prev.is_labiodental):
+                if (prev.phoneme not in PAUSES
+                        and not (prev.is_bilabial or prev.is_labiodental)):
                     # Rule 3: replace lip shape entirely
                     prev.lip = event.lip
                 # Rule 4: bilabials/labiodentals keep their own lip shape
+                # (simultaneous articulation — no change needed)
 
             # Next neighbor
             if i < len(events) - 1:
                 nxt = events[i + 1]
-                if not (nxt.is_bilabial or nxt.is_labiodental):
+                if (nxt.phoneme not in PAUSES
+                        and not (nxt.is_bilabial or nxt.is_labiodental)):
                     nxt.lip = event.lip
 
     @staticmethod
@@ -497,7 +597,7 @@ class CoarticulationEngine:
 
         Uses word_index to prevent cross-word lip bleeding.
         Within a word, looks forward first (anticipation), last
-        phoneme in word looks back — consistent with Rule 8.
+        phoneme in word looks back
         """
         n = len(events)
         for i, event in enumerate(events):
@@ -539,8 +639,8 @@ class CoarticulationEngine:
     def _apply_obstruent_rules(events: List[PhonemeEvent]):
         """Rules 6, 7: Obstruent/Nasal jaw behavior.
 
-        Rule 6: < 1 frame, no similar neighbors → no jaw effect
-        Rule 7: >= 1 frame → narrow jaw per viseme definition
+        Rule 6: < 1 frame, no similar neighbors  -> no jaw effect
+        Rule 7: >= 1 frame  -> narrow jaw per viseme definition
         """
         n = len(events)
         for i, event in enumerate(events):
@@ -554,10 +654,10 @@ class CoarticulationEngine:
                 has_similar = True
 
             if event.duration < 0.033 and not has_similar:
-                # Rule 6: short, isolated → jaw from neighbors
+                # Rule 6: short, isolated  -> jaw from neighbors
                 event.jaw = 0.0
             elif event.duration >= 0.033:
-                # Rule 7: long enough → narrow jaw per viseme
+                # Rule 7: long enough  -> narrow jaw per viseme
                 event.jaw = min(event.jaw, 0.3)
 
     @staticmethod
@@ -639,21 +739,77 @@ class CoarticulationEngine:
                     event.dominance = min(event.dominance, 0.1)
 
     @staticmethod
-    def _apply_stress_amplitude(events: List[PhonemeEvent]):
-        """Paper §4.2 Conventions: Amplitude from stress
+    def _infer_word_prominence(events: List[PhonemeEvent]):
+        """Mark de-stressed words.
 
-        Paper: "lexically stressed = high (9/10), normal (6/10),
-        de-stressed word = low (3/10)"
+        Paper §4.2 Convention 2: "de-stressed words usually get
+        weakly-articulated visemes for the length of the word."
+
+        Heuristic: a word is de-stressed if none of its vowels carry
+        primary stress (g2p_en marker '1').  Common function words
+        like 'and', 'of', 'the', 'a' typically come from g2p_en with
+        all unstressed vowels and benefit from this weakening.
+        Content words almost always have at least one primary-stressed
+        syllable, so they remain prominent.
+        """
+        if not events:
+            return
+
+        from collections import defaultdict
+        word_groups: Dict[int, List[PhonemeEvent]] = defaultdict(list)
+        for ev in events:
+            if ev.word_index >= 0:
+                word_groups[ev.word_index].append(ev)
+
+        for group in word_groups.values():
+            max_stress = 0
+            for ev in group:
+                if ev.is_vowel and ev.stress_level > max_stress:
+                    max_stress = ev.stress_level
+
+            # No primary stress in this word  -> de-stressed
+            if max_stress < 2:
+                for ev in group:
+                    ev.word_prominent = False
+
+    @staticmethod
+    def _apply_stress_amplitude(events: List[PhonemeEvent]):
+        """Paper §4.2 Conventions: graduated articulation from stress.
+
+        Three-level Arpabet stress markers from g2p_en:
+          2 (primary)    -> strong articulation (paper "high 9/10")
+          1 (secondary)  -> normal articulation (paper "normal 6/10")
+          0 (unstressed) -> weak articulation, schwa-like
+
+        For events from the acoustic-only path (no g2p context, marked
+        by word_index < 0), stress is UNKNOWN — we treat these as
+        secondary so they get normal articulation rather than being
+        weakened to schwa level.
+
+        De-stressed function words get a further reduction (Convention 2:
+        "weakly-articulated visemes for the length of the word") so they
+        smear into surrounding content.
+
         """
         for event in events:
-            if event.lexically_stressed and event.is_vowel:
-                event.amplitude = 0.9
+            if not event.is_vowel:
+                continue
+
+            # Acoustic-only events have no stress info  -> treat as normal
+            stress_known = event.word_index >= 0
+            effective_stress = event.stress_level if stress_known else 1
+
+            if effective_stress == 2:
                 event.jaw = min(event.jaw * 1.1, 1.0)
-            elif not event.word_prominent:
-                event.amplitude = 0.3
-                event.jaw *= 0.7
+            elif effective_stress == 1:
+                pass  # baseline values from JALI map
             else:
-                event.amplitude = 0.6
+                event.jaw *= 0.6
+                event.lip *= 0.7
+
+            # Convention 2: de-stressed function word — further weakening
+            if not event.word_prominent:
+                event.jaw *= 0.7
 
 
 class AcousticAnalyzer:
@@ -661,7 +817,12 @@ class AcousticAnalyzer:
 
     Separates vowels, fricatives, and plosives.  Computes per-class
     statistics (mean, σ) from aligned segments, then uses the paper's
-    bucketed rig settings (Tables 1-3)"""
+    bucketed rig settings (Tables 1-3)
+
+    Only lexically stressed vowels are modulated, and fricatives/plosives
+    only if adjacent to a stressed vowel — this keeps animation from
+    being too erratic.
+    """
 
     def __init__(self, audio_path: str):
         if not PARSELMOUTH_AVAILABLE:
@@ -684,7 +845,7 @@ class AcousticAnalyzer:
                 high: Tuple[float, float]) -> float:
         """Paper Tables 1-3: bucketed rig setting from z-score.
 
-        Uses deterministic midpoints of each range for reproducible output.
+        Uses deterministic midpoints of each range
         The paper gives ranges; we pick the center for consistency.
         """
         if z <= -1.0:
@@ -693,7 +854,7 @@ class AcousticAnalyzer:
             return (high[0] + high[1]) * 0.5
         else:
             # Interpolate within mid range based on z position
-            t = (z + 1.0) * 0.5  # map [-1,1] → [0,1]
+            t = (z + 1.0) * 0.5  # map [-1,1]  -> [0,1]
             return mid[0] + t * (mid[1] - mid[0])
 
     def modulate_events(self, events: List[PhonemeEvent]) -> List[PhonemeEvent]:
@@ -730,7 +891,7 @@ class AcousticAnalyzer:
         hf_mean = np.mean(fric_plos_hf) if fric_plos_hf else 30.0
         hf_std = max(np.std(fric_plos_hf), 1.0) if fric_plos_hf else 10.0
 
-        # Stress gating: identify which events to modulate
+        # identify which events to modulate
         stressed_vowel_indices = {i for i, ev in enumerate(events)
                                   if ev.is_vowel and ev.lexically_stressed}
         adjacent_to_stressed = set()
@@ -739,9 +900,10 @@ class AcousticAnalyzer:
                 adjacent_to_stressed.add(idx - 1)
             if idx < len(events) - 1:
                 adjacent_to_stressed.add(idx + 1)
-        # Paper Tables 1-2 give JA/LI intensity of action
+
+        # Paper Tables 1-2 give JA/LI "rig settings" (intensity of action).
         # These scale HOW MUCH jaw/lip action
-        # Direction comes from the viseme
+        # Direction comes from the phoneme viseme (preserved from coarticulation).
         MID_INTENSITY = 0.45  # center of mid bucket (0.3, 0.6)
 
         for i, event in enumerate(events):
@@ -763,14 +925,12 @@ class AcousticAnalyzer:
                 if not math.isnan(f0) and f0 > 0:
                     z_pitch = (f0 - v_p_mean) / (v_p_std + 1e-6)
                     # Table 2: LI intensity from pitch+intensity
-                    # Scale lip MAGNITUDE, preserve pucker vs wide
+                    # Scale lip MAGNITUDE, preserve DIRECTION (pucker vs wide)
                     z_combined = max(z_int, z_pitch)
                     li_intensity = self._bucket(z_combined, (0.1, 0.2), (0.3, 0.6), (0.7, 0.9))
                     scale = li_intensity / MID_INTENSITY
                     event.lip *= scale
                     event.lip = max(-1.0, min(1.0, event.lip))
-
-                event.amplitude = event.jaw
 
             elif (p in FRICATIVES or p in PLOSIVES) and i in adjacent_to_stressed:
                 if self.hf_intensity is not None:
@@ -823,7 +983,7 @@ class MotionCurveGenerator:
     def generate_curve(self, event: PhonemeEvent, times: np.ndarray) -> np.ndarray:
         """Generate temporal weight curve.
 
-        Shape: sin²(onset) → sustain(1.0) → sin²(decay)
+        Shape: sin²(onset)  -> sustain(1.0)  -> sin²(decay)
         """
         onset_dur = event.onset_duration
         decay_dur = event.decay_duration
@@ -860,21 +1020,33 @@ def create_phoneme_event(
         end: float,
         lexically_stressed: bool = False
         ) -> PhonemeEvent:
-    """Create PhonemeEvent from phoneme string and timing
+    """Create PhonemeEvent from phoneme string and timing.
+
+    Extracts the Arpabet stress marker (0/1/2) from the phoneme string
+    and stores it as stress_level (0=unstressed, 1=secondary, 2=primary).
 
     Args:
-        phoneme: Arpabet phoneme code
+        phoneme: Arpabet phoneme code, optionally with stress marker
         start: Start time (seconds)
         end: End time (seconds)
-        lexically_stressed: Stress marker
+        lexically_stressed: Override flag (used by acoustic-only path)
 
     Returns:
-        PhonemeEvent with JALI parameters
+        PhonemeEvent with JALI parameters and stress level
     """
+    # Extract stress level from Arpabet marker
+    stress_level = 0
+    if phoneme:
+        last = phoneme[-1]
+        if last == '1':
+            stress_level = 2  # primary
+        elif last == '2':
+            stress_level = 1  # secondary
+
     clean = phoneme.rstrip('012')
     jali = ARPABET_JALI_MAP.get(clean, JALIViseme(0.3, 0.0, 0.5))
 
-    stressed = lexically_stressed or (phoneme[-1] in '12' if phoneme else False)
+    stressed = lexically_stressed or (stress_level > 0)
 
     return PhonemeEvent(
             phoneme=clean,
@@ -883,7 +1055,8 @@ def create_phoneme_event(
             jaw=jali.jaw,
             lip=jali.lip,
             dominance=jali.dominance,
-            lexically_stressed=stressed
+            lexically_stressed=stressed,
+            stress_level=stress_level,
             )
 
 
@@ -891,8 +1064,8 @@ class AcousticPhonemeDetector:
     """Acoustic phoneme detection using Praat formant analysis.
 
     Classifies speech regions by acoustic features:
-    - Vowels (>80ms): F1/F2 formant space → AA, AE, UH, EH, UW, IY, AH
-    - Consonants (<80ms): Spectral characteristics → T, D, S, N, L, K
+    - Vowels (>80ms): F1/F2 formant space  -> AA, AE, UH, EH, UW, IY, AH
+    - Consonants (<80ms): Spectral characteristics  -> T, D, S, N, L, K
     - Silence: SIL
     """
 
@@ -1018,7 +1191,7 @@ class TranscriptAligner:
         sound = parselmouth.Sound(self.audio_path)
         self.duration = sound.get_total_duration()
 
-        # 1. Praat speech-interval detection (macro-timing)
+        # Praat speech-interval detection
         intensity = sound.to_intensity()
         textgrid = call(
             intensity, "To TextGrid (silences)",
@@ -1040,12 +1213,12 @@ class TranscriptAligner:
         if not intervals:
             intervals = [(0.0, self.duration)]
 
-        # 2. G2P conversion — returns (phoneme, word_index) tuples
+        # G2P conversion — returns (phoneme, word_index) tuples
         phoneme_words = self._g2p_convert(self.transcript)
         if not phoneme_words:
             return []
 
-        # 3. Proportionally weight vowels higher for realistic pacing
+        # Proportionally weight vowels higher for realistic pacing
         # g2p_en outputs stress markers (e.g. 'UW1'), strip for weight check
         weights = [3.0 if p.rstrip('012') in self.vowels else 1.0
                    for p, _wi in phoneme_words]
@@ -1070,10 +1243,11 @@ class TranscriptAligner:
 
             cumulative_weight += w
 
-        # 4. Anchor vowels to acoustic intensity peaks
-        self._anchor_vowels_to_peaks(events, intensity)
+        # For each phrase, find N intensity peaks (N = vowels in phrase),
+        # snap each vowel to its peak, then redistribute consonants in the gaps.
+        self._anchor_per_phrase(events, intensity, intervals)
 
-        # 5. Inject SIL events for silent intervals between speech
+        # Inject SIL events for silent intervals between speech
         for s_start, s_end in silent_intervals:
             sil = create_phoneme_event('SIL', s_start, s_end)
             sil.word_index = -1
@@ -1098,52 +1272,180 @@ class TranscriptAligner:
             accumulated += interval_dur
         return intervals[-1][1]
 
-    def _anchor_vowels_to_peaks(self, events: List[PhonemeEvent], intensity) -> None:
-        """Adjust vowel timing so intensity peaks fall within the sustain region.
+    def _is_vowel(self, phoneme: str) -> bool:
+        return phoneme.rstrip('012') in self.vowels
+
+    def _find_n_peaks(self, intensity, t_start: float, t_end: float, n: int) -> List[float]:
+        """Find n intensity peaks in [t_start, t_end], sorted by time.
+
+        Uses parselmouth's intensity contour as a numpy array, finds local
+        maxima, picks the strongest n by value, and returns their times in
+        chronological order.  Falls back to evenly-spaced positions if
+        peak detection fails or returns fewer peaks than requested.
         """
-        import math
+        if n <= 0:
+            return []
 
-        for i, event in enumerate(events):
-            if event.phoneme.rstrip('012') not in self.vowels:
+        try:
+            times = np.asarray(intensity.xs(), dtype=np.float64)
+            values = np.asarray(intensity.values, dtype=np.float64).ravel()
+        except Exception:
+            return [t_start + (i + 0.5) * (t_end - t_start) / n for i in range(n)]
+
+        mask = (times >= t_start) & (times <= t_end)
+        sub_t = times[mask]
+        sub_v = values[mask]
+
+        if len(sub_v) < 3:
+            return [t_start + (i + 0.5) * (t_end - t_start) / n for i in range(n)]
+
+        # Light smoothing to suppress noise
+        if len(sub_v) >= 5:
+            kernel = np.ones(5, dtype=np.float64) / 5.0
+            smoothed = np.convolve(sub_v, kernel, mode='same')
+        else:
+            smoothed = sub_v
+
+        # Local maxima
+        peaks: List[Tuple[float, float]] = []
+        for i in range(1, len(smoothed) - 1):
+            if smoothed[i] >= smoothed[i - 1] and smoothed[i] > smoothed[i + 1]:
+                peaks.append((float(sub_t[i]), float(smoothed[i])))
+
+        if not peaks:
+            return [t_start + (i + 0.5) * (t_end - t_start) / n for i in range(n)]
+
+        if len(peaks) <= n:
+            # Fewer peaks than vowels: pad with midpoints of largest gaps
+            result = sorted(p[0] for p in peaks)
+            while len(result) < n:
+                extended = [t_start] + result + [t_end]
+                gaps = [extended[i + 1] - extended[i] for i in range(len(extended) - 1)]
+                max_idx = gaps.index(max(gaps))
+                new_t = (extended[max_idx] + extended[max_idx + 1]) / 2
+                result.append(new_t)
+                result.sort()
+            return result
+
+        # More peaks than vowels: take strongest N by intensity, then sort by time
+        peaks.sort(key=lambda p: -p[1])
+        return sorted(p[0] for p in peaks[:n])
+
+    def _anchor_per_phrase(
+            self,
+            events: List[PhonemeEvent],
+            intensity,
+            phrases: List[Tuple[float, float]],
+            ) -> None:
+        """Snap vowels to intensity peaks within each phrase.
+
+        Algorithm:
+          1. For each phrase, count vowels
+          2. Find that many intensity peaks in the phrase
+          3. Snap each vowel to its corresponding peak
+          4. Redistribute consonants in the gaps between anchored vowels
+
+        """
+        for phrase_start, phrase_end in phrases:
+            phrase_events = [e for e in events
+                             if e.start >= phrase_start - 0.02
+                             and e.end <= phrase_end + 0.02]
+            if not phrase_events:
                 continue
 
-            dur = event.end - event.start
-            sustain_end = event.start + 0.75 * dur
+            vowels = [e for e in phrase_events if self._is_vowel(e.phoneme)]
+            n_vowels = len(vowels)
+            if n_vowels == 0:
+                continue
 
-            # Search ±100ms around the event
-            search_start = max(0.0, event.start - 0.1)
-            search_end = min(self.duration, event.end + 0.1)
+            peaks = self._find_n_peaks(intensity, phrase_start, phrase_end, n_vowels)
+            if len(peaks) != n_vowels:
+                continue  # safety: skip phrase if peak count mismatch
 
-            try:
-                peak_time = call(
-                    intensity, "Get time of maximum",
-                    search_start, search_end, "Parabolic")
-
-                if math.isnan(peak_time) or peak_time <= 0:
-                    continue
-
-                # Only shift if peak is outside the sustain window
-                if event.start <= peak_time <= sustain_end:
-                    continue  # peak already in sustain — no adjustment
-
-                # Shift so peak lands at 40% through the vowel
-                target = event.start + 0.4 * dur
-                shift = peak_time - target
-                new_start = event.start + shift
-                new_end = event.end + shift
-
-                # Clamp to not overlap neighbors
-                if i > 0:
-                    new_start = max(new_start, events[i - 1].end)
-                if i < len(events) - 1:
-                    new_end = min(new_end, events[i + 1].start)
-
+            # Anchor each vowel: position so peak lands at 40% through the vowel
+            for vowel, peak_time in zip(vowels, peaks):
+                dur = max(vowel.end - vowel.start, 0.04)
+                new_start = peak_time - 0.4 * dur
+                new_end = new_start + dur
+                new_start = max(new_start, phrase_start)
+                new_end = min(new_end, phrase_end)
                 if new_end > new_start + 0.02:
-                    event.start = new_start
-                    event.end = new_end
+                    vowel.start = new_start
+                    vowel.end = new_end
 
-            except Exception:
+            # Redistribute consonants between anchored vowels
+            self._fill_consonants(phrase_events, phrase_start, phrase_end)
+
+    def _fill_consonants(
+            self,
+            phrase_events: List[PhonemeEvent],
+            phrase_start: float,
+            phrase_end: float,
+            ) -> None:
+        """After vowels are anchored, distribute consonants evenly in the gaps."""
+        n = len(phrase_events)
+        if n == 0:
+            return
+
+        vowel_pos = [i for i, e in enumerate(phrase_events) if self._is_vowel(e.phoneme)]
+        if not vowel_pos:
+            return
+
+        # Leading consonants (before first vowel)
+        first_v = vowel_pos[0]
+        if first_v > 0:
+            leading = phrase_events[:first_v]
+            gap_end = phrase_events[first_v].start
+            gap_start = phrase_start
+            gap = gap_end - gap_start
+            if gap > 0.001:
+                per = gap / len(leading)
+                for j, c in enumerate(leading):
+                    c.start = gap_start + j * per
+                    c.end = gap_start + (j + 1) * per
+            else:
+                # Stack tightly before vowel
+                tick = 0.02
+                for j, c in enumerate(leading):
+                    c.start = gap_end - tick * (len(leading) - j)
+                    c.end = gap_end - tick * (len(leading) - j - 1)
+
+        # Between vowels
+        for k in range(len(vowel_pos) - 1):
+            v1_idx = vowel_pos[k]
+            v2_idx = vowel_pos[k + 1]
+            between = phrase_events[v1_idx + 1: v2_idx]
+            if not between:
                 continue
+            gap_start = phrase_events[v1_idx].end
+            gap_end = phrase_events[v2_idx].start
+            gap = gap_end - gap_start
+            if gap > 0.001:
+                per = gap / len(between)
+                for j, c in enumerate(between):
+                    c.start = gap_start + j * per
+                    c.end = gap_start + (j + 1) * per
+            else:
+                # Vowels too close: collapse consonants at midpoint
+                mid = (phrase_events[v1_idx].end + phrase_events[v2_idx].start) / 2
+                tick = 0.01
+                offset = tick * len(between) / 2
+                for j, c in enumerate(between):
+                    c.start = mid - offset + j * tick
+                    c.end = c.start + tick
+
+        # Trailing consonants (after last vowel)
+        last_v = vowel_pos[-1]
+        if last_v < n - 1:
+            trailing = phrase_events[last_v + 1:]
+            gap_start = phrase_events[last_v].end
+            gap_end = phrase_end
+            gap = gap_end - gap_start
+            if gap > 0.001:
+                per = gap / len(trailing)
+                for j, c in enumerate(trailing):
+                    c.start = gap_start + j * per
+                    c.end = gap_start + (j + 1) * per
 
     def _g2p_convert(self, text: str) -> List[Tuple[str, int]]:
         """Convert transcript to Arpabet phonemes via g2p_en.

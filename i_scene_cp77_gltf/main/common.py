@@ -153,6 +153,10 @@ def get_icon_dir():
 def get_refit_dir():
     resources_dir = get_resources_dir()
     return os.path.join(resources_dir, "refitters")
+    
+def get_char_dir():
+    resources_dir = get_resources_dir()
+    return os.path.join(resources_dir, "characters")
 
 def get_script_dir():
     resources_dir = get_resources_dir()

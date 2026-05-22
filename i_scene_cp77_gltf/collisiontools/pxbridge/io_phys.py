@@ -16,27 +16,27 @@ def get_physx_shape_type_mapping(physx_type):
         'CONVEX': 'physicsColliderConvex',
         'TRIANGLE': 'physicsColliderMesh',
         'HEIGHTFIELD': 'physicsColliderMesh'
-        }
+    }
     return mapping.get(physx_type, 'physicsColliderBox')
 
 
 def extract_convex_verts_from_cooked(cooked_data):
     """ Extract vertex positions from PhysX cooked data """
     try:
-        from . import pxveh34 as _bridge
+        from . import pxbridge as _bridge
         raw_data = base64.b64decode(cooked_data.encode('ascii'))
         geom_data = _bridge.get_cooked_geometry('CONVEX', raw_data)
         vertices = []
         verts_flat = geom_data.get('vertices', [])
         for i in range(0, len(verts_flat), 3):
             vertices.append(
-                    {
-                        "$type": "Vector3",
-                        "X": verts_flat[i],
-                        "Y": verts_flat[i + 1],
-                        "Z": verts_flat[i + 2]
-                        }
-                    )
+                {
+                    "$type": "Vector3",
+                    "X": verts_flat[i],
+                    "Y": verts_flat[i + 1],
+                    "Z": verts_flat[i + 2]
+                }
+            )
         return vertices
     except Exception as e:
         print(f"Warning: Could not extract convex vertices: {e}")
@@ -49,55 +49,55 @@ def import_collider_as_actor(obj, shape_type, shape_data, physmat, local_pos, lo
     Registers the object as a scene actor if not already registered.
     """
     px = obj.physx
-
+    
     # Register as actor if not already
     is_registered = False
     for item in context.scene.physx.actors:
         if item.obj_ref == obj:
             is_registered = True
             break
-
+            
     if not is_registered:
         px.actor_type = 'STATIC'
         new_item = context.scene.physx.actors.add()
         new_item.obj_ref = obj
         context.scene.physx.actor_list_index = len(context.scene.physx.actors) - 1
-
+        
     shape_item = px.shapes.add()
-
+    
     s_type_raw = shape_type
     shape_item.name = s_type_raw.replace('physicsCollider', '')
-
+    
     shape_item.local_pos = local_pos
     shape_item.local_rot = local_rot
     shape_item.physics_material = physmat
     shape_item.collision_preset = "None"
-
+    
     if s_type_raw == 'physicsColliderBox':
         shape_item.shape_type = 'BOX'
         extents = shape_data
         shape_item.dim_x = float(extents.get('X', 0.5))
         shape_item.dim_y = float(extents.get('Y', 0.5))
         shape_item.dim_z = float(extents.get('Z', 0.5))
-
+        
     elif s_type_raw == 'physicsColliderSphere':
         shape_item.shape_type = 'SPHERE'
         shape_item.dim_x = float(shape_data)
-
+        
     elif s_type_raw == 'physicsColliderCapsule':
         shape_item.shape_type = 'CAPSULE'
         shape_item.dim_x = float(shape_data.get('radius', 0.5))
         shape_item.dim_y = float(shape_data.get('height', 1.0)) / 2.0
-
+        
     elif s_type_raw == 'physicsColliderConvex':
         shape_item.shape_type = 'CONVEX'
         raw_verts = shape_data
         shape_points = []
         for v in raw_verts:
             shape_points.extend([float(v.get('X', 0)), float(v.get('Y', 0)), float(v.get('Z', 0))])
-
+            
         try:
-            from . import pxveh34 as _bridge
+            from . import pxbridge as _bridge
             if _bridge and shape_points:
                 cooked = _bridge.cook_mesh("CONVEX", shape_points, [], 256)
                 if cooked:
@@ -109,7 +109,7 @@ def import_collider_as_actor(obj, shape_type, shape_data, physmat, local_pos, lo
         except Exception as e:
             print(f"Failed to cook: {e}")
             shape_item.name += " (Failed)"
-
+            
     viz.invalidate_visualization_cache()
     return shape_item
 
@@ -189,19 +189,19 @@ def export_actor_item_to_phys(actor_item, filepath):
                     "$type": "CName",
                     "$storage": "string",
                     "$value": preset_name
-                    },
+                },
                 "queryFilter": {
                     "$type": "physicsQueryFilter",
                     "mask1": "0",
                     "mask2": str(query_mask)
-                    },
+                },
                 "simulationFilter": {
                     "$type": "physicsSimulationFilter",
                     "mask1": str(sim_group),
                     "mask2": str(sim_target_mask)
-                    }
                 }
             }
+        }
 
         pos = shape.local_pos
         rot = shape.local_rot
@@ -218,18 +218,18 @@ def export_actor_item_to_phys(actor_item, filepath):
                 "orientation": {
                     "$type": "Quaternion",
                     "i": rot[1], "j": rot[2], "k": rot[3], "r": rot[0]
-                    },
+                },
                 "position": {
                     "$type": "Vector4", "W": 0,
                     "X": pos[0], "Y": pos[1], "Z": pos[2]
-                    }
-                },
+                }
+            },
             "material": {"$type": "CName", "$storage": "string", "$value": mat_name},
             "materialApperanceOverrides": [],
             "polygonVertices": [],
             "tag": {"$type": "CName", "$storage": "string", "$value": "None"},
             "volumeModifier": 1
-            }
+        }
 
         # Geometry
         if shape.shape_type == 'BOX':
@@ -271,7 +271,7 @@ def export_actor_item_to_phys(actor_item, filepath):
             "ExportedDateTime": datetime.now(timezone.utc).isoformat() + "Z",
             "DataType": "CR2W",
             "ArchiveFileName": filepath
-            },
+        },
         "Data": {
             "Version": 195, "BuildVersion": 0,
             "RootChunk": {
@@ -287,13 +287,13 @@ def export_actor_item_to_phys(actor_item, filepath):
                                 "$type": "Transform",
                                 "orientation": {"$type": "Quaternion", "i": 0, "j": 0, "k": 0, "r": 1},
                                 "position": {"$type": "Vector4", "W": 0, "X": 0, "Y": 0, "Z": 0}
-                                },
+                            },
                             "mappedBoneName": {"$type": "CName", "$storage": "string", "$value": "None"},
                             "mappedBoneToBody": {
                                 "$type": "Transform",
                                 "orientation": {"$type": "Quaternion", "i": 0, "j": 0, "k": 0, "r": 1},
                                 "position": {"$type": "Vector4", "W": 0, "X": 0, "Y": 0, "Z": 0}
-                                },
+                            },
                             "name": {"$type": "CName", "$storage": "string", "$value": obj_ref.name},
                             "params": {
                                 "$type": "physicsSystemBodyParams",
@@ -303,21 +303,21 @@ def export_actor_item_to_phys(actor_item, filepath):
                                     "$type": "Transform",
                                     "orientation": {"$type": "Quaternion", "i": 0, "j": 0, "k": 0, "r": 1},
                                     "position": {"$type": "Vector4", "W": 0, "X": com.x, "Y": com.y, "Z": com.z}
-                                    },
+                                },
                                 "inertia": {"$type": "Vector3", "X": inertia.x, "Y": inertia.y, "Z": inertia.z},
                                 "mass": total_mass,
                                 "maxAngularVelocity": -1, "maxContactImpulse": -1, "maxDepenetrationVelocity": -1,
                                 "simulationType": sim_type,
                                 "solverIterationsCountPosition": 4, "solverIterationsCountVelocity": 1
-                                }
                             }
                         }
-                    ],
+                    }
+                ],
                 "cookingPlatform": "PLATFORM_PC", "joints": []
-                },
+            },
             "EmbeddedFiles": []
-            }
         }
+    }
 
     try:
         with open(filepath, 'w') as f:
@@ -330,7 +330,7 @@ def export_actor_item_to_phys(actor_item, filepath):
 
 def process_phys_import(filepath, target_obj, context):
     try:
-        from . import pxveh34 as _bridge
+        from . import pxbridge as _bridge
     except ImportError:
         _bridge = None
         print("PhysX Bridge missing: Imported colliders will not be cooked.")
@@ -384,7 +384,7 @@ def process_phys_import(filepath, target_obj, context):
                 float(rot.get('i', 0.0)),
                 float(rot.get('j', 0.0)),
                 float(rot.get('k', 0.0))
-                )
+            )
 
             mat_info = s_data.get('material', {})
             mat_name = mat_info.get('$value', 'Default')
@@ -619,7 +619,7 @@ class PHYSX_OT_export_scene(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            from . import pxveh34 as _bridge
+            from . import pxbridge as _bridge
             if _bridge.export_scene(self.filepath):
                 self.report({'INFO'}, f"Scene Exported to {self.filepath}")
             else:
@@ -640,7 +640,7 @@ class PHYSX_OT_import_scene(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            from . import pxveh34 as _bridge
+            from . import pxbridge as _bridge
             if _bridge.import_scene(self.filepath):
                 self.report({'INFO'}, "Scene Imported successfully")
             else:
