@@ -1,23 +1,25 @@
 import bpy
-import math  
-from math import *
-from collections import Counter
+import math
+from math import ceil, floor
+from collections import Counter, defaultdict
+from .compat import get_action_fcurves
 
-_DEF_FPS = 30.0  
+_DEF_FPS = 30.0
 _VERBOSE = False
+
 
 def _set_verbose(val: bool):
     global _VERBOSE
     _VERBOSE = bool(val)
 
+
 def _vprint(msg: str):
     if _VERBOSE:
         print(msg)
 
+
 def _iget(d, key, default=None):
-    """
-    Getter for IDPropertyGroup/dict/attrs
-    """
+    """Getter for IDPropertyGroup/dict/attrs."""
     try:
         return d.get(key, default)
     except AttributeError:
@@ -26,43 +28,159 @@ def _iget(d, key, default=None):
         except Exception:
             return getattr(d, key, default)
 
-"""
-    Transfer (& Remove) Track Fcurves to Action Extras
-"""
-def export_anim_tracks(action):
+
+#  Track-name resolution from armature skin extras
+
+def _get_track_name_map(armature=None):
+    candidates = [armature] if armature else [
+        obj for obj in bpy.data.objects
+        if obj.type == 'ARMATURE' and (
+            obj.get("trackNames") is not None or obj.get("numTrackNames", 0) > 0
+        )
+    ]
+    for arm in candidates:
+        if arm is None:
+            continue
+
+        # Current format: single dict {"0": name, "1": name, …}
+        tn = arm.get("trackNames")
+        if tn is not None and hasattr(tn, 'keys'):
+            return {int(k): str(v) for k, v in tn.items()}
+
+        # Legacy format: numTrackNames + trackName_{i}
+        num = arm.get("numTrackNames", 0)
+        if num > 0:
+            return {
+                i: arm.get(f"trackName_{i}", f"T{i:02d}")
+                for i in range(num)
+            }
+    return {}
+
+
+def _track_prop_name(index, name_map):
+    """Return the custom-property name for a track index.
+
+    Uses the real track name from *name_map* when available, falling back
+    to the legacy ``T00`` / ``T01`` format.
+    """
+    if name_map and index in name_map:
+        return name_map[index]
+    return f"T{index:02d}"
+
+
+def _track_data_path(prop_name):
+    """Return the FCurve data-path string for a track property name."""
+    return f'["{prop_name}"]'
+
+
+#  Bulk keyframe helpers  (foreach_set is ~10-50× faster than per-kf .co =)
+
+def _bulk_set_keyframes(fc, frames, values, interpolation=None):
+    """Insert keyframes into *fc* using the fast ``foreach_set`` path.
+
+    *frames*        – sequence of frame numbers (same length as *values*).
+    *values*        – sequence of values.
+    *interpolation* – optional Blender interpolation string to apply to
+                      every keyframe (e.g. ``'CONSTANT'``).  When *None*
+                      the default (``'BEZIER'``) is kept.
+    """
+    n = len(frames)
+    if n == 0:
+        return
+    fc.keyframe_points.add(n)
+    coords = [0.0] * (n * 2)
+    for i in range(n):
+        coords[i * 2] = frames[i]
+        coords[i * 2 + 1] = values[i]
+    fc.keyframe_points.foreach_set('co', coords)
+    if interpolation is not None:
+        for kp in fc.keyframe_points:
+            kp.interpolation = interpolation
+    fc.update()
+
+
+#  Export – Transfer (& Remove) Track FCurves to Action Extras
+
+def export_anim_tracks(action, armature=None):
+    """Transfer track FCurves from *action* back into IDProperty key lists.
+
+    Track names are resolved from the *armature* (the rig-level source of
+    truth).  When *armature* is ``None`` the function auto-discovers it the
+    same way :func:`import_anim_tracks` does.  Falls back to a legacy
+    ``["T…`` prefix scan when no rig-level mapping exists.
+    """
     obj = {"trackKeys": [], "constTrackKeys": []}
     num_exported = 0
-    fc_tracks = [fc.data_path for fc in action.fcurves if fc.data_path.startswith('["T')]
-    for t_datapath in fc_tracks:
-        track_index = int(t_datapath.split('"')[-2][1:])
-        fc = action.fcurves.find(data_path=t_datapath)
+    fcurves = get_action_fcurves(action)
+    if fcurves is None:
+        _vprint('export_anim_tracks: no fcurves available')
+        return
+
+    # Resolve track-index → property-name from the armature
+    name_map = _get_track_name_map(armature)
+
+    track_fc_info = []  # [(track_index, data_path, fc), ...]
+
+    if name_map:
+        # Named tracks from rig – look up each known track by its data-path
+        for idx, prop_name in name_map.items():
+            dp = _track_data_path(prop_name)
+            fc = fcurves.find(data_path=dp)
+            if fc is not None:
+                track_fc_info.append((idx, dp, fc))
+    else:
+        # Legacy fallback: scan for data-paths starting with '["T'
+        for fc in fcurves:
+            dp = fc.data_path
+            if dp.startswith('["T') and dp.endswith('"]'):
+                prop_name = dp[2:-2]  # strip ["..."]
+                try:
+                    idx = int(prop_name[1:])
+                except ValueError:
+                    continue
+                track_fc_info.append((idx, dp, fc))
+
+    for track_index, t_datapath, fc in track_fc_info:
         if fc and len(fc.keyframe_points) > 0:
-            kf_vals = [kp.co[1] for kp in fc.keyframe_points]
-            tmin, tmax, tavg = [min(kf_vals), max(kf_vals), sum(kf_vals) / len(kf_vals)]
+            n_kf = len(fc.keyframe_points)
+            # Bulk-read values via foreach_get
+            cos = [0.0] * (n_kf * 2)
+            fc.keyframe_points.foreach_get('co', cos)
+            kf_vals = [cos[i * 2 + 1] for i in range(n_kf)]
+            tmin = min(kf_vals)
+            tmax = max(kf_vals)
+            tavg = sum(kf_vals) / n_kf
             if tavg == 0 or tmin == tmax:
-                # constant
-                obj["constTrackKeys"].append({'trackIndex': track_index, 'value': tavg, 'time': 0.0})
+                obj["constTrackKeys"].append({
+                    'trackIndex': track_index, 'value': tavg, 'time': 0.0
+                })
                 num_exported += 1
             else:
-                num_exported += len(fc.keyframe_points)
-                for kp in fc.keyframe_points:
-                    obj["trackKeys"].append({'trackIndex': track_index, 'value': kp.co[1], 'time': kp.co[0] / 30.0})
+                num_exported += n_kf
+                for i in range(n_kf):
+                    obj["trackKeys"].append({
+                        'trackIndex': track_index,
+                        'value': cos[i * 2 + 1],
+                        'time': cos[i * 2] / 30.0,
+                    })
             fc.keyframe_points.clear()
             fc.update()
         if fc:
-            action.fcurves.remove(fc)
-    #
+            fcurves.remove(fc)
+
     action['trackKeys'] = obj["trackKeys"]
     action['constTrackKeys'] = obj["constTrackKeys"]
-    action["optimizationHints"] = { "preferSIMD": False, "maxRotationCompression": 0}
-    # remove custom group
+    # Preserve optimizationHints from import; only set defaults if missing
+    if "optimizationHints" not in action:
+        action["optimizationHints"] = {"preferSIMD": False, "maxRotationCompression": 0}
     remove_track_action_group(action)
     _vprint(f'{num_exported} Tracks Exported')
 
-"""
-    Create Custom Properties for Tracks on all Armatures - Why all Armatures?
-"""
+
+#  Custom properties on armatures for track channels
+
 def add_track_properties(track_properties=[]):
+    """Create custom float properties for tracks on all armatures."""
     armature_list = [obj for obj in bpy.data.objects if obj.type == 'ARMATURE']
     for armature in armature_list:
         for prop_name in track_properties:
@@ -84,225 +202,250 @@ def add_track_properties(track_properties=[]):
                 except Exception:
                     pass
             except Exception as e:
-                print(f"Error creating custom track property ({prop_name}) on Armature [{armature.name}]: {e}")
-"""
-    Track Action Group Name
-"""
+                print(f"Error creating custom track property ({prop_name}) "
+                      f"on Armature [{armature.name}]: {e}")
+
+
+#  Track action group helpers
+
+def _get_action_groups(action):
+    """Return the groups collection for *action*.
+
+    Blender 4.x: ``action.groups``
+    Blender 5.x: groups live on the channelbag, not the action itself.
+    """
+    if hasattr(action, 'groups'):
+        return action.groups
+    # 5.x layered actions – groups are on the channelbag
+    try:
+        for layer in action.layers:
+            for strip in layer.strips:
+                for cb in strip.channelbags:
+                    if hasattr(cb, 'groups'):
+                        return cb.groups
+    except Exception:
+        pass
+    return None
+
+
 def get_track_action_group_name():
     return "Track Keys"
-"""
-    Remove Custom Action Group for Tracks  - collapsible section in fcurve editor
-"""
+
+
 def remove_track_action_group(action):
+    groups = _get_action_groups(action)
+    if groups is None:
+        return
     try:
         group_name = get_track_action_group_name()
-        group_id = action.groups.find(group_name)
+        group_id = groups.find(group_name)
         if group_id >= 0:
-            action_group = action.groups[group_id]
-            action.groups.remove(action_group)
+            groups.remove(groups[group_id])
     except Exception as e:
         print(f"Error removing custom track action group: {e}")
-"""
-    Create Custom Action Group for Tracks  - collapsible section in fcurve editor
-"""
+
+
 def add_track_action_group(action):
+    groups = _get_action_groups(action)
+    if groups is None:
+        return None
     try:
         group_name = get_track_action_group_name()
-        group_id = action.groups.find(group_name)
+        group_id = groups.find(group_name)
         if group_id < 0:
-            action_group = action.groups.new(group_name)
-            return action_group
+            return groups.new(group_name)
         else:
-            action_group = action.groups[group_id]
-            return action_group
+            return groups[group_id]
     except Exception as e:
         print(f"Error adding custom track action group: {e}")
-"""
-    Creates FCurves for Anim Tracks & Corrects Timing Misalignment (Inbetween Frames due to quantisation precison loss)
-"""
+        return None
+
+
+#  Import – Create FCurves for anim tracks (with frame-alignment fix)
+
 def import_anim_tracks(action):
     track_keys = action.get("trackKeys", [])
     const_track_keys = action.get("constTrackKeys", [])
-    track_list = []
-    const_track_list = []
-    ct_data = []
-    t_data = []
-    t_usage = []
-    num_imported = 0
-    if len(track_keys) > 0:
-        # Accept list of dicts or IDPropertyGroup items
-        for trk in track_keys:
-            idx = _iget(trk, 'trackIndex')
-            val = _iget(trk, 'value')
-            tim = _iget(trk, 'time')
-            if idx is None:
-                continue
-            t_data.append([idx, val, tim])
-        t_usage = sorted(list(set([t[0] for t in t_data])))
 
-        track_list.extend(t_usage)
-        #print("tracks")
-
-    if len(const_track_keys) > 0:
-        # Accept list of dicts or IDPropertyGroup items
-        for ct in const_track_keys:
-            idx = _iget(ct, 'trackIndex')
-            val = _iget(ct, 'value')
-            tim = _iget(ct, 'time')
-            if idx is None:
-                continue
-            ct_data.append([idx, val, tim])
-        const_track_list = sorted(list(set([t[0] for t in ct_data])))
-        track_list.extend(const_track_list)
-        #print("consttracks")
-
-    if len(track_list) == 0:
-        #print("NoTracks")
+    if not track_keys and not const_track_keys:
         return
-    all_tracks = sorted(list(set(track_list)))
-    track_unsorted = {t:[] for t in all_tracks}
-    track_sorted = {t:[] for t in all_tracks}
-    track_props = ['T{:02d}'.format(t) for t in all_tracks]
-    # property name to valid datapath
-    track_fcurves = ['["{}"]'.format(t) for t in track_props]
-    track_property_idx = {t:'T{:02d}'.format(t) for t in all_tracks}
-    track_fcurve_idx = {t:'["T{:02d}"]'.format(t) for t in all_tracks}
 
-    add_track_properties(track_props)
-    # group tracks - collapsible section in fcurve editor
+    #  Pre-group all key data by track index  (O(n) vs old O(n×m))
+    t_by_idx = defaultdict(list)       # {track_index: [[time, value], ...]}
+    ct_by_idx = defaultdict(list)      # {track_index: [value, ...]}
+
+    for trk in track_keys:
+        idx = _iget(trk, 'trackIndex')
+        if idx is None:
+            continue
+        t_by_idx[idx].append([_iget(trk, 'time', 0.0), _iget(trk, 'value', 0.0)])
+
+    for ct in const_track_keys:
+        idx = _iget(ct, 'trackIndex')
+        if idx is None:
+            continue
+        ct_by_idx[idx].append(_iget(ct, 'value', 0.0))
+
+    all_indices = sorted(set(t_by_idx.keys()) | set(ct_by_idx.keys()))
+    if not all_indices:
+        return
+
+    #  Resolve human-readable track names from armature skin extras
+    name_map = _get_track_name_map()
+
+    # Build property names & data-paths, store mapping on action for export
+    track_prop_names = {}       # index → property name
+    track_data_paths = {}       # index → data-path string
+    for idx in all_indices:
+        pname = _track_prop_name(idx, name_map)
+        track_prop_names[idx] = pname
+        track_data_paths[idx] = _track_data_path(pname)
+
+    prop_name_list = list(track_prop_names.values())
+    add_track_properties(prop_name_list)
+
+    #  Create / reset FCurves
+    #  NOTE: get_action_fcurves must be called BEFORE add_track_action_group
+    #  because on Blender 5.x it creates the channelbag where groups live.
+    fcurves = get_action_fcurves(action)
+    if fcurves is None:
+        _vprint('import_anim_tracks: no fcurves collection available')
+        return
+
     action_group = add_track_action_group(action)
 
-    """
-        create fcurves (clear existing)
-    """
-    for track_dp in track_fcurve_idx.values():
-        fc = action.fcurves.find(data_path=track_dp)
-        if not fc is None:
+    fc_cache = {}  # index → FCurve
+    for idx in all_indices:
+        dp = track_data_paths[idx]
+        fc = fcurves.find(data_path=dp)
+        if fc is not None:
             fc.keyframe_points.clear()
-            action.fcurves.remove(fc)
-        fc = action.fcurves.new(data_path=track_dp)
-        fc.group = action_group
-        fc.update()
-    """
-        sort const keys & eliminate samples (multiple values per track)
-    """
-    for trk in const_track_list:
-        t_datapath = track_fcurve_idx[trk]
-        key_points = [t[1] for t in ct_data if t[0] == trk]
-        tmin,tmax,tavg = [min(key_points),max(key_points),sum(key_points) / len(key_points)]
-        const_val = tmin if tmin == tmax else key_points[-1]
-        track_sorted[trk].append([0, const_val])
+            fcurves.remove(fc)
+        fc = fcurves.new(data_path=dp)
+        if action_group is not None:
+            fc.group = action_group
+        fc_cache[idx] = fc
+
+    #  Resolve final keyframe data (const + animated)
+    num_imported = 0
+    final_frames = {}  # index → [frame, ...]
+    final_values = {}  # index → [value, ...]
+
+    # Constant tracks
+    for idx, vals in ct_by_idx.items():
+        vmin, vmax = min(vals), max(vals)
+        const_val = vmin if vmin == vmax else vals[-1]
+        final_frames[idx] = [0.0]
+        final_values[idx] = [const_val]
         num_imported += 1
-    #
-    for trk in t_usage:
-        t_datapath = track_fcurve_idx[trk]
-        key_points = sorted([[t[2],t[1]] for t in t_data if t[0] == trk])
-        track_unsorted[trk] = key_points
+
+    # Animated tracks – align fractional frames to integer boundaries
+    for idx, raw_keys in t_by_idx.items():
+        raw_keys.sort(key=lambda p: p[0])  # sort by time
+        n_kf = len(raw_keys)
+
+        frames_unaligned = [t * 30.0 for t, _ in raw_keys]
         frames_aligned = []
-        frames_unaligned = []
-        frames_vals = []
-        for p in key_points:
-            t, v = p
-            frame_num = f = t * 30.0
-            frames_unaligned.append(f)
-            if (math.ceil(f)-f) < (f - math.floor(f)):
-                frame_num = math.ceil(f)
+        for f in frames_unaligned:
+            if (ceil(f) - f) < (f - floor(f)):
+                frames_aligned.append(float(ceil(f)))
             else:
-                frame_num = math.floor(f)
-            frames_aligned.append(frame_num)
-        # fetch fcurve & clear
-        fc = action.fcurves.find(data_path=t_datapath)
+                frames_aligned.append(float(floor(f)))
+
+        # Insert unaligned keyframes into a temporary FCurve for evaluation
+        fc = fc_cache[idx]
+        raw_values = [v for _, v in raw_keys]
+        _bulk_set_keyframes(fc, frames_unaligned, raw_values)
+
+        # Re-evaluate at aligned integer frames
+        aligned_vals = [fc.evaluate(frm) for frm in frames_aligned]
+
+        # Clear temp data
         fc.keyframe_points.clear()
         fc.update()
-        # insert unaligned kf
-        fc.keyframe_points.add(len(key_points))
-        for i in range(len(key_points)):
-            fc.keyframe_points[i].co = frames_unaligned[i], key_points[i][1]
-        fc.update()
-        # re-evaluate fcurve at aligned frames
-        for t in range(len(key_points)):
-            frm = frames_aligned[t]
-            v = fc.evaluate(frm)
-            frames_vals.append(v)
-        #
-        for t in range(len(key_points)):
-            frm = frames_aligned[t]
-            track_sorted[trk].append([frm, frames_vals[t]])
-        # clear out temp
-        fc.keyframe_points.clear()
-        fc.update()
-    #
-    for trk in all_tracks:
-        t_datapath = track_fcurve_idx[trk]
-        num_keys = len(track_sorted[trk])
-        if num_keys > 0:
-            # fetch fcurve
-            fc = action.fcurves.find(data_path=t_datapath)
-            fc.keyframe_points.add(num_keys)
-            num_imported += num_keys 
-            for i in range(num_keys):
-                fc.keyframe_points[i].co = track_sorted[trk][i][0], track_sorted[trk][i][1]
-            fc.update()
+
+        final_frames[idx] = frames_aligned
+        final_values[idx] = aligned_vals
+        num_imported += n_kf
+
+    #  Bulk-insert final keyframes
+    for idx in all_indices:
+        frms = final_frames.get(idx)
+        vals = final_values.get(idx)
+        if frms:
+            _bulk_set_keyframes(fc_cache[idx], frms, vals)
+
     _vprint(f'{num_imported} Tracks Imported')
 
-"""
-    POSE BONES - Corrects Timing Misalignment (Inbetween Frames due to quantisation precison loss)
-"""
+
+#  POSE BONES – Correct timing misalignment (sub-frame quantisation)
+
 def fix_anim_frame_alignment(action):
-    #from collections import Counter
-    fc_keys = dict(Counter([fc.data_path for fc in action.fcurves if fc.data_path.startswith('pose.bones[')]))
-    #fc_cached_bones = {bn: {n:[] for n in ['location','rotation_quaternion','scale','rotation_axis_angle','rotation_euler']} for bn in fc_bones}
-    for dp in fc_keys.keys():
-        bn = dp.split('"')[-2]
-        channel = dp.split('.')[-1]
-        array_len = fc_keys[dp]
-        sorted_fc = {}
+    fcurves = get_action_fcurves(action)
+    if fcurves is None:
+        return
+
+    # Count array components per data-path (location=3, quat=4, etc.)
+    fc_keys = dict(Counter(
+        fc.data_path for fc in fcurves if fc.data_path.startswith('pose.bones[')
+    ))
+
+    for dp, array_len in fc_keys.items():
         num_fixed = 0
         for i in range(array_len):
-            fc = action.fcurves.find(data_path=dp, index=i)
-            if not fc is None:
-                if len(fc.keyframe_points) > 0:
-                    num_fixed = 0
-                    num_org_keys = len(fc.keyframe_points)
-                    frames_unaligned = [kp.co[0] for kp in fc.keyframe_points]
-                    frames_aligned = []
-                    frame_values = [kp.co[1] for kp in fc.keyframe_points]
-                    frame_values_aligned = []
-                    for f in frames_unaligned:
-                        frame_num = f
-                        if (ceil(f)-f) < (f - floor(f)):
-                            frame_num = ceil(f)
-                        else:
-                            frame_num = floor(f)
-                        if frame_num != f:
-                            num_fixed += 1
-                        frames_aligned.append(frame_num)
-                    frames_aligned = sorted(list(set(frames_aligned)))
-                    num_keys = len(frames_aligned)
-                    # re-evaluate fcurve at aligned frames
-                    for kfp in range(num_keys):
-                        frame_num = frames_aligned[kfp]
-                        frame_val = fc.evaluate(frame_num)
-                        frame_values_aligned.append(frame_val)
-                    # check for constants
-                    omin,omax,oavg = [min(frame_values),max(frame_values),sum(frame_values) / len(frame_values)]
-                    vmin,vmax,vavg = [min(frame_values_aligned),max(frame_values_aligned),sum(frame_values_aligned) / len(frame_values_aligned)]
-                    if omin == omax:
-                        #_vprint(f'{bn}-{channel}[{i}] constant org {omin} -> {num_keys} dupes')
-                        if vmin != vmax:
-                            _vprint(f'org {omin} == {omax} but {vmin} != {vmax} Re-Aligned')
-                    if vmin == vmax:
-                        #_vprint(f'{bn}-{channel}[{i}] constant realiglned  {vmin} -> {num_keys} dupes')
-                        if omin != omax:
-                            _vprint(f'org {omin} != {omax} but {vmin} == {vmax} Re-Aligned')
-                    if num_keys == 1:
-                        continue#print(f'{bn}-{channel}[{i}] single const {frame_values_aligned[0]} org({frame_values[0]} @ frame {frames_aligned[0]} org({frames_unaligned[0]})')
-                    fc.keyframe_points.clear()
-                    fc.update()
-                    fc.keyframe_points.add(num_keys)
-                    for kfp in range(num_keys):
-                        fc.keyframe_points[kfp].co = frames_aligned[kfp], frame_values_aligned[kfp]
-                    fc.update()
-            #
+            fc = fcurves.find(data_path=dp, index=i)
+            if fc is None or len(fc.keyframe_points) == 0:
+                continue
+
+            n_kf = len(fc.keyframe_points)
+
+            # Bulk-read current keyframe data
+            cos = [0.0] * (n_kf * 2)
+            fc.keyframe_points.foreach_get('co', cos)
+
+            frames_unaligned = [cos[j * 2] for j in range(n_kf)]
+            frame_values = [cos[j * 2 + 1] for j in range(n_kf)]
+
+            # Snap to nearest integer frame
+            frames_aligned = []
+            for f in frames_unaligned:
+                if (ceil(f) - f) < (f - floor(f)):
+                    fn = float(ceil(f))
+                else:
+                    fn = float(floor(f))
+                if fn != f:
+                    num_fixed += 1
+                frames_aligned.append(fn)
+
+            # Deduplicate (multiple sub-frame keys can snap to same integer)
+            frames_aligned_unique = sorted(set(frames_aligned))
+            num_keys = len(frames_aligned_unique)
+
+            # Re-evaluate FCurve at aligned frames
+            frame_values_aligned = [fc.evaluate(frm) for frm in frames_aligned_unique]
+
+            # Diagnostic logging for constant-channel drift
+            omin, omax = min(frame_values), max(frame_values)
+            vmin, vmax = min(frame_values_aligned), max(frame_values_aligned)
+            if omin == omax and vmin != vmax:
+                _vprint(f'org {omin} == {omax} but {vmin} != {vmax} Re-Aligned')
+            if vmin == vmax and omin != omax:
+                _vprint(f'org {omin} != {omax} but {vmin} == {vmax} Re-Aligned')
+
+            if num_keys == 1:
+                continue
+
+            # Preserve original interpolation mode (CP77 uses CONSTANT/STEP)
+            orig_interp = fc.keyframe_points[0].interpolation
+
+            fc.keyframe_points.clear()
+            fc.update()
+            _bulk_set_keyframes(
+                fc,
+                frames_aligned_unique,
+                frame_values_aligned,
+                interpolation=orig_interp,
+            )
+
         if num_fixed > 0:
             _vprint(f'{dp} Re-Aligned Timing for {num_fixed} Frames')

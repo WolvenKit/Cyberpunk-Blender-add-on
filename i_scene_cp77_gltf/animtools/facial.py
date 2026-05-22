@@ -26,15 +26,6 @@ class FacialSetup:
 def load_wkit_rig_skeleton(path: str | Path) -> RigSkeleton:
     """Load skeleton rig from WolvenKit JSON export
     
-    Args:
-        path: Path to rig JSON file
-    
-    Returns:
-        RigSkeleton with bone hierarchy and reference pose
-    
-    Raises:
-        FileNotFoundError: If file doesn't exist
-        ValueError: If JSON structure is invalid
     """
     p = Path(path)
     if not p.exists():
@@ -148,16 +139,6 @@ def load_wkit_rig_skeleton(path: str | Path) -> RigSkeleton:
 def load_wkit_facialsetup(path: str | Path, rig_info: RigSkeleton) -> FacialSetup:
     """Load facial setup from WolvenKit JSON export
     
-    Args:
-        path: Path to facial setup JSON file
-        rig_info: Previously loaded rig skeleton
-    
-    Returns:
-        FacialSetup object with metadata and pose banks
-    
-    Raises:
-        FileNotFoundError: If file doesn't exist
-        ValueError: If JSON structure is invalid
     """
     p = Path(path)
     if not p.exists():
@@ -177,7 +158,7 @@ def load_wkit_facialsetup(path: str | Path, rig_info: RigSkeleton) -> FacialSetu
     except KeyError as e:
         raise ValueError(f"Missing required key in facial setup: {e}")
     
-    # === Build Face Metadata ===
+    #  Build Face Metadata 
     class FaceMeta:
         """Container for baked facial animation metadata"""
         pass
@@ -237,7 +218,7 @@ def load_wkit_facialsetup(path: str | Path, rig_info: RigSkeleton) -> FacialSetu
     wrinkle_start = root["info"]["face"].get("wrinkleStartingIndex", 381)
     setattr(face_meta, "wrinkle_starting_index", int(wrinkle_start))
     
-    # === Build Pose Banks ===
+    #  Build Pose Banks 
     
     def _build_bank(num_bones: int, poses_desc: list, transforms: list):
         """Build pose bank from JSON data
@@ -245,13 +226,6 @@ def load_wkit_facialsetup(path: str | Path, rig_info: RigSkeleton) -> FacialSetu
         Creates arrays of additive transforms for all poses.
         Sparse: only stores non-identity transforms per pose.
         
-        Args:
-            num_bones: Total bone count
-            poses_desc: List of pose descriptors with TransformIdx, NumTransforms
-            transforms: Flat list of all transform records
-        
-        Returns:
-            Object with .q, .t, .s attributes (P, N, *) arrays
         """
         P = len(poses_desc)
         
@@ -321,7 +295,7 @@ def load_wkit_facialsetup(path: str | Path, rig_info: RigSkeleton) -> FacialSetu
         corr_face["Transforms"]
     )
     
-    # === Validation ===
+    #  Validation 
     expected_main = len(mp)
     actual_main = fb_main.q.shape[0]
     if expected_main != actual_main:
@@ -332,7 +306,7 @@ def load_wkit_facialsetup(path: str | Path, rig_info: RigSkeleton) -> FacialSetu
     if expected_corr > actual_corr:
         print(f"Warning: Corrective entries reference up to index {expected_corr}, but only {actual_corr} poses loaded")
     
-    # === Build Final Setup Object ===
+    #  Build Final Setup Object 
     
     setup = FacialSetup()
     setup.face_meta = face_meta
