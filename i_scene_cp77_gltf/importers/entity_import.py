@@ -129,8 +129,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         appearances=[]
         for app in ent_apps:
             appearances.append(app['appearanceName']['$value'])
-        if len(appearances)==0:
-            appearances.append('BASE_COMPONENTS_ONLY')
+    if len(appearances)==0:
+        appearances.append('BASE_COMPONENTS_ONLY')
 
     VS=[]
     vehicle_slots=None
@@ -143,10 +143,11 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
     # find the appearance file jsons
     if not escaped_path:
         escaped_path = glob.escape(path)
-    if not app_path:
-        app_path = glob.glob(os.path.join(escaped_path,"**","*.app.json"), recursive = True)
-    if len(app_path)==0 and len(ent_apps)>0:
-        print('No Appearance file JSONs found in path, run the Ent export script first')
+    if ent_apps and len(ent_apps)>0:
+        if not app_path:
+            app_path = glob.glob(os.path.join(escaped_path,"**","*.app.json"), recursive = True)
+        if len(app_path)==0 and len(ent_apps)>0:
+            print('No Appearance file JSONs found in path, run the Ent export script first')
 
     # find the meshes
     if not meshes:
@@ -213,7 +214,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                     rig_j=rig_j['Data']['RootChunk']
                     print('rig json loaded')
 
-    if len(meshes)<1 or len(app_path)<1 and len(ent_components)<1:
+    if len(meshes)<1 or (not app_path or len(app_path)<1) and len(ent_components)<1:
         print("You need to export the meshes and convert app and ent to json")
         pass
 
@@ -293,7 +294,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
 
             if len(app_comps[app_name])==0:
                 print('falling back to rootchunk components...')
-                app_comps['BASE_COMPONENTS_ONLY']= ent_components
+                app_comps[app_name]= ent_components
             exclude_meshes=[]
             for c in app_comps[app_name]:
                 if not ( 'mesh' in c.keys() or 'graphicsMesh' in c.keys()):
