@@ -2,6 +2,7 @@ import bpy
 import os
 import json
 import traceback
+from ..main.setup import MaterialBuilder, bcolors
 from .import_with_materials import CP77GLBimport
 
 

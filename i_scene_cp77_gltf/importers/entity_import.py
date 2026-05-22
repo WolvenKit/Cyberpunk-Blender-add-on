@@ -85,12 +85,12 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         if app not in ent_applist and app.upper() !='ALL' and app =='default':
             if ent_default and len(ent_default)>0 and ent_default!='None':
                 print(f"Using default appearance {ent_default} for entity {ent_name}.")
-                appearances[appidx]=ent_default
+                #appearances[appidx]=ent_default
                 print(appearances)
             else:                
                 if len(ent_applist)>0:
                     print(f"No default appearance specified in entity {ent_name}. Using first available appearance {ent_applist[0]}.")
-                    app=ent_applist[0]
+                    ent_default=ent_applist[0]
                 else:
                     print(f"No appearances specified in entity {ent_name}. Using root entities.")    
                     appearances[0]= 'BASE_COMPONENTS_ONLY'          
@@ -125,6 +125,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         resolved.append(os.path.join(path,res_p['DepotPath']['$value']))
 
     # if no apps requested populate the list with all available.
+
     if len(appearances[0])==0 or appearances[0].upper()=='ALL':
         appearances=[]
         for app in ent_apps:
@@ -334,6 +335,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
             print(f"\nImporting appearance {x+1} of {len(appearances)}: {app_name}")
             app_start_time = time.time()
             ent_coll = bpy.data.collections.new(ent_name+'_'+app_name)
+            if app_name=='default':
+                app_name=ent_default
             if inColl and inColl in coll_scene.children.keys():
                 par_coll=bpy.data.collections.get(inColl)
                 par_coll.children.link(ent_coll)
