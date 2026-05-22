@@ -2,6 +2,7 @@ import bpy
 import json
 import zipfile
 import os
+import re
 from .main.common import show_message, load_zip
 from pathlib import Path
 
