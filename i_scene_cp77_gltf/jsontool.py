@@ -1,6 +1,7 @@
 import bpy
 import json
 import zipfile
+import re
 import os
 from .main.common import show_message, load_zip
 from pathlib import Path
