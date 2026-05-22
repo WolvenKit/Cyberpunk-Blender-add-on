@@ -14,6 +14,12 @@ def load_icons():
         custom_icons.load("TRAUMA", os.path.join(icons_dir, "trauma.png"), 'IMAGE')
         custom_icons.load("TECH", os.path.join(icons_dir, "tech.png"), 'IMAGE')
         custom_icons.load("REFIT", os.path.join(icons_dir, "refit.png"), 'IMAGE')
+        custom_icons.load("MIRROR", os.path.join(icons_dir, "mirror.png"), 'IMAGE')
+        custom_icons.load("ARMATURE", os.path.join(icons_dir, "armature.png"), 'IMAGE')
+        custom_icons.load("FACE", os.path.join(icons_dir, "face.png"), 'IMAGE')
+        custom_icons.load("EYES", os.path.join(icons_dir, "eyes.png"), 'IMAGE')
+        custom_icons.load("TONGUE", os.path.join(icons_dir, "tongue.png"), 'IMAGE')
+
 
 def unload_icons():
     global custom_icons
