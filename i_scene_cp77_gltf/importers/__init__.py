@@ -13,7 +13,7 @@ from ..cyber_props import *
 from ..cyber_prefs import *
 from ..icons.cp77_icons import *
 from .read_rig import create_armature_from_data
-
+from .npz_import import (CP77CharacterShapeProps, CP77_OT_NpzImportMesh, CP77_OT_NpzImportShapeKeys, CP77_OT_LoadBaseCharacter)
 class CP77ImportRig(Operator):
     bl_idname = "import_scene.rig"
     bl_label = "Import Rig from JSON"
@@ -362,6 +362,13 @@ def menu_func_import(self, context):
 
 
 operators, other_classes = get_classes(sys.modules[__name__])
+_npz_classes = (
+    CP77CharacterShapeProps,
+    CP77_OT_NpzImportMesh,
+    CP77_OT_NpzImportShapeKeys,
+    CP77_OT_LoadBaseCharacter,
+)
+
 
 def register_importers():
     for cls in operators:
@@ -370,11 +377,26 @@ def register_importers():
     for cls in other_classes:
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
+    for cls in _npz_classes:
+        if not hasattr(bpy.types, cls.__name__):
+            bpy.utils.register_class(cls)
+
+    bpy.types.Scene.cp77_character_shape = bpy.props.PointerProperty(type=CP77CharacterShapeProps)
+
     TOPBAR_MT_file_import.append(menu_func_import)
 
+
 def unregister_importers():
+    # Clean up the scene property
+    if hasattr(bpy.types.Scene, "cp77_character_shape"):
+        del bpy.types.Scene.cp77_character_shape
+
+    for cls in reversed(_npz_classes):
+        if hasattr(bpy.types, cls.__name__):
+            bpy.utils.unregister_class(cls)
     for cls in reversed(other_classes):
         bpy.utils.unregister_class(cls)
     for cls in reversed(operators):
         bpy.utils.unregister_class(cls)
+
     TOPBAR_MT_file_import.remove(menu_func_import)

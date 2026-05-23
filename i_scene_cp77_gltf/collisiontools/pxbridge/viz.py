@@ -153,7 +153,7 @@ def _build_visualization_data(context):
                         )
             elif shape.cooked_data:
                 try:
-                    from . import pxveh34 as _bridge
+                    from . import pxbridge as _bridge
                     raw = base64.b64decode(shape.cooked_data.encode('ascii'))
                     data = _bridge.get_cooked_geometry(shape.shape_type, raw)
                     vf = data['vertices']

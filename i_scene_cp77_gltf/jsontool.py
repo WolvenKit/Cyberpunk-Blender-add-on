@@ -1,13 +1,20 @@
 import bpy
 import json
 import zipfile
+import re
 import os
 from .main.common import show_message, load_zip
 from pathlib import Path
 
 
 # Error messages for different file types
-invalid_json_error = "This plugin requires jsons generated using the latest version of Wolvenkit."
+invalid_json_error = (
+    "This plugin requires JSONs generated with WolvenKit 8.13 or newer.\n"
+    "Please re-export your files using a compatible WolvenKit version.\n\n"
+    "Download links:\n"
+    "• Latest stable: https://github.com/WolvenKit/WolvenKit/releases/latest\n"
+    "• Nightly builds (recommended): https://github.com/WolvenKit/WolvenKit-nightly-releases/releases"
+)
 invalid_material_error = "Import will continue, but shaders may be incorrectly set up for these objects."
 invalid_phys_error = "Import may continue, but .phys colliders will not be imported."
 
@@ -32,13 +39,36 @@ class JSONTool:
 
     @staticmethod
     def json_ver_validate(json_data):
-        if json_data==None:
+        """Validate that the JSON was generated with a supported WolvenKit version.
+
+        Supports:
+          - WolvenKit 8.13 and all later 8.x versions
+          - All 9.x and higher major versions (future-proof)
+        Rejects versions older than 8.13 and unrecognized version strings.
+        Also checks MaterialJsonVersion when present.
+        """
+        if json_data is None:
             return False
         if 'Header' not in json_data:
             return False
         header = json_data['Header']
-        if "WolvenKitVersion" in header and "8.13" not in header["WolvenKitVersion"]:
-            if "8.15" not in header["WolvenKitVersion"] and "8.16" not in header["WolvenKitVersion"] and "8.17" not in header["WolvenKitVersion"]:
+
+        # === Improved WolvenKit version validation (handles 8.x, 9.x, 10.x, ...) ===
+        if "WolvenKitVersion" in header:
+            ver_str = str(header.get("WolvenKitVersion", ""))
+            # Match major.minor (e.g. 8.18, 9.2, 10.0)
+            match = re.search(r'\b(\d+)\.(\d+)', ver_str)
+            if match:
+                major = int(match.group(1))
+                minor = int(match.group(2))
+
+                if major == 8 and minor < 13:
+                    return False          # Too old (8.0 – 8.12)
+                if major < 8:
+                    return False          # Pre-8.x versions not supported
+                # major >= 9 or (major == 8 and minor >= 13) → allowed
+            else:
+                # No recognizable X.Y version string found
                 return False
         if "MaterialJsonVersion" in header:
             if "1." not in header["MaterialJsonVersion"]:

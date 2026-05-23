@@ -4,29 +4,17 @@ project(pxbridge LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# SET PATH TO BLENDER ROOT
+# Resolves Python 3.13 dependencies using system installed python
+find_package(Python3 3.13 EXACT COMPONENTS Development.Module REQUIRED)
 
-set(BLENDER_ROOT "C:/Program Files/Blender Foundation/Blender 5.0/5.0")
-set(BL_PYTHON_DIR "${BLENDER_ROOT}/python")
+message(STATUS "--- PYTHON CONFIG ---")
+message(STATUS "  - Library: ${Python3_LIBRARIES}")
+message(STATUS "  - Include: ${Python3_INCLUDE_DIRS}")
 
-if (EXISTS "${BL_PYTHON_DIR}/libs/python311.lib")
-    set(MY_PY_LIB "${BL_PYTHON_DIR}/libs/python311.lib")
-elseif (EXISTS "${BL_PYTHON_DIR}/libs/python3.lib")
-    set(MY_PY_LIB "${BL_PYTHON_DIR}/libs/python3.lib")
-else ()
-    message(FATAL_ERROR "Could not find python lib in ${BL_PYTHON_DIR}/libs")
-endif ()
-
-set(MY_PY_INC "${BL_PYTHON_DIR}/include")
-
-message(STATUS "--- MANUAL PYTHON CONFIG ---")
-message(STATUS "  - Library: ${MY_PY_LIB}")
-message(STATUS "  - Include: ${MY_PY_INC}")
 if (MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     message(STATUS "  - Forcing MSVC Runtime Library to /MT")
 endif ()
-
 
 set(PYBIND11_NOPYTHON ON)
 
@@ -57,6 +45,7 @@ set(PHYSX_LIBRARIES "")
 set(PHYSX_SHARED_LIB_DIR "${PXSHARED_ROOT}/PxShared/lib/vc15win64")
 file(TO_CMAKE_PATH "${PHYSX_SHARED_LIB_DIR}" PHYSX_SHARED_LIB_DIR)
 
+# Locates and appends specified PhysX binaries to the linking sequence.
 macro(find_physx_lib ALIAS LIB_NAME SEARCH_PATH)
     find_library(LIB_PATH_${ALIAS} NAMES ${LIB_NAME} HINTS "${SEARCH_PATH}" NO_DEFAULT_PATH)
     if (NOT LIB_PATH_${ALIAS})
@@ -85,8 +74,8 @@ set_target_properties(pxbridge PROPERTIES
 
 target_link_libraries(pxbridge PRIVATE pybind11::headers)
 
-target_include_directories(pxbridge PRIVATE "${MY_PY_INC}")
-target_link_libraries(pxbridge PRIVATE "${MY_PY_LIB}")
+target_include_directories(pxbridge PRIVATE "${Python3_INCLUDE_DIRS}")
+target_link_libraries(pxbridge PRIVATE "${Python3_LIBRARIES}")
 
 target_include_directories(pxbridge PRIVATE
         "${PHYSX_INCLUDE_DIR}"
@@ -95,7 +84,5 @@ target_include_directories(pxbridge PRIVATE
 )
 
 target_link_libraries(pxbridge PRIVATE ${PHYSX_LIBRARIES})
-
-message(STATUS "Configuration Successful. Ready to build Release.")
 
 message(STATUS "Configuration Successful. Ready to build.")
