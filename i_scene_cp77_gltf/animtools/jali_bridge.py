@@ -1,3 +1,4 @@
+import bpy
 from __future__ import annotations
 
 from typing import Dict, List, Optional
@@ -791,9 +792,7 @@ def keyframe_tracks(
     Returns:
         Number of tracks that received keyframes.
     """
-    if not BPY_AVAILABLE:
-        raise ImportError("Blender not available")
-
+ 
     from .animtools import _assign_action
     from .tracks import (
         get_action_fcurves,
