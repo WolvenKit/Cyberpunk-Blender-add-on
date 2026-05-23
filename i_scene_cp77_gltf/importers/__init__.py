@@ -1,6 +1,5 @@
 import bpy
 import sys
-
 from bpy_extras.io_utils import ImportHelper
 from bpy.props import (StringProperty, EnumProperty, BoolProperty, CollectionProperty)
 from bpy.types import (Operator, OperatorFileListElement, TOPBAR_MT_file_import )
@@ -206,6 +205,13 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
         return {'FINISHED'}
 
 
+def update_appearances_logic(self, context):
+    if self.all_appearances_toggle:
+        self.appearances_buffer = self.appearances
+        self.appearances = ""
+    else:
+        self.appearances = self.appearances_buffer
+
 class CP77Import(Operator, ImportHelper):
     bl_idname = "io_scene_gltf.cp77"
     bl_label = "Import glTF"
@@ -238,10 +244,10 @@ class CP77Import(Operator, ImportHelper):
     files: CollectionProperty(type=OperatorFileListElement)
     directory: StringProperty()
 
-    appearances: StringProperty(name= "Appearances",
-                                description="Appearances to extract with models",
-                                default="Default"
-                                )
+    all_appearances_toggle: bpy.props.BoolProperty(name="All Appearances",default=False,update=update_appearances_logic)
+    appearances_buffer: bpy.props.StringProperty()
+    appearances: StringProperty(name= "Appearances",description="Appearances to extract with models",default="Default")
+
     scripting: BoolProperty(name="Scripting",default=False ,description="Tell it its being called by a script so it can ignore the gui file lists",options={'HIDDEN'})
     import_tracks: BoolProperty(name="Import Tracks",default=True,description="Import Animation Float Tracks to F-Curves")
 
@@ -266,6 +272,11 @@ class CP77Import(Operator, ImportHelper):
             col.prop(self, 'generate_overrides')
             col.prop(self, 'exclude_unused_mats')
             box = layout.box()
+            box.label(text='Appearances to Import:')
+            box.prop(self, 'all_appearances_toggle')
+            if not self.all_appearances_toggle:
+                box.prop(self, 'appearances', text='')
+            box = layout.box()
             col = box.column()
             col.prop(props, 'use_vulkan')
             col.prop(props, 'use_cycles')
@@ -274,9 +285,6 @@ class CP77Import(Operator, ImportHelper):
             box = layout.box()
             box.label(text='Texture Format:')
             box.prop(self, 'image_format', text='')
-            box = layout.box()
-            box.label(text='Appearances to Import:')
-            box.prop(self, 'appearances', text='')
             box = layout.box()
             col = box.column()
             col.prop(self, 'hide_armatures')
@@ -308,16 +316,41 @@ class CP77MaterialReload(Operator):
     bl_label = "Reload Material"
     bl_options = {'REGISTER', 'UNDO'}
     bl_parent_id = "CP77_PT_MaterialTools"
-    bl_description = """Reload the active material from json.
-WARNING! All data within the active material will be deleted"""
+    bl_description = "Reload the active material from json."
 
     def execute(self, context):
-        try:
-            reload_mats(self, context)
+        active_object = context.active_object
+        if not active_object:
+            self.report({'ERROR'}, "No active object")
+            return {'CANCELLED'}
+        active_material = active_object.active_material
+        if not active_material:
+            self.report({'ERROR'}, "Active object has no material")
+            return {'CANCELLED'}
+        # JATO: TODO make a popup asking to use the locate mesh operator
+        if active_material['MeshPath'] == "":
+            self.report({'ERROR'}, "Material was not reloaded: Use Locate Mesh to find a valid source file within a WolvenKit project")
+            return {'CANCELLED'}
 
-        except Exception as e:
-            print("Exception when trying to import mats: " + str(e))
-            raise e
+        old_mat = active_material
+        old_mat_idx = active_object.active_material_index
+
+        new_mat = reload_mats(self, context)
+
+        # JATO: maybe dumb but if reload_mats dont return the same type something is f'd
+        if type(new_mat) is not type(old_mat):
+            self.report({'ERROR'}, 'Material failed to reload')
+            return {'CANCELLED'}
+
+        old_mat.user_remap(new_mat)
+
+        bpy.context.object.active_material = new_mat
+        bpy.context.active_object.active_material_index = old_mat_idx
+
+        bpy.ops.refresh_layer.mlsetup()
+
+        # JATO: cannot figure out how to delete the old mat without causing a crash...
+        #bpy.data.materials.remove(old_mat)
 
         return {"FINISHED"}
 
