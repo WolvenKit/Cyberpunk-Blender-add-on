@@ -1,16 +1,15 @@
-from bpy_extras.io_utils import ImportHelper
-import bpy
 import bpy.utils.previews
-import sys
-import os
+from bpy.props import (BoolProperty, EnumProperty, FloatProperty, FloatVectorProperty, StringProperty)
+from bpy.types import (Operator, Panel)
+from bpy_extras.io_utils import ImportHelper
+
 from .meshtools import *
 from .verttools import *
-from ..main.bartmoss_functions import *
-from ..main.common import get_active_collection, get_classes, get_color_presets, get_selected_collection, save_presets
-from bpy.props import (StringProperty, FloatVectorProperty, FloatProperty, BoolProperty, EnumProperty)
-from bpy.types import (Operator, Panel)
 from ..cyber_props import CP77RefitList, refit_dir
 from ..icons.cp77_icons import get_icon
+from ..main.bartmoss_functions import *
+from ..main.common import get_active_collection, get_classes, get_color_presets, get_selected_collection, save_presets
+
 
 class CP77_PT_MeshTools(Panel):
     bl_label = "Mesh Tools"
@@ -30,41 +29,83 @@ class CP77_PT_MeshTools(Panel):
 
     def draw(self, context):
         layout = self.layout
-        box = layout.box()
         props = context.scene.cp77_panel_props
 
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
         if not cp77_addon_prefs.show_modtools or not cp77_addon_prefs.show_meshtools:
             return
 
-        # store control flags for display logic below
+        # Tab selector 
+        row = layout.row(align=True)
+        row.prop(props, "meshtab", expand=True)
+
+        layout.separator()
+
         has_meshes_selected = bpy.context.selected_objects and len([obj for obj in bpy.context.selected_objects if obj.type == 'MESH']) > 1
         has_mesh_selected = (context.active_object and context.active_object.type == 'MESH')
         has_armature_selected = (context.active_object and context.active_object.type == 'ARMATURE')
 
-        if has_armature_selected:
+        if props.meshtab == 'UTILITIES':
+            self.draw_utilities_tab(context, layout, has_mesh_selected, has_meshes_selected, has_armature_selected)
+        elif props.meshtab == 'MODELLING':
+            self.draw_modelling_tab(context, layout, has_mesh_selected, has_meshes_selected)
+        elif props.meshtab == 'CHARACTERS':
+            self.draw_characters_tab(context, layout, has_mesh_selected)
 
+    def draw_utilities_tab(self, context, layout, has_mesh_selected, has_meshes_selected, has_armature_selected):
+        # Clean up Armature
+        if has_armature_selected:
+            box = layout.box()
             col = box.column()
             col.label(text="Clean up Armature", icon_value=get_icon("ARMATURE"))
             col.operator('delete_unused_bones.cp77', text='Delete unused bones')
 
+        # Mesh Cleanup
+        box = layout.box()
+        box.label(text="Mesh Cleanup", icon_value=get_icon("TRAUMA"))
+        col = box.column()
+        col.operator("cp77.submesh_prep")
+
+        # Armature Target
+        if has_mesh_selected or has_meshes_selected:
+            box = layout.box()
+            box.label(text="Armature", icon_value=get_icon("ARMATURE"))
+            col = box.column()
+            col.operator("cp77.set_armature", text="Change Armature Target")
+
+        # Mirror Tools
+        if has_mesh_selected or has_meshes_selected:
+            box = layout.box()
+            box.label(text="Mirror Tools", icon_value=get_icon("MIRROR"))
+            col = box.column()
+            col.operator("cp77.mirror_x_axis", text="Safely mirror")
+            col.operator("cp77.mirror_vertex_groups", text="Mirror Vertex Groups")
+            box.operator("cp77.rotate_obj", text="Rotate Selected Objects")
+
+    def draw_modelling_tab(self, context, layout, has_mesh_selected, has_meshes_selected):
+        # Vert Tools
+        box = layout.box()
+        box.label(text="Vertex Groups", icon_value=get_icon("TRAUMA"))
+        col = box.column()
+        col.operator("cp77.group_verts", text="Group Ungrouped Verts")
+        col.operator("cp77.del_empty_vgroup", text="Delete Unused Vert Groups")
+
         if not (has_mesh_selected or has_meshes_selected):
+            box = layout.box()
             box.label(icon_value=get_icon("SCULPT"), text="Select a mesh")
             return
+
+        # UV Checker
+        box = layout.box()
+        box.label(icon_value=get_icon("SCULPT"), text="Modelling:")
         col = box.column()
-        col.operator("cp77.set_armature", text="Change Armature Target")
 
         if context.object.active_material and context.object.active_material.name == 'UV_Checker':
             col.operator("cp77.uv_unchecker",  text="Remove UV Checker")
         else:
             col.operator("cp77.uv_checker", text="Apply UV Checker")
 
-        # Modelling
-        box.label(icon_value=get_icon("SCULPT"), text="Modelling:")
-        col = box.column()
-
         col.operator("cp77.shrinkwrap", text="GarmentSupport/Decal")
-
         col.operator("cp77.trans_weights", text="Weight Transfer Tool")
 
         if has_mesh_selected and context.active_object.data.materials and any(mat.name.startswith('submesh_') for mat in context.active_object.data.materials if mat):
@@ -72,37 +113,56 @@ class CP77_PT_MeshTools(Panel):
         elif has_meshes_selected:
             col.operator("cp77.safe_join", text="Join Meshes")
 
-        # Mirror
-        box = layout.box()
-        box.label(text="Mirror Tools", icon_value=get_icon("MIRROR"))
-        col = box.column()
-
-        col.operator("cp77.mirror_x_axis", text="Safely mirror")
-        col.operator("cp77.mirror_vertex_groups", text="Mirror Vertex Groups")
-
-        box.operator("cp77.rotate_obj", text="Rotate Selected Objects")
-
-        # Cleanup
-        box = layout.box()
-        box.label(text="Mesh Cleanup", icon_value=get_icon("TRAUMA"))
-        col = box.column()
-        col.operator("cp77.submesh_prep")
-        col.operator("cp77.group_verts", text="Group Ungrouped Verts")
-        col.operator("cp77.del_empty_vgroup", text="Delete Unused Vert Groups")
-
-        # Autofitter
+        # AKL Autofitter
         box = layout.box()
         box.label(text="AKL Autofitter", icon_value=get_icon("REFIT"))
         col = box.column()
         col.operator("cp77.auto_fitter", text="Refit Selected Meshes")
 
-        # Vertex colours
+        # Vertex Colours
         box = layout.box()
         box.label(text="Vertex Colours", icon="BRUSH_DATA")
         col = box.column()
         col.operator("cp77.apply_vertex_color_preset")
         col.operator("cp77.add_vertex_color_preset")
         col.operator("cp77.delete_vertex_color_preset")
+
+    def draw_characters_tab(self, context, layout, has_mesh_selected):
+        box = layout.box()
+        box.label(text="Characters", icon='MESH_DATA')
+        col = box.column()
+        col.operator("cp77.load_base_character", icon='IMPORT')
+
+        char_props = context.scene.cp77_character_shape
+
+        # Head shape sliders
+        head_obj = None
+        if char_props.head_mesh_names:
+            for name in char_props.head_mesh_names.split(";"):
+                obj = bpy.data.objects.get(name)
+                if obj and obj.data.shape_keys:
+                    head_obj = obj
+                    break
+
+        if head_obj:
+            box = layout.box()
+            box.label(text="Head Shape", icon='SHAPEKEY_DATA')
+            col = box.column(align=True)
+            col.prop(char_props, "eyes")
+            col.prop(char_props, "nose")
+            col.prop(char_props, "mouth")
+            col.prop(char_props, "jaw")
+            col.prop(char_props, "ears")
+
+        # Body shape sliders
+        body_obj = bpy.data.objects.get(char_props.body_mesh_name) if char_props.body_mesh_name else None
+        if body_obj and body_obj.data.shape_keys:
+            has_breast_keys = any("breast" in kb.name for kb in body_obj.data.shape_keys.key_blocks)
+            if has_breast_keys:
+                box = layout.box()
+                box.label(text=f"Body Shape: {body_obj.name}", icon='SHAPEKEY_DATA')
+                col = box.column(align=True)
+                col.prop(char_props, "breasts")
 
 class CP77DeleteVertexcolorPreset(Operator):
     bl_idname = "cp77.delete_vertex_color_preset"
@@ -157,7 +217,7 @@ class CP77AddVertexcolorPreset(Operator):
     def invoke(self, context, event):
         tool_settings = context.tool_settings.vertex_paint
         color = tool_settings.brush.color
-        alpha = tool_settings.brush.strength  # Assuming alpha can be taken from brush strength
+        alpha = tool_settings.brush.strength  # Assumes alpha can be taken from brush strength
         self.color = (*color[:3], alpha)  # Combine color and alpha
         print(self.color)
         return context.window_manager.invoke_props_dialog(self)
@@ -200,9 +260,7 @@ class Vertex_Group_Properties(bpy.types.PropertyGroup):
     presets: bpy.props.EnumProperty(
         items=lambda self, context: get_vertex_groups(context),
         name='Vertex Group'
-    ) # pyright: ignore[reportInvalidTypeForm]
-
-#endregion
+    ) 
 
 class CP77GarmentSupport(Operator):
     bl_idname = 'cp77.shrinkwrap'
@@ -210,19 +268,19 @@ class CP77GarmentSupport(Operator):
     bl_description = "Shrinkwrap selection on top of another mesh"
     bl_options = {'REGISTER', 'UNDO'}
 
-    mesh_target: StringProperty(name="Mesh Target")  # pyright: ignore[reportInvalidTypeForm]
+    mesh_target: StringProperty(name="Mesh Target")  
 
     as_garment_support: BoolProperty(
         name="As Garment Support",
         description="Modifier is GarmentSupport",
         default=True
-    ) # pyright: ignore[reportInvalidTypeForm]
+    ) 
 
     apply_immediately: BoolProperty(
         name="Apply immediately",
         description="Unchecking this box will preserve the modifier",
         default=True
-    ) # pyright: ignore[reportInvalidTypeForm]
+    ) 
 
     offset: FloatProperty(
         name="Offset",
@@ -230,7 +288,7 @@ class CP77GarmentSupport(Operator):
         default=0.0002,
         step=0.0001,
         precision=5,
-    ) # pyright: ignore[reportInvalidTypeForm]
+    ) 
 
     wrap_method: EnumProperty(
 
@@ -242,7 +300,7 @@ class CP77GarmentSupport(Operator):
             ('TARGET_PROJECT', "Target Normal Project", "Shrink the mesh to the nearest target surface along the interpolated vertex normals of the target.")
         ],
         default='NEAREST_SURFACEPOINT'
-    ) # pyright: ignore[reportInvalidTypeForm]
+    ) 
 
     def invoke(self, context, event):
         try:
@@ -508,7 +566,7 @@ class CP77Autofitter(Operator):
         base_paths,  base_names  = CP77RefitList(context)
         addon_paths, addon_names = CP77RefitAddonList(context)
 
-        # Gather the user’s chosen refitters (paths + names in order)
+        # Gather the user's chosen refitters (paths + names in order)
         refitter_paths = []
         names = []
 
@@ -778,13 +836,13 @@ def register_meshtools():
     for cls in other_classes:
         if not hasattr(bpy.types, cls.__name__):
             bpy.utils.register_class(cls)
-
     bpy.types.Scene.vertex_group_props = bpy.props.PointerProperty(type=Vertex_Group_Properties)
 
 def unregister_meshtools():
+    del bpy.types.Scene.cp77_character_shape
+    del bpy.types.Scene.vertex_group_props
+
     for cls in reversed(other_classes):
         bpy.utils.unregister_class(cls)
     for cls in reversed(operators):
         bpy.utils.unregister_class(cls)
-
-    del bpy.types.Scene.vertex_group_props
