@@ -3,7 +3,7 @@ import bpy
 import bmesh
 import numpy as np
 from ..animtools.animtools import reset_armature
-from ..main.common import show_message
+from ..main.common import show_message, exclusion_cache
 from ..animtools.tracks import export_anim_tracks
 from ..animtools.compat import get_action_fcurves
 from ..main.bartmoss_functions import (
@@ -106,39 +106,6 @@ def pose_export_options():
         # interpolation, inflating file size, and losing keyframe sparsity.
         opts['export_force_sampling'] = False
     return opts
-
-_excluded_objects_cache = None
-_excluded_cache_timestamp = 0
-
-def get_excluded_objects():
-    """A cached set of objects in glTF_not_exported collection"""
-    # This should work regardless of user language selection - gltf_not_exported is explicitly defined in Khronos' code
-    global _excluded_objects_cache, _excluded_cache_timestamp
-
-    # Simple cache invalidation using scene update
-    current_time = bpy.context.scene.frame_current
-
-    if _excluded_objects_cache is None or current_time != _excluded_cache_timestamp:
-        _excluded_objects_cache = set()
-        if "glTF_not_exported" in bpy.data.collections:
-            not_exported_coll = bpy.data.collections["glTF_not_exported"]
-
-            def get_all_objects_recursive(coll):
-                objects = set(coll.objects)
-                for child in coll.children:
-                    objects.update(get_all_objects_recursive(child))
-                return objects
-
-            _excluded_objects_cache = get_all_objects_recursive(not_exported_coll)
-        _excluded_cache_timestamp = current_time
-
-    return _excluded_objects_cache
-
-def clear_excluded_cache():
-    """Clear the excluded objects cache."""
-    global _excluded_objects_cache, _excluded_cache_timestamp
-    _excluded_objects_cache = None
-    _excluded_cache_timestamp = 0
 
 def add_garment_cap(mesh):
     """Add garment support color attributes to mesh."""
@@ -708,7 +675,7 @@ def cp77_meshValidation(
         raise ValueError("No meshes to export, please select at least one mesh")
 
     # Filter excluded objects
-    excluded_objects = get_excluded_objects()
+    excluded_objects = exclusion_cache.get_excluded_objects()
     meshes = [m for m in meshes if m not in excluded_objects]
 
     if not meshes:
@@ -988,7 +955,7 @@ def export_cyberpunk_glb(
         safe_mode_switch('OBJECT')
 
     # Filter excluded objects
-    excluded_objects = get_excluded_objects()
+    excluded_objects = exclusion_cache.get_excluded_objects()
 
 
     if export_poses:

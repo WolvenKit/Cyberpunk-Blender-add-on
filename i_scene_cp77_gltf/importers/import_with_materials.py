@@ -14,7 +14,7 @@ from .import_from_external import *
 from .attribute_import import manage_garment_support
 from ..cyber_props import add_anim_props, add_skin_props
 from ..jsontool import JSONTool
-from ..main.common import show_message
+from ..main.common import show_message, exclusion_cache
 from ..animtools.tracks import import_anim_tracks, fix_anim_frame_alignment
 import traceback
 
@@ -171,7 +171,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
 
         existingMaterials = set(bpy.data.materials.keys())
         BlenderGlTF.create(gltf_importer)
-
+        exclusion_cache.clear_cache()
         imported=context.selected_objects #the new stuff should be selected
 
         # if we're not importing a Cyberpunk mesh, not all submesh names will start with submesh_00, and they will be nested weirdly.
@@ -382,46 +382,51 @@ def reload_mats(self, context):
 
 
 def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmatnames,multimesh=False,generate_overrides=False):
+    excluded_objects = exclusion_cache.get_excluded_objects()
     failedon = []
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     start_time = time.time()
     validmats = {}
-    for mat in validmatnames.keys():
-        for m in mats: #obj['Materials']:
-            if 'Name' not in m.keys():
-                # Sometimes a material has no name, for now we continue out, but we should figure out why
-                continue
-            if m['Name'] != mat:
-                continue
-            if 'BaseMaterial' in m.keys():
-                if 'GlobalNormal' in m['Data'].keys():
-                    GlobalNormal = m['Data']['GlobalNormal']
-                else:
-                    GlobalNormal = 'None'
-                if 'MultilayerMask' in m['Data'].keys():
-                    MultilayerMask = m['Data']['MultilayerMask']
-                else:
-                    MultilayerMask = 'None'
-                if 'DiffuseMap' in m['Data'].keys():
-                    DiffuseMap = m['Data']['DiffuseMap']
-                elif 'BaseColor' in m['Data'].keys():
-                    DiffuseMap = m['Data']['BaseColor']
-                elif 'DiffuseTexture' in m['Data'].keys():
-                    DiffuseMap = m['Data']['DiffuseTexture']
-                else:
-                    DiffuseMap = 'None'
-
-                validmats[mat] = {'Name': m['Name'], 'BaseMaterial': m['BaseMaterial'],
-                                  'GlobalNormal': GlobalNormal, 'MultilayerMask': MultilayerMask,
-                                  'DiffuseMap': DiffuseMap}
+    for m in mats: #obj['Materials']:
+        if 'Name' not in m.keys():
+            # Sometimes a material has no name, for now we continue out, but we should figure out why
+            continue
+        mat = m['Name']
+        if mat not in validmatnames.keys():
+            continue
+        if 'BaseMaterial' in m.keys():
+            if 'GlobalNormal' in m['Data'].keys():
+                GlobalNormal = m['Data']['GlobalNormal']
             else:
-                print(m.keys())
+                GlobalNormal = 'None'
+            if 'MultilayerMask' in m['Data'].keys():
+                MultilayerMask = m['Data']['MultilayerMask']
+            else:
+                MultilayerMask = 'None'
+            if 'DiffuseMap' in m['Data'].keys():
+                DiffuseMap = m['Data']['DiffuseMap']
+            elif 'BaseColor' in m['Data'].keys():
+                DiffuseMap = m['Data']['BaseColor']
+            elif 'DiffuseTexture' in m['Data'].keys():
+                DiffuseMap = m['Data']['DiffuseTexture']
+            else:
+                DiffuseMap = 'None'
+
+            validmats[mat] = {'Name': m['Name'], 'BaseMaterial': m['BaseMaterial'],
+                              'GlobalNormal': GlobalNormal, 'MultilayerMask': MultilayerMask,
+                              'DiffuseMap': DiffuseMap}
+        else:
+            print(m.keys())
 
     MatImportList = [k for k in validmats.keys()]
     Builder = MaterialBuilder(mats, DepotPath, str(image_format), BasePath)
     counter = 0
     bpy_mats = bpy.data.materials
-    names=[key for key in bpy.data.meshes.keys() if 'Icosphere' not in key and key not in existingMeshes]
+    excluded_mesh_names = {
+        obj.data.name for obj in excluded_objects
+        if getattr(obj, "type", "") == 'MESH' and obj.data
+        }
+    names=[key for key in bpy.data.meshes.keys() if key not in existingMeshes and key not in excluded_mesh_names]
     if multimesh:
         names= sorted(list(names), key=lambda x: int(x.split('_')[0]))
     for name in names:
@@ -504,6 +509,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
                 (rawmat["Name"] in MatImportList) or len(MatImportList) < 1):
             Builder.create(mats,index)
         index = index + 1
+
 
 def blender_4_scale_armature_bones():
     vers = bpy.app.version
