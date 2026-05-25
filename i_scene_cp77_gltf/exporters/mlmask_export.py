@@ -7,12 +7,11 @@ def cp77_mlmask_export(self,context, filepath, export_format):
     nodes = active_material.node_tree.nodes
     # print("Exporting Mask Images from " + active_material.name + " on " + active_object.name)
 
-    projpath = str(active_material["ProjPath"])
     mlmaskpath = str(active_material["MultilayerMask"])
     mlmask_file_name = (mlmaskpath.split("\\")[-1])
     masklist_folder_name = (mlmask_file_name.split(".")[0]) + "_layers/"
-    masklist_folder_path = (mlmaskpath.split(".")[0]) + "_layers"
-    mask_outpath = projpath + masklist_folder_path
+    masklist_folder_path = filepath.rsplit('\\', 1)[0]
+    mask_outpath = masklist_folder_path + '\\' + masklist_folder_name
 
     mask_list = []
 
