@@ -3,12 +3,14 @@ import sys
 import time
 import numpy as np
 import bpy
+import importlib
 from bpy.types import Operator
 from bpy.props import BoolProperty, IntProperty, FloatProperty
 from pathlib import Path
 from typing import Tuple
 
-from ..main.common import get_classes
+
+from ..main.common import get_classes, show_message
 from .compat import get_action_fcurves
 
 from . import rig_binding
@@ -43,6 +45,7 @@ except ImportError:
     JALIAnimationPipeline = None
     keyframe_tracks = None
     JALI_AVAILABLE = False
+    
 
 _CACHE: dict = {
     "rig":   None,   # RigData
@@ -868,50 +871,41 @@ class JALI_OT_InstallDependencies(Operator):
     bl_options = {"REGISTER"}
 
     def execute(self, context):
-        import subprocess
-        import ensurepip
-
-        python = sys.executable
-        errors = []
-
-        # Ensure pip is available
-        try:
-            ensurepip.bootstrap(upgrade=True)
-        except Exception:
-            pass  # may already be bootstrapped
-
+        from ..install_dependency import install_dependency 
         packages = [
             ("praat-parselmouth", "parselmouth"),
+            ("nltk", "nltk"),
             ("g2p_en", "g2p_en"),
         ]
-
+        
+        results = {
+            "installed_now": [],
+            "already_present": [],
+            "failed": []
+        }
+        
         for pip_name, import_name in packages:
             try:
-                __import__(import_name)
-                self.report({'INFO'}, f"{pip_name} already installed")
-                continue
+                importlib.import_module(import_name)
+                results["already_present"].append(pip_name)
+            
             except ImportError:
-                pass
+                self.report({'INFO'}, f"Installing {pip_name}...")
+                
+                if install_dependency(pip_name, import_name):
+                    results["installed_now"].append(pip_name)
+                else:
+                    results["failed"].append(pip_name)
 
-            self.report({'INFO'}, f"Installing {pip_name}...")
-            try:
-                subprocess.check_call(
-                    [python, "-m", "pip", "install", "--user", pip_name],
-                    timeout=120,
-                )
-                self.report({'INFO'}, f"{pip_name} installed successfully")
-            except Exception as e:
-                errors.append(f"{pip_name}: {e}")
-                self.report({'WARNING'}, f"Failed to install {pip_name}: {e}")
-
-        if errors:
-            self.report({'WARNING'},
-                        f"Some packages failed: {'; '.join(errors)}. "
-                        f"You may need to restart Blender.")
-        else:
-            self.report({'INFO'},
-                        "All JALI dependencies installed. "
-                        "Please restart Blender to activate them.")
+        if results["failed"]:
+            failed_str = ", ".join(results["failed"])
+            self.report({'WARNING'}, f"Failed to install: {failed_str}. Check console for permissions errors.")
+        
+        if results["installed_now"]:
+            self.report({'INFO'}, "Jali dependencies installed successfully. Restart Blender Now.")
+            show_message("Jali dependencies installed successfully. Restart Blender Now.")
+        elif not results["failed"]:
+            self.report({'INFO'}, "All dependencies are already present and loaded.")
 
         return {'FINISHED'}
 
