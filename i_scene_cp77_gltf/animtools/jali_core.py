@@ -460,7 +460,7 @@ class CoarticulationEngine:
             if event.phoneme in PAUSES:
                 next_pause_start = event.start
 
-    @staticmethod
+
     @staticmethod
     def _substitute_pauses(events: List[PhonemeEvent]):
         """Figure 10: Pause substitution.
