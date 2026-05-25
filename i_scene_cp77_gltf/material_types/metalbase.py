@@ -15,6 +15,23 @@ class MetalBase:
         sockets=bsdf_socket_names()
         isDetailNormal=None
 
+        # LayerTile mapping node (base layer only)
+        layerTileMapping = None
+        if "LayerTile" in Data:
+            texCoord = CurMat.nodes.new("ShaderNodeTexCoord")
+            texCoord.location = (-2200, 400)
+            texCoord.hide = True
+            mappingNode = CurMat.nodes.new("ShaderNodeMapping")
+            mappingNode.location = (-2000, 400)
+            mappingNode.label = "LayerTile"      # nice name in editor
+            mappingNode.hide = True              # spawn collapsed/minimized
+            tileValue = Data["LayerTile"]
+            if tileValue <= 0:
+                tileValue = 1.0
+            mappingNode.inputs[3].default_value = (tileValue, tileValue, 1.0)
+            CurMat.links.new(texCoord.outputs[2], mappingNode.inputs[0])
+            layerTileMapping = mappingNode
+
         mixRGB = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-800,500) , blend_type = 'MULTIPLY')
         mixRGB.inputs[0].default_value = 1
         CurMat.links.new(mixRGB.outputs[0],pBSDF.inputs['Base Color'])
@@ -22,15 +39,19 @@ class MetalBase:
         if "BaseColor" in Data:
             bcolImg=imageFromRelPath(Data["BaseColor"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
             bColNode = create_node(CurMat.nodes,"ShaderNodeTexImage", (-1400,650), label="BaseColor", image=bcolImg)
+            if layerTileMapping:
+                CurMat.links.new(layerTileMapping.outputs[0], bColNode.inputs[0])
             CurMat.links.new(bColNode.outputs[0],mixRGB.inputs[1])
 
         if "DetailColor" in Data:
             dColImg=imageFromRelPath(Data["DetailColor"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
-            dColNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-1400,950), label="DetailColor", image=dColImg) 
+            dColNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-1400,950), label="DetailColor", image=dColImg)
 
         if "Metalness" in Data:
             mImg=imageFromRelPath(Data["Metalness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
             metNode = create_node(CurMat.nodes,"ShaderNodeTexImage", (-1400,250), label="Metalness", image=mImg)
+            if layerTileMapping:
+                CurMat.links.new(layerTileMapping.outputs[0], metNode.inputs[0])
 
             mMulAddNode = create_node(CurMat.nodes,"ShaderNodeMath", (-1050,250) , operation = 'MULTIPLY_ADD')
             mMulAddNode.inputs[1].default_value = 1
@@ -42,6 +63,8 @@ class MetalBase:
         if "Roughness" in Data:
             rImg=imageFromRelPath(Data["Roughness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
             rNode = create_node(CurMat.nodes,"ShaderNodeTexImage", (-1400,50), label="Roughness", image=rImg)
+            if layerTileMapping:
+                CurMat.links.new(layerTileMapping.outputs[0], rNode.inputs[0])
 
             rMulAddNode = create_node(CurMat.nodes,"ShaderNodeMath", (-1050,50) , operation = 'MULTIPLY_ADD')
             rMulAddNode.inputs[1].default_value = 1
@@ -52,6 +75,11 @@ class MetalBase:
 
         if "Normal" in Data:
             nMap = CreateShaderNodeGlobalNormalMap(CurMat,self.BasePath + Data["Normal"],-1000,-200,'Normal',self.image_format)
+            if layerTileMapping:
+                try:
+                    CurMat.links.new(layerTileMapping.outputs[0], nMap.inputs[0])
+                except Exception:
+                    pass
             normalVectorize = CurMat.nodes.new("ShaderNodeVectorMath")
             normalVectorize.operation='MULTIPLY_ADD'
             normalVectorize.location = (-1050,-200)
@@ -93,8 +121,8 @@ class MetalBase:
             baseColorGamma.location = (-1050,500)
             baseColorGamma.inputs[1].default_value = 2.2
             baseColorGamma.hide = True
-            CurMat.links.new(dColScale.outputs[0],baseColorGamma.inputs[0]) 
-            CurMat.links.new(baseColorGamma.outputs[0],mixRGB.inputs[2]) 
+            CurMat.links.new(dColScale.outputs[0],baseColorGamma.inputs[0])
+            CurMat.links.new(baseColorGamma.outputs[0],mixRGB.inputs[2])
 
         if 'GradientMap' in Data:
             gradmap = Data["GradientMap"]
@@ -106,7 +134,7 @@ class MetalBase:
 
         if 'MetalnessScale' in Data:
             mScale = CreateShaderNodeValue(CurMat,Data["MetalnessScale"],-1400, 200,"MetalnessScale")
-            CurMat.links.new(mScale.outputs[0],mMulAddNode.inputs[1]) 
+            CurMat.links.new(mScale.outputs[0],mMulAddNode.inputs[1])
 
         if 'MetalnessBias' in Data:
             mBias = CreateShaderNodeValue(CurMat,Data["MetalnessBias"],-1400, 150,"MetalnessBias")
@@ -114,7 +142,7 @@ class MetalBase:
 
         if 'RoughnessScale' in Data:
             rScale = CreateShaderNodeValue(CurMat,Data["RoughnessScale"],-1400, 0,"RoughnessScale")
-            CurMat.links.new(rScale.outputs[0],rMulAddNode.inputs[1]) 
+            CurMat.links.new(rScale.outputs[0],rMulAddNode.inputs[1])
 
         if 'RoughnessBias' in Data:
             rBias = CreateShaderNodeValue(CurMat,Data["RoughnessBias"],-1400, -50,"RoughnessBias")
@@ -143,6 +171,8 @@ class MetalBase:
         if "Emissive" in Data:
             EmImg=imageFromRelPath(Data["Emissive"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
             emTexNode =create_node(CurMat.nodes,"ShaderNodeTexImage", (-800,-500), label="Emissive", image=EmImg)
+            if layerTileMapping:
+                CurMat.links.new(layerTileMapping.outputs[0], emTexNode.inputs[0])
             CurMat.links.new(emTexNode.outputs[0],mulNode.inputs[2])
 
         if "EmissiveColor" in Data:
@@ -200,22 +230,22 @@ class MetalBase:
 
 
 used_params=['BaseColor',
- 'BaseColorScale',
- 'Metalness',
- 'Roughness',
- 'Normal',
- 'AlphaThreshold',
- 'MetalnessScale',
- 'MetalnessBias',
- 'RoughnessScale',
- 'RoughnessBias',
- 'NormalStrength',
- 'Emissive',
- 'EmissiveLift',
- 'EmissiveEV',
- 'EmissiveEVRaytracingBias',
- 'EmissiveDirectionality',
- 'EnableRaytracedEmissive',
- 'EmissiveColor',
- 'LayerTile',
- 'VehicleDamageInfluence']
+             'BaseColorScale',
+             'Metalness',
+             'Roughness',
+             'Normal',
+             'AlphaThreshold',
+             'MetalnessScale',
+             'MetalnessBias',
+             'RoughnessScale',
+             'RoughnessBias',
+             'NormalStrength',
+             'Emissive',
+             'EmissiveLift',
+             'EmissiveEV',
+             'EmissiveEVRaytracingBias',
+             'EmissiveDirectionality',
+             'EnableRaytracedEmissive',
+             'EmissiveColor',
+             'LayerTile',
+             'VehicleDamageInfluence']
