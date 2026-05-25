@@ -76,11 +76,12 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         # this just isnt true, loads of stuff doesnt have appearances, and the popup is annoying
 
     #print(ent_applist)
-
+    was_random=False
     if ent_default and ent_default != 'None' and ent_default=='random':
         if len(ent_applist)>0:
             import random
             ent_default= random.choice(ent_applist)
+            was_random=True
             print(f"Default appearance set to random choice: {ent_default}")
         else:
             print("No appearances available to select a random default from.")
@@ -342,9 +343,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
         for x,app_name in enumerate(appearances):
             print(f"\nImporting appearance {x+1} of {len(appearances)}: {app_name}")
             app_start_time = time.time()
-            ent_coll = bpy.data.collections.new(ent_name+'_'+app_name)
-            comps=app_comps[app_name]
-            if app_name=='default':
+            ent_coll = bpy.data.collections.new(ent_name+'_'+app_name)            
+            if app_name=='default' and not was_random:
                 app_name=ent_default
             if inColl and inColl in coll_scene.children.keys():
                 par_coll=bpy.data.collections.get(inColl)
@@ -405,6 +405,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                     default=default_index,
                 )
 
+            comps=app_comps[app_name]
             comps_lookup = {o['name']['$value']: o for o in comps}
 
             if not rig:
