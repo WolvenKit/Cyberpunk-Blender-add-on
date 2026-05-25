@@ -13,6 +13,7 @@ from . importers import *
 from . exporters import *
 from . scriptman import *
 from . materialtools import *
+from .main.common import exclusion_cache
 
 bl_info = {
     "name": "Cyberpunk 2077 IO Suite",
@@ -118,6 +119,6 @@ def unregister():
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
     unload_icons()
-
+    exclusion_cache.clear_cache()
 if __name__ == "__main__":
     register()
