@@ -77,6 +77,14 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
 
     #print(ent_applist)
 
+    if ent_default and ent_default != 'None' and ent_default=='random':
+        if len(ent_applist)>0:
+            import random
+            ent_default= random.choice(ent_applist)
+            print(f"Default appearance set to random choice: {ent_default}")
+        else:
+            print("No appearances available to select a random default from.")
+
     for appidx,app in enumerate(appearances):
         if app not in ent_applist and app.upper() !='ALL' and app !='default':
             print(f"Appearance {app} not found in entity {ent_name}. Available appearances: {', '.join(ent_applist)}")
@@ -335,6 +343,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
             print(f"\nImporting appearance {x+1} of {len(appearances)}: {app_name}")
             app_start_time = time.time()
             ent_coll = bpy.data.collections.new(ent_name+'_'+app_name)
+            comps=app_comps[app_name]
             if app_name=='default':
                 app_name=ent_default
             if inColl and inColl in coll_scene.children.keys():
@@ -396,7 +405,6 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                     default=default_index,
                 )
 
-            comps=app_comps[app_name]
             comps_lookup = {o['name']['$value']: o for o in comps}
 
             if not rig:
@@ -505,7 +513,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                 #bpy.ops.io_scene_gltf.cp77(with_materials, filepath=meshpath, appearances=meshApp,scripting=True,generate_overrides=generate_overrides)
                                 group, groupname = get_group(meshpath,meshApp,Masters)
                                 if (group):
-                                    new=bpy.data.collections.new(groupname)
+                                    new=bpy.data.collections.new(groupname)                                       
                                     ent_coll.children.link(new)
                                     for old_obj in group.all_objects:
                                         obj=old_obj.copy()
@@ -519,6 +527,8 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                         obj['entAppearance'] = app_name
                                         if 'Armature' in obj.name:
                                             obj.hide_set(True)
+                                else:
+                                    print('BREAK collection not found after import - ', meshname)
                             except:
                                 print('import threw an error:')
                                 print(traceback.format_exc())
