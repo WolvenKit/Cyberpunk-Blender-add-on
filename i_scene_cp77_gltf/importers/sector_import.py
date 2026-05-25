@@ -796,22 +796,23 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 #print(jsonpath)
                                 try:
                                     obj=JSONTool.jsonload(jsonpath)
-                                    index = 0
-                                    obj["Data"]["RootChunk"]['alpha'] = data['alpha']
-                                    #FIXME: image_format
-                                    if mipath in mis.keys():
-                                        bpymat = mis[mipath]
-                                    else:
-                                        builder = MaterialBuilder(obj,path,'png',path)
-                                        bpymat = builder.createdecal(index)
-                                        mis[mipath] = bpymat
-                                    if bpymat:
-                                        o.data.materials.append(bpymat)
-                                    else:
-                                        o.display_type = 'WIRE'
-                                        o.color = (1.0, 0.905, .062, 1)
-                                        o.show_wire = True
-                                        o.display.show_shadows = False
+                                    if obj:
+                                        index = 0
+                                        obj["Data"]["RootChunk"]['alpha'] = data['alpha']
+                                        #FIXME: image_format
+                                        if mipath in mis.keys():
+                                            bpymat = mis[mipath]
+                                        else:
+                                            builder = MaterialBuilder(obj,path,'png',path)
+                                            bpymat = builder.createdecal(index)
+                                            mis[mipath] = bpymat
+                                        if bpymat:
+                                            o.data.materials.append(bpymat)
+                                        else:
+                                            o.display_type = 'WIRE'
+                                            o.color = (1.0, 0.905, .062, 1)
+                                            o.show_wire = True
+                                            o.display.show_shadows = False
                                 except FileNotFoundError:
                                     name = os.path.basename(jsonpath)
                                     print(f'File not found {name} ({jsonpath}), you need to export .mi files')

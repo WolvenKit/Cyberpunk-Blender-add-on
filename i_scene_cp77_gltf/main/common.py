@@ -13,6 +13,14 @@ import json
 scale_factor=1.0
 from typing import Literal, get_args
 
+def found(self,tex):
+    result = os.path.exists(os.path.join(self.BasePath, tex)[:-3]+ self.image_format)
+    if not result:
+        result = os.path.exists(os.path.join(self.ProjPath, tex)[:-3]+ self.image_format)
+        if not result:
+            print(f"Texture not found: {tex}")
+    return result
+
 def load_zip(path):
     with zipfile.ZipFile(path, "r") as z:
         filename=z.namelist()[0]
