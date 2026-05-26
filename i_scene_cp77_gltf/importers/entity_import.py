@@ -869,6 +869,7 @@ def importEnt(with_materials, filepath='', appearances=[], exclude_meshes=[], in
                                         continue
                                     bit = cm_list[subnum] if subnum < len(cm_list) else True
                                     obj.hide_set(not bit)
+                                    obj.hide_viewport = not bit
                                     obj.hide_render = not bit
 
                         except:
