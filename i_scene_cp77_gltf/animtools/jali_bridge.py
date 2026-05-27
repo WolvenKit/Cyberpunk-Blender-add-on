@@ -1,5 +1,5 @@
-import bpy
 from __future__ import annotations
+import bpy
 
 from typing import Dict, List, Optional
 
