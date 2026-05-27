@@ -2,19 +2,40 @@ from __future__ import annotations
 import traceback
 import bpy
 from bpy.types import Operator, OperatorFileListElement
-from bpy.props import StringProperty, BoolProperty, IntProperty, CollectionProperty
+from bpy.props import StringProperty, BoolProperty, EnumProperty, IntProperty, CollectionProperty
 from ..main.bartmoss_functions import *
 from ..cyber_props import cp77riglist
-from ..icons.cp77_icons import get_icon
 from ..importers.import_with_materials import CP77GLBimport
 from .animtools import *
-from .animtools import _assign_action
+from .animtools import animBones, _assign_action
 from .generate_rigs import cp77_to_rigify
 from .draw import _draw_callback
-
+from .generate_rigs import (
+    find_pair,
+    get_constraint_direction,
+    set_constraint_direction,
+    DIRECTION_FORWARD,
+    DIRECTION_REVERSE,
+)
 _handle  = None
 _running = False
-
+def _set_pose_bone_select(pose_bone, selected: bool) -> bool:
+    """Toggle pose-bone selection across Blender 5.0 and 5.1+.
+ 
+    Pre-5.1 the selection flag lives on the data `Bone` (`pose_bone.bone.select`).
+    From 5.1 onward `Bone.select` is gone and selection lives on `PoseBone`
+    directly. Returns True if either path succeeded.
+    """
+    try:
+        pose_bone.select = selected
+        return True
+    except (AttributeError, TypeError):
+        pass
+    try:
+        pose_bone.bone.select = selected
+        return True
+    except (AttributeError, TypeError):
+        return False
 class CP77_OT_ToggleSIMD(Operator):
     bl_idname = "cp77.toggle_simd"
     bl_label = "Toggle SIMD Encoding"
@@ -251,6 +272,254 @@ class CP77ResetArmature(Operator):
         reset_armature(self, context)
         return {"FINISHED"}
 
+class CP77_OT_ToggleConstraintDirection(Operator):
+    """Reverse which rig drives which: Rigify ↔ source"""
+    bl_idname = 'cp77.toggle_constraint_direction'
+    bl_label = 'Toggle Rigify Constraint Direction'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    source_name: StringProperty(options={'HIDDEN'})
+    rigify_name: StringProperty(options={'HIDDEN'})
+
+    def execute(self, context):
+        source = bpy.data.objects.get(self.source_name)
+        rig = bpy.data.objects.get(self.rigify_name)
+        if not source or not rig:
+            source, rig = find_pair(context.active_object)
+        if not source or not rig:
+            self.report({'ERROR'}, 'Source/Rigify pair not found')
+            return {'CANCELLED'}
+
+        current = get_constraint_direction(source)
+        target = (DIRECTION_REVERSE if current == DIRECTION_FORWARD
+                  else DIRECTION_FORWARD)
+        ok, msg = set_constraint_direction(source, rig, target)
+        self.report({'INFO'} if ok else {'ERROR'}, msg)
+        return {'FINISHED'} if ok else {'CANCELLED'}
+
+class CP77_OT_ActivateLinkedRig(Operator):
+    """Make the named armature the active object"""
+    bl_idname = 'cp77.activate_linked_rig'
+    bl_label = 'Activate Linked Rig'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    target_name: StringProperty(options={'HIDDEN'})
+
+    def execute(self, context):
+        target = bpy.data.objects.get(self.target_name)
+        if target is None:
+            self.report({'ERROR'}, f"Object '{self.target_name}' not found")
+            return {'CANCELLED'}
+
+        was_hidden = target.hide_get()
+        if was_hidden:
+            target.hide_set(False)
+
+        if context.mode != 'OBJECT':
+            try:
+                bpy.ops.object.mode_set(mode='OBJECT')
+            except Exception:
+                pass
+
+        for o in context.selected_objects:
+            o.select_set(False)
+        target.select_set(True)
+        context.view_layer.objects.active = target
+        return {'FINISHED'}
+
+class CP77_OT_BakeRigifyToSource(Operator):
+    """Bake Rigify-driven motion to keyframes on the CP77 source rig
+ 
+    Reads constraint-evaluated transforms from the source bones over the chosen
+    frame range and writes them as an action ready for in-game export. Only
+    the animation-bone subset is baked. Forward constraints are left in place;
+    mute or remove them later to play the baked action standalone.
+    """
+    bl_idname = 'cp77.bake_rigify_to_source'
+    bl_label = 'Bake Rigify to Cyberpunk'
+    bl_options = {'REGISTER', 'UNDO'}
+ 
+    action_name: StringProperty(
+        name='Action Name',
+        description="Name of the new action. Defaults to '<rigify action>_baked'",
+        default='',
+    )
+    overwrite: BoolProperty(
+        name='Overwrite Existing',
+        description='Replace the target action if it already exists',
+        default=False,
+    )
+    frame_range_source: EnumProperty(
+        name='Frame Range',
+        items=[
+            ('SCENE',  'Scene Range',  "Use scene.frame_start / scene.frame_end"),
+            ('ACTION', 'Action Range', "Use the Rigify action's own frame_range"),
+            ('MANUAL', 'Manual',       'Specify start and end frames'),
+        ],
+        default='SCENE',
+    )
+    frame_start: IntProperty(name='Start', default=1, min=0)
+    frame_end:   IntProperty(name='End',   default=250, min=0)
+    step:        IntProperty(
+        name='Step',
+        description='Frame step (1 = every frame)',
+        default=1, min=1, max=10,
+    )
+ 
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        if obj is None or obj.type != 'ARMATURE':
+            return False
+        source, rig = find_pair(obj)
+        if not source or not rig:
+            return False
+        return (rig.animation_data is not None
+                and rig.animation_data.action is not None)
+ 
+    def invoke(self, context, event):
+        source, rig = find_pair(context.active_object)
+        if rig is None or rig.animation_data is None or rig.animation_data.action is None:
+            self.report({'ERROR'}, 'Rigify rig has no action to bake')
+            return {'CANCELLED'}
+ 
+        rig_action = rig.animation_data.action
+        self.action_name = f"{rig_action.name}_baked"
+ 
+        fr = rig_action.frame_range
+        self.frame_start = int(fr[0])
+        self.frame_end   = int(fr[1])
+ 
+        if get_constraint_direction(source) != DIRECTION_FORWARD:
+            self.report(
+                {'WARNING'},
+                "Constraints are in REVERSE direction — source already follows itself. "
+                "Switch to FORWARD before baking for meaningful results.",
+            )
+ 
+        return context.window_manager.invoke_props_dialog(self, width=400)
+ 
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+ 
+        source, rig = find_pair(context.active_object)
+        if rig is not None and rig.animation_data and rig.animation_data.action:
+            col = layout.column(align=True)
+            col.enabled = False
+            col.label(text=f"From: {rig.name} → {rig.animation_data.action.name}",
+                      icon='ARMATURE_DATA')
+            col.label(text=f"Onto: {source.name}", icon='OUTLINER_OB_ARMATURE')
+            layout.separator()
+ 
+        layout.prop(self, 'action_name')
+        layout.prop(self, 'overwrite')
+        layout.separator()
+        layout.prop(self, 'frame_range_source')
+        if self.frame_range_source == 'MANUAL':
+            row = layout.row(align=True)
+            row.prop(self, 'frame_start')
+            row.prop(self, 'frame_end')
+        layout.prop(self, 'step')
+ 
+        layout.separator()
+        info = layout.column(align=True)
+        info.scale_y = 0.85
+        info.label(text='Animation-bone subset only (animBones).', icon='INFO')
+        info.label(text='Forward constraints are preserved — mute them later',
+                   icon='INFO')
+        info.label(text='to play the baked action standalone.')
+ 
+    def execute(self, context):
+        source, rig = find_pair(context.active_object)
+        if not source or not rig:
+            self.report({'ERROR'}, 'No Rigify pair found for active object')
+            return {'CANCELLED'}
+        if not (rig.animation_data and rig.animation_data.action):
+            self.report({'ERROR'}, 'Rigify rig has no action to bake')
+            return {'CANCELLED'}
+ 
+        if self.frame_range_source == 'SCENE':
+            start, end = context.scene.frame_start, context.scene.frame_end
+        elif self.frame_range_source == 'ACTION':
+            fr = rig.animation_data.action.frame_range
+            start, end = int(fr[0]), int(fr[1])
+        else:
+            start, end = self.frame_start, self.frame_end
+ 
+        if end < start:
+            self.report({'ERROR'}, f"Invalid frame range: {start} → {end}")
+            return {'CANCELLED'}
+ 
+        action_name = self.action_name.strip() or f"{rig.animation_data.action.name}_baked"
+        existing    = bpy.data.actions.get(action_name)
+        if existing is not None and not self.overwrite:
+            self.report({'ERROR'},
+                        f"Action '{action_name}' already exists — enable Overwrite to replace")
+            return {'CANCELLED'}
+        if existing is not None and self.overwrite:
+            bpy.data.actions.remove(existing)
+ 
+        target_action = bpy.data.actions.new(action_name)
+        target_action.use_fake_user = True
+ 
+        store_current_context()
+        try:
+            if context.mode != 'OBJECT':
+                try:
+                    bpy.ops.object.mode_set(mode='OBJECT')
+                except Exception:
+                    pass
+ 
+            for o in context.selected_objects:
+                o.select_set(False)
+            if source.hide_get():
+                source.hide_set(False)
+            source.select_set(True)
+            context.view_layer.objects.active = source
+ 
+            bpy.ops.object.mode_set(mode='POSE')
+ 
+            if not source.animation_data:
+                source.animation_data_create()
+            _assign_action(source.animation_data, target_action)
+ 
+            present_anim_bones = set()
+            for pb in source.pose.bones:
+                is_anim = pb.name in animBones
+                _set_pose_bone_select(pb, is_anim)
+                if is_anim:
+                    present_anim_bones.add(pb.name)
+ 
+            if not present_anim_bones:
+                self.report({'ERROR'}, 'No animation bones present on source rig')
+                return {'CANCELLED'}
+ 
+            bpy.ops.nla.bake(
+                frame_start=start,
+                frame_end=end,
+                step=self.step,
+                only_selected=True,
+                visual_keying=True,
+                clear_constraints=False,
+                clear_parents=False,
+                use_current_action=True,
+                bake_types={'POSE'},
+            )
+        except Exception as e:
+            traceback.print_exc()
+            self.report({'ERROR'}, f"Bake failed: {e}")
+            return {'CANCELLED'}
+        finally:
+            restore_previous_context()
+ 
+        self.report(
+            {'INFO'},
+            f"Baked '{target_action.name}' "
+            f"({start}→{end}, step {self.step}, {len(present_anim_bones)} bones). "
+            f"Mute the constraints on source bones to play it standalone."
+        )
+        return {'FINISHED'}
 
 class CP77NewAction(Operator):
     bl_idname = 'cp77.new_action'
