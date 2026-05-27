@@ -2,7 +2,14 @@ import bpy
 import os
 import json
 import traceback
+from ..main.setup import MaterialBuilder, bcolors
 from .import_with_materials import CP77GLBimport
+vers = bpy.app.version
+
+if vers[0]  < 5:
+    NAME_MAX_LEN = 64
+else:
+    NAME_MAX_LEN = 256
 
 
 def get_groupname(meshname, meshAppearance):
@@ -11,7 +18,8 @@ def get_groupname(meshname, meshAppearance):
         groupname = os.path.dirname(meshname).split(os.sep)[-1] + '_' + groupname
     if len(meshAppearance)>0:
         groupname += '@' + meshAppearance
-    while len(groupname) > 64:
+    
+    while len(groupname) > NAME_MAX_LEN:
         groupname = groupname[:-1]
     return groupname
 
