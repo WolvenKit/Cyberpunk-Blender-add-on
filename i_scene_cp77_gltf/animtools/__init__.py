@@ -13,6 +13,8 @@ from . import facial_ops
 from . import rig_binding
 from . import pose_preview
 from . import solver as _solver_mod
+from . import rigify_ui
+from .generate_rigs import find_pair as _find_rigify_pair
 from .anim_ops import BHLS_OT_Start, BHLS_OT_Stop
 from .facial_ops import (
     _CACHE,
@@ -77,7 +79,7 @@ class CP77_PT_AnimsPanel(Panel):
         col.operator('cp77.rig_loader', text="Load Bundled Rig")
 
         if obj is None or obj.type != 'ARMATURE':
-            col.label(text="Select an armature to access additional rig tools", icon='INFO')
+            col.label(text="Select an armature to access rig tools")
             return
 
         col.operator('rigify_generator.cp77', text='Generate Rigify Rig')
@@ -108,13 +110,14 @@ class CP77_PT_AnimsPanel(Panel):
             else:
                 col.operator('cp77.load_tpose', text="Switch to T-Pose")
 
+        rigify_ui.draw_rigify_controls(layout, context)
 
 
     def draw_animation_tab(self, context, layout, obj):
         """Animation playback, management, and keyframing"""
         if obj is None or obj.type != 'ARMATURE':
             box = layout.box()
-            box.label(text="Select an armature to use animation tools", icon='INFO')
+            box.label(text="Select an armature to use animation tools")
             return
 
         available_anims = list(CP77AnimsList(self, context))
@@ -194,6 +197,9 @@ class CP77_PT_AnimsPanel(Panel):
         box = layout.box()
         box.label(text="Animation Tools", icon='KEYFRAME')
         col = box.column(align=True)
+        source, rig = _find_rigify_pair(obj)
+        if source is not None and rig is not None:
+            col.operator('cp77.bake_rigify_to_source', text='Bake Rigify to Cyberpunk',)
         col.operator('insert_keyframe.cp77', text="Insert Keyframe")
         col.operator('cp77.anim_namer', text="Fix Anim Names")
 
@@ -308,7 +314,9 @@ class CP77_PT_AnimsPanel(Panel):
 
         if panel:
             # Dependency status
-            deps_ok = PARSELMOUTH_AVAILABLE
+            deps_ok = False
+            if PARSELMOUTH_AVAILABLE and G2P_AVAILABLE:
+                deps_ok = True
             if not deps_ok:
                 box = panel.box()
                 box.label(text="Dependencies required:", icon='ERROR')
