@@ -5,53 +5,59 @@ Download the latest version from [Releases](https://github.com/WolvenKit/Cyberpu
 
 ![blender add-on banner panam](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/assets/65016231/a0489b07-68af-4a90-b53e-1ad3ef271f4a)
 
-The Cyberpunk IO Suite is part of the Cyberpunk 2077 modding toolchain, bridging the gap between [WolvenKit](https://wiki.redmodding.org/wolvenkit) and Blender.
+The Cyberpunk IO Suite is the definitive bridge between [WolvenKit](https://wiki.redmodding.org/wolvenkit) and Blender, built specifically for the Cyberpunk 2077 modding toolchain.
+
+Whether you are importing complex level sectors, generating pixel-perfect collision bodies via native PhysX, or animating custom JALI facial expressions, the Cyberpunk IO suite brings REDengine compatibility directly to your Blender workspace.
 
 You can find detailed documentation (and much else) on the [Cyberpunk 2077 modding wiki](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite).
 
-# Features
+# Core Features
 
 ![blender add-on yaiba exampe](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/assets/65016231/fffb9aab-c5f0-4f77-9a63-bdbee941708e)
 
 ## Import:
-- [Meshes](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export): Import Cyberpunk 2077 meshes from Wovlenkit with a fully automated setup of the game's complex shaders — in just a few clicks.
+- [Meshes](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export): Import Cyberpunk meshes from WolvenKit with a fully automated, one-click setup of the game's complex shaders.
   > Hint: The add-on doesn't support all Cyberpunk shaders yet, but we're working on it!
 
-- [Characters](https://wiki.redmodding.org/wolvenkit/modding-community/exporting-to-blender) and [vehicles](https://wiki.redmodding.org/wolvenkit/modding-community/exporting-vehicles): Point the plugin at the Wolvenkit export and it will include all meshes and materials from your project, setting them up to match the in-game appearance you specified.
-
-- Colliders: Import colliders from Wolvenkit exported .phys and entity jsons for easy visualization and editing
-
-- Cyberpunk 2077 [animations](https://wiki.redmodding.org/wolvenkit/modding-community/exporting-to-blender/exporting-rigs-and-anims): Play animations directly on your exported models — either by [importing them from file](https://wiki.redmodding.org/wolvenkit/modding-community/exporting-to-blender/exporting-rigs-and-anims), or by using the bundled rig resources via the Cyberpunk Animations Panel
+- [Characters](https://wiki.redmodding.org/wolvenkit/modding-community/exporting-to-blender) and [vehicles](https://wiki.redmodding.org/wolvenkit/modding-community/exporting-vehicles):  Point the plugin at a WolvenKit export to automatically assemble all meshes and materials, perfectly matching the in-game appearance you specified.
 
 - [Level data (streamingsectors)](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-guides/world-editing): Import the map(.streamingsector) from Cyberpunk 2077 into Blender and change the world — literally.
 
-## Export:
+## Smart Exporting:
 
-- [Mesh to .glb](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export): The plugin's export functions aims for maximum compatibility with Wolvenkit. Our exporter supports shapekeys and GarmentSupport and checks for common things that will cause the Wolvenkit export to fail. Where issues are found, the plugin provides simplified solutions to speed up your workflow.
+- [Mesh to .glb](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export): Aimed at maximum compatibility. The plugin validates GarmentSupport, shapekeys, and vertex limits. If your mesh has unassigned vertex groups or degenerate geometry, the exporter will isolate and fix them automatically on a temporary instance to ensure WolvenKit never throws an error.
 
-- [Animations](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#animations-1): Export new and edited animations to GLB
+- Export Collections:
+Export entire collections of meshes to  your Wolvenkit project with a single click. 
 
-- Collisions: Export generated collision shapes to .phys.json
 
-## Tools and Shortcuts:
+
+## Animation & Rigging:
+
+* **Animation I/O:** Robust, bidirectional import and export of animation data optimized for import back into Wolvenkit.
+* **Auto-Rigify & Bundled Rigs:** Forget manual bone constraints. Generate production-ready Rigify control rigs instantly. Need to test an animation? Drop in one of the bundled native game rigs straight from the plugin UI.
+* **Facial Animation Pipeline & JALI Lipsync:** Import, preview and manipulate the games native facial animations using the real-time track solver. Automatically generate game compatible lipsync animations from text and audio using our implementation of the principals outlined in the [2018 JALI paper](https://www.dgp.toronto.edu/~elf/JALISIG16.pdf)
+* **Pose & Action Management:** Shortcuts for playing, renaming, and deleting animations outside of Blender's native, clunky animation tabs. Support for Root Motion, bone relationship drawing and easy toggling of deform bones.
+
+## Physics, Collisions & Dangles:
+
+* **Native PhysX Tools:** Seamlessly import, generate, cook, simulate, validate, and export colliders using the exact same backend as the game. Experiment with the games physics materials, collision filters and dynamics settings, all without ever starting the game. 
+* **Terrain Collisions:** Dedicated exporter for heightfields and world terrain collisions.
+* **Dangles Engine:** Import dangle physics from `.animgraph.json`, simulate drag, constraints, and collisions for character accessories without needing to re export the same file over and over. 
+
 > Hint: You can find more detailed documentation on the [Cyberpunk 2077 Modding Wiki](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite)
 
-### Animation Tools Panel
-- shortcuts for playing, renaming and deleting existing animations
-- add new actions and insert keyframes
-- all from outside Blender's animations tab
-
-### Mesh Tools Panel
+## Sculpting Workflow & Mesh Tools:
 - [Auto refit clothing meshes](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-akl-autofitter) to a variety of different modded and vanilla body shapes.  
 *This functionality is based on research and work by AllKnowingLion*
+* **Seamless Sculpting (`Safe Join/Split`):** Cyberpunk meshes are heavily compartmentalized into submeshes, making it difficult to sculpt smoothly. Our custom safe join/split tools temporarily merge your mesh, back up your complex material data, let you sculpt across seams natively, and then split everything back into engine-ready submeshes.
+* **Vertex Color Presets (Vehicles):** Instantly apply the exact, REDengine-compliant RGB vertex color values required to make vehicle parts function as Primary Headlights, Secondary Taillights, and Marker Lights in-game.
+* **Garment Support Generation:** Automatically generate the correct `_GARMENTSUPPORTWEIGHT` (Red) and `_GARMENTSUPPORTCAP` (Black) corner-domain color attributes required for clothing mods to shrinkwrap dynamically in-game.
+
 - Simplified weight transfer shortcut with the best settings - no more hassle for you
 - Mesh clean up panel can automatically assign ungrouped vertices to the nearest bone
 - UV Checker: switch the currently active material for a coloured grid with numbers for easier UV editing - and back!
 
-### Collision Tools and Generator
-- Automatic generation of convex colliders matched perfectly to the shape of your mesh, the number of vertices to sample should be set to match the number set in the .phys file in order to ensure successful export.
-- Generate colliders with either user specified sizing or sized automatically to match the selected mesh
-- Export your generated collision bodies to .phys.json for use in game.
 
 ### Material Exports
 - [Hair profiles](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#hair-profiles-.hp): export custom hair profiles to `.hp.json` for easy import with Wolvenkit.  
@@ -63,11 +69,12 @@ You can find detailed documentation (and much else) on the [Cyberpunk 2077 moddi
 
 # Requirements
 
-1) **Blender** version 4.0 or higher is *highly recommended*
-<br>**Blender** versions below 3.6 will not work and users of these versions should update Blender before installing the plugin
+1) **Blender** version 5.1 or higher is *highly recommended*
+> Blender versions below 4.5 will not work and users of these versions should update Blender before installing the plugin
+> PhysX tools are extremely version specific. The current release will *not* work with versions below 5.1 - for dlls compatible with older versions look [here](https://linkgoeshere.remembertodothispresto)
 <br>https://www.blender.org/<br/>
 
-2) **WolvenKit** version 8.13 or higher
+2) **WolvenKit** version 8.17 or higher
 <br>https://github.com/WolvenKit/WolvenKit<br/>
 
 ---

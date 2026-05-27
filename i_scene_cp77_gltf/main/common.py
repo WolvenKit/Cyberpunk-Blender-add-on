@@ -13,6 +13,45 @@ import json
 scale_factor=1.0
 from typing import Literal, get_args
 
+class GLTFExclusionCache:
+    """Manages the caching and retrieval of objects designated for exclusion from glTF I/O."""
+    
+    def __init__(self):
+        """Initializes the cache state and timestamp."""
+        self._excluded_objects_cache = None
+        self._excluded_cache_timestamp = 0
+
+    def get_excluded_objects(self):
+        """Retrieves a cached set of excluded objects, updating the cache if the scene frame has changed."""
+        current_time = bpy.context.scene.frame_current
+
+        if self._excluded_objects_cache is None or current_time != self._excluded_cache_timestamp: 
+            self._excluded_objects_cache = set()
+            
+            if "glTF_not_exported" in bpy.data.collections:
+                not_exported_coll = bpy.data.collections["glTF_not_exported"]
+                self._excluded_objects_cache = self._get_all_objects_recursive(not_exported_coll)
+                
+            self._excluded_cache_timestamp = current_time #TODO: probably just remove this, the timestamp is useless
+
+        return self._excluded_objects_cache
+
+    def _get_all_objects_recursive(self, coll):
+        """Recursively aggregates objects from a specified collection and its nested children."""
+        objects = set(coll.objects)
+        for child in coll.children:
+            objects.update(self._get_all_objects_recursive(child))
+        return objects
+
+    def clear_cache(self):
+        """Resets the cache data and its associated timestamp."""
+        self._excluded_objects_cache = None
+        self._excluded_cache_timestamp = 0
+
+# IMPORT THIS FOR USE, NOT THE CLASS 
+exclusion_cache = GLTFExclusionCache()
+
+
 def found(self,tex):
     result = os.path.exists(os.path.join(self.BasePath, tex)[:-3]+ self.image_format)
     if not result:
@@ -153,7 +192,7 @@ def get_icon_dir():
 def get_refit_dir():
     resources_dir = get_resources_dir()
     return os.path.join(resources_dir, "refitters")
-    
+
 def get_char_dir():
     resources_dir = get_resources_dir()
     return os.path.join(resources_dir, "characters")

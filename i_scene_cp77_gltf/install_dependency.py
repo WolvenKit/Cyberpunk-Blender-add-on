@@ -1,19 +1,27 @@
-import bpy
 import sys
-from .main.common import show_message
+import subprocess
+import importlib 
 
-_os = sys.platform
-
-def install_dependency(dependency_name):
-    if _os is not 'win32':
-        print(f"required package: {dependency_name} not found but the plugin is unable to install this automatically on OS other than Windows")
-        show_message(f"required package: {dependency_name} not found but the plugin is unable to install automatically on OS other than Windows")
-        return('CANCELLED')
-    print(f"required package: {dependency_name} not found")
-    from pip import _internal as pip
-    print(f"Attempting to install {dependency_name}")
+def install_dependency(pip_name: str, import_name: str) -> bool:
+    """
+    Executes a subprocess to install a Python package via pip and 
+    returns a boolean indicating execution success.
+    """
+    if sys.platform != 'win32':
+        return False
+    
+    python_executable = sys.executable
+    
     try:
-        pip.main(['install', dependency_name])
-        print(f"Successfully installed {dependency_name}")
-    except Exception as e:
-        print(f"Failed to install {dependency_name}: {e}")
+        subprocess.check_call(
+            [python_executable, "-m", "pip", "install", pip_name]
+        )
+        
+    except subprocess.CalledProcessError:
+        pass
+    
+    try:
+        importlib.import_module(import_name)
+        return True
+    except ImportError:
+        return False

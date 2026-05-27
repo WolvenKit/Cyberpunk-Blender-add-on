@@ -367,7 +367,8 @@ class JALIToCp77Bridge:
 
     # Suffix for lipsync pose output tracks
     LIPSYNC_POSE_SUFFIX = 'LipsyncPoseOutput'
-
+    ANIM_OVERRIDE_SUFFIX = 'AnimOverrideWeight'
+    
     def __init__(self):
         """Initialize mapping tables"""
         self.mappings = build_jali_track_mappings()
@@ -387,6 +388,17 @@ class JALIToCp77Bridge:
         """
         return f"{base_name}{self.LIPSYNC_POSE_SUFFIX}"
 
+    def _get_anim_override_track_name(self, base_name: str) -> str:
+        """Return the AnimOverrideWeight channel name for a given main pose.
+
+        AnimOverrideWeight channels are multiplicative gates applied by
+        Sermo_ApplyLipsyncOverrides. The runtime computes:
+            mainPose *= lerp(lipsyncEnvelope, 1.0, override)
+        Default value is 1.0 (no effect). Writing below 1.0 suppresses the
+        main pose for the duration that lipsyncEnvelope is engaged.
+        """
+        return f"{base_name}{self.ANIM_OVERRIDE_SUFFIX}"
+
     def jali_to_tracks(
             self,
             ja_curve: np.ndarray,
@@ -394,18 +406,16 @@ class JALIToCp77Bridge:
             track_names: List[str]
             ) -> np.ndarray:
         """Convert JALI curves to CP77 track weights
-
         Writes pose activations to LipsyncPoseOutput tracks
         The solver will add these to main tracks via apply_lipsync_poses().
+            Args:
+                ja_curve: Jaw curve over time (N,) - values in [0, 1]
+                li_curve: Lip curve over time (N,) - values in [-1, 1]
+                track_names: List of all track names from rig
 
-        Args:
-            ja_curve: Jaw curve over time (N,) - values in [0, 1]
-            li_curve: Lip curve over time (N,) - values in [-1, 1]
-            track_names: List of all track names from rig
-
-        Returns:
-            Track weights array (N, M) where M = len(track_names)
-        """
+            Returns:
+                Track weights array (N, M) where M = len(track_names)
+            """
         num_frames = len(ja_curve)
         num_tracks = len(track_names)
 
@@ -415,11 +425,16 @@ class JALIToCp77Bridge:
         # Initialize track weights (all zeros)
         tracks = np.zeros((num_frames, num_tracks), dtype=np.float32)
 
+        override_indices = [i for i, n in enumerate(track_names)
+                            if n.endswith(self.ANIM_OVERRIDE_SUFFIX)]
+        if override_indices:
+            tracks[:, override_indices] = 1.0
+
         # jaliJaw (Track 7) - Direct from JA curve
         if IDX_JALI_JAW < num_tracks:
             tracks[:, IDX_JALI_JAW] = np.clip(ja_curve, 0.0, 1.0)
-        # jaliLips (Track 8) - Transform LI from [-1,1] to [0,2] range
-        # CP77 expects: 0=pucker, 1=neutral, 2=wide
+            # jaliLips (Track 8) - Transform LI from [-1,1] to [0,2] range
+            # CP77 expects: 0=pucker, 1=neutral, 2=wide
         if IDX_JALI_LIPS < num_tracks:
             tracks[:, IDX_JALI_LIPS] = np.clip(li_curve + 1.0, 0.0, 2.0)
 
@@ -546,26 +561,28 @@ class JALIToCp77Bridge:
                 envelope[-fi:] = ramp[::-1]
 
             for base_name, target_weight in overrides.items():
-                lipsync_track_name = self._get_lipsync_track_name(base_name)
-                idx = track_map.get(lipsync_track_name)
-                if idx is None:
-                    idx = track_map.get(base_name)
+                if target_weight == 0.0:
+                    override_name = self._get_anim_override_track_name(base_name)
+                    idx = track_map.get(override_name)
                     if idx is None:
                         continue
 
-                current = tracks[start_frame:end_frame, idx]
-
-                if target_weight == 0.0:
-                    # Soft closure: blend current  -> 0  -> current via envelope.
-                    # At env=1 (middle), value = 0 (forced closure).
-                    # At env=0 (edges), value = current (no change).
-                    tracks[start_frame:end_frame, idx] = current * (1.0 - envelope)
+                    suppression_curve = 1.0 - envelope
+                    tracks[start_frame:end_frame, idx] = np.minimum(
+                            tracks[start_frame:end_frame, idx],
+                            suppression_curve)
                 else:
-                    # Soft override: ramp toward target, max-blend with current.
-                    # Existing higher values are preserved at all frames.
+                    lipsync_name = self._get_lipsync_track_name(base_name)
+                    idx = track_map.get(lipsync_name)
+                    if idx is None:
+                        idx = track_map.get(base_name)
+                        if idx is None:
+                            continue
+
                     target_curve = envelope * target_weight
                     tracks[start_frame:end_frame, idx] = np.maximum(
-                            current, target_curve)
+                            tracks[start_frame:end_frame, idx],
+                            target_curve)
 
         return tracks
 
@@ -621,7 +638,7 @@ class JALIAnimationPipeline:
             raise ValueError("No phoneme events provided")
 
         duration = phoneme_events[-1].end + 0.5
-
+        
         # Detect if we have real phoneme variety or just AH/SIL from detector
         unique = set(e.phoneme for e in phoneme_events
                      if e.phoneme not in ('SIL', 'SP'))
@@ -638,13 +655,8 @@ class JALIAnimationPipeline:
         print("[JALI] Stage 4: JALI  -> CP77 track mapping...")
         track_names = [str(n) if not isinstance(n, dict) else n.get('$value', '')
                        for n in self.rig.track_names]
-
-        tracks = self.bridge.jali_to_tracks(ja_curve, li_curve, track_names)
-
-        # Override tracks [154-239] at 1.0 (passthrough) per game data
         num_tracks = len(track_names)
-        for i in range(154, min(240, num_tracks)):
-            tracks[:, i] = 1.0
+        tracks = self.bridge.jali_to_tracks(ja_curve, li_curve, track_names)
 
         # Phoneme-specific overrides only meaningful with real phonemes
         if has_real_phonemes:
@@ -792,7 +804,7 @@ def keyframe_tracks(
     Returns:
         Number of tracks that received keyframes.
     """
- 
+
     from .animtools import _assign_action
     from .tracks import (
         get_action_fcurves,

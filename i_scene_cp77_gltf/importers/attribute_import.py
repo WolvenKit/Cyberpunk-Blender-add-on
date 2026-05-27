@@ -1,5 +1,5 @@
 import bpy
-
+from ..main.common import exclusion_cache
 from io_scene_gltf2.io.imp.gltf2_io_binary import BinaryData
 vers = bpy.app.version
 if vers[0] == 4 and vers[1] < 3:
@@ -17,10 +17,16 @@ def rename_color_attribute(mesh, name_before, name_after):
         col_layer.name = name_after
 
 def manage_garment_support(existingMeshes, gltf_importer_data):
+    exclusion_cache.clear_cache()
     gltf_importer = gltf_importer_data
     curMeshCount = 0
+    excluded_objects = exclusion_cache.get_excluded_objects()
+    excluded_mesh_names = {
+        obj.data.name for obj in excluded_objects
+        if getattr(obj, "type", "") == 'MESH' and obj.data
+        }
     for name in bpy.data.meshes.keys():
-        if name in existingMeshes or "Icosphere" in name or'icosaédrica' in name:
+        if name in existingMeshes or excluded_mesh_names:
             continue
         mesh = bpy.data.meshes[name]
 
