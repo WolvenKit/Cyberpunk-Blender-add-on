@@ -14,7 +14,7 @@ from .import_from_external import *
 from .attribute_import import manage_garment_support
 from ..cyber_props import add_anim_props, add_skin_props
 from ..jsontool import JSONTool
-from ..main.common import show_message
+from ..main.common import show_message, exclusion_cache
 from ..animtools.tracks import import_anim_tracks, fix_anim_frame_alignment
 import traceback
 
@@ -23,6 +23,7 @@ def get_anim_info(animations, oldanims, import_tracks):
 	Keeps original logic/printing; only adds track import + alignment.
 	"""
 	cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
+	verbose = not cp77_addon_prefs.non_verbose
 
 	if bpy.app.version >= (4, 4, 0):
 		old_names = {getattr(x, 'name', x) for x in (oldanims or [])}
@@ -40,18 +41,18 @@ def get_anim_info(animations, oldanims, import_tracks):
 							import_anim_tracks(act)
 							fix_anim_frame_alignment(act)
 						except Exception as e:
-							if not cp77_addon_prefs.non_verbose:
+							if verbose:
 								print(f"Track integration failed for action {n}: {e}")
 						found = True
-						if not cp77_addon_prefs.non_verbose:
+						if verbose:
 							print(f"Properties added to action: {n} succesfully")
-			if not found and not cp77_addon_prefs.non_verbose:
+			if not found and verbose:
 				print(f"No action found for {base}")
 		return{'FINISHED'}
 	else:
 		# left in for pre blender 4.4 users
 		for animation in animations:
-			if not cp77_addon_prefs.non_verbose:
+			if verbose:
 				print(f"Processing animation: {animation.name}")
 
 			# Find an action whose name contains the animation name
@@ -63,12 +64,12 @@ def get_anim_info(animations, oldanims, import_tracks):
 					import_anim_tracks(action)
 					fix_anim_frame_alignment(action)
 				except Exception as e:
-					if not cp77_addon_prefs.non_verbose:
+					if verbose:
 						print(f"Track integration failed for action {action.name}: {e}")
-				if not cp77_addon_prefs.non_verbose:
+				if verbose:
 					print("Properties added to", action.name)
 			else:
-				if not cp77_addon_prefs.non_verbose:
+				if verbose:
 					print("No action found for", animation.name)
 
 def objs_in_col(top_coll, objtype):
@@ -89,6 +90,7 @@ collection = None
 
 def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=True, image_format='png', filepath='', hide_armatures=True, import_garmentsupport=False, files=[], directory='', appearances=[], scripting=False, import_tracks=False, generate_overrides=False):
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
+    verbose = not cp77_addon_prefs.non_verbose
     context=bpy.context
     oldanims = None
     ## switch to pose mode if it's not already
@@ -107,7 +109,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
     DepotPath=cp77_addon_prefs
 
     oldanims={}
-    if not cp77_addon_prefs.non_verbose:
+    if verbose:
         if ".anims.glb" in filepath:
             bpy.context.scene.render.fps = 30
             oldanims = {act.name for act in bpy.data.actions}
@@ -153,7 +155,6 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
     for f in loadfiles:
         filename=os.path.splitext(os.path.splitext(f['name'])[0])[0]
         filepath = os.path.join(directory, f['name'])
-        vers = bpy.app.version
         if vers[0] == 4 and vers[1] >= 2 and vers[1] < 4:
             gltf_importer = glTFImporter(filepath, { "files": None, "loglevel": 0, "import_pack_images" :True, "merge_vertices" :False, "import_shading" : 'NORMALS', "bone_heuristic":heuristic, "guess_original_bind_pose" : False, "import_user_extensions": "",'disable_bone_shape':octos, 'bone_shape_scale_factor':1.0})
         elif vers[0] == 4 and vers[1] > 3 and vers[1] < 5:
@@ -171,7 +172,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
 
         existingMaterials = set(bpy.data.materials.keys())
         BlenderGlTF.create(gltf_importer)
-
+        exclusion_cache.clear_cache()
         imported=context.selected_objects #the new stuff should be selected
 
         # if we're not importing a Cyberpunk mesh, not all submesh names will start with submesh_00, and they will be nested weirdly.
@@ -219,8 +220,9 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
 
         #for sketchfab exports, we want to keep our materials
         if not isExternalImport:
-            for name in set(bpy.data.materials.keys()) - existingMaterials:
-                 bpy.data.materials.remove(bpy.data.materials[name], do_unlink=True, do_id_user=True, do_ui_user=True)
+            for mat in list(bpy.data.materials):
+                if mat.name not in existingMaterials:
+                    bpy.data.materials.remove(mat, do_unlink=True, do_id_user=True, do_ui_user=True)
 
         #Kwek: Gate this--do the block if corresponding Material.json exist
         #Kwek: was tempted to do a try-catch, but that is just La-Z
@@ -248,7 +250,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         context=bpy.context # TODO: Do we need this here?
         if remap_depot and os.path.exists(cp77_addon_prefs.depotfolder_path):
             DepotPath = cp77_addon_prefs.depotfolder_path
-            if not cp77_addon_prefs.non_verbose:
+            if verbose:
                 print(f"Using depot path: {DepotPath}")
         if DepotPath!=None:
             DepotPath= DepotPath.replace('\\', os.sep)
@@ -265,7 +267,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         # fix the app names as for some reason they have their index added on the end.
         if len(json_apps) > 0:
 
-            appkeys=[k for k in json_apps.keys()]
+            appkeys = list(json_apps)
             for i,k in enumerate(appkeys):
                 json_apps[k[:-1*len(str(i))]]=json_apps.pop(k)
 
@@ -280,13 +282,13 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
                     for m in json_apps[first_key]:
                         validmats[m] = True
                 else:
-                    for key in json_apps.keys():
+                    for key in json_apps:
                         if key in appearances:
                             for m in json_apps[key]:
                                 validmats[m]=True
             # there isnt always a default, so if none were listed, or ALL was used, or an invalid one add everything.
             if len(validmats)==0:
-                for key in json_apps.keys():
+                for key in json_apps:
                     for m in json_apps[key]:
                         validmats[m]=True
 
@@ -311,7 +313,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
     if len(errorMessages) > 0:
         show_message("\n".join(errorMessages))
 
-    if not cp77_addon_prefs.non_verbose:
+    if verbose:
         print(f"GLB Import Time: {(time.time() - start_time)} Seconds")
         print('-------------------- Finished importing Cyberpunk 2077 Model --------------------\n')
 
@@ -322,7 +324,7 @@ def reload_mats(self, context):
 
     orig_mat_name = active_material.name
     # JATO: "m" customprop introduced in addon ver 1.8. much safer to use than the bpy material.name
-    if 'm' in active_material.keys():
+    if 'm' in active_material:
         orig_mat_name = str(active_material['m']['Name'])
 
     active_material.name = "to_be_deleted"
@@ -374,7 +376,7 @@ def reload_mats(self, context):
         self.report({'ERROR'}, "New material not created")
         return {'CANCELLED'}
     # JATO: Copy custom material properties from old mat to new mat. Maybe we could regenerate from file, but I'm having a hard time understanding the code for that within import_mats function
-    for k in active_material.keys():
+    for k in active_material:
         if k in ('BaseMaterial','DiffuseMap','GlobalNormal','MultilayerMask'):
             newmat[k] = active_material[k]
 
@@ -382,46 +384,53 @@ def reload_mats(self, context):
 
 
 def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmatnames,multimesh=False,generate_overrides=False):
+    excluded_objects = exclusion_cache.get_excluded_objects()
     failedon = []
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
+    verbose = not cp77_addon_prefs.non_verbose
     start_time = time.time()
     validmats = {}
-    for mat in validmatnames.keys():
-        for m in mats: #obj['Materials']:
-            if 'Name' not in m.keys():
-                # Sometimes a material has no name, for now we continue out, but we should figure out why
-                continue
-            if m['Name'] != mat:
-                continue
-            if 'BaseMaterial' in m.keys():
-                if 'GlobalNormal' in m['Data'].keys():
-                    GlobalNormal = m['Data']['GlobalNormal']
-                else:
-                    GlobalNormal = 'None'
-                if 'MultilayerMask' in m['Data'].keys():
-                    MultilayerMask = m['Data']['MultilayerMask']
-                else:
-                    MultilayerMask = 'None'
-                if 'DiffuseMap' in m['Data'].keys():
-                    DiffuseMap = m['Data']['DiffuseMap']
-                elif 'BaseColor' in m['Data'].keys():
-                    DiffuseMap = m['Data']['BaseColor']
-                elif 'DiffuseTexture' in m['Data'].keys():
-                    DiffuseMap = m['Data']['DiffuseTexture']
-                else:
-                    DiffuseMap = 'None'
-
-                validmats[mat] = {'Name': m['Name'], 'BaseMaterial': m['BaseMaterial'],
-                                  'GlobalNormal': GlobalNormal, 'MultilayerMask': MultilayerMask,
-                                  'DiffuseMap': DiffuseMap}
+    for m in mats: #obj['Materials']:
+        if 'Name' not in m:
+            # Sometimes a material has no name, for now we continue out, but we should figure out why
+            continue
+        mat = m['Name']
+        if mat not in validmatnames:
+            continue
+        if 'BaseMaterial' in m:
+            if 'GlobalNormal' in m['Data']:
+                GlobalNormal = m['Data']['GlobalNormal']
             else:
-                print(m.keys())
+                GlobalNormal = 'None'
+            if 'MultilayerMask' in m['Data']:
+                MultilayerMask = m['Data']['MultilayerMask']
+            else:
+                MultilayerMask = 'None'
+            if 'DiffuseMap' in m['Data']:
+                DiffuseMap = m['Data']['DiffuseMap']
+            elif 'BaseColor' in m['Data']:
+                DiffuseMap = m['Data']['BaseColor']
+            elif 'DiffuseTexture' in m['Data']:
+                DiffuseMap = m['Data']['DiffuseTexture']
+            else:
+                DiffuseMap = 'None'
 
-    MatImportList = [k for k in validmats.keys()]
+            validmats[mat] = {'Name': m['Name'], 'BaseMaterial': m['BaseMaterial'],
+                              'GlobalNormal': GlobalNormal, 'MultilayerMask': MultilayerMask,
+                              'DiffuseMap': DiffuseMap}
+        else:
+            print(m.keys())
+
+    MatImportList = list(validmats)
+    mat_index_by_name = {m['Name']: i for i, m in enumerate(mats) if 'Name' in m}
     Builder = MaterialBuilder(mats, DepotPath, str(image_format), BasePath)
     counter = 0
     bpy_mats = bpy.data.materials
-    names=[key for key in bpy.data.meshes.keys() if 'Icosphere' not in key and key not in existingMeshes]
+    excluded_mesh_names = {
+        obj.data.name for obj in excluded_objects
+        if getattr(obj, "type", "") == 'MESH' and obj.data
+        }
+    names=[key for key in bpy.data.meshes.keys() if key not in existingMeshes and key not in excluded_mesh_names]
     if multimesh:
         names= sorted(list(names), key=lambda x: int(x.split('_')[0]))
     for name in names:
@@ -432,7 +441,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
 
         # morphtargets don't have material names. Just use all of them.
         materialNames = None
-        if extras is None or ("materialNames" not in extras.keys() or extras["materialNames"] is None):
+        if extras is None or ("materialNames" not in extras or extras["materialNames"] is None):
             if BasePath.endswith(".morphtarget"):
                 materialNames = validmats.keys()
             else:
@@ -448,46 +457,45 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
         # Kwek: I also found that other material hiccups will cause the Collection to fail
         for matname in materialNames:
 
-            if matname not in validmats.keys():
+            if matname not in validmats:
                 continue
 
             # print('matname: ',matname, validmats[matname])
             m = validmats[matname]
-            if matname=='decal_diffuse1':
+            if matname == 'decal_diffuse1':
                 print('debug')
             # Should create a list of mis that dont play nice with this and just check if the mat is using one.
-            if ( matname in bpy_mats.keys() and 'm' in bpy_mats[matname].keys() and dict(bpy_mats[matname]['m']) == m ):
-                bpy.data.meshes[name].materials.append(bpy_mats[matname])
-            elif matname in validmats.keys():
-                index = 0
-                for rawmat in mats:
-                    if 'Name' not in rawmat.keys() or rawmat["Name"] != matname:
-                        index = index + 1
-                        continue
-                    try:
-                        bpymat = Builder.create(mats, index)
-                        if bpymat:
-                            bpymat['m']=m
-                            bpymat['BaseMaterial'] = validmats[matname]['BaseMaterial']
-                            bpymat['GlobalNormal'] = validmats[matname]['GlobalNormal']
-                            bpymat['MultilayerMask'] = validmats[matname]['MultilayerMask']
-                            if 'DiffuseMap' in validmats[matname].keys():
-                                bpymat['DiffuseMap'] = validmats[matname]['DiffuseMap']
-                            if 'DiffuseTexture' in validmats[matname].keys():
-                                bpymat['DiffuseTexture'] = validmats[matname]['DiffuseTexture']
-                            bpy.data.meshes[name].materials.append(bpymat)
-                            if 'no_shadows' in bpymat.keys() and bpymat['no_shadows'] and name in bpy.data.objects.keys():
-                                bpy.data.objects[name].visible_shadow = False
-                    except:
-                        # Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
-                        print(traceback.format_exc())
-                        failedon.append(matname)
-                        pass
+            cached = bpy_mats.get(matname)
+            if cached is not None and 'm' in cached and dict(cached['m']) == m:
+                bpy.data.meshes[name].materials.append(cached)
+                continue
 
-                    index = index + 1
+            index = mat_index_by_name.get(matname)
+            if index is None:
+                continue
+            try:
+                bpymat = Builder.create(mats, index)
+                if bpymat:
+                    bpymat['m'] = m
+                    bpymat['BaseMaterial'] = m['BaseMaterial']
+                    bpymat['GlobalNormal'] = m['GlobalNormal']
+                    bpymat['MultilayerMask'] = m['MultilayerMask']
+                    if 'DiffuseMap' in m:
+                        bpymat['DiffuseMap'] = m['DiffuseMap']
+                    if 'DiffuseTexture' in m:
+                        bpymat['DiffuseTexture'] = m['DiffuseTexture']
+                    bpy.data.meshes[name].materials.append(bpymat)
+                    if bpymat.get('no_shadows'):
+                        shadow_obj = bpy.data.objects.get(name)
+                        if shadow_obj is not None:
+                            shadow_obj.visible_shadow = False
+            except:
+                # Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
+                print(traceback.format_exc())
+                failedon.append(matname)
 
         counter = counter + 1
-    if not cp77_addon_prefs.non_verbose:
+    if verbose:
         if len(failedon) == 0:
             print(f'Shader Setup Completed Succesfully in {(time.time() - start_time)} Seconds')
         else:
@@ -498,12 +506,13 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
     if exclude_unused_mats:
         return
 
-    index = 0
-    for rawmat in mats:#obj["Materials"]:
-        if rawmat["Name"] not in bpy.data.materials.keys() and (
-                (rawmat["Name"] in MatImportList) or len(MatImportList) < 1):
-            Builder.create(mats,index)
-        index = index + 1
+    for name, index in mat_index_by_name.items():
+        if name in bpy.data.materials:
+            continue
+        if MatImportList and name not in MatImportList:
+            continue
+        Builder.create(mats, index)
+
 
 def blender_4_scale_armature_bones():
     vers = bpy.app.version
@@ -520,6 +529,7 @@ def blender_4_scale_armature_bones():
 def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filename, oldanims, import_tracks):
     # TODO: check if this is a Cyberpunk import or something else entirely
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
+    verbose = not cp77_addon_prefs.non_verbose
 
     for parent in o.users_collection:
         parent.objects.unlink(o)
@@ -533,11 +543,11 @@ def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filena
         for skin in gltf_importer.data.skins:
             try:
                 add_skin_props(skin, o)
-                if not cp77_addon_prefs.non_verbose:
+                if verbose:
                     print(f"Skin properties added to armature: {o.name}")
                 break  # typically one skin per armature
             except Exception as e:
-                if not cp77_addon_prefs.non_verbose:
+                if verbose:
                     print(f"could not add skin properties to '{o.name}': {e}")
 
     # if animations exist, don't hide the armature and get the extras properties
