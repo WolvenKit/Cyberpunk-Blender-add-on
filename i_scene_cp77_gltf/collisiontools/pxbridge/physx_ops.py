@@ -23,7 +23,7 @@ class PHYSX_OT_init_scene(bpy.types.Operator):
                 _bridge.set_gravity(g[0], g[1], g[2])
                 self.report({'INFO'}, "PhysX Initialized")
                 if self.add_ground:
-                    ground_obj = physx_utils.add_ground_plane(offset_below=0.0, xy_expand=50, height=1.0)
+                    ground_obj = physx_utils.add_ground_plane()
                     already_added = False
                     for item in context.scene.physx.actors:
                         if item.obj_ref == ground_obj:
