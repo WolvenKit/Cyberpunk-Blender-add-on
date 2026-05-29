@@ -4,7 +4,7 @@ from . import physx_utils, viz
 def update_gravity_cb(self, context):
     if self.is_initialized:
         try:
-            from . import pxveh34 as _bridge
+            from . import pxbridge as _bridge
             g = self.gravity
             _bridge.set_gravity(g[0], g[1], g[2])
         except ImportError:
