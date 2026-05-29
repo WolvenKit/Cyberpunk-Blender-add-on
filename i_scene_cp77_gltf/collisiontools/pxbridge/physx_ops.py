@@ -92,61 +92,52 @@ def build_scene(context):
             g = context.scene.physx.gravity
             _bridge.set_gravity(g[0], g[1], g[2])
             count = 0
-        except Exception as e:
-            self.report({'ERROR'}, str(e))
 
-        shapes_list = []
-        for shape in px.shapes:
-            raw = ""
-            if shape.shape_type in ('CONVEX', 'TRIANGLE', 'HEIGHTFIELD'):
-                if not shape.cooked_data: continue
-                raw = base64.b64decode(shape.cooked_data.encode('ascii'))
+            shapes_list = []
+            for shape in px.shapes:
+                raw = ""
+                if shape.shape_type in ('CONVEX', 'TRIANGLE', 'HEIGHTFIELD'):
+                    if not shape.cooked_data: continue
+                    raw = base64.b64decode(shape.cooked_data.encode('ascii'))
 
-            mat_data = physx_utils.get_mat_data(shape.physics_material)
-            q = shape.local_rot
-            l = shape.local_pos
-            px_quat = [q[1], q[2], q[3], q[0]]
+                mat_data = physx_utils.get_mat_data(shape.physics_material)
+                q = shape.local_rot
+                l = shape.local_pos
+                px_quat = [q[1], q[2], q[3], q[0]]
 
-            w0 = physx_utils.bits_to_int(shape.filter_group)
-            w1 = physx_utils.bits_to_int(shape.filter_mask)
-            w2 = physx_utils.bits_to_int(shape.filter_query)
-            w3 = 0
+                w0 = physx_utils.bits_to_int(shape.filter_group)
+                w1 = physx_utils.bits_to_int(shape.filter_mask)
+                w2 = physx_utils.bits_to_int(shape.filter_query)
+                w3 = 0
 
-            shapes_list.append(
-                    {
-                        "type": shape.shape_type,
-                        "data": raw,
-                        "dims": [shape.dim_x, shape.dim_y, shape.dim_z],
-                        "pos": [l[0], l[1], l[2]],
-                        "rot": px_quat,
-                        "mat": mat_data,
-                        "filter": [w0, w1, w2, w3]
-                        }
-                    )
+                shapes_list.append(
+                        {
+                            "type": shape.shape_type,
+                            "data": raw,
+                            "dims": [shape.dim_x, shape.dim_y, shape.dim_z],
+                            "pos": [l[0], l[1], l[2]],
+                            "rot": px_quat,
+                            "mat": mat_data,
+                            "filter": [w0, w1, w2, w3]
+                            }
+                        )
 
-        if not shapes_list: continue
-        loc, quat = physx_utils.get_actor_world_transform(item)
-        actor_pose = [loc.x, loc.y, loc.z, quat.x, quat.y, quat.z, quat.w]
-        com = [px.com_offset[0], px.com_offset[1], px.com_offset[2]]
-        inert = [px.inertia[0], px.inertia[1], px.inertia[2]]
+                if not shapes_list: continue
+                loc, quat = physx_utils.get_actor_world_transform(item)
+                actor_pose = [loc.x, loc.y, loc.z, quat.x, quat.y, quat.z, quat.w]
+                com = [px.com_offset[0], px.com_offset[1], px.com_offset[2]]
+                inert = [px.inertia[0], px.inertia[1], px.inertia[2]]
 
-        handle = _bridge.create_actor(px.actor_type, actor_pose, shapes_list, px.mass, com, inert)
-        item.actor_handle = str(handle)
-        count += 1
-
-    context.scene.physx.active_actor_count = _bridge.get_actor_count()
-    return count
                 handle = _bridge.create_actor(px.actor_type, actor_pose, shapes_list, px.mass, com, inert)
                 item.actor_handle = str(handle)
                 count += 1
 
             context.scene.physx.active_actor_count = _bridge.get_actor_count()
-            context.scene.physx.scene_built = True
-            self.report({'INFO'}, f"Built {count} actors")
-            return {'FINISHED'}
+            return count
+        
         except Exception as e:
             self.report({'ERROR'}, str(e))
-            return {'FINISHED'}
+               
 
 
 class PHYSX_OT_run_steps(bpy.types.Operator):
