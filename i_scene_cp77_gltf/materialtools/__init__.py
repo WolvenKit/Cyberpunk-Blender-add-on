@@ -518,9 +518,9 @@ def send_mltemplate_to_shader(self,context):
 
         # JATO: for performance, first we try getting node group by direct name-match and ensure the mlTemplate path matches
         # If mlTemplate paths don't match try searching all node-groups which can be slow
-        ngmatch = None
+ngmatch = None
         nodeGroup = bpy.data.node_groups.get(palette_name)
-        if nodeGroup['mlTemplate'] == ts.gpencil_paint.palette['MLTemplatePath']:
+        if nodeGroup and 'mlTemplate' in nodeGroup and nodeGroup['mlTemplate'] == ts.gpencil_paint.palette['MLTemplatePath']:
             ngmatch = nodeGroup
         else:
             for ng in bpy.data.node_groups:
