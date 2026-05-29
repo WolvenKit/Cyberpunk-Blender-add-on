@@ -376,7 +376,7 @@ def reload_mats(self, context):
         self.report({'ERROR'}, "New material not created")
         return {'CANCELLED'}
     # JATO: Copy custom material properties from old mat to new mat. Maybe we could regenerate from file, but I'm having a hard time understanding the code for that within import_mats function
-    for k in active_material:
+    for k in active_material.keys():
         if k in ('BaseMaterial','DiffuseMap','GlobalNormal','MultilayerMask'):
             newmat[k] = active_material[k]
 
