@@ -17,6 +17,7 @@ class PHYSX_OT_init_scene(bpy.types.Operator):
     def execute(self, context):
         try:
             from . import pxbridge as _bridge
+            from . import pxveh34 as _bridge
             if _bridge.init():
                 context.scene.physx.is_initialized = True
                 g = context.scene.physx.gravity
@@ -79,10 +80,21 @@ def build_scene(context):
     _bridge.set_gravity(g[0], g[1], g[2])
     count = 0
 
+<<<<<<< HEAD
     for item in context.scene.physx.actors:
         obj = item.obj_ref
         if not obj or obj.physx.actor_type == 'NONE': continue
         px = obj.physx
+=======
+    def execute(self, context):
+        bpy.ops.physx.validate_scene()
+        try:
+            from . import pxveh34 as _bridge
+            _bridge.reset()
+            g = context.scene.physx.gravity
+            _bridge.set_gravity(g[0], g[1], g[2])
+            count = 0
+>>>>>>> parent of 2129c43 (rebuild physx binding for blender 5.1 - changed name to pxbridge for consistency)
 
         shapes_list = []
         for shape in px.shapes:
@@ -123,8 +135,64 @@ def build_scene(context):
         item.actor_handle = str(handle)
         count += 1
 
+<<<<<<< HEAD
     context.scene.physx.active_actor_count = _bridge.get_actor_count()
     return count
+=======
+                handle = _bridge.create_actor(px.actor_type, actor_pose, shapes_list, px.mass, com, inert)
+                item.actor_handle = str(handle)
+                count += 1
+
+            context.scene.physx.active_actor_count = _bridge.get_actor_count()
+            context.scene.physx.scene_built = True
+            self.report({'INFO'}, f"Built {count} actors")
+            return {'FINISHED'}
+        except Exception as e:
+            self.report({'ERROR'}, str(e))
+            return {'FINISHED'}
+
+
+class PHYSX_OT_run_steps(bpy.types.Operator):
+    bl_idname = "physx.run_steps"
+    bl_label = "Step N"
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.physx.is_initialized
+
+    def execute(self, context):
+        px_s = context.scene.physx
+        if not px_s.is_initialized: return {'CANCELLED'}
+        try:
+            from . import pxveh34 as _bridge
+            dt = 1.0 / 60.0
+            for _ in range(px_s.sim_steps):
+                _bridge.start_step(dt)
+                _bridge.fetch_results(True)
+            poses = _bridge.get_active_poses()
+            if poses:
+                for item in px_s.actors:
+                    h = item.actor_handle
+                    if h in poses and item.obj_ref:
+                        p = poses[h]
+                        loc = Vector((p[0], p[1], p[2]))
+                        quat = Quaternion((p[6], p[3], p[4], p[5]))
+                        world_matrix = Matrix.Translation(loc) @ quat.to_matrix().to_4x4()
+                        if item.use_bone_parent and item.parent_armature != "NONE" and item.target_bone != "NONE":
+                            armature_obj = context.scene.objects.get(item.parent_armature)
+                            if armature_obj:
+                                physx_utils.set_bone_world_matrix(armature_obj, item.target_bone, world_matrix)
+                        else:
+                            item.obj_ref.matrix_world = world_matrix
+            # Update viz after stepping
+            viz.invalidate_visualization_cache()
+            for window in context.window_manager.windows:
+                for area in window.screen.areas: area.tag_redraw()
+            self.report({'INFO'}, f"Stepped {px_s.sim_steps}")
+        except Exception as e:
+            self.report({'ERROR'}, str(e))
+        return {'FINISHED'}
+>>>>>>> parent of 2129c43 (rebuild physx binding for blender 5.1 - changed name to pxbridge for consistency)
 
 
 class PHYSX_OT_sim_step(bpy.types.Operator):
@@ -156,7 +224,7 @@ class PHYSX_OT_sim_step(bpy.types.Operator):
             return self.cancel(context)
         if event.type in {'ESC', 'RIGHTMOUSE'}:
             return self.cancel(context)
-        from . import pxbridge as _bridge
+        from . import pxveh34 as _bridge
 
         # Manipulator
         if event.type == 'MOUSEMOVE':
@@ -241,7 +309,7 @@ class PHYSX_OT_sim_step(bpy.types.Operator):
             context.window_manager.event_timer_remove(self._timer)
             self._timer = None
         if self._cursor_handle != "0":
-            from . import pxbridge as _bridge
+            from . import pxveh34 as _bridge
             try:
                 _bridge.remove_actor(int(self._cursor_handle))
             except:
@@ -273,7 +341,7 @@ class PHYSX_OT_apply_force(bpy.types.Operator):
                 h = item.actor_handle
                 break
         if h == "0": return {'CANCELLED'}
-        from . import pxbridge as _bridge
+        from . import pxveh34 as _bridge
         f = px_s.force_value
         p = context.scene.cursor.location if px_s.use_force_pos else Vector((0, 0, 0))
         _bridge.apply_force(int(h), [f[0], f[1], f[2]], int(px_s.force_mode), px_s.use_force_pos, [p.x, p.y, p.z])
@@ -286,7 +354,7 @@ class PHYSX_OT_update_gravity(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            from . import pxbridge as _bridge
+            from . import pxveh34 as _bridge
             g = context.scene.physx.gravity
             _bridge.set_gravity(g[0], g[1], g[2])
         except:
@@ -300,7 +368,7 @@ class PHYSX_OT_cook_mesh(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            from . import pxbridge as _bridge
+            from . import pxveh34 as _bridge
             if not _bridge.init(): return {'CANCELLED'}
             obj = context.object
             shape = obj.physx.shapes[obj.physx.shape_index]
@@ -396,7 +464,7 @@ class PHYSX_OT_calc_dynamics(bpy.types.Operator):
         obj = context.object
         px = obj.physx
         try:
-            from . import pxbridge as _bridge
+            from . import pxveh34 as _bridge
             shapes_data = []
             densities = []
             for shape in px.shapes:
@@ -471,7 +539,7 @@ class PHYSX_OT_reset_session(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            from . import pxbridge as _bridge
+            from . import pxveh34 as _bridge
             _bridge.reset()
             context.scene.physx.active_actor_count = 0
         except Exception:
