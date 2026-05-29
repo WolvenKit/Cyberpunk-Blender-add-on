@@ -319,39 +319,28 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
 
 def reload_mats(self, context):
     active_obj = bpy.context.active_object
-    if not active_obj:
-        self.report({'ERROR'}, 'No mesh selected')
-        return {'CANCELLED'}
-    if active_obj.type != 'MESH':
-        self.report({'ERROR'}, 'Selected object is not a mesh')
-        return {'CANCELLED'}
-    if not active_obj.material_slots:
-        self.report({'ERROR'}, 'Selected object has no materials')
-        return {'CANCELLED'}
 
     active_material = active_obj.active_material
-    mat_idx = active_obj.active_material_index
-    old_mat_name = active_material.name
 
-    # "m" customprop (addon 1.8+) holds the unsuffixed source name; prefer it for the JSON
-    # lookup and fall back to the datablock name with any Blender ".001" suffix stripped.
-    if 'm' in active_material:
-        json_name = str(active_material['m']['Name'])
-    else:
-        json_name = old_mat_name.split('.')[0]
+    orig_mat_name = active_material.name
+    # JATO: "m" customprop introduced in addon ver 1.8. much safer to use than the bpy material.name
+    if 'm' in active_material.keys():
+        orig_mat_name = str(active_material['m']['Name'])
 
-    DepotPath = active_material.get('DepotPath')
+    active_material.name = "to_be_deleted"
+
     BasePath = active_material.get('MeshPath')
+    DepotPath = active_material.get('DepotPath')
     ProjPath = active_material.get('ProjPath')
 
     # JATO: This is a workaround to get MeshPath from collection for old assets before we stored MeshPath within material.
     if BasePath is None:
         for collection in bpy.data.collections:
-            if active_obj.name in collection.objects:
-                MeshPath = collection.get('mesh')
-                MeshPathNoSuffix = MeshPath[0:MeshPath.rfind('.')]
-                BasePath = os.path.join(ProjPath, MeshPathNoSuffix)
-                break
+             if active_obj.name in collection.objects:
+                  MeshPath = collection.get('mesh')
+                  MeshPathNoSuffix = MeshPath[0:MeshPath.rfind('.')]
+                  BasePath = os.path.join(ProjPath, MeshPathNoSuffix)
+                  break
 
     errorMessages = []
     matjsonpath = BasePath + ".Material.json"
@@ -360,46 +349,39 @@ def reload_mats(self, context):
         self.report({'ERROR'}, ('Material.json not found: ' + matjsonpath))
         return {'CANCELLED'}
 
-    image_format = 'png'
+    # JATO: hard-coded to PNG (who doesnt use PNG?) but could be exposed if we add image_format to material properties
+    image_format='png'
 
-    initiated_cache = False
+    # JATO: no idea what caching does but the glb import function does it so...
+    # JATO: probably a better way to do this but idk how and dont want to rewrite the function
     if not JSONTool._use_cache:
         JSONTool.start_caching()
         initiated_cache = True
-
     somejunk, otherjunk, mats = JSONTool.jsonload(matjsonpath, errorMessages)
     Builder = MaterialBuilder(mats, DepotPath, str(image_format), BasePath)
+    if initiated_cache:
+        JSONTool.stop_caching()
+    if len(errorMessages) > 0:
+        show_message("\n".join(errorMessages))
 
-    newmat = None
     index = 0
     for rawmat in mats:
-        if rawmat["Name"] == json_name:
-            newmat = Builder.create(mats, index)
+        #old_mat_name_split = old_mat_name.split('.')[0]
+        if rawmat["Name"] == orig_mat_name.split('.')[0]:
+            newmat = Builder.create(mats,index)
             break
         index = index + 1
 
-    if newmat is None:
+    if 'newmat' not in locals():
         self.report({'ERROR'}, "New material not created")
-        if initiated_cache:
-            JSONTool.stop_caching()
         return {'CANCELLED'}
-
-    # Repoint every user of the old material (submeshes can share it) at the rebuild, carry
-    # the custom props across, then drop the old datablock so the new one reclaims the name.
-    active_material.user_remap(newmat)
+    # JATO: Copy custom material properties from old mat to new mat. Maybe we could regenerate from file, but I'm having a hard time understanding the code for that within import_mats function
     for k in active_material.keys():
-        if k in ('BaseMaterial', 'DiffuseMap', 'GlobalNormal', 'MultilayerMask'):
+        if k in ('BaseMaterial','DiffuseMap','GlobalNormal','MultilayerMask'):
             newmat[k] = active_material[k]
 
-    active_obj.active_material_index = mat_idx
-    bpy.data.materials.remove(active_material, do_unlink=True, do_id_user=True, do_ui_user=True)
-    newmat.name = old_mat_name
+    return newmat
 
-    if initiated_cache:
-        JSONTool.stop_caching()
-
-    if len(errorMessages) > 0:
-        show_message("\n".join(errorMessages))
 
 def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmatnames,multimesh=False,generate_overrides=False):
     excluded_objects = exclusion_cache.get_excluded_objects()
