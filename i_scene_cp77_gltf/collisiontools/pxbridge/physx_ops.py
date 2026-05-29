@@ -17,6 +17,7 @@ class PHYSX_OT_init_scene(bpy.types.Operator):
     def execute(self, context):
         try:
             from . import pxbridge as _bridge
+            from . import pxveh34 as _bridge
             if _bridge.init():
                 context.scene.physx.is_initialized = True
                 g = context.scene.physx.gravity
@@ -71,59 +72,73 @@ class PHYSX_OT_validate_scene(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class PHYSX_OT_build_scene(bpy.types.Operator):
-    bl_idname = "physx.build_scene"
-    bl_label = "Build PhysX Scene"
+def build_scene(context):
+    bpy.ops.physx.validate_scene()
+    from . import pxbridge as _bridge
+    _bridge.reset()
+    g = context.scene.physx.gravity
+    _bridge.set_gravity(g[0], g[1], g[2])
+    count = 0
 
+<<<<<<< HEAD
+    for item in context.scene.physx.actors:
+        obj = item.obj_ref
+        if not obj or obj.physx.actor_type == 'NONE': continue
+        px = obj.physx
+=======
     def execute(self, context):
         bpy.ops.physx.validate_scene()
         try:
-            from . import pxbridge as _bridge
+            from . import pxveh34 as _bridge
             _bridge.reset()
             g = context.scene.physx.gravity
             _bridge.set_gravity(g[0], g[1], g[2])
             count = 0
+>>>>>>> parent of 2129c43 (rebuild physx binding for blender 5.1 - changed name to pxbridge for consistency)
 
-            for item in context.scene.physx.actors:
-                obj = item.obj_ref
-                if not obj or obj.physx.actor_type == 'NONE': continue
-                px = obj.physx
+        shapes_list = []
+        for shape in px.shapes:
+            raw = ""
+            if shape.shape_type in ('CONVEX', 'TRIANGLE', 'HEIGHTFIELD'):
+                if not shape.cooked_data: continue
+                raw = base64.b64decode(shape.cooked_data.encode('ascii'))
 
-                shapes_list = []
-                for shape in px.shapes:
-                    raw = ""
-                    if shape.shape_type in ('CONVEX', 'TRIANGLE', 'HEIGHTFIELD'):
-                        if not shape.cooked_data: continue
-                        raw = base64.b64decode(shape.cooked_data.encode('ascii'))
+            mat_data = physx_utils.get_mat_data(shape.physics_material)
+            q = shape.local_rot
+            l = shape.local_pos
+            px_quat = [q[1], q[2], q[3], q[0]]
 
-                    mat_data = physx_utils.get_mat_data(shape.physics_material)
-                    q = shape.local_rot
-                    l = shape.local_pos
-                    px_quat = [q[1], q[2], q[3], q[0]]
+            w0 = physx_utils.bits_to_int(shape.filter_group)
+            w1 = physx_utils.bits_to_int(shape.filter_mask)
+            w2 = physx_utils.bits_to_int(shape.filter_query)
+            w3 = 0
 
-                    w0 = physx_utils.bits_to_int(shape.filter_group)
-                    w1 = physx_utils.bits_to_int(shape.filter_mask)
-                    w2 = physx_utils.bits_to_int(shape.filter_query)
-                    w3 = 0
+            shapes_list.append(
+                    {
+                        "type": shape.shape_type,
+                        "data": raw,
+                        "dims": [shape.dim_x, shape.dim_y, shape.dim_z],
+                        "pos": [l[0], l[1], l[2]],
+                        "rot": px_quat,
+                        "mat": mat_data,
+                        "filter": [w0, w1, w2, w3]
+                        }
+                    )
 
-                    shapes_list.append(
-                            {
-                                "type": shape.shape_type,
-                                "data": raw,
-                                "dims": [shape.dim_x, shape.dim_y, shape.dim_z],
-                                "pos": [l[0], l[1], l[2]],
-                                "rot": px_quat,
-                                "mat": mat_data,
-                                "filter": [w0, w1, w2, w3]
-                                }
-                            )
+        if not shapes_list: continue
+        loc, quat = physx_utils.get_actor_world_transform(item)
+        actor_pose = [loc.x, loc.y, loc.z, quat.x, quat.y, quat.z, quat.w]
+        com = [px.com_offset[0], px.com_offset[1], px.com_offset[2]]
+        inert = [px.inertia[0], px.inertia[1], px.inertia[2]]
 
-                if not shapes_list: continue
-                loc, quat = physx_utils.get_actor_world_transform(item)
-                actor_pose = [loc.x, loc.y, loc.z, quat.x, quat.y, quat.z, quat.w]
-                com = [px.com_offset[0], px.com_offset[1], px.com_offset[2]]
-                inert = [px.inertia[0], px.inertia[1], px.inertia[2]]
+        handle = _bridge.create_actor(px.actor_type, actor_pose, shapes_list, px.mass, com, inert)
+        item.actor_handle = str(handle)
+        count += 1
 
+<<<<<<< HEAD
+    context.scene.physx.active_actor_count = _bridge.get_actor_count()
+    return count
+=======
                 handle = _bridge.create_actor(px.actor_type, actor_pose, shapes_list, px.mass, com, inert)
                 item.actor_handle = str(handle)
                 count += 1
@@ -149,7 +164,7 @@ class PHYSX_OT_run_steps(bpy.types.Operator):
         px_s = context.scene.physx
         if not px_s.is_initialized: return {'CANCELLED'}
         try:
-            from . import pxbridge as _bridge
+            from . import pxveh34 as _bridge
             dt = 1.0 / 60.0
             for _ in range(px_s.sim_steps):
                 _bridge.start_step(dt)
@@ -177,6 +192,7 @@ class PHYSX_OT_run_steps(bpy.types.Operator):
         except Exception as e:
             self.report({'ERROR'}, str(e))
         return {'FINISHED'}
+>>>>>>> parent of 2129c43 (rebuild physx binding for blender 5.1 - changed name to pxbridge for consistency)
 
 
 class PHYSX_OT_sim_step(bpy.types.Operator):
@@ -192,8 +208,11 @@ class PHYSX_OT_sim_step(bpy.types.Operator):
         return px_s.is_initialized and not px_s.sim_running
 
     def invoke(self, context, event):
-        if not context.scene.physx.scene_built:
-            bpy.ops.physx.build_scene()
+        try:
+            build_scene(context)
+        except Exception as e:
+            self.report({'ERROR'}, str(e))
+            return {'CANCELLED'}
         context.scene.physx.sim_running = True
         self._timer = context.window_manager.event_timer_add(1.0 / 60.0, window=context.window)
         context.window_manager.modal_handler_add(self)
@@ -205,7 +224,7 @@ class PHYSX_OT_sim_step(bpy.types.Operator):
             return self.cancel(context)
         if event.type in {'ESC', 'RIGHTMOUSE'}:
             return self.cancel(context)
-        from . import pxbridge as _bridge
+        from . import pxveh34 as _bridge
 
         # Manipulator
         if event.type == 'MOUSEMOVE':
@@ -290,7 +309,7 @@ class PHYSX_OT_sim_step(bpy.types.Operator):
             context.window_manager.event_timer_remove(self._timer)
             self._timer = None
         if self._cursor_handle != "0":
-            from . import pxbridge as _bridge
+            from . import pxveh34 as _bridge
             try:
                 _bridge.remove_actor(int(self._cursor_handle))
             except:
@@ -322,7 +341,7 @@ class PHYSX_OT_apply_force(bpy.types.Operator):
                 h = item.actor_handle
                 break
         if h == "0": return {'CANCELLED'}
-        from . import pxbridge as _bridge
+        from . import pxveh34 as _bridge
         f = px_s.force_value
         p = context.scene.cursor.location if px_s.use_force_pos else Vector((0, 0, 0))
         _bridge.apply_force(int(h), [f[0], f[1], f[2]], int(px_s.force_mode), px_s.use_force_pos, [p.x, p.y, p.z])
@@ -335,7 +354,7 @@ class PHYSX_OT_update_gravity(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            from . import pxbridge as _bridge
+            from . import pxveh34 as _bridge
             g = context.scene.physx.gravity
             _bridge.set_gravity(g[0], g[1], g[2])
         except:
@@ -349,7 +368,7 @@ class PHYSX_OT_cook_mesh(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            from . import pxbridge as _bridge
+            from . import pxveh34 as _bridge
             if not _bridge.init(): return {'CANCELLED'}
             obj = context.object
             shape = obj.physx.shapes[obj.physx.shape_index]
@@ -445,7 +464,7 @@ class PHYSX_OT_calc_dynamics(bpy.types.Operator):
         obj = context.object
         px = obj.physx
         try:
-            from . import pxbridge as _bridge
+            from . import pxveh34 as _bridge
             shapes_data = []
             densities = []
             for shape in px.shapes:
@@ -520,10 +539,9 @@ class PHYSX_OT_reset_session(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            from . import pxbridge as _bridge
+            from . import pxveh34 as _bridge
             _bridge.reset()
             context.scene.physx.active_actor_count = 0
-            context.scene.physx.scene_built = False
         except Exception:
             pass
         return {'FINISHED'}
