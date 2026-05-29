@@ -1,7 +1,6 @@
 import bpy
 import json
 import zipfile
-import re
 import os
 import re
 from .main.common import show_message, load_zip
@@ -18,6 +17,9 @@ invalid_json_error = (
 )
 invalid_material_error = "Import will continue, but shaders may be incorrectly set up for these objects."
 invalid_phys_error = "Import may continue, but .phys colliders will not be imported."
+
+MIN_WOLVENKIT_VERSION = (8, 13)
+MIN_MATERIAL_JSON_VERSION = (1, 0)
 
 
 class JSONTool:
@@ -39,43 +41,34 @@ class JSONTool:
         return data
 
     @staticmethod
+    def _version_at_least(version_string, minimum):
+        components = []
+        for part in str(version_string).split('.'):
+            leading = re.match(r'\d+', part)
+            if leading is None:
+                break
+            components.append(int(leading.group()))
+        return tuple(components) >= minimum
+
+    @staticmethod
     def json_ver_validate(json_data):
-        """Validate that the JSON was generated with a supported WolvenKit version.
-
-        Supports:
-          - WolvenKit 8.13 and all later 8.x versions
-          - All 9.x and higher major versions (future-proof)
-        Rejects versions older than 8.13 and unrecognized version strings.
-        Also checks MaterialJsonVersion when present.
-        """
-        if json_data is None:
+        if not isinstance(json_data, dict):
             return False
-        if 'Header' not in json_data:
+        header = json_data.get('Header')
+        if not isinstance(header, dict):
             return False
-        header = json_data['Header']
 
-        # === Improved WolvenKit version validation (handles 8.x, 9.x, 10.x, ...) ===
-        if "WolvenKitVersion" in header:
-            ver_str = str(header.get("WolvenKitVersion", ""))
-            # Match major.minor (e.g. 8.18, 9.2, 10.0)
-            match = re.search(r'\b(\d+)\.(\d+)', ver_str)
-            if match:
-                major = int(match.group(1))
-                minor = int(match.group(2))
+        has_material_version = 'MaterialJsonVersion' in header
+        has_wolvenkit_version = 'WolvenKitVersion' in header
+        if not has_material_version and not has_wolvenkit_version:
+            return False
 
-                if major == 8 and minor < 13:
-                    return False          # Too old (8.0 – 8.12)
-                if major < 8:
-                    return False          # Pre-8.x versions not supported
-                # major >= 9 or (major == 8 and minor >= 13) → allowed
-            else:
-                # No recognizable X.Y version string found
-                return False
-        if "MaterialJsonVersion" in header:
-            if "1." not in header["MaterialJsonVersion"]:
-                return False
+        if has_material_version and not JSONTool._version_at_least(header['MaterialJsonVersion'], MIN_MATERIAL_JSON_VERSION):
+            return False
+        if has_wolvenkit_version and not JSONTool._version_at_least(header['WolvenKitVersion'], MIN_WOLVENKIT_VERSION):
+            return False
         return True
-
+    
     @staticmethod
     def load_json(file_path):
         if os.path.exists(file_path) is False:
