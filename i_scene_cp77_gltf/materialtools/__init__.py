@@ -175,9 +175,8 @@ def generate_multilayer_material(self,context):
     dummy_material['MeshPath'] = filepath[:-4]
     # JATO: we have to set 'm' here to get the original mat-name, otherwise name-incrementing will break reload
     dummy_material['m'] = {'Name': 'Multilayer Default', 'BaseMaterial': 'engine\\materials\\multilayered.mt', 'GlobalNormal': 'engine\\textures\\editor\\normal.xbm', 'MultilayerMask': 'default.mlmask', 'DiffuseMap': 'None'}
-
-    if os.path.exists(cp77_addon_prefs.depotfolder_path):
-        DepotPath = cp77_addon_prefs.depotfolder_path
+    
+    DepotPath = cp77_addon_prefs.depotfolder_path
     dummy_material['DepotPath'] = DepotPath
 
     # assign the dummy mat to active obj
