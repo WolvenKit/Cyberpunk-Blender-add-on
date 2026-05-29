@@ -7,7 +7,7 @@ Download the latest version from [Releases](https://github.com/WolvenKit/Cyberpu
 
 The Cyberpunk IO Suite is the definitive bridge between [WolvenKit](https://wiki.redmodding.org/wolvenkit) and Blender, built specifically for the Cyberpunk 2077 modding toolchain.
 
-Whether you are importing complex level sectors, generating pixel-perfect collision bodies via native PhysX, or animating custom JALI facial expressions, the Cyberpunk IO suite brings REDengine compatibility directly to your Blender workspace.
+Whether you are importing entire levels, generating collision bodies via the native PhysX integration, or generating custom JALI facial expressions, the Cyberpunk IO suite brings REDengine compatibility directly to your Blender workspace.
 
 You can find detailed documentation (and much else) on the [Cyberpunk 2077 modding wiki](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite).
 
