@@ -324,7 +324,7 @@ def reload_mats(self, context):
 
     orig_mat_name = active_material.name
     # JATO: "m" customprop introduced in addon ver 1.8. much safer to use than the bpy material.name
-    if 'm' in active_material:
+    if 'm' in active_material.keys():
         orig_mat_name = str(active_material['m']['Name'])
 
     active_material.name = "to_be_deleted"
@@ -367,7 +367,7 @@ def reload_mats(self, context):
     index = 0
     for rawmat in mats:
         #old_mat_name_split = old_mat_name.split('.')[0]
-        if rawmat["Name"] == orig_mat_name:
+        if rawmat["Name"] == orig_mat_name.split('.')[0]:
             newmat = Builder.create(mats,index)
             break
         index = index + 1
@@ -376,7 +376,7 @@ def reload_mats(self, context):
         self.report({'ERROR'}, "New material not created")
         return {'CANCELLED'}
     # JATO: Copy custom material properties from old mat to new mat. Maybe we could regenerate from file, but I'm having a hard time understanding the code for that within import_mats function
-    for k in active_material:
+    for k in active_material.keys():
         if k in ('BaseMaterial','DiffuseMap','GlobalNormal','MultilayerMask'):
             newmat[k] = active_material[k]
 

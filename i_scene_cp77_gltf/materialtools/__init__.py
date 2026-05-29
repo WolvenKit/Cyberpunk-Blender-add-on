@@ -28,9 +28,10 @@ def trigger_update_on_undo(scene):
     bpy.context.scene.cp77_ml_props.multilayer_index_int = bpy.context.scene.cp77_ml_props.multilayer_index_int
 
 def subscribe_to_color():
+    bpy.msgbus.clear_by_owner(bpy.types.PaletteColor)
     subscribe_to = bpy.types.PaletteColor, "color"
     bpy.msgbus.subscribe_rna(key=subscribe_to,owner=bpy.types.PaletteColor,args=(),notify=color_changed_callback)
-
+    
 def color_changed_callback():
     ts = bpy.context.tool_settings
     palette = ts.gpencil_paint.palette
@@ -65,17 +66,18 @@ def send_color_to_shader():
 
 
 def subscribe_to_object():
+    bpy.msgbus.clear_by_owner(bpy.types.LayerObjects)
     subscribe_to = bpy.types.LayerObjects, "active"
     bpy.msgbus.subscribe_rna(key=subscribe_to,owner=bpy.types.LayerObjects,args=(),notify=object_changed_callback)
-
+    
 def object_changed_callback():
     props = bpy.context.scene.cp77_ml_props
     obj = bpy.context.active_object
     if not obj:
         return
 
-    if bpy.context.active_object != props.last_active_object:
-        if bpy.context.active_object.active_material != props.last_active_material:
+    if obj != props.last_active_object:
+        if obj.active_material != props.last_active_material:
             mat = bpy.context.object.active_material
             props.multilayer_object_bool = False
             if mat and 'MLSetup' in mat:
@@ -85,11 +87,12 @@ def object_changed_callback():
     # JATO: We have to update the "last" props when we change active mat
     # otherwise when making the first change panel will desync by not sending data to shader
     # TODO: do we need last_palette here and in the mat_change callback?
-    props.last_active_object = bpy.context.active_object
-    props.last_active_material = bpy.context.active_object.active_material
-    props.last_palette = bpy.context.tool_settings.gpencil_paint.palette
-    if bpy.context.tool_settings.gpencil_paint.palette != None:
-        props.last_palette_color = bpy.context.tool_settings.gpencil_paint.palette.colors.active.color
+    props.last_active_object = obj
+    props.last_active_material = obj.active_material
+    palette = bpy.context.tool_settings.gpencil_paint.palette
+    props.last_palette = palette
+    if palette != None:
+        props.last_palette_color = palette.colors.active.color
     else:
         props.last_palette_color = (0.0, 0.0, 0.0)
 
@@ -105,7 +108,7 @@ def material_changed_callback():
     if not obj:
         return
 
-    if bpy.context.active_object.active_material != props.last_active_material:
+    if obj.active_material != props.last_active_material:
         #print("cur mat: ",bpy.context.active_object.active_material, "  |  last mat: ", props.last_active_material)
         mat = bpy.context.object.active_material
         props.multilayer_object_bool = False
@@ -115,10 +118,11 @@ def material_changed_callback():
 
     # JATO: We have to update the "last" props when we change active mat
     # otherwise when making the first change panel will desync by not sending data to shader
-    props.last_active_material = bpy.context.active_object.active_material
-    props.last_palette = bpy.context.tool_settings.gpencil_paint.palette
-    if bpy.context.tool_settings.gpencil_paint.palette != None:
-        props.last_palette_color = bpy.context.tool_settings.gpencil_paint.palette.colors.active.color
+    props.last_active_material = obj.active_material
+    palette = bpy.context.tool_settings.gpencil_paint.palette
+    props.last_palette = palette
+    if palette != None:
+        props.last_palette_color = palette.colors.active.color
     else:
         props.last_palette_color = (0.0, 0.0, 0.0)
 
@@ -188,7 +192,7 @@ def generate_multilayer_material(self,context):
             bpy.context.active_object.data.materials.append(dummy_material)
 
     new_material = reload_mats(self, context)
-    new_material['BaseMaterial'] = "engine\materials\multilayered.mt"
+    new_material['BaseMaterial'] = "engine\\materials\\multilayered.mt"
     new_material['DiffuseMap'] = "None"
     new_material['GlobalNormal'] = "engine\\textures\editor\\normal.xbm"
     new_material['MultilayerMask'] = "default.mlmask"
@@ -377,43 +381,59 @@ def load_panel_data(self, context):
     if active_palette:
         palette_colors = active_palette.colors
 
+        pal_col = None
         for pal_col in palette_colors:
-            col_tuple= pal_col.color[:]
-            err=np.sum(np.abs(np.subtract(col_tuple,colorscale)))
-            if abs(err)<matchTolerance:
-                break
-        for elem_nrmstr in active_palette['NormalStrengthList']:
-            elem_nrmstr_float = float(elem_nrmstr)
-            err=np.sum(np.subtract(elem_nrmstr_float,normstr))
-            if abs(err)<matchTolerance:
-                break
-        for elem_metin in active_palette['MetalLevelsInList']:
-            elem_metin_list = ast.literal_eval(elem_metin)
-            err=np.sum(np.abs(np.subtract(elem_metin_list,metin)))
-            if abs(err)<matchTolerance:
-                break
-        for elem_metout in active_palette['MetalLevelsOutList']:
-            elem_metout_list = ast.literal_eval(elem_metout)
-            err=np.sum(np.abs(np.subtract(elem_metout_list,metout)))
-            if abs(err)<matchTolerance:
-                break
-        for elem_rouin in active_palette['RoughLevelsInList']:
-            elem_rouin_list = ast.literal_eval(elem_rouin)
-            err=np.sum(np.abs(np.subtract(elem_rouin_list,rouin)))
-            if abs(err)<matchTolerance:
-                break
-        for elem_rouout in active_palette['RoughLevelsOutList']:
-            elem_rouout_list = ast.literal_eval(elem_rouout)
-            err=np.sum(np.abs(np.subtract(elem_rouout_list,rouout)))
-            if abs(err)<matchTolerance:
+            col_tuple = pal_col.color[:]
+            err = sum(abs(a - b) for a, b in zip(col_tuple, colorscale))
+            if abs(err) < matchTolerance:
                 break
 
-        bpy.context.tool_settings.gpencil_paint.palette.colors.active = pal_col
-        props.multilayer_normalstr_enum = elem_nrmstr
-        props.multilayer_metalin_enum = elem_metin
-        props.multilayer_metalout_enum = elem_metout
-        props.multilayer_roughin_enum = elem_rouin
-        props.multilayer_roughout_enum = elem_rouout
+        elem_nrmstr = None
+        for elem_nrmstr in active_palette['NormalStrengthList']:
+            err = float(elem_nrmstr) - normstr
+            if abs(err) < matchTolerance:
+                break
+
+        elem_metin = None
+        for elem_metin in active_palette['MetalLevelsInList']:
+            elem_metin_list = ast.literal_eval(elem_metin)
+            err = sum(abs(a - b) for a, b in zip(elem_metin_list, metin))
+            if abs(err) < matchTolerance:
+                break
+
+        elem_metout = None
+        for elem_metout in active_palette['MetalLevelsOutList']:
+            elem_metout_list = ast.literal_eval(elem_metout)
+            err = sum(abs(a - b) for a, b in zip(elem_metout_list, metout))
+            if abs(err) < matchTolerance:
+                break
+
+        elem_rouin = None
+        for elem_rouin in active_palette['RoughLevelsInList']:
+            elem_rouin_list = ast.literal_eval(elem_rouin)
+            err = sum(abs(a - b) for a, b in zip(elem_rouin_list, rouin))
+            if abs(err) < matchTolerance:
+                break
+
+        elem_rouout = None
+        for elem_rouout in active_palette['RoughLevelsOutList']:
+            elem_rouout_list = ast.literal_eval(elem_rouout)
+            err = sum(abs(a - b) for a, b in zip(elem_rouout_list, rouout))
+            if abs(err) < matchTolerance:
+                break
+
+        if pal_col is not None:
+            bpy.context.tool_settings.gpencil_paint.palette.colors.active = pal_col
+        if elem_nrmstr is not None:
+            props.multilayer_normalstr_enum = elem_nrmstr
+        if elem_metin is not None:
+            props.multilayer_metalin_enum = elem_metin
+        if elem_metout is not None:
+            props.multilayer_metalout_enum = elem_metout
+        if elem_rouin is not None:
+            props.multilayer_roughin_enum = elem_rouin
+        if elem_rouout is not None:
+            props.multilayer_roughout_enum = elem_rouout
 
 def load_mltemplate_and_microblend(self,context,node_group_name):
     active_object=bpy.context.active_object
@@ -501,24 +521,24 @@ def apply_mltemplate(self,context):
     props.last_palette = ts.gpencil_paint.palette
 
 def send_mltemplate_to_shader(self,context):
-        ts = context.tool_settings
-        if not ts.gpencil_paint.palette:
-            # self.report({'WARNING'}, 'No active palette to match with MLTEMPLATE.')
-            return {'CANCELLED'}
-        if 'MLTemplatePath' not in ts.gpencil_paint.palette:
-            # self.report({'WARNING'}, 'MLTEMPLATE path not found on active palette.')
-            return {'CANCELLED'}
-        palette_name = ts.gpencil_paint.palette.name
+    ts = context.tool_settings
+    if not ts.gpencil_paint.palette:
+        # self.report({'WARNING'}, 'No active palette to match with MLTEMPLATE.')
+        return {'CANCELLED'}
+    if 'MLTemplatePath' not in ts.gpencil_paint.palette:
+        # self.report({'WARNING'}, 'MLTEMPLATE path not found on active palette.')
+        return {'CANCELLED'}
+    palette_name = ts.gpencil_paint.palette.name
 
-        LayerGroup = get_layernode_by_socket()
-        if LayerGroup == None:
-            return
+    LayerGroup = get_layernode_by_socket()
+    if LayerGroup == None:
+        return
 
         # JATO: for performance, first we try getting node group by direct name-match and ensure the mlTemplate path matches
         # If mlTemplate paths don't match try searching all node-groups which can be slow
         ngmatch = None
         nodeGroup = bpy.data.node_groups.get(palette_name)
-        if nodeGroup['mlTemplate'] == ts.gpencil_paint.palette['MLTemplatePath']:
+        if nodeGroup and 'mlTemplate' in nodeGroup and nodeGroup['mlTemplate'] == ts.gpencil_paint.palette['MLTemplatePath']:
             ngmatch = nodeGroup
         else:
             for ng in bpy.data.node_groups:
@@ -1072,11 +1092,13 @@ def unregister_materialtools():
         bpy.utils.unregister_class(cls)
     for cls in reversed(operators):
         bpy.utils.unregister_class(cls)
-    subscribe_to_object()
-    subscribe_to_color()
-    subscribe_to_material()
+    bpy.msgbus.clear_by_owner(bpy.types.LayerObjects)
+    bpy.msgbus.clear_by_owner(bpy.types.PaletteColor)
+    bpy.msgbus.clear_by_owner(bpy.types.WindowManager)
     if load_post_handler in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.remove(load_post_handler)
-    bpy.app.handlers.undo_post.append(trigger_update_on_undo)
-    bpy.app.handlers.redo_post.append(trigger_update_on_undo)
+    if trigger_update_on_undo in bpy.app.handlers.undo_post:
+        bpy.app.handlers.undo_post.remove(trigger_update_on_undo)
+    if trigger_update_on_undo in bpy.app.handlers.redo_post:
+        bpy.app.handlers.redo_post.remove(trigger_update_on_undo)
     del bpy.types.Scene.cp77_ml_props
