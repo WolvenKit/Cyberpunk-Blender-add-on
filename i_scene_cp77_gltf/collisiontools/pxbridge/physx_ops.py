@@ -92,6 +92,8 @@ def build_scene(context):
             g = context.scene.physx.gravity
             _bridge.set_gravity(g[0], g[1], g[2])
             count = 0
+        except Exception as e:
+            self.report({'ERROR'}, str(e))
 
         shapes_list = []
         for shape in px.shapes:
