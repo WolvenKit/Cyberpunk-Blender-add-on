@@ -1074,11 +1074,13 @@ def unregister_materialtools():
         bpy.utils.unregister_class(cls)
     for cls in reversed(operators):
         bpy.utils.unregister_class(cls)
-    subscribe_to_object()
-    subscribe_to_color()
-    subscribe_to_material()
+    bpy.msgbus.clear_by_owner(bpy.types.LayerObjects)
+    bpy.msgbus.clear_by_owner(bpy.types.PaletteColor)
+    bpy.msgbus.clear_by_owner(bpy.types.WindowManager)
     if load_post_handler in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.remove(load_post_handler)
-    bpy.app.handlers.undo_post.append(trigger_update_on_undo)
-    bpy.app.handlers.redo_post.append(trigger_update_on_undo)
+    if trigger_update_on_undo in bpy.app.handlers.undo_post:
+        bpy.app.handlers.undo_post.remove(trigger_update_on_undo)
+    if trigger_update_on_undo in bpy.app.handlers.redo_post:
+        bpy.app.handlers.redo_post.remove(trigger_update_on_undo)
     del bpy.types.Scene.cp77_ml_props
