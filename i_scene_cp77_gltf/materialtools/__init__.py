@@ -192,7 +192,7 @@ def generate_multilayer_material(self,context):
             bpy.context.active_object.data.materials.append(dummy_material)
 
     new_material = reload_mats(self, context)
-    new_material['BaseMaterial'] = "engine\materials\multilayered.mt"
+    new_material['BaseMaterial'] = "engine\\materials\\multilayered.mt"
     new_material['DiffuseMap'] = "None"
     new_material['GlobalNormal'] = "engine\\textures\editor\\normal.xbm"
     new_material['MultilayerMask'] = "default.mlmask"
