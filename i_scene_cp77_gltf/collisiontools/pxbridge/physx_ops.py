@@ -80,12 +80,10 @@ def build_scene(context):
     _bridge.set_gravity(g[0], g[1], g[2])
     count = 0
 
-<<<<<<< HEAD
     for item in context.scene.physx.actors:
         obj = item.obj_ref
         if not obj or obj.physx.actor_type == 'NONE': continue
         px = obj.physx
-=======
     def execute(self, context):
         bpy.ops.physx.validate_scene()
         try:
@@ -94,7 +92,6 @@ def build_scene(context):
             g = context.scene.physx.gravity
             _bridge.set_gravity(g[0], g[1], g[2])
             count = 0
->>>>>>> parent of 2129c43 (rebuild physx binding for blender 5.1 - changed name to pxbridge for consistency)
 
         shapes_list = []
         for shape in px.shapes:
@@ -135,10 +132,8 @@ def build_scene(context):
         item.actor_handle = str(handle)
         count += 1
 
-<<<<<<< HEAD
     context.scene.physx.active_actor_count = _bridge.get_actor_count()
     return count
-=======
                 handle = _bridge.create_actor(px.actor_type, actor_pose, shapes_list, px.mass, com, inert)
                 item.actor_handle = str(handle)
                 count += 1
@@ -192,7 +187,6 @@ class PHYSX_OT_run_steps(bpy.types.Operator):
         except Exception as e:
             self.report({'ERROR'}, str(e))
         return {'FINISHED'}
->>>>>>> parent of 2129c43 (rebuild physx binding for blender 5.1 - changed name to pxbridge for consistency)
 
 
 class PHYSX_OT_sim_step(bpy.types.Operator):
