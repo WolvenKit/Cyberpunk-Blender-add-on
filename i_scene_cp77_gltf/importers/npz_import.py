@@ -462,7 +462,7 @@ _BASE_CHAR_RESOURCES = {
         'body_mesh': "t0_000_ma_base__full_hql.npz",
         'body_sk':   "ma_base_shapekeys.npz",
         'head_parts': [
-            ("h0_000_ma_c__basehead.npz",  "h0_000_ma_c__basehead.npz"),
+            ("h0_000_ma_c__basehead.npz",  "h0_000_pma__morphs.npz"),
             ("he_000_ma_c__basehead.npz",  "he_000_ma_morphs.npz"),
             ("ht_000_ma_c__basehead.npz",  "ht_000_ma_morphs.npz"),
             ("heb_000_ma_c__basehead.npz", "heb_000_ma_morphs.npz"),
