@@ -28,9 +28,10 @@ def trigger_update_on_undo(scene):
     bpy.context.scene.cp77_ml_props.multilayer_index_int = bpy.context.scene.cp77_ml_props.multilayer_index_int
 
 def subscribe_to_color():
+    bpy.msgbus.clear_by_owner(bpy.types.PaletteColor)
     subscribe_to = bpy.types.PaletteColor, "color"
     bpy.msgbus.subscribe_rna(key=subscribe_to,owner=bpy.types.PaletteColor,args=(),notify=color_changed_callback)
-
+    
 def color_changed_callback():
     ts = bpy.context.tool_settings
     palette = ts.gpencil_paint.palette
@@ -65,9 +66,10 @@ def send_color_to_shader():
 
 
 def subscribe_to_object():
+    bpy.msgbus.clear_by_owner(bpy.types.LayerObjects)
     subscribe_to = bpy.types.LayerObjects, "active"
     bpy.msgbus.subscribe_rna(key=subscribe_to,owner=bpy.types.LayerObjects,args=(),notify=object_changed_callback)
-
+    
 def object_changed_callback():
     props = bpy.context.scene.cp77_ml_props
     obj = bpy.context.active_object
