@@ -74,6 +74,88 @@ class CP7PhysImport(Operator):
         return {"RUNNING_MODAL"}
 
 
+# ====================== APPEARANCE DROP MENU ======================
+
+def get_appearance_items(self, context):
+
+    if not self.filepath or not os.path.exists(self.filepath):
+        return []
+
+    try:
+        with open(self.filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        root = data.get('Data', {}).get('RootChunk', {})
+        appearances = []
+
+        if 'appearances' in root:
+            for app in root.get('appearances', []):
+                if isinstance(app, dict):
+                    name = app.get('appearanceName', {}).get('$value')
+                    if name:
+                        appearances.append((name, name, f"Import appearance: {name}"))
+
+        return appearances
+
+    except Exception as e:
+        print(f"[CP77] Error reading appearances: {e}")
+        return []
+
+
+def get_appearance_enum_items(self, context):
+
+    if not self.filepath:
+        return [("NONE", "No file selected", "")]
+
+    raw_items = get_appearance_items(self, context)
+
+    if not raw_items:
+        return [("NONE", "No appearances found", "")]
+
+    formatted_items = []
+    for item in raw_items:
+        if isinstance(item, (list, tuple)) and len(item) > 0:
+            name = str(item[0])
+        elif isinstance(item, str):
+            name = item
+        else:
+            continue
+        formatted_items.append((name, name, f"Import appearance: {name}"))
+
+    return formatted_items
+    
+def update_filepath(self, context):
+    self.appearances = "default"
+
+    try:
+        items = get_appearance_enum_items(self, context)
+        if items and len(items) > 0:
+            
+            self.property_unset("selected_appearance")
+            self["selected_appearance"] = items[0][0]
+        else:
+            self.property_unset("selected_appearance")
+            self["selected_appearance"] = "NONE"
+    
+    except Exception as e:
+        print(f"[CP77] update_filepath error: {e}")
+        self["selected_appearance"] = "NONE"
+
+    for area in context.screen.areas:
+        area.tag_redraw()
+            
+    try:
+        bpy.context.view_layer.update()
+    except:
+        pass
+
+
+def update_selected_appearance(self, context):
+    if self.selected_appearance and self.selected_appearance not in ("NONE", "BASE_COMPONENTS_ONLY"):
+        self.appearances = self.selected_appearance
+
+# ===================================================
+
 class CP77EntityImport(Operator,ImportHelper):
 
     bl_idname = "io_scene_gltf.cp77entity"
@@ -86,7 +168,8 @@ class CP77EntityImport(Operator,ImportHelper):
         )
 
     filepath: StringProperty(name= "Filepath",
-                             subtype = 'FILE_PATH')
+                             subtype = 'FILE_PATH',
+                             update=update_filepath)
 
     appearances: StringProperty(name= "Appearances",
                                 description="Entity Appearances to extract. Needs appearanceName from ent. Comma seperate multiples",
@@ -108,6 +191,27 @@ class CP77EntityImport(Operator,ImportHelper):
                                 default='',
                                 options={'HIDDEN'})
   
+    # ====================== APPEARANCE BLOCK ==========================
+    
+    show_appearance_selection: BoolProperty(
+        name="Appearance Selection",
+        description="Enable manual selection of entity appearance",
+        default=False
+    )
+    
+    selected_appearance: bpy.props.EnumProperty(
+        name="Appearance",
+        items=get_appearance_enum_items,
+        update=update_selected_appearance,
+    )
+    
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        self.appearances = "default"
+        return {'RUNNING_MODAL'}
+    
+    #===================================================================
+    
     def draw(self, context):
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
         props = context.scene.cp77_panel_props
@@ -117,6 +221,25 @@ class CP77EntityImport(Operator,ImportHelper):
         split.label(text="Ent Appearance:")
         split.prop(self, "appearances", text="")
         row = layout.row(align=True)
+
+        box = layout.box()
+        box.label(text="Appearance Selection", icon='OUTLINER_OB_GROUP_INSTANCE')
+
+        row = box.row()
+        row.prop(self, "show_appearance_selection", text="Manual Appearance Selection", toggle=True)
+
+        if self.show_appearance_selection:
+            row = box.row()
+            row.operator("wm.redraw_timer", text="Refresh Appearances", icon='FILE_REFRESH').type = 'DRAW'
+            box.separator()
+            col = box.column(align=True)
+            col.label(text=f"Total: {len(get_appearance_enum_items(self, context))} appearance(s)", icon='INFO')
+            col.separator()
+            col.label(text="Choose Appearance:", icon='DOWNARROW_HLT')
+            col.prop(self, "selected_appearance", text="")
+            
+            col.separator()
+
         box = layout.box()
         col = box.column()
         col.prop(props, "with_materials")        
@@ -152,7 +275,11 @@ class CP77EntityImport(Operator,ImportHelper):
         props = context.scene.cp77_panel_props
         SetCyclesRenderer(props.use_cycles, props.update_gi)
 
-        apps=self.appearances.split(",")
+        if self.show_appearance_selection and self.selected_appearance and self.selected_appearance != "BASE_COMPONENTS_ONLY":
+            apps = [self.selected_appearance]
+        else:
+            apps = [a.strip() for a in self.appearances.split(",") if a.strip()]
+        
         print('apps - ',apps)
         excluded=""
         bob=self.filepath
