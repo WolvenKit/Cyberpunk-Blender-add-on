@@ -76,9 +76,17 @@ class CP7PhysImport(Operator):
 
 # ====================== APPEARANCE DROP MENU ======================
 
-def get_appearance_items(self, context):
+_appearance_cache = {}
 
-    if not self.filepath or not os.path.exists(self.filepath):
+def get_appearance_items(self, context):
+    if not self.filepath:
+        return []
+
+    # Используем кэш, чтобы не читать файл каждый раз
+    if self.filepath in _appearance_cache:
+        return _appearance_cache[self.filepath]
+
+    if not os.path.exists(self.filepath):
         return []
 
     try:
@@ -95,6 +103,7 @@ def get_appearance_items(self, context):
                     if name:
                         appearances.append((name, name, f"Import appearance: {name}"))
 
+        _appearance_cache[self.filepath] = appearances
         return appearances
 
     except Exception as e:
@@ -103,7 +112,6 @@ def get_appearance_items(self, context):
 
 
 def get_appearance_enum_items(self, context):
-
     if not self.filepath:
         return [("NONE", "No file selected", "")]
 
@@ -112,47 +120,25 @@ def get_appearance_enum_items(self, context):
     if not raw_items:
         return [("NONE", "No appearances found", "")]
 
-    formatted_items = []
-    for item in raw_items:
-        if isinstance(item, (list, tuple)) and len(item) > 0:
-            name = str(item[0])
-        elif isinstance(item, str):
-            name = item
-        else:
-            continue
-        formatted_items.append((name, name, f"Import appearance: {name}"))
+    return [(item[0], item[0], item[2]) for item in raw_items]
 
-    return formatted_items
-    
+
 def update_filepath(self, context):
+    """Сбрасываем на первое appearance при смене файла"""
     self.appearances = "default"
 
     try:
         items = get_appearance_enum_items(self, context)
-        if items and len(items) > 0:
-            
+        if items:
             self.property_unset("selected_appearance")
             self["selected_appearance"] = items[0][0]
         else:
-            self.property_unset("selected_appearance")
             self["selected_appearance"] = "NONE"
-    
-    except Exception as e:
-        print(f"[CP77] update_filepath error: {e}")
+    except:
         self["selected_appearance"] = "NONE"
 
     for area in context.screen.areas:
         area.tag_redraw()
-            
-    try:
-        bpy.context.view_layer.update()
-    except:
-        pass
-
-
-def update_selected_appearance(self, context):
-    if self.selected_appearance and self.selected_appearance not in ("NONE", "BASE_COMPONENTS_ONLY"):
-        self.appearances = self.selected_appearance
 
 # ===================================================
 
@@ -194,17 +180,15 @@ class CP77EntityImport(Operator,ImportHelper):
     # ====================== APPEARANCE BLOCK ==========================
     
     show_appearance_selection: BoolProperty(
-        name="Appearance Selection",
-        description="Enable manual selection of entity appearance",
+        name="Manual Appearance Selection",
         default=False
     )
-    
+
     selected_appearance: bpy.props.EnumProperty(
         name="Appearance",
         items=get_appearance_enum_items,
-        update=update_selected_appearance,
     )
-    
+
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
         self.appearances = "default"
@@ -275,19 +259,14 @@ class CP77EntityImport(Operator,ImportHelper):
         props = context.scene.cp77_panel_props
         SetCyclesRenderer(props.use_cycles, props.update_gi)
 
-        if self.show_appearance_selection and self.selected_appearance and self.selected_appearance != "BASE_COMPONENTS_ONLY":
+        if self.show_appearance_selection and self.selected_appearance:
             apps = [self.selected_appearance]
         else:
             apps = [a.strip() for a in self.appearances.split(",") if a.strip()]
-        
-        print('apps - ',apps)
-        excluded=""
-        bob=self.filepath
-        inColl=self.inColl
-        #print('Bob - ',bob)
-        importEnt(props.with_materials, bob, apps, excluded, self.include_collisions, self.include_phys, self.include_entCollider, inColl, props.remap_depot, 
-                    meshes=None, mesh_jsons=None, escaped_path=None, app_path=None, anim_files=None, rigjsons=None, generate_overrides=self.generate_overrides)
 
+        importEnt(props.with_materials, self.filepath, apps, "", 
+                  self.include_collisions, self.include_phys, self.include_entCollider,
+                  self.inColl, props.remap_depot, generate_overrides=self.generate_overrides)
         return {'FINISHED'}
 
 
