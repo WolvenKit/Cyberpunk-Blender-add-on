@@ -230,7 +230,7 @@ class CP77EntityImport(Operator,ImportHelper):
             if items and items[0][0] == "default" and len(items) == 1:
                 row.label(text="No appearances found")
             else:
-                row.label(text=f"Select appearance (Total: {len([i for i in items if i[0] not in ('default', 'ALL','SEPARATOR')])})")
+                row.label(text=f"Select appearance (Total: {len([i for i in items if i[0] not in ('default', 'ALL','_SEPARATOR')])})")
 
             row = box.row(align=True)
             row.prop(self, "selected_appearance", text="")
