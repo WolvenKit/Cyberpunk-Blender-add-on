@@ -193,7 +193,7 @@ class CP77EntityImport(Operator,ImportHelper):
     
     show_appearance_selection: BoolProperty(
         name="Appearance Selection",
-        description="Enable manual selection of entity appearance",
+        description="Enable / Disable selection of entity appearance from dropdown list / old appearance text field",
         default=True
     )
     
@@ -276,6 +276,7 @@ class CP77EntityImport(Operator,ImportHelper):
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
+        SetVulkanBackend(props.use_vulkan)
         SetCyclesRenderer(props.use_cycles, props.update_gi)
 
         if self.filepath and self.selected_appearance:
