@@ -2,6 +2,7 @@ import bpy
 import sys
 import os
 import json 
+import re
 from bpy_extras.io_utils import ImportHelper
 from bpy.props import (StringProperty, EnumProperty, BoolProperty, CollectionProperty)
 from bpy.types import (Operator, OperatorFileListElement, TOPBAR_MT_file_import )
@@ -106,26 +107,30 @@ def get_appearance_items(self, context):
 
 
 def get_appearance_enum_items(self, context):
+    global _appearance_enum_cache
+
     if not self.filepath:
-        return [("SELECT_FILE", "Select file", "Please select an .ent.json file")]
+        _appearance_enum_cache = [("SELECT_FILE", "Select file", "Please select an .ent.json file")]
+        return _appearance_enum_cache
 
     names = get_appearance_items(self, context)
 
     if not names:
-        return [("default", "default", "Use default appearance")]
+        _appearance_enum_cache = [("default", "default", "Use default appearance")]
+        return _appearance_enum_cache
 
     result = [
         ("default", "default", "Use default appearance"),
         ("all", "all", "Import ALL appearances"),
-        ("_SEPARATOR", "----", ""),
+        None,
     ]
 
-    sorted_names = sorted(names, key=str.lower)
-    for name in sorted_names:
+    for name in sorted(names, key=str.lower):
         if name.lower() != "default":
             result.append((name, name, f"Import appearance: {name}"))
 
-    return result
+    _appearance_enum_cache = result
+    return _appearance_enum_cache
 
 
 def update_filepath(self, context):
@@ -147,10 +152,6 @@ def update_filepath(self, context):
 
     for area in context.screen.areas:
         area.tag_redraw()
-        
-def update_selected_appearance(self, context):
-    if self.selected_appearance == "_SEPARATOR":
-        self.selected_appearance = "default"
 
 # ==================================================================
 
@@ -200,7 +201,6 @@ class CP77EntityImport(Operator,ImportHelper):
     selected_appearance: bpy.props.EnumProperty(
         name="Appearance",
         items=get_appearance_enum_items,
-        update=update_selected_appearance,
     )
     
     def invoke(self, context, event):
@@ -224,13 +224,13 @@ class CP77EntityImport(Operator,ImportHelper):
             items = get_appearance_enum_items(self, context)
 
             row = box.row(align=True)
-            row.operator("wm.redraw_timer", text="Refresh Appearances", icon='FILE_REFRESH').type = 'DRAW'
+            # row.operator("wm.redraw_timer", text="Refresh Appearances", icon='FILE_REFRESH').type = 'DRAW'
 
             row = box.row(align=True)
             if items and items[0][0] == "default" and len(items) == 1:
                 row.label(text="No appearances found")
             else:
-                row.label(text=f"Select appearance (Total: {len([i for i in items if i[0] not in ('default', 'all','_SEPARATOR')])})")
+                row.label(text=f"Select appearance (Total: {len([i for i in items if i and i[0] not in ('default', 'all')])})")
 
             row = box.row(align=True)
             row.prop(self, "selected_appearance", text="")
@@ -283,7 +283,7 @@ class CP77EntityImport(Operator,ImportHelper):
             _last_selected_appearance[self.filepath] = self.selected_appearance
         
         if self.show_appearance_selection and self.selected_appearance:
-            if self.selected_appearance in ("NO_APPEARANCES", "SELECT_FILE", "_SEPARATOR"):
+            if self.selected_appearance in ("NO_APPEARANCES", "SELECT_FILE"):
                 apps = ["default"]
             elif self.selected_appearance == "all":
                 apps = ["ALL"]
@@ -344,6 +344,82 @@ class CP77StreamingSectorImport(Operator,ImportHelper):
         return {'FINISHED'}
 
 
+def get_gltf_appearance_items(self, context):
+    if not self.filepath:
+        return []
+
+    names = []
+
+    base = os.path.splitext(self.filepath)[0]
+    material_json = base + ".material.json"
+
+    if os.path.isfile(material_json):
+        try:
+            with open(material_json, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            if 'Appearances' in data:
+                for app_name in data['Appearances'].keys():
+                    if app_name:
+
+                        names.append(app_name)
+        except Exception as e:
+            print(f"[CP77] Error reading material.json: {e}")
+
+    if not names:
+        names = ["default"]
+
+    return names
+    
+def clean_appearance_name(name):
+    """Removes digits from app names at the end"""
+    return re.sub(r'\d+$', '', name).strip()
+
+def get_gltf_appearance_enum_items(self, context):
+    global _appearance_enum_cache
+
+    if not self.filepath:
+        _appearance_enum_cache = [("SELECT_FILE", "Select file", "Please select a .glb/.gltf file")]
+        return _appearance_enum_cache
+
+    if self.filepath in _appearance_enum_cache:
+        return _appearance_enum_cache[self.filepath]
+
+    names = get_gltf_appearance_items(self, context)
+
+    if not names:
+        result = [("all", "all", "Import ALL appearances")]
+    else:
+        if len(names) == 1:
+            clean_name = clean_appearance_name(names[0])
+            result = [(names[0], clean_name, f"Import appearance: {names[0]}")]
+        else:
+            result = [
+                ("all", "all", "Import ALL appearances"),
+                None,
+            ]
+
+        sorted_names = sorted(names, key=str.lower)
+        for name in sorted_names:
+            clean_name = clean_appearance_name(name)
+            result.append((name, clean_name, f"Import appearance: {clean_name}"))
+
+    _appearance_enum_cache = result
+    return _appearance_enum_cache
+    
+def update_filepath(self, context):
+    try:
+        items = get_gltf_appearance_enum_items(self, context)
+        self.property_unset("selected_appearance")
+        self["selected_appearance"] = "default"
+
+    except Exception as e:
+        print(f"[CP77] update_filepath error: {e}")
+        self["selected_appearance"] = "default"
+
+    for area in context.screen.areas:
+        area.tag_redraw()
+
 def update_appearances_logic(self, context):
     if self.all_appearances_toggle:
         self.appearances_buffer = self.appearances
@@ -360,6 +436,30 @@ class CP77Import(Operator, ImportHelper):
         default="*.gltf;*.glb",
         options={'HIDDEN'},
         )
+    
+    show_appearance_selection: BoolProperty(
+        name="Appearance Selection",
+        default=True
+    )
+
+    selected_appearance: bpy.props.EnumProperty(
+        name="Appearances",
+        items=get_gltf_appearance_enum_items,
+    )
+
+    appearances: StringProperty(
+        name="Appearances",
+        description="Appearances to extract (comma separated)",
+        default="default"
+    )
+
+    all_appearances_toggle: bpy.props.BoolProperty(
+        name="All Appearances",
+        default=False,
+        update=update_appearances_logic
+    )
+    appearances_buffer: bpy.props.StringProperty()
+    
     image_format: EnumProperty(
         name="Textures",
         items=(("png", "Use PNG textures", ""),
@@ -378,7 +478,7 @@ class CP77Import(Operator, ImportHelper):
     import_garmentsupport: BoolProperty(name="Import Garment Support (Experimental)",default=True,description="Imports Garment Support mesh data as color attributes")
     generate_overrides: BoolProperty(name="Generate Overrides for Multilayer materials (may be slow)",default=False,description="Imports overrides and palettes for multilayered materials")
 
-    filepath: StringProperty(subtype = 'FILE_PATH')
+    filepath: StringProperty(subtype = 'FILE_PATH', update=update_filepath)
 
     files: CollectionProperty(type=OperatorFileListElement)
     directory: StringProperty()
@@ -396,6 +496,41 @@ class CP77Import(Operator, ImportHelper):
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
         props = context.scene.cp77_panel_props
         layout = self.layout
+        
+        box = layout.box()
+        box.label(text="Appearance Selection", icon='OUTLINER_OB_GROUP_INSTANCE')
+
+        row = box.row(align=True)
+        row.prop(self, "show_appearance_selection", text="Appearance Selection", toggle=True)
+
+        if self.show_appearance_selection:
+            # === NEW DROPDOWN LIST ===
+            items = get_gltf_appearance_enum_items(self, context)
+
+            row = box.row(align=True)
+            # row.operator("wm.redraw_timer", text="Refresh Appearances", icon='FILE_REFRESH').type = 'DRAW'
+
+            row = box.row(align=True)
+            if items and items[0][0] == "default" and len(items) == 1:
+                row.label(text="No appearances found", icon='INFO')
+            else:
+                row.label(text=f"Select appearance (Total: {len([i for i in items if i and i[0] not in ('default', 'all')])})")
+
+            row = box.row(align=True)
+            row.prop(self, "selected_appearance", text="")
+
+        else:
+            # === OLD APPEARANCE TEXT FIELD ===
+            box = layout.box()
+            box.label(text="Appearances to Import:")
+
+            row = box.row(align=True)
+            row.prop(self, "all_appearances_toggle", text="All Appearances")
+
+            if not self.all_appearances_toggle:
+                row = box.row(align=True)
+                row.prop(self, "appearances", text="")
+        
         if not props.with_materials:
             box = layout.box()
             col = box.column()
@@ -409,12 +544,8 @@ class CP77Import(Operator, ImportHelper):
             col = box.column()
             col.prop(props, 'with_materials')
             col.prop(self, 'generate_overrides')
-            col.prop(self, 'exclude_unused_mats')
-            box = layout.box()
-            box.label(text='Appearances to Import:')
-            box.prop(self, 'all_appearances_toggle')
-            if not self.all_appearances_toggle:
-                box.prop(self, 'appearances', text='')
+            if not self.show_appearance_selection:
+                col.prop(self, 'exclude_unused_mats')
             box = layout.box()
             col = box.column()
             col.prop(props, 'use_vulkan')
@@ -438,7 +569,19 @@ class CP77Import(Operator, ImportHelper):
         props = context.scene.cp77_panel_props
         SetVulkanBackend(props.use_vulkan)
         SetCyclesRenderer(props.use_cycles, props.update_gi)
-        appearances=self.appearances.split(",")
+        
+        if self.show_appearance_selection and self.selected_appearance:
+            if self.selected_appearance in ("NO_APPEARANCES", "SELECT_FILE"):
+                appearances = ["default"]
+            elif self.selected_appearance == "all":
+                appearances = ["ALL"]
+            else:
+                clean_name = clean_appearance_name(self.selected_appearance)
+                appearances = [clean_name]
+        else:
+            appearances = [a.strip() for a in self.appearances.split(",") if a.strip()]
+        
+        print('apps - ', appearances)
         # turns out that multimesh import of an entire car uses a gazillion duplicates as well...
         impinitiated_cache = False
         if not JSONTool._use_cache:
