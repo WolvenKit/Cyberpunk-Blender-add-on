@@ -116,7 +116,7 @@ def get_appearance_enum_items(self, context):
 
     result = [
         ("default", "default", "Use default appearance"),
-        ("ALL", "all", "Import ALL appearances"),
+        ("all", "all", "Import ALL appearances"),
         ("_SEPARATOR", "----", ""),
     ]
 
@@ -198,7 +198,8 @@ class CP77EntityImport(Operator,ImportHelper):
     )
     
     selected_appearance: bpy.props.EnumProperty(
-        name="Appearance",
+        #name="Appearance",
+        name="",
         items=get_appearance_enum_items,
         update=update_selected_appearance,
     )
@@ -220,7 +221,6 @@ class CP77EntityImport(Operator,ImportHelper):
         row = box.row(align=True)
 
         if self.show_appearance_selection:
-            #### New Appearance Selection ####
             items = get_appearance_enum_items(self, context)
 
             row = box.row(align=True)
@@ -230,13 +230,13 @@ class CP77EntityImport(Operator,ImportHelper):
             if items and items[0][0] == "default" and len(items) == 1:
                 row.label(text="No appearances found")
             else:
-                row.label(text=f"Select appearance (Total: {len([i for i in items if i[0] not in ('default', 'ALL','_SEPARATOR')])})")
+                row.label(text=f"Select appearance (Total: {len([i for i in items if i[0] not in ('default', 'all','_SEPARATOR')])})")
 
             row = box.row(align=True)
             row.prop(self, "selected_appearance", text="")
         
         else:
-            #### Old text field ####
+            # Старый путь (текстовое поле)
             row = box.row(align=True)
             split = row.split(factor=0.45, align=True)
             split.label(text="Appearance:")
@@ -284,8 +284,8 @@ class CP77EntityImport(Operator,ImportHelper):
         if self.show_appearance_selection and self.selected_appearance:
             if self.selected_appearance in ("NO_APPEARANCES", "SELECT_FILE", "_SEPARATOR"):
                 apps = ["default"]
-            elif self.selected_appearance == "ALL":
-                apps = []
+            elif self.selected_appearance == "all":
+                apps = ["ALL"]          # ← вот это исправление
             else:
                 apps = [self.selected_appearance]
         else:
