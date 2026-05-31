@@ -4,7 +4,7 @@ from . import physx_utils, viz
 def update_gravity_cb(self, context):
     if self.is_initialized:
         try:
-            from . import pxbridge as _bridge
+            from . import pxveh34 as _bridge
             g = self.gravity
             _bridge.set_gravity(g[0], g[1], g[2])
         except ImportError:
@@ -142,6 +142,7 @@ class PhysXSceneProperties(bpy.types.PropertyGroup):
         ],
         default='WORLD'
     )
+    scene_built: bpy.props.BoolProperty(default=False, name="Scene Built")
     sim_running: bpy.props.BoolProperty(name="Simulating", default=False)
     viz_enabled: bpy.props.BoolProperty(name="Debug Draw", default=True)
 
@@ -160,6 +161,8 @@ class PhysXSceneProperties(bpy.types.PropertyGroup):
     )
     force_value: bpy.props.FloatVectorProperty(name="Vector", default=(0, 0, 1000))
     use_force_pos: bpy.props.BoolProperty(name="Use Cursor Pos", default=False)
+
+    sim_steps: bpy.props.IntProperty(name="Steps", default=1, min=1)
 
     use_grab_mode: bpy.props.BoolProperty(
         name="Enable Manipulator",

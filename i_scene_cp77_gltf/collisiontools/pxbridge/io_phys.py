@@ -23,7 +23,7 @@ def get_physx_shape_type_mapping(physx_type):
 def extract_convex_verts_from_cooked(cooked_data):
     """ Extract vertex positions from PhysX cooked data """
     try:
-        from . import pxbridge as _bridge
+        from . import pxveh34 as _bridge
         raw_data = base64.b64decode(cooked_data.encode('ascii'))
         geom_data = _bridge.get_cooked_geometry('CONVEX', raw_data)
         vertices = []
@@ -97,7 +97,7 @@ def import_collider_as_actor(obj, shape_type, shape_data, physmat, local_pos, lo
             shape_points.extend([float(v.get('X', 0)), float(v.get('Y', 0)), float(v.get('Z', 0))])
             
         try:
-            from . import pxbridge as _bridge
+            from . import pxveh34 as _bridge
             if _bridge and shape_points:
                 cooked = _bridge.cook_mesh("CONVEX", shape_points, [], 256)
                 if cooked:
@@ -330,7 +330,7 @@ def export_actor_item_to_phys(actor_item, filepath):
 
 def process_phys_import(filepath, target_obj, context):
     try:
-        from . import pxbridge as _bridge
+        from . import pxveh34 as _bridge
     except ImportError:
         _bridge = None
         print("PhysX Bridge missing: Imported colliders will not be cooked.")
@@ -619,7 +619,7 @@ class PHYSX_OT_export_scene(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            from . import pxbridge as _bridge
+            from . import pxveh34 as _bridge
             if _bridge.export_scene(self.filepath):
                 self.report({'INFO'}, f"Scene Exported to {self.filepath}")
             else:
@@ -640,7 +640,7 @@ class PHYSX_OT_import_scene(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            from . import pxbridge as _bridge
+            from . import pxveh34 as _bridge
             if _bridge.import_scene(self.filepath):
                 self.report({'INFO'}, "Scene Imported successfully")
             else:
