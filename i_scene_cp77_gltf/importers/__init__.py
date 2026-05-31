@@ -17,7 +17,8 @@ from ..icons.cp77_icons import *
 from .read_rig import create_armature_from_data
 from .npz_import import (CP77CharacterShapeProps, CP77_OT_NpzImportMesh, CP77_OT_NpzImportShapeKeys, CP77_OT_LoadBaseCharacter)
 
-_appearance_enum_cache = [("NONE", "No file selected", "")]
+_appearance_enum_cache = [("default", "default", "Use default appearance")]
+_last_selected_appearance = {}
 
 class CP77ImportRig(Operator):
     bl_idname = "import_scene.rig"
@@ -102,35 +103,54 @@ def get_appearance_items(self, context):
                 names.append(name)
 
     return names
-    
-def get_appearance_enum_items(self, context):
-    global _appearance_enum_cache
 
+
+def get_appearance_enum_items(self, context):
     if not self.filepath:
-        _appearance_enum_cache = [("NONE", "No file selected", "")]
-        return _appearance_enum_cache
+        return [("SELECT_FILE", "Select file", "Please select an .ent.json file")]
 
     names = get_appearance_items(self, context)
 
     if not names:
-        _appearance_enum_cache = [("NONE", "No appearances found", "")]
-        return _appearance_enum_cache
+        return [("default", "default", "Use default appearance")]
 
-    _appearance_enum_cache = [(name, name, f"Import appearance: {name}") for name in names]
-    return _appearance_enum_cache
+    result = [
+        ("default", "default", "Use default appearance"),
+        ("ALL", "all", "Import ALL appearances"),
+        ("_SEPARATOR", "----", ""),
+    ]
+
+    sorted_names = sorted(names, key=str.lower)
+    for name in sorted_names:
+        if name.lower() != "default":
+            result.append((name, name, f"Import appearance: {name}"))
+
+    return result
+
 
 def update_filepath(self, context):
-
     try:
         items = get_appearance_enum_items(self, context)
         self.property_unset("selected_appearance")
-        self["selected_appearance"] = items[0][0] if items else "NONE"
+
+        if self.filepath in _last_selected_appearance:
+            last = _last_selected_appearance[self.filepath]
+            if any(item[0] == last for item in items):
+                self["selected_appearance"] = last
+                return
+
+        self["selected_appearance"] = "default"
+
     except Exception as e:
         print(f"[CP77] update_filepath error: {e}")
-        self["selected_appearance"] = "NONE"
+        self["selected_appearance"] = "default"
 
     for area in context.screen.areas:
         area.tag_redraw()
+        
+def update_selected_appearance(self, context):
+    if self.selected_appearance == "_SEPARATOR":
+        self.selected_appearance = "default"
 
 # ==================================================================
 
@@ -173,13 +193,14 @@ class CP77EntityImport(Operator,ImportHelper):
     
     show_appearance_selection: BoolProperty(
         name="Appearance Selection",
-        description="Enable selection of entity appearance or use text field to enter appearance name",
+        description="Enable manual selection of entity appearance",
         default=True
     )
     
     selected_appearance: bpy.props.EnumProperty(
         name="Appearance",
         items=get_appearance_enum_items,
+        update=update_selected_appearance,
     )
     
     def invoke(self, context, event):
@@ -197,19 +218,28 @@ class CP77EntityImport(Operator,ImportHelper):
         row = box.row(align=True)
         row.prop(self, "show_appearance_selection", text="Appearance Selection", toggle=True)
         row = box.row(align=True)
-        split = row.split(factor=0.45,align=True)
-        
-        if self.show_appearance_selection is False:         
-            split.label(text="Appearance:")
-            split.prop(self, "appearances", text="")
-        else:
-            if _appearance_enum_cache != [("NONE", "No file selected", "")]: 
-                row.operator("wm.redraw_timer", text="Refresh Appearances", icon='FILE_REFRESH').type = 'DRAW'
-                row = box.row(align=True)          
-                # row.label(text=f"Available Appearances (Total: {len(get_appearance_enum_items(self, context))})")
-                row.label(text=f"Available Appearances:")
+
+        if self.show_appearance_selection:
+            items = get_appearance_enum_items(self, context)
+
+            row = box.row(align=True)
+            row.operator("wm.redraw_timer", text="Refresh Appearances", icon='FILE_REFRESH').type = 'DRAW'
+
+            row = box.row(align=True)
+            if items and items[0][0] == "default" and len(items) == 1:
+                row.label(text="No appearances found")
+            else:
+                row.label(text=f"Select appearance (Total: {len([i for i in items if i[0] not in ('default', 'ALL','SEPARATOR')])})")
+
             row = box.row(align=True)
             row.prop(self, "selected_appearance", text="")
+        
+        else:
+            # Старый путь (текстовое поле)
+            row = box.row(align=True)
+            split = row.split(factor=0.45, align=True)
+            split.label(text="Appearance:")
+            split.prop(self, "appearances", text="")
 
 
         box = layout.box()
@@ -247,8 +277,16 @@ class CP77EntityImport(Operator,ImportHelper):
         props = context.scene.cp77_panel_props
         SetCyclesRenderer(props.use_cycles, props.update_gi)
 
+        if self.filepath and self.selected_appearance:
+            _last_selected_appearance[self.filepath] = self.selected_appearance
+        
         if self.show_appearance_selection and self.selected_appearance:
-            apps = [self.selected_appearance]
+            if self.selected_appearance in ("NO_APPEARANCES", "SELECT_FILE", "_SEPARATOR"):
+                apps = ["default"]
+            elif self.selected_appearance == "ALL":
+                apps = []
+            else:
+                apps = [self.selected_appearance]
         else:
             apps = [a.strip() for a in self.appearances.split(",") if a.strip()]
         
