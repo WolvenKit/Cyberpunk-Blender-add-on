@@ -197,7 +197,6 @@ def get_raw_mesh_data(obj):
     obj_eval.to_mesh_clear()
     return verts, indices
 
-
 def add_ground_plane(offset_below: float = 0.05, size_xy: float = 100000.0, thickness: float = 0.01, name: str = "GroundPlane") -> bpy.types.Object:
     """
     Instantiates a procedural ground plane object with defined volumetric extents.
