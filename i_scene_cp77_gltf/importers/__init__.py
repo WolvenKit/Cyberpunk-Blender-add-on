@@ -220,6 +220,7 @@ class CP77EntityImport(Operator,ImportHelper):
         row = box.row(align=True)
 
         if self.show_appearance_selection:
+            #### New Appearance Selection ####
             items = get_appearance_enum_items(self, context)
 
             row = box.row(align=True)
@@ -235,7 +236,7 @@ class CP77EntityImport(Operator,ImportHelper):
             row.prop(self, "selected_appearance", text="")
         
         else:
-            # Старый путь (текстовое поле)
+            #### Old text field ####
             row = box.row(align=True)
             split = row.split(factor=0.45, align=True)
             split.label(text="Appearance:")
