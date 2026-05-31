@@ -198,8 +198,7 @@ class CP77EntityImport(Operator,ImportHelper):
     )
     
     selected_appearance: bpy.props.EnumProperty(
-        #name="Appearance",
-        name="",
+        name="Appearance",
         items=get_appearance_enum_items,
         update=update_selected_appearance,
     )
@@ -221,6 +220,7 @@ class CP77EntityImport(Operator,ImportHelper):
         row = box.row(align=True)
 
         if self.show_appearance_selection:
+            #### Appearance selection ####
             items = get_appearance_enum_items(self, context)
 
             row = box.row(align=True)
@@ -236,7 +236,7 @@ class CP77EntityImport(Operator,ImportHelper):
             row.prop(self, "selected_appearance", text="")
         
         else:
-            # Старый путь (текстовое поле)
+            #### Old text field ####
             row = box.row(align=True)
             split = row.split(factor=0.45, align=True)
             split.label(text="Appearance:")
@@ -285,7 +285,7 @@ class CP77EntityImport(Operator,ImportHelper):
             if self.selected_appearance in ("NO_APPEARANCES", "SELECT_FILE", "_SEPARATOR"):
                 apps = ["default"]
             elif self.selected_appearance == "all":
-                apps = ["ALL"]          # ← вот это исправление
+                apps = ["ALL"]
             else:
                 apps = [self.selected_appearance]
         else:
