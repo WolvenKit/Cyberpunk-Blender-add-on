@@ -411,8 +411,6 @@ def update_filepath(self, context):
     try:
         items = get_gltf_appearance_enum_items(self, context)
         self.property_unset("selected_appearance")
-
-        # Всегда выбираем default при смене файла
         self["selected_appearance"] = "default"
 
     except Exception as e:
