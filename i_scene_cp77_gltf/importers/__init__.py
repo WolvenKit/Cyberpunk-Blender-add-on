@@ -109,7 +109,7 @@ def get_appearance_items(self, context):
 def get_appearance_enum_items(self, context):
     global _appearance_enum_cache
 
-    if not self.filepath:
+    if not self.filepath or not os.path.isfile(self.filepath):
         _appearance_enum_cache = [("SELECT_FILE", "Select file", "Please select an .ent.json file")]
         return _appearance_enum_cache
 
@@ -119,15 +119,19 @@ def get_appearance_enum_items(self, context):
         _appearance_enum_cache = [("default", "default", "Use default appearance")]
         return _appearance_enum_cache
 
-    result = [
-        ("default", "default", "Use default appearance"),
-        ("all", "all", "Import ALL appearances"),
-        None,
-    ]
+    if len(names) == 1:
+        result = [(names[0], names[0], f"Import appearance: {names[0]}")]
+    else:
+        result = [
+            ("default", "default", "Use default appearance"),
+            ("all", "all", "Import ALL appearances"),
+            None,
+        ]
 
-    for name in sorted(names, key=str.lower):
-        if name.lower() != "default":
-            result.append((name, name, f"Import appearance: {name}"))
+        sorted_names = sorted(names, key=str.lower)
+        for name in sorted(names, key=str.lower):
+            if name.lower() != "default":
+                result.append((name, name, f"Import appearance: {name}"))
 
     _appearance_enum_cache = result
     return _appearance_enum_cache
@@ -220,23 +224,28 @@ class CP77EntityImport(Operator,ImportHelper):
         row = box.row(align=True)
 
         if self.show_appearance_selection:
-            #### Appearance selection ####
+            # === NEW DROPDOWN LIST ===
             items = get_appearance_enum_items(self, context)
+            
+            if items and items[0][0] == "SELECT_FILE":
+               row = box.row(align=True)
+               row.label(text="Please select an .ent.json file") 
 
-            row = box.row(align=True)
-            # row.operator("wm.redraw_timer", text="Refresh Appearances", icon='FILE_REFRESH').type = 'DRAW'
-
-            row = box.row(align=True)
-            if items and items[0][0] == "default" and len(items) == 1:
-                row.label(text="No appearances found")
             else:
-                row.label(text=f"Select appearance (Total: {len([i for i in items if i and i[0] not in ('default', 'all')])})")
+                #row = box.row(align=True)
+                # row.operator("wm.redraw_timer", text="Refresh Appearances", icon='FILE_REFRESH').type = 'DRAW'
 
-            row = box.row(align=True)
-            row.prop(self, "selected_appearance", text="")
+                row = box.row(align=True)
+                if items and items[0][0] == "default" and len(items) == 1:
+                    row.label(text="No appearances found")
+                else:
+                    row.label(text=f"Select appearance (Total: {len([i for i in items if i and i[0] not in ('default', 'all')])})")
+
+                row = box.row(align=True)
+                row.prop(self, "selected_appearance", text="")
         
         else:
-            #### Old text field ####
+            # === OLD APPEARANCE TEXT FIELD ===
             row = box.row(align=True)
             split = row.split(factor=0.45, align=True)
             split.label(text="Appearance:")
@@ -378,7 +387,7 @@ def clean_appearance_name(name):
 def get_gltf_appearance_enum_items(self, context):
     global _appearance_enum_cache
 
-    if not self.filepath:
+    if not self.filepath or not os.path.isfile(self.filepath):
         _appearance_enum_cache = [("SELECT_FILE", "Select file", "Please select a .glb/.gltf file")]
         return _appearance_enum_cache
 
@@ -411,6 +420,7 @@ def update_filepath(self, context):
     try:
         items = get_gltf_appearance_enum_items(self, context)
         self.property_unset("selected_appearance")
+
         self["selected_appearance"] = "default"
 
     except Exception as e:
@@ -506,18 +516,20 @@ class CP77Import(Operator, ImportHelper):
         if self.show_appearance_selection:
             # === NEW DROPDOWN LIST ===
             items = get_gltf_appearance_enum_items(self, context)
-
-            row = box.row(align=True)
-            # row.operator("wm.redraw_timer", text="Refresh Appearances", icon='FILE_REFRESH').type = 'DRAW'
-
-            row = box.row(align=True)
-            if items and items[0][0] == "default" and len(items) == 1:
-                row.label(text="No appearances found", icon='INFO')
+            
+            if items and items[0][0] == "SELECT_FILE":
+                row = box.row(align=True)
+                row.label(text="Please select a .glb/.gltf file")
+            
             else:
-                row.label(text=f"Select appearance (Total: {len([i for i in items if i and i[0] not in ('default', 'all')])})")
+                row = box.row(align=True)
+                if items and items[0][0] == "default" and len(items) == 1:
+                    row.label(text="No appearances found")
+                else:
+                    row.label(text=f"Select appearance (Total: {len([i for i in items if i and i[0] not in ('default', 'all')])})")
 
-            row = box.row(align=True)
-            row.prop(self, "selected_appearance", text="")
+                row = box.row(align=True)
+                row.prop(self, "selected_appearance", text="")
 
         else:
             # === OLD APPEARANCE TEXT FIELD ===
