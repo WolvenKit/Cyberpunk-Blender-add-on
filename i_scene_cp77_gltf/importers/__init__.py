@@ -214,7 +214,7 @@ class CP77EntityImport(Operator,ImportHelper):
         props = context.scene.cp77_panel_props
         layout = self.layout
         box = layout.box()
-        box.label(text="Entity Appearance")
+        box.label(text="Entity Appearance", icon='OUTLINER_OB_GROUP_INSTANCE')
         row = box.row(align=True)
         row.prop(self, "show_appearance_selection", text="Appearance Selection", toggle=True)
         row = box.row(align=True)
@@ -411,6 +411,8 @@ def update_filepath(self, context):
     try:
         items = get_gltf_appearance_enum_items(self, context)
         self.property_unset("selected_appearance")
+
+        # Всегда выбираем default при смене файла
         self["selected_appearance"] = "default"
 
     except Exception as e:
@@ -498,7 +500,7 @@ class CP77Import(Operator, ImportHelper):
         layout = self.layout
         
         box = layout.box()
-        box.label(text="Appearance Selection", icon='OUTLINER_OB_GROUP_INSTANCE')
+        box.label(text="Mesh Appearance", icon='OUTLINER_OB_GROUP_INSTANCE')
 
         row = box.row(align=True)
         row.prop(self, "show_appearance_selection", text="Appearance Selection", toggle=True)
@@ -576,6 +578,7 @@ class CP77Import(Operator, ImportHelper):
             elif self.selected_appearance == "all":
                 appearances = ["ALL"]
             else:
+                # Передаём очищенное имя (без цифр), как в старом способе
                 clean_name = clean_appearance_name(self.selected_appearance)
                 appearances = [clean_name]
         else:
