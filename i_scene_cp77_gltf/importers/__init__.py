@@ -232,9 +232,6 @@ class CP77EntityImport(Operator,ImportHelper):
                row.label(text="Please select an .ent.json file") 
 
             else:
-                #row = box.row(align=True)
-                # row.operator("wm.redraw_timer", text="Refresh Appearances", icon='FILE_REFRESH').type = 'DRAW'
-
                 row = box.row(align=True)
                 if items and items[0][0] == "default" and len(items) == 1:
                     row.label(text="No appearances found")
@@ -375,8 +372,8 @@ def get_gltf_appearance_items(self, context):
         except Exception as e:
             print(f"[CP77] Error reading material.json: {e}")
 
-    if not names:
-        names = ["default"]
+    # if not names:
+    #    names = ["default"]
 
     return names
     
@@ -396,17 +393,14 @@ def get_gltf_appearance_enum_items(self, context):
 
     names = get_gltf_appearance_items(self, context)
 
-    if not names:
-        result = [("all", "all", "Import ALL appearances")]
+    if len(names) == 1:
+        clean_name = clean_appearance_name(names[0])
+        result = [(names[0], clean_name, f"Import appearance: {clean_name}")]
     else:
-        if len(names) == 1:
-            clean_name = clean_appearance_name(names[0])
-            result = [(names[0], clean_name, f"Import appearance: {names[0]}")]
-        else:
-            result = [
-                ("all", "all", "Import ALL appearances"),
-                None,
-            ]
+        result = [
+            ("all", "all", "Import ALL appearances"),
+            None,
+        ]
 
         sorted_names = sorted(names, key=str.lower)
         for name in sorted_names:
@@ -416,16 +410,19 @@ def get_gltf_appearance_enum_items(self, context):
     _appearance_enum_cache = result
     return _appearance_enum_cache
     
-def update_filepath(self, context):
+def update_glb_filepath(self, context):
     try:
         items = get_gltf_appearance_enum_items(self, context)
         self.property_unset("selected_appearance")
 
-        self["selected_appearance"] = "default"
+        if len(items) == 1:
+            self["selected_appearance"] = items[0][0]
+        else:
+            self["selected_appearance"] = "all"
 
     except Exception as e:
         print(f"[CP77] update_filepath error: {e}")
-        self["selected_appearance"] = "default"
+        self["selected_appearance"] = "all"
 
     for area in context.screen.areas:
         area.tag_redraw()
@@ -488,14 +485,14 @@ class CP77Import(Operator, ImportHelper):
     import_garmentsupport: BoolProperty(name="Import Garment Support (Experimental)",default=True,description="Imports Garment Support mesh data as color attributes")
     generate_overrides: BoolProperty(name="Generate Overrides for Multilayer materials (may be slow)",default=False,description="Imports overrides and palettes for multilayered materials")
 
-    filepath: StringProperty(subtype = 'FILE_PATH', update=update_filepath)
+    filepath: StringProperty(subtype = 'FILE_PATH', update=update_glb_filepath)
 
     files: CollectionProperty(type=OperatorFileListElement)
     directory: StringProperty()
 
     all_appearances_toggle: bpy.props.BoolProperty(name="All Appearances",default=False,update=update_appearances_logic)
     appearances_buffer: bpy.props.StringProperty()
-    appearances: StringProperty(name= "Appearances",description="Appearances to extract with models",default="Default")
+    appearances: StringProperty(name= "",description="Appearances to extract with models",default="default")
 
     scripting: BoolProperty(name="Scripting",default=False ,description="Tell it its being called by a script so it can ignore the gui file lists",options={'HIDDEN'})
     import_tracks: BoolProperty(name="Import Tracks",default=True,description="Import Animation Float Tracks to F-Curves")
@@ -512,6 +509,7 @@ class CP77Import(Operator, ImportHelper):
 
         row = box.row(align=True)
         row.prop(self, "show_appearance_selection", text="Appearance Selection", toggle=True)
+        row = box.row(align=True)
 
         if self.show_appearance_selection:
             # === NEW DROPDOWN LIST ===
