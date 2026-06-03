@@ -289,7 +289,9 @@ class CP77EntityImport(Operator,ImportHelper):
         
         if len(self.appearance_list) == 0:
             row = box.row(align=True)
-            row.label(text="This entity has no appearances. Will import base components only.", icon='INFO')
+            row.label(text="No appearances found", icon='INFO')
+            row = box.row
+            row.label(text="Will import base components only")
             return
         
         row = box.row()
@@ -313,7 +315,7 @@ class CP77EntityImport(Operator,ImportHelper):
                         box = layout.box()
                         box.alert = True
                         row = box.row()
-                        row.label(text="Skipping duplicate import:")
+                        row.label(text="Skipping duplicate import:", icon="INFO")
                         row = box.row()
                         row.label(text=f"'{resolved}' = 'default'")
                         break
@@ -321,6 +323,8 @@ class CP77EntityImport(Operator,ImportHelper):
         box = layout.box()
         col = box.column()
         col.prop(props, "with_materials")
+        if cp77_addon_prefs.experimental_features:
+            col.prop(props,"remap_depot")
         #col.prop(self, 'generate_overrides')
         box = layout.box()
         col = box.column()
@@ -328,9 +332,6 @@ class CP77EntityImport(Operator,ImportHelper):
         col.prop(props, 'use_cycles')
         if props.use_cycles:
             col.prop(props, 'update_gi')
-
-        if cp77_addon_prefs.experimental_features:
-            col.prop(props,"remap_depot")
 
         row = layout.row(align=True)
         if not self.include_collisions:
@@ -552,6 +553,8 @@ class CP77Import(Operator, ImportHelper):
             if len(self.appearance_list) == 0:
                 row = box.row(align=True)
                 row.label(text="No appearances found", icon="INFO")
+                row = box.row(align=True)
+                row.label(text="Importing .gltf/.glb without materials")
                 return
 
             row = box.row()
@@ -570,6 +573,10 @@ class CP77Import(Operator, ImportHelper):
                 box = layout.box()
                 col = box.column()
                 col.prop(props, 'with_materials')
+                if cp77_addon_prefs.experimental_features:
+                    col.prop(props,"remap_depot")
+                box = layout.box()
+                col = box.column()
                 col.prop(self, 'hide_armatures')
                 col.prop(self, 'import_garmentsupport')
                 if cp77_addon_prefs.experimental_features:
@@ -578,6 +585,8 @@ class CP77Import(Operator, ImportHelper):
                 box = layout.box()
                 col = box.column()
                 col.prop(props, 'with_materials')
+                if cp77_addon_prefs.experimental_features:
+                    col.prop(props,"remap_depot")
                 #col.prop(self, 'generate_overrides')
                 #if not self.show_appearance_selection:
                 #   col.prop(self, 'exclude_unused_mats')
@@ -587,7 +596,6 @@ class CP77Import(Operator, ImportHelper):
                 col.prop(props, 'use_cycles')
                 if props.use_cycles:
                     col.prop(props, 'update_gi')
-                            
                 box = layout.box()
                 box.label(text='Texture Format:')
                 box.prop(self, 'image_format', text='')
@@ -595,8 +603,6 @@ class CP77Import(Operator, ImportHelper):
                 col = box.column()
                 col.prop(self, 'hide_armatures')
                 col.prop(self, 'import_garmentsupport')
-                if cp77_addon_prefs.experimental_features:
-                    col.prop(props,"remap_depot")
             box = layout.box()
             col = box.column()
             col.prop(self, 'import_tracks')
