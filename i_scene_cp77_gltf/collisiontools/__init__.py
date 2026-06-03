@@ -208,6 +208,10 @@ class CP77_PT_PhysicsTools(bpy.types.Panel):
                 r.operator("physx.stop_sim", icon='PAUSE', text="Stop")
             else:
                 r.operator("physx.sim_step", icon='PLAY', text="Start")
+            l.prop(px_s, "sim_steps", text="Step Count")
+            r = l.row()
+            r.operator("physx.build_scene", text="Rebuild Scene", icon='FILE_REFRESH')
+            r.operator("physx.run_steps", icon='NEXT_KEYFRAME', text="Step N")
 
         elif px_s.ui_tab == 'DANGLES':
             row = l.row()

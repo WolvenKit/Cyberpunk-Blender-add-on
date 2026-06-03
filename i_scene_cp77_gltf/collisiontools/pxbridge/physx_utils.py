@@ -3,6 +3,7 @@ import bmesh
 import math
 import os
 from mathutils import Matrix, Vector, Quaternion
+from ...main.common import exclusion_cache
 
 # fallback incase the preset lib doesn't load
 try:
@@ -196,58 +197,47 @@ def get_raw_mesh_data(obj):
     obj_eval.to_mesh_clear()
     return verts, indices
 
-
-def add_ground_plane(offset_below=0.1, xy_expand=50, height=0.05, name="GroundPlane"):
+def add_ground_plane(offset_below: float = 0.05, size_xy: float = 100000.0, thickness: float = 0.01, name: str = "GroundPlane") -> bpy.types.Object:
+    """
+    Instantiates a procedural ground plane object with defined volumetric extents.
+    Calculates the scene's global minimum Z bounding coordinate to position the 
+    instantiated plane at a precise vertical offset beneath all existing geometry.
+    """
+    exclusion_cache.clear_cache()
     if (existing := bpy.data.objects.get(name)):
         bpy.data.objects.remove(existing, do_unlink=True)
         if existing.data:
             bpy.data.meshes.remove(existing.data, do_unlink=True)
-
-    objs = [o for o in bpy.context.scene.objects if o.type == 'MESH']
+    excluded_objects = exclusion_cache.get_excluded_objects()
+    objs = [o for o in bpy.context.scene.objects if o.type == 'MESH' and o not in excluded_objects]
 
     if not objs:
-        min_x = -xy_expand;
-        max_x = xy_expand
-        min_y = -xy_expand;
-        max_y = xy_expand
         min_z = 0.0
     else:
-        min_x = min_y = min_z = float('inf')
-        max_x = max_y = max_z = float('-inf')
-
+        min_z = float('inf')
         for o in objs:
             for v in o.bound_box:
                 w = o.matrix_world @ Vector(v)
-                min_x = min(min_x, w.x);
-                max_x = max(max_x, w.x)
-                min_y = min(min_y, w.y);
-                max_y = max(max_y, w.y)
-                min_z = min(min_z, w.z);
-                max_z = max(max_z, w.z)
+                min_z = min(min_z, w.z)
 
-    world_min_x = min_x - xy_expand
-    world_max_x = max_x + xy_expand
-    world_min_y = min_y - xy_expand
-    world_max_y = max_y + xy_expand
+    center_x = 0.0
+    center_y = 0.0
+    center_z = (min_z - offset_below) - (thickness / 2.0)
 
-    center_x = (world_min_x + world_max_x) / 2.0
-    center_y = (world_min_y + world_max_y) / 2.0
-    center_z = (min_z - offset_below) - (height / 2.0)
-
-    size_x = world_max_x - world_min_x
-    size_y = world_max_y - world_min_y
-    size_z = height
-
-    dx = size_x / 2.0
-    dy = size_y / 2.0
-    dz = size_z / 2.0
+    dx = size_xy / 2.0
+    dy = size_xy / 2.0
+    dz = thickness / 2.0
 
     verts = [
         (-dx, -dy, -dz), (dx, -dy, -dz), (dx, dy, -dz), (-dx, dy, -dz),
-        (-dx, -dy, dz), (dx, -dy, dz), (dx, dy, dz), (-dx, dy, dz),
-        ]
+        (-dx, -dy, dz),  (dx, -dy, dz),  (dx, dy, dz),  (-dx, dy, dz),
+    ]
 
-    faces = [(0, 1, 2, 3), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
+    faces = [
+        (0, 1, 2, 3), (4, 5, 6, 7), 
+        (0, 1, 5, 4), (1, 2, 6, 5), 
+        (2, 3, 7, 6), (3, 0, 4, 7)
+    ]
 
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(verts, [], faces)

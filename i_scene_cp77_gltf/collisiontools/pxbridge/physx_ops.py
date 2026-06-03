@@ -16,7 +16,6 @@ class PHYSX_OT_init_scene(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            from . import pxbridge as _bridge
             from . import pxveh34 as _bridge
             if _bridge.init():
                 context.scene.physx.is_initialized = True
@@ -24,7 +23,7 @@ class PHYSX_OT_init_scene(bpy.types.Operator):
                 _bridge.set_gravity(g[0], g[1], g[2])
                 self.report({'INFO'}, "PhysX Initialized")
                 if self.add_ground:
-                    ground_obj = physx_utils.add_ground_plane(offset_below=0.0, xy_expand=50, height=1.0)
+                    ground_obj = physx_utils.add_ground_plane()
                     already_added = False
                     for item in context.scene.physx.actors:
                         if item.obj_ref == ground_obj:
@@ -72,18 +71,10 @@ class PHYSX_OT_validate_scene(bpy.types.Operator):
         return {'FINISHED'}
 
 
-def build_scene(context):
-    bpy.ops.physx.validate_scene()
-    from . import pxbridge as _bridge
-    _bridge.reset()
-    g = context.scene.physx.gravity
-    _bridge.set_gravity(g[0], g[1], g[2])
-    count = 0
+class PHYSX_OT_build_scene(bpy.types.Operator):
+    bl_idname = "physx.build_scene"
+    bl_label = "Build PhysX Scene"
 
-    for item in context.scene.physx.actors:
-        obj = item.obj_ref
-        if not obj or obj.physx.actor_type == 'NONE': continue
-        px = obj.physx
     def execute(self, context):
         bpy.ops.physx.validate_scene()
         try:
@@ -93,34 +84,39 @@ def build_scene(context):
             _bridge.set_gravity(g[0], g[1], g[2])
             count = 0
 
-            shapes_list = []
-            for shape in px.shapes:
-                raw = ""
-                if shape.shape_type in ('CONVEX', 'TRIANGLE', 'HEIGHTFIELD'):
-                    if not shape.cooked_data: continue
-                    raw = base64.b64decode(shape.cooked_data.encode('ascii'))
+            for item in context.scene.physx.actors:
+                obj = item.obj_ref
+                if not obj or obj.physx.actor_type == 'NONE': continue
+                px = obj.physx
 
-                mat_data = physx_utils.get_mat_data(shape.physics_material)
-                q = shape.local_rot
-                l = shape.local_pos
-                px_quat = [q[1], q[2], q[3], q[0]]
+                shapes_list = []
+                for shape in px.shapes:
+                    raw = ""
+                    if shape.shape_type in ('CONVEX', 'TRIANGLE', 'HEIGHTFIELD'):
+                        if not shape.cooked_data: continue
+                        raw = base64.b64decode(shape.cooked_data.encode('ascii'))
 
-                w0 = physx_utils.bits_to_int(shape.filter_group)
-                w1 = physx_utils.bits_to_int(shape.filter_mask)
-                w2 = physx_utils.bits_to_int(shape.filter_query)
-                w3 = 0
+                    mat_data = physx_utils.get_mat_data(shape.physics_material)
+                    q = shape.local_rot
+                    l = shape.local_pos
+                    px_quat = [q[1], q[2], q[3], q[0]]
 
-                shapes_list.append(
-                        {
-                            "type": shape.shape_type,
-                            "data": raw,
-                            "dims": [shape.dim_x, shape.dim_y, shape.dim_z],
-                            "pos": [l[0], l[1], l[2]],
-                            "rot": px_quat,
-                            "mat": mat_data,
-                            "filter": [w0, w1, w2, w3]
-                            }
-                        )
+                    w0 = physx_utils.bits_to_int(shape.filter_group)
+                    w1 = physx_utils.bits_to_int(shape.filter_mask)
+                    w2 = physx_utils.bits_to_int(shape.filter_query)
+                    w3 = 0
+
+                    shapes_list.append(
+                            {
+                                "type": shape.shape_type,
+                                "data": raw,
+                                "dims": [shape.dim_x, shape.dim_y, shape.dim_z],
+                                "pos": [l[0], l[1], l[2]],
+                                "rot": px_quat,
+                                "mat": mat_data,
+                                "filter": [w0, w1, w2, w3]
+                                }
+                            )
 
                 if not shapes_list: continue
                 loc, quat = physx_utils.get_actor_world_transform(item)
@@ -133,11 +129,12 @@ def build_scene(context):
                 count += 1
 
             context.scene.physx.active_actor_count = _bridge.get_actor_count()
-            return count
-        
+            context.scene.physx.scene_built = True
+            self.report({'INFO'}, f"Built {count} actors")
+            return {'FINISHED'}
         except Exception as e:
             self.report({'ERROR'}, str(e))
-               
+            return {'FINISHED'}
 
 
 class PHYSX_OT_run_steps(bpy.types.Operator):
@@ -195,11 +192,8 @@ class PHYSX_OT_sim_step(bpy.types.Operator):
         return px_s.is_initialized and not px_s.sim_running
 
     def invoke(self, context, event):
-        try:
-            build_scene(context)
-        except Exception as e:
-            self.report({'ERROR'}, str(e))
-            return {'CANCELLED'}
+        if not context.scene.physx.scene_built:
+            bpy.ops.physx.build_scene()
         context.scene.physx.sim_running = True
         self._timer = context.window_manager.event_timer_add(1.0 / 60.0, window=context.window)
         context.window_manager.modal_handler_add(self)
@@ -529,6 +523,7 @@ class PHYSX_OT_reset_session(bpy.types.Operator):
             from . import pxveh34 as _bridge
             _bridge.reset()
             context.scene.physx.active_actor_count = 0
+            context.scene.physx.scene_built = False
         except Exception:
             pass
         return {'FINISHED'}
