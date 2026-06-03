@@ -458,16 +458,11 @@ def get_gltf_appearance_items(self, context):
 
     return names
 
-def clean_appearance_name(name: str, index: int) -> str:
-    
-    if not name:
-        return name
-
-    name = name.strip()
-    pattern = rf'[_-]?{index}$'
-    cleaned = re.sub(pattern, '', name)
-
-    return cleaned if cleaned else name
+def clean_appearance_name(name, index):
+    suffix = str(index)
+    if name.endswith(suffix):
+        return name[:-len(suffix)]
+    return name
 
 class CP77Import(Operator, ImportHelper):
     bl_idname = "io_scene_gltf.cp77"
@@ -515,8 +510,8 @@ class CP77Import(Operator, ImportHelper):
             return
 
         cleaned_names = []
-        for index, name in enumerate(names):
-            clean_name = clean_appearance_name(name, index)
+        for i, name in enumerate(names):
+            clean_name = clean_appearance_name(name, i)
             cleaned_names.append(clean_name)
         
         if len(cleaned_names) == 1:
@@ -532,7 +527,8 @@ class CP77Import(Operator, ImportHelper):
         for name in cleaned_names:
             item = self.appearance_list.add()
             item.name = name
-            item.selected = False         
+            item.selected = False
+            
 
     def draw(self, context):
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
@@ -555,7 +551,7 @@ class CP77Import(Operator, ImportHelper):
 
             if len(self.appearance_list) == 0:
                 row = box.row(align=True)
-                row.label(text="No appearances found!", icon="INFO")
+                row.label(text="No appearances found", icon="INFO")
                 return
 
             row = box.row()
