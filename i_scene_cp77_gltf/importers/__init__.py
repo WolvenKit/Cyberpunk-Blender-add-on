@@ -458,9 +458,16 @@ def get_gltf_appearance_items(self, context):
 
     return names
 
-def clean_appearance_name(name):
-    """Removes digits from app names at the end"""
-    return re.sub(r'\d+$', '', name).strip()
+def clean_appearance_name(name: str, index: int) -> str:
+    
+    if not name:
+        return name
+
+    name = name.strip()
+    pattern = rf'[_-]?{index}$'
+    cleaned = re.sub(pattern, '', name)
+
+    return cleaned if cleaned else name
 
 class CP77Import(Operator, ImportHelper):
     bl_idname = "io_scene_gltf.cp77"
@@ -507,10 +514,14 @@ class CP77Import(Operator, ImportHelper):
         if not names:
             return
 
-        if len(names) == 1:
-            clean_name = clean_appearance_name(names[0])
+        cleaned_names = []
+        for index, name in enumerate(names):
+            clean_name = clean_appearance_name(name, index)
+            cleaned_names.append(clean_name)
+        
+        if len(cleaned_names) == 1:
             item = self.appearance_list.add()
-            item.name = clean_name
+            item.name = "default"
             item.selected = True
             return
 
@@ -518,11 +529,16 @@ class CP77Import(Operator, ImportHelper):
         all_item.name = "all"
         all_item.selected = "all" in last_selected
 
-        for name in sorted(names, key=str.lower):
-            clean_name = clean_appearance_name(name)
+        #for name in cleaned_names:
+        #    if name.lower() != "default":
+        #        item = self.appearance_list.add()
+        #        item.name = name
+        #        item.selected = False
+                
+        for name in cleaned_names:
             item = self.appearance_list.add()
-            item.name = clean_name
-            item.selected = clean_name in last_selected
+            item.name = name
+            item.selected = False
             
 
     def draw(self, context):
