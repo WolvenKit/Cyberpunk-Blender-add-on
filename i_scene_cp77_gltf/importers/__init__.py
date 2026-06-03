@@ -528,18 +528,11 @@ class CP77Import(Operator, ImportHelper):
         all_item = self.appearance_list.add()
         all_item.name = "all"
         all_item.selected = "all" in last_selected
-
-        #for name in cleaned_names:
-        #    if name.lower() != "default":
-        #        item = self.appearance_list.add()
-        #        item.name = name
-        #        item.selected = False
                 
         for name in cleaned_names:
             item = self.appearance_list.add()
             item.name = name
-            item.selected = False
-            
+            item.selected = False         
 
     def draw(self, context):
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
@@ -562,7 +555,7 @@ class CP77Import(Operator, ImportHelper):
 
             if len(self.appearance_list) == 0:
                 row = box.row(align=True)
-                row.label(text="Please select a .glb/.gltf file")
+                row.label(text="No appearances found!", icon="INFO")
                 return
 
             row = box.row()
