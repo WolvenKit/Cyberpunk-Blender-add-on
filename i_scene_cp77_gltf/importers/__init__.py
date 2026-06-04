@@ -42,7 +42,7 @@ class CP77_UL_AppearanceList(bpy.types.UIList):
             return
 
         if item.name == "all":
-            row.prop(item, "selected", text=item.name)
+            row.prop(item, "selected", text=item.name, text_ctxt=f"All appearances")
             return
 
         if item.name == "default":
@@ -169,7 +169,7 @@ class CP77EntityImport(Operator,ImportHelper):
 
     appearance_list: CollectionProperty(type=AppearanceItem)
     active_appearance_index: IntProperty(default=0)
-    
+
     exclude_meshes: StringProperty(name= "Meshes_to_Exclude",
                                 description="Meshes to skip during import",
                                 default="",
@@ -188,7 +188,7 @@ class CP77EntityImport(Operator,ImportHelper):
         return {'RUNNING_MODAL'}
 
     def get_default_appearance_name(self):
-    
+
         if not self.filepath or not os.path.isfile(self.filepath):
             return None
 
@@ -207,7 +207,7 @@ class CP77EntityImport(Operator,ImportHelper):
             if not default_name or default_name.lower() in ('none', 'null', 'random', ''):
                 return None
 
-        
+
             appearances = root.get('appearances', [])
             for app in appearances:
                 name_field = app.get('name', {})
@@ -216,7 +216,7 @@ class CP77EntityImport(Operator,ImportHelper):
                 else:
                     name_value = str(name_field)
 
-                if name_value == default_name:              
+                if name_value == default_name:
                     app_name = app.get('appearanceName', {})
                     if isinstance(app_name, dict):
                         return app_name.get('$value', default_name)
@@ -227,13 +227,13 @@ class CP77EntityImport(Operator,ImportHelper):
         except Exception as e:
             print(f"[CP77] Error resolving defaultAppearance: {e}")
             return None
-    
+
     def ent_update_appearance_list(self):
         self.appearance_list.clear()
         names = get_appearance_items(self, bpy.context)
 
         self._resolved_default = self.get_default_appearance_name()
-        
+
         last_selected = _last_selected_entity_appearance.get(self.filepath, [])
 
         if not names:
@@ -241,7 +241,7 @@ class CP77EntityImport(Operator,ImportHelper):
            item.name = "default"
            item.selected = True
            return
-
+        
         if len(names) == 1:
            item = self.appearance_list.add()
            item.name = "default"
@@ -251,7 +251,7 @@ class CP77EntityImport(Operator,ImportHelper):
         def_item = self.appearance_list.add()
         def_item.name = "default"
         def_item.selected = "default" in last_selected or not last_selected
-        
+
         all_item = self.appearance_list.add()
         all_item.name = "all"
         all_item.selected = "all" in last_selected
@@ -264,7 +264,7 @@ class CP77EntityImport(Operator,ImportHelper):
             item = self.appearance_list.add()
             item.name = name
             item.selected = name in last_selected
-    
+
     def draw(self, context):
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
         props = context.scene.cp77_panel_props
@@ -286,14 +286,16 @@ class CP77EntityImport(Operator,ImportHelper):
         if last != self.filepath:
             self.ent_update_appearance_list()
             self._last_filepath = self.filepath
-        
+
         if len(self.appearance_list) == 0:
+            box = layout.box()
             row = box.row(align=True)
             row.label(text="No appearances found", icon='INFO')
-            row = box.row
-            row.label(text="Will import base components only")
-            return
-        
+            sub = box.row()
+            sub.alignment = 'CENTER'
+            sub.enabled = False
+            sub.label(text=f"Will import base components only")
+
         row = box.row()
         row.template_list(
             "CP77_UL_AppearanceList",
@@ -313,11 +315,12 @@ class CP77EntityImport(Operator,ImportHelper):
                 for item in self.appearance_list:
                     if item.name.lower() == resolved.lower() and item.selected:
                         box = layout.box()
-                        box.alert = True
-                        row = box.row()
-                        row.label(text="Skipping duplicate import:", icon="INFO")
-                        row = box.row()
-                        row.label(text=f"'{resolved}' = 'default'")
+                        row = box.row(align=True)
+                        row.label(text="Skipping duplicate entity import:", icon="INFO")
+                        sub = box.row()
+                        sub.alignment = 'CENTER'
+                        sub.enabled = False
+                        sub.label(text=f"↳ '{resolved}' matches 'default'")
                         break
 
         box = layout.box()
@@ -359,6 +362,7 @@ class CP77EntityImport(Operator,ImportHelper):
         SetCyclesRenderer(props.use_cycles, props.update_gi)
 
         selected = [item.name for item in self.appearance_list if item.selected]
+                
         if selected:
             _last_selected_entity_appearance[self.filepath] = selected
 
@@ -489,7 +493,7 @@ class CP77Import(Operator, ImportHelper):
                ("jpeg", "Use JPEG textures", "")),
         default="png"
     )
-  
+
     #exclude_unused_mats: BoolProperty(name="Exclude Unused Materials",default=True,description="Enabling this options skips all the materials that aren't being used by any mesh")
 
     #Kwekmaster: QoL option to match WolvenKit GUI options - Name change to With Materials
@@ -504,7 +508,7 @@ class CP77Import(Operator, ImportHelper):
     def gltf_update_appearance_list(self):
         self.appearance_list.clear()
         names = get_gltf_appearance_items(self, bpy.context)
-        
+
         last_selected = _last_selected_gltf_appearance.get(self.filepath, [])
 
         if not names:
@@ -514,22 +518,23 @@ class CP77Import(Operator, ImportHelper):
         for i, name in enumerate(names):
             clean_name = clean_appearance_name(name, i)
             cleaned_names.append(clean_name)
-        
+
         if len(cleaned_names) == 1:
             item = self.appearance_list.add()
-            item.name = "default"
+            item.name = clean_name
             item.selected = True
             return
 
         all_item = self.appearance_list.add()
         all_item.name = "all"
-        all_item.selected = "all" in last_selected
-                
+        all_item.selected = "all" in last_selected or not last_selected
+
         for name in cleaned_names:
             item = self.appearance_list.add()
             item.name = name
-            item.selected = False
-            
+            item.selected = name in last_selected
+
+
 
     def draw(self, context):
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
@@ -538,12 +543,12 @@ class CP77Import(Operator, ImportHelper):
 
         box = layout.box()
         box.label(text="Mesh Appearance", icon='OUTLINER_OB_GROUP_INSTANCE')
-        
+
         if not self.filepath:
             row = box.row(align=True)
             row.label(text="Please select a .glb/.gltf file")
             return
-        
+
         if self.filepath:
             last = getattr(self, '_last_filepath', '')
             if last != self.filepath:
@@ -551,10 +556,13 @@ class CP77Import(Operator, ImportHelper):
                 self._last_filepath = self.filepath
 
             if len(self.appearance_list) == 0:
+                box = layout.box()
                 row = box.row(align=True)
-                row.label(text="No appearances found", icon="INFO")
-                row = box.row(align=True)
-                row.label(text="Importing .gltf/.glb without materials")
+                row.label(text="No appearances found", icon='INFO')
+                sub = box.row()
+                sub.alignment = 'CENTER'
+                sub.enabled = False
+                sub.label(text=f"Importing .gltf/.glb without materials")
                 return
 
             row = box.row()
@@ -612,14 +620,14 @@ class CP77Import(Operator, ImportHelper):
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
-        
+
         SetVulkanBackend(props.use_vulkan)
         SetCyclesRenderer(props.use_cycles, props.update_gi)
 
         selected = [item.name for item in self.appearance_list if item.selected]
         if selected:
             _last_selected_gltf_appearance[self.filepath] = selected
-        
+
         if "all" in selected:
             appearances = ["ALL"]
         elif len(selected) == 0:
