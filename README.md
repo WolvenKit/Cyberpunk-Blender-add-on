@@ -69,9 +69,9 @@ Export entire collections of meshes to  your Wolvenkit project with a single cli
 
 # Requirements
 
-1) **Blender** version 5.1 or higher is *highly recommended*
+1) **Blender** version 5.0 or higher is *highly recommended*
 > Blender versions below 4.5 will not work and users of these versions should update Blender before installing the plugin
-> PhysX tools are extremely version specific. The current release will *not* work with versions below 5.1 - for dlls compatible with older versions look [here](https://linkgoeshere.remembertodothispresto)
+> PhysX tools are extremely version specific. The current release will *not* work with versions other than 5.0 - for dlls compatible with other versions bug Presto on the discord
 <br>https://www.blender.org/<br/>
 
 2) **WolvenKit** version 8.17 or higher
@@ -134,7 +134,7 @@ The plugin will apply the correct settings to ensure your animation imports back
 
 2) [Import the `.ent.json`](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export#importing-into-blender-2) from the menu (**File \ Import \ Cyberpunk Entity**).
 
-> Hint: You can enter the appearance you want in the import options, this requires the appearanceName from the entity appearances info. Enter ALL for all appearances.
+> Hint: You can select the appearance you want in the import options, default will provide whatever the default in game is (including random). Enter ALL for all appearances.
 
 ## Streaming Sector Import
 
