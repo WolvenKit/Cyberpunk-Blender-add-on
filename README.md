@@ -13,7 +13,7 @@ You can find detailed documentation (and much else) on the [Cyberpunk 2077 moddi
 
 # Core Features
 
-![blender add-on yaiba exampe](https://github.com/WolvenKit/Cyberpunk-Blender-add-on/assets/65016231/fffb9aab-c5f0-4f77-9a63-bdbee941708e)
+![blender add-on yaiba exampe](https://github.com/Ametis81/Cyberpunk-Blender-add-on/blob/030607f8c0ddb548372c5b8b0de2045fd4271968/shadernodes50.png)
 
 ## Import:
 - [Meshes](https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators/modding-tools/wolvenkit-blender-io-suite/wkit-blender-plugin-import-export): Import Cyberpunk meshes from WolvenKit with a fully automated, one-click setup of the game's complex shaders.
