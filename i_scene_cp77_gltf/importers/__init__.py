@@ -446,7 +446,7 @@ def get_gltf_appearance_items(self, context):
     names = []
 
     base = os.path.splitext(self.filepath)[0]
-    material_json = base + ".material.json"
+    material_json = base + ".Material.json"
 
     if os.path.isfile(material_json):
         try:
