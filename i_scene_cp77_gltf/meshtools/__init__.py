@@ -89,6 +89,7 @@ class CP77_PT_MeshTools(Panel):
         col = box.column()
         col.operator("cp77.group_verts", text="Group Ungrouped Verts")
         col.operator("cp77.del_empty_vgroup", text="Delete Unused Vert Groups")
+        col.operator("cp77.delete_orphaned_vgroups", text="Delete Orphaned Vert Groups")
 
         if not (has_mesh_selected or has_meshes_selected):
             box = layout.box()
@@ -824,6 +825,17 @@ class CP77DeleteUnusedBones(Operator):
 
     def execute(self, context):
         delete_unused_bones(self, context)
+        return {"FINISHED"}
+
+
+class CP77DeleteUnParentedVertexGroups(Operator):
+    bl_idname = "cp77.delete_orphaned_vgroups"
+    bl_parent_id = "CP77_PT_MeshTools"
+    bl_label = "Delete orphaned vertex groups"
+    bl_description = "Delete all vertex groups that don't have a corresponding armature bone"
+
+    def execute(self, context):
+        delete_orphaned_vertex_groups(self, context)
         return {"FINISHED"}
 
 operators, other_classes = get_classes(sys.modules[__name__])
