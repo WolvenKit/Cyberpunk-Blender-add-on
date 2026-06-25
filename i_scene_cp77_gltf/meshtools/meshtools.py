@@ -644,6 +644,13 @@ def create_color_attributes(obj):
         for i in range(len(attr.data)):
             attr.data[i].color = color
 
+def select_shapekey(mesh, shape_key_name):
+    if mesh is None or mesh.data.shape_keys is None or mesh.data.shape_keys.key_blocks is None:
+        return
+    shape_key = mesh.data.shape_keys.key_blocks[shape_key_name]
+    mesh.active_shape_key_index = list(mesh.data.shape_keys.key_blocks).index(shape_key)
+
+
 #region Join/Split helpers
 
 # Material storage for join/split
@@ -698,6 +705,8 @@ def safe_join(self, context):
             obj.select_set(True)
         context.view_layer.objects.active = selected_meshes[0]
         bpy.ops.object.join()
+
+        select_shapekey(context.view_layer.objects.active, "Basis")
 
         return {'FINISHED'}
 
