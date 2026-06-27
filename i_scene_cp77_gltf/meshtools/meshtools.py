@@ -644,6 +644,13 @@ def create_color_attributes(obj):
         for i in range(len(attr.data)):
             attr.data[i].color = color
 
+def select_shapekey(mesh, shape_key_name):
+    if mesh is None or mesh.data.shape_keys is None or mesh.data.shape_keys.key_blocks is None:
+        return
+    shape_key = mesh.data.shape_keys.key_blocks[shape_key_name]
+    mesh.active_shape_key_index = list(mesh.data.shape_keys.key_blocks).index(shape_key)
+
+
 #region Join/Split helpers
 
 # Material storage for join/split
@@ -698,6 +705,8 @@ def safe_join(self, context):
             obj.select_set(True)
         context.view_layer.objects.active = selected_meshes[0]
         bpy.ops.object.join()
+
+        select_shapekey(context.view_layer.objects.active, "Basis")
 
         return {'FINISHED'}
 
@@ -795,6 +804,106 @@ def mirror_vertex_groups(mesh):
 #endregion
 
 #region armature helpers
+def get_armature_parent(mesh):
+    for mod in mesh.modifiers:
+        if mod.type == 'ARMATURE':
+            return mod.object
+    return None
+
+def get_armature_bone_names(armature):
+    if armature is None or armature.data.bones is None:
+        return set()
+    return set(armature.data.bones.keys())
+
+
+def delete_vertex_groups_not_in_bone_list(mesh_obj, valid_bones):
+    """
+    Removes all vertex groups from mesh_obj whose name is NOT in bone_names.
+
+    Args:
+        mesh_obj (bpy.types.Object): The mesh object.
+        valid_bones (iterable): A list/set of valid bone names (strings).
+    """
+    if mesh_obj.type != 'MESH':
+        print(f"'{mesh_obj.name}' is not a mesh. Aborting.")
+        return 0
+
+    # Get list of groups to delete (don't modify while iterating)
+    groups_to_delete = [vg for vg in mesh_obj.vertex_groups if vg.name not in valid_bones]
+
+    if not groups_to_delete:
+        print("No vertex groups to delete – all groups match bone names.")
+        return 0
+
+    # Delete them (must be in OBJECT mode)
+    bpy.context.view_layer.objects.active = mesh_obj
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    for vg in groups_to_delete:
+        mesh_obj.vertex_groups.remove(vg)
+
+    return len(groups_to_delete)
+
+def delete_orphaned_vertex_groups(self, context):
+    """
+    Deletes vertex groups from the selected mesh(es) if no bones exist in the corresponding parent armature
+
+    Args:
+        self: Operator instance
+        context: Blender context
+
+    Returns:
+        {'FINISHED'} or {'CANCELLED'}
+    """
+    selected_meshes = [
+        obj for obj in context.selected_objects
+        if obj.type == 'MESH' and re.match(r'submesh_\d\d', obj.name)
+    ]
+
+    if not selected_meshes or len(selected_meshes) == 0:
+        self.report({'ERROR'}, "No valid submeshes selected")
+        return {'CANCELLED'}
+
+    # Store context
+    store_current_context()
+
+    safe_mode_switch('OBJECT')
+    bpy.ops.object.select_all(action='DESELECT')
+
+    armature_bone_cache = {}
+    deleted_groups = 0
+    affected_meshes = 0
+
+    try:
+        # store materials
+        for obj in selected_meshes:
+            armature = get_armature_parent(obj)
+            if armature is None:
+                continue
+
+            if not armature.name in armature_bone_cache:
+                armature_bone_cache[armature.name] =  get_armature_bone_names(armature)
+
+            armature_bones = armature_bone_cache.get(armature.name)
+            deletions = delete_vertex_groups_not_in_bone_list(obj, armature_bones)
+            if deletions == 0:
+                continue
+            deleted_groups += deletions
+            affected_meshes += 1
+
+        safe_mode_switch('OBJECT')
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in selected_meshes:
+            obj.select_set(True)
+        context.view_layer.objects.active = selected_meshes[0]
+
+        self.report({'INFO'}, f"Deleted {deleted_groups} vertex groups across {affected_meshes} meshes.")
+
+        return {'FINISHED'}
+
+    finally:
+        restore_previous_context()
+
 def delete_unused_bones(self, context):
     """
     Deletes bones from the selected armature that do not have corresponding vertex groups
