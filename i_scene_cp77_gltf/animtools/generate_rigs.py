@@ -103,8 +103,8 @@ RIGIFY_TYPES: Dict[str, str] = {
     'eye.R':      'basic.super_copy',
     'thigh.L':    'limbs.leg',
     'thigh.R':    'limbs.leg',
-    'upper_arm.L': 'limbs.super_limb',
-    'upper_arm.R': 'limbs.super_limb',
+    'upper_arm.L': 'limbs.arm',
+    'upper_arm.R': 'limbs.arm',
     'weapon.L':   'basic.super_copy',
     'weapon.R':   'basic.super_copy',
 }
@@ -312,8 +312,8 @@ def _make_copy_transforms(bone: bpy.types.PoseBone, name: str,
     c.name = name
     c.target = target
     c.subtarget = subtarget
-    c.target_space = 'LOCAL_OWNER_ORIENT'
-    c.owner_space = 'LOCAL'
+    c.target_space = 'WORLD'
+    c.owner_space = 'WORLD'
     if hasattr(c, 'use_offset'):
         c.use_offset = False
     if hasattr(c, 'mix_mode'):
@@ -483,6 +483,7 @@ class RigifyConverter:
 
         safe_mode_switch('EDIT')
         eb = arm.edit_bones
+        self._prune_deform_bones(eb)
         self._rename_bones(eb)
         self._build_chains(eb)
         self._build_foot_chains(eb)
@@ -496,6 +497,18 @@ class RigifyConverter:
         self._strip_custom_shapes()
 
         safe_mode_switch('OBJECT')
+
+    def _prune_deform_bones(self, eb) -> None:
+        """Remove the CP77 deform bones from the metarig.
+        """
+        allowed = set(CP77_TO_METARIG.keys())
+        to_remove = [b for b in eb if b.name not in allowed]
+        for b in to_remove:
+            eb.remove(b)
+
+        self.stats['pruned_unmapped'] = len(to_remove)
+        if to_remove:
+            self.log(f"Pruned {len(to_remove)} unmapped source bones from metarig")
 
     def _rename_bones(self, eb) -> None:
         """Two-pass rename to avoid collisions with bones whose target name matches another bone."""
@@ -533,12 +546,34 @@ class RigifyConverter:
             toe  = present.get(f'toe{side}')
             if not (foot and heel and toe):
                 continue
+                
+            foot_head = foot.head.copy()
+            heel_head = heel.head.copy()
+            toe_head = toe.head.copy()
+            
             heel.parent = foot
-            toe.parent  = foot
-            foot.tail = heel.head.copy()
-            heel.tail = toe.head.copy()
             heel.use_connect = False
+            heel.head = heel_head
+
+            toe.parent = foot
+            foot.tail = toe_head
             toe.use_connect = True
+
+            heel_axis = toe_head - heel_head
+            if heel_axis.length <= 1e-4:
+                heel_axis = foot_head - heel_head
+            if heel_axis.length > 1e-4:
+                heel.tail = heel_head + heel_axis.normalized() * min(max(heel_axis.length * 0.5, 0.04), 0.10)
+
+            toe_forward = toe_head - heel_head
+            if toe_forward.length <= 1e-4:
+                toe_forward = toe_head - foot_head
+            if toe_forward.length <= 1e-4:
+                toe_forward = foot.tail - foot.head
+
+            if toe_forward.length > 1e-4:
+                toe_len = min(max(toe_forward.length * 0.45, 0.06), 0.12)
+                toe.tail = toe.head + toe_forward.normalized() * toe_len
 
     def _reparent_weapons(self, eb) -> None:
         """Pin weapon controls to their hand parents and give them a useful tail length.
@@ -601,13 +636,17 @@ class RigifyConverter:
                 if b is None:
                     continue
                 params = b.rigify_parameters
-                params.rotation_axis = 'x'
+                params.rotation_axis = 'automatic'
                 params.segments = 2
-                params.limb_uniform_scale = False
+                params.limb_uniform_scale = True
+                if params.foot_pivot_type and params.foot_pivot_type == 'ANKLE_TOE':
+                    params.extra_ik_toe = True
+                    params.ik_local_location = True
+                
             for finger in ('thumb.01', 'f_index.01', 'f_middle.01', 'f_ring.01', 'f_pinky.01'):
                 b = pb.get(f'{finger}.{side}')
                 if b is not None:
-                    b.rigify_parameters.primary_rotation_axis = 'X'
+                    b.rigify_parameters.primary_rotation_axis = 'automatic'
 
     def _strip_custom_shapes(self) -> None:
         for b in self.meta.pose.bones:
