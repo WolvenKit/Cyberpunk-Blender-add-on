@@ -787,6 +787,14 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             o.rotation_mode = "QUATERNION"
                             o.rotation_quaternion = get_rot(inst)
                             o.scale = get_scale(inst)
+                            
+                            h_flip = bool(data.get('horizontalFlip', False))
+                            v_flip = bool(data.get('verticalFlip', False))
+
+                            if h_flip:
+                                o.scale.x = -abs(o.scale.x)
+                            if v_flip:
+                                o.scale.y = -abs(o.scale.y)
 
                             #o.empty_display_size = 0.002
                             #o.empty_display_type = 'IMAGE'
