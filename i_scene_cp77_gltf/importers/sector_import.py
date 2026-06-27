@@ -808,15 +808,17 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                         index = 0
                                         obj["Data"]["RootChunk"]['alpha'] = data['alpha']
                                         #FIXME: image_format
+                                        desired_name = os.path.basename(mipath)
                                         if mipath in mis.keys():
                                             bpymat = mis[mipath]
                                         else:
-                                            builder = MaterialBuilder(obj,path,'png',path)
-                                            bpymat = builder.createdecal(index)
-                                            if bpymat:
-                                                # Material name = .mi file name from path (like `dirt_o.mi`)
-                                                desired_name = os.path.basename(mipath)
-                                                bpymat.name = desired_name
+                                            # Material name = .mi file name from path (like `dirt_o.mi`)
+                                            bpymat = bpy.data.materials.get(desired_name)
+                                            if not bpymat:
+                                                builder = MaterialBuilder(obj, path, 'png', path)
+                                                bpymat = builder.createdecal(index)
+                                                if bpymat:
+                                                    bpymat.name = desired_name
                                             mis[mipath] = bpymat
                                         if bpymat:
                                             o.data.materials.append(bpymat)
