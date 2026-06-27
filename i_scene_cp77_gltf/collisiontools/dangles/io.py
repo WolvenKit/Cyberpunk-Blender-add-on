@@ -1,6 +1,11 @@
 import json
 import bpy
 import os
+import copy
+
+from ...main.common import get_resources_dir
+
+TEMPLATE_NAME = "template_dangle.animgraph.json"
 
 LINK_MAP = {
     "KeepFixedDistance": "FIXED",
@@ -23,6 +28,17 @@ PEND_PROJ_MAP = {
     "Disabled": "DISABLED",
     "ShortestPathRotational": "SHORTEST_PATH_ROTATIONAL",
     "DirectedRotational": "DIRECTED_ROTATIONAL",
+}
+
+LINK_MAP_INV = {v: k for k, v in LINK_MAP.items()}
+PEND_MAP_INV = {v: k for k, v in PEND_MAP.items()}
+PEND_PROJ_MAP_INV = {v: k for k, v in PEND_PROJ_MAP.items()}
+
+# Particle dyng projection is a restricted subset of PROJ_MAP (no Directional).
+DYNG_PROJ_INV = {
+    "DISABLED": "Disabled",
+    "SHORTEST_PATH": "ShortestPath",
+    "DIRECTED": "Directed",
 }
 
 def _get_wk(node, key, default=None):
@@ -424,98 +440,248 @@ def import_chains(filepath, addon_state):
         return _parse_wolvenkit_animgraph(data, addon_state)
     return 0
 
-def export_chains(filepath, addon_state):
-    data = {
-        "version": 5,
-        "gravityWS": -bpy.context.scene.physx.gravity[2] if bpy.context else 9.81,
-        "externalForceWS": list(addon_state.external_force_ws),
-        "substepTime": addon_state.substep_time,
-        "substeps": addon_state.substeps,
-        "solverIterations": addon_state.solver_iterations,
-        "collisionShapes": [],
-        "dangleNodes": [],
-        "dragNodes": [],
+def _load_template():
+    resources_dir = get_resources_dir()
+    path = os.path.join(resources_dir, TEMPLATE_NAME)
+    if not os.path.isfile(path):
+        try:
+            contents = ", ".join(sorted(os.listdir(resources_dir))) or "<empty>"
+        except OSError as exc:
+            contents = f"<unreadable: {exc}>"
+        raise FileNotFoundError(
+            f"Dangle export template '{TEMPLATE_NAME}' not found in resources dir.\n"
+            f"  Resources dir: {resources_dir}\n"
+            f"  Contents:      {contents}"
+        )
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def _make_cname(value):
+    return {"$type": "CName", "$storage": "string", "$value": value if value else "None"}
+
+def _make_transform_index(bone_name):
+    return {"$type": "animTransformIndex", "name": _make_cname(bone_name)}
+
+def _make_vec3(v):
+    return {"$type": "Vector3", "X": float(v[0]), "Y": float(v[1]), "Z": float(v[2])}
+
+def _make_vec4(v, w=1.0):
+    return {"$type": "Vector4", "W": float(w), "X": float(v[0]), "Y": float(v[1]), "Z": float(v[2])}
+
+def _make_quat(q_wxyz):
+    i, j, k, r = _quat_wxyz_to_ijkr(q_wxyz)
+    return {"$type": "Quaternion", "i": float(i), "j": float(j), "k": float(k), "r": float(r)}
+
+def _make_qstransform(rot_wxyz, translation, scale=(1.0, 1.0, 1.0)):
+    return {
+        "$type": "QsTransform",
+        "Rotation": _make_quat(rot_wxyz),
+        "Scale": _make_vec4(scale, w=1.0),
+        "Translation": _make_vec4(translation, w=1.0),
     }
-    for s in addon_state.collision_shapes:
-        data["collisionShapes"].append({
-            "name": s.name, "bone": s.bone_name, "shapeType": s.shape_type,
-            "radius": s.radius,
-            "xBoxExtent": getattr(s, 'x_box_extent', 0.0),
-            "yBoxExtent": getattr(s, 'y_box_extent', 0.0),
-            "zBoxExtent": s.height_extent,
-            "offsetLS": list(s.offset_ls),
-            "rotationLS": list(_quat_wxyz_to_ijkr(s.rotation_ls_quat)),
-        })
-    for dnode in addon_state.dangle_nodes:
-        nd = {
-            "name": dnode.name, "alpha": dnode.alpha,
-            "rotateParentToLookAt": dnode.rotate_parent_to_look_at,
-            "lookAtAxis": list(_axis_bl_to_re(dnode.look_at_axis)),
-            "substepTime": dnode.substep_time,
-            "solverIterations": dnode.solver_iterations,
-            "importedSolverIterations": dnode.imported_solver_iterations,
-            "chains": [], "collisionShapes": [],
-        }
-        for cs in dnode.collision_shapes:
-            nd["collisionShapes"].append({
-                "name": cs.name, "bone": cs.bone_name, "shapeType": cs.shape_type,
-                "radius": cs.radius,
-                "xBoxExtent": getattr(cs, 'x_box_extent', 0.0),
-                "yBoxExtent": getattr(cs, 'y_box_extent', 0.0),
-                "zBoxExtent": cs.height_extent,
-                "offsetLS": list(cs.offset_ls),
-                "rotationLS": list(_quat_wxyz_to_ijkr(cs.rotation_ls_quat)),
-            })
-        for ch in dnode.chains:
-            chd = {"name": ch.name, "solver": ch.solver, "particles": []}
-            for p in ch.particles:
-                pd = {
-                    "bone": p.bone_name, "mass": p.mass, "damping": p.damping,
-                    "pullForceFactor": p.pull_force, "isFree": not p.is_pinned,
-                    "collisionCapsuleRadius": p.capsule_radius,
-                    "collisionCapsuleHeightExtent": p.capsule_height,
-                    "collisionCapsuleAxisLS": list(p.capsule_axis_ls),
-                    "dyngProjectionType": p.dyng_projection_type,
-                    "posProjectionType": p.pos_projection_type,
-                    "directionReferenceBone": p.direction_reference_bone,
-                    "links": [], "ellipsoids": [], "pendulums": [],
-                }
-                for lnk in p.link_constraints:
-                    pd["links"].append({
-                        "targetBone": lnk.target_bone, "linkType": lnk.link_type,
-                        "lowerRatio": lnk.lower_ratio, "upperRatio": lnk.upper_ratio,
-                        "stiffness": lnk.stiffness,
-                        "explicitRestDistance": lnk.explicit_rest_distance,
-                        "lookAtAxis": list(_axis_bl_to_re(lnk.look_at_axis)),
-                    })
-                for ell in p.ellipsoid_constraints:
-                    pd["ellipsoids"].append({
-                        "targetBone": ell.target_bone, "radius": ell.radius,
-                        "scale1": ell.scale1, "scale2": ell.scale2,
-                        "transformLsQuat": list(_quat_wxyz_to_ijkr(ell.ellipsoid_transform_ls_quat)),
-                        "transformLsOffset": list(ell.ellipsoid_transform_ls_offset),
-                    })
-                for pen in p.pendulum_constraints:
-                    pd["pendulums"].append({
-                        "targetBone": pen.target_bone,
-                        "constraintType": pen.constraint_type,
-                        "halfApertureAngle": pen.half_aperture_angle,
-                        "projectionType": pen.projection_type,
-                        "coneCollisionRadius": pen.cone_collision_radius,
-                        "coneCollisionHeight": pen.cone_collision_height,
-                        "coneTransformLsQuat": list(_quat_wxyz_to_ijkr(pen.cone_transform_ls_quat)),
-                    })
-                chd["particles"].append(pd)
-            nd["chains"].append(chd)
-        data["dangleNodes"].append(nd)
-    for dn in addon_state.drag_nodes:
-        data["dragNodes"].append({
-            "bone": dn.bone_name, "simulationFps": dn.simulation_fps,
-            "sourceSpeedMultiplier": dn.source_speed_multiplier,
-            "hasOvershoot": dn.has_overshoot,
-            "overshootDetectionMinSpeed": dn.overshoot_detection_min_speed,
-            "overshootDetectionMaxSpeed": dn.overshoot_detection_max_speed,
-            "overshootDuration": dn.overshoot_duration,
-        })
+
+def _export_gravity_scalar():
+    try:
+        scene = bpy.context.scene
+        if scene is not None and hasattr(scene, "physx"):
+            return -float(scene.physx.gravity[2])
+    except Exception:
+        pass
+    return 9.81
+
+def _make_particle(p):
+    return {
+        "$type": "animDyngParticle",
+        "bone": _make_transform_index(p.bone_name),
+        "collisionCapsuleAxisLS": _make_vec3(p.capsule_axis_ls),
+        "collisionCapsuleHeightExtent": float(p.capsule_height),
+        "collisionCapsuleRadius": float(p.capsule_radius),
+        "damping": float(p.damping),
+        "isDebugEnabled": 1,
+        "isFree": 0 if p.is_pinned else 1,
+        "mass": float(p.mass),
+        "projectionType": DYNG_PROJ_INV.get(p.dyng_projection_type, "ShortestPath"),
+        "pullForceFactor": float(p.pull_force),
+    }
+
+def _make_link(owner_bone, lnk):
+    return {
+        "$type": "animDyngConstraintLink",
+        "bone1": _make_transform_index(owner_bone),
+        "bone2": _make_transform_index(lnk.target_bone),
+        "isDebugEnabled": 1,
+        "lengthLowerBoundRatioPercentage": float(lnk.lower_ratio),
+        "lengthUpperBoundRatioPercentage": float(lnk.upper_ratio),
+        "linkType": LINK_MAP_INV.get(lnk.link_type, "KeepFixedDistance"),
+        "lookAtAxis": _make_vec3(_axis_bl_to_re(lnk.look_at_axis)),
+    }
+
+def _make_cone(constrained_bone, pen):
+    return {
+        "$type": "animDyngConstraintCone",
+        "collisionCapsuleHeightExtent": float(pen.cone_collision_height),
+        "collisionCapsuleRadius": float(pen.cone_collision_radius),
+        "coneAttachmentBone": _make_transform_index(pen.target_bone),
+        "coneTransformLS": _make_qstransform(pen.cone_transform_ls_quat, (0.0, 0.0, 0.0)),
+        "constrainedBone": _make_transform_index(constrained_bone),
+        "constraintType": PEND_MAP_INV.get(pen.constraint_type, "Cone"),
+        "halfOfMaxApertureAngle": float(pen.half_aperture_angle),
+        "isDebugEnabled": 1,
+        "projectionType": PEND_PROJ_MAP_INV.get(pen.projection_type, "Disabled"),
+    }
+
+def _make_ellipsoid(owner_bone, ell):
+    return {
+        "$type": "animDyngConstraintEllipsoid",
+        "bone": _make_transform_index(owner_bone),
+        "constraintRadius": float(ell.radius),
+        "constraintScale1": float(ell.scale1),
+        "constraintScale2": float(ell.scale2),
+        "ellipsoidTransformLS": _make_qstransform(
+            ell.ellipsoid_transform_ls_quat, ell.ellipsoid_transform_ls_offset
+        ),
+        "isDebugEnabled": 1,
+    }
+
+def _make_collision_shape(s):
+    is_sphere = s.shape_type == "SPHERE"
+    x_ext = 0.0 if is_sphere else float(getattr(s, "x_box_extent", 0.0))
+    y_ext = 0.0 if is_sphere else float(getattr(s, "y_box_extent", 0.0))
+    z_ext = 0.0 if is_sphere else float(s.height_extent)
+    return {
+        "$type": "animCollisionRoundedShape",
+        "bone": _make_transform_index(s.bone_name),
+        "drawAxis": 1,
+        "roundedCornerRadius": float(s.radius),
+        "transformLS": _make_qstransform(s.rotation_ls_quat, s.offset_ls),
+        "xBoxExtent": x_ext,
+        "yBoxExtent": y_ext,
+        "zBoxExtent": z_ext,
+    }
+
+def _make_allocator(start):
+    counter = [start]
+    def alloc():
+        value = str(counter[0])
+        counter[0] += 1
+        return value
+    return alloc
+
+def _max_handle_id(node):
+    found = -1
+    if isinstance(node, dict):
+        if "HandleId" in node:
+            try:
+                found = int(node["HandleId"])
+            except (TypeError, ValueError):
+                pass
+        for v in node.values():
+            found = max(found, _max_handle_id(v))
+    elif isinstance(node, list):
+        for v in node:
+            found = max(found, _max_handle_id(v))
+    return found
+
+def _inject_simulation(sim_data, multi_data, dnode, addon_state, alloc):
+    sim_data["alpha"] = float(dnode.alpha)
+    sim_data["solverIterations"] = int(dnode.solver_iterations)
+    sim_data["substepTime"] = float(dnode.substep_time)
+    sim_data["rotateParentToLookAtDangle"] = 1 if dnode.rotate_parent_to_look_at else 0
+
+    container = sim_data["particlesContainer"]
+    container["gravityWS"] = _export_gravity_scalar()
+    container["externalForceWS"] = _make_vec3(addon_state.external_force_ws)
+
+    particles = []
+    inner_constraints = []
+    for ch in dnode.chains:
+        for p in ch.particles:
+            if not p.bone_name:
+                continue
+            particles.append(_make_particle(p))
+            for lnk in p.link_constraints:
+                if not lnk.target_bone:
+                    continue
+                inner_constraints.append(
+                    {"HandleId": alloc(), "Data": _make_link(p.bone_name, lnk)}
+                )
+            for pen in p.pendulum_constraints:
+                if not pen.target_bone:
+                    continue
+                inner_constraints.append(
+                    {"HandleId": alloc(), "Data": _make_cone(p.bone_name, pen)}
+                )
+            for ell in p.ellipsoid_constraints:
+                inner_constraints.append(
+                    {"HandleId": alloc(), "Data": _make_ellipsoid(p.bone_name, ell)}
+                )
+
+    container["particles"] = particles
+    multi_data["innerConstraints"] = inner_constraints
+
+    shapes = [_make_collision_shape(s) for s in addon_state.collision_shapes]
+    shapes.extend(_make_collision_shape(s) for s in dnode.collision_shapes)
+    sim_data["collisionRoundedShapes"] = shapes
+
+def _append_init_refs(root_chunk, anchor_id, new_ids):
+    init_list = root_chunk.get("nodesToInit", [])
+    insert_at = None
+    for i, entry in enumerate(init_list):
+        if entry.get("HandleRefId") == anchor_id or entry.get("HandleId") == anchor_id:
+            insert_at = i + 1
+            break
+    refs = [{"HandleRefId": nid} for nid in new_ids]
+    if insert_at is None:
+        init_list.extend(refs)
+    else:
+        init_list[insert_at:insert_at] = refs
+    root_chunk["nodesToInit"] = init_list
+
+def export_chains(filepath, addon_state):
+    doc = _load_template()
+    root_chunk = doc["Data"]["RootChunk"]
+
+    posms = _find_nodes_by_type(root_chunk, "animAnimNode_PoseMsToLs")
+    if not posms:
+        raise ValueError("Export template is missing an animAnimNode_PoseMsToLs node.")
+    dangle_wrapper = posms[0].get("inputLink", {}).get("node")
+    if not (
+        isinstance(dangle_wrapper, dict)
+        and isinstance(dangle_wrapper.get("Data"), dict)
+        and dangle_wrapper["Data"].get("$type") == "animAnimNode_Dangle"
+    ):
+        raise ValueError("Export template PoseMsToLs does not feed an animAnimNode_Dangle node.")
+
+    pristine_dangle = copy.deepcopy(dangle_wrapper)
+    alloc = _make_allocator(_max_handle_id(doc) + 1)
+
+    dangle_nodes = list(addon_state.dangle_nodes)
+    if dangle_nodes:
+        head_data = dangle_wrapper["Data"]
+        head_sim = head_data["dangleConstraint"]["Data"]
+        head_multi = head_sim["dyngConstraint"]["Data"]
+        _inject_simulation(head_sim, head_multi, dangle_nodes[0], addon_state, alloc)
+
+        graph_tail = head_data["inputLink"]["node"]
+        prev_data = head_data
+        appended_ids = []
+        for dnode in dangle_nodes[1:]:
+            unit = copy.deepcopy(pristine_dangle)
+            unit["HandleId"] = alloc()
+            sim_wrapper = unit["Data"]["dangleConstraint"]
+            sim_wrapper["HandleId"] = alloc()
+            multi_wrapper = sim_wrapper["Data"]["dyngConstraint"]
+            multi_wrapper["HandleId"] = alloc()
+            _inject_simulation(
+                sim_wrapper["Data"], multi_wrapper["Data"], dnode, addon_state, alloc
+            )
+            prev_data["inputLink"]["node"] = unit
+            appended_ids.append(unit["HandleId"])
+            prev_data = unit["Data"]
+
+        prev_data["inputLink"]["node"] = graph_tail
+        if appended_ids:
+            _append_init_refs(root_chunk, dangle_wrapper["HandleId"], appended_ids)
+
     with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+        json.dump(doc, f, indent=2)
