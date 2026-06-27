@@ -210,15 +210,38 @@ CP77_TO_RIGIFY_REVERSE: Dict[str, str] = {
 
 
 def _resolve_target(rig_bone_names: set, base: str) -> Optional[str]:
-    """Locate the bone on the rigify rig that best represents *base*.
-
-    Order: DEF- → ORG- → MCH- → bare name. Used for forward constraints and as
-    the fallback for reverse-direction lookups when no explicit FK control is
-    specified in CP77_TO_RIGIFY_REVERSE.
-    """
-    for cand in (f'DEF-{base}', f'ORG-{base}', f'MCH-{base}', base):
+    """Locate a generated Rigify bone by generic metarig base name."""
+    for cand in (f'DEF-{base}', base, f'ORG-{base}', f'MCH-{base}'):
         if cand in rig_bone_names:
             return cand
+    return None
+
+
+FORWARD_SAFE_FALLBACKS: Dict[str, Tuple[str, ...]] = {
+    'Root': ('root', 'DEF-root', 'ORG-root'),
+    'LeftEye': ('DEF-eye.L', 'eye.L', 'ORG-eye.L'),
+    'RightEye': ('DEF-eye.R', 'eye.R', 'ORG-eye.R'),
+}
+
+
+def _resolve_forward_target(cp77_bone: str, metarig_bone: str,
+                            rig_bone_names: set) -> Optional[str]:
+    """Pick a deformation-safe target for Rigify-to-source constraints.
+
+    The original CP77 armature is still the mesh deformation armature. Binding
+    source deform bones directly to FK, IK, MCH, or other control bones can
+    change the source rest-pose relationship and collapse the skinned mesh.
+    Prefer generated DEF bones and only use explicit non-deform fallbacks for
+    anchors that are not expected to act as mesh-deforming bones.
+    """
+    deform_target = f'DEF-{metarig_bone}'
+    if deform_target in rig_bone_names:
+        return deform_target
+
+    for candidate in FORWARD_SAFE_FALLBACKS.get(cp77_bone, ()): 
+        if candidate in rig_bone_names:
+            return candidate
+
     return None
 
 
@@ -302,7 +325,9 @@ def get_constraint_direction(source: bpy.types.Object) -> str:
 # Constraint plumbing.
 
 def _make_copy_transforms(bone: bpy.types.PoseBone, name: str,
-                          target: bpy.types.Object, subtarget: str
+                          target: bpy.types.Object, subtarget: str,
+                          target_space: str = 'LOCAL_OWNER_ORIENT',
+                          owner_space: str = 'LOCAL'
                           ) -> bpy.types.Constraint:
     """Create or refresh a named COPY_TRANSFORMS constraint at the end of the stack."""
     existing = bone.constraints.get(name)
@@ -312,8 +337,8 @@ def _make_copy_transforms(bone: bpy.types.PoseBone, name: str,
     c.name = name
     c.target = target
     c.subtarget = subtarget
-    c.target_space = 'WORLD'
-    c.owner_space = 'WORLD'
+    c.target_space = target_space
+    c.owner_space = owner_space
     if hasattr(c, 'use_offset'):
         c.use_offset = False
     if hasattr(c, 'mix_mode'):
@@ -344,7 +369,7 @@ def _build_forward_constraints(source: bpy.types.Object,
         meta = CP77_TO_METARIG.get(pb.name)
         if not meta:
             continue
-        sub = _resolve_target(rig_bone_names, meta)
+        sub = _resolve_forward_target(pb.name, meta, rig_bone_names)
         if not sub:
             continue
         _make_copy_transforms(pb, FORWARD_CONSTRAINT, rig, sub)
@@ -370,7 +395,14 @@ def _build_reverse_constraints(source: bpy.types.Object,
         target_pb = rig.pose.bones.get(target_name)
         if target_pb is None:
             continue
-        _make_copy_transforms(target_pb, REVERSE_CONSTRAINT, source, source_bone.name)
+        _make_copy_transforms(
+            target_pb,
+            REVERSE_CONSTRAINT,
+            source,
+            source_bone.name,
+            target_space='WORLD',
+            owner_space='WORLD',
+        )
         n += 1
     return n
 
