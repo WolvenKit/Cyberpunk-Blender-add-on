@@ -69,7 +69,7 @@ Export entire collections of meshes to  your Wolvenkit project with a single cli
 
 # Requirements
 
-1) **Blender** version 5.0 or higher is *highly recommended*
+1) **Blender** version 5.0 is *highly recommended*
 > Blender versions below 4.5 will not work and users of these versions should update Blender before installing the plugin
 > PhysX tools are extremely version specific. The current release will *not* work with versions other than 5.0 - for dlls compatible with other versions bug Presto on the discord
 <br>https://www.blender.org/<br/>
