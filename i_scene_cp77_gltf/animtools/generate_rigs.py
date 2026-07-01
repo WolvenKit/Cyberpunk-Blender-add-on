@@ -13,9 +13,8 @@ from ..main.bartmoss_functions import (
 )
 
 
-# CP77 source bone  →  metarig bone (Rigify human metarig naming)
+# CP77 source bones mapped to Rigify human metarig names.
 CP77_TO_METARIG: Dict[str, str] = {
-    'Root':          'root',
     'Hips':          'pelvis',
     'Spine':         'spine',
     'Spine1':        'spine.001',
@@ -93,7 +92,7 @@ CP77_TO_METARIG: Dict[str, str] = {
 METARIG_TO_CP77: Dict[str, str] = {v: k for k, v in CP77_TO_METARIG.items()}
 
 
-# Metarig bone  →  rigify_type assignment
+# Rigify generator type assignments.
 RIGIFY_TYPES: Dict[str, str] = {
     'pelvis':     'spines.basic_spine',
     'spine.004':  'spines.super_head',
@@ -111,7 +110,7 @@ for _side in ('L', 'R'):
         RIGIFY_TYPES[f'{_finger}.{_side}'] = 'limbs.super_finger'
 
 
-# Parent / connect chains for the metarig prep pass
+# Metarig connectivity applied before Rigify generation.
 CHAINS: List[List[str]] = [
     ['pelvis', 'spine', 'spine.001', 'spine.002', 'spine.003'],
     ['spine.004', 'spine.005', 'spine.006'],
@@ -121,8 +120,7 @@ for _s in ('L', 'R'):
     CHAINS.append([f'upper_arm.{_s}', f'forearm.{_s}', f'hand.{_s}'])
 
 
-# Per-side metarig finger chains (proximal → distal), excluding the palm bone.
-# Drives terminal-tip repair and roll alignment in the metarig prep pass.
+# Per-side finger chains used for endpoint repair and roll alignment.
 METARIG_FINGER_CHAINS: Dict[str, Tuple[Tuple[str, ...], ...]] = {}
 for _s in ('L', 'R'):
     METARIG_FINGER_CHAINS[_s] = (
@@ -134,7 +132,7 @@ for _s in ('L', 'R'):
     )
 
 
-# Bone collection layout: name → (members, row, color_set_id)
+# Bone collection layout: name -> (members, UI row, color set).
 COLLECTIONS: Dict[str, Tuple[List[str], int, int]] = {
     'Root':   (['root', 'pelvis'], 0, 1),
     'Torso':  (['spine', 'spine.001', 'spine.002', 'spine.003'], 3, 5),
@@ -158,7 +156,7 @@ for _s in ('L', 'R'):
     COLLECTIONS[f'Weapons.{_s}'] = ([f'weapon.{_s}'], 5, 6)
 
 
-# Rigify color sets, in the canonical order Rigify expects
+# Rigify color sets in generator order.
 COLOR_SETS: List[Tuple[str, Tuple[float, float, float], Tuple[float, float, float]]] = [
     ('Root',    (0.549, 1.000, 1.000), (0.435, 0.184, 0.416)),
     ('IK',      (0.549, 1.000, 1.000), (0.604, 0.000, 0.000)),
@@ -171,13 +169,14 @@ COLOR_SETS: List[Tuple[str, Tuple[float, float, float], Tuple[float, float, floa
 SELECT_COLOR: Tuple[float, float, float] = (0.314, 0.784, 1.000)
 
 
-# Constraint naming. Both directions use identifiable names so we can locate/mute/unmute them deterministically
+# Direction flags and deterministic constraint names.
 FORWARD_CONSTRAINT: str = 'CP77_RigifyDrivesSource'
 REVERSE_CONSTRAINT: str = 'CP77_SourceDrivesRigify'
 
 DIRECTION_FORWARD: str = 'forward'
 DIRECTION_REVERSE: str = 'reverse'
 
+# Limit forward-sync translation to deform-safe CP77 joints.
 FORWARD_LOCATION_BONES = {'Root', 'Hips'}
 FORWARD_LIMITED_LOCATION_BONES = {'LeftHand', 'RightHand', 'LeftFoot', 'RightFoot'}
 LIMITED_LOCATION_OFFSETS = {
@@ -188,10 +187,7 @@ LIMITED_LOCATION_OFFSETS = {
 }
 MAX_LIMITED_LOCATION_OFFSET = 0.35
 
-# CP77 shoulder/clavicle joints are not equivalent to generated Rigify shoulder
-# controls. The controls affect the generated arm chain before source sync, so
-# skipping only the CP77 shoulder bones is insufficient. Disable these controls
-# at the Rigify side and keep the source shoulder joints at rest.
+# Neutralize Rigify controls that do not map 1:1 to CP77 deform joints.
 PALM_METARIG_BONES = {
     f'palm.0{i}.{side}'
     for side in ('L', 'R')
@@ -208,7 +204,7 @@ NEUTRALIZED_RIGIFY_CONTROLS = {'shoulder.L', 'shoulder.R'} | PALM_METARIG_BONES
 FORWARD_REST_ONLY_BONES = {'LeftShoulder', 'RightShoulder'} | PALM_CP77_BONES
 
 
-# Stale forward constraint names removed before matrix-basis sync is enabled.
+# Forward-sync constraint names cleared before matrix-basis sync.
 FORWARD_CONSTRAINT_NAMES = (
     FORWARD_CONSTRAINT,
     f'{FORWARD_CONSTRAINT}Location',
@@ -217,12 +213,11 @@ FORWARD_CONSTRAINT_NAMES = (
 
 _CP77_BASIS_SYNC_ACTIVE = False
 
-# Stored on the source armature as evaluated generated-rig neutral matrices.
-# The source sync uses these instead of raw generated bone rest matrices so a
-# freshly generated neutral Rigify pose produces an identity source delta.
+# Prefix for evaluated Rigify neutral matrices stored on the source armature.
 FORWARD_NEUTRAL_PROP_PREFIX = 'cp77_forward_neutral_'
 
 
+# Reverse sync targets FK controls where Rigify exposes them.
 CP77_TO_RIGIFY_REVERSE: Dict[str, str] = {
     'Hips':           'torso',
     'Spine':          'spine_fk',
@@ -254,12 +249,7 @@ CP77_TO_RIGIFY_REVERSE: Dict[str, str] = {
 
 
 def _resolve_target(rig_bone_names: set, base: str) -> Optional[str]:
-    """Locate the bone on the rigify rig that best represents *base*.
-
-    Order: DEF- → ORG- → MCH- → bare name. Used as a general fallback and by
-    reverse-direction lookups when no explicit FK control is specified in
-    CP77_TO_RIGIFY_REVERSE.
-    """
+    """Resolve a generated Rigify bone name for a metarig base name."""
     for cand in (f'DEF-{base}', f'ORG-{base}', f'MCH-{base}', base):
         if cand in rig_bone_names:
             return cand
@@ -286,12 +276,7 @@ def _is_finger_or_palm_metarig_bone(name: str) -> bool:
 
 def _resolve_forward_target(cp77_bone: str, metarig_bone: str,
                             rig_bone_names: set) -> Optional[str]:
-    """Resolve the generated Rigify bone sampled by forward source sync.
-
-    Forward sync should sample the generated deformation result where possible.
-    ORG bones are only a final fallback, and MCH bones are intentionally never
-    used for the mesh-bound source rig.
-    """
+    """Resolve the generated bone sampled when Rigify drives the CP77 source."""
     special = {
         'Root': ('root', 'DEF-root', 'ORG-root'),
         'Hips': ('DEF-pelvis', 'pelvis', 'torso', 'ORG-pelvis'),
@@ -305,6 +290,7 @@ def _resolve_forward_target(cp77_bone: str, metarig_bone: str,
         return target
 
     if _is_finger_or_palm_metarig_bone(metarig_bone):
+        # Sample generated deform bones, not visible super-finger controls.
         return _first_existing(rig_bone_names, (
             f'DEF-{metarig_bone}',
             f'ORG-{metarig_bone}',
@@ -340,9 +326,7 @@ def _copy_matrix3(dst, src) -> None:
 
 
 def set_rigify_coll_prop(coll, name: str, value) -> None:
-    """
-    Write a Rigify bone-collection property across Blender versions
-    """
+    """Write a Rigify collection property across Blender/Rigify storage variants."""
     try:
         setattr(coll, name, value)
     except (AttributeError, TypeError):
@@ -350,7 +334,7 @@ def set_rigify_coll_prop(coll, name: str, value) -> None:
 
 
 def get_rigify_coll_prop(coll, name: str, default=0):
-    """Read a Rigify bone-collection property across Blender versions."""
+    """Read a Rigify collection property across storage variants."""
     if hasattr(coll, name):
         return getattr(coll, name)
     return coll.get(name, default)
@@ -358,7 +342,7 @@ def get_rigify_coll_prop(coll, name: str, default=0):
 
 def _reverse_target_for(cp77_bone: str, metarig_bone: Optional[str],
                         rig_bone_names: set) -> Optional[str]:
-    """Pick the rigify target bone used when source drives rigify."""
+    """Resolve the Rigify target used when the CP77 source drives controls."""
     explicit = CP77_TO_RIGIFY_REVERSE.get(cp77_bone)
     if explicit and explicit in rig_bone_names:
         return explicit
@@ -367,15 +351,9 @@ def _reverse_target_for(cp77_bone: str, metarig_bone: Optional[str],
     return None
 
 
-# Public pair-lookup helpers used by the UI 
-
 def find_pair(obj: Optional[bpy.types.Object]
               ) -> Tuple[Optional[bpy.types.Object], Optional[bpy.types.Object]]:
-    """Resolve (source, rigify_rig) given any armature in the trio.
-
-    Accepts the source rig, the metarig, or the generated rigify rig; returns
-    the source and rigify pair if both are still present in the .blend.
-    """
+    """Resolve the CP77 source and generated Rigify rig from any related armature."""
     if obj is None or obj.type != 'ARMATURE':
         return None, None
     arm = obj.data
@@ -414,7 +392,7 @@ def get_constraint_direction(source: bpy.types.Object) -> str:
 def _make_copy_transforms(bone: bpy.types.PoseBone, name: str,
                           target: bpy.types.Object, subtarget: str
                           ) -> bpy.types.Constraint:
-    """Create or refresh a named COPY_TRANSFORMS constraint at the end of the stack."""
+    """Create a fresh world-space COPY_TRANSFORMS constraint."""
     existing = bone.constraints.get(name)
     if existing is not None:
         bone.constraints.remove(existing)
@@ -433,7 +411,7 @@ def _make_copy_transforms(bone: bpy.types.PoseBone, name: str,
 
 def _set_constraint_mute(armature_obj: bpy.types.Object,
                          constraint_name: str, mute: bool) -> int:
-    """Mute or unmute every same-named constraint on the rig. Returns count."""
+    """Mute or unmute same-named constraints and return the affected count."""
     n = 0
     for pb in armature_obj.pose.bones:
         c = pb.constraints.get(constraint_name)
@@ -444,12 +422,7 @@ def _set_constraint_mute(armature_obj: bpy.types.Object,
 
 
 def _neutralize_rigify_controls(rig: bpy.types.Object) -> int:
-    """Keep known non-export-safe Rigify controls from driving source sync.
-
-    Shoulder and palm controls are Rigify control/offset constructs, not
-    equivalent CP77 deform joints. If they remain movable, their transforms
-    enter the evaluated chain before source sync samples it.
-    """
+    """Lock Rigify controls that do not map safely to CP77 deform joints."""
     if rig is None or rig.type != 'ARMATURE':
         return 0
     n = 0
@@ -468,7 +441,7 @@ def _neutralize_rigify_controls(rig: bpy.types.Object) -> int:
 
 
 def _clear_forward_constraints(source: bpy.types.Object) -> int:
-    """Remove named forward-driving constraints from the source rig."""
+    """Remove named forward-sync constraints from the source rig."""
     removed = 0
     if source is None or source.type != 'ARMATURE':
         return removed
@@ -482,7 +455,7 @@ def _clear_forward_constraints(source: bpy.types.Object) -> int:
 
 
 def _rotation_only_3x3(matrix: Matrix) -> Matrix:
-    """Return an orthonormal rotation matrix, discarding scale and shear."""
+    """Return an orthonormal rotation matrix with scale and shear removed."""
     return matrix.to_quaternion().to_matrix()
 
 
@@ -537,15 +510,7 @@ def _has_forward_neutral_pose(source: bpy.types.Object,
 def _capture_forward_neutral_pose(source: bpy.types.Object,
                                   rig: bpy.types.Object,
                                   depsgraph=None) -> int:
-    """Capture generated Rigify neutral pose matrices for source sync.
-
-    Rigify DEF bones often do not evaluate exactly to their edit-bone rest
-    matrix at generation time because MCH constraints and control layers are
-    already active. Using bone.matrix_local as the neutral reference therefore
-    injects a pose delta into the CP77 source at frame zero. Capturing the
-    evaluated generated pose makes neutral Rigify → neutral source an identity
-    operation.
-    """
+    """Capture evaluated Rigify neutral matrices used as source-sync baselines."""
     if source is None or rig is None:
         return 0
     if source.type != 'ARMATURE' or rig.type != 'ARMATURE':
@@ -594,14 +559,7 @@ def _basis_from_world_rest_delta(source: bpy.types.Object,
                                  copy_location: bool,
                                  limited_location: bool = False,
                                  target_neutral: Optional[Matrix] = None) -> Matrix:
-    """Solve source matrix_basis from the target's evaluated neutral delta.
-
-    The neutral reference is the generated Rigify bone's evaluated matrix
-    captured immediately after generation. This is deliberately different from
-    target_rest: Rigify DEF bones can evaluate with constraint/MCH offsets even
-    when the visible controls are at zero. Using the captured neutral prevents
-    the source fingers from receiving an offset as soon as the rig is generated.
-    """
+    """Solve source matrix_basis from an evaluated target neutral delta."""
     source_rest = src_pb.bone.matrix_local.copy()
 
     target_pose_world = rig.matrix_world @ target_pb.matrix.copy()
@@ -636,7 +594,7 @@ def _basis_from_world_rest_delta(source: bpy.types.Object,
     return result
 
 def _refresh_pose_matrices(obj: bpy.types.Object) -> None:
-    """Force Blender to refresh dependent pose matrices after parent basis writes."""
+    """Refresh dependent pose matrices after parent basis writes."""
     try:
         obj.update_tag(refresh={'OBJECT', 'DATA'})
         bpy.context.view_layer.update()
@@ -646,14 +604,7 @@ def _refresh_pose_matrices(obj: bpy.types.Object) -> None:
 def sync_source_from_rigify(source: bpy.types.Object,
                             rig: bpy.types.Object,
                             depsgraph=None) -> int:
-    """Apply Rigify evaluated world-rest deltas to the CP77 source matrix_basis.
-
-    Source bones are processed by hierarchy depth and the pose is refreshed once
-    per depth level. This preserves the parent-refresh behaviour needed by feet
-    and hands without forcing a full view-layer update after every single bone.
-    Finger phalanges use the evaluated Rigify DEF-chain local pose delta,
-    converted into the CP77 source joint basis without copying translation.
-    """
+    """Apply Rigify evaluated world-rest deltas to CP77 source matrix_basis values."""
     if source is None or rig is None:
         return 0
     if source.type != 'ARMATURE' or rig.type != 'ARMATURE':
@@ -710,6 +661,7 @@ def sync_source_from_rigify(source: bpy.types.Object,
             synced += 1
             continue
 
+        # Use the parent-aware solve for fingers to preserve curl axes.
         neutral = _get_forward_neutral_pose(source, cp77_bone)
         basis = _basis_from_world_rest_delta(
             source,
@@ -751,11 +703,7 @@ def _cp77_basis_sync_handler(*args) -> None:
         _CP77_BASIS_SYNC_ACTIVE = False
 
 def ensure_basis_sync_handler() -> None:
-    """
-    Install the current sync handler and replace previous sync handlers.
-    Blender keeps app handlers alive after script reloads, so replace handlers
-    by function name instead of only checking whether one exists
-    """
+    """Install the current CP77 depsgraph sync handler after script reloads."""
     handlers = bpy.app.handlers.depsgraph_update_post
     handler_names = {'_cp77_basis_sync_handler', '_cp77_sync_handler'}
     for h in tuple(handlers):
@@ -787,10 +735,7 @@ def _build_forward_constraints(source: bpy.types.Object,
 
 def _build_reverse_constraints(source: bpy.types.Object,
                                rig: bpy.types.Object) -> int:
-    """Place COPY_TRANSFORMS on rigify control bones, targeting the source rig.
-
-    Lazy-created on first reverse-direction toggle, then persist muted.
-    """
+    """Create reverse COPY_TRANSFORMS constraints from source bones to Rigify controls."""
     rig_bone_names = set(rig.data.bones.keys())
     select_objects(rig)
     safe_mode_switch('POSE')
@@ -811,7 +756,7 @@ def _build_reverse_constraints(source: bpy.types.Object,
 def set_constraint_direction(source: bpy.types.Object,
                              rig: bpy.types.Object,
                              direction: str) -> Tuple[bool, str]:
-    """Toggle which side drives which. Creates the reverse-side constraints lazily."""
+    """Switch which rig drives the other and create lazy reverse constraints as needed."""
     if direction not in (DIRECTION_FORWARD, DIRECTION_REVERSE):
         return False, f"Unknown direction '{direction}'"
     if source is None or rig is None:
@@ -844,10 +789,8 @@ def set_constraint_direction(source: bpy.types.Object,
     return True, msg
 
 
-# The main converter.
-
 class RigifyConverter:
-    """Builds a Rigify metarig from a CP77 deform rig and generates the control rig."""
+    """Convert a CP77 deform rig into a prepared Rigify metarig and generated control rig."""
 
     def __init__(self, source_armature: bpy.types.Object):
         if not source_armature or source_armature.type != 'ARMATURE':
@@ -920,6 +863,8 @@ class RigifyConverter:
         self._prune_deform_bones(eb)
         self._rename_bones(eb)
         self._build_chains(eb)
+        self._build_spine_branch(eb)
+        self._orient_root_bone(eb)
         self._build_finger_chains(eb)
         self._align_finger_rolls(eb)
         self._build_foot_chains(eb)
@@ -935,8 +880,7 @@ class RigifyConverter:
         safe_mode_switch('OBJECT')
 
     def _prune_deform_bones(self, eb) -> None:
-        """Remove the CP77 deform bones from the metarig.
-        """
+        """Remove unmapped CP77 deform bones from the metarig."""
         allowed = set(CP77_TO_METARIG.keys())
         to_remove = [b for b in eb if b.name not in allowed]
         for b in to_remove:
@@ -947,7 +891,7 @@ class RigifyConverter:
             self.log(f"Pruned {len(to_remove)} unmapped source bones from metarig")
 
     def _rename_bones(self, eb) -> None:
-        """Two-pass rename to avoid collisions with bones whose target name matches another bone."""
+        """Rename bones in two passes to avoid target-name collisions."""
         TEMP = '__CP77T__'
         present = {b.name: b for b in eb}
         rename_map = {cp77: meta for cp77, meta in CP77_TO_METARIG.items() if cp77 in present}
@@ -974,6 +918,106 @@ class RigifyConverter:
                 parent.tail = child.head.copy()
                 child.use_connect = True
 
+    def _build_spine_branch(self, eb) -> None:
+        """Aim the upper spine anatomically while preserving Rigify ownership boundaries."""
+        present = {b.name: b for b in eb}
+        chest = present.get('spine.003')
+        neck = present.get('spine.004')
+        if chest is None or neck is None:
+            return
+
+        chest_axis = neck.head - chest.head
+        if chest_axis.length <= 1e-5:
+            return
+
+        chest.tail = neck.head.copy()
+        neck.parent = chest
+        neck.use_connect = False
+
+        for shoulder_name in ('shoulder.L', 'shoulder.R'):
+            shoulder = present.get(shoulder_name)
+            if shoulder is not None:
+                shoulder.parent = chest
+                shoulder.use_connect = False
+
+        left = present.get('shoulder.L')
+        right = present.get('shoulder.R')
+        if left is None or right is None:
+            self.stats['spine3_branch_aimed'] = 1
+            return
+
+        shoulder_axis = right.head - left.head
+        if shoulder_axis.length <= 1e-5:
+            self.stats['spine3_branch_aimed'] = 1
+            return
+
+        roll_ref = shoulder_axis.cross(chest_axis)
+        if roll_ref.length <= 1e-5:
+            self.stats['spine3_branch_aimed'] = 1
+            return
+        roll_ref.normalize()
+
+        aligned = 0
+        for name in ('pelvis', 'spine', 'spine.001', 'spine.002', 'spine.003'):
+            bone = present.get(name)
+            if bone is None:
+                continue
+            axis = bone.tail - bone.head
+            if axis.length <= 1e-5:
+                continue
+            projected = roll_ref - axis.normalized() * roll_ref.dot(axis.normalized())
+            if projected.length <= 1e-5:
+                continue
+            bone.align_roll(projected.normalized())
+            aligned += 1
+
+        self.stats['spine3_branch_aimed'] = 1
+        self.stats['basic_spine_rolls_aligned'] = aligned
+
+    def _orient_root_bone(self, eb) -> None:
+        present = {b.name: b for b in eb}
+        root = present.get('root')
+        if root is None:
+            return
+
+        root.parent = None
+        root.use_connect = False
+
+        pelvis = present.get('pelvis')
+        spine = present.get('spine')
+        chest = present.get('spine.003')
+        neck = present.get('spine.004')
+
+        up = None
+        if chest is not None and neck is not None:
+            up = neck.head - chest.head
+        if (up is None or up.length <= 1e-5) and pelvis is not None and spine is not None:
+            up = spine.head - pelvis.head
+        if up is None or up.length <= 1e-5:
+            up = Vector((0.0, 0.0, 1.0))
+        up.normalize()
+
+        length = (root.tail - root.head).length
+        if length <= 1e-4:
+            if pelvis is not None:
+                length = max((pelvis.head - root.head).length * 0.35, 0.20)
+            else:
+                length = 0.20
+        root.tail = root.head + up * length
+
+        left = present.get('shoulder.L')
+        right = present.get('shoulder.R')
+        if left is not None and right is not None:
+            shoulder_axis = right.head - left.head
+            if shoulder_axis.length > 1e-5:
+                forward = shoulder_axis.cross(up)
+                if forward.length > 1e-5:
+                    root.align_roll(forward.normalized())
+                    self.stats['root_bone_oriented'] = 1
+                    return
+
+        self.stats['root_bone_oriented'] = 1
+
     def _iter_source_meshes(self):
         seen = set()
         for obj in bpy.context.scene.objects:
@@ -994,7 +1038,7 @@ class RigifyConverter:
                                tip_head: Vector,
                                direction: Vector,
                                max_distance: float) -> Optional[Vector]:
-        """Estimate the anatomical fingertip center from the distal weight cap """
+        """Estimate the fingertip endpoint from the distal weighted mesh cap."""
         if direction.length <= 1e-6:
             return None
         direction = direction.normalized()
@@ -1031,7 +1075,7 @@ class RigifyConverter:
                     continue
 
                 lateral = offset - (direction * projection)
-                # Reject broad stray assignments that are clearly not part of the fingertip
+                # Reject broad stray weights outside this terminal phalanx cap.
                 if lateral.length > max(max_distance * 0.45, 0.04):
                     continue
 
@@ -1044,9 +1088,7 @@ class RigifyConverter:
         if max_projection <= 1e-5:
             return None
 
-        # Use only the far cap, not the whole distal phalanx envelope. The cap
-        # depth scales with the last segment so small fingers and thumbs both
-        # get stable centering.
+        # Average only the far weighted cap to avoid pulling the endpoint inward.
         cap_depth = min(max(max_projection * 0.20, 0.01), 0.04)
         cap_min = max_projection - cap_depth
         cap = [(p, w, pt) for p, w, pt in samples if p >= cap_min]
@@ -1067,9 +1109,7 @@ class RigifyConverter:
         if projection <= 1e-5 or projection > max_distance:
             return None
 
-        # Keep the endpoint close to the actual cap center, but clamp excessive
-        # sideways motion so one bad vertex group cannot aim the Rigify chain off
-        # the finger. This is especially important for thumbs.
+        # Clamp lateral drift so bad weights cannot aim the chain off-finger.
         lateral = offset - (direction * projection)
         max_lateral = max(projection * 0.35, 0.025)
         if lateral.length > max_lateral:
@@ -1095,6 +1135,7 @@ class RigifyConverter:
             self.stats['finger_tip_mesh_caps'] += 1
             return mesh_tail
 
+        # Ignore Maya terminal tails; fall back to the previous phalanx axis.
         if imported.length > 1e-5:
             self.stats['finger_tip_imported_tails_rejected'] += 1
         self.stats['finger_tip_axis_fallbacks'] += 1
@@ -1141,7 +1182,7 @@ class RigifyConverter:
                 if prev is None or cp77_tip is None:
                     continue
 
-                # Fit the generated Rigify endpoint to the weighted fingertip cap
+                # Fit terminal endpoints to fingertip weights, then axis-fallback.
                 tail = self._source_terminal_tail(cp77_tip, tip, prev)
                 if tail is None:
                     tip.tail = original_tail
@@ -1159,7 +1200,7 @@ class RigifyConverter:
 
 
     def _metarig_palm_normal(self, present, side) -> Optional[Vector]:
-        """Palm-plane normal from the four-finger spread, used as a roll fallback."""
+        """Return a palm-plane normal for finger roll fallback."""
         def head(name):
             b = present.get(name)
             return b.head.copy() if b is not None else None
@@ -1178,13 +1219,7 @@ class RigifyConverter:
         return normal.normalized() if normal.length > 1e-5 else None
 
     def _thumb_roll_target(self, present, side) -> Optional[Vector]:
-        """Opposition-plane reference for the thumb.
-
-        The thumb bends roughly perpendicular to the four-finger plane, so the
-        palm normal is the wrong reference. Use the across-palm vector toward the
-        middle finger base, projected off the thumb axis, as the palmar/curl
-        direction
-        """
+        """Return the thumb opposition-plane reference used for roll alignment."""
         thumb = present.get(f'thumb.01.{side}')
         mid = present.get(f'f_middle.01.{side}')
         if thumb is None or mid is None:
@@ -1197,16 +1232,7 @@ class RigifyConverter:
         return perp if perp.length > 1e-5 else None
 
     def _align_finger_rolls(self, eb) -> None:
-        """Align finger phalanx roll so flexion resolves to the local X axis.
-
-        After the chain tails are rewired the CP77 roll scalar no longer reflects
-        a usable bend plane, so super_finger's automatic axis detection picks an
-        off-axis result and fingers splay instead of curl. Each finger is rolled
-        to its own rest bend plane (the palmar component of the distal segment),
-        which keeps the bend axis consistent across both hands without relying on
-        mirror assumptions. Must run after _build_finger_chains so distal bones have a
-        geometry-derived direction to roll.
-        """
+        """Align finger roll so super_finger flexion resolves to the intended bend plane."""
         present = {b.name: b for b in eb}
         aligned = 0
         for side in ('L', 'R'):
@@ -1247,11 +1273,11 @@ class RigifyConverter:
             toe  = present.get(f'toe{side}')
             if not (foot and heel and toe):
                 continue
-                
+
             foot_head = foot.head.copy()
             heel_head = heel.head.copy()
             toe_head = toe.head.copy()
-            
+
             heel.parent = foot
             heel.use_connect = False
             heel.head = heel_head
@@ -1277,10 +1303,7 @@ class RigifyConverter:
                 toe.tail = toe.head + toe_forward.normalized() * toe_len
 
     def _reparent_weapons(self, eb) -> None:
-        """Pin weapon controls to their hand parents and give them a useful tail length.
-
-        Source weapon bones have zero-length tails which Rigify rejects.
-        """
+        """Parent weapon controls to hands and repair zero-length tails."""
         present = {b.name: b for b in eb}
         for side in ('L', 'R'):
             weapon = present.get(f'weapon.{side}')
@@ -1343,10 +1366,11 @@ class RigifyConverter:
                 if params.foot_pivot_type and params.foot_pivot_type == 'ANKLE_TOE':
                     params.extra_ik_toe = True
                     params.ik_local_location = True
-                
+
             for finger in ('thumb.01', 'f_index.01', 'f_middle.01', 'f_ring.01', 'f_pinky.01'):
                 b = pb.get(f'{finger}.{side}')
                 if b is not None:
+                    # Roll alignment leaves flexion on the primary rotation axis.
                     b.rigify_parameters.primary_rotation_axis = 'automatic'
 
     def _strip_custom_shapes(self) -> None:
@@ -1378,7 +1402,7 @@ class RigifyConverter:
             raise RuntimeError('Rigify generation failed to produce an armature')
         self.log(f"Generated '{self.rig.name}'")
 
-        # Match the rig's scene-collection placement to the source.
+        # Keep generated rig collection membership aligned with the source.
         for coll in list(self.rig.users_collection):
             try:
                 coll.objects.unlink(self.rig)
@@ -1441,7 +1465,7 @@ class RigifyConverter:
         safe_mode_switch('OBJECT')
 
     def _link_metadata(self) -> None:
-        """Cross-link the trio so downstream operators can navigate any-to-any."""
+        """Cross-link source, metarig, and generated rig for downstream operators."""
         self.source.data['cp77_metarig']     = self.meta.name
         self.source.data['cp77_rigify_rig']  = self.rig.name
         self.source.data['cp77_rig_id']      = self.rig.data.get('rig_id', '')
