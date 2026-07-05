@@ -16,49 +16,69 @@ class MeshReference:
     material_overrides: List[MaterialOverride] = field(default_factory=list)
 
 
-@dataclass
-class AppearanceComponent:
-    name: str
+@dataclass(slots=True)
+class ParsedComponent:
+    raw: dict
     type: str
-    mesh: Optional[MeshReference] = None
-    transform: Optional[Dict[str, List[float]]] = None  # {'position': [...], 'orientation': [...], 'scale': [...]}
-    parent_transform_ref_id: Optional[int] = None
-    parent_transform_data: Optional[Dict] = None
-    extra_data: Dict = field(default_factory=dict)
-
-
-@dataclass
-class AppearanceData:
     name: str
-    components: List[AppearanceComponent]
+    mesh_depot: str
+    graphics_mesh_depot: str
+    mesh_appearance: str
+    rig_depot: str
+    enabled: bool
+    local_transform: dict
+    visual_scale: dict | None
+    slots: list | None
+    parent_transform_handle: object
+    skinning_handle: object
 
 
-@dataclass
-class EntityComponent:
+@dataclass(slots=True)
+class ParsedEntity:
+    filepath: str
     name: str
-    type: str
-    mesh_path: Optional[str] = None
-    graphics_mesh_path: Optional[str] = None
-    mesh_appearance: Optional[str] = None
-    transform: Optional[Dict[str, List[float]]] = None
-    parent_transform_ref_id: Optional[int] = None
-    parent_transform_data: Optional[Dict] = None
-    extra_data: Dict = field(default_factory=dict)
+    raw: dict
+    root: dict
+    appearances: list
+    appearance_names: list
+    appearance_index_by_name: dict
+    appearances_by_appearance: dict
+    appearances_by_name: dict
+    default_appearance: str
+    component_dicts: list
+    component_data: list
+    parsed_components: list
+    components_by_name: dict
+    components_by_id: dict
+    component_ids: set
+    component_data_ids: set
+    parent_transform_lookup: dict
+    skinning_lookup: dict
+    shape_lookup: dict
+    slot_component_lookups: dict
+    collider_components: list
+    simple_collider_components: list
+    light_channel_components: list
+    rig_components: dict
+    resolved_dependencies: list
+    vehicle_slot_component: dict | None
 
 
-@dataclass
-class ResolvedDependency:
-    path: str
-
-
-@dataclass
-class EntityData:
-    name: str
-    default_appearance: Optional[str]
-    global_components: List[EntityComponent] = field(default_factory=list)
-    appearances: List[AppearanceData] = field(default_factory=list)
-    resolved_dependencies: List[ResolvedDependency] = field(default_factory=list)
-
+@dataclass(slots=True)
+class ParsedApp:
+    filepath: str
+    raw: dict
+    root: dict
+    appearances: list
+    appearance_names: list
+    appearances_by_name: dict
+    components_by_appearance_name: dict
+    chunks_by_appearance_name: dict
+    parent_transform_lookup_by_appearance_name: dict
+    skinning_lookup_by_appearance_name: dict
+    shape_lookup_by_appearance_name: dict
+    light_channels_by_appearance_name: dict
+    
 @dataclass(slots=True)
 class BoneTransformCache:
     location: mathutils.Vector
