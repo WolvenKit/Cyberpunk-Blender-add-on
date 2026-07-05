@@ -2,45 +2,320 @@ import bpy
 import os
 from ..main.common import *
 
+try:
+    from ..main.datakrash import DepotAssetIndex, DEFAULT_IMAGE_EXTENSIONS
+except (ImportError, AttributeError):
+    DepotAssetIndex = None
+    DEFAULT_IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.tga', '.dds', '.bmp', '.webp', '.tif', '.tiff')
+
+
+def _add_group_io(group, vers, inputs, outputs):
+    if vers[0] < 4:
+        for socket_type, name in inputs:
+            group.inputs.new(socket_type, name)
+        for socket_type, name in outputs:
+            group.outputs.new(socket_type, name)
+        return
+
+    for socket_type, name in inputs:
+        group.interface.new_socket(name=name, socket_type=socket_type, in_out='INPUT')
+    for socket_type, name in outputs:
+        group.interface.new_socket(name=name, socket_type=socket_type, in_out='OUTPUT')
+
+
+def _node_group(name, vers, inputs, outputs, build):
+    group = bpy.data.node_groups.get(name)
+    if group is not None:
+        return group
+
+    group = bpy.data.node_groups.new(name, "ShaderNodeTree")
+    _add_group_io(group, vers, inputs, outputs)
+    build(group)
+    return group
+
+
+def _group_node(tree, group, loc, label=None, name=None):
+    node = create_node(tree.nodes, "ShaderNodeGroup", loc, label=label or group.name)
+    node.node_tree = group
+    if name:
+        node.name = name
+    return node
+
+
+def _create_scroll_group(layer, vers):
+    group_name = f"scroll{layer}_ps_t"
+    inputs = (
+        ('NodeSocketFloat', f'ScrollSpeed{layer}'),
+        ('NodeSocketFloat', f'ScrollStepFactor{layer}'),
+        ('NodeSocketFloat', 'Time'),
+    )
+    outputs = (('NodeSocketFloat', f'scroll{layer}'),)
+
+    def build(group):
+        group_in = create_node(group.nodes, "NodeGroupInput", (-1400, 0))
+        group_out = create_node(group.nodes, "NodeGroupOutput", (-600, 0))
+        mul = create_node(group.nodes, "ShaderNodeMath", (-1250, 0), operation="MULTIPLY")
+        mul2 = create_node(group.nodes, "ShaderNodeMath", (-1100, 0), operation="MULTIPLY")
+        div = create_node(group.nodes, "ShaderNodeMath", (-950, 0), operation="DIVIDE")
+        floor = create_node(group.nodes, "ShaderNodeMath", (-800, 0), operation="FLOOR")
+        group.links.new(group_in.outputs[2], mul.inputs[0])
+        group.links.new(group_in.outputs[0], mul.inputs[1])
+        group.links.new(mul.outputs[0], mul2.inputs[0])
+        group.links.new(group_in.outputs[1], mul2.inputs[1])
+        group.links.new(mul2.outputs[0], div.inputs[0])
+        group.links.new(group_in.outputs[1], div.inputs[1])
+        group.links.new(div.outputs[0], floor.inputs[0])
+        group.links.new(floor.outputs[0], group_out.inputs[0])
+
+    return _node_group(group_name, vers, inputs, outputs, build)
+
+
+def _create_scroll_uv_group(layer, horizontal, vers):
+    group_name = f"scrollUV{layer}X" if horizontal else f"scrollUV{layer}_ps_t"
+    output_name = f"scrollUV{layer}X" if horizontal else f"scrollUV{layer}"
+    inputs = (
+        ('NodeSocketVector', 'newUV'),
+        ('NodeSocketFloat', f'ScrollMaskHeight{layer}'),
+        ('NodeSocketFloat', f'scroll{layer}'),
+        ('NodeSocketFloat', f'ScrollMaskStartPoint{layer}'),
+    )
+    outputs = (('NodeSocketVector', output_name),)
+
+    def build(group):
+        group_in = create_node(group.nodes, "NodeGroupInput", (-1400, 0))
+        group_out = create_node(group.nodes, "NodeGroupOutput", (-200, 0))
+        separate_loc = (-1250, -100) if horizontal else (-1250, 100)
+        combine_loc = (-350, -100) if horizontal else (-350, 100)
+        separate = create_node(group.nodes, "ShaderNodeSeparateXYZ", separate_loc)
+        div = create_node(group.nodes, "ShaderNodeMath", (-1250, 0), operation="DIVIDE")
+        mul = create_node(group.nodes, "ShaderNodeMath", (-1100, 0), operation="MULTIPLY")
+        add = create_node(group.nodes, "ShaderNodeMath", (-950, 0), operation="ADD")
+        frac = create_node(group.nodes, "ShaderNodeMath", (-800, 0), operation="FRACT")
+        mul2 = create_node(group.nodes, "ShaderNodeMath", (-650, 0), operation="MULTIPLY")
+        add2 = create_node(group.nodes, "ShaderNodeMath", (-500, 0), operation="ADD")
+        combine = create_node(group.nodes, "ShaderNodeCombineXYZ", combine_loc)
+        div.inputs[0].default_value = 1
+        scroll_axis = 0 if horizontal else 1
+        passthrough_axis = 1 if horizontal else 0
+        group.links.new(group_in.outputs[0], separate.inputs[0])
+        group.links.new(group_in.outputs[1], div.inputs[1])
+        group.links.new(separate.outputs[scroll_axis], mul.inputs[0])
+        group.links.new(div.outputs[0], mul.inputs[1])
+        group.links.new(mul.outputs[0], add.inputs[0])
+        group.links.new(group_in.outputs[2], add.inputs[1])
+        group.links.new(add.outputs[0], frac.inputs[0])
+        group.links.new(frac.outputs[0], mul2.inputs[0])
+        group.links.new(group_in.outputs[1], mul2.inputs[1])
+        group.links.new(mul2.outputs[0], add2.inputs[0])
+        group.links.new(group_in.outputs[3], add2.inputs[1])
+        group.links.new(add2.outputs[0], combine.inputs[scroll_axis])
+        group.links.new(separate.outputs[passthrough_axis], combine.inputs[passthrough_axis])
+        group.links.new(combine.outputs[0], group_out.inputs[0])
+
+    return _node_group(group_name, vers, inputs, outputs, build)
+
+
+def _create_final_scroll_delta_group(layer, vers):
+    group_name = f"finalScrollUV{layer}"
+    inputs = (
+        ('NodeSocketVector', 'finalScrollUV1'),
+        ('NodeSocketVector', 'l1'),
+        ('NodeSocketVector', f'l{layer}'),
+    )
+    outputs = (('NodeSocketVector', group_name),)
+
+    def build(group):
+        group_in = create_node(group.nodes, "NodeGroupInput", (-1050, 0))
+        group_out = create_node(group.nodes, "NodeGroupOutput", (-150, 0))
+        vec_delta = create_node(group.nodes, "ShaderNodeVectorMath", (-900, -25))
+        vec_add = create_node(group.nodes, "ShaderNodeVectorMath", (-750, 0))
+        group.links.new(group_in.outputs[2], vec_delta.inputs[0])
+        group.links.new(group_in.outputs[1], vec_delta.inputs[1])
+        group.links.new(group_in.outputs[0], vec_add.inputs[0])
+        group.links.new(vec_delta.outputs[0], vec_add.inputs[1])
+        group.links.new(vec_add.outputs[0], group_out.inputs[0])
+
+    return _node_group(group_name, vers, inputs, outputs, build)
+
+
+def _create_layer_intensity_group(layer, component, vers, scanline_group, lerp_group):
+    group_name = f"i{layer}_ps_t"
+    sampled = f'l{layer}Sampled'
+    layer_uv = f'l{layer}'
+    final_uv = f'finalScrollUV{layer}'
+    intensity = f'IntensityPerLayer.{component}'
+    inputs = (
+        ('NodeSocketVector', sampled),
+        ('NodeSocketFloat', 'Alpha'),
+        ('NodeSocketVector', layer_uv),
+        ('NodeSocketVector', final_uv),
+        ('NodeSocketFloat', intensity),
+        ('NodeSocketFloat', 'ScanlinesIntensity'),
+        ('NodeSocketFloat', 'ScanlinesDensity'),
+        ('NodeSocketFloat', 'scanlineSpeed'),
+        ('NodeSocketFloat', 'scrollMaskMask'),
+    )
+    outputs = (
+        ('NodeSocketVector', f'i{layer}'),
+        ('NodeSocketFloat', 'Alpha'),
+    )
+
+    def build(group):
+        group_in = create_node(group.nodes, "NodeGroupInput", (-1050, 0))
+        group_out = create_node(group.nodes, "NodeGroupOutput", (200, 0))
+        vec_mul = create_node(group.nodes, "ShaderNodeVectorMath", (-900, 0), operation="MULTIPLY")
+        separate = create_node(group.nodes, "ShaderNodeSeparateXYZ", (-750, -50))
+        add = create_node(group.nodes, "ShaderNodeMath", (-600, -50))
+        scanline = create_node(group.nodes, "ShaderNodeGroup", (-450, -50), label="scanline")
+        scanline.node_tree = scanline_group
+        separate2 = create_node(group.nodes, "ShaderNodeSeparateXYZ", (-750, 0))
+        add2 = create_node(group.nodes, "ShaderNodeMath", (-600, 0))
+        scanline2 = create_node(group.nodes, "ShaderNodeGroup", (-450, 0), label="scanline")
+        scanline2.node_tree = scanline_group
+        lerp = create_node(group.nodes, "ShaderNodeGroup", (-300, -25), label="lerp")
+        lerp.node_tree = lerp_group
+        lerp2 = create_node(group.nodes, "ShaderNodeGroup", (-150, 0), label="lerp")
+        lerp2.node_tree = lerp_group
+        lerp2.inputs[1].default_value = 1
+        vec_mul2 = create_node(group.nodes, "ShaderNodeVectorMath", (0, 0), operation="MULTIPLY")
+        mul = create_node(group.nodes, "ShaderNodeMath", (-900, -150), operation="MULTIPLY")
+        mul2 = create_node(group.nodes, "ShaderNodeMath", (0, -150), operation="MULTIPLY")
+
+        group.links.new(group_in.outputs[sampled], vec_mul.inputs[0])
+        group.links.new(group_in.outputs[intensity], vec_mul.inputs[1])
+        group.links.new(group_in.outputs[final_uv], separate.inputs[0])
+        group.links.new(separate.outputs[1], add.inputs[0])
+        group.links.new(group_in.outputs['scanlineSpeed'], add.inputs[1])
+        group.links.new(group_in.outputs['ScanlinesDensity'], scanline.inputs[0])
+        group.links.new(add.outputs[0], scanline.inputs[1])
+        group.links.new(group_in.outputs[layer_uv], separate2.inputs[0])
+        group.links.new(separate2.outputs[1], add2.inputs[0])
+        group.links.new(group_in.outputs['scanlineSpeed'], add2.inputs[1])
+        group.links.new(group_in.outputs['ScanlinesDensity'], scanline2.inputs[0])
+        group.links.new(scanline.outputs[0], lerp.inputs[0])
+        group.links.new(scanline2.outputs[0], lerp.inputs[1])
+        group.links.new(group_in.outputs['scrollMaskMask'], lerp.inputs[2])
+        group.links.new(group_in.outputs['ScanlinesIntensity'], lerp2.inputs[0])
+        group.links.new(lerp.outputs[0], lerp2.inputs[2])
+        group.links.new(vec_mul.outputs[0], vec_mul2.inputs[0])
+        group.links.new(lerp2.outputs[0], vec_mul2.inputs[1])
+        group.links.new(vec_mul2.outputs[0], group_out.inputs[0])
+        group.links.new(group_in.outputs['Alpha'], mul.inputs[0])
+        group.links.new(group_in.outputs[intensity], mul.inputs[1])
+        group.links.new(mul.outputs[0], mul2.inputs[0])
+        group.links.new(lerp2.outputs[0], mul2.inputs[1])
+        group.links.new(mul2.outputs[0], group_out.inputs[1])
+
+    return _node_group(group_name, vers, inputs, outputs, build)
+
+
+def _create_m_group(group_name, output_name, input_a, input_b, vers):
+    inputs = (
+        ('NodeSocketVector', input_a),
+        ('NodeSocketVector', input_b),
+        ('NodeSocketFloat', f'{input_a}.a'),
+        ('NodeSocketFloat', f'{input_b}.a'),
+    )
+    outputs = (
+        ('NodeSocketVector', output_name),
+        ('NodeSocketFloat', 'Alpha'),
+    )
+
+    def build(group):
+        group_in = create_node(group.nodes, "NodeGroupInput", (-1050, 0))
+        group_out = create_node(group.nodes, "NodeGroupOutput", (300, 0))
+        vec_sub = create_node(group.nodes, "ShaderNodeVectorMath", (-900, 25), operation="SUBTRACT")
+        vec_sub.inputs[0].default_value = (1, 1, 1)
+        vec_sub2 = create_node(group.nodes, "ShaderNodeVectorMath", (-900, -25), operation="SUBTRACT")
+        vec_sub2.inputs[0].default_value = (1, 1, 1)
+        vec_mul = create_node(group.nodes, "ShaderNodeVectorMath", (-750, 0), operation="MULTIPLY")
+        vec_out = create_node(group.nodes, "ShaderNodeVectorMath", (-600, 0), operation="SUBTRACT")
+        vec_out.inputs[0].default_value = (1, 1, 1)
+        group.links.new(group_in.outputs[0], vec_sub.inputs[1])
+        group.links.new(group_in.outputs[1], vec_sub2.inputs[1])
+        group.links.new(vec_sub.outputs[0], vec_mul.inputs[0])
+        group.links.new(vec_sub2.outputs[0], vec_mul.inputs[1])
+        group.links.new(vec_mul.outputs[0], vec_out.inputs[1])
+        group.links.new(vec_out.outputs[0], group_out.inputs[0])
+
+        sub = create_node(group.nodes, "ShaderNodeMath", (-900, -150), operation="SUBTRACT")
+        sub.inputs[0].default_value = 1
+        sub2 = create_node(group.nodes, "ShaderNodeMath", (-900, -200), operation="SUBTRACT")
+        sub2.inputs[0].default_value = 1
+        mul = create_node(group.nodes, "ShaderNodeMath", (-750, -150), operation="MULTIPLY")
+        sub3 = create_node(group.nodes, "ShaderNodeMath", (-600, -150), operation="SUBTRACT")
+        sub3.inputs[0].default_value = 1
+        group.links.new(group_in.outputs[2], sub.inputs[0])
+        group.links.new(group_in.outputs[3], sub2.inputs[0])
+        group.links.new(sub.outputs[0], mul.inputs[0])
+        group.links.new(sub2.outputs[0], mul.inputs[1])
+        group.links.new(mul.outputs[0], sub3.inputs[1])
+        group.links.new(sub3.outputs[0], group_out.inputs[1])
+
+    return _node_group(group_name, vers, inputs, outputs, build)
+
 
 class ParallaxScreenTransparent:
-    def __init__(self, BasePath,image_format,ProjPath):
+    def __init__(self, BasePath, image_format, ProjPath):
         self.BasePath = BasePath
         self.ProjPath = ProjPath
         self.image_format = image_format
+        self._asset_index = None
+        self._image_cache = {}
+
+    def _get_asset_index(self):
+        if DepotAssetIndex is None:
+            return None
+        if self._asset_index is None:
+            root = self.ProjPath if os.path.isdir(self.ProjPath) else self.BasePath
+            self._asset_index = DepotAssetIndex.cached(root, DEFAULT_IMAGE_EXTENSIONS, warn_missing=False)
+        return self._asset_index
+
+    def _image_from_rel_path(self, reference):
+        if not reference:
+            return None
+        cache_key = (reference, self.image_format, self.BasePath, self.ProjPath)
+        cached = self._image_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        image = None
+        asset_index = self._get_asset_index()
+        if asset_index is not None:
+            image_path = asset_index.resolve_image(reference, self.image_format, warn=False)
+            if image_path:
+                image = bpy.data.images.load(image_path, check_existing=True)
+        if image is None:
+            image = imageFromRelPath(reference, DepotPath=self.BasePath, ProjPath=self.ProjPath, image_format=self.image_format)
+        self._image_cache[cache_key] = image
+        return image
 
     def createScanlinesGroup(self):
-        if 'scanlines' in bpy.data.node_groups.keys():
-            stepGroup = bpy.data.node_groups['scanlines']
-            return stepGroup
-        else:
-            scanlinesGroup = bpy.data.node_groups.new("scanlines","ShaderNodeTree")
-            vers=bpy.app.version
-            if vers[0]<4:
-                scanlinesGroup.inputs.new('NodeSocketFloat','density')
-                scanlinesGroup.inputs.new('NodeSocketFloat','uv')
-                scanlinesGroup.outputs.new('NodeSocketFloat','result')
-            else:
-                scanlinesGroup.interface.new_socket(name="density", socket_type='NodeSocketFloat', in_out='INPUT')
-                scanlinesGroup.interface.new_socket(name="uv", socket_type='NodeSocketFloat', in_out='INPUT')
-                scanlinesGroup.interface.new_socket(name="result", socket_type='NodeSocketFloat', in_out='OUTPUT')
+        vers = bpy.app.version
 
-            scanlinesGroupI = create_node(scanlinesGroup.nodes, "NodeGroupInput",(-1400,0))
-            scanlinesGroupO = create_node(scanlinesGroup.nodes, "NodeGroupOutput",(-200,0))
-            mul = create_node(scanlinesGroup.nodes, "ShaderNodeMath",(-1200,0),operation="MULTIPLY")
-            cos = create_node(scanlinesGroup.nodes, "ShaderNodeMath",(-1000,0),operation="COSINE")
-            div = create_node(scanlinesGroup.nodes, "ShaderNodeMath",(-800,0),operation="DIVIDE")
+        def build(group):
+            group_in = create_node(group.nodes, "NodeGroupInput", (-1400, 0))
+            group_out = create_node(group.nodes, "NodeGroupOutput", (-200, 0))
+            mul = create_node(group.nodes, "ShaderNodeMath", (-1200, 0), operation="MULTIPLY")
+            cos = create_node(group.nodes, "ShaderNodeMath", (-1000, 0), operation="COSINE")
+            div = create_node(group.nodes, "ShaderNodeMath", (-800, 0), operation="DIVIDE")
             div.inputs[1].default_value = 2
-            add = create_node(scanlinesGroup.nodes, "ShaderNodeMath",(-800,0))
+            add = create_node(group.nodes, "ShaderNodeMath", (-800, 0))
             add.inputs[1].default_value = 1
-            scanlinesGroup.links.new(scanlinesGroupI.outputs[0],mul.inputs[1])
-            scanlinesGroup.links.new(scanlinesGroupI.outputs[1],mul.inputs[0])
-            scanlinesGroup.links.new(mul.outputs[0],cos.inputs[0])
-            scanlinesGroup.links.new(cos.outputs[0],add.inputs[0])
-            scanlinesGroup.links.new(add.outputs[0],div.inputs[0])
-            scanlinesGroup.links.new(div.outputs[0],scanlinesGroupO.inputs[0])
+            group.links.new(group_in.outputs[0], mul.inputs[1])
+            group.links.new(group_in.outputs[1], mul.inputs[0])
+            group.links.new(mul.outputs[0], cos.inputs[0])
+            group.links.new(cos.outputs[0], add.inputs[0])
+            group.links.new(add.outputs[0], div.inputs[0])
+            group.links.new(div.outputs[0], group_out.inputs[0])
 
-            return scanlinesGroup
+        return _node_group(
+            "scanlines",
+            vers,
+            (('NodeSocketFloat', 'density'), ('NodeSocketFloat', 'uv')),
+            (('NodeSocketFloat', 'result'),),
+            build,
+        )
 
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
@@ -49,109 +324,93 @@ class ParallaxScreenTransparent:
         sockets=bsdf_socket_names()
         pBSDF.inputs[sockets['Specular']].default_value = 0
 
-        # PARAMETERS
-        if "SeparateLayersFromTexture" in Data:
-            separateLayersFromTex = CreateShaderNodeValue(CurMat,Data["SeparateLayersFromTexture"],-2000, 500,
-                                                          "SeparateLayersFromTexture")
+        value_specs = (
+            ('SeparateLayersFromTexture', -2000, 500, 'SeparateLayersFromTexture'),
+            ('LayersSeparation', -2000, 650, 'LayersSeparation'),
+            ('ScanlinesSpeed', -2000, 150, 'ScanlinesSpeed'),
+            ('TilesWidth', -2000, 100, 'TilesWidth'),
+            ('TilesHeight', -2000, 50, 'TilesHeight'),
+            ('PlaySpeed', -2000, 0, 'PlaySpeed'),
+            ('InterlaceLines', -2000, -100, 'InterlaceLines'),
+            ('TextureOffsetX', -2000, -150, 'TextureOffsetX'),
+            ('TextureOffsetY', -2000, -200, 'TextureOffsetY'),
+            ('ScrollSpeed1', -2000, -350, 'ScrollSpeed1'),
+            ('ScrollStepFactor1', -2000, -400, 'ScrollStepFactor1'),
+            ('ScrollMaskHeight1', -2000, -450, 'ScrollMaskHeight1'),
+            ('ScrollMaskStartPoint1', -2000, -500, 'ScrollMaskStartPoint1'),
+            ('ScrollSpeed2', -2000, -550, 'ScrollSpeed2'),
+            ('ScrollStepFactor2', -2000, -600, 'ScrollStepFactor2'),
+            ('ScrollMaskHeight2', -2000, -650, 'ScrollMaskHeight2'),
+            ('ScrollMaskStartPoint2', -2000, -700, 'ScrollMaskStartPoint2'),
+            ('ScrollVerticalOrHorizontal', -2000, -750, 'ScrollVerticalOrHorizontal'),
+            ('ScanlinesIntensity', -2000, -1000, 'ScanlinesIntensity'),
+            ('ScanlinesDensity', -2000, -1050, 'ScanlinesDensity'),
+            ('Emissive', -2000, -1100, 'Emissive'),
+            ('EdgesMask', -2000, -1400, 'EdgesMask'),
+        )
+        value_nodes = {
+            key: CreateShaderNodeValue(CurMat, Data[key], x, y, label)
+            for key, x, y, label in value_specs
+            if key in Data
+        }
+        component_specs = (
+            ('LayersScrollSpeed', (('X', -2000, 450), ('Y', -2000, 500), ('Z', -2000, 550), ('W', -2000, 600))),
+            ('ImageScale', (('X', -2000, -250), ('Y', -2000, -300))),
+            ('IntensityPerLayer', (('X', -2000, -800), ('Y', -2000, -850), ('Z', -2000, -900), ('W', -2000, -950))),
+            ('TexHSVControl', (('X', -2000, -1150), ('Y', -2000, -1200), ('Z', -2000, -1250))),
+        )
+        component_nodes = {}
+        for key, components in component_specs:
+            values = Data.get(key)
+            if not values:
+                continue
+            for component, x, y in components:
+                component_nodes[(key, component)] = CreateShaderNodeValue(
+                    CurMat, values[component], x, y, f'{key}.{component.lower()}'
+                )
 
-        if "LayersSeparation" in Data:
-            layersSeparation = CreateShaderNodeValue(CurMat,Data["LayersSeparation"],-2000, 650,"LayersSeparation")
-
-        if "LayersScrollSpeed" in Data:
-            layersScrollSpeed_x = CreateShaderNodeValue(CurMat,Data["LayersScrollSpeed"]["X"],-2000, 450,
-                                                        "LayersScrollSpeed.x")
-            layersScrollSpeed_y = CreateShaderNodeValue(CurMat,Data["LayersScrollSpeed"]["Y"],-2000, 500,
-                                                        "LayersScrollSpeed.y")
-            layersScrollSpeed_z = CreateShaderNodeValue(CurMat,Data["LayersScrollSpeed"]["Z"],-2000, 550,
-                                                        "LayersScrollSpeed.z")
-            layersScrollSpeed_w = CreateShaderNodeValue(CurMat,Data["LayersScrollSpeed"]["W"],-2000, 600,
-                                                        "LayersScrollSpeed.w")
-            
-        if "ScanlinesSpeed" in Data:
-            scanlinesSpeed = CreateShaderNodeValue(CurMat,Data["ScanlinesSpeed"],-2000, 150,"ScanlinesSpeed")
-
-        if "TilesWidth" in Data:
-            tilesW = CreateShaderNodeValue(CurMat,Data["TilesWidth"],-2000, 100,"TilesWidth")
-
-        if "TilesHeight" in Data:
-            tilesH = CreateShaderNodeValue(CurMat,Data["TilesHeight"],-2000, 50,"TilesHeight")
-
-        if "PlaySpeed" in Data:
-            playSpeed = CreateShaderNodeValue(CurMat,Data["PlaySpeed"],-2000, 0,"PlaySpeed")
-
-        if "InterlaceLines" in Data:
-            iLines = CreateShaderNodeValue(CurMat,Data["InterlaceLines"],-2000, -100,"InterlaceLines")
-
-        if "TextureOffsetX" in Data:
-            textureOffsetX = CreateShaderNodeValue(CurMat,Data["TextureOffsetX"],-2000, -150,"TextureOffsetX")
-
-        if "TextureOffsetY" in Data:
-            textureOffsetY = CreateShaderNodeValue(CurMat,Data["TextureOffsetY"],-2000, -200,"TextureOffsetY")
-
-        if "ImageScale" in Data:
-            imageScale_x = CreateShaderNodeValue(CurMat,Data["ImageScale"]["X"],-2000, -250,"ImageScale.x")
-            imageScale_y = CreateShaderNodeValue(CurMat,Data["ImageScale"]["Y"],-2000, -300,"ImageScale.y")
-
-        if "ScrollSpeed1" in Data:
-            scrollSpeed1 = CreateShaderNodeValue(CurMat,Data["ScrollSpeed1"],-2000, -350,"ScrollSpeed1")
-
-        if "ScrollStepFactor1" in Data:
-            scrollStepFactor1 = CreateShaderNodeValue(CurMat,Data["ScrollStepFactor1"],-2000, -400,"ScrollStepFactor1")  
-
-        if "ScrollMaskHeight1" in Data:
-            scrollMaskHeight1 = CreateShaderNodeValue(CurMat,Data["ScrollMaskHeight1"],-2000, -450,"ScrollMaskHeight1")  
-
-        if "ScrollMaskStartPoint1" in Data:
-            scrollMaskStartPoint1 = CreateShaderNodeValue(CurMat,Data["ScrollMaskStartPoint1"],-2000, -500,"ScrollMaskStartPoint1")  
-
-        if "ScrollSpeed2" in Data:
-            scrollSpeed2 = CreateShaderNodeValue(CurMat,Data["ScrollSpeed2"],-2000, -550,"ScrollSpeed2")
-
-        if "ScrollStepFactor2" in Data:
-            scrollStepFactor2 = CreateShaderNodeValue(CurMat,Data["ScrollStepFactor2"],-2000, -600,"ScrollStepFactor2")  
-
-        if "ScrollMaskHeight2" in Data:
-            scrollMaskHeight2 = CreateShaderNodeValue(CurMat,Data["ScrollMaskHeight2"],-2000, -650,"ScrollMaskHeight2")  
-
-        if "ScrollMaskStartPoint2" in Data:
-            scrollMaskStartPoint2 = CreateShaderNodeValue(CurMat,Data["ScrollMaskStartPoint2"],-2000, -700,"ScrollMaskStartPoint2")  
-
-        if "ScrollVerticalOrHorizontal" in Data:
-            scrollVerticalOrHorizontal = CreateShaderNodeValue(CurMat,Data["ScrollVerticalOrHorizontal"],
-                                                               -2000, -750,"ScrollVerticalOrHorizontal")
-        
-        if "IntensityPerLayer" in Data:
-            intensityPerLayer_x = CreateShaderNodeValue(CurMat,Data["IntensityPerLayer"]["X"],-2000, -800,"IntensityPerLayer.x")  
-            intensityPerLayer_y = CreateShaderNodeValue(CurMat,Data["IntensityPerLayer"]["Y"],-2000, -850,"IntensityPerLayer.y")  
-            intensityPerLayer_z = CreateShaderNodeValue(CurMat,Data["IntensityPerLayer"]["Z"],-2000, -900,"IntensityPerLayer.z")  
-            intensityPerLayer_w = CreateShaderNodeValue(CurMat,Data["IntensityPerLayer"]["W"],-2000, -950,"IntensityPerLayer.w")  
-
-        if "ScanlinesIntensity" in Data:
-            scanlinesIntensity = CreateShaderNodeValue(CurMat,Data["ScanlinesIntensity"],-2000, -1000,"ScanlinesIntensity")  
-
-        if "ScanlinesDensity" in Data:
-            scanlinesDensity = CreateShaderNodeValue(CurMat,Data["ScanlinesDensity"],-2000, -1050,"ScanlinesDensity")  
-
-        if "Emissive" in Data:
-            emissive = CreateShaderNodeValue(CurMat,Data["Emissive"],-2000, -1100,"Emissive")  
-
-        if "TexHSVControl" in Data:
-            texHSVControl_x = CreateShaderNodeValue(CurMat,Data["TexHSVControl"]["X"],-2000, -1150,"TexHSVControl.x")  
-            texHSVControl_y = CreateShaderNodeValue(CurMat,Data["TexHSVControl"]["Y"],-2000, -1200,"TexHSVControl.y")  
-            texHSVControl_z = CreateShaderNodeValue(CurMat,Data["TexHSVControl"]["Z"],-2000, -1250,"TexHSVControl.z")  
+        separateLayersFromTex = value_nodes.get('SeparateLayersFromTexture')
+        layersSeparation = value_nodes.get('LayersSeparation')
+        scanlinesSpeed = value_nodes.get('ScanlinesSpeed')
+        tilesW = value_nodes.get('TilesWidth')
+        tilesH = value_nodes.get('TilesHeight')
+        playSpeed = value_nodes.get('PlaySpeed')
+        iLines = value_nodes.get('InterlaceLines')
+        textureOffsetX = value_nodes.get('TextureOffsetX')
+        textureOffsetY = value_nodes.get('TextureOffsetY')
+        scrollSpeed1 = value_nodes.get('ScrollSpeed1')
+        scrollStepFactor1 = value_nodes.get('ScrollStepFactor1')
+        scrollMaskHeight1 = value_nodes.get('ScrollMaskHeight1')
+        scrollMaskStartPoint1 = value_nodes.get('ScrollMaskStartPoint1')
+        scrollSpeed2 = value_nodes.get('ScrollSpeed2')
+        scrollStepFactor2 = value_nodes.get('ScrollStepFactor2')
+        scrollMaskHeight2 = value_nodes.get('ScrollMaskHeight2')
+        scrollMaskStartPoint2 = value_nodes.get('ScrollMaskStartPoint2')
+        scrollVerticalOrHorizontal = value_nodes.get('ScrollVerticalOrHorizontal')
+        scanlinesIntensity = value_nodes.get('ScanlinesIntensity')
+        scanlinesDensity = value_nodes.get('ScanlinesDensity')
+        emissive = value_nodes.get('Emissive')
+        edgesMaskValue = value_nodes.get('EdgesMask')
+        layersScrollSpeed_x = component_nodes.get(('LayersScrollSpeed', 'X'))
+        layersScrollSpeed_y = component_nodes.get(('LayersScrollSpeed', 'Y'))
+        layersScrollSpeed_z = component_nodes.get(('LayersScrollSpeed', 'Z'))
+        layersScrollSpeed_w = component_nodes.get(('LayersScrollSpeed', 'W'))
+        imageScale_x = component_nodes.get(('ImageScale', 'X'))
+        imageScale_y = component_nodes.get(('ImageScale', 'Y'))
+        intensityPerLayer_x = component_nodes.get(('IntensityPerLayer', 'X'))
+        intensityPerLayer_y = component_nodes.get(('IntensityPerLayer', 'Y'))
+        intensityPerLayer_z = component_nodes.get(('IntensityPerLayer', 'Z'))
+        intensityPerLayer_w = component_nodes.get(('IntensityPerLayer', 'W'))
+        texHSVControl_x = component_nodes.get(('TexHSVControl', 'X'))
+        texHSVControl_y = component_nodes.get(('TexHSVControl', 'Y'))
+        texHSVControl_z = component_nodes.get(('TexHSVControl', 'Z'))
 
         if "Color" in Data:
-            color = CreateShaderNodeRGB(CurMat,Data["Color"],-2000, -1300,"Color")
-            color_a = CreateShaderNodeValue(CurMat,Data["Color"]["Alpha"]/255,-2000, -1350,"Color.a")  
+            color = CreateShaderNodeRGB(CurMat, Data["Color"], -2000, -1300, "Color")
+            color_a = CreateShaderNodeValue(CurMat, Data["Color"]["Alpha"] / 255, -2000, -1350, "Color.a")
 
-        if "EdgesMask" in Data:
-            edgesMaskValue = CreateShaderNodeValue(CurMat,Data["EdgesMask"],-2000, -1400,"EdgesMask")  
-
-        if "ScrollMaskTexture" in Data:
-            scrollMaskImg=imageFromRelPath(Data["ScrollMaskTexture"],DepotPath=self.BasePath, ProjPath=self.ProjPath, image_format=self.image_format)
-
-        if "ParalaxTexture" in Data:
-            parImg=imageFromRelPath(Data["ParalaxTexture"],DepotPath=self.BasePath, ProjPath=self.ProjPath, image_format=self.image_format)
+        scrollMaskImg = self._image_from_rel_path(Data.get("ScrollMaskTexture"))
+        parImg = self._image_from_rel_path(Data.get("ParalaxTexture"))
 
         # tangent, geometry node, uv
         tangent = create_node(CurMat.nodes, "ShaderNodeTangent", (-2000,400))
@@ -196,9 +455,8 @@ class ParallaxScreenTransparent:
         CurMat.links.new(color.outputs[0], gamma.inputs[0])
 
         # n
-        if 'n_ps_t' in bpy.data.node_groups.keys():
-            ngroup = bpy.data.node_groups['n_ps_t']
-        else:
+        ngroup = bpy.data.node_groups.get('n_ps_t')
+        if ngroup is None:
             ngroup = bpy.data.node_groups.new("n_ps_t","ShaderNodeTree")   
             if vers[0]<4:
                 ngroup.inputs.new('NodeSocketFloat','TilesWidth')
@@ -243,9 +501,8 @@ class ParallaxScreenTransparent:
         CurMat.links.new(time.outputs[0],n.inputs[3])
 
         # frameAdd	
-        if 'frameAdd_ps_t' in bpy.data.node_groups.keys():
-            frameGroup = bpy.data.node_groups['frameAdd_ps_t']
-        else:
+        frameGroup = bpy.data.node_groups.get('frameAdd_ps_t')
+        if frameGroup is None:
             frameGroup = bpy.data.node_groups.new("frameAdd_ps_t","ShaderNodeTree") 
             if vers[0]<4:
                 frameGroup.inputs.new('NodeSocketVector','UV')
@@ -297,9 +554,8 @@ class ParallaxScreenTransparent:
         CurMat.links.new(n.outputs[0],frameAdd.inputs["n"])
 
         # subUV
-        if 'subUV' in bpy.data.node_groups.keys():
-            subUVGroup = bpy.data.node_groups['subUV']
-        else:
+        subUVGroup = bpy.data.node_groups.get('subUV')
+        if subUVGroup is None:
             subUVGroup = bpy.data.node_groups.new("subUV","ShaderNodeTree") 
             if vers[0]<4:
                 subUVGroup.inputs.new('NodeSocketFloat','TilesWidth')
@@ -377,9 +633,9 @@ class ParallaxScreenTransparent:
 
         # newUV
 
-        if 'newUV_ps_t' in bpy.data.node_groups.keys():
-            newUVGroup = bpy.data.node_groups['newUV_ps_t']
-        else:
+        newUVGroup = bpy.data.node_groups.get('newUV_ps_t')
+
+        if newUVGroup is None:
             newUVGroup = bpy.data.node_groups.new("newUV_ps_t","ShaderNodeTree") 
             if vers[0]<4:
                 newUVGroup.inputs.new('NodeSocketVector','subUV')
@@ -429,283 +685,41 @@ class ParallaxScreenTransparent:
         CurMat.links.new(imageScale_x.outputs[0],newUV.inputs[3])
         CurMat.links.new(imageScale_y.outputs[0],newUV.inputs[4])
 
-        # scroll1
-        if 'scroll1_ps_t' in bpy.data.node_groups.keys():
-            scroll1Group = bpy.data.node_groups['scroll1_ps_t']
-        else:
-            scroll1Group = bpy.data.node_groups.new("scroll1_ps_t","ShaderNodeTree") 
-            if vers[0]<4:
-                scroll1Group.inputs.new('NodeSocketFloat','ScrollSpeed1')
-                scroll1Group.inputs.new('NodeSocketFloat','ScrollStepFactor1')
-                scroll1Group.inputs.new('NodeSocketFloat','Time')
-                scroll1Group.outputs.new('NodeSocketFloat','scroll1')
-            else:
-                scroll1Group.interface.new_socket(name="ScrollSpeed1", socket_type='NodeSocketFloat', in_out='INPUT')
-                scroll1Group.interface.new_socket(name="ScrollStepFactor1", socket_type='NodeSocketFloat', in_out='INPUT')
-                scroll1Group.interface.new_socket(name="Time", socket_type='NodeSocketFloat', in_out='INPUT')
-                scroll1Group.interface.new_socket(name="scroll1", socket_type='NodeSocketFloat', in_out='OUTPUT')
-
-            scroll1GroupI = create_node(scroll1Group.nodes, "NodeGroupInput",(-1400,0))
-            scroll1GroupO = create_node(scroll1Group.nodes, "NodeGroupOutput",(-600,0))
-            mul = create_node(scroll1Group.nodes, "ShaderNodeMath",(-1250,0),operation="MULTIPLY")
-            mul2 = create_node(scroll1Group.nodes, "ShaderNodeMath",(-1100,0),operation="MULTIPLY")
-            div = create_node(scroll1Group.nodes, "ShaderNodeMath",(-950,0),operation="DIVIDE")
-            floor = create_node(scroll1Group.nodes, "ShaderNodeMath",(-800,0),operation="FLOOR")
-            scroll1Group.links.new(scroll1GroupI.outputs[2],mul.inputs[0])
-            scroll1Group.links.new(scroll1GroupI.outputs[0],mul.inputs[1])
-            scroll1Group.links.new(mul.outputs[0],mul2.inputs[0])
-            scroll1Group.links.new(scroll1GroupI.outputs[1],mul2.inputs[1])
-            scroll1Group.links.new(mul2.outputs[0],div.inputs[0])
-            scroll1Group.links.new(scroll1GroupI.outputs[1],div.inputs[1])
-            scroll1Group.links.new(div.outputs[0],floor.inputs[0])
-            scroll1Group.links.new(floor.outputs[0],scroll1GroupO.inputs[0])
-
-        scroll1 = create_node(CurMat.nodes,"ShaderNodeGroup",(-1500, -200), label="scroll1_ps_t")
-        scroll1.node_tree = scroll1Group
-        scroll1.name = "scroll1_ps_t"
+        scroll1Group = _create_scroll_group(1, vers)
+        scroll1 = _group_node(CurMat, scroll1Group, (-1500, -200), label="scroll1_ps_t", name="scroll1_ps_t")
         CurMat.links.new(scrollSpeed1.outputs[0], scroll1.inputs[0])
         CurMat.links.new(scrollStepFactor1.outputs[0], scroll1.inputs[1])
         CurMat.links.new(time.outputs[0], scroll1.inputs[2])
-        # scrollUV1
-        if 'scrollUV1_ps_t' in bpy.data.node_groups.keys():
-            scrollUV1Group = bpy.data.node_groups['scrollUV1_ps_t']
-        else:
-            scrollUV1Group = bpy.data.node_groups.new("scrollUV1_ps_t","ShaderNodeTree") 
-            if vers[0]<4:
-                scrollUV1Group.inputs.new('NodeSocketVector','newUV')
-                scrollUV1Group.inputs.new('NodeSocketFloat','ScrollMaskHeight1')
-                scrollUV1Group.inputs.new('NodeSocketFloat','scroll1')
-                scrollUV1Group.inputs.new('NodeSocketFloat','ScrollMaskStartPoint1')
-                scrollUV1Group.outputs.new('NodeSocketVector','scrollUV1')
-            else:
-                scrollUV1Group.interface.new_socket(name="newUV", socket_type='NodeSocketVector', in_out='INPUT')
-                scrollUV1Group.interface.new_socket(name="ScrollMaskHeight1", socket_type='NodeSocketFloat', in_out='INPUT')
-                scrollUV1Group.interface.new_socket(name="scroll1", socket_type='NodeSocketFloat', in_out='INPUT')
-                scrollUV1Group.interface.new_socket(name="ScrollMaskStartPoint1", socket_type='NodeSocketFloat', in_out='INPUT')
-                scrollUV1Group.interface.new_socket(name="scrollUV1", socket_type='NodeSocketVector', in_out='OUTPUT')
 
-            scrollUV1GroupI = create_node(scrollUV1Group.nodes, "NodeGroupInput",(-1400,0))
-            scrollUV1GroupO = create_node(scrollUV1Group.nodes, "NodeGroupOutput",(-200,0))
-            separate = create_node(scrollUV1Group.nodes, "ShaderNodeSeparateXYZ",(-1250,100))
-            div2 = create_node(scrollUV1Group.nodes, "ShaderNodeMath",(-1250,0),operation="DIVIDE")
-            mul3 = create_node(scrollUV1Group.nodes, "ShaderNodeMath",(-1100,0),operation="MULTIPLY")
-            add = create_node(scrollUV1Group.nodes, "ShaderNodeMath",(-950,0),operation="ADD")
-            frac = create_node(scrollUV1Group.nodes, "ShaderNodeMath",(-800,0),operation="FRACT")
-            mul4 = create_node(scrollUV1Group.nodes, "ShaderNodeMath",(-650,0),operation="MULTIPLY")
-            add2 = create_node(scrollUV1Group.nodes, "ShaderNodeMath",(-500,0),operation="ADD")
-            combine2 = create_node(scrollUV1Group.nodes, "ShaderNodeCombineXYZ",(-350,100))
-            div2.inputs[0].default_value = 1
-            scrollUV1Group.links.new(scrollUV1GroupI.outputs[0],separate.inputs[0])
-            scrollUV1Group.links.new(scrollUV1GroupI.outputs[1],div2.inputs[1])
-            scrollUV1Group.links.new(separate.outputs[1],mul3.inputs[0])
-            scrollUV1Group.links.new(div2.outputs[0],mul3.inputs[1])
-            scrollUV1Group.links.new(mul3.outputs[0],add.inputs[0])
-            scrollUV1Group.links.new(scrollUV1GroupI.outputs[2],add.inputs[1])
-            scrollUV1Group.links.new(add.outputs[0],frac.inputs[0])
-            scrollUV1Group.links.new(frac.outputs[0],mul4.inputs[0])
-            scrollUV1Group.links.new(scrollUV1GroupI.outputs[1],mul4.inputs[1])
-            scrollUV1Group.links.new(mul4.outputs[0],add2.inputs[0])
-            scrollUV1Group.links.new(scrollUV1GroupI.outputs[3],add2.inputs[1])
-            scrollUV1Group.links.new(separate.outputs[0],combine2.inputs[0])
-            scrollUV1Group.links.new(add2.outputs[0],combine2.inputs[1])
-            scrollUV1Group.links.new(combine2.outputs[0],scrollUV1GroupO.inputs[0])
-
-        scrollUV1 = create_node(CurMat.nodes,"ShaderNodeGroup",(-1350, -200), label="scrollUV1_ps_t")
-        scrollUV1.node_tree = scrollUV1Group
-        scrollUV1.name = "scrollUV1_ps_t"
+        scrollUV1Group = _create_scroll_uv_group(1, False, vers)
+        scrollUV1 = _group_node(CurMat, scrollUV1Group, (-1350, -200), label="scrollUV1_ps_t", name="scrollUV1_ps_t")
         CurMat.links.new(newUV.outputs[0], scrollUV1.inputs[0])
         CurMat.links.new(scrollMaskHeight1.outputs[0], scrollUV1.inputs[1])
         CurMat.links.new(scroll1.outputs[0], scrollUV1.inputs[2])
         CurMat.links.new(scrollMaskStartPoint1.outputs[0], scrollUV1.inputs[3])
 
-        # scrollUV1X
-        if 'scrollUV1X' in bpy.data.node_groups.keys():
-            scrollUV1XGroup = bpy.data.node_groups['scrollUV1X']
-        else:
-            scrollUV1XGroup = bpy.data.node_groups.new("scrollUV1X","ShaderNodeTree") 
-            if vers[0]<4:
-                scrollUV1XGroup.inputs.new('NodeSocketVector','newUV')
-                scrollUV1XGroup.inputs.new('NodeSocketFloat','ScrollMaskHeight1')
-                scrollUV1XGroup.inputs.new('NodeSocketFloat','scroll1')
-                scrollUV1XGroup.inputs.new('NodeSocketFloat','ScrollMaskStartPoint1')
-                scrollUV1XGroup.outputs.new('NodeSocketVector','scrollUV1X')
-            else:
-                scrollUV1XGroup.interface.new_socket(name="newUV", socket_type='NodeSocketVector', in_out='INPUT')
-                scrollUV1XGroup.interface.new_socket(name="ScrollMaskHeight1", socket_type='NodeSocketFloat', in_out='INPUT')
-                scrollUV1XGroup.interface.new_socket(name="scroll1", socket_type='NodeSocketFloat', in_out='INPUT')
-                scrollUV1XGroup.interface.new_socket(name="ScrollMaskStartPoint1", socket_type='NodeSocketFloat', in_out='INPUT')
-                scrollUV1XGroup.interface.new_socket(name="scrollUV1X", socket_type='NodeSocketVector', in_out='OUTPUT')
-
-            scrollUV1XGroupI = create_node(scrollUV1XGroup.nodes, "NodeGroupInput",(-1400,0))
-            scrollUV1XGroupO = create_node(scrollUV1XGroup.nodes, "NodeGroupOutput",(-200,0))
-            separate = create_node(scrollUV1XGroup.nodes, "ShaderNodeSeparateXYZ",(-1250,-100))
-            div = create_node(scrollUV1XGroup.nodes, "ShaderNodeMath",(-1250,0),operation="DIVIDE")
-            mul = create_node(scrollUV1XGroup.nodes, "ShaderNodeMath",(-1100,0),operation="MULTIPLY")
-            add = create_node(scrollUV1XGroup.nodes, "ShaderNodeMath",(-950,0),operation="ADD")
-            frac = create_node(scrollUV1XGroup.nodes, "ShaderNodeMath",(-800,0),operation="FRACT")
-            mul2 = create_node(scrollUV1XGroup.nodes, "ShaderNodeMath",(-650,0),operation="MULTIPLY")
-            add2 = create_node(scrollUV1XGroup.nodes, "ShaderNodeMath",(-500,0),operation="ADD")
-            combine4 = create_node(scrollUV1XGroup.nodes, "ShaderNodeCombineXYZ",(-350,-100))
-            div.inputs[0].default_value = 1
-            scrollUV1XGroup.links.new(scrollUV1XGroupI.outputs[0],separate.inputs[0])
-            scrollUV1XGroup.links.new(scrollUV1XGroupI.outputs[1],div.inputs[1])
-            scrollUV1XGroup.links.new(separate.outputs[0],mul.inputs[0])
-            scrollUV1XGroup.links.new(div.outputs[0],mul.inputs[1])
-            scrollUV1XGroup.links.new(mul.outputs[0],add.inputs[0])
-            scrollUV1XGroup.links.new(scrollUV1XGroupI.outputs[2],add.inputs[1])
-            scrollUV1XGroup.links.new(add.outputs[0],frac.inputs[0])
-            scrollUV1XGroup.links.new(frac.outputs[0],mul2.inputs[0])
-            scrollUV1XGroup.links.new(scrollUV1XGroupI.outputs[1],mul2.inputs[1])
-            scrollUV1XGroup.links.new(mul2.outputs[0],add2.inputs[0])
-            scrollUV1XGroup.links.new(scrollUV1XGroupI.outputs[3],add2.inputs[1])
-            scrollUV1XGroup.links.new(separate.outputs[1],combine4.inputs[1])
-            scrollUV1XGroup.links.new(add2.outputs[0],combine4.inputs[0])
-            scrollUV1XGroup.links.new(combine4.outputs[0],scrollUV1XGroupO.inputs[0])
-
-        scrollUV1X = create_node(CurMat.nodes,"ShaderNodeGroup",(-1350, -250), label="scrollUV1X")
-        scrollUV1X.node_tree = scrollUV1XGroup
-        scrollUV1X.name = "scrollUV1X"
+        scrollUV1XGroup = _create_scroll_uv_group(1, True, vers)
+        scrollUV1X = _group_node(CurMat, scrollUV1XGroup, (-1350, -250), label="scrollUV1X", name="scrollUV1X")
         CurMat.links.new(newUV.outputs[0], scrollUV1X.inputs[0])
         CurMat.links.new(scrollMaskHeight1.outputs[0], scrollUV1X.inputs[1])
         CurMat.links.new(scroll1.outputs[0], scrollUV1X.inputs[2])
         CurMat.links.new(scrollMaskStartPoint1.outputs[0], scrollUV1X.inputs[3])
 
-        # scroll2
-        if 'scroll2_ps_t' in bpy.data.node_groups.keys():
-            scroll2Group = bpy.data.node_groups['scroll2_ps_t']
-        else:
-            scroll2Group = bpy.data.node_groups.new("scroll2_ps_t","ShaderNodeTree") 
-            if vers[0]<4:
-                scroll2Group.inputs.new('NodeSocketFloat','ScrollSpeed2')
-                scroll2Group.inputs.new('NodeSocketFloat','ScrollStepFactor2')
-                scroll2Group.inputs.new('NodeSocketFloat','Time')
-                scroll2Group.outputs.new('NodeSocketFloat','scroll2')
-            else:
-                scroll2Group.interface.new_socket(name="ScrollSpeed2", socket_type='NodeSocketFloat', in_out='INPUT')
-                scroll2Group.interface.new_socket(name="ScrollStepFactor2", socket_type='NodeSocketFloat', in_out='INPUT')
-                scroll2Group.interface.new_socket(name="Time", socket_type='NodeSocketFloat', in_out='INPUT')
-                scroll2Group.interface.new_socket(name="scroll2", socket_type='NodeSocketFloat', in_out='OUTPUT')
-
-            scroll2GroupI = create_node(scroll2Group.nodes, "NodeGroupInput",(-1400,0))
-            scroll2GroupO = create_node(scroll2Group.nodes, "NodeGroupOutput",(-600,0))
-            mul = create_node(scroll2Group.nodes, "ShaderNodeMath",(-1250,0),operation="MULTIPLY")
-            mul2 = create_node(scroll2Group.nodes, "ShaderNodeMath",(-1100,0),operation="MULTIPLY")
-            div = create_node(scroll2Group.nodes, "ShaderNodeMath",(-950,0),operation="DIVIDE")
-            floor = create_node(scroll2Group.nodes, "ShaderNodeMath",(-800,0),operation="FLOOR")
-            scroll2Group.links.new(scroll2GroupI.outputs[2],mul.inputs[0])
-            scroll2Group.links.new(scroll2GroupI.outputs[0],mul.inputs[1])
-            scroll2Group.links.new(mul.outputs[0],mul2.inputs[0])
-            scroll2Group.links.new(scroll2GroupI.outputs[1],mul2.inputs[1])
-            scroll2Group.links.new(mul2.outputs[0],div.inputs[0])
-            scroll2Group.links.new(scroll2GroupI.outputs[1],div.inputs[1])
-            scroll2Group.links.new(div.outputs[0],floor.inputs[0])
-            scroll2Group.links.new(floor.outputs[0],scroll2GroupO.inputs[0])
-
-        scroll2 = create_node(CurMat.nodes,"ShaderNodeGroup",(-1500, -300), label="scroll2_ps_t")
-        scroll2.node_tree = scroll2Group
-        scroll2.name = "scroll2_ps_t"
+        scroll2Group = _create_scroll_group(2, vers)
+        scroll2 = _group_node(CurMat, scroll2Group, (-1500, -300), label="scroll2_ps_t", name="scroll2_ps_t")
         CurMat.links.new(scrollSpeed2.outputs[0], scroll2.inputs[0])
         CurMat.links.new(scrollStepFactor2.outputs[0], scroll2.inputs[1])
         CurMat.links.new(time.outputs[0], scroll2.inputs[2])
 
-        # scrollUV2
-        if 'scrollUV2_ps_t' in bpy.data.node_groups.keys():
-            scrollUV2Group = bpy.data.node_groups['scrollUV2_ps_t']
-        else:
-            scrollUV2Group = bpy.data.node_groups.new("scrollUV2_ps_t","ShaderNodeTree") 
-            if vers[0]<4:
-                scrollUV2Group.inputs.new('NodeSocketVector','newUV')
-                scrollUV2Group.inputs.new('NodeSocketFloat','ScrollMaskHeight2')
-                scrollUV2Group.inputs.new('NodeSocketFloat','scroll2')
-                scrollUV2Group.inputs.new('NodeSocketFloat','ScrollMaskStartPoint2')
-                scrollUV2Group.outputs.new('NodeSocketVector','scrollUV2')
-            else:
-                scrollUV2Group.interface.new_socket(name="newUV", socket_type='NodeSocketVector', in_out='INPUT')
-                scrollUV2Group.interface.new_socket(name="ScrollMaskHeight2", socket_type='NodeSocketFloat', in_out='INPUT')
-                scrollUV2Group.interface.new_socket(name="scroll2", socket_type='NodeSocketFloat', in_out='INPUT')
-                scrollUV2Group.interface.new_socket(name="ScrollMaskStartPoint2", socket_type='NodeSocketFloat', in_out='INPUT')
-                scrollUV2Group.interface.new_socket(name="scrollUV2", socket_type='NodeSocketVector', in_out='OUTPUT')
-
-            scrollUV2GroupI = create_node(scrollUV2Group.nodes, "NodeGroupInput",(-1400,0))
-            scrollUV2GroupO = create_node(scrollUV2Group.nodes, "NodeGroupOutput",(-200,0))
-            separate = create_node(scrollUV2Group.nodes, "ShaderNodeSeparateXYZ",(-1250,100))
-            div2 = create_node(scrollUV2Group.nodes, "ShaderNodeMath",(-1250,0),operation="DIVIDE")
-            mul3 = create_node(scrollUV2Group.nodes, "ShaderNodeMath",(-1100,0),operation="MULTIPLY")
-            add = create_node(scrollUV2Group.nodes, "ShaderNodeMath",(-950,0),operation="ADD")
-            frac = create_node(scrollUV2Group.nodes, "ShaderNodeMath",(-800,0),operation="FRACT")
-            mul4 = create_node(scrollUV2Group.nodes, "ShaderNodeMath",(-650,0),operation="MULTIPLY")
-            add2 = create_node(scrollUV2Group.nodes, "ShaderNodeMath",(-500,0),operation="ADD")
-            combine3 = create_node(scrollUV2Group.nodes, "ShaderNodeCombineXYZ",(-350,100))
-            div2.inputs[0].default_value = 1
-            scrollUV2Group.links.new(scrollUV2GroupI.outputs[0],separate.inputs[0])
-            scrollUV2Group.links.new(scrollUV2GroupI.outputs[1],div2.inputs[1])
-            scrollUV2Group.links.new(separate.outputs[1],mul3.inputs[0])
-            scrollUV2Group.links.new(div2.outputs[0],mul3.inputs[1])
-            scrollUV2Group.links.new(mul3.outputs[0],add.inputs[0])
-            scrollUV2Group.links.new(scrollUV2GroupI.outputs[2],add.inputs[1])
-            scrollUV2Group.links.new(add.outputs[0],frac.inputs[0])
-            scrollUV2Group.links.new(frac.outputs[0],mul4.inputs[0])
-            scrollUV2Group.links.new(scrollUV2GroupI.outputs[1],mul4.inputs[1])
-            scrollUV2Group.links.new(mul4.outputs[0],add2.inputs[0])
-            scrollUV2Group.links.new(scrollUV2GroupI.outputs[3],add2.inputs[1])
-            scrollUV2Group.links.new(separate.outputs[0],combine3.inputs[0])
-            scrollUV2Group.links.new(add2.outputs[0],combine3.inputs[1])
-            scrollUV2Group.links.new(combine3.outputs[0],scrollUV2GroupO.inputs[0])
-
-        scrollUV2 = create_node(CurMat.nodes,"ShaderNodeGroup",(-1350, -300), label="scrollUV2_ps_t")
-        scrollUV2.node_tree = scrollUV2Group
-        scrollUV2.name = "scrollUV2_ps_t"
+        scrollUV2Group = _create_scroll_uv_group(2, False, vers)
+        scrollUV2 = _group_node(CurMat, scrollUV2Group, (-1350, -300), label="scrollUV2_ps_t", name="scrollUV2_ps_t")
         CurMat.links.new(newUV.outputs[0], scrollUV2.inputs[0])
         CurMat.links.new(scrollMaskHeight2.outputs[0], scrollUV2.inputs[1])
         CurMat.links.new(scroll2.outputs[0], scrollUV2.inputs[2])
         CurMat.links.new(scrollMaskStartPoint2.outputs[0], scrollUV2.inputs[3])
 
-        # scrollUV2X
-        if 'scrollUV2X' in bpy.data.node_groups.keys():
-            scrollUV2XGroup = bpy.data.node_groups['scrollUV2X']
-        else:
-            scrollUV2XGroup = bpy.data.node_groups.new("scrollUV2X","ShaderNodeTree") 
-            if vers[0]<4:
-                scrollUV2XGroup.inputs.new('NodeSocketVector','newUV')
-                scrollUV2XGroup.inputs.new('NodeSocketFloat','ScrollMaskHeight2')
-                scrollUV2XGroup.inputs.new('NodeSocketFloat','scroll2')
-                scrollUV2XGroup.inputs.new('NodeSocketFloat','ScrollMaskStartPoint2')
-                scrollUV2XGroup.outputs.new('NodeSocketVector','scrollUV2X')
-            else:
-                scrollUV2XGroup.interface.new_socket(name="newUV", socket_type='NodeSocketVector', in_out='INPUT')
-                scrollUV2XGroup.interface.new_socket(name="ScrollMaskHeight2", socket_type='NodeSocketFloat', in_out='INPUT')
-                scrollUV2XGroup.interface.new_socket(name="scroll2", socket_type='NodeSocketFloat', in_out='INPUT')
-                scrollUV2XGroup.interface.new_socket(name="ScrollMaskStartPoint2", socket_type='NodeSocketFloat', in_out='INPUT')
-                scrollUV2XGroup.interface.new_socket(name="scrollUV2X", socket_type='NodeSocketVector', in_out='OUTPUT')
-            scrollUV2XGroupI = create_node(scrollUV2XGroup.nodes, "NodeGroupInput",(-1400,0))
-            scrollUV2XGroupO = create_node(scrollUV2XGroup.nodes, "NodeGroupOutput",(-200,0))
-            separate = create_node(scrollUV2XGroup.nodes, "ShaderNodeSeparateXYZ",(-1250,-100))
-            div = create_node(scrollUV2XGroup.nodes, "ShaderNodeMath",(-1250,0),operation="DIVIDE")
-            mul = create_node(scrollUV2XGroup.nodes, "ShaderNodeMath",(-1100,0),operation="MULTIPLY")
-            add = create_node(scrollUV2XGroup.nodes, "ShaderNodeMath",(-950,0),operation="ADD")
-            frac = create_node(scrollUV2XGroup.nodes, "ShaderNodeMath",(-800,0),operation="FRACT")
-            mul2 = create_node(scrollUV2XGroup.nodes, "ShaderNodeMath",(-650,0),operation="MULTIPLY")
-            add2 = create_node(scrollUV2XGroup.nodes, "ShaderNodeMath",(-500,0),operation="ADD")
-            combine14 = create_node(scrollUV2XGroup.nodes, "ShaderNodeCombineXYZ",(-350,-100))
-            div.inputs[0].default_value = 1
-            scrollUV2XGroup.links.new(scrollUV2XGroupI.outputs[0],separate.inputs[0])
-            scrollUV2XGroup.links.new(scrollUV2XGroupI.outputs[1],div.inputs[1])
-            scrollUV2XGroup.links.new(separate.outputs[0],mul.inputs[0])
-            scrollUV2XGroup.links.new(div.outputs[0],mul.inputs[1])
-            scrollUV2XGroup.links.new(mul.outputs[0],add.inputs[0])
-            scrollUV2XGroup.links.new(scrollUV2XGroupI.outputs[2],add.inputs[1])
-            scrollUV2XGroup.links.new(add.outputs[0],frac.inputs[0])
-            scrollUV2XGroup.links.new(frac.outputs[0],mul2.inputs[0])
-            scrollUV2XGroup.links.new(scrollUV2XGroupI.outputs[1],mul2.inputs[1])
-            scrollUV2XGroup.links.new(mul2.outputs[0],add2.inputs[0])
-            scrollUV2XGroup.links.new(scrollUV2XGroupI.outputs[3],add2.inputs[1])
-            scrollUV2XGroup.links.new(separate.outputs[1],combine14.inputs[1])
-            scrollUV2XGroup.links.new(add2.outputs[0],combine14.inputs[0])
-            scrollUV2XGroup.links.new(combine14.outputs[0],scrollUV2XGroupO.inputs[0])
-
-        scrollUV2X = create_node(CurMat.nodes,"ShaderNodeGroup",(-1350, -350), label="scrollUV2X")
-        scrollUV2X.node_tree = scrollUV2XGroup
-        scrollUV2X.name = "scrollUV2X"
+        scrollUV2XGroup = _create_scroll_uv_group(2, True, vers)
+        scrollUV2X = _group_node(CurMat, scrollUV2XGroup, (-1350, -350), label="scrollUV2X", name="scrollUV2X")
         CurMat.links.new(newUV.outputs[0], scrollUV2X.inputs[0])
         CurMat.links.new(scrollMaskHeight2.outputs[0], scrollUV2X.inputs[1])
         CurMat.links.new(scroll2.outputs[0], scrollUV2X.inputs[2])
@@ -713,9 +727,8 @@ class ParallaxScreenTransparent:
 
         # TODO ClampUV
         # l1
-        if 'l1_ps_t' in bpy.data.node_groups.keys():
-            l1Group = bpy.data.node_groups['l1_ps_t']
-        else:     
+        l1Group = bpy.data.node_groups.get('l1_ps_t')
+        if l1Group is None:     
             l1Group = bpy.data.node_groups.new("l1_ps_t","ShaderNodeTree")   
             if vers[0]<4:
                 l1Group.inputs.new('NodeSocketVector','newUV') 
@@ -749,9 +762,8 @@ class ParallaxScreenTransparent:
         CurMat.links.new(newUV.outputs[0],l1.inputs[0])
 
         # l2
-        if 'l2_ps_t' in bpy.data.node_groups.keys():
-            l2Group = bpy.data.node_groups['l2_ps_t']
-        else:     
+        l2Group = bpy.data.node_groups.get('l2_ps_t')
+        if l2Group is None:     
             l2Group = bpy.data.node_groups.new("l2_ps_t","ShaderNodeTree")
             if vers[0]<4:
                 l2Group.inputs.new('NodeSocketVector','modUV')
@@ -802,9 +814,9 @@ class ParallaxScreenTransparent:
 
         # l3
 
-        if 'l3_ps_t' in bpy.data.node_groups.keys():
-            l3Group = bpy.data.node_groups['l3_ps_t']
-        else:     
+        l3Group = bpy.data.node_groups.get('l3_ps_t')
+
+        if l3Group is None:     
             l3Group = bpy.data.node_groups.new("l3_ps_t","ShaderNodeTree")
             if vers[0]<4:
                 l3Group.inputs.new('NodeSocketVector','modUV')
@@ -858,9 +870,9 @@ class ParallaxScreenTransparent:
 
         # l4
 
-        if 'l4' in bpy.data.node_groups.keys():
-            l4Group = bpy.data.node_groups['l4_ps_t']
-        else:     
+        l4Group = bpy.data.node_groups.get('l4_ps_t')
+
+        if l4Group is None:     
             l4Group = bpy.data.node_groups.new("l4_ps_t","ShaderNodeTree")
             if vers[0]<4:
                 l4Group.inputs.new('NodeSocketVector','modUV')
@@ -913,9 +925,8 @@ class ParallaxScreenTransparent:
         CurMat.links.new(layersSeparation.outputs[0],l4.inputs[2])
 
         # l1_2
-        if 'l1_2' in bpy.data.node_groups.keys():
-            l1_2Group = bpy.data.node_groups['l1_2']
-        else:     
+        l1_2Group = bpy.data.node_groups.get('l1_2')
+        if l1_2Group is None:     
             l1_2Group = bpy.data.node_groups.new("l1_2","ShaderNodeTree")   
             if vers[0]<4:
                 l1_2Group.inputs.new('NodeSocketVector','newUV') 
@@ -942,9 +953,8 @@ class ParallaxScreenTransparent:
         CurMat.links.new(newUV.outputs[0],l1_2.inputs[0])
 
         # l2_2
-        if 'l2_2' in bpy.data.node_groups.keys():
-            l2_2Group = bpy.data.node_groups['l2_2']
-        else:     
+        l2_2Group = bpy.data.node_groups.get('l2_2')
+        if l2_2Group is None:     
             l2_2Group = bpy.data.node_groups.new("l2_2","ShaderNodeTree")
             if vers[0]<4:
                 l2_2Group.inputs.new('NodeSocketVector','modUV')
@@ -984,9 +994,8 @@ class ParallaxScreenTransparent:
         CurMat.links.new(layersSeparation.outputs[0],l2_2.inputs[2])
 
         # l3_2
-        if 'l3_2' in bpy.data.node_groups.keys():
-            l3_2Group = bpy.data.node_groups['l3_2']
-        else:     
+        l3_2Group = bpy.data.node_groups.get('l3_2')
+        if l3_2Group is None:     
             l3_2Group = bpy.data.node_groups.new("l3_2","ShaderNodeTree")
             if vers[0]<4:
                 l3_2Group.inputs.new('NodeSocketVector','modUV')
@@ -1029,9 +1038,8 @@ class ParallaxScreenTransparent:
         CurMat.links.new(layersSeparation.outputs[0],l3_2.inputs[2])
 
         # l4_2
-        if 'l4_2' in bpy.data.node_groups.keys():
-            l4_2Group = bpy.data.node_groups['l4_2']
-        else:     
+        l4_2Group = bpy.data.node_groups.get('l4_2')
+        if l4_2Group is None:     
             l4_2Group = bpy.data.node_groups.new("l4_2","ShaderNodeTree")
             if vers[0]<4:
                 l4_2Group.inputs.new('NodeSocketVector','modUV')
@@ -1094,9 +1102,9 @@ class ParallaxScreenTransparent:
         CurMat.links.new(l4.outputs[0],vecMix4.inputs[5])
         CurMat.links.new(l4_2.outputs[0],vecMix4.inputs[4])
 
-        if 'l1scrollspeed' in bpy.data.node_groups.keys():
-            l1ssGroup = bpy.data.node_groups['l1scrollspeed']
-        else:     
+        l1ssGroup = bpy.data.node_groups.get('l1scrollspeed')
+
+        if l1ssGroup is None:     
             l1ssGroup = bpy.data.node_groups.new("l1scrollspeed","ShaderNodeTree")
             if vers[0]<4:
                 l1ssGroup.inputs.new('NodeSocketVector','l1')
@@ -1131,9 +1139,10 @@ class ParallaxScreenTransparent:
         CurMat.links.new(time.outputs[0],l1ss.inputs[2])
 
 
-        if 'l2scrollspeed' in bpy.data.node_groups.keys():
-            l2ssGroup = bpy.data.node_groups['l2scrollspeed']
-        else:     
+        l2ssGroup = bpy.data.node_groups.get('l2scrollspeed')
+
+
+        if l2ssGroup is None:     
             l2ssGroup = bpy.data.node_groups.new("l2scrollspeed","ShaderNodeTree")
             if vers[0]<4:
                 l2ssGroup.inputs.new('NodeSocketVector','l2')
@@ -1167,9 +1176,9 @@ class ParallaxScreenTransparent:
         CurMat.links.new(layersScrollSpeed_y.outputs[0],l2ss.inputs[1])
         CurMat.links.new(time.outputs[0],l2ss.inputs[2]) 
 
-        if 'l3scrollspeed' in bpy.data.node_groups.keys():
-            l3ssGroup = bpy.data.node_groups['l3scrollspeed']
-        else:     
+        l3ssGroup = bpy.data.node_groups.get('l3scrollspeed')
+
+        if l3ssGroup is None:     
             l3ssGroup = bpy.data.node_groups.new("l3scrollspeed","ShaderNodeTree")
             if vers[0]<4:
                 l3ssGroup.inputs.new('NodeSocketVector','l3')
@@ -1203,9 +1212,9 @@ class ParallaxScreenTransparent:
         CurMat.links.new(layersScrollSpeed_z.outputs[0],l3ss.inputs[1])
         CurMat.links.new(time.outputs[0],l3ss.inputs[2]) 
 
-        if 'l4scrollspeed' in bpy.data.node_groups.keys():
-            l4ssGroup = bpy.data.node_groups['l4scrollspeed']
-        else:     
+        l4ssGroup = bpy.data.node_groups.get('l4scrollspeed')
+
+        if l4ssGroup is None:     
             l4ssGroup = bpy.data.node_groups.new("l4scrollspeed","ShaderNodeTree")
             if vers[0]<4:
                 l4ssGroup.inputs.new('NodeSocketVector','l4')
@@ -1246,9 +1255,8 @@ class ParallaxScreenTransparent:
         CurMat.links.new(l1ss.outputs[0],scrollMask.inputs[0]) 
 
         # scrollMaskMask
-        if 'scrollMaskMask' in bpy.data.node_groups.keys():
-            scrollMMGroup = bpy.data.node_groups['scrollMaskMask']
-        else:     
+        scrollMMGroup = bpy.data.node_groups.get('scrollMaskMask')
+        if scrollMMGroup is None:     
             scrollMMGroup = bpy.data.node_groups.new("scrollMaskMask","ShaderNodeTree")
             if vers[0]<4:
                 scrollMMGroup.inputs.new('NodeSocketColor','scrollMask')
@@ -1279,9 +1287,8 @@ class ParallaxScreenTransparent:
 
 
         # finalScrollUV
-        if 'finalScrollUV1' in bpy.data.node_groups.keys():
-            finalScrollUVGroup = bpy.data.node_groups['finalScrollUV1']
-        else:           
+        finalScrollUVGroup = bpy.data.node_groups.get('finalScrollUV1')
+        if finalScrollUVGroup is None:           
             finalScrollUVGroup = bpy.data.node_groups.new("finalScrollUV1","ShaderNodeTree")
             if vers[0]<4:
                 finalScrollUVGroup.inputs.new('NodeSocketColor','scrollMask')  
@@ -1331,101 +1338,24 @@ class ParallaxScreenTransparent:
         CurMat.links.new(scrollUV1X.outputs[0],finalScrollUV1.inputs[2])
         CurMat.links.new(scrollVerticalOrHorizontal.outputs[0],finalScrollUV1.inputs[5])
 
-        # finalScrollUV2
-        if 'finalScrollUV2' in bpy.data.node_groups.keys():
-            finalScrollUV2Group = bpy.data.node_groups['finalScrollUV2']
-        else:           
-            finalScrollUV2Group = bpy.data.node_groups.new("finalScrollUV2","ShaderNodeTree") 
-            if vers[0]<4:
-                finalScrollUV2Group.inputs.new('NodeSocketVector','finalScrollUV1') 
-                finalScrollUV2Group.inputs.new('NodeSocketVector','l1')
-                finalScrollUV2Group.inputs.new('NodeSocketVector','l2')
-                finalScrollUV2Group.outputs.new('NodeSocketVector','finalScrollUV2')   
-            else:
-                finalScrollUV2Group.interface.new_socket(name="finalScrollUV1", socket_type='NodeSocketVector', in_out='INPUT')
-                finalScrollUV2Group.interface.new_socket(name="l1", socket_type='NodeSocketVector', in_out='INPUT')
-                finalScrollUV2Group.interface.new_socket(name="l2", socket_type='NodeSocketVector', in_out='INPUT')
-                finalScrollUV2Group.interface.new_socket(name="finalScrollUV2", socket_type='NodeSocketVector', in_out='OUTPUT')
+        finalScrollUV2Group = _create_final_scroll_delta_group(2, vers)
+        finalScrollUV2 = _group_node(CurMat, finalScrollUV2Group, (-1200, -250), label="finalScrollUV2")
+        CurMat.links.new(finalScrollUV1.outputs[0], finalScrollUV2.inputs[0])
+        CurMat.links.new(l1ss.outputs[0], finalScrollUV2.inputs[1])
+        CurMat.links.new(l2ss.outputs[0], finalScrollUV2.inputs[2])
 
-            finalScrollUV2GroupI = create_node(finalScrollUV2Group.nodes, "NodeGroupInput",(-1050,0))
-            finalScrollUV2GroupO = create_node(finalScrollUV2Group.nodes, "NodeGroupOutput",(-150,0))   
-            vecSub = create_node(finalScrollUV2Group.nodes, "ShaderNodeVectorMath",(-900,-25))
-            vecAdd = create_node(finalScrollUV2Group.nodes, "ShaderNodeVectorMath",(-750,0))
-            finalScrollUV2Group.links.new(finalScrollUV2GroupI.outputs[2],vecSub.inputs[0])
-            finalScrollUV2Group.links.new(finalScrollUV2GroupI.outputs[1],vecSub.inputs[1])
-            finalScrollUV2Group.links.new(finalScrollUV2GroupI.outputs[0],vecAdd.inputs[0])
-            finalScrollUV2Group.links.new(vecSub.outputs[0],vecAdd.inputs[1])
-            finalScrollUV2Group.links.new(vecAdd.outputs[0],finalScrollUV2GroupO.inputs[0])
+        finalScrollUV3Group = _create_final_scroll_delta_group(3, vers)
+        finalScrollUV3 = _group_node(CurMat, finalScrollUV3Group, (-1200, -300), label="finalScrollUV3")
+        CurMat.links.new(finalScrollUV1.outputs[0], finalScrollUV3.inputs[0])
+        CurMat.links.new(l1ss.outputs[0], finalScrollUV3.inputs[1])
+        CurMat.links.new(l3ss.outputs[0], finalScrollUV3.inputs[2])
 
-        finalScrollUV2 = create_node(CurMat.nodes,"ShaderNodeGroup",(-1200, -250), label="finalScrollUV2")
-        finalScrollUV2.node_tree = finalScrollUV2Group
-        CurMat.links.new(finalScrollUV1.outputs[0],finalScrollUV2.inputs[0])
-        CurMat.links.new(l1ss.outputs[0],finalScrollUV2.inputs[1])
-        CurMat.links.new(l2ss.outputs[0],finalScrollUV2.inputs[2])
+        finalScrollUV4Group = _create_final_scroll_delta_group(4, vers)
+        finalScrollUV4 = _group_node(CurMat, finalScrollUV4Group, (-1200, -350), label="finalScrollUV4")
+        CurMat.links.new(finalScrollUV1.outputs[0], finalScrollUV4.inputs[0])
+        CurMat.links.new(l1ss.outputs[0], finalScrollUV4.inputs[1])
+        CurMat.links.new(l4ss.outputs[0], finalScrollUV4.inputs[2])
 
-        # finalScrollUV3
-        if 'finalScrollUV3' in bpy.data.node_groups.keys():
-            finalScrollUV3Group = bpy.data.node_groups['finalScrollUV3']
-        else:           
-            finalScrollUV3Group = bpy.data.node_groups.new("finalScrollUV3","ShaderNodeTree") 
-            if vers[0]<4:
-                finalScrollUV3Group.inputs.new('NodeSocketVector','finalScrollUV1') 
-                finalScrollUV3Group.inputs.new('NodeSocketVector','l1')
-                finalScrollUV3Group.inputs.new('NodeSocketVector','l3')
-                finalScrollUV3Group.outputs.new('NodeSocketVector','finalScrollUV3')   
-            else:
-                finalScrollUV3Group.interface.new_socket(name="finalScrollUV1", socket_type='NodeSocketVector', in_out='INPUT')
-                finalScrollUV3Group.interface.new_socket(name="l1", socket_type='NodeSocketVector', in_out='INPUT')
-                finalScrollUV3Group.interface.new_socket(name="l3", socket_type='NodeSocketVector', in_out='INPUT')
-                finalScrollUV3Group.interface.new_socket(name="finalScrollUV3", socket_type='NodeSocketVector', in_out='OUTPUT')
-
-            finalScrollUV3GroupI = create_node(finalScrollUV3Group.nodes, "NodeGroupInput",(-1050,0))
-            finalScrollUV3GroupO = create_node(finalScrollUV3Group.nodes, "NodeGroupOutput",(-150,0))   
-            vecSub = create_node(finalScrollUV3Group.nodes, "ShaderNodeVectorMath",(-900,-25))
-            vecAdd = create_node(finalScrollUV3Group.nodes, "ShaderNodeVectorMath",(-750,0))
-            finalScrollUV3Group.links.new(finalScrollUV3GroupI.outputs[2],vecSub.inputs[0])
-            finalScrollUV3Group.links.new(finalScrollUV3GroupI.outputs[1],vecSub.inputs[1])
-            finalScrollUV3Group.links.new(finalScrollUV3GroupI.outputs[0],vecAdd.inputs[0])
-            finalScrollUV3Group.links.new(vecSub.outputs[0],vecAdd.inputs[1])
-            finalScrollUV3Group.links.new(vecAdd.outputs[0],finalScrollUV3GroupO.inputs[0])
-
-        finalScrollUV3 = create_node(CurMat.nodes,"ShaderNodeGroup",(-1200, -300), label="finalScrollUV3")
-        finalScrollUV3.node_tree = finalScrollUV3Group
-        CurMat.links.new(finalScrollUV1.outputs[0],finalScrollUV3.inputs[0])
-        CurMat.links.new(l1ss.outputs[0],finalScrollUV3.inputs[1])
-        CurMat.links.new(l3ss.outputs[0],finalScrollUV3.inputs[2])
-
-        # finalScrollUV4
-        if 'finalScrollUV4' in bpy.data.node_groups.keys():
-            finalScrollUV4Group = bpy.data.node_groups['finalScrollUV4']
-        else:
-            finalScrollUV4Group = bpy.data.node_groups.new("finalScrollUV4","ShaderNodeTree") 
-            if vers[0]<4:
-                finalScrollUV4Group.inputs.new('NodeSocketVector','finalScrollUV1') 
-                finalScrollUV4Group.inputs.new('NodeSocketVector','l1')
-                finalScrollUV4Group.inputs.new('NodeSocketVector','l4')
-                finalScrollUV4Group.outputs.new('NodeSocketVector','finalScrollUV4')   
-            else:
-                finalScrollUV4Group.interface.new_socket(name="finalScrollUV1", socket_type='NodeSocketVector', in_out='INPUT')
-                finalScrollUV4Group.interface.new_socket(name="l1", socket_type='NodeSocketVector', in_out='INPUT')
-                finalScrollUV4Group.interface.new_socket(name="l4", socket_type='NodeSocketVector', in_out='INPUT')
-                finalScrollUV4Group.interface.new_socket(name="finalScrollUV4", socket_type='NodeSocketVector', in_out='OUTPUT')
-            finalScrollUV4GroupI = create_node(finalScrollUV4Group.nodes, "NodeGroupInput",(-1050,0))
-            finalScrollUV4GroupO = create_node(finalScrollUV4Group.nodes, "NodeGroupOutput",(-150,0))   
-            vecSub = create_node(finalScrollUV4Group.nodes, "ShaderNodeVectorMath",(-900,-25))
-            vecAdd = create_node(finalScrollUV4Group.nodes, "ShaderNodeVectorMath",(-750,0))
-            finalScrollUV4Group.links.new(finalScrollUV4GroupI.outputs[2],vecSub.inputs[0])
-            finalScrollUV4Group.links.new(finalScrollUV4GroupI.outputs[1],vecSub.inputs[1])
-            finalScrollUV4Group.links.new(finalScrollUV4GroupI.outputs[0],vecAdd.inputs[0])
-            finalScrollUV4Group.links.new(vecSub.outputs[0],vecAdd.inputs[1])
-            finalScrollUV4Group.links.new(vecAdd.outputs[0],finalScrollUV4GroupO.inputs[0])
-
-        finalScrollUV4 = create_node(CurMat.nodes,"ShaderNodeGroup",(-1200, -350), label="finalScrollUV4")
-        finalScrollUV4.node_tree = finalScrollUV4Group
-        CurMat.links.new(finalScrollUV1.outputs[0],finalScrollUV4.inputs[0])
-        CurMat.links.new(l1ss.outputs[0],finalScrollUV4.inputs[1])
-        CurMat.links.new(l4ss.outputs[0],finalScrollUV4.inputs[2])
-        
         # l1Sampled 
         parTex = create_node(CurMat.nodes,"ShaderNodeTexImage",(-1050, -100), label="ParalaxTexture", image=parImg)
         parTex2 = create_node(CurMat.nodes,"ShaderNodeTexImage",(-1050, -150), label="ParalaxTexture", image=parImg)
@@ -1492,9 +1422,8 @@ class ParallaxScreenTransparent:
         CurMat.links.new(scrollMaskMask.outputs[0],lerp4.inputs[2])
 
         # i1
-        if 'i1_ps_t' in bpy.data.node_groups.keys():
-            i1Group = bpy.data.node_groups['i1_ps_t']
-        else:           
+        i1Group = bpy.data.node_groups.get('i1_ps_t')
+        if i1Group is None:           
             i1Group = bpy.data.node_groups.new("i1_ps_t","ShaderNodeTree") 
             if vers[0]<4:
                 i1Group.inputs.new('NodeSocketVector','l1Sampled')
@@ -1526,456 +1455,69 @@ class ParallaxScreenTransparent:
         CurMat.links.new(lerp.outputs[0],i1.inputs[1])
         CurMat.links.new(intensityPerLayer_x.outputs[0],i1.inputs[2])
 
-        # i2
-        if 'i2_ps_t' in bpy.data.node_groups.keys():
-            i2Group = bpy.data.node_groups['i2_ps_t']
-        else:           
-            i2Group = bpy.data.node_groups.new("i2_ps_t","ShaderNodeTree") 
-            if vers[0]<4:
-                i2Group.inputs.new('NodeSocketVector','l2Sampled') 
-                i2Group.inputs.new('NodeSocketFloat','Alpha') 
-                i2Group.inputs.new('NodeSocketVector','l2') 
-                i2Group.inputs.new('NodeSocketVector','finalScrollUV2')
-                i2Group.inputs.new('NodeSocketFloat','IntensityPerLayer.y')
-                i2Group.inputs.new('NodeSocketFloat','ScanlinesIntensity')
-                i2Group.inputs.new('NodeSocketFloat','ScanlinesDensity')
-                i2Group.inputs.new('NodeSocketFloat','scanlineSpeed')
-                i2Group.inputs.new('NodeSocketFloat','scrollMaskMask')
-                i2Group.outputs.new('NodeSocketVector','i2')   
-                i2Group.outputs.new('NodeSocketFloat','Alpha')   
-            else:
-                i2Group.interface.new_socket(name="l2Sampled", socket_type='NodeSocketVector', in_out='INPUT')
-                i2Group.interface.new_socket(name="Alpha", socket_type='NodeSocketFloat', in_out='INPUT')
-                i2Group.interface.new_socket(name="l2", socket_type='NodeSocketVector', in_out='INPUT')
-                i2Group.interface.new_socket(name="finalScrollUV2", socket_type='NodeSocketVector', in_out='INPUT')
-                i2Group.interface.new_socket(name="IntensityPerLayer.y", socket_type='NodeSocketFloat', in_out='INPUT')
-                i2Group.interface.new_socket(name="ScanlinesIntensity", socket_type='NodeSocketFloat', in_out='INPUT')
-                i2Group.interface.new_socket(name="ScanlinesDensity", socket_type='NodeSocketFloat', in_out='INPUT')
-                i2Group.interface.new_socket(name="scanlineSpeed", socket_type='NodeSocketFloat', in_out='INPUT')
-                i2Group.interface.new_socket(name="scrollMaskMask", socket_type='NodeSocketFloat', in_out='INPUT')
-                i2Group.interface.new_socket(name="i2", socket_type='NodeSocketVector', in_out='OUTPUT')
-                i2Group.interface.new_socket(name="Alpha", socket_type='NodeSocketFloat', in_out='OUTPUT')     
+        scanlineG = self.createScanlinesGroup()
+        layerLerpG = createLerpGroup()
 
-            i2GroupI = create_node(i2Group.nodes, "NodeGroupInput",(-1050,0))
-            i2GroupO = create_node(i2Group.nodes, "NodeGroupOutput",(200,0))   
-            vecMul = create_node(i2Group.nodes, "ShaderNodeVectorMath",(-900,0),operation="MULTIPLY")
-            separate = create_node(i2Group.nodes, "ShaderNodeSeparateXYZ",(-750,-50))
-            add = create_node(i2Group.nodes, "ShaderNodeMath",(-600,-50))
-            scanlineG = self.createScanlinesGroup()
-            scanline = create_node(i2Group.nodes,"ShaderNodeGroup",(-450,-50), label="scanline")
-            scanline.node_tree = scanlineG
-            separate2 = create_node(i2Group.nodes, "ShaderNodeSeparateXYZ",(-750,0))
-            add2 = create_node(i2Group.nodes, "ShaderNodeMath",(-600,0))
-            scanline2 = create_node(i2Group.nodes,"ShaderNodeGroup",(-450,0), label="scanline")
-            scanline2.node_tree = scanlineG
-            lerpG = createLerpGroup()
-            lerp = create_node(i2Group.nodes,"ShaderNodeGroup",(-300,-25), label="lerp")
-            lerp.node_tree = lerpG
-            lerp2 = create_node(i2Group.nodes,"ShaderNodeGroup",(-150,0), label="lerp")
-            lerp2.node_tree = lerpG
-            lerp2.inputs[1].default_value = 1
-            vecMul2 = create_node(i2Group.nodes, "ShaderNodeVectorMath",(0,0),operation="MULTIPLY")
+        i2Group = _create_layer_intensity_group(2, 'y', vers, scanlineG, layerLerpG)
+        i2 = _group_node(CurMat, i2Group, (-550, -275), label="i2_ps_t")
+        CurMat.links.new(vecLerp2.outputs[0], i2.inputs[0])
+        CurMat.links.new(lerp2.outputs[0], i2.inputs[1])
+        CurMat.links.new(l2ss.outputs[0], i2.inputs[2])
+        CurMat.links.new(finalScrollUV2.outputs[0], i2.inputs[3])
+        CurMat.links.new(intensityPerLayer_y.outputs[0], i2.inputs[4])
+        CurMat.links.new(scanlinesIntensity.outputs[0], i2.inputs[5])
+        CurMat.links.new(scanlinesDensity.outputs[0], i2.inputs[6])
+        CurMat.links.new(frac2.outputs[0], i2.inputs[7])
+        CurMat.links.new(scrollMaskMask.outputs[0], i2.inputs[8])
 
-            i2Group.links.new(i2GroupI.outputs['l2Sampled'],vecMul.inputs[0])
-            i2Group.links.new(i2GroupI.outputs['IntensityPerLayer.y'],vecMul.inputs[1])
-            i2Group.links.new(i2GroupI.outputs['finalScrollUV2'],separate.inputs[0])
-            i2Group.links.new(separate.outputs[1],add.inputs[0])
-            i2Group.links.new(i2GroupI.outputs['scanlineSpeed'],add.inputs[1])
-            i2Group.links.new(i2GroupI.outputs['ScanlinesDensity'],scanline.inputs[0])
-            i2Group.links.new(add.outputs[0],scanline.inputs[1])
-            i2Group.links.new(i2GroupI.outputs['l2'],separate2.inputs[0])
-            i2Group.links.new(separate2.outputs[1],add2.inputs[0])
-            i2Group.links.new(i2GroupI.outputs['scanlineSpeed'],add2.inputs[1])
-            i2Group.links.new(i2GroupI.outputs['ScanlinesDensity'],scanline2.inputs[0])
-            i2Group.links.new(scanline.outputs[0],lerp.inputs[0])
-            i2Group.links.new(scanline2.outputs[0],lerp.inputs[1])
-            i2Group.links.new(i2GroupI.outputs['scrollMaskMask'],lerp.inputs[2])
-            i2Group.links.new(i2GroupI.outputs['ScanlinesIntensity'],lerp2.inputs[0])
-            i2Group.links.new(lerp.outputs[0],lerp2.inputs[2])
-            i2Group.links.new(vecMul.outputs[0],vecMul2.inputs[0])
-            i2Group.links.new(lerp2.outputs[0],vecMul2.inputs[1])
-            i2Group.links.new(vecMul2.outputs[0],i2GroupO.inputs[0])
-            # alpha
-            mul = create_node(i2Group.nodes, "ShaderNodeMath",(-900,-150),operation="MULTIPLY")
-            mul2 = create_node(i2Group.nodes, "ShaderNodeMath",(0,-150),operation="MULTIPLY")
-            i2Group.links.new(i2GroupI.outputs['Alpha'],mul.inputs[0])
-            i2Group.links.new(i2GroupI.outputs['IntensityPerLayer.y'],mul.inputs[1])
-            i2Group.links.new(mul.outputs[0],mul2.inputs[0])
-            i2Group.links.new(lerp2.outputs[0],mul2.inputs[1])
-            i2Group.links.new(mul2.outputs[0],i2GroupO.inputs[1])
-            
+        i3Group = _create_layer_intensity_group(3, 'z', vers, scanlineG, layerLerpG)
+        i3 = _group_node(CurMat, i3Group, (-550, -375), label="i3_ps_t")
+        CurMat.links.new(vecLerp3.outputs[0], i3.inputs[0])
+        CurMat.links.new(lerp3.outputs[0], i3.inputs[1])
+        CurMat.links.new(l3ss.outputs[0], i3.inputs[2])
+        CurMat.links.new(finalScrollUV3.outputs[0], i3.inputs[3])
+        CurMat.links.new(intensityPerLayer_z.outputs[0], i3.inputs[4])
+        CurMat.links.new(scanlinesIntensity.outputs[0], i3.inputs[5])
+        CurMat.links.new(scanlinesDensity.outputs[0], i3.inputs[6])
+        CurMat.links.new(frac2.outputs[0], i3.inputs[7])
+        CurMat.links.new(scrollMaskMask.outputs[0], i3.inputs[8])
 
-        i2 = create_node(CurMat.nodes,"ShaderNodeGroup",(-550, -275), label="i2_ps_t")
-        i2.node_tree = i2Group
-        CurMat.links.new(vecLerp2.outputs[0],i2.inputs[0])
-        CurMat.links.new(lerp2.outputs[0],i2.inputs[1])
-        CurMat.links.new(l2ss.outputs[0],i2.inputs[2])
-        CurMat.links.new(finalScrollUV2.outputs[0],i2.inputs[3])
-        CurMat.links.new(intensityPerLayer_y.outputs[0],i2.inputs[4])
-        CurMat.links.new(scanlinesIntensity.outputs[0],i2.inputs[5])
-        CurMat.links.new(scanlinesDensity.outputs[0],i2.inputs[6])
-        CurMat.links.new(frac2.outputs[0],i2.inputs[7])
-        CurMat.links.new(scrollMaskMask.outputs[0],i2.inputs[8])
-
-
-        # i3
-        # TODO NoPostORPost
-        if 'i3_ps_t' in bpy.data.node_groups.keys():
-            i3Group = bpy.data.node_groups['i3_ps_t']
-        else:
-            i3Group = bpy.data.node_groups.new("i3_ps_t","ShaderNodeTree") 
-            if vers[0]<4:
-                i3Group.inputs.new('NodeSocketVector','l3Sampled') 
-                i3Group.inputs.new('NodeSocketFloat','Alpha') 
-                i3Group.inputs.new('NodeSocketVector','l3') 
-                i3Group.inputs.new('NodeSocketVector','finalScrollUV3')
-                i3Group.inputs.new('NodeSocketFloat','IntensityPerLayer.z')
-                i3Group.inputs.new('NodeSocketFloat','ScanlinesIntensity')
-                i3Group.inputs.new('NodeSocketFloat','ScanlinesDensity')
-                i3Group.inputs.new('NodeSocketFloat','scanlineSpeed')
-                i3Group.inputs.new('NodeSocketFloat','scrollMaskMask')
-                i3Group.outputs.new('NodeSocketVector','i3')   
-                i3Group.outputs.new('NodeSocketFloat','Alpha') 
-            else:
-                i3Group.interface.new_socket(name="l3Sampled", socket_type='NodeSocketVector', in_out='INPUT')
-                i3Group.interface.new_socket(name="Alpha", socket_type='NodeSocketFloat', in_out='INPUT')
-                i3Group.interface.new_socket(name="l3", socket_type='NodeSocketVector', in_out='INPUT')
-                i3Group.interface.new_socket(name="finalScrollUV3", socket_type='NodeSocketVector', in_out='INPUT')
-                i3Group.interface.new_socket(name="IntensityPerLayer.z", socket_type='NodeSocketFloat', in_out='INPUT')
-                i3Group.interface.new_socket(name="ScanlinesIntensity", socket_type='NodeSocketFloat', in_out='INPUT')
-                i3Group.interface.new_socket(name="ScanlinesDensity", socket_type='NodeSocketFloat', in_out='INPUT')
-                i3Group.interface.new_socket(name="scanlineSpeed", socket_type='NodeSocketFloat', in_out='INPUT')
-                i3Group.interface.new_socket(name="scrollMaskMask", socket_type='NodeSocketFloat', in_out='INPUT')
-                i3Group.interface.new_socket(name="i3", socket_type='NodeSocketVector', in_out='OUTPUT')
-                i3Group.interface.new_socket(name="Alpha", socket_type='NodeSocketFloat', in_out='OUTPUT')     
-            
-            i3GroupI = create_node(i3Group.nodes, "NodeGroupInput",(-1050,0))
-            i3GroupO = create_node(i3Group.nodes, "NodeGroupOutput",(200,0))   
-            vecMul = create_node(i3Group.nodes, "ShaderNodeVectorMath",(-900,0),operation="MULTIPLY")
-            separate = create_node(i3Group.nodes, "ShaderNodeSeparateXYZ",(-750,-50))
-            add = create_node(i3Group.nodes, "ShaderNodeMath",(-600,-50))
-            scanlineG = self.createScanlinesGroup()
-            scanline = create_node(i3Group.nodes,"ShaderNodeGroup",(-450,-50), label="scanline")
-            scanline.node_tree = scanlineG
-            separate2 = create_node(i3Group.nodes, "ShaderNodeSeparateXYZ",(-750,0))
-            add2 = create_node(i3Group.nodes, "ShaderNodeMath",(-600,0))
-            scanline2 = create_node(i3Group.nodes,"ShaderNodeGroup",(-450,0), label="scanline")
-            scanline2.node_tree = scanlineG
-            lerpG = createLerpGroup()
-            lerp = create_node(i3Group.nodes,"ShaderNodeGroup",(-300,-25), label="lerp")
-            lerp.node_tree = lerpG
-            lerp2 = create_node(i3Group.nodes,"ShaderNodeGroup",(-150,0), label="lerp")
-            lerp2.node_tree = lerpG
-            lerp2.inputs[1].default_value = 1
-            vecMul2 = create_node(i3Group.nodes, "ShaderNodeVectorMath",(0,0),operation="MULTIPLY")
-            mul = create_node(i3Group.nodes, "ShaderNodeMath",(-900,-150),operation="MULTIPLY")
-            mul2 = create_node(i3Group.nodes, "ShaderNodeMath",(0,-150),operation="MULTIPLY")
-            i3Group.links.new(i3GroupI.outputs['l3Sampled'],vecMul.inputs[0])
-            i3Group.links.new(i3GroupI.outputs['IntensityPerLayer.z'],vecMul.inputs[1])
-            i3Group.links.new(i3GroupI.outputs['finalScrollUV3'],separate.inputs[0])
-            i3Group.links.new(separate.outputs[1],add.inputs[0])
-            i3Group.links.new(i3GroupI.outputs['scanlineSpeed'],add.inputs[1])
-            i3Group.links.new(i3GroupI.outputs['ScanlinesDensity'],scanline.inputs[0])
-            i3Group.links.new(add.outputs[0],scanline.inputs[1])
-            i3Group.links.new(i3GroupI.outputs['l3'],separate2.inputs[0])
-            i3Group.links.new(separate2.outputs[1],add2.inputs[0])
-            i3Group.links.new(i3GroupI.outputs['scanlineSpeed'],add2.inputs[1])
-            i3Group.links.new(i3GroupI.outputs['ScanlinesDensity'],scanline2.inputs[0])
-            i3Group.links.new(scanline.outputs[0],lerp.inputs[0])
-            i3Group.links.new(scanline2.outputs[0],lerp.inputs[1])
-            i3Group.links.new(i3GroupI.outputs['scrollMaskMask'],lerp.inputs[2])
-            i3Group.links.new(i3GroupI.outputs['ScanlinesIntensity'],lerp2.inputs[0])
-            i3Group.links.new(lerp.outputs[0],lerp2.inputs[2])
-            i3Group.links.new(vecMul.outputs[0],vecMul2.inputs[0])
-            i3Group.links.new(lerp2.outputs[0],vecMul2.inputs[1])
-            i3Group.links.new(vecMul2.outputs[0],i3GroupO.inputs[0])
-            # alpha
-            mul = create_node(i3Group.nodes, "ShaderNodeMath",(-900,-150),operation="MULTIPLY")
-            mul2 = create_node(i3Group.nodes, "ShaderNodeMath",(0,-150),operation="MULTIPLY")
-            i3Group.links.new(i3GroupI.outputs['Alpha'],mul.inputs[0])
-            i3Group.links.new(i3GroupI.outputs['IntensityPerLayer.z'],mul.inputs[1])
-            i3Group.links.new(mul.outputs[0],mul2.inputs[0])
-            i3Group.links.new(lerp2.outputs[0],mul2.inputs[1])
-            i3Group.links.new(mul2.outputs[0],i3GroupO.inputs[1])
-            
-
-        i3 = create_node(CurMat.nodes,"ShaderNodeGroup",(-550, -375), label="i3_ps_t")
-        i3.node_tree = i3Group
-        CurMat.links.new(vecLerp3.outputs[0],i3.inputs[0])
-        CurMat.links.new(lerp3.outputs[0],i3.inputs[1])
-        CurMat.links.new(l3ss.outputs[0],i3.inputs[2])
-        CurMat.links.new(finalScrollUV3.outputs[0],i3.inputs[3])
-        CurMat.links.new(intensityPerLayer_z.outputs[0],i3.inputs[4])
-        CurMat.links.new(scanlinesIntensity.outputs[0],i3.inputs[5])
-        CurMat.links.new(scanlinesDensity.outputs[0],i3.inputs[6])
-        CurMat.links.new(frac2.outputs[0],i3.inputs[7])
-        CurMat.links.new(scrollMaskMask.outputs[0],i3.inputs[8])
-
-        # i4
-        if 'i4_ps_t' in bpy.data.node_groups.keys():
-            i4Group = bpy.data.node_groups['i4_ps_t']
-        else:           
-            i4Group = bpy.data.node_groups.new("i4_ps_t","ShaderNodeTree") 
-            if vers[0]<4:
-                i4Group.inputs.new('NodeSocketVector','l4Sampled') 
-                i4Group.inputs.new('NodeSocketFloat','Alpha') 
-                i4Group.inputs.new('NodeSocketVector','l4') 
-                i4Group.inputs.new('NodeSocketVector','finalScrollUV4')
-                i4Group.inputs.new('NodeSocketFloat','IntensityPerLayer.w')
-                i4Group.inputs.new('NodeSocketFloat','ScanlinesIntensity')
-                i4Group.inputs.new('NodeSocketFloat','ScanlinesDensity')
-                i4Group.inputs.new('NodeSocketFloat','scanlineSpeed')
-                i4Group.inputs.new('NodeSocketFloat','scrollMaskMask')
-                i4Group.outputs.new('NodeSocketVector','i4')   
-                i4Group.outputs.new('NodeSocketFloat','Alpha') 
-            else:
-                i4Group.interface.new_socket(name="l4Sampled", socket_type='NodeSocketVector', in_out='INPUT')
-                i4Group.interface.new_socket(name="Alpha", socket_type='NodeSocketFloat', in_out='INPUT')
-                i4Group.interface.new_socket(name="l4", socket_type='NodeSocketVector', in_out='INPUT')
-                i4Group.interface.new_socket(name="finalScrollUV4", socket_type='NodeSocketVector', in_out='INPUT')
-                i4Group.interface.new_socket(name="IntensityPerLayer.w", socket_type='NodeSocketFloat', in_out='INPUT')
-                i4Group.interface.new_socket(name="ScanlinesIntensity", socket_type='NodeSocketFloat', in_out='INPUT')
-                i4Group.interface.new_socket(name="ScanlinesDensity", socket_type='NodeSocketFloat', in_out='INPUT')
-                i4Group.interface.new_socket(name="scanlineSpeed", socket_type='NodeSocketFloat', in_out='INPUT')
-                i4Group.interface.new_socket(name="scrollMaskMask", socket_type='NodeSocketFloat', in_out='INPUT')
-                i4Group.interface.new_socket(name="i4", socket_type='NodeSocketVector', in_out='OUTPUT')
-                i4Group.interface.new_socket(name="Alpha", socket_type='NodeSocketFloat', in_out='OUTPUT')
-
-            i4GroupI = create_node(i4Group.nodes, "NodeGroupInput",(-1050,0))
-            i4GroupO = create_node(i4Group.nodes, "NodeGroupOutput",(200,0))   
-            vecMul = create_node(i4Group.nodes, "ShaderNodeVectorMath",(-900,0),operation="MULTIPLY")
-            separate = create_node(i4Group.nodes, "ShaderNodeSeparateXYZ",(-750,-50))
-            add = create_node(i4Group.nodes, "ShaderNodeMath",(-600,-50))
-            scanlineG = self.createScanlinesGroup()
-            scanline = create_node(i4Group.nodes,"ShaderNodeGroup",(-450,-50), label="scanline")
-            scanline.node_tree = scanlineG
-            separate2 = create_node(i4Group.nodes, "ShaderNodeSeparateXYZ",(-750,0))
-            add2 = create_node(i4Group.nodes, "ShaderNodeMath",(-600,0))
-            scanline2 = create_node(i4Group.nodes,"ShaderNodeGroup",(-450,0), label="scanline")
-            scanline2.node_tree = scanlineG
-            lerpG = createLerpGroup()
-            lerp = create_node(i4Group.nodes,"ShaderNodeGroup",(-300,-25), label="lerp")
-            lerp.node_tree = lerpG
-            lerp2 = create_node(i4Group.nodes,"ShaderNodeGroup",(-150,0), label="lerp")
-            lerp2.node_tree = lerpG
-            lerp2.inputs[1].default_value = 1
-            vecMul2 = create_node(i4Group.nodes, "ShaderNodeVectorMath",(0,0),operation="MULTIPLY")
-
-            i4Group.links.new(i4GroupI.outputs['l4Sampled'],vecMul.inputs[0])
-            i4Group.links.new(i4GroupI.outputs['IntensityPerLayer.w'],vecMul.inputs[1])
-            i4Group.links.new(i4GroupI.outputs['finalScrollUV4'],separate.inputs[0])
-            i4Group.links.new(separate.outputs[1],add.inputs[0])
-            i4Group.links.new(i4GroupI.outputs['scanlineSpeed'],add.inputs[1])
-            i4Group.links.new(i4GroupI.outputs['ScanlinesDensity'],scanline.inputs[0])
-            i4Group.links.new(add.outputs[0],scanline.inputs[1])
-            i4Group.links.new(i4GroupI.outputs['l4'],separate2.inputs[0])
-            i4Group.links.new(separate2.outputs[1],add2.inputs[0])
-            i4Group.links.new(i4GroupI.outputs['scanlineSpeed'],add2.inputs[1])
-            i4Group.links.new(i4GroupI.outputs['ScanlinesDensity'],scanline2.inputs[0])
-            i4Group.links.new(scanline.outputs[0],lerp.inputs[0])
-            i4Group.links.new(scanline2.outputs[0],lerp.inputs[1])
-            i4Group.links.new(i4GroupI.outputs['scrollMaskMask'],lerp.inputs[2])
-            i4Group.links.new(i4GroupI.outputs['ScanlinesIntensity'],lerp2.inputs[0])
-            i4Group.links.new(lerp.outputs[0],lerp2.inputs[2])
-            i4Group.links.new(vecMul.outputs[0],vecMul2.inputs[0])
-            i4Group.links.new(lerp2.outputs[0],vecMul2.inputs[1])
-            i4Group.links.new(vecMul2.outputs[0],i4GroupO.inputs[0])
-            # alpha
-            mul = create_node(i3Group.nodes, "ShaderNodeMath",(-900,-150),operation="MULTIPLY")
-            mul2 = create_node(i3Group.nodes, "ShaderNodeMath",(0,-150),operation="MULTIPLY")
-            i4Group.links.new(i4GroupI.outputs['Alpha'],mul.inputs[0])
-            i4Group.links.new(i4GroupI.outputs['IntensityPerLayer.w'],mul.inputs[1])
-            i4Group.links.new(mul.outputs[0],mul2.inputs[0])
-            i4Group.links.new(lerp2.outputs[0],mul2.inputs[1])
-            i4Group.links.new(mul2.outputs[0],i4GroupO.inputs[1])
-            
-
-        i4 = create_node(CurMat.nodes,"ShaderNodeGroup",(-550, -475), label="i4_ps_t")
-        i4.node_tree = i4Group
-        CurMat.links.new(vecLerp4.outputs[0],i4.inputs[0])
-        CurMat.links.new(lerp4.outputs[0],i4.inputs[1])
-        CurMat.links.new(l4ss.outputs[0],i4.inputs[2])
-        CurMat.links.new(finalScrollUV4.outputs[0],i4.inputs[3])
-        CurMat.links.new(intensityPerLayer_w.outputs[0],i4.inputs[4])
-        CurMat.links.new(scanlinesIntensity.outputs[0],i4.inputs[5])
-        CurMat.links.new(scanlinesDensity.outputs[0],i4.inputs[6])
-        CurMat.links.new(frac2.outputs[0],i4.inputs[7])
-        CurMat.links.new(scrollMaskMask.outputs[0],i4.inputs[8])
+        i4Group = _create_layer_intensity_group(4, 'w', vers, scanlineG, layerLerpG)
+        i4 = _group_node(CurMat, i4Group, (-550, -475), label="i4_ps_t")
+        CurMat.links.new(vecLerp4.outputs[0], i4.inputs[0])
+        CurMat.links.new(lerp4.outputs[0], i4.inputs[1])
+        CurMat.links.new(l4ss.outputs[0], i4.inputs[2])
+        CurMat.links.new(finalScrollUV4.outputs[0], i4.inputs[3])
+        CurMat.links.new(intensityPerLayer_w.outputs[0], i4.inputs[4])
+        CurMat.links.new(scanlinesIntensity.outputs[0], i4.inputs[5])
+        CurMat.links.new(scanlinesDensity.outputs[0], i4.inputs[6])
+        CurMat.links.new(frac2.outputs[0], i4.inputs[7])
+        CurMat.links.new(scrollMaskMask.outputs[0], i4.inputs[8])
         
     # TODO AdditiveOrAlphaBlened
 
-        # m1
-        if 'm1' in bpy.data.node_groups.keys():
-            m1Group = bpy.data.node_groups['m1']
-        else:      
-            m1Group = bpy.data.node_groups.new("m1","ShaderNodeTree")
-            if vers[0]<4:
-                m1Group.inputs.new('NodeSocketVector','i4')
-                m1Group.inputs.new('NodeSocketVector','i3')
-                m1Group.inputs.new('NodeSocketFloat','i4.a')
-                m1Group.inputs.new('NodeSocketFloat','i3.a')
-                m1Group.outputs.new('NodeSocketVector','m1')
-                m1Group.outputs.new('NodeSocketFloat','Alpha')
-            else:
-                m1Group.interface.new_socket(name="i4", socket_type='NodeSocketVector', in_out='INPUT')
-                m1Group.interface.new_socket(name="i3", socket_type='NodeSocketVector', in_out='INPUT')
-                m1Group.interface.new_socket(name="i4.a", socket_type='NodeSocketFloat', in_out='INPUT')
-                m1Group.interface.new_socket(name="i3.a", socket_type='NodeSocketFloat', in_out='INPUT')
-                m1Group.interface.new_socket(name="m1", socket_type='NodeSocketVector', in_out='OUTPUT')
-                m1Group.interface.new_socket(name="Alpha", socket_type='NodeSocketFloat', in_out='OUTPUT')    
+        m1Group = _create_m_group("m1", "m1", "i4", "i3", vers)
+        m1 = _group_node(CurMat, m1Group, (-550, -500), label="m1")
+        CurMat.links.new(i4.outputs[0], m1.inputs[0])
+        CurMat.links.new(i3.outputs[0], m1.inputs[1])
+        CurMat.links.new(i4.outputs[1], m1.inputs[2])
+        CurMat.links.new(i3.outputs[1], m1.inputs[3])
 
-            m1GroupI = create_node(m1Group.nodes, "NodeGroupInput",(-1050,0))
-            m1GroupO = create_node(m1Group.nodes, "NodeGroupOutput",(300,0))
-            vecSub2 =  create_node(m1Group.nodes,"ShaderNodeVectorMath",(-900,25),operation = "SUBTRACT")
-            vecSub2.inputs[0].default_value = (1,1,1)
-            vecSub3 =  create_node(m1Group.nodes,"ShaderNodeVectorMath",(-900,-25),operation = "SUBTRACT")
-            vecSub3.inputs[0].default_value = (1,1,1)
-            vecMul18 = create_node(m1Group.nodes,"ShaderNodeVectorMath",(-750,0),operation = "MULTIPLY")
-            vecSub4 =  create_node(m1Group.nodes,"ShaderNodeVectorMath",(-600,0),operation = "SUBTRACT")
-            vecSub4.inputs[0].default_value = (1,1,1)
-
-            m1Group.links.new(m1GroupI.outputs[0],vecSub2.inputs[1])
-            m1Group.links.new(m1GroupI.outputs[1],vecSub3.inputs[1])
-            m1Group.links.new(vecSub2.outputs[0],vecMul18.inputs[0])
-            m1Group.links.new(vecSub3.outputs[0],vecMul18.inputs[1])
-            m1Group.links.new(vecMul18.outputs[0],vecSub4.inputs[1])
-            m1Group.links.new(vecSub4.outputs[0],m1GroupO.inputs[0])
-            # alpha
-            sub = create_node(m1Group.nodes,"ShaderNodeMath",(-900,-150),operation = "SUBTRACT")
-            sub.inputs[0].default_value = 1
-            sub2 = create_node(m1Group.nodes,"ShaderNodeMath",(-900,-200),operation = "SUBTRACT")
-            sub2.inputs[0].default_value = 1
-            mul = create_node(m1Group.nodes,"ShaderNodeMath",(-750,-150),operation = "MULTIPLY")
-            sub3 = create_node(m1Group.nodes,"ShaderNodeMath",(-600,-150),operation = "SUBTRACT")
-            sub3.inputs[0].default_value = 1
-            m1Group.links.new(m1GroupI.outputs[2],sub.inputs[0])
-            m1Group.links.new(m1GroupI.outputs[3],sub2.inputs[0])
-            m1Group.links.new(sub.outputs[0],mul.inputs[0])
-            m1Group.links.new(sub2.outputs[0],mul.inputs[1])
-            m1Group.links.new(mul.outputs[0],sub3.inputs[1])
-            m1Group.links.new(sub3.outputs[0],m1GroupO.inputs[1])
-
-        m1 = create_node(CurMat.nodes,"ShaderNodeGroup",(-550, -500), label="m1")
-        m1.node_tree = m1Group
-        CurMat.links.new(i4.outputs[0],m1.inputs[0])
-        CurMat.links.new(i3.outputs[0],m1.inputs[1])
-        CurMat.links.new(i4.outputs[1],m1.inputs[2])
-        CurMat.links.new(i3.outputs[1],m1.inputs[3])
-
-        # m2
-        if 'parallax_screen_trans_m2' in bpy.data.node_groups.keys():
-            m2Group = bpy.data.node_groups['parallax_screen_trans_m2']
-        else:           
-            m2Group = bpy.data.node_groups.new("parallax_screen_trans_m2","ShaderNodeTree")
-            if vers[0]<4:
-                m2Group.inputs.new('NodeSocketVector','m1')
-                m2Group.inputs.new('NodeSocketVector','i2')    
-                m2Group.inputs.new('NodeSocketFloat','m1.a')
-                m2Group.inputs.new('NodeSocketFloat','i2.a')    
-                m2Group.outputs.new('NodeSocketVector','m2')
-                m2Group.outputs.new('NodeSocketFloat','Alpha')
-            else:
-                m2Group.interface.new_socket(name="m1", socket_type='NodeSocketVector', in_out='INPUT')
-                m2Group.interface.new_socket(name="i2", socket_type='NodeSocketVector', in_out='INPUT')
-                m2Group.interface.new_socket(name="m1.a", socket_type='NodeSocketFloat', in_out='INPUT')
-                m2Group.interface.new_socket(name="i2.a", socket_type='NodeSocketFloat', in_out='INPUT')
-                m2Group.interface.new_socket(name="m2", socket_type='NodeSocketVector', in_out='OUTPUT')
-                m2Group.interface.new_socket(name="Alpha", socket_type='NodeSocketFloat', in_out='OUTPUT')
-
-            m2GroupI = create_node(m2Group.nodes, "NodeGroupInput",(-1050,0))
-            m2GroupO = create_node(m2Group.nodes, "NodeGroupOutput",(300,0))   
-            vecSub5 =  create_node(m2Group.nodes,"ShaderNodeVectorMath",(-900,25),operation = "SUBTRACT")
-            vecSub5.inputs[0].default_value = (1,1,1)
-            vecSub6 =  create_node(m2Group.nodes,"ShaderNodeVectorMath",(-900,-25),operation = "SUBTRACT")
-            vecSub6.inputs[0].default_value = (1,1,1)
-            vecMul19 = create_node(m2Group.nodes,"ShaderNodeVectorMath",(-750,0),operation = "MULTIPLY")
-            vecSub7 =  create_node(m2Group.nodes,"ShaderNodeVectorMath",(-600,0),operation = "SUBTRACT")
-            vecSub7.inputs[0].default_value = (1,1,1)
-            m2Group.links.new(m2GroupI.outputs[0],vecSub5.inputs[1])
-            m2Group.links.new(m2GroupI.outputs[1],vecSub6.inputs[1])
-            m2Group.links.new(vecSub5.outputs[0],vecMul19.inputs[0])
-            m2Group.links.new(vecSub6.outputs[0],vecMul19.inputs[1])
-            m2Group.links.new(vecMul19.outputs[0],vecSub7.inputs[1])
-            m2Group.links.new(vecSub7.outputs[0],m2GroupO.inputs[0])
-            # alpha
-            sub = create_node(m2Group.nodes,"ShaderNodeMath",(-900,-150),operation = "SUBTRACT")
-            sub.inputs[0].default_value = 1
-            sub2 = create_node(m2Group.nodes,"ShaderNodeMath",(-900,-200),operation = "SUBTRACT")
-            sub2.inputs[0].default_value = 1
-            mul = create_node(m2Group.nodes,"ShaderNodeMath",(-750,-150),operation = "MULTIPLY")
-            sub3 = create_node(m2Group.nodes,"ShaderNodeMath",(-600,-150),operation = "SUBTRACT")
-            sub3.inputs[0].default_value = 1
-            m2Group.links.new(m2GroupI.outputs[2],sub.inputs[0])
-            m2Group.links.new(m2GroupI.outputs[3],sub2.inputs[0])
-            m2Group.links.new(sub.outputs[0],mul.inputs[0])
-            m2Group.links.new(sub2.outputs[0],mul.inputs[1])
-            m2Group.links.new(mul.outputs[0],sub3.inputs[1])
-            m2Group.links.new(sub3.outputs[0],m2GroupO.inputs[1])
-        m2 = create_node(CurMat.nodes,"ShaderNodeGroup",(-550,-550), label="m2")
-        m2.node_tree = m2Group 
-        CurMat.links.new(m1.outputs[0],m2.inputs[0])
-        CurMat.links.new(i2.outputs[0],m2.inputs[1])
+        m2Group = _create_m_group("parallax_screen_trans_m2", "m2", "m1", "i2", vers)
+        m2 = _group_node(CurMat, m2Group, (-550, -550), label="m2")
+        CurMat.links.new(m1.outputs[0], m2.inputs[0])
+        CurMat.links.new(i2.outputs[0], m2.inputs[1])
         if len(m2.outputs) > 1:
-            CurMat.links.new(m1.outputs[1],m2.inputs[2])
-            CurMat.links.new(i2.outputs[1],m2.inputs[3])
+            CurMat.links.new(m1.outputs[1], m2.inputs[2])
+            CurMat.links.new(i2.outputs[1], m2.inputs[3])
 
-        # m3
-        if 'parallax_screen_trans_m3' in bpy.data.node_groups.keys():
-            m3Group = bpy.data.node_groups['parallax_screen_trans_m3']
-        else:
-            m3Group = bpy.data.node_groups.new("parallax_screen_trans_m3","ShaderNodeTree")
-            if vers[0]<4:
-                m3Group.inputs.new('NodeSocketVector','m2')
-                m3Group.inputs.new('NodeSocketVector','i1')    
-                m3Group.inputs.new('NodeSocketFloat','m2.a')
-                m3Group.inputs.new('NodeSocketFloat','i1.a')  
-                m3Group.outputs.new('NodeSocketVector','m3')
-                m3Group.outputs.new('NodeSocketFloat','Alpha')
-            else:
-                m3Group.interface.new_socket(name="m2", socket_type='NodeSocketVector', in_out='INPUT')
-                m3Group.interface.new_socket(name="i1", socket_type='NodeSocketVector', in_out='INPUT')
-                m3Group.interface.new_socket(name="m2.a", socket_type='NodeSocketFloat', in_out='INPUT')
-                m3Group.interface.new_socket(name="i1.a", socket_type='NodeSocketFloat', in_out='INPUT')
-                m3Group.interface.new_socket(name="m3", socket_type='NodeSocketVector', in_out='OUTPUT')
-                m3Group.interface.new_socket(name="Alpha", socket_type='NodeSocketFloat', in_out='OUTPUT')
-
-            m3GroupI = create_node(m3Group.nodes, "NodeGroupInput",(-1050,0))
-            m3GroupO = create_node(m3Group.nodes, "NodeGroupOutput",(300,0))   
-            vecSub5 =  create_node(m3Group.nodes,"ShaderNodeVectorMath",(-900,25),operation = "SUBTRACT")
-            vecSub5.inputs[0].default_value = (1,1,1)
-            vecSub6 =  create_node(m3Group.nodes,"ShaderNodeVectorMath",(-900,-25),operation = "SUBTRACT")
-            vecSub6.inputs[0].default_value = (1,1,1)
-            vecMul19 = create_node(m3Group.nodes,"ShaderNodeVectorMath",(-750,0),operation = "MULTIPLY")
-            vecSub7 =  create_node(m3Group.nodes,"ShaderNodeVectorMath",(-600,0),operation = "SUBTRACT")
-            vecSub7.inputs[0].default_value = (1,1,1)
-            m3Group.links.new(m3GroupI.outputs[0],vecSub5.inputs[1])
-            m3Group.links.new(m3GroupI.outputs[1],vecSub6.inputs[1])
-            m3Group.links.new(vecSub5.outputs[0],vecMul19.inputs[0])
-            m3Group.links.new(vecSub6.outputs[0],vecMul19.inputs[1])
-            m3Group.links.new(vecMul19.outputs[0],vecSub7.inputs[1])
-            m3Group.links.new(vecSub7.outputs[0],m3GroupO.inputs[0])
-
-            # alpha
-            sub = create_node(m3Group.nodes,"ShaderNodeMath",(-900,-150),operation = "SUBTRACT")
-            sub.inputs[0].default_value = 1
-            sub2 = create_node(m3Group.nodes,"ShaderNodeMath",(-900,-200),operation = "SUBTRACT")
-            sub2.inputs[0].default_value = 1
-            mul = create_node(m3Group.nodes,"ShaderNodeMath",(-750,-150),operation = "MULTIPLY")
-            sub3 = create_node(m3Group.nodes,"ShaderNodeMath",(-600,-150),operation = "SUBTRACT")
-            sub3.inputs[0].default_value = 1
-            m3Group.links.new(m3GroupI.outputs[2],sub.inputs[0])
-            m3Group.links.new(m3GroupI.outputs[3],sub2.inputs[0])
-            m3Group.links.new(sub.outputs[0],mul.inputs[0])
-            m3Group.links.new(sub2.outputs[0],mul.inputs[1])
-            m3Group.links.new(mul.outputs[0],sub3.inputs[1])
-            m3Group.links.new(sub3.outputs[0],m3GroupO.inputs[1])
-        m3 = create_node(CurMat.nodes,"ShaderNodeGroup",(-550,-600), label="m3")
-        m3.node_tree = m3Group 
-        CurMat.links.new(m2.outputs[0],m3.inputs[0])
-        CurMat.links.new(i1.outputs[0],m3.inputs[1])
+        m3Group = _create_m_group("parallax_screen_trans_m3", "m3", "m2", "i1", vers)
+        m3 = _group_node(CurMat, m3Group, (-550, -600), label="m3")
+        CurMat.links.new(m2.outputs[0], m3.inputs[0])
+        CurMat.links.new(i1.outputs[0], m3.inputs[1])
         if len(m2.outputs) > 1:
-            CurMat.links.new(m2.outputs[1],m3.inputs[2])
-        CurMat.links.new(i1.outputs[1],m3.inputs[3])
+            CurMat.links.new(m2.outputs[1], m3.inputs[2])
+        CurMat.links.new(i1.outputs[1], m3.inputs[3])
 
 
         # if EdgesMask > 0
@@ -1987,9 +1529,8 @@ class ParallaxScreenTransparent:
         CurMat.links.new(greater_than.outputs[0],mix.inputs[0])
 
         # edgesMask
-        if 'edgesMask' in bpy.data.node_groups.keys():
-            edgesMaskGroup = bpy.data.node_groups['edgesMask']
-        else:
+        edgesMaskGroup = bpy.data.node_groups.get('edgesMask')
+        if edgesMaskGroup is None:
             edgesMaskGroup = bpy.data.node_groups.new("edgesMask","ShaderNodeTree")
             if vers[0]<4:
                 edgesMaskGroup.inputs.new('NodeSocketVector','UV')
@@ -2030,9 +1571,8 @@ class ParallaxScreenTransparent:
         
 
         # HSV
-        if 'hsv' in bpy.data.node_groups.keys():
-            hsvGroup = bpy.data.node_groups['hsv']
-        else:  
+        hsvGroup = bpy.data.node_groups.get('hsv')
+        if hsvGroup is None:  
             hsvGroup = bpy.data.node_groups.new("hsv","ShaderNodeTree") 
             if vers[0]<4:
                 hsvGroup.inputs.new('NodeSocketVector','m3')
