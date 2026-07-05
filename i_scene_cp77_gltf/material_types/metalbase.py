@@ -2,250 +2,340 @@ import bpy
 import os
 from ..main.common import *
 
+try:
+    from ..main.datakrash import DepotAssetIndex, DEFAULT_IMAGE_EXTENSIONS
+except (ImportError, AttributeError):
+    DepotAssetIndex = None
+    DEFAULT_IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.tga', '.dds', '.bmp', '.webp', '.tif', '.tiff')
+
+
 class MetalBase:
-    def __init__(self, BasePath,image_format, ProjPath, enableMask):
+    def __init__(self, BasePath, image_format, ProjPath, enableMask):
         self.BasePath = BasePath
         self.ProjPath = ProjPath
         self.enableMask = enableMask
         self.image_format = image_format
+        self._asset_index = None
+        self._image_cache = {}
+        self._path_cache = {}
 
-    def create(self,Data,Mat):
-        CurMat = Mat.node_tree
-        pBSDF = CurMat.nodes[loc('Principled BSDF')]
-        sockets=bsdf_socket_names()
-        isDetailNormal=None
+    def _get_asset_index(self):
+        if DepotAssetIndex is None:
+            return None
+        if self._asset_index is None:
+            root = self.ProjPath if os.path.isdir(self.ProjPath) else self.BasePath
+            self._asset_index = DepotAssetIndex.cached(root, DEFAULT_IMAGE_EXTENSIONS, warn_missing=False)
+        return self._asset_index
 
-        # LayerTile mapping node (base layer only)
-        layerTileMapping = None
-        if "LayerTile" in Data:
-            texCoord = CurMat.nodes.new("ShaderNodeTexCoord")
-            texCoord.location = (-2200, 400)
-            texCoord.hide = True
-            mappingNode = CurMat.nodes.new("ShaderNodeMapping")
-            mappingNode.location = (-2000, 400)
-            mappingNode.label = "LayerTile"      # nice name in editor
-            mappingNode.hide = True              # spawn collapsed/minimized
-            tileValue = Data["LayerTile"]
-            if tileValue <= 0:
-                tileValue = 1.0
-            mappingNode.inputs[3].default_value = (tileValue, tileValue, 1.0)
-            CurMat.links.new(texCoord.outputs[2], mappingNode.inputs[0])
-            layerTileMapping = mappingNode
+    def _resolve_image_path(self, reference):
+        if not reference:
+            return None
+        cache_key = (reference, self.image_format, self.BasePath, self.ProjPath)
+        cached = self._path_cache.get(cache_key)
+        if cached is not None:
+            return cached
 
-        mixRGB = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-800,500) , blend_type = 'MULTIPLY')
-        mixRGB.inputs[0].default_value = 1
-        CurMat.links.new(mixRGB.outputs[0],pBSDF.inputs['Base Color'])
+        resolved = None
+        asset_index = self._get_asset_index()
+        if asset_index is not None:
+            resolved = asset_index.resolve_image(reference, self.image_format, warn=False)
+        self._path_cache[cache_key] = resolved or ''
+        return resolved
 
-        if "BaseColor" in Data:
-            bcolImg=imageFromRelPath(Data["BaseColor"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
-            bColNode = create_node(CurMat.nodes,"ShaderNodeTexImage", (-1400,650), label="BaseColor", image=bcolImg)
-            if layerTileMapping:
-                CurMat.links.new(layerTileMapping.outputs[0], bColNode.inputs[0])
-            CurMat.links.new(bColNode.outputs[0],mixRGB.inputs[1])
+    def _image_from_rel_path(self, reference, is_normal=False):
+        if not reference:
+            return None
+        cache_key = (reference, self.image_format, self.BasePath, self.ProjPath, is_normal)
+        cached = self._image_cache.get(cache_key)
+        if cached is not None:
+            return cached
 
-        if "DetailColor" in Data:
-            dColImg=imageFromRelPath(Data["DetailColor"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
-            dColNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-1400,950), label="DetailColor", image=dColImg)
-
-        if "Metalness" in Data:
-            mImg=imageFromRelPath(Data["Metalness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
-            metNode = create_node(CurMat.nodes,"ShaderNodeTexImage", (-1400,250), label="Metalness", image=mImg)
-            if layerTileMapping:
-                CurMat.links.new(layerTileMapping.outputs[0], metNode.inputs[0])
-
-            mMulAddNode = create_node(CurMat.nodes,"ShaderNodeMath", (-1050,250) , operation = 'MULTIPLY_ADD')
-            mMulAddNode.inputs[1].default_value = 1
-            mMulAddNode.inputs[2].default_value = 0
-
-            CurMat.links.new(metNode.outputs[0],mMulAddNode.inputs[0])
-            CurMat.links.new(mMulAddNode.outputs[0],pBSDF.inputs['Metallic'])
-
-        if "Roughness" in Data:
-            rImg=imageFromRelPath(Data["Roughness"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
-            rNode = create_node(CurMat.nodes,"ShaderNodeTexImage", (-1400,50), label="Roughness", image=rImg)
-            if layerTileMapping:
-                CurMat.links.new(layerTileMapping.outputs[0], rNode.inputs[0])
-
-            rMulAddNode = create_node(CurMat.nodes,"ShaderNodeMath", (-1050,50) , operation = 'MULTIPLY_ADD')
-            rMulAddNode.inputs[1].default_value = 1
-            rMulAddNode.inputs[2].default_value = 0
-
-            CurMat.links.new(rNode.outputs[0],rMulAddNode.inputs[0])
-            CurMat.links.new(rMulAddNode.outputs[0],pBSDF.inputs['Roughness'])
-
-        if "Normal" in Data:
-            nMap = CreateShaderNodeGlobalNormalMap(CurMat,self.BasePath + Data["Normal"],-1000,-200,'Normal',self.image_format)
-            if layerTileMapping:
+        image = None
+        image_path = self._resolve_image_path(reference)
+        if image_path:
+            image = bpy.data.images.load(image_path, check_existing=True)
+            if is_normal:
                 try:
-                    CurMat.links.new(layerTileMapping.outputs[0], nMap.inputs[0])
+                    image.colorspace_settings.name = 'Non-Color'
                 except Exception:
                     pass
-            normalVectorize = CurMat.nodes.new("ShaderNodeVectorMath")
-            normalVectorize.operation='MULTIPLY_ADD'
-            normalVectorize.location = (-1050,-200)
-            normalVectorize.hide = True
-            normalVectorize.inputs[1].default_value = 2, 2, 0
-            normalVectorize.inputs[2].default_value = -1, -1, 0
 
-            normalCreateVecZGroup = CreateCalculateVecNormalZ(CurMat,-800,-350)
-            normalMap = create_node(CurMat.nodes, "ShaderNodeNormalMap",(-500,-350))
+        if image is None:
+            image = imageFromRelPath(
+                reference,
+                self.image_format,
+                DepotPath=self.BasePath,
+                ProjPath=self.ProjPath,
+                isNormal=is_normal,
+            )
 
-            CurMat.links.new(nMap.outputs[0],normalVectorize.inputs[0])
-            CurMat.links.new(normalVectorize.outputs[0],normalCreateVecZGroup.inputs[0])
-            CurMat.links.new(normalCreateVecZGroup.outputs[0],normalMap.inputs[1])
-            CurMat.links.new(normalMap.outputs[0],pBSDF.inputs['Normal'])
+        self._image_cache[cache_key] = image
+        return image
 
+    def _normal_reference(self, reference):
+        resolved = self._resolve_image_path(reference)
+        if resolved:
+            return resolved
+        return self.BasePath + reference
+
+    def _create_layer_tile_mapping(self, CurMat, Data):
+        if "LayerTile" not in Data:
+            return None
+
+        texCoord = CurMat.nodes.new("ShaderNodeTexCoord")
+        texCoord.location = (-2200, 400)
+        texCoord.hide = True
+
+        mappingNode = CurMat.nodes.new("ShaderNodeMapping")
+        mappingNode.location = (-2000, 400)
+        mappingNode.label = "LayerTile"
+        mappingNode.hide = True
+
+        tileValue = Data["LayerTile"]
+        if tileValue <= 0:
+            tileValue = 1.0
+        mappingNode.inputs[3].default_value = (tileValue, tileValue, 1.0)
+        CurMat.links.new(texCoord.outputs[2], mappingNode.inputs[0])
+        return mappingNode
+
+    def _create_detail_mapping(self, CurMat, Data):
+        texCoord = CurMat.nodes.new("ShaderNodeTexCoord")
+        texCoord.location = (-2300, 0)
+
+        mappingNode = CurMat.nodes.new("ShaderNodeMapping")
+        mappingNode.location = (-2100, 0)
+        if "DetailU" in Data and "DetailV" in Data:
+            mappingNode.inputs[3].default_value = (Data["DetailU"], Data["DetailV"], 0)
+        CurMat.links.new(texCoord.outputs[2], mappingNode.inputs[0])
+        return mappingNode
+
+    def _create_image_node(self, CurMat, Data, key, loc, label=None, is_normal=False):
+        if key not in Data:
+            return None, None
+        image = self._image_from_rel_path(Data[key], is_normal=is_normal)
+        node = create_node(CurMat.nodes, "ShaderNodeTexImage", loc, label=label or key, image=image)
+        return node, image
+
+    def _create_pbr_channel(self, Data, CurMat, channel_name, bsdf_input, layerTileMapping, y_loc):
+        node, _ = self._create_image_node(CurMat, Data, channel_name, (-1400, y_loc), is_normal=True)
+        if node is None:
+            return None
+
+        if layerTileMapping:
+            CurMat.links.new(layerTileMapping.outputs[0], node.inputs[0])
+
+        math_node = create_node(CurMat.nodes, "ShaderNodeMath", (-1050, y_loc), operation='MULTIPLY_ADD')
+        math_node.inputs[1].default_value = 1
+        math_node.inputs[2].default_value = 0
+
+        scale_key = f"{channel_name}Scale"
+        bias_key = f"{channel_name}Bias"
+        if scale_key in Data:
+            scale = CreateShaderNodeValue(CurMat, Data[scale_key], -1400, y_loc - 50, scale_key)
+            CurMat.links.new(scale.outputs[0], math_node.inputs[1])
+        if bias_key in Data:
+            bias = CreateShaderNodeValue(CurMat, Data[bias_key], -1400, y_loc - 100, bias_key)
+            CurMat.links.new(bias.outputs[0], math_node.inputs[2])
+
+        CurMat.links.new(node.outputs[0], math_node.inputs[0])
+        CurMat.links.new(math_node.outputs[0], bsdf_input)
+        return math_node
+
+    def _create_normal_nodes(self, CurMat, Data, pBSDF, layerTileMapping, detailMapping):
+        if "Normal" not in Data:
+            return None
+
+        nMap = CreateShaderNodeGlobalNormalMap(
+            CurMat,
+            self._normal_reference(Data["Normal"]),
+            -1000,
+            -200,
+            'Normal',
+            self.image_format,
+        )
+        if layerTileMapping:
+            try:
+                CurMat.links.new(layerTileMapping.outputs[0], nMap.inputs[0])
+            except Exception:
+                pass
+
+        normalVectorize = CurMat.nodes.new("ShaderNodeVectorMath")
+        normalVectorize.operation = 'MULTIPLY_ADD'
+        normalVectorize.location = (-1050, -200)
+        normalVectorize.hide = True
+        normalVectorize.inputs[1].default_value = 2, 2, 0
+        normalVectorize.inputs[2].default_value = -1, -1, 0
+
+        normalCreateVecZGroup = CreateCalculateVecNormalZ(CurMat, -800, -350)
+        normalMap = create_node(CurMat.nodes, "ShaderNodeNormalMap", (-500, -350))
+
+        CurMat.links.new(nMap.outputs[0], normalVectorize.inputs[0])
+
+        detail_normal = None
         if "DetailNormal" in Data:
-            dNNode = CreateShaderNodeGlobalNormalMap(CurMat,self.BasePath + Data["DetailNormal"],-1000,-500,'Normal',self.image_format)
+            dNNode = CreateShaderNodeGlobalNormalMap(
+                CurMat,
+                self._normal_reference(Data["DetailNormal"]),
+                -1000,
+                -500,
+                'Normal',
+                self.image_format,
+            )
+            if detailMapping:
+                CurMat.links.new(detailMapping.outputs[0], dNNode.inputs[0])
 
             normalDetVectorize = CurMat.nodes.new("ShaderNodeVectorMath")
-            normalDetVectorize.operation='MULTIPLY_ADD'
-            normalDetVectorize.location = (-1050,-500)
+            normalDetVectorize.operation = 'MULTIPLY_ADD'
+            normalDetVectorize.location = (-1050, -500)
             normalDetVectorize.hide = True
             normalDetVectorize.inputs[1].default_value = 2, 2, 0
             normalDetVectorize.inputs[2].default_value = -1, -1, 0
 
-            normalAdd = create_node(CurMat.nodes, "ShaderNodeVectorMath",(-1050,-350),operation='ADD')
+            normalAdd = create_node(CurMat.nodes, "ShaderNodeVectorMath", (-1050, -350), operation='ADD')
+            CurMat.links.new(dNNode.outputs[0], normalDetVectorize.inputs[0])
+            CurMat.links.new(normalVectorize.outputs[0], normalAdd.inputs[0])
+            CurMat.links.new(normalDetVectorize.outputs[0], normalAdd.inputs[1])
+            CurMat.links.new(normalAdd.outputs[0], normalCreateVecZGroup.inputs[0])
+            detail_normal = dNNode
+        else:
+            CurMat.links.new(normalVectorize.outputs[0], normalCreateVecZGroup.inputs[0])
 
-            CurMat.links.new(dNNode.outputs[0],normalDetVectorize.inputs[0])
-            CurMat.links.new(normalVectorize.outputs[0],normalAdd.inputs[0])
-            CurMat.links.new(normalDetVectorize.outputs[0],normalAdd.inputs[1])
+        CurMat.links.new(normalCreateVecZGroup.outputs[0], normalMap.inputs[1])
+        CurMat.links.new(normalMap.outputs[0], pBSDF.inputs['Normal'])
+        return detail_normal
 
-            CurMat.links.new(normalAdd.outputs[0],normalCreateVecZGroup.inputs[0])
+    def create(self, Data, Mat):
+        CurMat = Mat.node_tree
+        pBSDF = CurMat.nodes[loc('Principled BSDF')]
+        sockets = bsdf_socket_names()
+        has_detail = all(key in Data for key in ("BaseColor", "DetailColor", "Normal", "DetailNormal"))
 
-            isDetailNormal = True
+        layerTileMapping = self._create_layer_tile_mapping(CurMat, Data)
+        detailMapping = self._create_detail_mapping(CurMat, Data) if has_detail else None
+
+        mixRGB = create_node(CurMat.nodes, "ShaderNodeMixRGB", (-800, 500), blend_type='MULTIPLY')
+        mixRGB.inputs[0].default_value = 1
+        CurMat.links.new(mixRGB.outputs[0], pBSDF.inputs['Base Color'])
+
+        bColNode = None
+        bcolImg = None
+        if "BaseColor" in Data:
+            bColNode, bcolImg = self._create_image_node(CurMat, Data, "BaseColor", (-1400, 650))
+            if layerTileMapping:
+                CurMat.links.new(layerTileMapping.outputs[0], bColNode.inputs[0])
+
+        dColNode = None
+        if "DetailColor" in Data:
+            dColNode, _ = self._create_image_node(CurMat, Data, "DetailColor", (-1400, 950))
+            if detailMapping:
+                CurMat.links.new(detailMapping.outputs[0], dColNode.inputs[0])
+
+        if bColNode is not None and dColNode is not None and has_detail:
+            dColmul = create_node(CurMat.nodes, "ShaderNodeMixRGB", (-800, 650), blend_type='MULTIPLY')
+            dColmul.inputs[0].default_value = 1
+            CurMat.links.new(dColNode.outputs[0], dColmul.inputs[1])
+            CurMat.links.new(bColNode.outputs[0], dColmul.inputs[2])
+            CurMat.links.new(dColmul.outputs[0], mixRGB.inputs[1])
+        elif bColNode is not None:
+            CurMat.links.new(bColNode.outputs[0], mixRGB.inputs[1])
+
+        self._create_pbr_channel(Data, CurMat, "Metalness", pBSDF.inputs['Metallic'], layerTileMapping, 250)
+        self._create_pbr_channel(Data, CurMat, "Roughness", pBSDF.inputs['Roughness'], layerTileMapping, 50)
+
+        dNNode = self._create_normal_nodes(CurMat, Data, pBSDF, layerTileMapping, detailMapping)
 
         if "BaseColorScale" in Data:
-            dColScale = CreateShaderNodeRGB(CurMat, Data["BaseColorScale"],-1400,500,'BaseColorScale',True)
+            dColScale = CreateShaderNodeRGB(CurMat, Data["BaseColorScale"], -1400, 500, 'BaseColorScale', True)
             baseColorGamma = CurMat.nodes.new("ShaderNodeGamma")
-            baseColorGamma.location = (-1050,500)
+            baseColorGamma.location = (-1050, 500)
             baseColorGamma.inputs[1].default_value = 2.2
             baseColorGamma.hide = True
-            CurMat.links.new(dColScale.outputs[0],baseColorGamma.inputs[0])
-            CurMat.links.new(baseColorGamma.outputs[0],mixRGB.inputs[2])
+            CurMat.links.new(dColScale.outputs[0], baseColorGamma.inputs[0])
+            CurMat.links.new(baseColorGamma.outputs[0], mixRGB.inputs[2])
 
         if 'GradientMap' in Data:
-            gradmap = Data["GradientMap"]
-            gradImg = imageFromRelPath(gradmap,self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
-            grad_image_node = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,0), label="GradientMap", image=gradImg)
-            color_ramp_node=CreateGradMapRamp(CurMat, grad_image_node)
+            gradImg = self._image_from_rel_path(Data["GradientMap"])
+            grad_image_node = create_node(CurMat.nodes, "ShaderNodeTexImage", (-800, 0), label="GradientMap", image=gradImg)
+            color_ramp_node = CreateGradMapRamp(CurMat, grad_image_node)
             CurMat.links.new(mixRGB.outputs[0], color_ramp_node.inputs[0])
             CurMat.links.new(color_ramp_node.outputs[0], pBSDF.inputs['Base Color'])
 
-        if 'MetalnessScale' in Data:
-            mScale = CreateShaderNodeValue(CurMat,Data["MetalnessScale"],-1400, 200,"MetalnessScale")
-            CurMat.links.new(mScale.outputs[0],mMulAddNode.inputs[1])
-
-        if 'MetalnessBias' in Data:
-            mBias = CreateShaderNodeValue(CurMat,Data["MetalnessBias"],-1400, 150,"MetalnessBias")
-            CurMat.links.new(mBias.outputs[0],mMulAddNode.inputs[2])
-
-        if 'RoughnessScale' in Data:
-            rScale = CreateShaderNodeValue(CurMat,Data["RoughnessScale"],-1400, 0,"RoughnessScale")
-            CurMat.links.new(rScale.outputs[0],rMulAddNode.inputs[1])
-
-        if 'RoughnessBias' in Data:
-            rBias = CreateShaderNodeValue(CurMat,Data["RoughnessBias"],-1400, -50,"RoughnessBias")
-            CurMat.links.new(rBias.outputs[0],rMulAddNode.inputs[2])
-
         if "AlphaThreshold" in Data:
-            aThreshold = CreateShaderNodeValue(CurMat,Data["AlphaThreshold"],-1400, 400,"AlphaThreshold")
+            aThreshold = CreateShaderNodeValue(CurMat, Data["AlphaThreshold"], -1400, 400, "AlphaThreshold")
         else:
-            aThreshold = CreateShaderNodeValue(CurMat,1.0,-1400, 400,"AlphaThreshold")
+            aThreshold = CreateShaderNodeValue(CurMat, 1.0, -1400, 400, "AlphaThreshold")
 
-        maskThreshold = create_node(CurMat.nodes,"ShaderNodeMath",(-1050,400),operation='GREATER_THAN')
-        CurMat.links.new(bColNode.outputs[1],maskThreshold.inputs[0])
-        CurMat.links.new(aThreshold.outputs[0],maskThreshold.inputs[1])
-        # JATO: what is the purpose of this if/else?
-        # if self.enableMask:
-        #     CurMat.links.new(bColNode.outputs[1],alphaClamp.inputs['Value'])
-        # else:
-        #     CurMat.links.new(bColNode.outputs[0],alphaClamp.inputs['Value'])
+        maskThreshold = create_node(CurMat.nodes, "ShaderNodeMath", (-1050, 400), operation='GREATER_THAN')
+        if bColNode is not None:
+            if dColNode is not None and has_detail:
+                alphaMultiply = create_node(CurMat.nodes, "ShaderNodeMath", (-1050, 800), operation='MULTIPLY')
+                CurMat.links.new(dColNode.outputs[1], alphaMultiply.inputs[0])
+                CurMat.links.new(bColNode.outputs[1], alphaMultiply.inputs[1])
+                CurMat.links.new(alphaMultiply.outputs[0], maskThreshold.inputs[0])
+            else:
+                CurMat.links.new(bColNode.outputs[1], maskThreshold.inputs[0])
+        CurMat.links.new(aThreshold.outputs[0], maskThreshold.inputs[1])
 
         mulNode = CurMat.nodes.new("ShaderNodeMixRGB")
         mulNode.inputs[0].default_value = 1
         mulNode.blend_type = 'MULTIPLY'
-        mulNode.location = (-450,-450)
+        mulNode.location = (-450, -450)
         mulNode.hide = True
 
         if "Emissive" in Data:
-            EmImg=imageFromRelPath(Data["Emissive"],self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
-            emTexNode =create_node(CurMat.nodes,"ShaderNodeTexImage", (-800,-500), label="Emissive", image=EmImg)
+            emImg = self._image_from_rel_path(Data["Emissive"])
+            emTexNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-800, -500), label="Emissive", image=emImg)
             if layerTileMapping:
                 CurMat.links.new(layerTileMapping.outputs[0], emTexNode.inputs[0])
-            CurMat.links.new(emTexNode.outputs[0],mulNode.inputs[2])
+            CurMat.links.new(emTexNode.outputs[0], mulNode.inputs[2])
 
         if "EmissiveColor" in Data:
-            emColor = CreateShaderNodeRGB(CurMat, Data["EmissiveColor"],-700,-450,"EmissiveColor")
-            CurMat.links.new(emColor.outputs[0],mulNode.inputs[1])
+            emColor = CreateShaderNodeRGB(CurMat, Data["EmissiveColor"], -700, -450, "EmissiveColor")
+            CurMat.links.new(emColor.outputs[0], mulNode.inputs[1])
 
-        CurMat.links.new(mulNode.outputs[0],pBSDF.inputs[sockets['Emission']])
+        CurMat.links.new(mulNode.outputs[0], pBSDF.inputs[sockets['Emission']])
 
         if "EmissiveEV" in Data:
-            pBSDF.inputs['Emission Strength'].default_value =  Data["EmissiveEV"]
+            pBSDF.inputs['Emission Strength'].default_value = Data["EmissiveEV"]
 
-        #Setup a value node for the enableMask flag that turns off the alpha when 0 (false) and on when 1
-        EnableMask = create_node(CurMat.nodes,"ShaderNodeValue",(-800, -150), label="EnableMask")
-        EnableMask.outputs[0].default_value=int(self.enableMask)
+        enableMask = create_node(CurMat.nodes, "ShaderNodeValue", (-800, -150), label="EnableMask")
+        enableMask.outputs[0].default_value = int(self.enableMask)
 
-        mathSubtract = create_node(CurMat.nodes,"ShaderNodeMath",(-800, -100), operation='SUBTRACT', label="Math")
-        mathSubtract.inputs[0].default_value=1
+        mathSubtract = create_node(CurMat.nodes, "ShaderNodeMath", (-800, -100), operation='SUBTRACT', label="Math")
+        mathSubtract.inputs[0].default_value = 1
 
-        enableMaskClamp = create_node(CurMat.nodes,"ShaderNodeClamp",(-800, -50))
+        enableMaskClamp = create_node(CurMat.nodes, "ShaderNodeClamp", (-800, -50))
+        backfaceGroup = CreateCullBackfaceGroup(CurMat, x=-500, y=-50, name='Cull Backface')
 
-        backfaceGroup = CreateCullBackfaceGroup(CurMat, x = -500, y = -50,name = 'Cull Backface')
-
-        # Case for when material is metalbasedet.mt
-        # It's critical we create these links last so the metalbasedet links overwrite metalbase links
-        if isDetailNormal:
-            texCoord = CurMat.nodes.new("ShaderNodeTexCoord")
-            texCoord.location = (-2300,0)
-            mappingNode = CurMat.nodes.new("ShaderNodeMapping")
-            mappingNode.location = (-2100,0)
-            if "DetailU" in Data:
-                if "DetailV" in Data:
-                    mappingNode.inputs[3].default_value = (Data["DetailU"],Data["DetailV"],0)
-            CurMat.links.new(texCoord.outputs[2],mappingNode.inputs[0])
-            CurMat.links.new(mappingNode.outputs[0],dColNode.inputs[0])
-            CurMat.links.new(mappingNode.outputs[0],dNNode.inputs[0])
-
-            alphaMultiply = create_node(CurMat.nodes,"ShaderNodeMath", (-1050,800) , operation = 'MULTIPLY')
-            CurMat.links.new(dColNode.outputs[1],alphaMultiply.inputs[0])
-            CurMat.links.new(bColNode.outputs[1],alphaMultiply.inputs[1])
-            CurMat.links.new(alphaMultiply.outputs[0],maskThreshold.inputs[0])
-
-            dColmul = create_node(CurMat.nodes,"ShaderNodeMixRGB", (-800,650), blend_type = 'MULTIPLY')
-            dColmul.inputs[0].default_value = 1
-            CurMat.links.new(dColNode.outputs[0],dColmul.inputs[1])
-            CurMat.links.new(bColNode.outputs[0],dColmul.inputs[2])
-            CurMat.links.new(dColmul.outputs[0],mixRGB.inputs[1])
-
-        CurMat.links.new(EnableMask.outputs['Value'], mathSubtract.inputs[1]) # Enablemask value into math which inverts it
-        CurMat.links.new(mathSubtract.outputs['Value'], enableMaskClamp.inputs[1]) # Inverted value into clamp min, so if 1 its always solic, if 0 will use BaseColor alpha
-        CurMat.links.new(maskThreshold.outputs[0], enableMaskClamp.inputs[0])
+        CurMat.links.new(enableMask.outputs['Value'], mathSubtract.inputs[1])
+        CurMat.links.new(mathSubtract.outputs['Value'], enableMaskClamp.inputs[1])
+        if bColNode is not None and bcolImg is not None and not image_has_alpha(bcolImg):
+            CurMat.links.new(bColNode.outputs['Color'], enableMaskClamp.inputs['Value'])
+        else:
+            CurMat.links.new(maskThreshold.outputs[0], enableMaskClamp.inputs[0])
         CurMat.links.new(enableMaskClamp.outputs[0], backfaceGroup.inputs[0])
         CurMat.links.new(backfaceGroup.outputs[0], pBSDF.inputs['Alpha'])
-        if not image_has_alpha(bcolImg): # if the image doesnt have alpha stick the color in instead
-            CurMat.links.new(bColNode.outputs['Color'],enableMaskClamp.inputs['Value'])
 
 
-used_params=['BaseColor',
-             'BaseColorScale',
-             'Metalness',
-             'Roughness',
-             'Normal',
-             'AlphaThreshold',
-             'MetalnessScale',
-             'MetalnessBias',
-             'RoughnessScale',
-             'RoughnessBias',
-             'NormalStrength',
-             'Emissive',
-             'EmissiveLift',
-             'EmissiveEV',
-             'EmissiveEVRaytracingBias',
-             'EmissiveDirectionality',
-             'EnableRaytracedEmissive',
-             'EmissiveColor',
-             'LayerTile',
-             'VehicleDamageInfluence']
+used_params = [
+    'BaseColor',
+    'BaseColorScale',
+    'Metalness',
+    'Roughness',
+    'Normal',
+    'AlphaThreshold',
+    'MetalnessScale',
+    'MetalnessBias',
+    'RoughnessScale',
+    'RoughnessBias',
+    'NormalStrength',
+    'Emissive',
+    'EmissiveLift',
+    'EmissiveEV',
+    'EmissiveEVRaytracingBias',
+    'EmissiveDirectionality',
+    'EnableRaytracedEmissive',
+    'EmissiveColor',
+    'LayerTile',
+    'VehicleDamageInfluence',
+]
