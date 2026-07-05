@@ -73,13 +73,16 @@ def get_anim_info(animations, oldanims, import_tracks):
                     print("No action found for", animation.name)
 
 def objs_in_col(top_coll, objtype):
-    return sum([len([o for o in col.objects if o.type==objtype]) for col in top_coll.children_recursive])+len([o for o in top_coll.objects if o.type==objtype])
+    nested = sum(1 for col in top_coll.children_recursive for o in col.objects if o.type == objtype)
+    direct = sum(1 for o in top_coll.objects if o.type == objtype)
+    return nested + direct
 
 # will collapse glTF_not_exported collection in the outliner
 def disable_collection_by_name(collection_name):
+    target = collection_name.lower()
     for vl in bpy.context.scene.view_layers:
         for l in vl.layer_collection.children:
-             if l.name.lower() == collection_name.lower():
+             if l.name.lower() == target:
                 l.exclude = True
 
 
@@ -177,23 +180,26 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
 
         # if we're not importing a Cyberpunk mesh, not all submesh names will start with submesh_00, and they will be nested weirdly.
         # we want to clean this up.
-        imported_meshes = [obj for obj in imported if obj.type == "MESH"]
-        imported_empties = [obj for obj in imported if obj.type == "EMPTY"]
-        isExternalImport = len(imported_empties) > 0 or len([mesh.name for mesh in imported_meshes if mesh.name.startswith("submesh")]) != len(imported_meshes)
-
-        multimesh=False
-        meshcount=0
-        # check if we have a multimesh object, and if so, set the flag
+        # Single pass over `imported` for both the external-import heuristic and the
+        # multimesh flag; these were previously two separate loops over the same list.
+        multimesh = False
+        meshcount = 0
+        submesh_count = 0
+        imported_empties_present = False
         for obj in imported:
-            if obj.type == 'MESH' and obj.name.startswith(str(meshcount)+"_"):
-                multimesh = True
-                meshcount += 1
-            elif obj.type == 'MESH' :
-                multimesh = False
+            obj_type = obj.type
+            if obj_type == "EMPTY":
+                imported_empties_present = True
+            if obj_type == 'MESH':
+                if obj.name.startswith("submesh"):
+                    submesh_count += 1
+                multimesh = obj.name.startswith(str(meshcount)+"_")
                 meshcount += 1
             else:
                 multimesh = False
                 exclude_unused_mats = False
+
+        isExternalImport = imported_empties_present or submesh_count != meshcount
 
         if multimesh:
             isExternalImport = False
@@ -210,7 +216,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         collection = bpy.data.collections.new(filename)
         bpy.context.scene.collection.children.link(collection)
         for o in imported:
-            import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filename, oldanims, import_tracks)
+            import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filename, oldanims, import_tracks, verbose)
 
         collection['orig_filepath']=filepath
         collection['numMeshChildren']=objs_in_col(collection, 'MESH')
@@ -390,11 +396,13 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
     verbose = not cp77_addon_prefs.non_verbose
     start_time = time.time()
     validmats = {}
-    for m in mats: #obj['Materials']:
+    mat_index_by_name = {}
+    for i, m in enumerate(mats): #obj['Materials']:
         if 'Name' not in m:
             # Sometimes a material has no name, for now we continue out, but we should figure out why
             continue
         mat = m['Name']
+        mat_index_by_name[mat] = i
         if mat not in validmatnames:
             continue
         if 'BaseMaterial' in m:
@@ -421,8 +429,6 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
         else:
             print(m.keys())
 
-    MatImportList = list(validmats)
-    mat_index_by_name = {m['Name']: i for i, m in enumerate(mats) if 'Name' in m}
     Builder = MaterialBuilder(mats, DepotPath, str(image_format), BasePath)
     counter = 0
     bpy_mats = bpy.data.materials
@@ -430,9 +436,12 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
         obj.data.name for obj in excluded_objects
         if getattr(obj, "type", "") == 'MESH' and obj.data
         }
-    names=[key for key in bpy.data.meshes.keys() if key not in existingMeshes and key not in excluded_mesh_names]
+    # existingMeshes may be a plain keys() view/list; hoist to a set once so the
+    # membership test below is O(1) instead of O(n) per name.
+    existing_mesh_names = set(existingMeshes)
+    names=[key for key in bpy.data.meshes.keys() if key not in existing_mesh_names and key not in excluded_mesh_names]
     if multimesh:
-        names= sorted(list(names), key=lambda x: int(x.split('_')[0]))
+        names= sorted(names, key=lambda x: int(x.partition('_')[0]))
     for name in names:
 
         bpy.data.meshes[name].materials.clear()
@@ -509,7 +518,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
     for name, index in mat_index_by_name.items():
         if name in bpy.data.materials:
             continue
-        if MatImportList and name not in MatImportList:
+        if validmats and name not in validmats:
             continue
         Builder.create(mats, index)
 
@@ -526,10 +535,11 @@ def blender_4_scale_armature_bones():
                 pb.use_custom_shape_bone_size = True
 
 
-def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filename, oldanims, import_tracks):
+def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filename, oldanims, import_tracks, verbose=None):
     # TODO: check if this is a Cyberpunk import or something else entirely
-    cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
-    verbose = not cp77_addon_prefs.non_verbose
+    if verbose is None:
+        cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
+        verbose = not cp77_addon_prefs.non_verbose
 
     for parent in o.users_collection:
         parent.objects.unlink(o)
