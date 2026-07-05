@@ -88,6 +88,34 @@ def _parse_override_vector(value):
     return cached
 
 
+def _coerce_override_for_socket(socket, value):
+    parsed = _parse_override_vector(value)
+    current = getattr(socket, 'default_value', None)
+
+    try:
+        target_len = len(current)
+    except TypeError:
+        return parsed[0] if parsed else 0.0
+
+    if len(parsed) == target_len:
+        return parsed
+    if len(parsed) > target_len:
+        return parsed[:target_len]
+
+    try:
+        baseline = tuple(float(v) for v in current)
+    except (TypeError, ValueError):
+        baseline = (0.0,) * target_len
+
+    return parsed + baseline[len(parsed):]
+
+
+def _apply_override_vector(layer_group, socket_name, enum_value):
+    socket = layer_group.inputs.get(socket_name)
+    if socket is not None:
+        socket.default_value = _coerce_override_for_socket(socket, enum_value)
+
+
 def _find_matching_scalar(palette, key, target, tolerance):
     for value in _get_palette_values(palette, key):
         try:
@@ -670,7 +698,7 @@ def apply_metalin_ovrd(self, context):
         return
     LayerGroup = get_layernode_by_socket()
     if LayerGroup:
-        LayerGroup.inputs['MetalLevelsIn'].default_value = _parse_override_vector(props.multilayer_metalin_enum)
+        _apply_override_vector(LayerGroup, 'MetalLevelsIn', props.multilayer_metalin_enum)
 
 def apply_metalout_ovrd(self, context):
     props = bpy.context.scene.cp77_ml_props
@@ -678,7 +706,7 @@ def apply_metalout_ovrd(self, context):
         return
     LayerGroup = get_layernode_by_socket()
     if LayerGroup:
-        LayerGroup.inputs['MetalLevelsOut'].default_value = _parse_override_vector(props.multilayer_metalout_enum)
+        _apply_override_vector(LayerGroup, 'MetalLevelsOut', props.multilayer_metalout_enum)
 
 def apply_roughin_ovrd(self, context):
     props = bpy.context.scene.cp77_ml_props
@@ -686,7 +714,7 @@ def apply_roughin_ovrd(self, context):
         return
     LayerGroup = get_layernode_by_socket()
     if LayerGroup:
-        LayerGroup.inputs['RoughLevelsIn'].default_value = _parse_override_vector(props.multilayer_roughin_enum)
+        _apply_override_vector(LayerGroup, 'RoughLevelsIn', props.multilayer_roughin_enum)
 
 def apply_roughout_ovrd(self, context):
     props = bpy.context.scene.cp77_ml_props
@@ -695,7 +723,7 @@ def apply_roughout_ovrd(self, context):
         return
     LayerGroup = get_layernode_by_socket()
     if LayerGroup:
-        LayerGroup.inputs['RoughLevelsOut'].default_value = _parse_override_vector(props.multilayer_roughout_enum)
+        _apply_override_vector(LayerGroup, 'RoughLevelsOut', props.multilayer_roughout_enum)
 
     #JATO: important we do this here because this is the last "update" func to trigger
     props.last_multilayer_index = props.multilayer_index_int
