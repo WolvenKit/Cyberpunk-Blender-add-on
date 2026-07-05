@@ -140,7 +140,7 @@ def read_rig(filepath: str) -> RigData:
         ls_t=t,
         ls_s=s,
         rig_name=rig_name,
-        disable_connect=rig_name.startswith("v_"),
+        disable_connect=True,
         apose_ms=root.get("aPoseMS", []),
         apose_ls=root.get("aPoseLS", []),
         bone_transforms=trs,
@@ -357,7 +357,7 @@ def apply_bone_from_matrix(bone_index: int, mat: Matrix, edit_bones: dict[int, b
 
 def create_armature_from_data(filepath: str, bind_pose: str, create_debug: bool = False):
     start_time = time.time()
-
+    rig_col = None
     rig_data = read_rig(filepath)
     if not rig_data:
         show_message(f"Failed to load rig data from {filepath} ERROR")
@@ -366,8 +366,16 @@ def create_armature_from_data(filepath: str, bind_pose: str, create_debug: bool 
     print(f'Beginning Import of: {rig_data.rig_name} from: {filepath} Bind Pose: {bind_pose}')
     context = bpy.context
     safe_mode_switch('OBJECT')
+    coll_scene = context.scene.collection
+    if not bpy.data.collections.get(rig_data.rig_name):
+        rig_col=bpy.data.collections.new(rig_data.rig_name)
+        coll_scene.children.link(rig_col)
+    else:
+        rig_col = bpy.data.collections.get(rig_data.rig_name)      
     bpy.ops.object.add(type='ARMATURE', enter_editmode=True, location=(0, 0, 0))
     arm_obj = context.object
+    rig_col.objects.link(arm_obj)
+
     arm_data = arm_obj.data
     arm_obj.name = rig_data.rig_name
     arm_data.name = f"{rig_data.rig_name}_Data"
