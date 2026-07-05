@@ -16,7 +16,6 @@
 # 4) Run it
 from ..main.common import *
 from ..jsontool import JSONTool
-import glob
 import os
 import bpy
 import math
@@ -34,10 +33,41 @@ import bmesh
 from .entity_import import importEnt
 from .import_with_materials import *
 from .import_common import *
+from ..datakrash import DepotAssetIndex
 from bpy_extras import anim_utils
 
 VERBOSE=True
 scale_factor=1
+
+SECTOR_INDEX_EXTENSIONS = (
+    '.streamingsector.json',
+    '.ent.json',
+    '.app.json',
+    '.mesh.json',
+    '.glb',
+    '.anims.glb',
+    '.rig.json',
+    '.mi.json',
+)
+
+
+def _indexed_files(asset_index, extension):
+    return asset_index.get_files_by_extension(extension)
+
+
+def _resolve_indexed_json(asset_index, depot_path, extension):
+    if not depot_path:
+        return None
+    return asset_index.resolve_expected(f'{depot_path}.json', extension)
+
+
+def _project_sector_path(raw_root, project_name):
+    return os.path.normcase(os.path.normpath(os.path.join(raw_root, 'base', f'{project_name}.streamingsector.json')))
+
+
+def _same_path(left, right):
+    return os.path.normcase(os.path.normpath(left)) == os.path.normcase(os.path.normpath(right))
+
 
 def assign_custom_properties(obj, data, sectorName, i, **kwargs ):
     ntype=data['$type']
@@ -231,9 +261,11 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
     #import_types=['worldEntityNode'    ]
     wkit_proj_name=os.path.basename(filepath)
     # Enter the path to your projects source\raw\base folder below, needs double slashes between folder names.
-    path = os.path.join( os.path.dirname(filepath),'source','raw')
-    print('path is ',path)
-    project=os.path.dirname(filepath)
+    raw_root = os.path.join(os.path.dirname(filepath), 'source', 'raw')
+    print('path is ', raw_root)
+    project = os.path.dirname(filepath)
+    project_name = os.path.basename(project)
+    asset_index = DepotAssetIndex.cached(raw_root, SECTOR_INDEX_EXTENSIONS)
     # If your importing to edit the sectors and want to add stuff then set the am_modding to True and it will auto create the _new collectors
     # want_collisions when True will import/generate the box and capsule collisions
 
@@ -244,25 +276,24 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                 for s in a.spaces:
                     if s.type == 'VIEW_3D':
                         s.clip_end = 50000
-    props = bpy.context.scene.cp77_panel_props 
-    escaped_path = glob.escape(path)    
-    jsonpath = glob.glob(os.path.join(escaped_path, "**", "*.streamingsector.json"), recursive = True)
-    mesh_jsons =  glob.glob(os.path.join(escaped_path,"**","*mesh.json"), recursive = True)
-    anim_files = glob.glob(os.path.join(escaped_path,"**","*anims.glb"), recursive = True)
-    app_path = glob.glob(os.path.join(escaped_path,"**","*.app.json"), recursive = True)
-    rigjsons = glob.glob(os.path.join(escaped_path,"**","*.rig.json"), recursive = True)
-    glbs =  glob.glob(os.path.join(escaped_path,"**","*.glb"), recursive = True)
-    path = os.path.join( os.path.dirname(filepath),'source','raw','base')
+    props = bpy.context.scene.cp77_panel_props
+    sector_jsons = _indexed_files(asset_index, '.streamingsector.json')
+    mesh_jsons = _indexed_files(asset_index, '.mesh.json')
+    anim_files = _indexed_files(asset_index, '.anims.glb')
+    app_path = _indexed_files(asset_index, '.app.json')
+    rigjsons = _indexed_files(asset_index, '.rig.json')
+    glbs = _indexed_files(asset_index, '.glb')
+    path = os.path.join(raw_root, 'base')
     meshes={}
     C = bpy.context
     I_want_to_break_free=False
     # Use object wireframe colors not theme - doesnt work need to find hte viewport as the context doesnt return that for this call
     # bpy.context.space_data.shading.wireframe_color_type = 'OBJECT'
-    for filepath in jsonpath:
-        if filepath==os.path.join(path,os.path.basename(project)+'.streamingsector.json'):
+    for filepath in sector_jsons:
+        if _same_path(filepath, os.path.join(path, project_name + '.streamingsector.json')):
             continue
         if VERBOSE:
-            print(os.path.join(path,os.path.basename(project)+'.streamingsector.json'))
+            print(os.path.join(path,project_name + '.streamingsector.json'))
         t, nodes = JSONTool.jsonload(filepath)
         sectorName=os.path.basename(filepath)[:-5]
         #print(len(nodes))
@@ -385,7 +416,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
     from_mesh_no=0
     to_mesh_no=100000
 
-    meshes_from_mesheswapps( meshes_w_apps,path, from_mesh_no=from_mesh_no, to_mesh_no=to_mesh_no, with_mats=with_mats, glbs=glbs, mesh_jsons=mesh_jsons,Masters=Masters)
+    meshes_from_mesheswapps( meshes_w_apps,path, from_mesh_no=from_mesh_no, to_mesh_no=to_mesh_no, with_mats=with_mats, glbs=glbs, mesh_jsons=mesh_jsons,Masters=Masters, asset_index=asset_index)
 
     empty=[]
     for child in Masters.children:
@@ -399,10 +430,10 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
     inst_scale =Vector((1,1,1))
     inst_m=Matrix.LocRotScale(inst_pos,inst_rot,inst_scale)
     roads=[]
-    no_sectors=len(jsonpath)
-    for fpn,filepath in enumerate(jsonpath):
-        projectjson=os.path.join(path,os.path.basename(project)+'.streamingsector.json')
-        if filepath==projectjson:
+    no_sectors=len(sector_jsons)
+    for fpn,filepath in enumerate(sector_jsons):
+        projectjson=os.path.join(path,project_name + '.streamingsector.json')
+        if _same_path(filepath, projectjson):
             continue
 
         if 'sim_' in filepath:
@@ -467,7 +498,11 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                         #print('worldEntityNode',i)
                         
                         app=data['appearanceName']["$value"]
-                        entpath=os.path.join(path,data['entityTemplate']['DepotPath']['$value']).replace('\\', os.sep)+'.json'
+                        ent_depot = data['entityTemplate']['DepotPath']['$value']
+                        entpath = _resolve_indexed_json(asset_index, ent_depot, '.ent.json')
+                        if not entpath:
+                            print(f"Entity template not indexed: {ent_depot}")
+                            continue
                         ent_groupname=os.path.basename(entpath).split('.')[0]+'_'+app
                         if 'door' in ent_groupname:
                             print('Door entity found, pausing')
@@ -481,7 +516,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             try:
                                 #print('Importing ',entpath, ' using app ',app)
                                 incoll='MasterInstances'
-                                importEnt(with_mats, filepath=entpath, appearances=[app], inColl=incoll,meshes=glbs,mesh_jsons=mesh_jsons, escaped_path=escaped_path, app_path=app_path, anim_files=anim_files, rigjsons=rigjsons)
+                                importEnt(with_mats, filepath=entpath, appearances=[app], inColl=incoll,meshes=glbs,mesh_jsons=mesh_jsons, app_path=app_path, anim_files=anim_files, rigjsons=rigjsons)
                                 move_coll=Masters.children.get(ent_groupname)
                                 imported=True
                             except:
@@ -787,22 +822,17 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             o.rotation_mode = "QUATERNION"
                             o.rotation_quaternion = get_rot(inst)
                             o.scale = get_scale(inst)
-                            
-                            h_flip = bool(data.get('horizontalFlip', False))
-                            v_flip = bool(data.get('verticalFlip', False))
-
-                            if h_flip:
-                                o.scale.x = -abs(o.scale.x)
-                            if v_flip:
-                                o.scale.y = -abs(o.scale.y)
 
                             #o.empty_display_size = 0.002
                             #o.empty_display_type = 'IMAGE'
                             if with_mats:
                                 mipath = o['decal']
-                                jsonpath = os.path.join(path,mipath)+".json"
+                                expected_jsonpath = os.path.join(path, mipath) + ".json"
+                                jsonpath = _resolve_indexed_json(asset_index, mipath, '.mi.json')
                                 #print(jsonpath)
                                 try:
+                                    if not jsonpath:
+                                        raise FileNotFoundError(expected_jsonpath)
                                     obj=JSONTool.jsonload(jsonpath)
                                     if obj:
                                         index = 0
@@ -822,8 +852,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                             o.show_wire = True
                                             o.display.show_shadows = False
                                 except FileNotFoundError:
-                                    name = os.path.basename(jsonpath)
-                                    print(f'File not found {name} ({jsonpath}), you need to export .mi files')
+                                    missing_path = jsonpath or expected_jsonpath
+                                    name = os.path.basename(missing_path)
+                                    print(f'File not found {name} ({missing_path}), you need to export .mi files')
                                     o.display_type = 'WIRE'
                                     o.color = (1.0, 0.905, .062, 1)
                                     o.show_wire = True

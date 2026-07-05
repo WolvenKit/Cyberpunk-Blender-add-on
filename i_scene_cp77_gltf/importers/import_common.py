@@ -26,52 +26,66 @@ def get_groupname(meshname, meshAppearance):
     return groupname[:NAME_MAX_LEN]
 
 
-def build_master_group_index(Masters):
-    by_metadata = {}
-    if not Masters:
-        return by_metadata
-    for candidate in Masters.children:
-        meshpath = candidate.get('meshpath')
-        if meshpath is not None:
-            by_metadata[(meshpath, candidate.get('appearance', ''))] = candidate
-    return by_metadata
-
-
-def get_group(meshname, meshAppearance, Masters, master_index=None):
+def get_group(meshname, meshAppearance, Masters):
     groupname = get_groupname(meshname, meshAppearance)
     group = Masters.children.get(groupname)
     if group:
         return group, groupname
 
     appearance = _appearance_name(meshAppearance)
-    if master_index is not None:
-        candidate = master_index.get((meshname, appearance))
-        if candidate:
-            return candidate, candidate.name
-
     for candidate in Masters.children:
         if candidate.get('meshpath') == meshname and candidate.get('appearance') == appearance:
             return candidate, candidate.name
     return None, groupname
 
 
+def _dedupe_key(value):
+    if isinstance(value, dict):
+        if '$value' in value:
+            return ('cname', value.get('$value'))
+        try:
+            return ('dict', json.dumps(value, sort_keys=True, separators=(',', ':'), default=str))
+        except TypeError:
+            return ('dict', repr(value))
+    if isinstance(value, (list, tuple)):
+        return tuple(_dedupe_key(item) for item in value)
+    try:
+        hash(value)
+    except TypeError:
+        return repr(value)
+    return value
+
+
 def add_to_list(basename, meshes, target):
     mesh = meshes[basename]
     entry = target.setdefault(basename, {'apps': [], 'sectors': []})
-    seen_apps = set(entry['apps'])
+
+    seen_apps = {_dedupe_key(app) for app in entry['apps']}
     for app in mesh.get('appearances', []):
-        if app not in seen_apps:
-            seen_apps.add(app)
+        key = _dedupe_key(app)
+        if key not in seen_apps:
+            seen_apps.add(key)
             entry['apps'].append(app)
+
     sector = mesh.get('sector')
-    if sector not in entry['sectors']:
+    sector_key = _dedupe_key(sector)
+    seen_sectors = {_dedupe_key(existing) for existing in entry['sectors']}
+    if sector_key not in seen_sectors:
         entry['sectors'].append(sector)
 
 
-def _mesh_glb_path(path, mesh_ref):
+def _mesh_glb_path(path, mesh_ref, asset_index=None):
+    if asset_index is not None:
+        if mesh_ref.endswith(('physicalscene', 'w2mesh')):
+            resolved = asset_index.resolve_expected(mesh_ref + '.glb', '.glb', warn=False)
+        else:
+            resolved = asset_index.resolve_mesh_glb(mesh_ref)
+        if resolved:
+            return resolved
+
     if mesh_ref.endswith(('physicalscene', 'w2mesh')):
         return os.path.join(path, mesh_ref + '.glb').replace('\\', os.sep)
-    return (os.path.splitext(mesh_ref)[0] + '.glb').replace('\\', os.sep)
+    return os.path.join(path, os.path.splitext(mesh_ref)[0] + '.glb').replace('\\', os.sep)
 
 
 def _appearance_list(raw_apps):
@@ -90,17 +104,14 @@ def _appearance_list(raw_apps):
 
 def _prune_materials(obj, mat_name):
     materials = obj.data.materials
-    if len(mat_name) >= NAME_MAX_LEN or len(materials) <= 1:
+    if len(mat_name) >= NAME_MAX_LEN or len(materials) <= 1 or mat_name not in materials.keys():
         return
-    names = list(materials.keys())
-    if mat_name not in names:
-        return
-    for index in range(len(names) - 1, -1, -1):
-        if names[index].split('.')[0] != mat_name:
+    for index in range(len(materials) - 1, -1, -1):
+        if materials.keys()[index].split('.')[0] != mat_name:
             materials.pop(index=index)
 
 
-def meshes_from_mesheswapps(meshes_w_apps, path='', from_mesh_no=0, to_mesh_no=10000000, with_mats=False, glbs=None, mesh_jsons=None, Masters=None, generate_overrides=False):
+def meshes_from_mesheswapps(meshes_w_apps, path='', from_mesh_no=0, to_mesh_no=10000000, with_mats=False, glbs=None, mesh_jsons=None, Masters=None, generate_overrides=False, asset_index=None):
     props = bpy.context.scene.cp77_panel_props
     context = bpy.context
     coll_scene = context.scene.collection
@@ -113,11 +124,11 @@ def meshes_from_mesheswapps(meshes_w_apps, path='', from_mesh_no=0, to_mesh_no=1
             continue
 
         apps = _appearance_list(meshes_w_apps[mesh_ref].get('apps', []))
-        meshpath = _mesh_glb_path(path, mesh_ref)
+        meshpath = _mesh_glb_path(path, mesh_ref, asset_index=asset_index)
         print(meshpath)
 
         groupname = get_groupname(meshpath, '')
-        if master_children.get(groupname):
+        if groupname in master_children.keys():
             continue
         if not os.path.exists(meshpath):
             print('Mesh ', meshpath, ' does not exist')
