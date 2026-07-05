@@ -22,6 +22,7 @@ import math
 import traceback
 from mathutils import Vector, Matrix , Quaternion
 from pathlib import Path
+from collections import defaultdict
 import time
 import traceback
 from pprint import pprint
@@ -41,6 +42,7 @@ scale_factor=1
 
 SECTOR_INDEX_EXTENSIONS = (
     '.streamingsector.json',
+    '.streamingsector_inplace.json',
     '.ent.json',
     '.app.json',
     '.mesh.json',
@@ -48,6 +50,7 @@ SECTOR_INDEX_EXTENSIONS = (
     '.anims.glb',
     '.rig.json',
     '.mi.json',
+    '.cfoliage.json',
 )
 
 
@@ -67,6 +70,114 @@ def _project_sector_path(raw_root, project_name):
 
 def _same_path(left, right):
     return os.path.normcase(os.path.normpath(left)) == os.path.normcase(os.path.normpath(right))
+
+
+def _trim_name(name, max_len=63):
+    return name[:max_len]
+
+
+def _node_instances(node_data):
+    instances = defaultdict(list)
+    for index, item in enumerate(node_data or []):
+        item['nodeDataIndex'] = index
+        instances[item.get('NodeIndex')].append(item)
+    return instances
+
+
+def _node_handle_lookup(nodes):
+    return {node.get('HandleId'): node for node in nodes or [] if isinstance(node, dict)}
+
+
+def _load_sector_entry(filepath):
+    node_data, nodes = JSONTool.jsonload(filepath)
+    return {
+        'filepath': filepath,
+        'sectorName': os.path.basename(filepath)[:-5],
+        'nodeData': node_data,
+        'nodes': nodes,
+        'instances_by_node': _node_instances(node_data),
+        'nodes_by_handle': _node_handle_lookup(nodes),
+    }
+
+
+def _sector_entries(sector_jsons, base_path, project_name):
+    project_sector = os.path.join(base_path, project_name + '.streamingsector.json')
+    entries = []
+    for sector_path in sorted(sector_jsons):
+        if _same_path(sector_path, project_sector) or 'sim_' in sector_path:
+            continue
+        entries.append(_load_sector_entry(sector_path))
+    return entries
+
+
+def _first_instance(instances_by_node, node_index):
+    instances = instances_by_node.get(node_index)
+    return instances[0] if instances else None
+
+
+def _instance_matrix(inst, scale=1):
+    pos = Vector(get_pos(inst))
+    rot = Quaternion(get_rot(inst))
+    scl = Vector((1 / scale, 1 / scale, 1 / scale))
+    return Matrix.LocRotScale(pos, rot, scl)
+
+
+def _set_collection_props(collection, data, sector_name, node_index, inst=None, **kwargs):
+    if inst is None:
+        assign_custom_properties(collection, data, sector_name, node_index, **kwargs)
+    else:
+        assign_custom_properties(collection, data, sector_name, node_index, ndi=inst.get('nodeDataIndex'), pivot=inst.get('Pivot'), **kwargs)
+
+
+def _copy_object(old_obj, color=None, hide_armature=True):
+    obj = old_obj.copy()
+    if color is not None:
+        obj.color = color
+    if hide_armature and 'Armature' in obj.name:
+        obj.hide_viewport = True
+        obj.hide_render = True
+    return obj
+
+
+def _copy_collection_tree(src_collection, name, transform=None, color=None, hide_armatures=True):
+    dst_root = bpy.data.collections.new(_trim_name(name))
+    copy_map = {}
+
+    def copy_into(src, dst):
+        for child in src.children:
+            child_dst = bpy.data.collections.new(child.name)
+            dst.children.link(child_dst)
+            copy_into(child, child_dst)
+        for old_obj in src.objects:
+            obj = _copy_object(old_obj, color=color, hide_armature=hide_armatures)
+            copy_map[old_obj] = obj
+            dst.objects.link(obj)
+
+    copy_into(src_collection, dst_root)
+
+    for old_obj, obj in copy_map.items():
+        if old_obj.parent in copy_map:
+            obj.parent = copy_map[old_obj.parent]
+            obj.matrix_parent_inverse = old_obj.matrix_parent_inverse.copy()
+            obj.matrix_local = old_obj.matrix_local.copy()
+
+    if transform is not None:
+        for old_obj, obj in copy_map.items():
+            if old_obj.parent not in copy_map:
+                obj.matrix_world = transform @ old_obj.matrix_world
+
+    return dst_root
+
+
+def _shared_transform_buffer(data, nodes_by_handle, node, buffer_key):
+    buffer_data = data[buffer_key]['sharedDataBuffer']
+    if 'Data' in buffer_data:
+        return buffer_data['Data']['buffer']['Data']['Transforms']
+    if 'HandleRefId' in buffer_data:
+        buffer_id = int(buffer_data['HandleRefId'])
+        ref = nodes_by_handle.get(str(buffer_id - 1), node)
+        return ref['Data'][buffer_key]['sharedDataBuffer']['Data']['buffer']['Data']['Transforms']
+    return []
 
 
 def assign_custom_properties(obj, data, sectorName, i, **kwargs ):
@@ -287,15 +398,15 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
     meshes={}
     C = bpy.context
     I_want_to_break_free=False
+    sector_entries = _sector_entries(sector_jsons, path, project_name)
     # Use object wireframe colors not theme - doesnt work need to find hte viewport as the context doesnt return that for this call
     # bpy.context.space_data.shading.wireframe_color_type = 'OBJECT'
-    for filepath in sector_jsons:
-        if _same_path(filepath, os.path.join(path, project_name + '.streamingsector.json')):
-            continue
+    for sector_entry in sector_entries:
+        filepath = sector_entry['filepath']
+        nodes = sector_entry['nodes']
+        sectorName = sector_entry['sectorName']
         if VERBOSE:
-            print(os.path.join(path,project_name + '.streamingsector.json'))
-        t, nodes = JSONTool.jsonload(filepath)
-        sectorName=os.path.basename(filepath)[:-5]
+            print(os.path.join(path, project_name + '.streamingsector.json'))
         #print(len(nodes))
         #nodes=[]
 
@@ -430,24 +541,20 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
     inst_scale =Vector((1,1,1))
     inst_m=Matrix.LocRotScale(inst_pos,inst_rot,inst_scale)
     roads=[]
-    no_sectors=len(sector_jsons)
-    for fpn,filepath in enumerate(sector_jsons):
+    no_sectors=len(sector_entries)
+    for fpn, sector_entry in enumerate(sector_entries):
+        filepath = sector_entry['filepath']
+        t = sector_entry['nodeData']
+        nodes = sector_entry['nodes']
+        instances_by_node = sector_entry['instances_by_node']
+        nodes_by_handle = sector_entry['nodes_by_handle']
         projectjson=os.path.join(path,project_name + '.streamingsector.json')
-        if _same_path(filepath, projectjson):
-            continue
-
-        if 'sim_' in filepath:
-            continue
         if VERBOSE:
             print(projectjson)
             print(filepath)
-        # add nodeDataIndex props to all the nodes in t
-        t, nodes = JSONTool.jsonload(filepath)
-        for index, obj in enumerate(t):
-            obj['nodeDataIndex']=index
 
         numExpectedNodes = len(t)
-        sectorName=os.path.basename(filepath)[:-5]
+        sectorName=sector_entry['sectorName']
 
         if sectorName in coll_scene.children.keys():
             Sector_coll=bpy.data.collections.get(sectorName)
@@ -478,7 +585,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
             if  (limittypes and ntype in import_types) or limittypes==False: #or type=='worldCableMeshNode': # can add a filter for dev here
                 match ntype:
                     case 'worldAISpotNode':
-                        instances = [x for x in t if x['NodeIndex'] == i]
+                        instances = instances_by_node.get(i, [])
 
                         print('worldAISpotNode',i)
                         if instances:
@@ -523,7 +630,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                 print(traceback.format_exc())
                                 print(f"Failed during Entity import on {entpath} from app {app}")
                         if imported:
-                            instances = [x for x in t if x['NodeIndex'] == i]
+                            instances = instances_by_node.get(i, [])
                             for idx,inst in enumerate(instances):
                                 #print(inst)
                                 group=move_coll
@@ -532,50 +639,22 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                     move_coll['meshpath']='fake'
                                     move_coll['appearance']='fake'
                                     #print('Group found for ',groupname)
-                                    new=bpy.data.collections.new(groupname)
-                                    Sector_coll.children.link(new)
-                                    assign_custom_properties(new, data,sectorName,i,ndi=inst['nodeDataIndex'],idx=idx,HandleId=e['HandleId'],pivot=inst['Pivot'])                                    
                                     pos = Vector(get_pos(inst))
-                                    rot=[0,0,0,0]
-                                    scale =Vector((1/scale_factor,1/scale_factor,1/scale_factor))
-                                    rot =Quaternion(get_rot(inst))
+                                    rot = Quaternion(get_rot(inst))
+                                    scale = Vector((1/scale_factor, 1/scale_factor, 1/scale_factor))
+                                    inst_trans_mat = Matrix.LocRotScale(pos, rot, scale)
+                                    new = _copy_collection_tree(group, groupname, inst_trans_mat, color=(0.567942, 0.0247339, 0.600028, 1), hide_armatures=True)
+                                    assign_custom_properties(new, data,sectorName,i,ndi=inst['nodeDataIndex'],idx=idx,HandleId=e['HandleId'],pivot=inst['Pivot'])
                                     new['ent_rot']=rot.to_euler('XYZ')
                                     new['ent_pos']=pos
-                                    inst_trans_mat=Matrix.LocRotScale(pos,rot,scale)
-                                    #print('Entity transform matrix:', inst_trans_mat)
-                                    for child in group.children:
-                                        newchild=bpy.data.collections.new(child.name)
-                                        new.children.link(newchild)
-                                        for old_obj in child.objects:
-                                            obj=old_obj.copy()
-                                            obj.color = (0.567942, 0.0247339, 0.600028, 1)
-                                            newchild.objects.link(obj)
-                                            #print(obj.name, 'applying transform')
-                                            #print("Before:", obj.matrix_local)
-                                            if obj.parent:
-                                                # Apply in local space relative to parent
-                                                obj.matrix_local = inst_trans_mat @ obj.matrix_local
-                                            else:
-                                                # No parent, apply in world space
-                                                obj.matrix_world = inst_trans_mat @ obj.matrix_world
-                                            #print("After:", obj.matrix_local)
-                                            if 'Armature' in obj.name:
-                                                obj.hide_set(True)
-                                        bpy.context.view_layer.update()
-                                    for old_obj in group.objects:
-                                        obj=old_obj.copy()
-                                        obj.color = (0.567942, 0.0247339, 0.600028, 1)
-                                        new.objects.link(obj)
-                                        obj.matrix_local=  inst_trans_mat @ obj.matrix_local
-                                        if 'Armature' in obj.name:
-                                            obj.hide_set(True)
-                                    if len(group.all_objects)>0:
-                                        new['matrix']=group.all_objects[0].matrix_world
+                                    if len(new.all_objects)>0:
+                                        new['matrix']=new.all_objects[0].matrix_world
+                                    Sector_coll.children.link(new)
 
                     case 'worldBendedMeshNode' | 'worldCableMeshNode' :
                         #print(ntype)
                         meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
-                        instances = [x for x in t if x['NodeIndex'] == i]
+                        instances = instances_by_node.get(i, [])
                         #if len(instances)>1:
                         #    print('Multiple Instances of node ',i)
 
@@ -669,7 +748,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
 
                     case 'worldInstancedMeshNode' :
                         #print('worldInstancedMeshNode')
-                        instances = [x for x in t if x['NodeIndex'] == i]
+                        instances = instances_by_node.get(i, [])
                         for idx,inst in enumerate(instances):
                             meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
                             num=data['worldTransformsBuffer']['numElements']
@@ -706,10 +785,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                             elif 'HandleRefId' in data['worldTransformsBuffer']['sharedDataBuffer'].keys():
                                                 bufferID = int(data['worldTransformsBuffer']['sharedDataBuffer']['HandleRefId'])
                                                 new['bufferID']=bufferID
-                                                ref=e
-                                                for n in nodes:
-                                                    if n['HandleId']==str(bufferID-1):
-                                                        ref=n
+                                                ref = nodes_by_handle.get(str(bufferID - 1), e)
                                                 inst_trans = ref['Data']['worldTransformsBuffer']['sharedDataBuffer']['Data']['buffer']['Data']['Transforms'][El_idx]
                                             else :
                                                 print(e)
@@ -727,12 +803,13 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
 
                     case 'worldFoliageNode' :
                         #print('worldFoliageNode')
-                        instances = [x for x in t if x['NodeIndex'] == i]
+                        instances = instances_by_node.get(i, [])
                         for idx,inst in enumerate(instances):
                             meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
-                            foliageResource=data['foliageResource']['DepotPath']['$value'].replace('\\', os.sep)+'.json'
-                            if os.path.exists(os.path.join(path,foliageResource)):
-                                frjson=JSONTool.jsonload(os.path.join(path,foliageResource))
+                            foliageResource=data['foliageResource']['DepotPath']['$value'].replace('\\', os.sep)
+                            foliage_json = _resolve_indexed_json(asset_index, foliageResource, '.cfoliage.json')
+                            if foliage_json:
+                                frjson=JSONTool.jsonload(foliage_json)
                                 inst_pos=get_pos(inst)
                                 Bucketnum=data['populationSpanInfo']['cketCount']
                                 Bucketstart=data['populationSpanInfo']['cketBegin']
@@ -799,7 +876,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                     case 'worldStaticDecalNode':
                         #print('worldStaticDecalNode')
                         # decals are imported as planes tagged with the material details so you can see what they are and move them.
-                        instances = [x for x in t if x['NodeIndex'] == i]
+                        instances = instances_by_node.get(i, [])
                         for idx,inst in enumerate(instances):
                             #print( inst)
                             #o = bpy.data.objects.new( "empty", None )
@@ -867,7 +944,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
 
                     case 'worldSplineNode':
                         #print('worldSplineNode',i)
-                        instances = [x for x in t if x['NodeIndex'] == i]
+                        instances = instances_by_node.get(i, [])
                         if len(instances)>0:
                             spline_node=e
                             spline_ndata=instances[0]
@@ -895,9 +972,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                     case 'worldRoadProxyMeshNode' :
                         if isinstance(e, dict) and 'mesh' in data.keys():
                             meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
-                            #meshpath=os.path.join(path, meshname[:-4]+'glb')
-                            meshpath=os.path.join(path, meshname[:-1*len(os.path.splitext(meshname)[1])]+'.glb').replace('\\', os.sep)
-                            print(os.path.exists(meshpath))
+                            meshpath = asset_index.resolve_expected(meshname[:-1*len(os.path.splitext(meshname)[1])] + '.glb', '.glb')
+                            if not meshpath:
+                                print(f"Road proxy mesh not indexed: {meshname}")
                             #print('Mesh path is - ',meshpath, e['HandleId'])
                             if(meshname != 0):
                                         #print('Mesh - ',meshname, ' - ',i, e['HandleId'])
@@ -917,8 +994,8 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
 
                                         if (imported):
                                             #print('Group found for ',groupname)
-                                            instances = [x for x in t if x['NodeIndex'] == i]
-                                            for inst in instances:
+                                            instances = instances_by_node.get(i, [])
+                                            for idx, inst in enumerate(instances):
                                                 new=bpy.data.collections.new(groupname)
                                                 Sector_coll.children.link(new)
                                                 assign_custom_properties(new, data,sectorName,i,
@@ -973,18 +1050,17 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                 rot_time=data['fullRotationTime']
                                                 reverse=data['reverseDirection']
 
-                                            instances = [x for x in t if x['NodeIndex'] == i]
+                                            instances = instances_by_node.get(i, [])
                                             for idx,inst in enumerate(instances):
-                                                new=bpy.data.collections.new(groupname)
-                                                Sector_coll.children.link(new)
+                                                inst_trans_mat = _instance_matrix(inst, scale_factor)
+                                                new = _copy_collection_tree(group, groupname, inst_trans_mat, color=(0.3, 0.3, 0.3, 1), hide_armatures=True)
                                                 assign_custom_properties(new, data,sectorName,i,
                                                 nodeDataIndex=inst['nodeDataIndex'], instance_idx=idx,
                                                 mesh=meshname, pivot=inst['Pivot'],
                                                 meshAppearance=meshAppearance,
                                                 appearanceName=meshAppearance)
-                                                if ntype=='worldClothMeshNode':
-                                                    if 'windImpulseEnabled' in inst.keys():
-                                                        new['windImpulseEnabled']= inst['windImpulseEnabled']
+                                                if ntype=='worldClothMeshNode' and 'windImpulseEnabled' in inst.keys():
+                                                    new['windImpulseEnabled']= inst['windImpulseEnabled']
                                                 if ntype=='worldRotatingMeshNode':
                                                     if 'rotationAxis' in data.keys():
                                                         new['rot_axis']=data['rotationAxis']
@@ -992,26 +1068,13 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                         new['reverseDirection']=data['reverseDirection']
                                                     if 'fullRotationTime' in data.keys():
                                                         new['fullRotationTime']=data['fullRotationTime']
-
-                                                #print(new['nodeDataIndex'])
-                                                # Should do something with the Advertisements lightData  bits here
                                                 if ntype=='worldAdvertisingNode' or ntype=='worldAdvertisementNode':
                                                     if 'lightData' in data.keys():
                                                         new['lightData']=data['lightData']
-
-                                                for old_obj in group.all_objects:
-                                                    obj=old_obj.copy()
-                                                    new.objects.link(obj)
-
-                                                    obj.location = get_pos(inst)
-                                                    obj.rotation_quaternion = get_rot(inst)
-                                                    obj.scale = get_scale(inst)
-                                                    obj.color = (0.3, 0.3, 0.3, 1)
-
-                                                    if 'Armature' in obj.name:
-                                                        obj.hide_set(True)
-                                                    if ntype=='worldRotatingMeshNode':
-                                                        orig_rot= obj.rotation_quaternion
+                                                if ntype=='worldRotatingMeshNode':
+                                                    for obj in new.all_objects:
+                                                        if obj.type != 'MESH':
+                                                            continue
                                                         obj.rotation_mode='YXZ'
                                                         obj.keyframe_insert('rotation_euler', index=axis_no ,frame=1)
                                                         obj.rotation_euler[axis_no] = obj.rotation_euler[axis_no] +math.radians(360)
@@ -1023,6 +1086,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                             obj_fcu = channelbag.fcurves[0]
                                                             for pt in obj_fcu.keyframe_points:
                                                                 pt.interpolation = 'LINEAR'
+                                                Sector_coll.children.link(new)
 
 
 
@@ -1031,7 +1095,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
 
                     case 'worldInstancedDestructibleMeshNode':
                         #print('worldInstancedDestructibleMeshNode',i)
-                        instances = [x for x in t if x['NodeIndex'] == i]
+                        instances = instances_by_node.get(i, [])
                         for instidx,inst in enumerate(instances):
                             if isinstance(e, dict) and 'mesh' in data.keys():
                                 meshname = data['mesh']['DepotPath']['$value'].replace('\\', os.sep)
@@ -1079,10 +1143,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                     elif 'HandleRefId' in data['cookedInstanceTransforms']['sharedDataBuffer'].keys():
                                                         bufferID = int(data['cookedInstanceTransforms']['sharedDataBuffer']['HandleRefId'])
                                                         new['bufferID']=bufferID
-                                                        ref=e
-                                                        for n in nodes:
-                                                            if n['HandleId']==str(bufferID-1):
-                                                                ref=n
+                                                        ref = nodes_by_handle.get(str(bufferID - 1), e)
                                                         inst_trans = ref['Data']['cookedInstanceTransforms']['sharedDataBuffer']['Data']['buffer']['Data']['Transforms'][idx]
 
                                                     else :
@@ -1113,14 +1174,15 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                                                         obj.matrix_local= tm
                                                         obj.scale=get_scale(inst)
                                                         if 'Armature' in obj.name:
-                                                            obj.hide_set(True)
+                                                            obj.hide_viewport = True
+                                                            obj.hide_render = True
                                             else:
                                                 print('Mesh not found in masters - ',meshname, ' - ',i, e['HandleId'])
 
                     case 'worldStaticLightNode':
                         #print('worldStaticLightNode',i)
                         if with_lights:
-                            instances = [x for x in t if x['NodeIndex'] == i]
+                            instances = instances_by_node.get(i, [])
                             for inst in instances:
                                 light_node=e['Data']
                                 light_name=e['Data']['debugName']['$value']
@@ -1164,7 +1226,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
 
                     case 'worldStaticParticleNode'|'worldEffectNode'|'worldPopulationSpawnerNode':
                         #print('worldStaticParticleNode',i)
-                        instances = [x for x in t if x['NodeIndex'] == i]
+                        instances = instances_by_node.get(i, [])
                         for idx,inst in enumerate(instances):
                             o = bpy.data.objects.new( "empty", None )
                             o.name=ntype+'_'+e['Data']['debugName']['$value']
@@ -1196,7 +1258,7 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
 
                     case 'worldStaticSoundEmitterNode':
                         #print(ntype)
-                        instances = [x for x in t if x['NodeIndex'] == i]
+                        instances = instances_by_node.get(i, [])
                         for idx,inst in enumerate(instances):
                             o = bpy.data.objects.new( "empty", None )
                             o.empty_display_type = 'SPHERE'
@@ -1231,7 +1293,9 @@ def importSectors( filepath, with_mats, remap_depot, want_collisions, am_modding
                             else:
                                 sector_Collisions_coll=bpy.data.collections.new(sector_Collisions)
                                 coll_scene.children.link(sector_Collisions_coll)
-                            inst = [x for x in t if x['NodeIndex'] == i][0]
+                            inst = _first_instance(instances_by_node, i)
+                            if inst is None:
+                                continue
                             Actors=e['Data']['compiledData']['Data']['Actors']
                             for idx,act in enumerate(Actors):
                                 #print(len(act['Shapes']))
