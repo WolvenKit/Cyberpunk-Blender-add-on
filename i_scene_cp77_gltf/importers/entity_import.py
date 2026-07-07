@@ -124,6 +124,19 @@ def red_quaternion(value):
     ))
 
 
+def quaternion_is_identity(quat, eps=1e-5):
+    return (
+        abs(quat.w - 1.0) <= eps
+        and abs(quat.x) <= eps
+        and abs(quat.y) <= eps
+        and abs(quat.z) <= eps
+    )
+
+
+def vector_is_zero(vec, eps=1e-5):
+    return abs(vec.x) <= eps and abs(vec.y) <= eps and abs(vec.z) <= eps
+
+
 def fixed_point_position(transform):
     return vector_from_transform_position(transform, ('Position',))
 
@@ -671,7 +684,7 @@ def component_uses_skinning(component, skinning_lookup=None):
 
 
 def component_uses_deformation_skinning(component, skinning_lookup=None):
-    return component_uses_skinning(component, skinning_lookup)
+    return skinning_bind_name(component, skinning_lookup) == 'deformation_rig'
 
 
 def find_collection_armature(objects):
@@ -843,6 +856,121 @@ def bind_skinned_objects_to_rig(objects, rig):
     return retargeted, reparented
 
 
+def mesh_armature_modifier(obj):
+    for modifier in getattr(obj, 'modifiers', []):
+        if modifier.type == 'ARMATURE' and getattr(modifier, 'object', None) is not None:
+            return modifier
+    return None
+
+
+def copied_armatures_from_objects(objects):
+    return [obj for obj in objects if getattr(obj, 'type', None) == ARMATURE_TYPE]
+
+
+def deformation_candidate_armatures(objects):
+    copied = copied_armatures_from_objects(objects)
+    copied_set = set(copied)
+    candidates = []
+
+    for obj in objects:
+        if getattr(obj, 'type', None) != 'MESH':
+            continue
+
+        modifier = mesh_armature_modifier(obj)
+        target = getattr(modifier, 'object', None) if modifier is not None else None
+        if target in copied_set and target not in candidates:
+            candidates.append(target)
+
+        parent = getattr(obj, 'parent', None)
+        if parent in copied_set and parent not in candidates:
+            candidates.append(parent)
+
+    if not candidates and len(copied) == 1:
+        candidates.append(copied[0])
+    return candidates
+
+
+def mesh_vertex_group_names(meshes):
+    names = set()
+    for obj in meshes:
+        if getattr(obj, 'type', None) != 'MESH':
+            continue
+        for group in getattr(obj, 'vertex_groups', []):
+            names.add(group.name)
+    return names
+
+
+def shared_deformation_bone_names(local_armature, rig, meshes):
+    if local_armature is None or rig is None:
+        return []
+
+    shared = cache_armature_bones(local_armature) & cache_armature_bones(rig)
+    weighted = shared & mesh_vertex_group_names(meshes)
+    names = weighted if weighted else shared
+    return sorted(names)
+
+
+def pose_bone_head_world(armature, bone_name):
+    if armature is None or not bone_name:
+        return None
+
+    pose = getattr(armature, 'pose', None)
+    pose_bone = pose.bones.get(bone_name) if pose is not None else None
+    if pose_bone is not None:
+        return armature.matrix_world @ pose_bone.head
+
+    bone = getattr(getattr(armature, 'data', None), 'bones', {}).get(bone_name)
+    if bone is not None:
+        return armature.matrix_world @ bone.head_local
+    return None
+
+
+def average_vector(points):
+    if not points:
+        return None
+    total = Vector((0.0, 0.0, 0.0))
+    for point in points:
+        total += point
+    return total / len(points)
+
+
+def deformation_rig_centroid_translation_matrix(objects, rig):
+    if rig is None:
+        return None, None, []
+
+    meshes = [obj for obj in objects if getattr(obj, 'type', None) == 'MESH']
+    best = None
+
+    for local_armature in deformation_candidate_armatures(objects):
+        bone_names = shared_deformation_bone_names(local_armature, rig, meshes)
+        if not bone_names:
+            continue
+
+        source_points = []
+        target_points = []
+        for bone_name in bone_names:
+            source = pose_bone_head_world(local_armature, bone_name)
+            target = pose_bone_head_world(rig, bone_name)
+            if source is None or target is None:
+                continue
+            source_points.append(source)
+            target_points.append(target)
+
+        source_center = average_vector(source_points)
+        target_center = average_vector(target_points)
+        if source_center is None or target_center is None:
+            continue
+
+        score = len(source_points)
+        matrix = Matrix.Translation(target_center - source_center)
+        if best is None or score > best[0]:
+            best = (score, matrix, local_armature, bone_names)
+
+    if best is None:
+        return None, None, []
+    return best[1], best[2], best[3]
+
+
 
 
 def build_slot_component_lookups(components):
@@ -881,7 +1009,6 @@ class EntityTransformResolver:
         self.bone_matrix_cache = {}
         self.bone_rotation_cache = {}
         self.bone_head_cache = {}
-        self.bone_transform_data_cache = {}
         self.rig_space_bone_matrix_cache = {}
         self.rig_json_for_bone_cache = {}
         self.slot_cache = {}
@@ -978,37 +1105,22 @@ class EntityTransformResolver:
             return armature, armature.pose.bones[bone_name]
         return None, None
 
-    def _bone_transform_data(self, bone_name, slot_owner=None):
+    def bone_matrix(self, bone_name, slot_owner=None):
         cache_key = (bone_name, slot_owner)
-        cached = self.bone_transform_data_cache.get(cache_key)
+        cached = self.bone_matrix_cache.get(cache_key)
         if cached is not None:
             return cached
-
         armature, pose_bone = self._pose_bone(bone_name, slot_owner)
         if pose_bone is not None:
             matrix = armature.matrix_world @ pose_bone.matrix
-            rotation = pose_bone.rotation_quaternion.copy()
-            head = pose_bone.head.copy()
         else:
             rig_j = self._rig_json_for_bone(bone_name, slot_owner)
             if self._rig_json_has_bone(bone_name, rig_j):
                 matrix = rig_json_bone_matrix(rig_j, bone_name, self._rig_json_index(rig_j))
-                rotation = matrix.to_quaternion()
-                head = matrix.to_translation()
             else:
                 matrix = Matrix.Identity(4)
-                rotation = Quaternion((1, 0, 0, 0))
-                head = Vector((0, 0, 0))
-
-        result = (matrix, rotation, head)
-        self.bone_transform_data_cache[cache_key] = result
         self.bone_matrix_cache[cache_key] = matrix
-        self.bone_rotation_cache[cache_key] = rotation
-        self.bone_head_cache[cache_key] = head
-        return result
-
-    def bone_matrix(self, bone_name, slot_owner=None):
-        return self._bone_transform_data(bone_name, slot_owner)[0]
+        return matrix
 
     def resolve_slot_matrix(self, slot_owner, slot_name):
         cache_key = (slot_owner, slot_name)
@@ -1084,7 +1196,10 @@ class EntityTransformResolver:
                         return parent_matrix @ transform_dict_matrix(slot_lookup[slot_name]), bind_name, slot_name, 'component_slot'
                 return parent_matrix, bind_name, slot_name, 'component'
 
-            parent_matrix, parent_bind, parent_slot, parent_type = self.resolve_hard_component_matrix(bound_component)
+            if component_uses_skinning(bound_component, self.skinning_lookup):
+                parent_matrix, parent_bind, parent_slot, parent_type = self.resolve_component_matrix(bound_component)
+            else:
+                parent_matrix, parent_bind, parent_slot, parent_type = self.resolve_hard_component_matrix(bound_component)
             if slot_name and slot_name != 'None':
                 slot = self._slot(bind_name, slot_name)
                 if slot:
@@ -1138,10 +1253,38 @@ class EntityTransformResolver:
         return result
 
     def _bone_rotation(self, bone_name, slot_owner=None):
-        return self._bone_transform_data(bone_name, slot_owner)[1]
+        cache_key = (bone_name, slot_owner)
+        cached = self.bone_rotation_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        _, pose_bone = self._pose_bone(bone_name, slot_owner)
+        if pose_bone is not None:
+            rotation = pose_bone.rotation_quaternion.copy()
+        else:
+            rig_j = self._rig_json_for_bone(bone_name, slot_owner)
+            if self._rig_json_has_bone(bone_name, rig_j):
+                rotation = rig_json_bone_matrix(rig_j, bone_name, self._rig_json_index(rig_j)).to_quaternion()
+            else:
+                rotation = Quaternion((1, 0, 0, 0))
+        self.bone_rotation_cache[cache_key] = rotation
+        return rotation
 
     def _bone_head(self, bone_name, slot_owner=None):
-        return self._bone_transform_data(bone_name, slot_owner)[2]
+        cache_key = (bone_name, slot_owner)
+        cached = self.bone_head_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        _, pose_bone = self._pose_bone(bone_name, slot_owner)
+        if pose_bone is not None:
+            head = pose_bone.head.copy()
+        else:
+            rig_j = self._rig_json_for_bone(bone_name, slot_owner)
+            if self._rig_json_has_bone(bone_name, rig_j):
+                head = rig_json_bone_matrix(rig_j, bone_name, self._rig_json_index(rig_j)).to_translation()
+            else:
+                head = Vector((0, 0, 0))
+        self.bone_head_cache[cache_key] = head
+        return head
 
     def _rig_bone_index(self, bone_name):
         if not bone_name:
@@ -1314,14 +1457,25 @@ class EntityTransformResolver:
             slot_pos = vector_from_transform_position(slot, ('relativePosition',))
             slot_rot = red_quaternion(slot.get('relativeRotation'))
 
-        bone_matrix, bone_rotation, bone_head = self._bone_transform_data(bone_name, slot_owner)
         local_pos = fixed_point_position(local_transform)
         if bone_name and bone_name != 'Base':
-            local_pos = Matrix.Rotation(bone_matrix.to_euler().z, 4, 'Z') @ local_pos
+            z_ang = self.bone_matrix(bone_name, slot_owner).to_euler().z
+            x = local_pos.x
+            y = local_pos.y
+            local_pos = Vector((
+                x * math.cos(z_ang) + y * math.sin(z_ang),
+                x * math.sin(z_ang) + y * math.cos(z_ang),
+                local_pos.z,
+            ))
 
-        rotation = bone_rotation @ slot_rot @ red_quaternion(local_transform.get('Orientation'))
+        local_rot = red_quaternion(local_transform.get('Orientation'))
+        direct_identity_slot = type(slot) is dict and vector_is_zero(slot_pos) and quaternion_is_identity(slot_rot)
+        if direct_identity_slot and not quaternion_is_identity(local_rot):
+            rotation = local_rot
+        else:
+            rotation = self._bone_rotation(bone_name, slot_owner) @ slot_rot @ local_rot
         scale = red_scale(local_transform, visual_scale)
-        return Matrix.LocRotScale(bone_head + slot_pos + local_pos, rotation, scale)
+        return Matrix.LocRotScale(self._bone_head(bone_name, slot_owner) + slot_pos + local_pos, rotation, scale)
 
     def resolve_hard_component_matrix(self, component):
         key = ('hard', id(component))
@@ -1479,6 +1633,7 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
         appearances.append('BASE_COMPONENTS_ONLY')
 
     initial_vehicle_slot_component = parsed_ent.vehicle_slot_component
+    VS = [initial_vehicle_slot_component] if initial_vehicle_slot_component else []
     vehicle_slot_component_ids = {id(initial_vehicle_slot_component)} if initial_vehicle_slot_component else set()
     vehicle_slots = initial_vehicle_slot_component.get('slots') if initial_vehicle_slot_component else None
     vehicle_slot_lookup = build_slot_lookup(vehicle_slots)
@@ -1787,15 +1942,11 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
             slot_owner_rig_owner_names = build_slot_owner_rig_owner_names(transform_components, parent_transform_lookup, rig_component_names)
             anim_impl_lookup = build_anim_impl_lookup(chunks)
 
-            if not vehicle_slots:
-                slot_component = next((c for c in comps if component_name(c) in ('vehicle_slots', 'slot', 'slots') and id(c) not in vehicle_slot_component_ids), None)
-                if slot_component is not None:
-                    vehicle_slot_component_ids.add(id(slot_component))
-                    vehicle_slots = slot_component.get('slots')
-                    vehicle_slot_lookup = build_slot_lookup(vehicle_slots)
-
             if not rig:
                 for c in comps:
+                    if component_name(c) in ('vehicle_slots', 'slot', 'slots') and id(c) not in vehicle_slot_component_ids:
+                        VS.append(c)
+                        vehicle_slot_component_ids.add(id(c))
                     rig_depot = depot_path_value(c, 'rig')
                     if rig_depot:
                         rig_path = depot_to_local_path(path, rig_depot)
@@ -1864,6 +2015,12 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                 if component_name_value and component_name_value not in armature_by_component_name:
                     cache_armature_bones(rig)
                     armature_by_component_name[component_name_value] = rig
+
+            if not vehicle_slots:
+                if len(VS)>0:
+                    vehicle_slots= VS[0]['slots']
+                    vehicle_slot_lookup = build_slot_lookup(vehicle_slots)
+
 
             light_channel_components = collect_light_channel_components(app_light_channels, chunks, comps, parsed_ent.light_channel_components, ent_components)
             for comp in light_channel_components:
@@ -1971,6 +2128,14 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                             else:
                                 resolved_matrix, bindname, slotname, binding_type = transform_resolver.resolve_hard_component_matrix(c)
                             if component_is_skinned:
+                                deformation_matrix, deformation_armature, deformation_bones = deformation_rig_centroid_translation_matrix(objs, rig)
+                                if deformation_matrix is not None:
+                                    resolved_matrix = deformation_matrix @ resolved_matrix
+                                    deformation_bone_list = ','.join(deformation_bones)
+                                    deformation_armature_name = deformation_armature.name if deformation_armature else ''
+                                    for obj in objs:
+                                        obj['deformationRigTranslationArmature'] = deformation_armature_name
+                                        obj['deformationRigTranslationBones'] = deformation_bone_list
                                 bind_skinned_objects_to_rig(objs, rig)
                             can_bind_bone = (
                                 not component_is_skinned
@@ -2109,13 +2274,8 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                             new_col = bpy.data.collections.new(col_name)
                             collision_collection.children.link(new_col)
 
-                        colliders = i.get('colliders') or []
-                        if not colliders or type(colliders[0]) is not dict:
-                            continue
-                        cdata = colliders[0].get('Data')
-                        if type(cdata) is not dict:
-                            continue
-                        collision_shape = cdata.get('$type', 'physicsColliderBox')
+                        cdata = i['colliders'][0]['Data']
+                        collision_shape = cdata['$type']
                         submeshName = '_' + collision_shape
 
                         try:

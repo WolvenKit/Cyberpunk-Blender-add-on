@@ -10,10 +10,10 @@ from .import_with_materials import CP77GLBimport
 NAME_MAX_LEN = 256
 
 
-def _appearance_name(meshAppearance):
-    if isinstance(meshAppearance, dict):
-        return meshAppearance.get('$value', '')
-    return meshAppearance or ''
+def _appearance_name(mesh_appearance):
+    if isinstance(mesh_appearance, dict):
+        return mesh_appearance.get('$value', '')
+    return mesh_appearance or ''
 
 
 def get_groupname(meshname, meshAppearance):
@@ -27,152 +27,153 @@ def get_groupname(meshname, meshAppearance):
 
 
 def get_group(meshname, meshAppearance, Masters):
-    groupname = get_groupname(meshname, meshAppearance)
-    group = Masters.children.get(groupname)
-    if group:
-        return group, groupname
-
     appearance = _appearance_name(meshAppearance)
-    for candidate in Masters.children:
-        if candidate.get('meshpath') == meshname and candidate.get('appearance') == appearance:
-            return candidate, candidate.name
-    return None, groupname
+    for group in Masters.children:
+        if group.get('meshpath') == meshname and group.get('appearance') == appearance:
+            return group, group.name
+
+    groupname = get_groupname(meshname, appearance)
+    return Masters.children.get(groupname), groupname
 
 
-def _dedupe_key(value):
-    if isinstance(value, dict):
-        if '$value' in value:
-            return ('cname', value.get('$value'))
-        try:
-            return ('dict', json.dumps(value, sort_keys=True, separators=(',', ':'), default=str))
-        except TypeError:
-            return ('dict', repr(value))
-    if isinstance(value, (list, tuple)):
-        return tuple(_dedupe_key(item) for item in value)
-    try:
-        hash(value)
-    except TypeError:
-        return repr(value)
-    return value
+def add_to_list(basename, meshes, out):
+    mesh = meshes.get(basename)
+    if not mesh:
+        return
 
-
-def add_to_list(basename, meshes, target):
-    mesh = meshes[basename]
-    entry = target.setdefault(basename, {'apps': [], 'sectors': []})
-
-    seen_apps = {_dedupe_key(app) for app in entry['apps']}
-    for app in mesh.get('appearances', []):
-        key = _dedupe_key(app)
-        if key not in seen_apps:
-            seen_apps.add(key)
-            entry['apps'].append(app)
+    entry = out.setdefault(basename, {'apps': [[]], 'sectors': []})
+    apps = entry['apps'][0]
+    for appearance in mesh.get('appearances', []):
+        if appearance not in apps:
+            apps.append(appearance)
 
     sector = mesh.get('sector')
-    sector_key = _dedupe_key(sector)
-    seen_sectors = {_dedupe_key(existing) for existing in entry['sectors']}
-    if sector_key not in seen_sectors:
+    if sector and sector not in entry['sectors']:
         entry['sectors'].append(sector)
 
 
-def _mesh_glb_path(path, mesh_ref, asset_index=None):
-    if asset_index is not None:
-        if mesh_ref.endswith(('physicalscene', 'w2mesh')):
-            resolved = asset_index.resolve_expected(mesh_ref + '.glb', '.glb', warn=False)
-        else:
-            resolved = asset_index.resolve_mesh_glb(mesh_ref)
-        if resolved:
-            return resolved
-
-    if mesh_ref.endswith(('physicalscene', 'w2mesh')):
-        return os.path.join(path, mesh_ref + '.glb').replace('\\', os.sep)
-    return os.path.join(path, os.path.splitext(mesh_ref)[0] + '.glb').replace('\\', os.sep)
+def _collection_from_selection(context):
+    for obj in context.selected_objects:
+        collection = next(iter(obj.users_collection), None)
+        if collection is not None:
+            return collection
+    return None
 
 
-def _appearance_list(raw_apps):
-    if len(raw_apps) == 1 and isinstance(raw_apps[0], list):
-        raw_apps = raw_apps[0]
+def _remap_copied_object_references(copied_objects, object_map):
+    for obj in copied_objects:
+        parent = obj.parent
+        if parent in object_map:
+            world = obj.matrix_world.copy()
+            obj.parent = object_map[parent]
+            obj.matrix_world = world
 
+        for modifier in obj.modifiers:
+            target = getattr(modifier, 'object', None)
+            if target in object_map:
+                modifier.object = object_map[target]
+
+        for constraint in obj.constraints:
+            target = getattr(constraint, 'target', None)
+            if target in object_map:
+                constraint.target = object_map[target]
+
+
+def _copy_collection_objects(source_collection, target_collection, appearance, mesh_key):
+    json_apps_raw = source_collection.get('json_apps')
+    json_apps = json.loads(json_apps_raw) if json_apps_raw else None
+    if not json_apps:
+        print(f'{bcolors.FAIL}No material json found for - {mesh_key}{bcolors.ENDC}')
+
+    copied_objects = []
+    object_map = {}
+    for index, source_obj in enumerate(source_collection.objects):
+        obj = source_obj.copy()
+        object_map[source_obj] = obj
+        copied_objects.append(obj)
+        if source_obj.data:
+            obj.data = source_obj.data.copy()
+
+        if obj.type == 'MESH' and json_apps and appearance in json_apps and index < len(json_apps[appearance]):
+            mat_name = json_apps[appearance][index]
+            if 'sidewalk' in mesh_key:
+                mat_name = 'sidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalk'
+            if len(mat_name) < 63 and len(obj.data.materials) > 1 and obj.data.materials.find(mat_name) >= 0:
+                for material_index in range(len(obj.data.materials) - 1, -1, -1):
+                    material = obj.data.materials[material_index]
+                    material_name = material.name if material else ''
+                    if material_name.split('.')[0] != mat_name:
+                        obj.data.materials.pop(index=material_index)
+
+        target_collection.objects.link(obj)
+
+    _remap_copied_object_references(copied_objects, object_map)
+
+
+def _mesh_appearances(mesh_data):
     apps = []
-    seen = set()
-    for app in raw_apps:
-        value = _appearance_name(app)
-        if value and value not in seen:
-            seen.add(value)
-            apps.append(value)
+    for mesh_app in mesh_data.get('apps', [[]])[0]:
+        appearance = _appearance_name(mesh_app)
+        if appearance and appearance not in apps:
+            apps.append(appearance)
     return apps
 
 
-def _prune_materials(obj, mat_name):
-    materials = obj.data.materials
-    if len(mat_name) >= NAME_MAX_LEN or len(materials) <= 1 or mat_name not in materials.keys():
-        return
-    for index in range(len(materials) - 1, -1, -1):
-        if materials.keys()[index].split('.')[0] != mat_name:
-            materials.pop(index=index)
-
-
-def meshes_from_mesheswapps(meshes_w_apps, path='', from_mesh_no=0, to_mesh_no=10000000, with_mats=False, glbs=None, mesh_jsons=None, Masters=None, generate_overrides=False, asset_index=None):
+def meshes_from_mesheswapps(meshes_w_apps, path='', from_mesh_no=0, to_mesh_no=10000000, with_mats=False, glbs=None, mesh_jsons=None, Masters=None, generate_overrides=False):
     props = bpy.context.scene.cp77_panel_props
     context = bpy.context
-    coll_scene = context.scene.collection
-    master_children = Masters.children
+    scene_collection = context.scene.collection
 
-    for index, mesh_ref in enumerate(meshes_w_apps):
+    for index, mesh_key in enumerate(meshes_w_apps):
         if index < from_mesh_no or index > to_mesh_no:
             continue
-        if not mesh_ref.endswith(('mesh', 'physicalscene', 'w2mesh')):
+        if not (mesh_key.endswith('mesh') or mesh_key.endswith('physicalscene') or mesh_key.endswith('w2mesh')):
             continue
 
-        apps = _appearance_list(meshes_w_apps[mesh_ref].get('apps', []))
-        meshpath = _mesh_glb_path(path, mesh_ref, asset_index=asset_index)
+        apps = _mesh_appearances(meshes_w_apps[mesh_key])
+        if mesh_key.endswith('physicalscene') or mesh_key.endswith('w2mesh'):
+            meshpath = os.path.join(path, mesh_key + '.glb').replace('\\', os.sep)
+            print('not a standard mesh')
+        else:
+            meshpath = os.path.join(path, os.path.splitext(mesh_key)[0] + '.glb').replace('\\', os.sep)
         print(meshpath)
 
         groupname = get_groupname(meshpath, '')
-        if groupname in master_children.keys():
+        if Masters.children.get(groupname) is not None:
             continue
         if not os.path.exists(meshpath):
             print('Mesh ', meshpath, ' does not exist')
             continue
 
         try:
-            CP77GLBimport(with_materials=with_mats, remap_depot=props.remap_depot, filepath=meshpath, appearances=apps, scripting=True, generate_overrides=generate_overrides)
-            objs = context.selected_objects
-            if not objs:
-                print('failed on ', os.path.basename(meshpath))
-                print('No objects selected after import')
+            CP77GLBimport(
+                with_materials=with_mats,
+                remap_depot=props.remap_depot,
+                filepath=meshpath,
+                appearances=apps,
+                scripting=True,
+                generate_overrides=generate_overrides,
+            )
+
+            move_coll = _collection_from_selection(context)
+            if move_coll is None:
+                print(f'{bcolors.FAIL}Import produced no collection for - {mesh_key}{bcolors.ENDC}')
                 continue
 
-            source_coll = objs[0].users_collection[0]
-            if source_coll.name != groupname:
-                source_coll.name = groupname
-            move_coll = coll_scene.children.get(source_coll.name)
-            move_coll['meshpath'] = mesh_ref
+            if move_coll.name != groupname:
+                move_coll.name = groupname
+            move_coll['meshpath'] = mesh_key
             move_coll['appearance'] = 'default'
-            master_children.link(move_coll)
+            if move_coll.name in scene_collection.children:
+                scene_collection.children.unlink(move_coll)
+            Masters.children.link(move_coll)
 
-            json_apps = json.loads(move_coll['json_apps']) if 'json_apps' in move_coll.keys() else None
-            if json_apps is None:
-                print(f'{bcolors.FAIL}No material json found for - {mesh_ref}{bcolors.ENDC}')
-
-            source_objects = tuple(move_coll.objects)
             for app in apps:
                 new_coll = bpy.data.collections.new(groupname + '@' + app)
-                master_children.link(new_coll)
-                new_coll['meshpath'] = mesh_ref
+                new_coll['meshpath'] = mesh_key
                 new_coll['appearance'] = app
-                app_materials = json_apps.get(app) if json_apps else None
-
-                for obj_index, obj in enumerate(source_objects):
-                    obj_copy = obj.copy()
-                    obj_copy.data = obj.data.copy()
-                    if obj_copy.type == 'MESH' and app_materials and obj_index < len(app_materials):
-                        mat_name = app_materials[obj_index]
-                        if 'sidewalk' in mesh_ref:
-                            mat_name = 'sidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalk'
-                        _prune_materials(obj_copy, mat_name)
-                    new_coll.objects.link(obj_copy)
-
-            coll_scene.children.unlink(move_coll)
+                Masters.children.link(new_coll)
+                _copy_collection_objects(move_coll, new_coll, app, mesh_key)
         except Exception:
             print('failed on ', os.path.basename(meshpath))
             print(traceback.format_exc())
