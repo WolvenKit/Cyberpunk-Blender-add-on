@@ -8,15 +8,46 @@ _file_index_cache: Dict[str, Set[str]] = {}
 _cache_root = None
 _cache_extensions: Set[str] = set()
 _SKIP_DIRS = frozenset({'__pycache__', '.git', '.svn', 'node_modules', '.vscode', '.idea', 'archive', 'backup'})
-DEFAULT_ASSET_EXTENSIONS = (
-    '.app.json',
-    '.glb',
-    '.mesh.json',
-    '.anims.glb',
-    '.anims.json',
-    '.rig.json',
-    '.phys.json',
+DEFAULT_IMAGE_EXTENSIONS = (
+    '.png',
+    '.jpg',
+    '.jpeg',
+    '.tga',
+    '.dds',
+    '.bmp',
+    '.webp',
+    '.tif',
+    '.tiff',
 )
+
+COOKED_RESOURCE_EXPORTS = {
+    '.mesh': ('.glb', '.mesh.json'),
+    '.anims': ('.anims.glb', '.anims.json'),
+    '.physicalscene': ('.physicalscene.glb', '.physicalscene.json'),
+    '.w2mesh': ('.w2mesh.glb', '.w2mesh.json'),
+    '.rig': ('.rig.json',),
+    '.ent': ('.ent.json',),
+    '.app': ('.app.json',),
+    '.streamingsector_inplace': ('.streamingsector_inplace.json',),
+    '.streamingsector': ('.streamingsector.json',),
+    '.phys': ('.phys.json',),
+}
+
+EXPORTED_RESOURCE_EXTENSIONS = tuple(
+    sorted(
+        {ext for exports in COOKED_RESOURCE_EXPORTS.values() for ext in exports},
+        key=len,
+        reverse=True,
+    )
+)
+
+DEFAULT_ASSET_EXTENSIONS = (*EXPORTED_RESOURCE_EXTENSIONS, *DEFAULT_IMAGE_EXTENSIONS)
+_COOKED_DEPOT_EXTENSIONS = frozenset(COOKED_RESOURCE_EXPORTS)
+_EXPORT_GROUPS_BY_OUTPUT_EXTENSION = {
+    export_extension: exports
+    for exports in COOKED_RESOURCE_EXPORTS.values()
+    for export_extension in exports
+}
 
 
 def _normalize_path(path: str) -> str:
@@ -39,7 +70,29 @@ def _extension_key(extension: str) -> str:
 
 
 def _normalize_extensions(extensions: Iterable[str]) -> Set[str]:
-    return {_extension_key(ext) for ext in extensions if ext}
+    if isinstance(extensions, str):
+        extensions = (extensions,)
+    return {
+        ext
+        for ext in (_extension_key(extension) for extension in extensions if extension)
+        if ext and ext not in _COOKED_DEPOT_EXTENSIONS
+    }
+
+
+def _first_matching_suffix(value: str, suffixes: Iterable[str]) -> str:
+    key = _path_key(value)
+    for suffix in sorted(suffixes, key=len, reverse=True):
+        if key.endswith(suffix):
+            return suffix
+    return ''
+
+
+def _matching_export_extension(path: str, extensions: Iterable[str]) -> str:
+    return _first_matching_suffix(path, _normalize_extensions(extensions))
+
+
+def _append_exported_extension(base: str, extension: str) -> str:
+    return f'{base}{extension}'
 
 
 def dataKrash_fast(root: str, extensions: List[str]) -> Dict[str, Set[str]]:
@@ -146,39 +199,62 @@ class DepotAssetIndex:
             return ''
         return _normalize_path(local if os.path.isabs(local) else os.path.join(self.root, local))
 
-    def resolve_expected(self, reference: str, expected_extension: str, warn=None):
-        ext = _extension_key(expected_extension)
-        candidate = self._candidate(reference)
-        if not candidate:
+    def _resolve_candidate(self, candidate: str):
+        extension = _matching_export_extension(candidate, self.extensions)
+        if not extension:
             return None
-        resolved = self._keys_by_ext.get(ext, {}).get(_path_key(candidate))
-        if resolved:
-            return resolved
+        return self._keys_by_ext.get(extension, {}).get(_path_key(self._candidate(candidate)))
+
+    def export_candidates(self, reference: str, export_extensions: Iterable[str] = None):
+        local = _local_ref(reference)
+        if not local:
+            return []
+
+        requested = _normalize_extensions(export_extensions or self.extensions)
+        cooked_suffix = _first_matching_suffix(local, COOKED_RESOURCE_EXPORTS)
+        exported_suffix = '' if cooked_suffix else _first_matching_suffix(local, _EXPORT_GROUPS_BY_OUTPUT_EXTENSION)
+
+        if cooked_suffix:
+            base = local[:-len(cooked_suffix)]
+            outputs = COOKED_RESOURCE_EXPORTS[cooked_suffix]
+        elif exported_suffix:
+            base = local[:-len(exported_suffix)]
+            outputs = _EXPORT_GROUPS_BY_OUTPUT_EXTENSION[exported_suffix]
+        else:
+            current_extension = _matching_export_extension(local, requested)
+            if current_extension:
+                return [local]
+            outputs = tuple(sorted(requested, key=len, reverse=True))
+            base = local
+
+        candidates = []
+        seen = set()
+        for output in outputs:
+            if output not in requested:
+                continue
+            candidate = _append_exported_extension(base, output)
+            key = _path_key(candidate)
+            if key not in seen:
+                seen.add(key)
+                candidates.append(candidate)
+        return candidates
+
+    def resolve_export(self, reference: str, export_extensions: Iterable[str] = None, warn=None):
+        candidates = self.export_candidates(reference, export_extensions)
+        for candidate in candidates:
+            resolved = self._resolve_candidate(candidate)
+            if resolved:
+                return resolved
+
         if self.warn_missing if warn is None else warn:
-            logging.warning("Expected %s path is not indexed and will be skipped: %s", ext, candidate)
+            logging.warning(
+                "Exported asset reference is not indexed and will be skipped: %s",
+                self._candidate(reference),
+            )
         return None
 
-    def resolve_app_json(self, depot_path: str):
-        return self.resolve_expected(f'{depot_path}.json', '.app.json')
+    def resolve_expected(self, reference: str, expected_extension: str, warn=None):
+        return self.resolve_export(reference, (expected_extension,), warn=warn)
 
-    def resolve_mesh_glb(self, depot_path: str):
-        if not depot_path:
-            return None
-        return self.resolve_expected(os.path.splitext(depot_path)[0] + '.glb', '.glb')
-
-    def resolve_mesh_json(self, depot_path: str):
-        return self.resolve_expected(f'{depot_path}.json', '.mesh.json')
-
-    def resolve_rig_json(self, depot_path: str):
-        return self.resolve_expected(f'{depot_path}.json', '.rig.json')
-
-    def resolve_anim_glb(self, depot_path: str):
-        return self.resolve_expected(f'{depot_path}.glb', '.anims.glb')
-
-    def resolve_anim_json(self, depot_path: str):
-        return self.resolve_expected(f'{depot_path}.json', '.anims.json')
-
-    def resolve_anim_json_from_glb(self, anim_glb_path: str):
-        if not anim_glb_path:
-            return None
-        return self.resolve_expected(os.path.splitext(anim_glb_path)[0] + '.json', '.anims.json')
+    def resolve_any(self, reference: str, extensions: Iterable[str] = None, warn=None):
+        return self.resolve_export(reference, extensions, warn=warn)

@@ -50,14 +50,54 @@ def add_to_list(basename, meshes, out):
     sector = mesh.get('sector')
     if sector and sector not in entry['sectors']:
         entry['sectors'].append(sector)
+    meshpath = mesh.get('meshpath')
+    if meshpath and not entry.get('meshpath'):
+        entry['meshpath'] = meshpath
 
 
-def _collection_from_selection(context):
-    for obj in context.selected_objects:
-        collection = next(iter(obj.users_collection), None)
-        if collection is not None:
-            return collection
-    return None
+def _collection_import_snapshot():
+    return set(bpy.data.collections), set(bpy.data.objects)
+
+
+def _imported_collection_from_diff(before_collections, before_objects, expected_name=''):
+    new_collections = [collection for collection in bpy.data.collections if collection not in before_collections]
+    if not new_collections:
+        return None
+
+    if expected_name:
+        exact = next((collection for collection in new_collections if collection.name == expected_name), None)
+        if exact is not None:
+            return exact
+
+    new_objects = {obj for obj in bpy.data.objects if obj not in before_objects}
+    object_collections = []
+    if new_objects:
+        for collection in new_collections:
+            try:
+                collection_objects = set(collection.all_objects)
+            except ReferenceError:
+                continue
+            if collection_objects.intersection(new_objects):
+                object_collections.append(collection)
+
+    candidates = object_collections or new_collections
+    nested_children = {child for collection in new_collections for child in collection.children}
+    roots = [collection for collection in candidates if collection not in nested_children]
+    if len(roots) == 1:
+        return roots[0]
+    if len(candidates) == 1:
+        return candidates[0]
+    return max(candidates, key=lambda collection: len(collection.all_objects))
+
+
+def _link_collection_once(parent, child):
+    if parent.children.get(child.name) is not child:
+        parent.children.link(child)
+
+
+def _unlink_collection_once(parent, child):
+    if parent.children.get(child.name) is child:
+        parent.children.unlink(child)
 
 
 def _remap_copied_object_references(copied_objects, object_map):
@@ -79,14 +119,48 @@ def _remap_copied_object_references(copied_objects, object_map):
                 constraint.target = object_map[target]
 
 
-def _copy_collection_objects(source_collection, target_collection, appearance, mesh_key):
-    json_apps_raw = source_collection.get('json_apps')
-    json_apps = json.loads(json_apps_raw) if json_apps_raw else None
+def _json_apps_for_collection(collection, mesh_key):
+    json_apps_raw = collection.get('json_apps')
+    if not json_apps_raw:
+        print(f'{bcolors.FAIL}No material json found for - {mesh_key}{bcolors.ENDC}')
+        return None
+    try:
+        json_apps = json.loads(json_apps_raw)
+    except json.JSONDecodeError:
+        print(f'{bcolors.FAIL}Invalid material json found for - {mesh_key}{bcolors.ENDC}')
+        return None
     if not json_apps:
         print(f'{bcolors.FAIL}No material json found for - {mesh_key}{bcolors.ENDC}')
+    return json_apps
 
+
+def _matching_material(materials, mat_name):
+    material = materials.get(mat_name)
+    if material is not None:
+        return material
+    mat_base = mat_name.split('.')[0]
+    for material in materials:
+        if material and material.name.split('.')[0] == mat_base:
+            return material
+    return None
+
+
+def _keep_only_material(obj, mat_name):
+    if obj.type != 'MESH' or not obj.data or not obj.data.materials or not mat_name:
+        return
+    material = _matching_material(obj.data.materials, mat_name)
+    if material is None:
+        return
+    obj.data.materials.clear()
+    obj.data.materials.append(material)
+    for polygon in obj.data.polygons:
+        polygon.material_index = 0
+
+
+def _copy_collection_objects(source_collection, target_collection, appearance, mesh_key, json_apps):
     copied_objects = []
     object_map = {}
+    appearance_materials = json_apps.get(appearance, []) if json_apps else []
     for index, source_obj in enumerate(source_collection.objects):
         obj = source_obj.copy()
         object_map[source_obj] = obj
@@ -94,16 +168,12 @@ def _copy_collection_objects(source_collection, target_collection, appearance, m
         if source_obj.data:
             obj.data = source_obj.data.copy()
 
-        if obj.type == 'MESH' and json_apps and appearance in json_apps and index < len(json_apps[appearance]):
-            mat_name = json_apps[appearance][index]
+        if obj.type == 'MESH' and index < len(appearance_materials):
+            mat_name = appearance_materials[index]
             if 'sidewalk' in mesh_key:
                 mat_name = 'sidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalk'
-            if len(mat_name) < 63 and len(obj.data.materials) > 1 and obj.data.materials.find(mat_name) >= 0:
-                for material_index in range(len(obj.data.materials) - 1, -1, -1):
-                    material = obj.data.materials[material_index]
-                    material_name = material.name if material else ''
-                    if material_name.split('.')[0] != mat_name:
-                        obj.data.materials.pop(index=material_index)
+            if len(mat_name) < 63:
+                _keep_only_material(obj, mat_name)
 
         target_collection.objects.link(obj)
 
@@ -119,6 +189,33 @@ def _mesh_appearances(mesh_data):
     return apps
 
 
+def _resolved_meshpath(mesh_data):
+    if isinstance(mesh_data, dict):
+        meshpath = mesh_data.get('meshpath')
+        if meshpath:
+            return os.path.normpath(meshpath)
+    return ''
+
+
+def _fallback_meshpath(path, mesh_key):
+    if mesh_key.endswith('physicalscene') or mesh_key.endswith('w2mesh'):
+        return os.path.join(path, mesh_key + '.glb').replace('\\', os.sep)
+    if mesh_key.endswith('mesh'):
+        return os.path.join(path, os.path.splitext(mesh_key)[0] + '.glb').replace('\\', os.sep)
+    return ''
+
+
+def _mesh_glb_path(path, mesh_key, mesh_data, glbs):
+    meshpath = _resolved_meshpath(mesh_data)
+    if meshpath:
+        return meshpath
+    if isinstance(glbs, dict):
+        meshpath = _resolved_meshpath(glbs.get(mesh_key))
+        if meshpath:
+            return meshpath
+    return _fallback_meshpath(path, mesh_key)
+
+
 def meshes_from_mesheswapps(meshes_w_apps, path='', from_mesh_no=0, to_mesh_no=10000000, with_mats=False, glbs=None, mesh_jsons=None, Masters=None, generate_overrides=False):
     props = bpy.context.scene.cp77_panel_props
     context = bpy.context
@@ -130,12 +227,11 @@ def meshes_from_mesheswapps(meshes_w_apps, path='', from_mesh_no=0, to_mesh_no=1
         if not (mesh_key.endswith('mesh') or mesh_key.endswith('physicalscene') or mesh_key.endswith('w2mesh')):
             continue
 
-        apps = _mesh_appearances(meshes_w_apps[mesh_key])
+        mesh_data = meshes_w_apps[mesh_key]
+        apps = _mesh_appearances(mesh_data)
+        meshpath = _mesh_glb_path(path, mesh_key, mesh_data, glbs)
         if mesh_key.endswith('physicalscene') or mesh_key.endswith('w2mesh'):
-            meshpath = os.path.join(path, mesh_key + '.glb').replace('\\', os.sep)
             print('not a standard mesh')
-        else:
-            meshpath = os.path.join(path, os.path.splitext(mesh_key)[0] + '.glb').replace('\\', os.sep)
         print(meshpath)
 
         groupname = get_groupname(meshpath, '')
@@ -146,6 +242,7 @@ def meshes_from_mesheswapps(meshes_w_apps, path='', from_mesh_no=0, to_mesh_no=1
             continue
 
         try:
+            before_collections, before_objects = _collection_import_snapshot()
             CP77GLBimport(
                 with_materials=with_mats,
                 remap_depot=props.remap_depot,
@@ -155,7 +252,7 @@ def meshes_from_mesheswapps(meshes_w_apps, path='', from_mesh_no=0, to_mesh_no=1
                 generate_overrides=generate_overrides,
             )
 
-            move_coll = _collection_from_selection(context)
+            move_coll = _imported_collection_from_diff(before_collections, before_objects, groupname)
             if move_coll is None:
                 print(f'{bcolors.FAIL}Import produced no collection for - {mesh_key}{bcolors.ENDC}')
                 continue
@@ -164,16 +261,16 @@ def meshes_from_mesheswapps(meshes_w_apps, path='', from_mesh_no=0, to_mesh_no=1
                 move_coll.name = groupname
             move_coll['meshpath'] = mesh_key
             move_coll['appearance'] = 'default'
-            if move_coll.name in scene_collection.children:
-                scene_collection.children.unlink(move_coll)
-            Masters.children.link(move_coll)
+            _unlink_collection_once(scene_collection, move_coll)
+            _link_collection_once(Masters, move_coll)
 
+            json_apps = _json_apps_for_collection(move_coll, mesh_key)
             for app in apps:
                 new_coll = bpy.data.collections.new(groupname + '@' + app)
                 new_coll['meshpath'] = mesh_key
                 new_coll['appearance'] = app
-                Masters.children.link(new_coll)
-                _copy_collection_objects(move_coll, new_coll, app, mesh_key)
+                _link_collection_once(Masters, new_coll)
+                _copy_collection_objects(move_coll, new_coll, app, mesh_key, json_apps)
         except Exception:
             print('failed on ', os.path.basename(meshpath))
             print(traceback.format_exc())
