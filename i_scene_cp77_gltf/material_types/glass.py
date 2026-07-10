@@ -43,8 +43,36 @@ class Glass:
                 CurMat.links.new(rImgNode.outputs[1],pBDSF.inputs['Roughness'])
 
         if "Normal" in Data:
-            nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["Normal"],-800,-300,'Normal',self.image_format)
-            CurMat.links.new(nMap.outputs[0],pBDSF.inputs['Normal'])
+            normal_path = self.BasePath + Data["Normal"]
+            nMap = CreateShaderNodeNormalMap(CurMat, normal_path, -600, -300, 'Normal', self.image_format)
+            
+            # Normal Strength
+            if "NormalStrength" in Data:
+                strength_val = float(Data["NormalStrength"])
+                strength_node = CreateShaderNodeValue(CurMat, strength_val, -450, -350, "NormalStrength")
+                CurMat.links.new(strength_node.outputs[0], nMap.inputs['Strength'])
+            
+            # NormalTileAndOffset
+            if "NormalTileAndOffset" in Data:
+                tile_offset = Data["NormalTileAndOffset"]
+                # Vector4: (tileX, tileY, offsetX, offsetY)
+                uv_map = create_node(CurMat.nodes, "ShaderNodeUVMap", (-200, -300), label="UV Map")
+                mapping = create_node(CurMat.nodes, "ShaderNodeMapping", (-400, -300), label="Normal Mapping")
+                
+                # Tile (scale)
+                mapping.inputs['Scale'].default_value[0] = float(tile_offset.get('X', 1.0)) or 1.0
+                mapping.inputs['Scale'].default_value[1] = float(tile_offset.get('Y', 1.0)) or 1.0
+                # Offset
+                mapping.inputs['Location'].default_value[0] = float(tile_offset.get('Z', 0.0)) or 0.0
+                mapping.inputs['Location'].default_value[1] = float(tile_offset.get('W', 0.0)) or 0.0
+                
+                tex_img = [node for node in CurMat.nodes if node.label == 'Normal' and isinstance(node, bpy.types.ShaderNodeTexImage)]
+                if tex_img:
+                    tex_img = tex_img[0]
+                    CurMat.links.new(uv_map.outputs[0], mapping.inputs[0])
+                    CurMat.links.new(mapping.outputs[0], tex_img.inputs[0])
+            
+            CurMat.links.new(nMap.outputs[0], pBDSF.inputs['Normal'])
 
         alphaAdd = create_node(CurMat.nodes,"ShaderNodeMath", (-800,150) , operation = 'ADD')
 
