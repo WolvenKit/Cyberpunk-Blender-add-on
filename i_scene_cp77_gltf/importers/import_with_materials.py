@@ -8,7 +8,7 @@ if vers[0] == 4 and vers[1] < 3:
     from io_scene_gltf2.blender.imp.gltf2_blender_gltf import BlenderGlTF
 else:
     from io_scene_gltf2.blender.imp.blender_gltf import BlenderGlTF
-from ..main.setup import MaterialBuilder
+from ..main.setup import MaterialBuilder, clear_material_cache
 from ..main.bartmoss_functions import UV_by_bounds
 from .import_from_external import *
 from .attribute_import import manage_garment_support
@@ -74,6 +74,18 @@ def get_anim_info(animations, oldanims, import_tracks):
 
 def objs_in_col(top_coll, objtype):
     return sum(1 for obj in top_coll.all_objects if obj.type == objtype)
+
+
+def _collection_type_counts(top_coll):
+    mesh_count = 0
+    armature_count = 0
+    for obj in top_coll.all_objects:
+        if obj.type == 'MESH':
+            mesh_count += 1
+        elif obj.type == 'ARMATURE':
+            armature_count += 1
+    return mesh_count, armature_count
+
 
 # will collapse glTF_not_exported collection in the outliner
 def disable_collection_by_name(collection_name):
@@ -146,6 +158,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
     errorMessages = []
     meshinitiated_cache = False
     if not JSONTool._use_cache:
+        clear_material_cache()
         JSONTool.start_caching()
         meshinitiated_cache = True
 
@@ -173,20 +186,32 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         existingMaterials = {mat.name for mat in bpy.data.materials}
         BlenderGlTF.create(gltf_importer)
         exclusion_cache.clear_cache()
-        imported=context.selected_objects #the new stuff should be selected
+        imported = tuple(context.selected_objects)  # the new stuff should be selected
 
         # if we're not importing a Cyberpunk mesh, not all submesh names will start with submesh_00, and they will be nested weirdly.
         # we want to clean this up.
-        imported_meshes = [obj for obj in imported if obj.type == "MESH"]
-        imported_empties = [obj for obj in imported if obj.type == "EMPTY"]
-        isExternalImport = len(imported_empties) > 0 or sum(1 for mesh in imported_meshes if mesh.name.startswith("submesh")) != len(imported_meshes)
+        imported_meshes = []
+        has_imported_empty = False
+        all_imported_are_meshes = True
+        for obj in imported:
+            obj_type = obj.type
+            if obj_type == 'MESH':
+                imported_meshes.append(obj)
+            else:
+                all_imported_are_meshes = False
+                if obj_type == 'EMPTY':
+                    has_imported_empty = True
 
-        mesh_objects = [obj for obj in imported if obj.type == 'MESH']
+        isExternalImport = (
+            has_imported_empty
+            or sum(1 for mesh in imported_meshes if mesh.name.startswith("submesh")) != len(imported_meshes)
+        )
+
         multimesh = any(
             obj.name and obj.name[0].isdigit() and '_' in obj.name
-            for obj in mesh_objects
+            for obj in imported_meshes
         )
-        exclude_unused_mats = exclude_unused_mats and all(obj.type == 'MESH' for obj in imported)
+        exclude_unused_mats = exclude_unused_mats and all_imported_are_meshes
 
         if multimesh:
             isExternalImport = False
@@ -205,9 +230,10 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
         for o in imported:
             import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filename, oldanims, import_tracks)
 
-        collection['orig_filepath']=filepath
-        collection['numMeshChildren']=objs_in_col(collection, 'MESH')
-        collection['numArmatureChildren']=objs_in_col(collection, 'ARMATURE')
+        collection['orig_filepath'] = filepath
+        mesh_count, armature_count = _collection_type_counts(collection)
+        collection['numMeshChildren'] = mesh_count
+        collection['numArmatureChildren'] = armature_count
 
         disable_collection_by_name("glTF_not_exported")
 
@@ -233,7 +259,8 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
 
             if has_material_json:
                 matjsonpath = current_file_base_path + ".Material.json"
-                DepotPath, json_apps, mats = JSONTool.jsonload(matjsonpath, errorMessages)
+                DepotPath, loaded_json_apps, mats = JSONTool.jsonload(matjsonpath, errorMessages)
+                json_apps = dict(loaded_json_apps)
 
             if DepotPath == None:
                 print(f"Failed to read DepotPath, skipping material import (hasMaterialJson: {has_material_json})")
@@ -301,6 +328,7 @@ def CP77GLBimport( with_materials=False, remap_depot=False, exclude_unused_mats=
                     raise e
     if meshinitiated_cache:
         JSONTool.stop_caching()
+        clear_material_cache()
 
 
     if len(errorMessages) > 0:
@@ -391,34 +419,38 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
     verbose = not cp77_addon_prefs.non_verbose
     start_time = time.time()
     validmats = {}
-    for m in mats: #obj['Materials']:
-        mat = m.get('Name')
+    mat_index_by_name = {}
+    for index, material_data in enumerate(mats):  # obj['Materials']
+        mat = material_data.get('Name')
         if mat is None:
             continue
+        mat_index_by_name[mat] = index
         if mat not in validmatnames:
             continue
-        if 'BaseMaterial' in m:
-            data = m.get('Data', {})
-            GlobalNormal = data.get('GlobalNormal', 'None')
-            MultilayerMask = data.get('MultilayerMask', 'None')
-            DiffuseMap = data.get('DiffuseMap', data.get('BaseColor', data.get('DiffuseTexture', 'None')))
+        if 'BaseMaterial' in material_data:
+            data = material_data.get('Data', {})
+            global_normal = data.get('GlobalNormal', 'None')
+            multilayer_mask = data.get('MultilayerMask', 'None')
+            diffuse_map = data.get('DiffuseMap', data.get('BaseColor', data.get('DiffuseTexture', 'None')))
 
-            validmats[mat] = {'Name': mat, 'BaseMaterial': m['BaseMaterial'],
-                              'GlobalNormal': GlobalNormal, 'MultilayerMask': MultilayerMask,
-                              'DiffuseMap': DiffuseMap}
+            validmats[mat] = {
+                'Name': mat,
+                'BaseMaterial': material_data['BaseMaterial'],
+                'GlobalNormal': global_normal,
+                'MultilayerMask': multilayer_mask,
+                'DiffuseMap': diffuse_map,
+            }
         else:
-            print(m.keys())
+            print(material_data.keys())
 
-    MatImportList = list(validmats)
-    mat_index_by_name = {m['Name']: i for i, m in enumerate(mats) if 'Name' in m}
+    MatImportList = set(validmats)
     Builder = MaterialBuilder(mats, DepotPath, str(image_format), BasePath)
     counter = 0
-    bpy_mats = bpy.data.materials
     excluded_mesh_names = {
         obj.data.name for obj in excluded_objects
         if getattr(obj, "type", "") == 'MESH' and obj.data
         }
-    existing_mesh_names = set(existingMeshes)
+    existing_mesh_names = existingMeshes if isinstance(existingMeshes, set) else set(existingMeshes)
     names = [
         mesh.name for mesh in bpy.data.meshes
         if mesh.name not in existing_mesh_names and mesh.name not in excluded_mesh_names
@@ -427,6 +459,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
         names = sorted(names, key=lambda x: int(x.split('_', 1)[0]) if x.split('_', 1)[0].isdigit() else 0)
 
     bpy_meshes = bpy.data.meshes
+    gltf_meshes = gltf_importer.data.meshes
     for name in names:
         mesh = bpy_meshes.get(name)
         if mesh is None:
@@ -434,7 +467,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
 
         mesh.materials.clear()
         # we're not getting the materials from the json, but from the glTF importer data
-        extras = gltf_importer.data.meshes[counter].extras
+        extras = gltf_meshes[counter].extras
 
         # morphtargets don't have material names. Just use all of them.
         materialNames = None
@@ -449,7 +482,7 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
 
         # remove duplicate material names (why does "extras" end up with 10k "decals" entries when I import the maimai?)
         # Sim - because of a bug in wkit I'd assume mana
-        materialNames = list(dict.fromkeys(materialNames))
+        materialNames = tuple(dict.fromkeys(materialNames))
 
         # Kwek: I also found that other material hiccups will cause the Collection to fail
         for matname in materialNames:
@@ -461,12 +494,6 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
             m = validmats[matname]
             if matname == 'decal_diffuse1':
                 print('debug')
-            # Should create a list of mis that dont play nice with this and just check if the mat is using one.
-            cached = bpy_mats.get(matname)
-            if cached is not None and 'm' in cached and dict(cached['m']) == m:
-                mesh.materials.append(cached)
-                continue
-
             index = mat_index_by_name.get(matname)
             if index is None:
                 continue
@@ -504,8 +531,6 @@ def import_mats(BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_i
         return
 
     for name, index in mat_index_by_name.items():
-        if name in bpy.data.materials:
-            continue
         if MatImportList and name not in MatImportList:
             continue
         Builder.create(mats, index)

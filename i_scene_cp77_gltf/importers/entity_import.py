@@ -5,40 +5,78 @@ import bpy
 import time
 import math
 import random
+import heapq
 import traceback
+import numpy as np
 from functools import lru_cache
 from mathutils import Vector, Matrix, Quaternion
 from ..main.common import *
-from ..jsontool import JSONTool
+from ..jsontool import JSONTool, ent_appearance_name, resolve_ent_appearance_alias, resolve_requested_appearance_name
 from .phys_import import cp77_phys_import
 from ..collisiontools.pxbridge.io_phys import import_collider_as_actor
 from .import_common import *
-from .import_common import _remap_copied_object_references
+from .import_common import _remap_copied_object_references, submesh_index_for_object, clear_submesh_index_cache
 from ..datakrash import DEFAULT_ASSET_EXTENSIONS, DepotAssetIndex
-from .read_rig import create_armature_from_data
+from .read_rig import (
+    create_armature_from_data,
+    create_armature_from_rig_files,
+    read_rig,
+    merge_rig_datas,
+    rig_data_to_root_chunk,
+    meta_bone_name,
+)
 from bpy_extras import anim_utils
 
-SUBMESH_PATTERN = re.compile(r"submesh_(\d+)", re.IGNORECASE)
 ARMATURE_TYPE = 'ARMATURE'
+# Proxy meshes and visual controllers do not represent authored visual geometry.
+NON_VISUAL_MESH_COMPONENT_TYPES = frozenset({'entAppearanceProxyMeshComponent', 'entVisualControllerComponent'})
+# These component families are omitted when their resolved chunk mask is zero.
+ZERO_MASK_CULLED_COMPONENT_TYPES = frozenset({
+    'entMeshComponent',
+    'entPhysicalMeshComponent',
+    'entSkinnedMeshComponent',
+    'entPhysicalSkinnedMeshComponent',
+    'entGarmentSkinnedMeshComponent',
+    'entMorphTargetSkinnedMeshComponent',
+})
 FIXED_POINT_DIVISOR = 131072
 POSITION_KEYS = ('Position', 'Translation', 'relativePosition')
 ROTATION_KEYS = ('Orientation', 'Rotation', 'relativeRotation')
 _AXIS_INDEX = {'X': 0, 'Y': 1, 'Z': 2}
 _UNSET = object()
+LIGHT_COMPONENT_TYPES = frozenset({'entLightComponent', 'vehicleLightComponent'})
+_LIGHT_DIRECTION_CORRECTION = Matrix.Rotation(math.radians(90.0), 4, 'X')
 
-_SUBMESH_INDEX_CACHE = {}
 _RIG_ARMATURE_OBJECT_CACHE = {}
 _ARMATURE_BONE_SET_CACHE = {}
 _RIG_BONE_INDEX_CACHE = {}
 _RIG_BONE_MATRIX_CACHE = {}
+_RIG_MODEL_SPACE_CACHE = {}
+_RIG_BONE_MATRIX_ARRAY_CACHE = {}
+_RIG_BONE_SOURCE_CACHE = {}
+_RED_MATRIX_CACHE = {}
+_RED_MATRIX_ARRAY_CACHE = {}
+_SKIN_ATTACHMENT_CACHE = {}
+_SKINNING_BIND_NAME_CACHE = {}
+_COMPONENT_PASS_INDEX_CACHE = {}
+_CHUNK_LOOKUP_CACHE = {}
 
 
 def clear_transient_import_caches():
-    _SUBMESH_INDEX_CACHE.clear()
+    clear_submesh_index_cache()
     _RIG_ARMATURE_OBJECT_CACHE.clear()
     _ARMATURE_BONE_SET_CACHE.clear()
     _RIG_BONE_INDEX_CACHE.clear()
     _RIG_BONE_MATRIX_CACHE.clear()
+    _RIG_MODEL_SPACE_CACHE.clear()
+    _RIG_BONE_MATRIX_ARRAY_CACHE.clear()
+    _RIG_BONE_SOURCE_CACHE.clear()
+    _RED_MATRIX_CACHE.clear()
+    _RED_MATRIX_ARRAY_CACHE.clear()
+    _SKIN_ATTACHMENT_CACHE.clear()
+    _SKINNING_BIND_NAME_CACHE.clear()
+    _COMPONENT_PASS_INDEX_CACHE.clear()
+    _CHUNK_LOOKUP_CACHE.clear()
 
 
 def create_axes(ent_coll, name):
@@ -91,6 +129,119 @@ def component_name(component, default=''):
     return cname_value(component.get('name'), default) if type(component) is dict else default
 
 
+def is_animated_rig_component(component):
+    return (
+        type(component) is dict
+        and component.get('$type') == 'entAnimatedComponent'
+        and bool(depot_path_value(component, 'rig'))
+    )
+
+
+def build_embedded_handle_lookup(components, key):
+    lookup = {}
+    for component in components or ():
+        value = component.get(key) if type(component) is dict else None
+        if type(value) is not dict:
+            continue
+        handle_id = value.get('HandleId')
+        if handle_id is not None and type(value.get('Data')) is dict:
+            lookup[handle_id] = value
+    return lookup
+
+
+def animated_component_control_target(component, lookup=None):
+    data = resolve_handle_data(component, lookup, 'controlBinding')
+    if type(data) is not dict or data.get('enabled', 1) == 0:
+        return ''
+    return cname_value(data.get('bindName'))
+
+
+def is_deformation_rig_component(component):
+    if type(component) is not dict:
+        return False
+    name = component_name(component).lower()
+    rig_path = depot_path_value(component, 'rig').replace('\\', '/').lower()
+    return (
+        'deformation' in name
+        or '/deformations_rig/' in rig_path
+        or rig_path.endswith('_deformations.rig')
+        or rig_path.endswith('_deformation.rig')
+    )
+
+
+def promote_deformation_control_targets(components, control_targets=None):
+    components = list(components or ())
+    if len(components) < 2:
+        return components
+
+    component_by_name = {}
+    for component in components:
+        name = component_name(component)
+        if name and name not in component_by_name:
+            component_by_name[name] = component
+
+    authorities = []
+    authority_ids = set()
+    for component in components:
+        if not is_deformation_rig_component(component):
+            continue
+        target_name = (control_targets or {}).get(id(component), '')
+        target = component_by_name.get(target_name)
+        if target is None or id(target) in authority_ids:
+            continue
+        authority_ids.add(id(target))
+        authorities.append(target)
+
+    if not authorities:
+        return components
+    return authorities + [component for component in components if id(component) not in authority_ids]
+
+
+def order_animated_rig_components(components, control_targets=None):
+    components = list(components or ())
+    component_count = len(components)
+    if component_count < 2:
+        return components
+
+    first_index_by_name = {}
+    for index, component in enumerate(components):
+        name = component_name(component)
+        if name and name not in first_index_by_name:
+            first_index_by_name[name] = index
+
+    targets = control_targets or {}
+    dependency_counts = [0] * component_count
+    dependents = [[] for _ in range(component_count)]
+    for index, component in enumerate(components):
+        target_index = first_index_by_name.get(targets.get(id(component), ''))
+        if target_index is None or target_index == index:
+            continue
+        dependency_counts[index] = 1
+        dependents[target_index].append(index)
+
+    ready = [index for index, count in enumerate(dependency_counts) if count == 0]
+    heapq.heapify(ready)
+    emitted = [False] * component_count
+    result = []
+    while ready:
+        index = heapq.heappop(ready)
+        if emitted[index]:
+            continue
+        emitted[index] = True
+        result.append(components[index])
+        for dependent_index in dependents[index]:
+            dependency_counts[dependent_index] = 0
+            if not emitted[dependent_index]:
+                heapq.heappush(ready, dependent_index)
+
+    if len(result) != component_count:
+        remaining = [component for index, component in enumerate(components) if not emitted[index]]
+        cycle_names = ', '.join(component_name(component, '<unnamed>') for component in remaining)
+        print(f'animation control binding cycle detected; preserving source order for: {cycle_names}')
+        result.extend(remaining)
+    return promote_deformation_control_targets(result, control_targets)
+
+
 def depot_path_value(component, *keys):
     if type(component) is not dict:
         return ''
@@ -118,6 +269,24 @@ def is_component_enabled(component):
     return component.get('isEnabled', 1) != 0 if type(component) is dict else True
 
 
+def chunk_mask_value(component):
+    raw = component.get('chunkMask') if type(component) is dict else None
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def component_is_zero_mask_culled(component):
+    return (
+        type(component) is dict
+        and component.get('$type') in ZERO_MASK_CULLED_COMPONENT_TYPES
+        and chunk_mask_value(component) == 0
+    )
+
+
 def depot_to_local_path(root, depot_path):
     return os.path.join(root, depot_path).replace('\\', os.sep) if depot_path else ''
 
@@ -127,42 +296,19 @@ def norm_path_key(value):
     return os.path.normcase(os.path.normpath(value)) if value else ''
 
 
-def submesh_index_for_object(obj):
-    name = getattr(obj, 'name', '')
-    cached = _SUBMESH_INDEX_CACHE.get(name)
-    if cached is not None:
-        return None if cached < 0 else cached
-    match = SUBMESH_PATTERN.search(name)
-    if match:
-        index = int(match.group(1))
-        _SUBMESH_INDEX_CACHE[name] = index
-        return index
-    data = getattr(obj, 'data', None)
-    for mat in getattr(data, 'materials', ()) if data is not None else ():
-        mat_name = getattr(mat, 'name', '') if mat else ''
-        match = SUBMESH_PATTERN.search(mat_name) if mat_name else None
-        if match:
-            index = int(match.group(1))
-            _SUBMESH_INDEX_CACHE[name] = index
-            return index
-    _SUBMESH_INDEX_CACHE[name] = -1
-    return None
+_SOURCE_RAW_PATTERN = re.compile(r'(?:^|/)source/raw(?=$|/)', re.IGNORECASE)
 
 
 def split_source_raw_root(filepath):
     if not filepath:
         return '', ''
     normalized = os.path.normpath(filepath)
-    lowered = normalized.replace('\\', '/').lower()
-    marker = '/source/raw'
-    marker_index = lowered.find(marker)
-    if marker_index < 0:
-        marker = 'source/raw'
-        marker_index = lowered.find(marker)
-    if marker_index < 0:
+    # Segment-boundary match: a plain substring search also matches paths like '.../resource/raw...'.
+    match = _SOURCE_RAW_PATTERN.search(normalized.replace('\\', '/'))
+    if match is None:
         root = os.path.dirname(normalized)
         return root, os.path.basename(normalized)
-    end = marker_index + len(marker)
+    end = match.end()
     root = normalized[:end].replace('/', os.sep)
     remainder = normalized[end:].lstrip('/\\')
     return root, remainder.replace('/', os.sep)
@@ -188,43 +334,28 @@ def build_component_lookup(components):
     for component in components or []:
         name = component_name(component)
         if name:
-            lookup[name] = component
+            # Preserve the first component registered under each name.
+            lookup.setdefault(name, component)
     return lookup
 
 
-def ent_appearance_name(ent_app, default=''):
-    return cname_value(ent_app.get('appearanceName'), default) if type(ent_app) is dict else default
-
-
-def ent_template_appearance_name(ent_app, default=''):
-    return cname_value(ent_app.get('name'), default) if type(ent_app) is dict else default
-
-
-def _appearance_lookup_index(lookup, key):
-    if not key or not lookup:
-        return -1
-    try:
-        return int(lookup.get(key, -1))
-    except (TypeError, ValueError):
-        return -1
-
-
-def resolve_ent_appearance_alias(app_name, ent_apps, by_appearance=None, by_name=None):
-    if not app_name or app_name == 'None':
-        return -1, ''
-
-    for lookup in (by_appearance, by_name):
-        ent_app_idx = _appearance_lookup_index(lookup, app_name)
-        if 0 <= ent_app_idx < len(ent_apps):
-            return ent_app_idx, ent_appearance_name(ent_apps[ent_app_idx], app_name)
-
-    for ent_app_idx, ent_app in enumerate(ent_apps or []):
-        appearance_name = ent_appearance_name(ent_app)
-        template_name = ent_template_appearance_name(ent_app)
-        if app_name == appearance_name or app_name == template_name:
-            return ent_app_idx, appearance_name or app_name
-
-    return -1, ''
+def merge_components_first_wins(primary, secondary):
+    # Entity components take precedence over appearance components with the same name.
+    merged = list(primary or [])
+    seen = set()
+    for component in merged:
+        name = component_name(component)
+        if name:
+            seen.add(name)
+    append = merged.append
+    for component in secondary or ():
+        name = component_name(component)
+        if name and name in seen:
+            continue
+        if name:
+            seen.add(name)
+        append(component)
+    return merged
 
 
 def appearance_request_is_known(app_name, ent_default, ent_apps, by_appearance, by_name):
@@ -233,17 +364,6 @@ def appearance_request_is_known(app_name, ent_default, ent_apps, by_appearance, 
     if app_name == 'default':
         return not ent_apps or not ent_default or resolve_ent_appearance_alias(ent_default, ent_apps, by_appearance, by_name)[0] >= 0
     return resolve_ent_appearance_alias(app_name, ent_apps, by_appearance, by_name)[0] >= 0
-
-
-def resolve_requested_appearance_name(app_name, ent_default, ent_apps, by_appearance, by_name):
-    if app_name == 'default':
-        if not ent_default:
-            return 'default'
-        _, resolved_name = resolve_ent_appearance_alias(ent_default, ent_apps, by_appearance, by_name)
-        return resolved_name or ent_default
-
-    _, resolved_name = resolve_ent_appearance_alias(app_name, ent_apps, by_appearance, by_name)
-    return resolved_name or app_name
 
 
 def resolve_ent_app(app_name, ent_apps, by_appearance, by_name, ent_default=None):
@@ -269,27 +389,20 @@ def resolve_ent_app(app_name, ent_apps, by_appearance, by_name, ent_default=None
     return 0, ent_appearance_name(ent_apps[0], app_name) if ent_apps else app_name
 
 
-def resolve_entity_appearance_for_file(filepath, requested_app, error_messages=None):
-    parsed_ent = JSONTool.load_entity(filepath, error_messages or []) if filepath else None
-    if parsed_ent is None:
-        return requested_app
-    return resolve_requested_appearance_name(
-        requested_app,
-        parsed_ent.default_appearance,
-        parsed_ent.appearances,
-        parsed_ent.appearances_by_appearance,
-        parsed_ent.appearances_by_name,
-    )
-
-
 def build_chunk_lookup(chunks, target_key, handle_key='HandleId'):
+    source = chunks or ()
+    cache_key = (id(source), target_key, handle_key, len(source))
+    cached = _CHUNK_LOOKUP_CACHE.get(cache_key)
+    if cached is not None and cached[0] is source:
+        return cached[1]
     lookup = {}
-    for chunk in chunks or []:
+    for chunk in source:
         if not isinstance(chunk, dict):
             continue
         target_data = chunk.get(target_key)
         if isinstance(target_data, dict) and handle_key in target_data:
             lookup[target_data[handle_key]] = target_data
+    _CHUNK_LOOKUP_CACHE[cache_key] = (source, lookup)
     return lookup
 
 
@@ -310,6 +423,7 @@ def light_channel_geometry(component, shape_lookup=None):
 
 def collect_light_channel_components(*component_groups):
     collected = {}
+    has_geometry = {}
     order = []
     for components in component_groups:
         for source in components or ():
@@ -318,13 +432,211 @@ def collect_light_channel_components(*component_groups):
             key = component_name(source) or str(id(source))
             if key not in collected:
                 collected[key] = source
+                has_geometry[key] = _UNSET
                 order.append(key)
-            elif light_channel_geometry(collected[key])[0] is None and light_channel_geometry(source)[0] is not None:
+                continue
+            current_has_geometry = has_geometry[key]
+            if current_has_geometry is _UNSET:
+                current_has_geometry = light_channel_geometry(collected[key])[0] is not None
+                has_geometry[key] = current_has_geometry
+            if not current_has_geometry and light_channel_geometry(source)[0] is not None:
                 collected[key] = source
+                has_geometry[key] = True
     return [collected[key] for key in order]
 
 
+def collect_light_components(*component_groups):
+    collected = {}
+    order = []
+    for components in component_groups:
+        for component in components or ():
+            if not isinstance(component, dict) or component.get('$type') not in LIGHT_COMPONENT_TYPES:
+                continue
+            name = component_name(component)
+            key = name or str(component.get('id') or id(component))
+            if key not in collected:
+                collected[key] = component
+                order.append(key)
+    return [collected[key] for key in order]
+
+
+def _light_float(component, key, default=0.0):
+    value = component.get(key, default) if isinstance(component, dict) else default
+    if isinstance(value, dict):
+        value = value.get('$value', default)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _light_color(component):
+    color = component.get('color') if isinstance(component, dict) else None
+    if not isinstance(color, dict):
+        return 1.0, 1.0, 1.0
+    return tuple(max(0.0, min(1.0, _light_float(color, channel, 255.0) / 255.0)) for channel in ('Red', 'Green', 'Blue'))
+
+
+def _blender_light_type(component):
+    light_type = component.get('type') if isinstance(component, dict) else None
+    if light_type == 'LT_Spot':
+        return 'SPOT'
+    if light_type == 'LT_Area':
+        return 'AREA'
+    if light_type in {'LT_Directional', 'LT_Sun'} or (isinstance(component, dict) and component.get('directional', 0)):
+        return 'SUN'
+    return 'POINT'
+
+
+def _set_light_distance(light_data, radius):
+    if radius <= 0.0:
+        return
+    if hasattr(light_data, 'use_custom_distance'):
+        light_data.use_custom_distance = True
+    if hasattr(light_data, 'cutoff_distance'):
+        light_data.cutoff_distance = radius
+
+
+def _set_light_softness(light_data, component):
+    source_radius = _light_float(component, 'sourceRadius', -1.0)
+    if source_radius < 0.0:
+        source_radius = _light_float(component, 'shadowRadius', -1.0)
+    if source_radius >= 0.0 and hasattr(light_data, 'shadow_soft_size'):
+        light_data.shadow_soft_size = source_radius
+
+
+def _configure_area_light(light_data, component):
+    shape = component.get('areaShape', 'ALS_Rectangle')
+    radius = max(_light_float(component, 'radius', 0.0), 0.0)
+    side_a = max(_light_float(component, 'areaRectSideA', 1.0), 0.001)
+    side_b = max(_light_float(component, 'areaRectSideB', 1.0), 0.001)
+    capsule_length = max(_light_float(component, 'capsuleLength', 0.0), 0.0)
+
+    if shape == 'ALS_Capsule':
+        light_data.shape = 'RECTANGLE'
+        light_data.size = max(capsule_length + radius * 2.0, 0.001)
+        light_data.size_y = max(radius * 2.0, 0.001)
+    elif shape in {'ALS_Sphere', 'ALS_Circle', 'ALS_Disc'}:
+        light_data.shape = 'DISK'
+        light_data.size = max(radius * 2.0, side_a, 0.001)
+    elif shape in {'ALS_Ellipse', 'ALS_Oval'}:
+        light_data.shape = 'ELLIPSE'
+        light_data.size = side_a
+        light_data.size_y = side_b
+    elif shape in {'ALS_Rectangle', 'ALS_Rect'}:
+        light_data.shape = 'RECTANGLE'
+        light_data.size = side_a
+        light_data.size_y = side_b
+    else:
+        light_data.shape = 'SQUARE'
+        light_data.size = side_a
+
+
+def _configure_light_data(light_data, component):
+    intensity = max(_light_float(component, 'intensity', 0.0), 0.0)
+    on_strength = max(_light_float(component, 'onStrength', 1.0), 0.0)
+    light_data.energy = intensity * on_strength / 10.0
+    light_data.color = _light_color(component)
+
+    radius = max(_light_float(component, 'radius', 0.0), 0.0)
+    _set_light_distance(light_data, radius)
+    if hasattr(light_data, 'use_shadow'):
+        light_data.use_shadow = bool(component.get('enableLocalShadows', 1))
+    if hasattr(light_data, 'diffuse_factor'):
+        light_data.diffuse_factor = max(_light_float(component, 'sceneDiffuse', 1.0), 0.0)
+    if hasattr(light_data, 'specular_factor'):
+        specular = 0.0 if component.get('noSpecular', 0) else max(_light_float(component, 'sceneSpecular', 1.0), 0.0)
+        light_data.specular_factor = specular * max(_light_float(component, 'sceneSpecularScale', 100.0), 0.0) / 100.0
+    if hasattr(light_data, 'volume_factor'):
+        light_data.volume_factor = max(_light_float(component, 'scaleVolFog', 0.0), 0.0) / 100.0 if component.get('useInFog', 0) else 0.0
+    if hasattr(light_data, 'transmission_factor'):
+        light_data.transmission_factor = 1.0 if component.get('useInTransparents', 1) else 0.0
+
+    temperature = _light_float(component, 'temperature', -1.0)
+    if temperature > 0.0 and hasattr(light_data, 'temperature'):
+        if hasattr(light_data, 'use_temperature'):
+            light_data.use_temperature = True
+        light_data.temperature = temperature
+
+    if light_data.type == 'SPOT':
+        outer_angle = max(_light_float(component, 'outerAngle', 45.0), 0.001)
+        inner_angle = max(0.0, min(_light_float(component, 'innerAngle', outer_angle), outer_angle))
+        light_data.spot_size = math.radians(min(outer_angle, 179.0))
+        light_data.spot_blend = max(0.0, min(1.0, 1.0 - inner_angle / outer_angle))
+        _set_light_softness(light_data, component)
+    elif light_data.type == 'AREA':
+        _configure_area_light(light_data, component)
+    elif light_data.type == 'SUN':
+        shadow_angle = _light_float(component, 'shadowAngle', -1.0)
+        if shadow_angle >= 0.0 and hasattr(light_data, 'angle'):
+            light_data.angle = math.radians(shadow_angle)
+    else:
+        _set_light_softness(light_data, component)
+
+
+def _store_light_metadata(light_obj, component, filepath):
+    component_type = component.get('$type', 'entLightComponent')
+    light_obj['ntype'] = component_type
+    light_obj['componentName'] = component_name(component)
+    light_obj['entJSON'] = filepath
+
+    for key in (
+        'type', 'unit', 'intensity', 'EV', 'radius', 'innerAngle', 'outerAngle',
+        'sourceRadius', 'shadowRadius', 'softness', 'areaShape', 'areaRectSideA',
+        'areaRectSideB', 'capsuleLength', 'areaTwoSided', 'attenuation',
+        'lightChannel', 'group', 'turnOnByDefault', 'onStrength', 'materialZone',
+        'enableLocalShadows', 'enableContactShadows', 'contactShadows',
+        'sceneDiffuse', 'sceneSpecular', 'sceneSpecularScale', 'scaleVolFog',
+        'useInFog', 'useInGI', 'useInTransparents', 'temperature',
+    ):
+        value = component.get(key)
+        if isinstance(value, (str, int, float, bool)):
+            light_obj[key] = value
+
+    color = component.get('color')
+    if isinstance(color, dict):
+        light_obj['redColor'] = [
+            int(_light_float(color, 'Red', 255)),
+            int(_light_float(color, 'Green', 255)),
+            int(_light_float(color, 'Blue', 255)),
+            int(_light_float(color, 'Alpha', 255)),
+        ]
+
+    flicker = component.get('flicker')
+    if isinstance(flicker, dict):
+        for source_key, target_key in (
+            ('flickerPeriod', 'flickerPeriod'),
+            ('flickerStrength', 'flickerStrength'),
+            ('positionOffset', 'flickerPositionOffset'),
+        ):
+            value = flicker.get(source_key)
+            if isinstance(value, (int, float)):
+                light_obj[target_key] = value
+
+    ies_profile = depot_path_value(component, 'iesProfile')
+    if ies_profile:
+        light_obj['iesProfile'] = ies_profile
+
+
+def create_entity_light(component, filepath):
+    name = component_name(component) or component.get('$type', 'Light')
+    light_data = bpy.data.lights.new(name, _blender_light_type(component))
+    _configure_light_data(light_data, component)
+    light_obj = bpy.data.objects.new(name, light_data)
+    light_obj.rotation_mode = 'QUATERNION'
+    light_obj.show_in_front = True
+    _store_light_metadata(light_obj, component, filepath)
+    return light_obj
+
+
 def build_component_pass_index(components):
+    source = components or ()
+    source_ids = tuple(id(component) for component in source)
+    cached = _COMPONENT_PASS_INDEX_CACHE.get(source_ids)
+    if cached is not None:
+        cached_source, cached_index = cached
+        if len(cached_source) == len(source) and all(a is b for a, b in zip(cached_source, source)):
+            return cached_index
     indexed = {
         'components': [],
         'by_name': {},
@@ -333,21 +645,29 @@ def build_component_pass_index(components):
         'mesh_components': [],
         'transform_animator_components': [],
     }
-    for component in components or ():
+    all_components = indexed['components']
+    by_name = indexed['by_name']
+    rig_components = indexed['rig_components']
+    slot_components = indexed['slot_components']
+    mesh_components = indexed['mesh_components']
+    animator_components = indexed['transform_animator_components']
+    for component in source:
         if type(component) is not dict:
             continue
-        indexed['components'].append(component)
+        all_components.append(component)
         name = component_name(component)
         if name:
-            indexed['by_name'][name] = component
+            by_name.setdefault(name, component)
+        component_type = component.get('$type')
         if depot_path_value(component, 'rig'):
-            indexed['rig_components'].append(component)
+            rig_components.append(component)
         if isinstance(component.get('slots'), list):
-            indexed['slot_components'].append(component)
-        if 'mesh' in component or 'graphicsMesh' in component:
-            indexed['mesh_components'].append(component)
-        if component.get('$type') == 'gameTransformAnimatorComponent':
-            indexed['transform_animator_components'].append(component)
+            slot_components.append(component)
+        if ('mesh' in component or 'graphicsMesh' in component) and component_type not in NON_VISUAL_MESH_COMPONENT_TYPES:
+            mesh_components.append(component)
+        if component_type == 'gameTransformAnimatorComponent':
+            animator_components.append(component)
+    _COMPONENT_PASS_INDEX_CACHE[source_ids] = (tuple(source), indexed)
     return indexed
 
 
@@ -490,7 +810,8 @@ def build_slot_lookup(vehicle_slots):
     for slot in vehicle_slots or []:
         name = cname_value(slot.get('slotName'))
         if name:
-            lookup[name] = slot
+            # Preserve the first slot registered under each name.
+            lookup.setdefault(name, slot)
     return lookup
 
 
@@ -516,6 +837,53 @@ def rig_bone_index_for(rig_j):
     return cached
 
 
+def _rig_json_bone_source(rig_j):
+    cache_key = id(rig_j)
+    cached = _RIG_BONE_SOURCE_CACHE.get(cache_key)
+    if cached is not None and cached[0] is rig_j:
+        return cached[1]
+    bone_count = len(rig_j.get('boneNames') or ())
+    apose_ls = rig_j.get('aPoseLS')
+    has_apose = type(apose_ls) is list and len(apose_ls) == bone_count
+    apose_ms = rig_j.get('aPoseMS')
+    use_model_space = has_apose and type(apose_ms) is list and len(apose_ms) == bone_count
+    transforms = apose_ms if use_model_space else (apose_ls if has_apose else rig_j.get('boneTransforms'))
+    source = (transforms, rig_j.get('boneParentIndexes'), use_model_space)
+    _RIG_BONE_SOURCE_CACHE[cache_key] = (rig_j, source)
+    return source
+
+
+def _rig_json_model_space_matrices(rig_j):
+    if type(rig_j) is not dict:
+        return ()
+    cache_key = id(rig_j)
+    cached = _RIG_MODEL_SPACE_CACHE.get(cache_key)
+    if cached is not None and cached[0] is rig_j:
+        return cached[1]
+    matrix_cache = _RIG_BONE_MATRIX_CACHE.setdefault(cache_key, {})
+    matrices = tuple(
+        _rig_json_bone_matrix_for_index(rig_j, index, matrix_cache)
+        for index in range(len(rig_j.get('boneNames') or ()))
+    )
+    _RIG_MODEL_SPACE_CACHE[cache_key] = (rig_j, matrices)
+    return matrices
+
+
+def _rig_json_bone_matrix_array(rig_j):
+    if type(rig_j) is not dict:
+        return np.empty((0, 4, 4), dtype=np.float64)
+    cache_key = id(rig_j)
+    cached = _RIG_BONE_MATRIX_ARRAY_CACHE.get(cache_key)
+    if cached is not None and cached[0] is rig_j:
+        return cached[1]
+    matrices = _rig_json_model_space_matrices(rig_j)
+    array = np.asarray([tuple(tuple(row) for row in matrix) for matrix in matrices], dtype=np.float64)
+    if not matrices:
+        array = np.empty((0, 4, 4), dtype=np.float64)
+    _RIG_BONE_MATRIX_ARRAY_CACHE[cache_key] = (rig_j, array)
+    return array
+
+
 def _rig_json_bone_matrix_for_index(rig_j, index, matrices, resolving=None):
     if type(rig_j) is not dict or index is None or index < 0:
         return Matrix.Identity(4)
@@ -529,23 +897,15 @@ def _rig_json_bone_matrix_for_index(rig_j, index, matrices, resolving=None):
         return Matrix.Identity(4)
     resolving.add(index)
 
-    # aPoseMS is already model-space. boneTransforms/aPoseLS are local-to-parent
-    # in vehicle rigs, so they must be accumulated through boneParentIndexes.
-    apose_ms = rig_j.get('aPoseMS')
-    if type(apose_ms) is list and index < len(apose_ms):
-        matrix = transform_matrix(apose_ms[index])
-    else:
-        transforms = rig_j.get('boneTransforms')
-        if not (type(transforms) is list and index < len(transforms)):
-            transforms = rig_j.get('aPoseLS')
-        if type(transforms) is list and index < len(transforms):
-            local_matrix = transform_matrix(transforms[index])
-            parents = rig_j.get('boneParentIndexes')
+    transforms, parents, use_model_space = _rig_json_bone_source(rig_j)
+    if type(transforms) is list and index < len(transforms):
+        matrix = transform_matrix(transforms[index])
+        if not use_model_space:
             parent_index = parents[index] if type(parents) is list and index < len(parents) else -1
             parent_matrix = _rig_json_bone_matrix_for_index(rig_j, parent_index, matrices, resolving) if parent_index is not None and parent_index >= 0 else Matrix.Identity(4)
-            matrix = parent_matrix @ local_matrix
-        else:
-            matrix = Matrix.Identity(4)
+            matrix = parent_matrix @ matrix
+    else:
+        matrix = Matrix.Identity(4)
 
     resolving.remove(index)
     matrices[index_key] = matrix
@@ -620,23 +980,33 @@ def transform_position(transform, keys=POSITION_KEYS):
     ))
 
 
-def transform_scale(transform, visual_scale=None):
+def transform_scale(transform):
     scale = transform.get('Scale') or transform.get('scale') if type(transform) is dict else None
-    if type(scale) is not dict and type(visual_scale) is dict:
-        scale = visual_scale
     if type(scale) is not dict:
         return Vector((1, 1, 1))
     return Vector((scale.get('X', 1), scale.get('Y', 1), scale.get('Z', 1)))
 
 
-def transform_matrix(transform, pos_keys=POSITION_KEYS, rot_keys=ROTATION_KEYS, scale=None, visual_scale=None):
+def transform_matrix(transform, pos_keys=POSITION_KEYS, rot_keys=ROTATION_KEYS, scale=None):
     if type(transform) is not dict:
         return Matrix.Identity(4)
     return Matrix.LocRotScale(
         transform_position(transform, pos_keys),
         red_quaternion(transform_field(transform, rot_keys)),
-        scale if scale is not None else transform_scale(transform, visual_scale),
+        scale if scale is not None else transform_scale(transform),
     )
+
+
+def visual_scale_matrix(component):
+    # visualScale scales the component's own geometry; it is not part of the placement
+    # hierarchy, so children and slot offsets must never inherit it.
+    scale = component.get('visualScale') if type(component) is dict else None
+    if type(scale) is not dict:
+        return None
+    vec = Vector((scale.get('X', 1), scale.get('Y', 1), scale.get('Z', 1)))
+    if abs(vec.x - 1.0) <= 1e-9 and abs(vec.y - 1.0) <= 1e-9 and abs(vec.z - 1.0) <= 1e-9:
+        return None
+    return Matrix.LocRotScale(Vector((0, 0, 0)), Quaternion((1, 0, 0, 0)), vec)
 
 
 def resolve_handle_data(component, lookup, key):
@@ -670,8 +1040,14 @@ def skinning_binding_data(component, skinning_lookup=None):
 
 
 def skinning_bind_name(component, skinning_lookup=None):
+    cache_key = (id(component), id(skinning_lookup))
+    cached = _SKINNING_BIND_NAME_CACHE.get(cache_key)
+    if cached is not None and cached[0] is component and cached[1] is skinning_lookup:
+        return cached[2]
     data = skinning_binding_data(component, skinning_lookup)
-    return cname_value(data.get('bindName')) if isinstance(data, dict) else ''
+    bind_name = cname_value(data.get('bindName')) if isinstance(data, dict) else ''
+    _SKINNING_BIND_NAME_CACHE[cache_key] = (component, skinning_lookup, bind_name)
+    return bind_name
 
 
 def component_uses_skinning(component, skinning_lookup=None):
@@ -679,30 +1055,27 @@ def component_uses_skinning(component, skinning_lookup=None):
     return bool(bind_name and bind_name != 'None')
 
 
-def imported_armatures_from_selection():
-    selected = [obj for obj in bpy.context.selected_objects if getattr(obj, 'type', None) == ARMATURE_TYPE]
-    if selected:
-        return selected
-    active = bpy.context.view_layer.objects.active
-    return [active] if getattr(active, 'type', None) == ARMATURE_TYPE else []
-
-
 def load_anim_rig(with_materials, anim_path, rig_path='', ent_name=''):
     if not anim_path:
         return None
-    bpy.ops.io_scene_gltf.cp77(with_materials, filepath=anim_path, scripting=True)
-    arms = imported_armatures_from_selection()
+    # Identify the imported rig by datablock diff; selection state is UI-dependent and can
+    # hand back a previously selected or unrelated armature.
+    before_armatures = set(bpy.data.armatures)
+    bpy.ops.io_scene_gltf.cp77(filepath=anim_path, scripting=True)
+    imported_armatures = set(bpy.data.armatures).difference(before_armatures)
+    arms = [obj for obj in bpy.data.objects if getattr(obj, 'type', None) == ARMATURE_TYPE and obj.data in imported_armatures]
     if not arms:
         print('anim rig import did not create an armature')
         return None
     rig = arms[0]
     cache_armature_bones(rig)
     rig['animset'] = anim_path
+    rig['animation_only'] = True
     if rig_path:
-        rig['rig'] = rig_path
+        rig['animation_source_rig_json'] = rig_path
     if ent_name:
         rig['ent'] = ent_name + '.ent.json'
-    print('anim rig loaded')
+    print('anim rig loaded for animation data only')
     return rig
 
 
@@ -714,90 +1087,6 @@ def child_of_inverse_matrix(target, subtarget_name=''):
         return target_matrix.inverted()
     except Exception:
         return Matrix.Identity(4)
-
-
-def root_constraint_bone_name(rig):
-    if getattr(rig, 'type', None) != ARMATURE_TYPE:
-        return ''
-    for bone_name in ('root', 'Root', 'base', 'Base'):
-        if armature_has_bone(rig, bone_name):
-            return bone_name
-    return ''
-
-
-def vector_is_zero(value, eps=1e-6):
-    return abs(value.x) <= eps and abs(value.y) <= eps and abs(value.z) <= eps
-
-
-def quaternion_is_identity(value, eps=1e-6):
-    return abs(value.x) <= eps and abs(value.y) <= eps and abs(value.z) <= eps and abs(value.w - 1.0) <= eps
-
-
-def is_root_like_bone_name(name):
-    return (name or '').lower() in {'root', 'base', 'trajectory'}
-
-
-def transform_has_authored_local_basis(transform):
-    if type(transform) is not dict:
-        return False
-    return (
-        not vector_is_zero(transform_position(transform, ('Position',)))
-        or not quaternion_is_identity(red_quaternion(transform.get('Orientation')))
-    )
-
-
-def rig_parent_bone_name(rig, rig_j, bone_name):
-    if not bone_name:
-        return ''
-    if getattr(rig, 'type', None) == ARMATURE_TYPE:
-        bone = rig.data.bones.get(bone_name) if getattr(rig, 'data', None) else None
-        if bone is not None and bone.parent is not None:
-            return bone.parent.name
-    if type(rig_j) is not dict:
-        return ''
-    index = rig_bone_index_for(rig_j).get(bone_name)
-    parents = rig_j.get('boneParentIndexes')
-    names = rig_j.get('boneNames')
-    if index is None or type(parents) is not list or type(names) is not list or index >= len(parents):
-        return ''
-    parent_index = parents[index]
-    if parent_index is None or parent_index < 0 or parent_index >= len(names):
-        return ''
-    return cname_value(names[parent_index])
-
-
-def root_inverse_hard_slot_workflow(component, transform_resolver, rig):
-    if type(component) is not dict:
-        return None
-    local_transform = component.get('localTransform', {})
-    if not transform_has_authored_local_basis(local_transform):
-        return None
-    binding = transform_resolver._binding_data(component)
-    if type(binding) is not dict:
-        return None
-    bind_name = cname_value(binding.get('bindName'))
-    slot_name = cname_value(binding.get('slotName'))
-    if not bind_name or not slot_name or slot_name == 'None':
-        return None
-    if transform_resolver._get_binding_target(bind_name) != 'slot':
-        return None
-    slot = transform_resolver._slot(bind_name, slot_name)
-    if type(slot) is not dict:
-        return None
-    bone_name = cname_value(slot.get('boneName'), slot_name)
-    if is_root_like_bone_name(bone_name) or is_root_like_bone_name(slot_name):
-        return None
-    if bone_name != slot_name or not armature_has_bone(rig, bone_name):
-        return None
-    if not vector_is_zero(transform_position(slot, ('relativePosition',))):
-        return None
-    if not quaternion_is_identity(red_quaternion(slot.get('relativeRotation'))):
-        return None
-    root_bone = root_constraint_bone_name(rig)
-    if not root_bone:
-        return None
-    local_matrix = transform_matrix(local_transform, visual_scale=component.get('visualScale'))
-    return local_matrix, bone_name, slot_name, root_bone
 
 
 def matching_child_of_constraint(obj, target, subtarget):
@@ -821,125 +1110,16 @@ def configure_child_of_constraint(obj, target, subtarget, inverse_matrix):
     return constraint
 
 
-def configure_root_inverse_child_of(obj, rig, root_bone, target_bone):
-    return configure_child_of_constraint(obj, rig, target_bone, child_of_inverse_matrix(rig, root_bone))
-
-
-def mesh_armature_modifier(obj):
-    for modifier in getattr(obj, 'modifiers', []):
-        if modifier.type == 'ARMATURE' and getattr(modifier, 'object', None) is not None:
-            return modifier
-    return None
-
-
-def copied_armatures_from_objects(objects):
-    object_ids = {id(obj) for obj in objects}
-    armatures = []
-    seen = set()
-    for obj in objects:
-        if getattr(obj, 'type', None) != 'MESH':
-            continue
-        modifier = mesh_armature_modifier(obj)
-        armature = getattr(modifier, 'object', None) if modifier is not None else None
-        if getattr(armature, 'type', None) != ARMATURE_TYPE:
-            continue
-        if id(armature) not in object_ids or id(armature) in seen:
-            continue
-        seen.add(id(armature))
-        armatures.append(armature)
-    return armatures
-
-
-def mesh_vertex_group_names(objects):
-    names = set()
-    for obj in objects:
-        if getattr(obj, 'type', None) == 'MESH':
-            names.update(group.name for group in getattr(obj, 'vertex_groups', []))
-    return names
-
-
-def pose_bone_head_world(armature, bone_name):
-    if getattr(armature, 'type', None) != ARMATURE_TYPE or not armature_has_bone(armature, bone_name):
-        return None
-    return armature.matrix_world @ armature.pose.bones[bone_name].head
-
-
-def average_vector(values):
-    values = tuple(value for value in values if value is not None)
-    return sum(values, Vector((0, 0, 0))) / len(values) if values else None
-
-
-def shared_deformation_bone_names(objects, source_armature, target_armature):
-    shared = cache_armature_bones(source_armature) & cache_armature_bones(target_armature)
-    if not shared:
-        return []
-    preferred = shared & mesh_vertex_group_names(objects)
-    return sorted(preferred or shared)
-
-
-def deformation_rig_centroid_translation_matrix(objects, rig):
-    if getattr(rig, 'type', None) != ARMATURE_TYPE:
-        return None, None, []
-    best_armature = None
-    best_bones = []
-    for armature in copied_armatures_from_objects(objects):
-        if armature == rig:
-            continue
-        bones = shared_deformation_bone_names(objects, armature, rig)
-        if len(bones) > len(best_bones):
-            best_armature = armature
-            best_bones = bones
-    if best_armature is None or not best_bones:
-        return None, None, []
-    source_centroid = average_vector(pose_bone_head_world(best_armature, bone_name) for bone_name in best_bones)
-    target_centroid = average_vector(pose_bone_head_world(rig, bone_name) for bone_name in best_bones)
-    if source_centroid is None or target_centroid is None:
-        return None, None, []
-    return Matrix.Translation(target_centroid - source_centroid), best_armature, best_bones
-
-def is_skinned_overlay_component(component, meshpath=''):
-    name = component_name(component).lower()
-    path = (meshpath or depot_path_value(component, 'mesh', 'graphicsMesh')).lower()
-    return 'decal' in name or 'decal' in path
-
-
-def skinned_source_armature(objects):
-    armatures = copied_armatures_from_objects(objects)
-    return armatures[0] if armatures else None
-
-
-def skinned_overlay_alignment_matrix(objects, resolved_matrix, anchors):
-    source_armature = skinned_source_armature(objects)
-    if source_armature is None or not anchors:
-        return None, '', []
-
-    source_groups = mesh_vertex_group_names(objects)
-    source_bones = cache_armature_bones(source_armature)
-    best = None
-    for anchor in anchors:
-        target_armature = anchor.get('armature')
-        if not is_live_armature_object(target_armature):
-            continue
-        shared = source_bones & cache_armature_bones(target_armature)
-        if not shared:
-            continue
-        anchor_groups = anchor.get('vertex_groups') or set()
-        preferred = shared & source_groups & anchor_groups
-        bones = sorted(preferred or (shared & source_groups) or shared)
-        if not bones:
-            continue
-        source_centroid = average_vector(pose_bone_head_world(source_armature, bone_name) for bone_name in bones)
-        target_centroid = average_vector(pose_bone_head_world(target_armature, bone_name) for bone_name in bones)
-        if source_centroid is None or target_centroid is None:
-            continue
-        score = (len(preferred), len(shared & source_groups), len(shared))
-        if best is None or score > best[0]:
-            best = (score, target_centroid - (resolved_matrix @ source_centroid), anchor.get('component_name', ''), bones)
-
-    if best is None:
-        return None, '', []
-    return Matrix.Translation(best[1]), best[2], best[3]
-
+def _armature_matches_rig_source(armature, rig_source_key):
+    # Animation-GLB armatures are intentionally excluded from the entity rig pipeline.
+    if armature.get('animation_only', False):
+        return False
+    # Same-named armatures from different rig assets must not alias; only reuse an armature
+    # whose recorded source rig matches.
+    stored = armature.get('source_rig_file') or armature.get('rig') or ''
+    if not stored and getattr(armature, 'data', None) is not None:
+        stored = armature.data.get('source_rig_file') or ''
+    return bool(stored) and norm_path_key(str(stored)) == rig_source_key
 
 
 def is_live_armature_object(obj):
@@ -964,18 +1144,15 @@ def ensure_armature_from_rig_json(rig_json_path, component_name_value='', ent_na
 
     expected_name = os.path.basename(rig_json_path).replace('.rig.json', '')
     direct = bpy.data.objects.get(expected_name)
-    if getattr(direct, 'type', None) == ARMATURE_TYPE:
+    if getattr(direct, 'type', None) == ARMATURE_TYPE and _armature_matches_rig_source(direct, target):
         cache_armature_bones(direct)
         _RIG_ARMATURE_OBJECT_CACHE[target] = direct
         return direct
 
-    created = create_armature_from_data(rig_json_path, "T-Pose", False)
+    # A-Pose matches the resolver's bind-pose preference (aPose arrays when populated);
+    # create_armature_from_data falls back to the boneTransforms T-pose itself.
+    created = create_armature_from_data(rig_json_path, 'A-Pose', False)
     armature = created if getattr(created, 'type', None) == ARMATURE_TYPE else None
-    if armature is None and isinstance(created, (list, tuple)):
-        armature = next((item for item in created if getattr(item, 'type', None) == ARMATURE_TYPE), None)
-    if armature is None:
-        selected = imported_armatures_from_selection()
-        armature = selected[0] if selected else None
 
     if armature is not None:
         cache_armature_bones(armature)
@@ -984,6 +1161,53 @@ def ensure_armature_from_rig_json(rig_json_path, component_name_value='', ent_na
         armature['source_rig_file'] = rig_json_path
         if component_name_value:
             armature['componentName'] = component_name_value
+        if ent_name:
+            armature['ent'] = ent_name + '.ent.json'
+    return armature
+
+
+def ensure_armature_from_rig_jsons(rig_json_paths, ent_name=''):
+    ordered_paths = []
+    ordered_keys = []
+    seen_keys = set()
+    for path in rig_json_paths or ():
+        if not path:
+            continue
+        key = norm_path_key(path)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        ordered_paths.append(path)
+        ordered_keys.append(key)
+    if not ordered_paths:
+        return None
+    # A MetaRig is a distinct product even when it contains one source rig. Never reuse
+    # the ordinary raw-rig armature created by ensure_armature_from_rig_json.
+    merged_key = 'metarig:' + ';'.join(ordered_keys)
+    existing = _RIG_ARMATURE_OBJECT_CACHE.get(merged_key)
+    if is_live_armature_object(existing):
+        cache_armature_bones(existing)
+        return existing
+    if existing is not None:
+        _RIG_ARMATURE_OBJECT_CACHE.pop(merged_key, None)
+
+    merged_name = (ent_name + '_rig') if ent_name else 'merged_rig'
+    direct = bpy.data.objects.get(merged_name)
+    if getattr(direct, 'type', None) == ARMATURE_TYPE and _armature_matches_rig_source(direct, merged_key):
+        cache_armature_bones(direct)
+        _RIG_ARMATURE_OBJECT_CACHE[merged_key] = direct
+        return direct
+
+    # Every rig referenced by the entity's animated components contributes bones so
+    # skinning retarget never drops influences (partial skeletons spaghettify meshes).
+    created = create_armature_from_rig_files(ordered_paths, merged_name, source_label=merged_key)
+    armature = created if getattr(created, 'type', None) == ARMATURE_TYPE else None
+    if armature is not None:
+        cache_armature_bones(armature)
+        _RIG_ARMATURE_OBJECT_CACHE[merged_key] = armature
+        armature['rig'] = ordered_paths[0]
+        armature['source_rig_file'] = merged_key
+        armature['merged_rigs'] = list(ordered_paths)
         if ent_name:
             armature['ent'] = ent_name + '.ent.json'
     return armature
@@ -1006,29 +1230,221 @@ def armature_has_bone(armature, bone_name):
     return bool(armature and bone_name and bone_name in cache_armature_bones(armature))
 
 
+def _red_matrix_to_blender(value):
+    """Convert a serialized RED Matrix to mathutils column-vector form."""
+    if not isinstance(value, dict):
+        return None
+    cache_key = id(value)
+    cached = _RED_MATRIX_CACHE.get(cache_key)
+    if cached is not None and cached[0] is value:
+        return cached[1]
+    x = value.get('X')
+    y = value.get('Y')
+    z = value.get('Z')
+    w = value.get('W')
+    matrix = None
+    if all(isinstance(column, dict) for column in (x, y, z, w)):
+        try:
+            matrix = Matrix((
+                (float(x['X']), float(y['X']), float(z['X']), float(w['X'])),
+                (float(x['Y']), float(y['Y']), float(z['Y']), float(w['Y'])),
+                (float(x['Z']), float(y['Z']), float(z['Z']), float(w['Z'])),
+                (float(x['W']), float(y['W']), float(z['W']), float(w['W'])),
+            ))
+        except (KeyError, TypeError, ValueError):
+            matrix = None
+    _RED_MATRIX_CACHE[cache_key] = (value, matrix)
+    return matrix
+
+
+def _red_matrix_to_array(value):
+    if not isinstance(value, dict):
+        return None
+    cache_key = id(value)
+    cached = _RED_MATRIX_ARRAY_CACHE.get(cache_key)
+    if cached is not None and cached[0] is value:
+        return cached[1]
+    matrix = _red_matrix_to_blender(value)
+    array = None if matrix is None else np.asarray(tuple(tuple(row) for row in matrix), dtype=np.float64)
+    _RED_MATRIX_ARRAY_CACHE[cache_key] = (value, array)
+    return array
+
+
+def _mesh_skin_anchor(mesh_j, rig_j):
+    """Return the first valid mesh bone in authored mesh order.
+
+    RigTargetMapping maps every mesh bone independently by name and does not rebuild a
+    hierarchy or identify a unique root. For Blender's component-level adapter, the
+    deterministic anchor is therefore the first authored mesh bone that resolves in the
+    completed MetaRig. Later mapped bones remain deformers and do not participate in
+    choosing the component attachment.
+    """
+    if not isinstance(mesh_j, dict) or not isinstance(rig_j, dict):
+        return None, 'missing_json'
+    raw_names = mesh_j.get('boneNames')
+    raw_matrices = mesh_j.get('boneRigMatrices')
+    if not isinstance(raw_names, list) or not isinstance(raw_matrices, list):
+        return None, 'missing_skin_data'
+
+    rig_index = rig_bone_index_for(rig_j)
+    saw_named_bone = False
+    for mesh_index, raw_name in enumerate(raw_names):
+        source_name = cname_value(raw_name)
+        if not source_name:
+            continue
+        saw_named_bone = True
+        if mesh_index >= len(raw_matrices):
+            continue
+        target_name = meta_bone_name(source_name)
+        target_index = rig_index.get(target_name)
+        if target_index is not None:
+            return (mesh_index, source_name, target_name, target_index), 'ok'
+
+    return None, 'missing_mapped_bone' if saw_named_bone else 'missing_bones'
+
+def _matrices_near(a, b, epsilon=1e-4):
+    for row in range(4):
+        a_row = a[row]
+        b_row = b[row]
+        for column in range(4):
+            if abs(a_row[column] - b_row[column]) > epsilon:
+                return False
+    return True
+
+
+def component_skin_attachment_matrix(mesh_j, rig_j):
+    """Return the RED attachment transform of the first mapped mesh bone.
+
+    RigTargetMapping preserves authored mesh-bone order and maps every bone independently.
+    The first valid mapped mesh bone supplies the component attachment anchor; later
+    mesh bones remain deformers and must not veto that attachment.
+
+    In Blender column-vector convention the anchor attachment is:
+
+        merged_anchor_ms @ mesh_anchor_bone_rig_matrix
+
+    Both operands come from RED JSON. No GLTF armature or Blender pose matrix participates.
+    """
+    cache_key = (id(mesh_j), id(rig_j))
+    cached = _SKIN_ATTACHMENT_CACHE.get(cache_key)
+    if cached is not None and cached[0] is mesh_j and cached[1] is rig_j:
+        return cached[2]
+
+    root, status = _mesh_skin_anchor(mesh_j, rig_j)
+    if root is None:
+        result = (None, '', status)
+        _SKIN_ATTACHMENT_CACHE[cache_key] = (mesh_j, rig_j, result)
+        return result
+
+    mesh_index, source_name, target_name, target_index = root
+    raw_matrices = mesh_j.get('boneRigMatrices') or ()
+    if mesh_index >= len(raw_matrices):
+        result = (None, source_name, 'missing_anchor_bind_matrix')
+        _SKIN_ATTACHMENT_CACHE[cache_key] = (mesh_j, rig_j, result)
+        return result
+
+    skin_to_rig = _red_matrix_to_blender(raw_matrices[mesh_index])
+    if skin_to_rig is None:
+        result = (None, source_name, 'invalid_anchor_bind_matrix')
+        _SKIN_ATTACHMENT_CACHE[cache_key] = (mesh_j, rig_j, result)
+        return result
+
+    rig_matrices = _rig_json_model_space_matrices(rig_j)
+    rig_model_space = rig_matrices[target_index] if target_index < len(rig_matrices) else Matrix.Identity(4)
+    placement = rig_model_space @ skin_to_rig
+
+    # Descendant products are diagnostic only. They describe deformation within the
+    # attached component and are not required to equal the root attachment matrix.
+    rig_index = rig_bone_index_for(rig_j)
+    non_uniform_children = []
+    missing_children = []
+    child_names = []
+    child_target_indices = []
+    child_bind_matrices = []
+    raw_names = mesh_j.get('boneNames') or ()
+    for child_index, raw_name in enumerate(raw_names):
+        if child_index == mesh_index or child_index >= len(raw_matrices):
+            continue
+        child_source_name = cname_value(raw_name)
+        if not child_source_name:
+            continue
+        child_target_index = rig_index.get(meta_bone_name(child_source_name))
+        child_skin_to_rig = _red_matrix_to_array(raw_matrices[child_index])
+        if child_target_index is None or child_skin_to_rig is None:
+            missing_children.append(child_source_name)
+            continue
+        child_names.append(child_source_name)
+        child_target_indices.append(child_target_index)
+        child_bind_matrices.append(child_skin_to_rig)
+
+    if child_names:
+        rig_matrix_array = _rig_json_bone_matrix_array(rig_j)
+        target_array = rig_matrix_array[np.asarray(child_target_indices, dtype=np.intp)]
+        bind_array = np.stack(child_bind_matrices)
+        products = np.matmul(target_array, bind_array)
+        placement_array = np.asarray(tuple(tuple(row) for row in placement), dtype=np.float64)
+        differences = np.max(np.abs(products - placement_array), axis=(1, 2))
+        non_uniform_children = [
+            name for name, difference in zip(child_names, differences)
+            if difference > 1e-4
+        ]
+
+    if missing_children:
+        status = 'anchor_ok_missing_mappings:' + ','.join(missing_children)
+    elif non_uniform_children:
+        status = 'anchor_ok_deforming_bones:' + ','.join(non_uniform_children)
+    else:
+        status = 'ok'
+    result = (placement, source_name, status)
+    _SKIN_ATTACHMENT_CACHE[cache_key] = (mesh_j, rig_j, result)
+    return result
+
+
+def _rename_vertex_groups_to_meta(obj, rig):
+    rig_bones = cache_armature_bones(rig)
+    for group in getattr(obj, 'vertex_groups', ()):
+        source_name = group.name
+        target_name = meta_bone_name(source_name)
+        if target_name != source_name and target_name in rig_bones and source_name not in rig_bones:
+            group.name = target_name
+
+
 def bind_skinned_objects_to_rig(objects, rig):
+    """Redirect copied mesh modifiers after the JSON MetaRig is fully assembled."""
     if rig is None:
         return 0, 0
-    retargeted = 0
-    reparented = 0
+
+    copied = set(objects)
+    live_sources = {}
+    skinned_meshes = 0
+    redirected_modifiers = 0
     for obj in objects:
         if getattr(obj, 'type', None) != 'MESH':
             continue
-        for modifier in getattr(obj, 'modifiers', []):
+        mesh_redirected = False
+        for modifier in getattr(obj, 'modifiers', ()):
             if modifier.type != 'ARMATURE':
                 continue
-            if modifier.object != rig:
-                modifier.object = rig
-                retargeted += 1
-        parent = getattr(obj, 'parent', None)
-        if parent is not None and getattr(parent, 'type', None) == 'ARMATURE' and parent != rig:
-            world = obj.matrix_world.copy()
-            obj.parent = rig
-            obj.matrix_parent_inverse = rig.matrix_world.inverted()
-            obj.matrix_world = world
-            reparented += 1
-    return retargeted, reparented
-
+            source_armature = modifier.object
+            if source_armature is rig:
+                mesh_redirected = True
+                continue
+            if source_armature is None or source_armature not in copied:
+                continue
+            source_key = id(source_armature)
+            source_is_live = live_sources.get(source_key, _UNSET)
+            if source_is_live is _UNSET:
+                source_is_live = is_live_armature_object(source_armature)
+                live_sources[source_key] = source_is_live
+            if not source_is_live:
+                continue
+            _rename_vertex_groups_to_meta(obj, rig)
+            modifier.object = rig
+            redirected_modifiers += 1
+            mesh_redirected = True
+        if mesh_redirected:
+            skinned_meshes += 1
+    return skinned_meshes, redirected_modifiers
 
 def build_slot_component_lookups(components):
     lookups = {}
@@ -1041,7 +1457,7 @@ def build_slot_component_lookups(components):
 
 
 class EntityTransformResolver:
-    def __init__(self, components, parent_transform_lookup, skinning_lookup=None, rig=None, rig_j=None, rig_bone_index=None, default_slot_lookup=None, slot_owner_rig_jsons=None, rig_json_by_component_name=None, armature_by_component_name=None, slot_owner_rig_owner_names=None, components_by_name=None, slot_component_lookups=None):
+    def __init__(self, components, parent_transform_lookup, skinning_lookup=None, rig=None, rig_j=None, rig_bone_index=None, default_slot_lookup=None, slot_owner_rig_jsons=None, rig_json_by_component_name=None, rig_json_by_bone_name=None, armature_by_component_name=None, slot_owner_rig_owner_names=None, components_by_name=None, slot_component_lookups=None, component_skin_placements=None):
         self.components = components or []
         self.components_by_name = components_by_name if components_by_name is not None else build_component_lookup(self.components)
         self.parent_transform_lookup = parent_transform_lookup or {}
@@ -1052,29 +1468,33 @@ class EntityTransformResolver:
         self.rig_bone_index = rig_bone_index or rig_bone_index_for(rig_j)
         self.slot_owner_rig_jsons = slot_owner_rig_jsons or {}
         self.rig_json_by_component_name = rig_json_by_component_name or {}
+        self.rig_json_by_bone_name = rig_json_by_bone_name or {}
         self.armature_by_component_name = armature_by_component_name or {}
         self.slot_owner_rig_owner_names = slot_owner_rig_owner_names or {}
         self.default_slot_lookup = default_slot_lookup or {}
+        self.component_skin_placements = component_skin_placements or {}
         self.cache = {}
         self.local_matrix_cache = {}
         self.binding_cache = {}
         self.slot_matrix_cache = {}
-        self.armature_for_bone_cache = {}
         self.bone_matrix_cache = {}
-        self.bone_rotation_cache = {}
-        self.bone_head_cache = {}
-        self.rig_space_bone_matrix_cache = {}
-        self.rig_json_for_bone_cache = {}
+        self.bone_source_cache = {}
         self.slot_cache = {}
         self.binding_target_cache = {}
-        self.slot_component_is_animated_child_cache = {}
-        self.animated_base_slot_cache = {}
-        self.slot_primary_bone_cache = {}
-        self.rig_bone_translation_matrix_cache = {}
-        self.rig_bone_yaw_matrix_cache = {}
         self.resolving = set()
+        self.warned_missing_bones = set()
+
+    def _slot_owner_rig_owner_name(self, slot_owner=None):
+        if slot_owner and slot_owner in self.slot_owner_rig_owner_names:
+            return self.slot_owner_rig_owner_names[slot_owner]
+        return ''
 
     def _slot_owner_rig_json(self, slot_owner=None):
+        owner_name = self._slot_owner_rig_owner_name(slot_owner)
+        if owner_name:
+            rig_json = self.rig_json_by_component_name.get(owner_name)
+            if rig_json is not None:
+                return rig_json
         if slot_owner and slot_owner in self.slot_owner_rig_jsons:
             return self.slot_owner_rig_jsons[slot_owner]
         return self.rig_j
@@ -1084,298 +1504,234 @@ class EntityTransformResolver:
         binding = self.binding_cache.get(key, _UNSET)
         if binding is _UNSET:
             binding = parent_transform_data(component, self.parent_transform_lookup)
+            # Disabled bindings resolve the component at the entity root.
+            if type(binding) is dict and binding.get('enabled', 1) == 0:
+                binding = None
             self.binding_cache[key] = binding
         return binding
 
-    def _local_matrix(self, component, transform=None, visual_scale=None):
+    def _local_matrix(self, component):
         key = id(component)
         matrix = self.local_matrix_cache.get(key)
         if matrix is None:
-            if transform is None or visual_scale is None:
-                default_transform, default_scale = self._component_local_fields(component)
-                transform = default_transform if transform is None else transform
-                visual_scale = default_scale if visual_scale is None else visual_scale
-            matrix = transform_matrix(transform, visual_scale=visual_scale)
+            transform = component.get('localTransform', {}) if type(component) is dict else {}
+            matrix = transform_matrix(transform)
             self.local_matrix_cache[key] = matrix
         return matrix
-
-    def _component_local_fields(self, component):
-        if type(component) is dict:
-            return component.get('localTransform', {}), component.get('visualScale')
-        return {}, None
 
     def _rig_json_index(self, rig_j):
         return rig_bone_index_for(rig_j)
 
     def _rig_json_has_bone(self, bone_name, rig_j=None):
-        return bool(bone_name and bone_name in self._rig_json_index(rig_j))
+        target_name = meta_bone_name(bone_name)
+        return bool(target_name and target_name in self._rig_json_index(rig_j))
 
-    def _rig_json_for_bone(self, bone_name, slot_owner=None):
-        cache_key = (bone_name, slot_owner)
-        if cache_key in self.rig_json_for_bone_cache:
-            return self.rig_json_for_bone_cache[cache_key]
-        preferred = self._slot_owner_rig_json(slot_owner)
-        result = preferred
-        if not self._rig_json_has_bone(bone_name, preferred):
-            for rig_json in self.rig_json_by_component_name.values():
-                if rig_json is not preferred and self._rig_json_has_bone(bone_name, rig_json):
-                    result = rig_json
-                    break
-        self.rig_json_for_bone_cache[cache_key] = result
+    def _armature_for_rig_json(self, rig_json, bone_name, preferred_owner=''):
+        if rig_json is None:
+            return None
+        target_name = meta_bone_name(bone_name)
+        owner_names = []
+        if preferred_owner and self.rig_json_by_component_name.get(preferred_owner) is rig_json:
+            owner_names.append(preferred_owner)
+        for owner_name, owner_rig_json in self.rig_json_by_component_name.items():
+            if owner_rig_json is rig_json and owner_name not in owner_names:
+                owner_names.append(owner_name)
+        for owner_name in owner_names:
+            armature = self.armature_by_component_name.get(owner_name)
+            if armature_has_bone(armature, target_name):
+                return armature
+        if rig_json is self.rig_j and armature_has_bone(self.rig, target_name):
+            return self.rig
+        return None
+
+    def _pose_bone_fallback_armature(self, bone_name, slot_owner=None):
+        if not bone_name or bone_name == 'None':
+            return None
+        target_name = meta_bone_name(bone_name)
+        owner_name = self._slot_owner_rig_owner_name(slot_owner)
+        owner = self.armature_by_component_name.get(owner_name) if owner_name else None
+        if armature_has_bone(owner, target_name):
+            return owner
+        if owner is not self.rig and armature_has_bone(self.rig, target_name):
+            return self.rig
+        return None
+
+    def _bone_source(self, bone_name, slot_owner=None):
+        target_name = meta_bone_name(bone_name)
+        cache_key = (target_name, slot_owner)
+        cached = self.bone_source_cache.get(cache_key, _UNSET)
+        if cached is not _UNSET:
+            return cached
+
+        # Bone lookup and model-space accumulation use the completed merged hierarchy.
+        if self._rig_json_has_bone(target_name, self.rig_j):
+            armature = self.rig if armature_has_bone(self.rig, target_name) else None
+            result = (self.rig_j, armature)
+        else:
+            result = (None, self._pose_bone_fallback_armature(target_name, slot_owner))
+        self.bone_source_cache[cache_key] = result
         return result
 
-    def _slot_owner_rig_owner_name(self, slot_owner=None):
-        if slot_owner and slot_owner in self.slot_owner_rig_owner_names:
-            return self.slot_owner_rig_owner_names[slot_owner]
-        return ''
+    def _rig_json_for_bone(self, bone_name, slot_owner=None):
+        return self._bone_source(bone_name, slot_owner)[0]
 
-    def _armature_for_bone(self, bone_name, slot_owner=None):
-        if not bone_name:
-            return None
-        cache_key = (bone_name, slot_owner)
-        if cache_key in self.armature_for_bone_cache:
-            return self.armature_for_bone_cache[cache_key]
-        result = None
+    def _armature_for_owner(self, slot_owner=None):
         owner_name = self._slot_owner_rig_owner_name(slot_owner)
         if owner_name:
             armature = self.armature_by_component_name.get(owner_name)
-            if armature_has_bone(armature, bone_name):
-                result = armature
-        if result is None and armature_has_bone(self.rig, bone_name):
-            result = self.rig
-        if result is None:
-            for armature in self.armature_by_component_name.values():
-                if armature_has_bone(armature, bone_name):
-                    result = armature
-                    break
-        self.armature_for_bone_cache[cache_key] = result
-        return result
+            if is_live_armature_object(armature):
+                return armature
+        return self.rig if is_live_armature_object(self.rig) else None
 
-    def _pose_bone(self, bone_name, slot_owner=None):
-        armature = self._armature_for_bone(bone_name, slot_owner)
-        if armature is not None:
-            return armature, armature.pose.bones[bone_name]
-        return None, None
-
-    def _rig_json_fallback_matrix(self, bone_name, slot_owner):
-        rig_j = self._rig_json_for_bone(bone_name, slot_owner)
-        if self._rig_json_has_bone(bone_name, rig_j):
-            return rig_json_bone_matrix(rig_j, bone_name, self._rig_json_index(rig_j))
-        return None
+    def _armature_world(self, slot_owner=None):
+        armature = self._armature_for_owner(slot_owner)
+        return armature.matrix_world.copy() if armature is not None else Matrix.Identity(4)
 
     def bone_matrix(self, bone_name, slot_owner=None):
-        cache_key = (bone_name, slot_owner)
+        target_name = meta_bone_name(bone_name)
+        cache_key = (target_name, slot_owner)
         cached = self.bone_matrix_cache.get(cache_key)
         if cached is not None:
             return cached
-        armature, pose_bone = self._pose_bone(bone_name, slot_owner)
-        if pose_bone is not None:
-            matrix = armature.matrix_world @ pose_bone.matrix
+        rig_json, armature = self._bone_source(target_name, slot_owner)
+        if rig_json is not None:
+            armature_world = armature.matrix_world.copy() if armature is not None else Matrix.Identity(4)
+            matrix = armature_world @ rig_json_bone_matrix(rig_json, target_name, self._rig_json_index(rig_json))
+        elif armature is not None and armature_has_bone(armature, target_name):
+            matrix = armature.matrix_world @ armature.pose.bones[target_name].matrix
         else:
-            fallback = self._rig_json_fallback_matrix(bone_name, slot_owner)
-            matrix = fallback if fallback is not None else Matrix.Identity(4)
+            if target_name and target_name != 'None' and target_name not in self.warned_missing_bones:
+                self.warned_missing_bones.add(target_name)
+                print(f"bone '{bone_name}' (MetaRig '{target_name}') not found; resolving at the entity root")
+            matrix = self._armature_world(slot_owner)
         self.bone_matrix_cache[cache_key] = matrix
         return matrix
 
     def resolve_slot_matrix(self, slot_owner, slot_name):
+        # Slot transforms are relative to their owning bone.
         cache_key = (slot_owner, slot_name)
         cached = self.slot_matrix_cache.get(cache_key)
         if cached is not None:
             return cached
         slot = self._slot(slot_owner, slot_name)
         if not slot:
-            result = (Matrix.Identity(4), slot_owner, slot_name)
+            result = (self._owner_component_matrix(slot_owner), slot_owner, slot_name, None)
         else:
-            bone_name = cname_value(slot.get('boneName'), slot_name)
-            result = (self.bone_matrix(bone_name, slot_owner) @ transform_matrix(slot), bone_name, slot_name)
+            source_bone_name = cname_value(slot.get('boneName'), slot_name)
+            bone_name = meta_bone_name(source_bone_name)
+            result = (
+                self.bone_matrix(source_bone_name, slot_owner) @ transform_matrix(slot),
+                bone_name,
+                slot_name,
+                self._attachment_armature(bone_name, slot_owner),
+            )
         self.slot_matrix_cache[cache_key] = result
         return result
 
+    def _attachment_armature(self, bone_name, slot_owner=None):
+        if not bone_name or bone_name == 'None':
+            return None
+        return self._bone_source(bone_name, slot_owner)[1]
+
+    def _rig_owner_armature(self, component_name_value):
+        armature = self.armature_by_component_name.get(component_name_value)
+        if is_live_armature_object(armature):
+            return armature
+        return self._armature_for_owner()
+
+    def _owner_component_matrix(self, owner):
+        component = self.components_by_name.get(owner)
+        if component is None:
+            return Matrix.Identity(4)
+        return self.resolve_component_matrix(component)[0]
+
     def _get_binding_target(self, bind_name):
+        # A binding targets a component; slot lookup is performed on that component.
         cached = self.binding_target_cache.get(bind_name)
         if cached is not None:
             return cached
         if not bind_name or bind_name == 'None':
             target = 'none'
-        elif bind_name in ('vehicle_slots', 'slots'):
-            target = 'slot'
-        elif bind_name == 'deformation_rig':
-            target = 'deformation_rig'
         elif bind_name in self.components_by_name:
             target = 'component'
-        elif armature_has_bone(self.rig, bind_name):
+        elif bind_name == 'deformation_rig':
+            target = 'deformation_rig'
+        elif bind_name in ('vehicle_slots', 'slots'):
+            target = 'slot'
+        elif self._rig_json_for_bone(bind_name) is not None or armature_has_bone(self.rig, meta_bone_name(bind_name)):
             target = 'bone'
         else:
             target = 'unresolved'
         self.binding_target_cache[bind_name] = target
         return target
 
-    def _resolve_parent_target(self, bind_name, slot_name, is_hard=False, component=None):
+    def _resolve_parent_target(self, bind_name, slot_name, component=None):
         target_type = self._get_binding_target(bind_name)
         if target_type == 'none':
-            return Matrix.Identity(4), bind_name, slot_name, 'none'
+            return Matrix.Identity(4), bind_name, slot_name, 'none', None
 
         if target_type == 'deformation_rig':
-            base = self.rig.matrix_world.copy() if self.rig else Matrix.Identity(4)
-            return base, bind_name, slot_name, 'deformation_rig'
+            armature = self._rig_owner_armature('deformation_rig')
+            matrix = armature.matrix_world.copy() if armature is not None else Matrix.Identity(4)
+            return matrix, bind_name, slot_name, 'deformation_rig', armature
 
         if target_type == 'bone':
-            if is_hard and component is not None:
-                local_transform, visual_scale = self._component_local_fields(component)
-                matrix = self._hard_bone_slot_matrix(bind_name, bind_name, slot_name, local_transform, visual_scale)
-            else:
-                matrix = self.bone_matrix(bind_name)
-            return matrix, bind_name, slot_name, 'bone'
+            target_name = meta_bone_name(bind_name)
+            return self.bone_matrix(bind_name), target_name, slot_name, 'bone', self._attachment_armature(bind_name)
 
         if target_type == 'slot':
-            if is_hard and component is not None:
-                bone_name = self._slot_bone_name(bind_name, slot_name)
-                local_transform, visual_scale = self._component_local_fields(component)
-                matrix = self._hard_bone_slot_matrix(bone_name, bind_name, slot_name, local_transform, visual_scale)
-                return matrix, bone_name, slot_name, 'slot'
-            matrix, bone_name, resolved_slot = self.resolve_slot_matrix(bind_name, slot_name)
-            return matrix, bone_name, resolved_slot, 'slot'
+            matrix, bone_name, resolved_slot, armature = self.resolve_slot_matrix(bind_name, slot_name)
+            return matrix, bone_name, resolved_slot, 'slot', armature
 
         if target_type == 'component':
             bound_component = self.components_by_name[bind_name]
-            if not is_hard:
-                if component_uses_skinning(component, self.skinning_lookup) and self._component_is_rig_owner(bound_component):
-                    base = self.rig.matrix_world.copy() if self.rig else Matrix.Identity(4)
-                    return base, bind_name, slot_name, 'skinning_root'
-                parent_matrix, _, _, _ = self.resolve_component_matrix(bound_component)
-                if slot_name and slot_name != 'None':
-                    slot_lookup = self.slot_component_lookups.get(bind_name)
-                    if slot_lookup and slot_name in slot_lookup:
-                        return parent_matrix @ transform_matrix(slot_lookup[slot_name]), bind_name, slot_name, 'component_slot'
-                return parent_matrix, bind_name, slot_name, 'component'
-
-            parent_matrix, parent_bind, parent_slot, parent_type = self.resolve_hard_component_matrix(bound_component)
             if slot_name and slot_name != 'None':
-                slot = self._slot(bind_name, slot_name)
-                if slot:
-                    bound_is_animated_child = self._slot_component_is_animated_child(bound_component)
-                    skip_animated_base_slot = bind_name == 'base' and slot_name == 'base' and bound_is_animated_child
-                    animated_parent_name = self._binding_name(bound_component) if bound_is_animated_child else ''
-                    animated_base_slot = self._animated_base_slot(animated_parent_name) if animated_parent_name else None
-                    bone_name = cname_value(slot.get('boneName'), slot_name)
-                    if animated_parent_name and type(animated_base_slot) is not dict:
-                        animated_parent = self.components_by_name.get(animated_parent_name)
-                        animated_parent_matrix = Matrix.Identity(4)
-                        if animated_parent is not None:
-                            animated_parent_matrix, _, _, _ = self.resolve_hard_component_matrix(animated_parent)
-                        parent_matrix = (
-                            animated_parent_matrix
-                            @ self._rig_bone_translation_matrix(bone_name)
-                            @ self._rig_bone_yaw_matrix(bone_name)
-                            @ Matrix.Translation(transform_position(slot, ('relativePosition',)))
-                        )
-                        parent_bind = bone_name or parent_bind or bind_name
-                        parent_slot = slot_name
-                        parent_type = 'slot'
-                    elif not skip_animated_base_slot:
-                        parent_matrix = parent_matrix @ transform_matrix(slot)
-                        parent_type = 'component_slot'
-            return parent_matrix, parent_bind or bind_name, parent_slot or slot_name, parent_type if parent_type != 'none' else 'component'
+                lookup = self._slot_lookup_for_owner(bind_name)
+                if lookup and slot_name in lookup:
+                    matrix, bone_name, resolved_slot, armature = self.resolve_slot_matrix(bind_name, slot_name)
+                    return matrix, bone_name, resolved_slot, 'slot', armature
+            if component is not None and component_uses_skinning(component, self.skinning_lookup) and self._component_is_rig_owner(bound_component):
+                armature = self._rig_owner_armature(bind_name)
+                matrix = armature.matrix_world.copy() if armature is not None else Matrix.Identity(4)
+                return matrix, bind_name, slot_name, 'skinning_root', armature
+            parent_matrix, _, _, _, parent_armature = self.resolve_component_matrix(bound_component)
+            return parent_matrix, bind_name, slot_name, 'component', parent_armature
 
-        return Matrix.Identity(4), bind_name, slot_name, 'unresolved'
+        return Matrix.Identity(4), bind_name, slot_name, 'unresolved', None
 
     def resolve_binding(self, component):
         binding = self._binding_data(component)
         if type(binding) is not dict:
-            return Matrix.Identity(4), '', '', 'none'
+            # Floating skin targets inherit the transform of their skinning component.
+            skin_bind = skinning_bind_name(component, self.skinning_lookup)
+            if skin_bind and skin_bind != 'None':
+                armature = self._rig_owner_armature(skin_bind)
+                matrix = armature.matrix_world.copy() if armature is not None else Matrix.Identity(4)
+                return matrix, skin_bind, '', 'skinning_root', armature
+            return Matrix.Identity(4), '', '', 'none', None
         bind_name = cname_value(binding.get('bindName'))
         slot_name = cname_value(binding.get('slotName'))
-        return self._resolve_parent_target(bind_name, slot_name, is_hard=False, component=component)
+        return self._resolve_parent_target(bind_name, slot_name, component=component)
 
     def resolve_component_matrix(self, component):
-        key = ('component', id(component))
-        if key in self.cache:
-            return self.cache[key]
+        # All binding types compose world transforms as parent multiplied by local.
+        # Skinned components use the armature that supplied the parent transform.
+        key = id(component)
+        cached = self.cache.get(key)
+        if cached is not None:
+            return cached
         if key in self.resolving:
-            return Matrix.Identity(4), '', '', 'cycle'
+            return Matrix.Identity(4), '', '', 'cycle', None
         self.resolving.add(key)
-        parent_matrix, bind_name, slot_name, binding_type = self.resolve_binding(component)
+        parent_matrix, bind_name, slot_name, binding_type, attach_armature = self.resolve_binding(component)
         matrix = parent_matrix @ self._local_matrix(component)
-        result = (matrix, bind_name, slot_name, binding_type)
+        skin_placement = self.component_skin_placements.get(key)
+        if skin_placement is not None:
+            matrix = matrix @ skin_placement
+        result = (matrix, bind_name, slot_name, binding_type, attach_armature)
         self.cache[key] = result
-        self.resolving.remove(key)
+        self.resolving.discard(key)
         return result
-
-    def _bone_rotation(self, bone_name, slot_owner=None):
-        cache_key = (bone_name, slot_owner)
-        cached = self.bone_rotation_cache.get(cache_key)
-        if cached is not None:
-            return cached
-        # Hard slot placement must use the RED rig's model-space rest rotation.
-        # Blender PoseBone channels are pose/local values and may include import-axis
-        # basis effects; RED boneTransforms/aPoseLS are accumulated by rig_json_bone_matrix.
-        fallback = self._rig_json_fallback_matrix(bone_name, slot_owner)
-        if fallback is not None:
-            rotation = fallback.to_quaternion()
-        else:
-            _, pose_bone = self._pose_bone(bone_name, slot_owner)
-            rotation = pose_bone.rotation_quaternion.copy() if pose_bone is not None else Quaternion((1, 0, 0, 0))
-        self.bone_rotation_cache[cache_key] = rotation
-        return rotation
-
-    def _bone_head(self, bone_name, slot_owner=None):
-        cache_key = (bone_name, slot_owner)
-        cached = self.bone_head_cache.get(cache_key)
-        if cached is not None:
-            return cached
-        _, pose_bone = self._pose_bone(bone_name, slot_owner)
-        if pose_bone is not None:
-            head = pose_bone.head.copy()
-        else:
-            fallback = self._rig_json_fallback_matrix(bone_name, slot_owner)
-            head = fallback.to_translation() if fallback is not None else Vector((0, 0, 0))
-        self.bone_head_cache[cache_key] = head
-        return head
-
-    def _rig_space_bone_matrix(self, bone_name):
-        cached = self.rig_space_bone_matrix_cache.get(bone_name)
-        if cached is not None:
-            return cached
-        if type(self.rig_j) is dict and self._rig_json_has_bone(bone_name, self.rig_j):
-            matrix = rig_json_bone_matrix(self.rig_j, bone_name, self.rig_bone_index)
-        elif armature_has_bone(self.rig, bone_name):
-            matrix = self.rig.pose.bones[bone_name].matrix.copy()
-        else:
-            matrix = Matrix.Identity(4)
-        self.rig_space_bone_matrix_cache[bone_name] = matrix
-        return matrix
-
-    def _rig_bone_translation_delta_matrix(self, base_bone_name, target_bone_name):
-        if not target_bone_name or target_bone_name == 'None' or target_bone_name == base_bone_name:
-            return Matrix.Identity(4)
-        base_matrix = self._rig_space_bone_matrix(base_bone_name)
-        target_matrix = self._rig_space_bone_matrix(target_bone_name)
-        delta = target_matrix.to_translation() - base_matrix.to_translation()
-        return Matrix.Translation(delta)
-
-    def _rig_bone_translation_matrix(self, bone_name):
-        if not bone_name or bone_name == 'None':
-            return Matrix.Identity(4)
-        cached = self.rig_bone_translation_matrix_cache.get(bone_name)
-        if cached is not None:
-            return cached
-        matrix = Matrix.Translation(self._rig_space_bone_matrix(bone_name).to_translation())
-        self.rig_bone_translation_matrix_cache[bone_name] = matrix
-        return matrix
-
-    def _rig_bone_yaw_matrix(self, bone_name):
-        if not bone_name or bone_name == 'None':
-            return Matrix.Identity(4)
-        cached = self.rig_bone_yaw_matrix_cache.get(bone_name)
-        if cached is not None:
-            return cached
-        try:
-            yaw = self._rig_space_bone_matrix(bone_name).to_euler().z
-        except Exception:
-            yaw = 0
-        matrix = Matrix.Rotation(yaw, 4, 'Z')
-        self.rig_bone_yaw_matrix_cache[bone_name] = matrix
-        return matrix
 
     def _slot_lookup_for_owner(self, owner):
         lookup = self.slot_component_lookups.get(owner)
@@ -1392,162 +1748,8 @@ class EntityTransformResolver:
         self.slot_cache[cache_key] = slot
         return slot
 
-    def _slot_bone_name(self, owner, slot_name):
-        slot = self._slot(owner, slot_name)
-        if slot:
-            return cname_value(slot.get('boneName'), slot_name)
-        return slot_name or owner
-
-    def _binding_name(self, component):
-        binding = self._binding_data(component)
-        return cname_value(binding.get('bindName')) if type(binding) is dict else ''
-
     def _component_is_rig_owner(self, component):
         return type(component) is dict and bool(depot_path_value(component, 'rig'))
-
-    def _slot_component_is_animated_child(self, component):
-        cache_key = id(component)
-        cached = self.slot_component_is_animated_child_cache.get(cache_key)
-        if cached is not None:
-            return cached
-        parent_name = self._binding_name(component)
-        parent = self.components_by_name.get(parent_name)
-        result = bool(parent_name and self._component_is_rig_owner(parent))
-        self.slot_component_is_animated_child_cache[cache_key] = result
-        return result
-
-    def _animated_base_slot(self, animated_component_name):
-        if animated_component_name in self.animated_base_slot_cache:
-            return self.animated_base_slot_cache[animated_component_name]
-        for slot_owner in self.components:
-            if type(slot_owner) is not dict or slot_owner.get('$type') != 'entSlotComponent':
-                continue
-            if self._binding_name(slot_owner) != animated_component_name:
-                continue
-            slots = slot_owner.get('slots')
-            if type(slots) is not list:
-                continue
-            for slot in slots:
-                slot_name = cname_value(slot.get('slotName'))
-                bone_name = cname_value(slot.get('boneName'))
-                if slot_name == 'base' or bone_name == 'base':
-                    self.animated_base_slot_cache[animated_component_name] = slot
-                    return slot
-        self.animated_base_slot_cache[animated_component_name] = None
-        return None
-
-    def _slot_component_primary_bone(self, component):
-        cache_key = id(component)
-        if cache_key in self.slot_primary_bone_cache:
-            return self.slot_primary_bone_cache[cache_key]
-        result = None
-        slots = component.get('slots') if type(component) is dict else None
-        if type(slots) is list:
-            for slot in slots:
-                bone_name = cname_value(slot.get('boneName'))
-                if bone_name and bone_name != 'None':
-                    result = bone_name
-                    break
-        self.slot_primary_bone_cache[cache_key] = result
-        return result
-
-    def _animated_slot_component_basis(self, component):
-        parent_name = self._binding_name(component)
-        if not parent_name:
-            return None
-        parent = self.components_by_name.get(parent_name)
-        if not self._component_is_rig_owner(parent):
-            return None
-        if component_name(component) == 'base':
-            return None
-        base_slot = self._animated_base_slot(parent_name)
-        if not isinstance(base_slot, dict):
-            return None
-        base_bone_name = cname_value(base_slot.get('boneName'))
-        target_bone_name = self._slot_component_primary_bone(component)
-        return transform_matrix(base_slot) @ self._rig_bone_translation_delta_matrix(base_bone_name or 'base', target_bone_name)
-
-    def _slot_for_bone(self, owner, bone_name):
-        slot = self._slot(owner, bone_name)
-        if type(slot) is dict and cname_value(slot.get('boneName'), bone_name) == bone_name:
-            return slot
-        lookup = self._slot_lookup_for_owner(owner)
-        if not lookup:
-            return None
-        for candidate in lookup.values():
-            if type(candidate) is dict and cname_value(candidate.get('boneName')) == bone_name:
-                return candidate
-        return None
-
-    def _parent_slot_relative_rotation(self, owner, bone_name, slot_rot):
-        if quaternion_is_identity(slot_rot):
-            return None
-        parent_bone_name = rig_parent_bone_name(self.rig, self._rig_json_for_bone(bone_name, owner), bone_name)
-        if not parent_bone_name:
-            return None
-        parent_slot = self._slot_for_bone(owner, parent_bone_name)
-        if type(parent_slot) is not dict:
-            return None
-        return red_quaternion(parent_slot.get('relativeRotation')).inverted() @ slot_rot
-
-    def _hard_bone_slot_matrix(self, bone_name, slot_owner, slot_name, local_transform, visual_scale=None):
-        slot = self._slot(slot_owner, slot_name)
-        slot_pos = Vector((0, 0, 0))
-        slot_rot = Quaternion((1, 0, 0, 0))
-        if type(slot) is dict:
-            slot_pos = transform_position(slot, ('relativePosition',))
-            slot_rot = red_quaternion(slot.get('relativeRotation'))
-
-        local_pos = transform_position(local_transform, ('Position',))
-        local_rot = red_quaternion(local_transform.get('Orientation'))
-        parent_relative_rot = None
-        if (
-            type(slot) is dict
-            and bone_name == slot_name
-            and cname_value(slot.get('boneName'), slot_name) == slot_name
-            and vector_is_zero(slot_pos)
-            and not transform_has_authored_local_basis(local_transform)
-        ):
-            parent_relative_rot = self._parent_slot_relative_rotation(slot_owner, bone_name, slot_rot)
-
-        if parent_relative_rot is None and bone_name and bone_name != 'Base':
-            z_ang = self.bone_matrix(bone_name, slot_owner).to_euler().z
-            local_pos = Matrix.Rotation(z_ang, 4, 'Z') @ local_pos
-
-        rotation = (parent_relative_rot @ local_rot) if parent_relative_rot is not None else self._bone_rotation(bone_name, slot_owner) @ slot_rot @ local_rot
-        scale = transform_scale(local_transform, visual_scale)
-        return Matrix.LocRotScale(self._bone_head(bone_name, slot_owner) + slot_pos + local_pos, rotation, scale)
-
-    def resolve_hard_component_matrix(self, component):
-        key = ('hard', id(component))
-        if key in self.cache:
-            return self.cache[key]
-        if key in self.resolving:
-            return Matrix.Identity(4), '', '', 'cycle'
-        self.resolving.add(key)
-
-        local_transform, visual_scale = self._component_local_fields(component)
-        animated_slot_basis = self._animated_slot_component_basis(component)
-        if animated_slot_basis is not None:
-            result = (animated_slot_basis @ self._local_matrix(component, local_transform, visual_scale), self._binding_name(component), '', 'animated_slot_component')
-        else:
-            binding = self._binding_data(component)
-            if type(binding) is not dict:
-                result = (self._local_matrix(component, local_transform, visual_scale), '', '', 'none')
-            else:
-                bind_name = cname_value(binding.get('bindName'))
-                slot_name = cname_value(binding.get('slotName'))
-                target_type = self._get_binding_target(bind_name)
-                parent_matrix, res_bind, res_slot, res_type = self._resolve_parent_target(bind_name, slot_name, is_hard=True, component=component)
-
-                if target_type in {'bone', 'slot'}:
-                    result = (parent_matrix, res_bind, res_slot, res_type)
-                else:
-                    result = (parent_matrix @ self._local_matrix(component, local_transform, visual_scale), res_bind, res_slot, res_type)
-
-        self.cache[key] = result
-        self.resolving.remove(key)
-        return result
 
 
 def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None, include_collisions=False, include_phys=False,
@@ -1560,6 +1762,8 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
         appearances = [appearances]
     else:
         appearances = list(appearances)
+    if not appearances:
+        appearances = ['']
     excluded_meshes = {norm_path_key(mesh) for mesh in (exclude_meshes or []) if mesh}
     if not cp77_addon_prefs.non_verbose:
         print('\n-------------------- Importing Cyberpunk 2077 Entity --------------------')
@@ -1569,7 +1773,9 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
     clear_transient_import_caches()
 
     path, after = split_source_raw_root(filepath)
-    asset_index = DepotAssetIndex.cached(path, DEFAULT_ASSET_EXTENSIONS)
+    # Top-level imports rescan the export tree so files created since the last import are
+    # visible; nested calls (per-entity imports inside a sector batch) reuse the shared index.
+    asset_index = DepotAssetIndex.cached(path, DEFAULT_ASSET_EXTENSIONS, force_refresh=not JSONTool._use_cache)
 
     error_messages = []
     entinitiatedcache = False
@@ -1578,6 +1784,7 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
         entinitiatedcache = True
 
     rig = None
+    imported_anim_rig = None
     Masters = None
     try:
         ent_name = os.path.basename(filepath)[:-9]
@@ -1608,6 +1815,14 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                 print("No appearances available to select a random default from.")
 
         for appidx, app in enumerate(appearances):
+            if app.lower() == 'random':
+                if ent_applist:
+                    appearances[appidx] = random.choice(ent_applist)
+                    print(f"Random appearance requested: using {appearances[appidx]}")
+                else:
+                    print("No appearances available for a random selection. Importing root entity components only.")
+                    appearances[appidx] = 'BASE_COMPONENTS_ONLY'
+                continue
             if app == 'default':
                 if ent_default:
                     resolved_default = resolve_requested_appearance_name(app, ent_default, ent_apps, ent_app_by_appearance, ent_app_by_name)
@@ -1623,19 +1838,19 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
             if not appearance_request_is_known(app, ent_default, ent_apps, ent_app_by_appearance, ent_app_by_name):
                 print(f"Appearance {app} not found in entity {ent_name}. Available appearances: {', '.join(ent_applist)}")
 
+        ent_animated_components = [component for component in ent_components if is_animated_rig_component(component)]
         ent_rigs = []
-        for component in parsed_ent.parsed_components:
-            if component.rig_depot:
-                print(f"Rig found in entity: {component.rig_depot}")
-                ent_rigs.append(depot_to_local_path(path, component.rig_depot))
+        for component in ent_animated_components:
+            ent_rig_depot = depot_path_value(component, 'rig')
+            print(f"Animated-component rig found in entity: {ent_rig_depot}")
+            ent_rigs.append(depot_to_local_path(path, ent_rig_depot))
         ent_colliderComps = parsed_ent.collider_components
         ent_simpleCollComps = parsed_ent.simple_collider_components
         chassis_info = parsed_ent.components_by_name.get('Chassis', [])
 
-        ent_rig_keys = {norm_path_key(rig_path) for rig_path in ent_rigs}
-
         if len(appearances[0]) == 0 or appearances[0].upper() == 'ALL':
-            appearances = [app['appearanceName']['$value'] for app in ent_apps]
+            # Ent files may repeat appearanceName across aliases; import each appearance once.
+            appearances = list(dict.fromkeys(ent_applist))
         if len(appearances) == 0:
             appearances.append('BASE_COMPONENTS_ONLY')
 
@@ -1657,41 +1872,11 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
         mesh_jsons = indexed_asset_files(asset_index, '.mesh.json', mesh_jsons)
         anim_files = indexed_asset_files(asset_index, '.anims.glb', anim_files)
 
-        if len(anim_files) == 0 or len(ent_rigs) == 0:
-            print('no anim rig found')
-        else:
-            resolved_keys = set()
-            for res_p in res:
-                depot_value = cname_value(res_p.get('DepotPath')) if type(res_p) is dict else ''
-                if depot_value:
-                    resolved_keys.add(norm_path_key(depot_to_local_path(path, depot_value)))
-            animsinres = [x for x in anim_files if norm_path_key(os.path.splitext(x)[0]) in resolved_keys]
-            if len(animsinres) == 0:
-                for anim in anim_files:
-                    anim_json_path = asset_index.resolve_export(anim, '.anims.json')
-                    if anim_json_path:
-                        anm_j = JSONTool.jsonload(anim_json_path, error_messages)
-                        if anm_j is not None:
-                            rig_depot = anm_j.get('Data', {}).get('RootChunk', {}).get('rig', {}).get('DepotPath', {}).get('$value')
-                            if rig_depot and norm_path_key(depot_to_local_path(path, rig_depot)) in ent_rig_keys:
-                                animsinres.append(anim)
-
-            if len(animsinres) > 0:
-                anim_file_name = animsinres[0]
-                rig_file_name = anim_file_name + '.rig.json' if anim_file_name.endswith('.glb') else ''
-                rig = load_anim_rig(with_materials, anim_file_name, rig_file_name, ent_name)
-
+        # Animation GLBs are imported later for their animation data only. The entity rig
+        # is always constructed exclusively from JSON rigs.
         rigjsons = indexed_asset_files(asset_index, '.rig.json', rigjsons)
         rig_j = None
-        if len(rigjsons) == 0 or len(ent_rigs) == 0:
-            print('no rig json loaded')
-        else:
-            for entrig in (x for x in rigjsons if norm_path_key(x[:-5]) in ent_rig_keys):
-                loaded_rig = load_root_chunk_json(entrig, error_messages)
-                if loaded_rig is not None:
-                    rig_j = loaded_rig
-                    print('rig json loaded')
-        rig_bone_index = rig_bone_index_for(rig_j)
+        rig_bone_index = {}
 
         rig_json_by_component_name = {}
         rig_json_path_by_component_name = {}
@@ -1730,6 +1915,7 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
 
             mesh_entries = {}
             app_comps = {}
+            appearance_only_components = {}
             ent_chunks = {}
             parsed_app_cache = {}
             app_lookup = {}
@@ -1737,6 +1923,7 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
             app_resource_lookup = {}
             display_app_names = {}
             component_mesh_info_cache = {}
+            component_mesh_json_cache = {}
             ent_component_ids = parsed_ent.component_ids
             ent_component_data_ids = parsed_ent.component_data_ids
             ent_parent_transform_lookup = parsed_ent.parent_transform_lookup
@@ -1751,7 +1938,10 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                 cached = component_mesh_info_cache.get(cache_key)
                 if cached is not None:
                     return cached
-                depot_path = depot_path_value(component, 'mesh', 'graphicsMesh')
+                if component.get('$type') in NON_VISUAL_MESH_COMPONENT_TYPES:
+                    depot_path = ''
+                else:
+                    depot_path = depot_path_value(component, 'mesh', 'graphicsMesh')
                 if not depot_path:
                     cached = ('', '', '', '', True)
                 else:
@@ -1761,6 +1951,19 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                     cached = (depot_path, meshname, meshpath, meshapp, is_component_enabled(component))
                 component_mesh_info_cache[cache_key] = cached
                 return cached
+
+            def component_mesh_json(component):
+                cached_info = component_mesh_info_cache.get(id(component))
+                depot_path = cached_info[0] if cached_info is not None else depot_path_value(component, 'mesh', 'graphicsMesh')
+                if not depot_path:
+                    return None
+                cached = component_mesh_json_cache.get(depot_path, _UNSET)
+                if cached is not _UNSET:
+                    return cached
+                json_path = asset_index.resolve_export(depot_path, '.mesh.json') or ''
+                root = load_root_chunk_json(json_path, error_messages) if json_path else None
+                component_mesh_json_cache[depot_path] = root
+                return root
 
             master_group_objects_cache = {}
 
@@ -1781,8 +1984,12 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                 app_name = resolve_requested_appearance_name(requested_app_name, ent_default, ent_apps, ent_app_by_appearance, ent_app_by_name)
                 display_app_names[requested_app_name] = app_name
                 app_comps[requested_app_name] = []
+                appearance_only_components[requested_app_name] = []
                 chunks = None
-                if len(ent_apps) == 0 and ent_component_data:
+                if requested_app_name == 'BASE_COMPONENTS_ONLY':
+                    # Root entity components only: never resolve or merge an .app appearance.
+                    chunks = ent_component_data or None
+                elif len(ent_apps) == 0 and ent_component_data:
                     chunks = ent_component_data
                 elif len(ent_apps) > 0:
                     ent_app_idx, app_name = resolve_ent_app(app_name, ent_apps, ent_app_by_appearance, ent_app_by_name, ent_default)
@@ -1799,20 +2006,22 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                             parsed_app = JSONTool.load_app(appfilepath, error_messages)
                             parsed_app_cache[appfilepath] = parsed_app
                         if parsed_app is not None:
-                            app_idx = parsed_app.appearances_by_name.get(app_name, 0)
-                            parsed_app_name = app_name
-                            if app_name in parsed_app.appearances_by_name:
+                            app_idx = parsed_app.appearances_by_name.get(app_name)
+                            if app_idx is None:
+                                available = ', '.join(parsed_app.appearance_names)
+                                print(f"appearance '{app_name}' not found in {os.path.basename(appfilepath)}; available: {available}")
+                            else:
+                                parsed_app_name = app_name
                                 print('appearance matched, id = ', app_idx)
-                            elif parsed_app.appearance_names:
-                                parsed_app_name = parsed_app.appearance_names[app_idx]
-                            app_components = parsed_app.components_by_appearance_name.get(parsed_app_name, [])
-                            if app_components:
-                                store_for_names(app_comps, ent_components + app_components, requested_app_name, app_name)
-                            chunks = parsed_app.chunks_by_appearance_name.get(parsed_app_name)
-                            store_for_names(app_bundle_lookup, (parsed_app, parsed_app_name), requested_app_name, app_name)
-                            if chunks:
-                                store_for_names(ent_chunks, chunks, requested_app_name, app_name)
-                                print('Chunks found')
+                                app_components = parsed_app.components_by_appearance_name.get(parsed_app_name, [])
+                                store_for_names(appearance_only_components, app_components, requested_app_name, app_name)
+                                if app_components:
+                                    store_for_names(app_comps, merge_components_first_wins(ent_components, app_components), requested_app_name, app_name)
+                                chunks = parsed_app.chunks_by_appearance_name.get(parsed_app_name)
+                                store_for_names(app_bundle_lookup, (parsed_app, parsed_app_name), requested_app_name, app_name)
+                                if chunks:
+                                    store_for_names(ent_chunks, chunks, requested_app_name, app_name)
+                                    print('Chunks found')
 
                 if len(app_comps[requested_app_name]) == 0:
                     print('falling back to rootchunk components...')
@@ -1820,6 +2029,9 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                 if chunks is not None and requested_app_name not in ent_chunks:
                     ent_chunks[requested_app_name] = chunks
                 for c in app_comps[requested_app_name]:
+                    # Components with a resolved zero chunk mask are omitted.
+                    if component_is_zero_mask_culled(c):
+                        continue
                     depot_path, meshname, meshpath, meshApp, _ = component_mesh_info(c)
                     if depot_path and meshname and meshpath and not is_excluded_mesh(depot_path, meshpath, meshname, excluded_meshes):
                         mesh_key = depot_to_local_path(path, depot_path)
@@ -1831,6 +2043,174 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                             if meshpath and not entry.get('meshpath'):
                                 entry['meshpath'] = meshpath
 
+            # Build the entity animation rig from JSON only. Component order is
+            # authoritative: the first entAnimatedComponent in the entity is the base;
+            # only when the entity has none does the first selected appearance supply it.
+            ordered_rig_components = []
+            seen_rig_components = set()
+            control_targets = {}
+
+            def append_animated_rig_components(source_components, control_binding_lookup=None):
+                for component in source_components or ():
+                    if not is_animated_rig_component(component):
+                        continue
+                    component_id = id(component)
+                    if component_id in seen_rig_components:
+                        continue
+                    seen_rig_components.add(component_id)
+                    ordered_rig_components.append(component)
+                    control_targets[component_id] = animated_component_control_target(
+                        component, control_binding_lookup
+                    )
+
+            ent_control_binding_lookup = build_embedded_handle_lookup(
+                parsed_ent.component_data, 'controlBinding'
+            )
+            append_animated_rig_components(ent_components, ent_control_binding_lookup)
+            for requested_app_name in appearances:
+                resolved_app_name = display_app_names.get(requested_app_name, requested_app_name)
+                appearance_components = appearance_only_components.get(requested_app_name)
+                if appearance_components is None:
+                    appearance_components = appearance_only_components.get(resolved_app_name, [])
+                parsed_app_bundle = app_bundle_lookup.get(requested_app_name)
+                if parsed_app_bundle is None:
+                    parsed_app_bundle = app_bundle_lookup.get(resolved_app_name)
+                if parsed_app_bundle is not None:
+                    parsed_app, parsed_app_name = parsed_app_bundle
+                    appearance_chunks = parsed_app.chunks_by_appearance_name.get(parsed_app_name, [])
+                    app_control_binding_lookup = build_embedded_handle_lookup(
+                        appearance_chunks, 'controlBinding'
+                    )
+                else:
+                    app_control_binding_lookup = None
+                append_animated_rig_components(appearance_components, app_control_binding_lookup)
+
+            ordered_rig_components = order_animated_rig_components(
+                ordered_rig_components, control_targets
+            )
+            deformation_authorities = []
+            ordered_by_name = {component_name(component): component for component in ordered_rig_components}
+            for component in ordered_rig_components:
+                if not is_deformation_rig_component(component):
+                    continue
+                target_name = control_targets.get(id(component), '')
+                if target_name in ordered_by_name and target_name not in deformation_authorities:
+                    deformation_authorities.append(target_name)
+            if deformation_authorities:
+                print('JSON MetaRig deformation base authority: ' + ', '.join(deformation_authorities))
+            print('JSON MetaRig component order: ' + ' -> '.join(
+                component_name(component, '<unnamed>') for component in ordered_rig_components
+            ))
+
+            ordered_rig_names = []
+            ordered_rig_paths = []
+            ordered_rig_jsons = []
+            ordered_rig_datas = []
+            ordered_rig_entries = []
+            for component in ordered_rig_components:
+                rig_name = component_name(component)
+                rig_depot = depot_path_value(component, 'rig')
+                rig_json_path = rig_json_path_for_depot(rig_depot)
+                rig_json = rig_json_for_depot(rig_depot)
+                rig_data = read_rig(rig_json_path) if rig_json_path else None
+                if not rig_name or not rig_json_path or rig_json is None or rig_data is None:
+                    print(f"unable to load JSON rig for animated component '{rig_name or '<unnamed>'}': {rig_depot}")
+                    continue
+                if rig_name not in rig_json_path_by_component_name:
+                    rig_json_path_by_component_name[rig_name] = rig_json_path
+                    rig_json_by_component_name[rig_name] = rig_json
+                    ordered_rig_names.append(rig_name)
+                ordered_rig_paths.append(rig_json_path)
+                ordered_rig_jsons.append(rig_json)
+                ordered_rig_datas.append(rig_data)
+                ordered_rig_entries.append((rig_name, rig_json_path, rig_json, rig_data))
+
+            base_rig_component = ordered_rig_components[0] if ordered_rig_components else None
+            base_rig_name = component_name(base_rig_component) if base_rig_component else ''
+            base_rig_path = rig_json_path_by_component_name.get(base_rig_name, '')
+
+            # Import an animation GLB for its animation payload, but never use its armature
+            # as the entity rig or as an input to the JSON MetaRig build.
+            animation_path = ''
+            animation_source_component = None
+            for component in ordered_rig_components:
+                gameplay_anims = component.get('animations', {}).get('gameplay')
+                if not gameplay_anims:
+                    continue
+                try:
+                    anim_depot = gameplay_anims[0]['animSet']['DepotPath']['$value']
+                except (KeyError, IndexError, TypeError):
+                    continue
+                animation_path = asset_index.resolve_export(anim_depot, '.anims.glb') or ''
+                if animation_path:
+                    animation_source_component = component
+                    break
+
+            if not animation_path and base_rig_component is not None:
+                base_rig_depot = depot_path_value(base_rig_component, 'rig')
+                base_rig_key = norm_path_key(depot_to_local_path(path, base_rig_depot))
+                for anim_path in anim_files:
+                    anim_json_path = asset_index.resolve_export(anim_path, '.anims.json')
+                    if not anim_json_path:
+                        continue
+                    anim_json = JSONTool.jsonload(anim_json_path, error_messages)
+                    anim_rig_depot = (
+                        anim_json.get('Data', {}).get('RootChunk', {}).get('rig', {}).get('DepotPath', {}).get('$value')
+                        if anim_json is not None else ''
+                    )
+                    if anim_rig_depot and norm_path_key(depot_to_local_path(path, anim_rig_depot)) == base_rig_key:
+                        animation_path = anim_path
+                        animation_source_component = base_rig_component
+                        break
+
+            if animation_path:
+                source_rig_name = component_name(animation_source_component) if animation_source_component else base_rig_name
+                source_rig_path = rig_json_path_by_component_name.get(source_rig_name, base_rig_path)
+                imported_anim_rig = load_anim_rig(with_materials, animation_path, source_rig_path, ent_name)
+                if imported_anim_rig is not None:
+                    print('animation GLB armature imported but excluded from entity rig construction')
+            else:
+                print('no animation GLB found for the ordered animated components')
+
+            rig_json_by_bone_name = {}
+            meta_rig_metadata = {}
+            if ordered_rig_datas and base_rig_path:
+                merged_rig_data, meta_rig_metadata = merge_rig_datas(
+                    ordered_rig_datas,
+                    (ent_name + '_rig') if ent_name else 'merged_rig',
+                    return_metadata=True,
+                )
+                merged_rig_json = rig_data_to_root_chunk(merged_rig_data)
+                rig = ensure_armature_from_rig_jsons(ordered_rig_paths, ent_name)
+                if is_live_armature_object(rig):
+                    cache_armature_bones(rig)
+                    for rig_name in ordered_rig_names:
+                        armature_by_component_name[rig_name] = rig
+                    # Transform and slot evaluation must use the MetaRig's merged local pose
+                    # and merged parent array, not any source rig's original model-space pose.
+                    rig_j = merged_rig_json
+                    rig_bone_index = rig_bone_index_for(rig_j)
+                    rig['base_rig_component'] = base_rig_name
+                    rig['base_rig_json'] = base_rig_path
+                    rig['rig_merge_order'] = list(ordered_rig_paths)
+                    rig['meta_rig_bone_count'] = len(merged_rig_data.bone_names)
+                    print(f"JSON MetaRig base: {base_rig_name} ({os.path.basename(base_rig_path)})")
+                    for merge_index, rig_path in enumerate(ordered_rig_paths[1:], start=1):
+                        print(f"JSON MetaRig part {merge_index}: {os.path.basename(rig_path)}")
+                else:
+                    print('failed to create the JSON MetaRig armature')
+
+                # Resolve both authored source names and MetaRig names to the merged pose.
+                for meta_name, source in meta_rig_metadata.get('bone_sources', {}).items():
+                    rig_json_by_bone_name.setdefault(meta_name, merged_rig_json)
+                    source_name = source.get('source_name')
+                    if source_name:
+                        rig_json_by_bone_name.setdefault(source_name, merged_rig_json)
+            elif ordered_rig_components:
+                print(f"base animated component '{base_rig_name}' has no usable JSON rig; no entity rig was created")
+            else:
+                print('no entAnimatedComponent rig found in the entity or selected appearances')
+
             meshes_w_apps = {}
             for m in mesh_entries:
                 add_to_list(m, mesh_entries, meshes_w_apps)
@@ -1838,6 +2218,7 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
             meshes_from_mesheswapps(meshes_w_apps, path, from_mesh_no=0, to_mesh_no=10000000, with_mats=with_materials, glbs=mesh_entries, mesh_jsons=mesh_jsons,
                                     Masters=Masters, generate_overrides=generate_overrides)
 
+            imported_appearance_collections = []
             for x, requested_app_name in enumerate(appearances):
                 app_name = display_app_names.get(requested_app_name, requested_app_name)
                 print(f"\nImporting appearance {x+1} of {len(appearances)}: {app_name}")
@@ -1849,6 +2230,7 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                 else:
                     coll_scene.children.link(ent_coll)
                 ent_coll['depotPath'] = after
+                imported_appearance_collections.append(ent_coll)
                 app_bundle = app_bundle_lookup.get(requested_app_name) or app_bundle_lookup.get(app_name)
                 chunks = ent_chunks.get(requested_app_name) or ent_chunks.get(app_name) or ent_component_data
 
@@ -1888,12 +2270,13 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                         set_skinning_lookup(comp, ent_skinning_lookup)
                         set_shape_lookup(comp, ent_shape_lookup)
                 for comp in transform_index['rig_components']:
-                    rig_depot = depot_path_value(comp, 'rig')
+                    if not is_animated_rig_component(comp):
+                        continue
                     rig_name = component_name(comp)
-                    if rig_name:
-                        if rig_name not in rig_json_by_component_name:
-                            rig_json_by_component_name[rig_name] = rig_json_for_depot(rig_depot)
-                        rig_json_path_by_component_name[rig_name] = rig_json_path_for_depot(rig_depot)
+                    if rig_name and rig_name not in rig_json_path_by_component_name:
+                        # All selected appearance rigs should have been discovered before the
+                        # JSON armature was built. Do not mutate the merge order per appearance.
+                        print(f"animated component '{rig_name}' was not present in the ordered JSON rig prepass; leaving it unmerged")
                 rig_component_names = set(rig_json_by_component_name.keys())
                 slot_owner_rig_jsons, slot_owner_rig_owner_names = build_slot_owner_binding_maps(
                     transform_index['slot_components'],
@@ -1904,64 +2287,10 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                 anim_impl_lookup = build_anim_impl_lookup(chunks)
                 transform_animator_lookup = build_transform_animator_lookup(transform_index['transform_animator_components'], anim_impl_lookup)
 
-                if not rig:
-                    for c in appearance_index['slot_components']:
-                        if component_name(c) in ('vehicle_slots', 'slot', 'slots') and id(c) not in vehicle_slot_component_ids:
-                            VS.append(c)
-                            vehicle_slot_component_ids.add(id(c))
-                    for c in appearance_index['rig_components']:
-                        rig_depot = depot_path_value(c, 'rig')
-                        rig_path = depot_to_local_path(path, rig_depot)
-                        print(f"Rig found in app components: {rig_depot}")
-                        if rig is None:
-                            rig_json_path = asset_index.resolve_export(rig_depot, '.rig.json')
-                            if rig_json_path:
-                                loaded_rig = load_root_chunk_json(rig_json_path, error_messages)
-                                if loaded_rig is not None:
-                                    rig_j = loaded_rig
-                                    rig_bone_index = rig_bone_index_for(rig_j)
-                                    print('rig json loaded')
-                            gameplay_anims = c.get('animations', {}).get('gameplay')
-                            if gameplay_anims is not None and len(gameplay_anims) > 0:
-                                anim_depot = gameplay_anims[0]['animSet']['DepotPath']['$value']
-                                animpath = asset_index.resolve_export(anim_depot, '.anims.glb')
-                                if animpath:
-                                    rig = load_anim_rig(with_materials, animpath, rig_path, ent_name)
-                        elif rig.get('rig') == rig_path:
-                            print('using existing rig')
-                        else:
-                            print('another rig', rig.get('rig'), ' is already loaded ', rig_path)
-                if rig is None:
-                    required_rig_names = []
-                    if 'deformation_rig' in rig_json_path_by_component_name:
-                        required_rig_names.append('deformation_rig')
-                    for rig_owner_name in slot_owner_rig_owner_names.values():
-                        if rig_owner_name not in required_rig_names:
-                            required_rig_names.append(rig_owner_name)
-                    for rig_name in rig_json_path_by_component_name:
-                        if rig_name not in required_rig_names:
-                            required_rig_names.append(rig_name)
-
-                    for rig_name in required_rig_names:
-                        rig_json_path = rig_json_path_by_component_name.get(rig_name)
-                        if not rig_json_path:
-                            continue
-                        armature = armature_by_component_name.get(rig_name)
-                        if armature is None:
-                            armature = ensure_armature_from_rig_json(rig_json_path, rig_name, ent_name)
-                            if armature is not None:
-                                armature_by_component_name[rig_name] = armature
-                                print(f"rig armature created from json for {rig_name}")
-                        if armature is not None and (rig is None or rig_name == 'deformation_rig'):
-                            rig = armature
-                            cache_armature_bones(rig)
-                            rig_j = rig_json_by_component_name.get(rig_name, rig_j)
-                            rig_bone_index = rig_bone_index_for(rig_j)
-                else:
-                    component_name_value = rig.get('componentName') if hasattr(rig, 'get') else None
-                    if component_name_value and component_name_value not in armature_by_component_name:
-                        cache_armature_bones(rig)
-                        armature_by_component_name[component_name_value] = rig
+                for c in appearance_index['slot_components']:
+                    if component_name(c) in ('vehicle_slots', 'slot', 'slots') and id(c) not in vehicle_slot_component_ids:
+                        VS.append(c)
+                        vehicle_slot_component_ids.add(id(c))
 
                 if not vehicle_slots:
                     if len(VS) > 0:
@@ -1969,13 +2298,15 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                         vehicle_slot_lookup = build_slot_lookup(vehicle_slots)
 
                 light_channel_components = collect_light_channel_components(app_light_channels, chunks, comps, parsed_ent.light_channel_components, ent_components)
-                for comp in light_channel_components:
+                light_components = collect_light_components(ent_component_data, ent_components, chunks, comps)
+                auxiliary_components = light_channel_components + light_components
+                for comp in auxiliary_components:
                     if id(comp) in ent_component_ids or id(comp) in ent_component_data_ids:
                         set_parent_lookup(comp, ent_parent_transform_lookup)
                         set_skinning_lookup(comp, ent_skinning_lookup)
                         set_shape_lookup(comp, ent_shape_lookup)
                 resolver_components_by_id = dict(transform_components_by_id)
-                for comp in light_channel_components:
+                for comp in auxiliary_components:
                     resolver_components_by_id[id(comp)] = comp
                 resolver_components = list(resolver_components_by_id.values())
                 resolver_index = build_component_pass_index(resolver_components)
@@ -1987,6 +2318,20 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                     if name:
                         resolver_slot_component_lookups[name] = build_slot_lookup(comp.get('slots'))
 
+                component_skin_placements = {}
+                component_skin_placement_info = {}
+                if rig_j is not None:
+                    for component in resolver_index['mesh_components']:
+                        if not component_uses_skinning(component, skinning_lookup):
+                            continue
+                        placement, root_bone, status = component_skin_attachment_matrix(
+                            component_mesh_json(component),
+                            rig_j,
+                        )
+                        component_skin_placement_info[id(component)] = (root_bone, status)
+                        if placement is not None:
+                            component_skin_placements[id(component)] = placement
+
                 transform_resolver = EntityTransformResolver(
                     resolver_components,
                     parent_transform_lookup,
@@ -1997,13 +2342,13 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                     default_slot_lookup=vehicle_slot_lookup,
                     slot_owner_rig_jsons=slot_owner_rig_jsons,
                     rig_json_by_component_name=rig_json_by_component_name,
+                    rig_json_by_bone_name=rig_json_by_bone_name,
                     armature_by_component_name=armature_by_component_name,
                     slot_owner_rig_owner_names=slot_owner_rig_owner_names,
                     components_by_name=resolver_components_by_name,
                     slot_component_lookups=resolver_slot_component_lookups,
+                    component_skin_placements=component_skin_placements,
                 )
-
-                skinned_alignment_anchors = []
 
                 for c in appearance_index['transform_animator_components']:
                     comp_name = component_name(c)
@@ -2014,13 +2359,16 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                         print(traceback.format_exc())
 
                 for c in appearance_index['mesh_components']:
+                    # Components with a resolved zero chunk mask are omitted.
+                    if component_is_zero_mask_culled(c):
+                        continue
                     comp_name = component_name(c)
                     depot_path, meshname, meshpath, meshApp, component_enabled = component_mesh_info(c)
                     if meshname and meshpath and not is_excluded_mesh(depot_path, meshpath, meshname, excluded_meshes):
                         new = None
                         hide_disabled = not component_enabled
                         try:
-                            group, groupname = get_group(meshpath, meshApp, Masters)
+                            group, groupname = get_group(meshpath, meshApp, Masters, source_glb=meshpath)
                             if group:
                                 new = bpy.data.collections.new(groupname)
                                 copied_objects = []
@@ -2052,39 +2400,24 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                                 continue
                             objs = copied_objects
                             component_is_skinned = component_uses_skinning(c, skinning_lookup)
-                            if component_is_skinned:
-                                resolved_matrix, bindname, slotname, binding_type = transform_resolver.resolve_component_matrix(c)
-                            else:
-                                resolved_matrix, bindname, slotname, binding_type = transform_resolver.resolve_hard_component_matrix(c)
-                            if component_is_skinned and skinning_bind_name(c, skinning_lookup) == 'deformation_rig':
-                                centroid_matrix, centroid_armature, centroid_bones = deformation_rig_centroid_translation_matrix(objs, rig)
-                                if centroid_matrix is not None:
-                                    resolved_matrix = centroid_matrix @ resolved_matrix
-                                    new['deformationCentroidArmature'] = centroid_armature.name if centroid_armature else ''
-                                    new['deformationCentroidBones'] = len(centroid_bones)
-                            if component_is_skinned and is_skinned_overlay_component(c, meshpath):
-                                overlay_matrix, overlay_anchor, overlay_bones = skinned_overlay_alignment_matrix(objs, resolved_matrix, skinned_alignment_anchors)
-                                if overlay_matrix is not None:
-                                    resolved_matrix = overlay_matrix @ resolved_matrix
-                            root_inverse_workflow = None if component_is_skinned else root_inverse_hard_slot_workflow(c, transform_resolver, rig)
-                            if root_inverse_workflow is not None:
-                                resolved_matrix, bindname, slotname, root_inverse_bone = root_inverse_workflow
-                                binding_type = 'slot_root_inverse'
-                                can_bind_bone = False
-                                child_inverse = None
-                            else:
-                                root_inverse_bone = ''
-                                can_bind_bone = (
-                                    not component_is_skinned
-                                    and binding_type in {'slot', 'bone'}
-                                    and bindname
-                                    and armature_has_bone(rig, bindname)
-                                )
-                                child_inverse = child_of_inverse_matrix(rig, bindname) if can_bind_bone else None
+                            resolved_matrix, bindname, slotname, binding_type, attach_armature = transform_resolver.resolve_component_matrix(c)
+                            skin_root_bone, skin_attachment_status = component_skin_placement_info.get(id(c), ('', 'not_applicable'))
+                            component_scale = visual_scale_matrix(c)
+                            if component_scale is not None:
+                                resolved_matrix = resolved_matrix @ component_scale
+                            can_bind_bone = (
+                                not component_is_skinned
+                                and binding_type in {'slot', 'bone'}
+                                and bindname
+                                and attach_armature is not None
+                            )
+                            child_inverse = child_of_inverse_matrix(attach_armature, bindname) if can_bind_bone else None
                             transform_animator_name, transform_animator_info_value = component_transform_animator_info(c, parent_transform_lookup, transform_animator_lookup)
                             transform_animator_target = ensure_transform_animator_empty(ent_coll, transform_animator_name, transform_animator_info_value) if transform_animator_info_value is not None else None
                             has_bindname = bool(bindname)
                             has_slotname = bool(slotname)
+                            cm_int = chunk_mask_value(c)
+                            copied_object_set = set(objs)
                             for obj in objs:
                                 obj['bindingType'] = binding_type
                                 if has_bindname:
@@ -2092,26 +2425,30 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                                 if has_slotname:
                                     obj['slotName'] = slotname
                                 obj['deformationRigSkinning'] = component_is_skinned
-                                if root_inverse_workflow is not None:
-                                    configure_root_inverse_child_of(obj, rig, root_inverse_bone, bindname)
-                                obj.matrix_world = resolved_matrix @ obj.matrix_world
-                                if hide_disabled:
+                                if component_is_skinned:
+                                    obj['skinAttachmentStatus'] = skin_attachment_status
+                                    if skin_root_bone:
+                                        obj['skinAttachmentRootBone'] = skin_root_bone
+                                if cm_int is not None:
+                                    submesh_index = submesh_index_for_object(obj)
+                                    if submesh_index is not None:
+                                        hidden = hide_disabled or not bool((cm_int >> submesh_index) & 1)
+                                        obj.hide_viewport = hidden
+                                        obj.hide_render = hidden
+                                elif hide_disabled:
                                     obj.hide_viewport = True
                                     obj.hide_render = True
+                                if obj.parent in copied_object_set:
+                                    # Hierarchy children follow their copied parent; transforming
+                                    # them again would apply the component transform twice.
+                                    continue
+                                obj.matrix_world = resolved_matrix @ obj.matrix_world
                                 if can_bind_bone:
-                                    configure_child_of_constraint(obj, rig, bindname, child_inverse)
+                                    configure_child_of_constraint(obj, attach_armature, bindname, child_inverse)
                                 if transform_animator_target is not None:
                                     add_rotation_axis_driver(obj, transform_animator_target, transform_animator_info_value['axis_no'])
                             if component_is_skinned:
                                 bind_skinned_objects_to_rig(objs, rig)
-                                if not is_skinned_overlay_component(c, meshpath):
-                                    source_armature = skinned_source_armature(objs)
-                                    if source_armature is not None:
-                                        skinned_alignment_anchors.append({
-                                            'component_name': comp_name,
-                                            'armature': source_armature,
-                                            'vertex_groups': mesh_vertex_group_names(objs),
-                                        })
 
                             if objs:
                                 new['depotPath'] = depot_path
@@ -2120,16 +2457,6 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                                     new['meshpath'] = "its an entity"
                                 if bindname:
                                     new['bindname'] = bindname
-
-                            if 'chunkMask' in c:
-                                cm_int = int(c['chunkMask'])
-                                for obj in objs:
-                                    subnum = submesh_index_for_object(obj)
-                                    if subnum is None:
-                                        continue
-                                    hidden = hide_disabled or not bool((cm_int >> subnum) & 1)
-                                    obj.hide_viewport = hidden
-                                    obj.hide_render = hidden
 
                             if new is not None:
                                 ent_coll.children.link(new)
@@ -2142,6 +2469,40 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                                     bpy.data.objects.remove(obj, do_unlink=True)
                                 bpy.data.collections.remove(new, do_unlink=True)
 
+                if light_components:
+                    light_collection = bpy.data.collections.new(ent_coll.name + '_lights')
+                    light_collection['nodeType'] = 'entLightComponent, vehicleLightComponent'
+                    light_collection['entAppearance'] = app_name
+                    ent_coll.children.link(light_collection)
+
+                    for c in light_components:
+                        light_obj = create_entity_light(c, filepath)
+                        light_collection.objects.link(light_obj)
+
+                        resolved_matrix, bindname, slotname, binding_type, attach_armature = transform_resolver.resolve_component_matrix(c)
+                        if light_obj.data.type in {'SPOT', 'AREA', 'SUN'}:
+                            resolved_matrix = resolved_matrix @ _LIGHT_DIRECTION_CORRECTION
+                        light_obj.matrix_world = resolved_matrix @ light_obj.matrix_world
+                        light_obj['bindingType'] = binding_type
+                        if bindname:
+                            light_obj['bindname'] = bindname
+                        if slotname:
+                            light_obj['slotName'] = slotname
+
+                        component_enabled = is_component_enabled(c)
+                        light_obj['componentEnabled'] = component_enabled
+                        if not component_enabled:
+                            light_obj.hide_viewport = True
+                            light_obj.hide_render = True
+
+                        if binding_type in {'slot', 'bone'} and bindname and attach_armature is not None:
+                            configure_child_of_constraint(light_obj, attach_armature, bindname, child_of_inverse_matrix(attach_armature, bindname))
+
+                        transform_animator_name, transform_animator_info_value = component_transform_animator_info(c, parent_transform_lookup, transform_animator_lookup)
+                        if transform_animator_info_value is not None:
+                            transform_animator_target = ensure_transform_animator_empty(ent_coll, transform_animator_name, transform_animator_info_value)
+                            add_rotation_axis_driver(light_obj, transform_animator_target, transform_animator_info_value['axis_no'])
+
                 for c in light_channel_components:
                     lcgroupname = component_name(c) or 'LightChannel'
                     mesh_obj = create_light_channel_mesh(c, shape_lookup, filepath)
@@ -2151,7 +2512,10 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                     lcgroup = bpy.data.collections.new(lcgroupname)
                     lcgroup.objects.link(mesh_obj)
 
-                    resolved_matrix, bindname, slotname, binding_type = transform_resolver.resolve_hard_component_matrix(c)
+                    resolved_matrix, bindname, slotname, binding_type, attach_armature = transform_resolver.resolve_component_matrix(c)
+                    component_scale = visual_scale_matrix(c)
+                    if component_scale is not None:
+                        resolved_matrix = resolved_matrix @ component_scale
                     mesh_obj['bindingType'] = binding_type
                     if bindname:
                         mesh_obj['bindname'] = bindname
@@ -2165,8 +2529,8 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                         mesh_obj.hide_viewport = True
                         mesh_obj.hide_render = True
 
-                    if binding_type in {'slot', 'bone'} and bindname and armature_has_bone(rig, bindname):
-                        configure_child_of_constraint(mesh_obj, rig, bindname, child_of_inverse_matrix(rig, bindname))
+                    if binding_type in {'slot', 'bone'} and bindname and attach_armature is not None:
+                        configure_child_of_constraint(mesh_obj, attach_armature, bindname, child_of_inverse_matrix(attach_armature, bindname))
 
                     lcgroup['componentName'] = lcgroupname
                     lcgroup['nodeType'] = 'entLightChannelComponent'
@@ -2175,21 +2539,62 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                     ent_coll.children.link(lcgroup)
                 print('Appearance import time:', time.time() - app_start_time, 'Seconds')
 
+            collision_transform_resolver = None
+            if include_collisions and include_entCollider and (ent_colliderComps or ent_simpleCollComps):
+                collision_components = list(ent_components)
+                collision_components.extend(ent_component_data)
+                collision_components_by_name = dict(base_components_by_name)
+                for component in ent_component_data:
+                    name = component_name(component)
+                    if name:
+                        collision_components_by_name.setdefault(name, component)
+                collision_parent_lookup = ComponentHandleLookup(ent_parent_transform_lookup)
+                collision_skinning_lookup = ComponentHandleLookup(ent_skinning_lookup)
+                base_slot_components = [
+                    component
+                    for component in ent_components
+                    if isinstance(component, dict) and isinstance(component.get('slots'), list)
+                ]
+                collision_slot_owner_jsons, collision_slot_owner_names = build_slot_owner_binding_maps(
+                    base_slot_components,
+                    collision_parent_lookup,
+                    rig_json_by_component_name,
+                    set(rig_json_by_component_name),
+                )
+                collision_transform_resolver = EntityTransformResolver(
+                    collision_components,
+                    collision_parent_lookup,
+                    skinning_lookup=collision_skinning_lookup,
+                    rig=rig,
+                    rig_j=rig_j,
+                    rig_bone_index=rig_bone_index,
+                    default_slot_lookup=vehicle_slot_lookup,
+                    slot_owner_rig_jsons=collision_slot_owner_jsons,
+                    rig_json_by_component_name=rig_json_by_component_name,
+                    rig_json_by_bone_name=rig_json_by_bone_name,
+                    armature_by_component_name=armature_by_component_name,
+                    slot_owner_rig_owner_names=collision_slot_owner_names,
+                    components_by_name=collision_components_by_name,
+                    slot_component_lookups=base_slot_component_lookups,
+                )
+
             if include_collisions:
                 collision_collection = bpy.data.collections.new('colliders')
-                ent_coll.children.link(collision_collection)
+                # Colliders belong to the entity: every imported appearance owns the collection,
+                # not just whichever appearance the loop finished on.
+                for appearance_collection in imported_appearance_collections:
+                    appearance_collection.children.link(collision_collection)
                 if include_phys:
                     try:
                         physJsonPaths = asset_index.get_files_by_extension('.phys.json')
                         if len(physJsonPaths) == 0:
                             print('No phys file JSONs found in path')
+                        elif not chassis_info:
+                            # Without a Chassis component there is no collisionResource to match a phys file against.
+                            print('No Chassis component in entity; skipping chassis collision import')
                         else:
-                            if chassis_info:
-                                chassis_z = chassis_info['localTransform']['Position']['z']['Bits'] / FIXED_POINT_DIVISOR
-                                chassis_phys_j = os.path.basename(chassis_info['collisionResource']['DepotPath']['$value']) + '.json'
-                            else:
-                                # Approximation when no Chassis component exists: bone 2 translation tracks chassis height closely.
-                                chassis_z = rig_j['boneTransforms'][2]['Translation']['Z']
+                            chassis_z = chassis_info['localTransform']['Position']['z']['Bits'] / FIXED_POINT_DIVISOR
+                            chassis_phys_j = os.path.basename(chassis_info['collisionResource']['DepotPath']['$value']) + '.json'
                             for physJsonPath in physJsonPaths:
                                 if os.path.basename(physJsonPath) == chassis_phys_j:
                                     cp77_phys_import(physJsonPath, rig, chassis_z)
@@ -2199,26 +2604,63 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                 if include_entCollider:
                     if len(ent_colliderComps) == 0 and len(ent_simpleCollComps) == 0:
                         print('No entColliderComponent or entSimpleColliderComponents found')
-                        return('FINISHED')
                     else:
-                        for i in ent_colliderComps + ent_simpleCollComps:
-                            col_name = i['$type']
-                            new_col = collision_collection.children.get(col_name)
-
-                            if not new_col:
-                                new_col = bpy.data.collections.new(col_name)
+                        for component in ent_colliderComps + ent_simpleCollComps:
+                            component_type = component.get('$type', 'entColliderComponent')
+                            component_label = component_name(component) or component_type
+                            new_col = collision_collection.children.get(component_label)
+                            if new_col is None:
+                                new_col = bpy.data.collections.new(component_label)
                                 collision_collection.children.link(new_col)
 
-                            cdata = i['colliders'][0]['Data']
-                            collision_shape = cdata['$type']
-                            submeshName = '_' + collision_shape
+                            if collision_transform_resolver is not None:
+                                resolved_matrix, bind_name, slot_name, binding_type, attach_armature = collision_transform_resolver.resolve_component_matrix(component)
+                            else:
+                                resolved_matrix, bind_name, slot_name, binding_type, attach_armature = Matrix.Identity(4), '', '', 'none', None
 
-                            try:
-                                obj = import_collider_as_actor(cdata, submeshName, new_col)
-                                if obj and 'simulationType' in i:
-                                    obj['simulationType'] = i['simulationType']
-                            except Exception as e:
-                                print(f'Error importing {collision_shape} via pxbridge: {e}')
+                            simulation_type = cname_value(component.get('simulationType'))
+                            simulation_type_name = str(simulation_type)
+                            simulation_is_dynamic = simulation_type_name.rsplit('::', 1)[-1].lower() == 'dynamic'
+                            colliders = component.get('colliders') or []
+                            if isinstance(colliders, dict):
+                                colliders = [colliders]
+                            for collider_index, collider_ref in enumerate(colliders):
+                                cdata = collider_ref.get('Data') if isinstance(collider_ref, dict) else None
+                                if cdata is None and isinstance(collider_ref, dict) and '$type' in collider_ref:
+                                    cdata = collider_ref
+                                if not isinstance(cdata, dict):
+                                    continue
+                                collision_shape = cdata.get('$type', 'Collider')
+                                submesh_name = f'_{component_label}_{collider_index}_{collision_shape}'
+                                try:
+                                    obj = import_collider_as_actor(cdata, submesh_name, new_col)
+                                    if obj is None:
+                                        continue
+                                    obj.matrix_world = resolved_matrix @ obj.matrix_world
+                                    obj['componentName'] = component_label
+                                    obj['componentType'] = component_type
+                                    obj['colliderIndex'] = collider_index
+                                    obj['bindingType'] = binding_type
+                                    if bind_name:
+                                        obj['bindname'] = bind_name
+                                    if slot_name:
+                                        obj['slotName'] = slot_name
+                                    if simulation_type:
+                                        obj['simulationType'] = simulation_type
+                                    if (
+                                        binding_type in {'slot', 'bone'}
+                                        and bind_name
+                                        and attach_armature is not None
+                                        and not simulation_is_dynamic
+                                    ):
+                                        configure_child_of_constraint(
+                                            obj,
+                                            attach_armature,
+                                            bind_name,
+                                            child_of_inverse_matrix(attach_armature, bind_name),
+                                        )
+                                except Exception as exc:
+                                    print(f'Error importing {collision_shape} via pxbridge: {exc}')
         if len(error_messages) > 0:
             show_message('Errors during import:\n\t' + '\n\t'.join(error_messages))
         if not cp77_addon_prefs.non_verbose:
@@ -2232,3 +2674,4 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
         if Masters:
             Masters.hide_viewport = True
         clear_transient_import_caches()
+    return {'FINISHED'}

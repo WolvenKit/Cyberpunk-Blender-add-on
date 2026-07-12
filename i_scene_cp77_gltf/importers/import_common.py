@@ -1,13 +1,48 @@
+import hashlib
 import json
 import os
+import re
 import traceback
+from array import array
+from functools import lru_cache
 
 import bpy
 
-from ..main.setup import bcolors
+from ..main.setup import bcolors, clear_material_cache
 from .import_with_materials import CP77GLBimport
+from ..jsontool import JSONTool
 
 NAME_MAX_LEN = 256
+SUBMESH_PATTERN = re.compile(r"submesh_(\d+)", re.IGNORECASE)
+
+_SUBMESH_INDEX_CACHE = {}
+_JSON_APPS_CACHE = {}
+
+
+def clear_submesh_index_cache():
+    _SUBMESH_INDEX_CACHE.clear()
+
+
+def submesh_index_for_object(obj):
+    name = getattr(obj, 'name', '')
+    cached = _SUBMESH_INDEX_CACHE.get(name)
+    if cached is not None:
+        return None if cached < 0 else cached
+    match = SUBMESH_PATTERN.search(name)
+    if match:
+        index = int(match.group(1))
+        _SUBMESH_INDEX_CACHE[name] = index
+        return index
+    data = getattr(obj, 'data', None)
+    for mat in getattr(data, 'materials', ()) if data is not None else ():
+        mat_name = getattr(mat, 'name', '') if mat else ''
+        match = SUBMESH_PATTERN.search(mat_name) if mat_name else None
+        if match:
+            index = int(match.group(1))
+            _SUBMESH_INDEX_CACHE[name] = index
+            return index
+    _SUBMESH_INDEX_CACHE[name] = -1
+    return None
 
 
 def _appearance_name(mesh_appearance):
@@ -16,24 +51,60 @@ def _appearance_name(mesh_appearance):
     return mesh_appearance or ''
 
 
-def get_groupname(meshname, meshAppearance):
+@lru_cache(maxsize=8192)
+def _groupname_cached(meshname, appearance):
     groupname = os.path.splitext(os.path.basename(meshname))[0]
     if 'intersection' in meshname:
         groupname = os.path.basename(os.path.dirname(meshname)) + '_' + groupname
-    appearance = _appearance_name(meshAppearance)
     if appearance:
         groupname += '@' + appearance
     return groupname[:NAME_MAX_LEN]
 
 
-def get_group(meshname, meshAppearance, Masters):
-    appearance = _appearance_name(meshAppearance)
-    for group in Masters.children:
-        if group.get('meshpath') == meshname and group.get('appearance') == appearance:
-            return group, group.name
+def get_groupname(meshname, meshAppearance):
+    return _groupname_cached(meshname, _appearance_name(meshAppearance))
 
-    groupname = get_groupname(meshname, appearance)
-    return Masters.children.get(groupname), groupname
+
+@lru_cache(maxsize=8192)
+def _asset_source_key(meshpath):
+    return os.path.normcase(os.path.normpath(meshpath)) if meshpath else ''
+
+
+@lru_cache(maxsize=8192)
+def _source_suffix(source_key):
+    return '~' + hashlib.sha1(source_key.encode('utf-8')).hexdigest()[:8]
+
+
+def _hashed_groupname(meshname, meshAppearance, source_key):
+    base = get_groupname(meshname, '')
+    suffix = _source_suffix(source_key)
+    name = base[:NAME_MAX_LEN - len(suffix)] + suffix
+    appearance = _appearance_name(meshAppearance)
+    if appearance:
+        name += '@' + appearance
+    return name[:NAME_MAX_LEN]
+
+
+def _collection_matches_source(collection, source_key):
+    if not source_key:
+        return True
+    stored = collection.get('source_glb', '')
+    # Collections created before source stamping carry no identity; accept them for continuity.
+    return not stored or stored == source_key
+
+
+def get_group(meshname, meshAppearance, Masters, source_glb=''):
+    # The master collection is the mesh asset cache key: same-named assets from different
+    # depot paths must not alias, so lookups verify the stored source identity.
+    source_key = _asset_source_key(source_glb)
+    candidates = [get_groupname(meshname, meshAppearance)]
+    if source_key:
+        candidates.append(_hashed_groupname(meshname, meshAppearance, source_key))
+    for groupname in candidates:
+        group = Masters.children.get(groupname)
+        if group is not None and _collection_matches_source(group, source_key):
+            return group, groupname
+    return None, candidates[0]
 
 
 def add_to_list(basename, meshes, out):
@@ -101,6 +172,9 @@ def _unlink_collection_once(parent, child):
 
 
 def _remap_copied_object_references(copied_objects, object_map):
+    """Remap parent, modifier .object, and constraint .target references between copied
+    objects. Other reference kinds (geometry-node inputs, drivers, particle systems,
+    custom-property datablocks) are not covered and need dedicated handling if they appear."""
     for obj in copied_objects:
         parent = obj.parent
         if parent in object_map:
@@ -124,6 +198,12 @@ def _json_apps_for_collection(collection, mesh_key):
     if not json_apps_raw:
         print(f'{bcolors.FAIL}No material json found for - {mesh_key}{bcolors.ENDC}')
         return None
+
+    cache_key = collection.as_pointer()
+    cached = _JSON_APPS_CACHE.get(cache_key)
+    if cached is not None and cached[0] == json_apps_raw:
+        return cached[1]
+
     try:
         json_apps = json.loads(json_apps_raw)
     except json.JSONDecodeError:
@@ -131,6 +211,9 @@ def _json_apps_for_collection(collection, mesh_key):
         return None
     if not json_apps:
         print(f'{bcolors.FAIL}No material json found for - {mesh_key}{bcolors.ENDC}')
+        return json_apps
+
+    _JSON_APPS_CACHE[cache_key] = (json_apps_raw, json_apps)
     return json_apps
 
 
@@ -153,38 +236,62 @@ def _keep_only_material(obj, mat_name):
         return
     obj.data.materials.clear()
     obj.data.materials.append(material)
-    for polygon in obj.data.polygons:
-        polygon.material_index = 0
+    polygons = obj.data.polygons
+    if polygons:
+        polygons.foreach_set('material_index', array('i', [0]) * len(polygons))
 
 
 def _copy_collection_objects(source_collection, target_collection, appearance, mesh_key, json_apps):
     copied_objects = []
     object_map = {}
     appearance_materials = json_apps.get(appearance, []) if json_apps else []
-    for index, source_obj in enumerate(source_collection.objects):
+    # Sidewalk meshes keep their imported materials; the appearance material lists do not apply to them.
+    assign_materials = bool(appearance_materials) and 'sidewalk' not in mesh_key
+    # all_objects: entity instancing copies nested collection contents, so variants must too.
+    for source_obj in source_collection.all_objects:
         obj = source_obj.copy()
         object_map[source_obj] = obj
         copied_objects.append(obj)
         if source_obj.data:
             obj.data = source_obj.data.copy()
 
-        if obj.type == 'MESH' and index < len(appearance_materials):
-            mat_name = appearance_materials[index]
-            if 'sidewalk' in mesh_key:
-                mat_name = 'sidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalksidewalk'
-            if len(mat_name) < 63:
-                _keep_only_material(obj, mat_name)
+        if obj.type == 'MESH' and assign_materials:
+            # Material lists are ordered by submesh index. Enumeration order is unreliable:
+            # collections are name-sorted and skinned imports include an Armature object.
+            submesh_index = submesh_index_for_object(source_obj)
+            if submesh_index is not None and submesh_index < len(appearance_materials):
+                mat_name = appearance_materials[submesh_index]
+                if mat_name and len(mat_name) < 63:
+                    _keep_only_material(obj, mat_name)
 
         target_collection.objects.link(obj)
 
     _remap_copied_object_references(copied_objects, object_map)
 
 
+def _ensure_appearance_variants(Masters, master_coll, mesh_key, source_key, apps, json_apps):
+    for app in apps:
+        variant_name = (master_coll.name + '@' + app)[:NAME_MAX_LEN] if app else master_coll.name
+        existing = Masters.children.get(variant_name)
+        if existing is not None and _collection_matches_source(existing, source_key):
+            continue
+        if existing is not None:
+            continue
+        new_coll = bpy.data.collections.new(variant_name)
+        new_coll['meshpath'] = mesh_key
+        new_coll['appearance'] = app
+        new_coll['source_glb'] = source_key
+        _link_collection_once(Masters, new_coll)
+        _copy_collection_objects(master_coll, new_coll, app, mesh_key, json_apps)
+
+
 def _mesh_appearances(mesh_data):
     apps = []
+    seen = set()
     for mesh_app in mesh_data.get('apps', [[]])[0]:
         appearance = _appearance_name(mesh_app)
-        if appearance and appearance not in apps:
+        if appearance and appearance not in seen:
+            seen.add(appearance)
             apps.append(appearance)
     return apps
 
@@ -217,60 +324,77 @@ def _mesh_glb_path(path, mesh_key, mesh_data, glbs):
 
 
 def meshes_from_mesheswapps(meshes_w_apps, path='', from_mesh_no=0, to_mesh_no=10000000, with_mats=False, glbs=None, mesh_jsons=None, Masters=None, generate_overrides=False):
-    props = bpy.context.scene.cp77_panel_props
-    context = bpy.context
-    scene_collection = context.scene.collection
+    clear_material_cache()
+    initiated_cache = False
+    if not JSONTool._use_cache:
+        JSONTool.start_caching()
+        initiated_cache = True
 
-    for index, mesh_key in enumerate(meshes_w_apps):
-        if index < from_mesh_no or index > to_mesh_no:
-            continue
-        if not (mesh_key.endswith('mesh') or mesh_key.endswith('physicalscene') or mesh_key.endswith('w2mesh')):
-            continue
+    try:
+        props = bpy.context.scene.cp77_panel_props
+        context = bpy.context
+        scene_collection = context.scene.collection
 
-        mesh_data = meshes_w_apps[mesh_key]
-        apps = _mesh_appearances(mesh_data)
-        meshpath = _mesh_glb_path(path, mesh_key, mesh_data, glbs)
-        if mesh_key.endswith('physicalscene') or mesh_key.endswith('w2mesh'):
-            print('not a standard mesh')
-        print(meshpath)
-
-        groupname = get_groupname(meshpath, '')
-        if Masters.children.get(groupname) is not None:
-            continue
-        if not os.path.exists(meshpath):
-            print('Mesh ', meshpath, ' does not exist')
-            continue
-
-        try:
-            before_collections, before_objects = _collection_import_snapshot()
-            CP77GLBimport(
-                with_materials=with_mats,
-                remap_depot=props.remap_depot,
-                filepath=meshpath,
-                appearances=apps,
-                scripting=True,
-                generate_overrides=generate_overrides,
-            )
-
-            move_coll = _imported_collection_from_diff(before_collections, before_objects, groupname)
-            if move_coll is None:
-                print(f'{bcolors.FAIL}Import produced no collection for - {mesh_key}{bcolors.ENDC}')
+        for index, mesh_key in enumerate(meshes_w_apps):
+            if index < from_mesh_no or index > to_mesh_no:
+                continue
+            if not (mesh_key.endswith('mesh') or mesh_key.endswith('physicalscene') or mesh_key.endswith('w2mesh')):
                 continue
 
-            if move_coll.name != groupname:
-                move_coll.name = groupname
-            move_coll['meshpath'] = mesh_key
-            move_coll['appearance'] = 'default'
-            _unlink_collection_once(scene_collection, move_coll)
-            _link_collection_once(Masters, move_coll)
+            mesh_data = meshes_w_apps[mesh_key]
+            apps = _mesh_appearances(mesh_data)
+            meshpath = _mesh_glb_path(path, mesh_key, mesh_data, glbs)
 
-            json_apps = _json_apps_for_collection(move_coll, mesh_key)
-            for app in apps:
-                new_coll = bpy.data.collections.new(groupname + '@' + app)
-                new_coll['meshpath'] = mesh_key
-                new_coll['appearance'] = app
-                _link_collection_once(Masters, new_coll)
-                _copy_collection_objects(move_coll, new_coll, app, mesh_key, json_apps)
-        except Exception:
-            print('failed on ', os.path.basename(meshpath))
-            print(traceback.format_exc())
+            source_key = _asset_source_key(meshpath)
+            groupname = get_groupname(meshpath, '')
+            existing_master = Masters.children.get(groupname)
+            if existing_master is not None and not _collection_matches_source(existing_master, source_key):
+                # A different asset already owns this display name; this asset gets a
+                # source-hashed name so the two never alias.
+                groupname = _hashed_groupname(meshpath, '', source_key)
+                existing_master = Masters.children.get(groupname)
+                if existing_master is not None and not _collection_matches_source(existing_master, source_key):
+                    existing_master = None
+            if existing_master is not None:
+                # A previous import created this master; still create any appearance
+                # variants that this import needs but the earlier one did not.
+                json_apps = _json_apps_for_collection(existing_master, mesh_key)
+                _ensure_appearance_variants(Masters, existing_master, mesh_key, source_key, apps, json_apps)
+                continue
+            if not os.path.exists(meshpath):
+                print('Mesh ', meshpath, ' does not exist')
+                continue
+
+            try:
+                before_collections, before_objects = _collection_import_snapshot()
+                CP77GLBimport(
+                    with_materials=with_mats,
+                    remap_depot=props.remap_depot,
+                    filepath=meshpath,
+                    appearances=apps,
+                    scripting=True,
+                    generate_overrides=generate_overrides,
+                )
+
+                move_coll = _imported_collection_from_diff(before_collections, before_objects, groupname)
+                if move_coll is None:
+                    print(f'{bcolors.FAIL}Import produced no collection for - {mesh_key}{bcolors.ENDC}')
+                    continue
+
+                if move_coll.name != groupname:
+                    move_coll.name = groupname
+                move_coll['meshpath'] = mesh_key
+                move_coll['appearance'] = 'default'
+                move_coll['source_glb'] = source_key
+                _unlink_collection_once(scene_collection, move_coll)
+                _link_collection_once(Masters, move_coll)
+
+                json_apps = _json_apps_for_collection(move_coll, mesh_key)
+                _ensure_appearance_variants(Masters, move_coll, mesh_key, source_key, apps, json_apps)
+            except Exception:
+                print('failed on ', os.path.basename(meshpath))
+                print(traceback.format_exc())
+    finally:
+        if initiated_cache:
+            JSONTool.stop_caching()
+        clear_material_cache()

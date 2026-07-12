@@ -8,6 +8,7 @@ from mathutils import Color
 import pkg_resources
 import bmesh
 import inspect
+from functools import lru_cache
 from mathutils import Vector
 import json
 scale_factor=1.0
@@ -116,14 +117,29 @@ def _with_image_extension(path, image_format):
     return f'{path[:-4]}{ext}' if path.lower().endswith('.xbm') else f'{path[:-3]}{image_format}'
 
 
-def _filepath_key(path):
-    if not path:
-        return ''
+@lru_cache(maxsize=32768)
+def _cached_filepath_key(path):
     try:
         path = bpy.path.abspath(path)
     except Exception:
         pass
     return os.path.normcase(os.path.abspath(os.path.normpath(path)))
+
+
+def _filepath_key(path):
+    if not path:
+        return ''
+    try:
+        path = os.fspath(path)
+    except TypeError:
+        path = str(path)
+    if path.startswith('//'):
+        try:
+            path = bpy.path.abspath(path)
+        except Exception:
+            pass
+        return os.path.normcase(os.path.abspath(os.path.normpath(path)))
+    return _cached_filepath_key(path)
 
 
 def _matches_colorspace(image, is_normal):
@@ -132,21 +148,46 @@ def _matches_colorspace(image, is_normal):
 
 
 _image_lookup_cache = {}
+_image_lookup_complete = False
+_image_lookup_count = -1
 _asset_index_cache = {}
 
 
-def _find_loaded_image(filepath, is_normal=False):
-    key = (_filepath_key(filepath), bool(is_normal))
-    cached_name = _image_lookup_cache.get(key)
-    if cached_name:
-        image = bpy.data.images.get(cached_name)
-        if image and _filepath_key(image.filepath) == key[0] and _matches_colorspace(image, is_normal):
-            return image
+def _rebuild_image_lookup_cache():
+    global _image_lookup_complete, _image_lookup_count
+    _image_lookup_cache.clear()
+    for image in bpy.data.images:
+        filepath = getattr(image, 'filepath', '')
+        filepath_key = _filepath_key(filepath)
+        if filepath_key:
+            is_normal = image.colorspace_settings.name == 'Non-Color'
+            _image_lookup_cache.setdefault((filepath_key, is_normal), image.name)
+    _image_lookup_count = len(bpy.data.images)
+    _image_lookup_complete = True
 
-    image = next((img for img in bpy.data.images if _filepath_key(img.filepath) == key[0] and _matches_colorspace(img, is_normal)), None)
-    if image:
-        _image_lookup_cache[key] = image.name
-    return image
+
+def _find_loaded_image(filepath, is_normal=False):
+    global _image_lookup_complete
+    filepath_key = _filepath_key(filepath)
+    if not filepath_key:
+        return None
+
+    if not _image_lookup_complete or _image_lookup_count != len(bpy.data.images):
+        _rebuild_image_lookup_cache()
+
+    key = (filepath_key, bool(is_normal))
+    cached_name = _image_lookup_cache.get(key)
+    if not cached_name:
+        return None
+
+    image = bpy.data.images.get(cached_name)
+    if image and _filepath_key(image.filepath) == filepath_key and _matches_colorspace(image, is_normal):
+        return image
+
+    _rebuild_image_lookup_cache()
+    cached_name = _image_lookup_cache.get(key)
+    image = bpy.data.images.get(cached_name) if cached_name else None
+    return image if image and _matches_colorspace(image, is_normal) else None
 
 
 def _resolve_indexed_image(reference, root, image_format):
@@ -180,6 +221,7 @@ def _resolve_indexed_image(reference, root, image_format):
 
 
 def _new_file_image(name, filepath, is_normal=False):
+    global _image_lookup_count
     image = bpy.data.images.new(name, 1, 1)
     image.source = 'FILE'
     image.alpha_mode = 'CHANNEL_PACKED'
@@ -187,12 +229,17 @@ def _new_file_image(name, filepath, is_normal=False):
     if is_normal:
         image.colorspace_settings.name = 'Non-Color'
     _image_lookup_cache[(_filepath_key(filepath), bool(is_normal))] = image.name
+    _image_lookup_count = len(bpy.data.images)
     return image
 
 
 def clear_image_lookup_cache():
+    global _image_lookup_complete, _image_lookup_count
     _image_lookup_cache.clear()
+    _image_lookup_complete = False
+    _image_lookup_count = -1
     _asset_index_cache.clear()
+    _cached_filepath_key.cache_clear()
 
 
 def get_pos(inst):

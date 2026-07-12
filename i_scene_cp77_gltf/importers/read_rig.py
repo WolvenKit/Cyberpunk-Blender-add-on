@@ -16,35 +16,68 @@ from ..main.datashards import RigData
 from ..main.bartmoss_functions import *
 
 
+_PARENT_CHILDREN_CACHE = {}
+_RIG_DATA_FILE_CACHE = {}
+_MERGED_RIG_DATA_CACHE = {}
+_MODEL_SPACE_MATRIX_CACHE = {}
+_ANIM_BONE_SET = None
+_SHAPE_SCALE_ROOT = (0.075, 0.075, 0.075)
+_SHAPE_SCALE_WEAPON = (0.0125, 0.0125, 0.0125)
+_SHAPE_SCALE_SMALL = (0.05, 0.05, 0.05)
+_SHAPE_SCALE_LARGE = (0.1, 0.1, 0.1)
+
+
+def _bounded_cache_store(cache, key, value, limit=64):
+    cache[key] = value
+    if len(cache) > limit:
+        cache.pop(next(iter(cache)))
+
+
+def _rig_file_signature(filepath):
+    normalized = os.path.normcase(os.path.abspath(filepath))
+    try:
+        stat = os.stat(filepath)
+    except OSError:
+        return normalized, None
+    return normalized, (stat.st_mtime_ns, stat.st_size)
+
+
 def _to_list_of_strings(seq) -> list[str]:
     if not isinstance(seq, (list, tuple)):
         return []
     out = []
-    for v in seq:
-        if isinstance(v, dict) and "$value" in v:
-            out.append(str(v.get("$value", "")))
-        elif isinstance(v, str):
-            out.append(v)
+    append = out.append
+    for value in seq:
+        if isinstance(value, dict) and "$value" in value:
+            append(str(value.get("$value", "")))
+        elif isinstance(value, str):
+            append(value)
     return out
 
 
 def _extract_trs(trs: list[dict], n: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    q = np.zeros((n, 4), dtype=np.float32)  # (x,y,z,w)
+    q = np.zeros((n, 4), dtype=np.float32)
     t = np.zeros((n, 3), dtype=np.float32)
     s = np.ones((n, 3), dtype=np.float32)
-    for i in range(min(n, len(trs))):
-        tr = trs[i] or {}
-        r = tr.get("Rotation", {})
-        # store (x,y,z,w) for mathutils consistency
-        q[i] = [float(r.get("i", 0.0)), float(r.get("j", 0.0)), float(r.get("k", 0.0)), float(r.get("r", 1.0))]
-        tt = tr.get("Translation", {})
-        t[i] = [float(tt.get("X", 0.0)), float(tt.get("Y", 0.0)), float(tt.get("Z", 0.0))]
-        sc = tr.get("Scale", {})
-        s[i] = [float(sc.get("X", 1.0)), float(sc.get("Y", 1.0)), float(sc.get("Z", 1.0))]
-    # normalize quats
-    nrm = np.linalg.norm(q, axis=-1, keepdims=True)
-    nrm[nrm == 0] = 1.0
-    q /= nrm
+    limit = min(n, len(trs))
+    for index in range(limit):
+        transform = trs[index] or {}
+        rotation = transform.get("Rotation", {})
+        q[index, 0] = float(rotation.get("i", 0.0))
+        q[index, 1] = float(rotation.get("j", 0.0))
+        q[index, 2] = float(rotation.get("k", 0.0))
+        q[index, 3] = float(rotation.get("r", 1.0))
+        translation = transform.get("Translation", {})
+        t[index, 0] = float(translation.get("X", 0.0))
+        t[index, 1] = float(translation.get("Y", 0.0))
+        t[index, 2] = float(translation.get("Z", 0.0))
+        scale = transform.get("Scale", {})
+        s[index, 0] = float(scale.get("X", 1.0))
+        s[index, 1] = float(scale.get("Y", 1.0))
+        s[index, 2] = float(scale.get("Z", 1.0))
+    norms = np.linalg.norm(q, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    np.divide(q, norms, out=q)
     return q, t, s
 
 
@@ -53,31 +86,29 @@ def trs_dicts_to_arrays(trs_list: list[dict]) -> tuple[np.ndarray, np.ndarray, n
     Returns (q_wxyz [N,4], t [N,3], s [N,3]).
     Quaternion order is (w,x,y,z) for the math below.
     """
-    n = len(trs_list)
-    q = np.zeros((n, 4), dtype=np.float32)
-    t = np.zeros((n, 3), dtype=np.float32)
-    s = np.ones((n, 3), dtype=np.float32)
-    for i, tr in enumerate(trs_list):
-        if not tr:
+    count = len(trs_list)
+    q = np.zeros((count, 4), dtype=np.float32)
+    t = np.zeros((count, 3), dtype=np.float32)
+    s = np.ones((count, 3), dtype=np.float32)
+    for index, transform in enumerate(trs_list):
+        if not transform:
             continue
-        r = tr.get("Rotation", {})
-        # (w, x, y, z)
-        q[i, 0] = float(r.get("r", 1.0))
-        q[i, 1] = float(r.get("i", 0.0))
-        q[i, 2] = float(r.get("j", 0.0))
-        q[i, 3] = float(r.get("k", 0.0))
-        tt = tr.get("Translation", {})
-        t[i, 0] = float(tt.get("X", 0.0))
-        t[i, 1] = float(tt.get("Y", 0.0))
-        t[i, 2] = float(tt.get("Z", 0.0))
-        sc = tr.get("Scale", {})
-        s[i, 0] = float(sc.get("X", 1.0))
-        s[i, 1] = float(sc.get("Y", 1.0))
-        s[i, 2] = float(sc.get("Z", 1.0))
-    # normalize quats
-    nrm = np.linalg.norm(q, axis=-1, keepdims=True)
-    nrm[nrm == 0] = 1.0
-    q /= nrm
+        rotation = transform.get("Rotation", {})
+        q[index, 0] = float(rotation.get("r", 1.0))
+        q[index, 1] = float(rotation.get("i", 0.0))
+        q[index, 2] = float(rotation.get("j", 0.0))
+        q[index, 3] = float(rotation.get("k", 0.0))
+        translation = transform.get("Translation", {})
+        t[index, 0] = float(translation.get("X", 0.0))
+        t[index, 1] = float(translation.get("Y", 0.0))
+        t[index, 2] = float(translation.get("Z", 0.0))
+        scale = transform.get("Scale", {})
+        s[index, 0] = float(scale.get("X", 1.0))
+        s[index, 1] = float(scale.get("Y", 1.0))
+        s[index, 2] = float(scale.get("Z", 1.0))
+    norms = np.linalg.norm(q, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    np.divide(q, norms, out=q)
     return q, t, s
 
 
@@ -119,6 +150,11 @@ def trs_to_matrices_np(q_wxyz: np.ndarray, t: np.ndarray, s: np.ndarray) -> np.n
 
 def read_rig(filepath: str) -> RigData:
     """Read .rig.json and return RigData (numpy-backed)."""
+    normalized, signature = _rig_file_signature(filepath)
+    cached = _RIG_DATA_FILE_CACHE.get(normalized)
+    if cached is not None and cached[0] == signature:
+        return cached[1]
+
     data = JSONTool.jsonload(filepath)
     base_name = os.path.basename(filepath)
     rig_name = base_name.replace(".rig.json", "")
@@ -131,7 +167,7 @@ def read_rig(filepath: str) -> RigData:
     trs = root.get("boneTransforms", [])
     q, t, s = _extract_trs(trs, len(bone_names))
 
-    return RigData(
+    rig_data = RigData(
         num_bones=len(bone_names),
         parent_indices=parent_indices,
         bone_names=bone_names,
@@ -154,6 +190,8 @@ def read_rig(filepath: str) -> RigData:
         ragdoll_desc=root.get("ragdollDesc", []),
         ragdoll_names=root.get("ragdollNames", []),
     )
+    _RIG_DATA_FILE_CACHE[normalized] = (signature, rig_data)
+    return rig_data
 
 
 def create_debug_empties(obj, bone_names, bone_parents, bone_transforms, apose_ls, apose_ms, bind_pose):
@@ -276,102 +314,413 @@ def scale_matrix(s: Vector | tuple | list) -> Matrix:
     return m
 
 
+def meta_bone_name(name: str) -> str:
+    """Return the merged-rig bone name, remapping ``*_plug`` to ``*_slot``."""
+    return f"{name[:-5]}_slot" if isinstance(name, str) and name.endswith("_plug") else name
+
+
 def compute_global_transform(index: int, transforms: list[dict], parents: np.ndarray, cache: dict[int, Matrix]) -> Matrix:
-    if index in cache:
-        return cache[index]
+    cached = cache.get(index)
+    if cached is not None:
+        return cached
 
-    t3 = transforms[index]["Translation"]
-    r4 = transforms[index]["Rotation"]
-    s3 = transforms[index].get("Scale", {"X": 1.0, "Y": 1.0, "Z": 1.0})
+    transform = transforms[index]
+    translation = transform["Translation"]
+    rotation = transform["Rotation"]
+    scale = transform.get("Scale", {"X": 1.0, "Y": 1.0, "Z": 1.0})
+    translation_vector = Vector((translation["X"], translation["Y"], translation["Z"]))
+    rotation_quaternion = Quaternion((rotation["r"], rotation["i"], rotation["j"], rotation["k"]))
+    scale_vector = Vector((scale["X"], scale["Y"], scale["Z"]))
+    local_matrix = Matrix.Translation(translation_vector) @ rotation_quaternion.to_matrix().to_4x4() @ scale_matrix(scale_vector)
+    parent_index = int(parents[index]) if index < len(parents) else -1
+    matrix = local_matrix if parent_index == -1 else compute_global_transform(parent_index, transforms, parents, cache) @ local_matrix
+    cache[index] = matrix
+    return matrix
 
-    T = Vector((t3["X"], t3["Y"], t3["Z"]))
-    Q = Quaternion((r4["r"], r4["i"], r4["j"], r4["k"]))
-    S = Vector((s3["X"], s3["Y"], s3["Z"]))
 
-    local_mat = Matrix.Translation(T) @ Q.to_matrix().to_4x4() @ scale_matrix(S)
-    p = int(parents[index]) if index < len(parents) else -1
-    if p == -1:
-        cache[index] = local_mat
-    else:
-        parent_mat = compute_global_transform(p, transforms, parents, cache)
-        cache[index] = parent_mat @ local_mat
-    return cache[index]
+def _model_space_matrices_cached(transforms, parent_indices):
+    cache_key = (id(transforms), id(parent_indices), len(transforms), len(parent_indices))
+    cached = _MODEL_SPACE_MATRIX_CACHE.get(cache_key)
+    if cached is not None and cached[0] is transforms and cached[1] is parent_indices:
+        return cached[2]
+    resolved = {}
+    matrices = tuple(
+        compute_global_transform(index, transforms, parent_indices, resolved)
+        for index in range(len(transforms))
+    )
+    _bounded_cache_store(
+        _MODEL_SPACE_MATRIX_CACHE,
+        cache_key,
+        (transforms, parent_indices, matrices),
+    )
+    return matrices
 
 
 def build_apose_matrices(apose_ms, apose_ls, bone_names: list[str], parent_indices: np.ndarray):
-    if apose_ms:
-        # Fast path: model-space TRS can be converted in batch with numpy
+    bone_count = len(bone_names)
+    # Partial A-pose arrays fall back to the reference pose.
+    if not isinstance(apose_ls, list) or len(apose_ls) != bone_count:
+        return None
+    if isinstance(apose_ms, list) and len(apose_ms) == bone_count:
         q_wxyz, t, s = trs_dicts_to_arrays(apose_ms)
         mats_np = trs_to_matrices_np(q_wxyz, t, s)
         return [Matrix(m) for m in mats_np]
-    elif apose_ls:
-        # Local-space: need hierarchy; keep existing cached recursion
-        cache: dict[int, Matrix] = {}
-        for i in range(len(bone_names)):
-            compute_global_transform(i, apose_ls, parent_indices, cache)
-        return [cache[i] for i in range(len(bone_names))]
-    return None
+
+    return list(_model_space_matrices_cached(apose_ls, parent_indices))
 
 
 def is_identity_transform(transform: dict) -> bool:
     t = transform["Translation"]; r = transform["Rotation"]; s = transform["Scale"]
     return (
         abs(t["X"]) < 1e-6 and abs(t["Y"]) < 1e-6 and abs(t["Z"]) < 1e-6 and
-        abs(r["r"]) < 1e-6 and abs(r["i"]) < 1e-6 and abs(r["j"]) < 1e-6 and abs(r["k"] - 1) < 1e-6 and
+        abs(r["r"] - 1) < 1e-6 and abs(r["i"]) < 1e-6 and abs(r["j"]) < 1e-6 and abs(r["k"]) < 1e-6 and
         abs(s["X"] - 1) < 1e-6 and abs(s["Y"] - 1) < 1e-6 and abs(s["Z"] - 1) < 1e-6
     )
 
 
+def _children_by_parent(parent_indices):
+    cache_key = id(parent_indices)
+    cached = _PARENT_CHILDREN_CACHE.get(cache_key)
+    if cached is not None and cached[0] is parent_indices and cached[1] == len(parent_indices):
+        return cached[2]
+    children = [[] for _ in range(len(parent_indices))]
+    for child_index, parent_index in enumerate(parent_indices):
+        parent_index = int(parent_index)
+        if 0 <= parent_index < len(children):
+            children[parent_index].append(child_index)
+    _PARENT_CHILDREN_CACHE[cache_key] = (parent_indices, len(parent_indices), children)
+    return children
+
+
 def apply_bone_from_matrix(bone_index: int, mat: Matrix, edit_bones: dict[int, bpy.types.EditBone], parent_indices: np.ndarray, global_transforms: dict[int, Matrix], default_length: float = 0.01):
-    safe_mode_switch('EDIT')
+    """Apply a complete model-space transform to an edit bone.
+
+    Child spacing determines a practical Blender bone length. The serialized rotation
+    determines the bone axis and roll.
+    """
+    active_object = bpy.context.object
+    if active_object is None or getattr(active_object, 'mode', None) != 'EDIT':
+        safe_mode_switch('EDIT')
     head = mat.to_translation()
 
-    pi = np.asarray(parent_indices, dtype=np.int32)
-    child_indices = np.where(pi == bone_index)[0].tolist()
+    distance_sum = 0.0
+    distance_count = 0
+    for child_index in _children_by_parent(parent_indices)[bone_index]:
+        child_matrix = (
+            global_transforms.get(child_index)
+            if hasattr(global_transforms, 'get')
+            else global_transforms[child_index] if child_index < len(global_transforms) else None
+        )
+        if child_matrix is None:
+            continue
+        distance = (child_matrix.to_translation() - head).length
+        if distance > 1e-6:
+            distance_sum += distance
+            distance_count += 1
+    length = max(distance_sum / distance_count if distance_count else default_length, default_length)
 
-    if child_indices:
-        avg = Vector()
-        for ci in child_indices:
-            avg += global_transforms[ci].to_translation()
-        avg /= len(child_indices)
-        direction = avg - head
-        if direction.length < 1e-6:
-            y_axis = (mat.to_3x3() @ Vector((0, 1, 0))).normalized()
-            direction = y_axis * default_length
-        else:
-            direction = direction.normalized() * max(direction.length, default_length)
-        tail = head + direction
+    rotation = mat.to_quaternion()
+    rotation_norm_squared = sum(component * component for component in rotation)
+    if rotation_norm_squared < 1e-12:
+        rotation = Quaternion((1.0, 0.0, 0.0, 0.0))
     else:
-        y_axis = (mat.to_3x3() @ Vector((0, 1, 0))).normalized()
-        tail = head + y_axis * default_length
+        rotation.normalize()
+    basis = rotation.to_matrix()
+    y_axis = basis @ Vector((0.0, 1.0, 0.0))
+    x_axis = basis @ Vector((1.0, 0.0, 0.0))
+    if y_axis.length_squared < 1e-12:
+        y_axis = Vector((0.0, 1.0, 0.0))
+    else:
+        y_axis.normalize()
 
-    if (tail - head).length < 1e-6:
-        tail = head + Vector((0, default_length, 0))
-
-    eb = edit_bones[bone_index]
-    eb.head = head
-    eb.tail = tail
-    x_axis = mat.to_3x3() @ Vector((1, 0, 0))
-    eb.align_roll(x_axis)
+    edit_bone = edit_bones[bone_index]
+    edit_bone.head = head
+    edit_bone.tail = head + y_axis * length
+    edit_bone.align_roll(x_axis)
 
 
 def create_armature_from_data(filepath: str, bind_pose: str, create_debug: bool = False):
-    start_time = time.time()
-    rig_col = None
     rig_data = read_rig(filepath)
     if not rig_data:
         show_message(f"Failed to load rig data from {filepath} ERROR")
         return None
+    return create_armature_from_rig_data(rig_data, bind_pose, create_debug, source_rig_file=filepath)
 
-    print(f'Beginning Import of: {rig_data.rig_name} from: {filepath} Bind Pose: {bind_pose}')
+
+def create_armature_from_rig_files(filepaths, merged_name: str = '', source_label: str = '', create_debug: bool = False):
+    """Build one JSON-derived armature by merging each later rig into the first.
+
+    ``filepaths[0]`` is the base rig. Input order is authoritative and duplicate bones
+    retain the base/earlier rig definition."""
+    rig_datas = []
+    for filepath in filepaths:
+        rig_data = read_rig(filepath)
+        if rig_data:
+            rig_datas.append(rig_data)
+        else:
+            show_message(f"Failed to load rig data from {filepath} ERROR")
+    if not rig_datas:
+        return None
+    # A single rig uses the same remapping, pose fallback, parent, and track rules.
+    merged = merge_rig_datas(rig_datas, merged_name or rig_datas[0].rig_name + '_metarig')
+    return create_armature_from_rig_data(merged, 'A-Pose', create_debug, source_rig_file=source_label or ';'.join(filepaths))
+
+
+def _identity_trs() -> dict:
+    return {
+        'Translation': {'X': 0.0, 'Y': 0.0, 'Z': 0.0},
+        'Rotation': {'i': 0.0, 'j': 0.0, 'k': 0.0, 'r': 1.0},
+        'Scale': {'X': 1.0, 'Y': 1.0, 'Z': 1.0},
+    }
+
+
+def _rig_apose_ls(rig_data) -> list[dict]:
+    # Use the A-pose only when it covers the complete bone set.
+    if len(rig_data.apose_ls) == len(rig_data.bone_names):
+        return rig_data.apose_ls
+    return rig_data.bone_transforms
+
+
+def _precise_meta_pose_ls(rig_datas, meta_bone_names: list[str]):
+    """Resolve the local A-pose transform for every merged-rig bone.
+
+    Rigs are searched in order, and the first rig containing a bone supplies its local
+    transform. Model space is accumulated later through the merged parent hierarchy.
+    """
+    first_transform_by_name = {}
+    for rig_data in rig_datas:
+        source_ls = _rig_apose_ls(rig_data)
+        source_count = len(source_ls)
+        seen_in_rig = set()
+        for source_index, raw_name in enumerate(rig_data.bone_names):
+            if source_index >= source_count:
+                break
+            name = meta_bone_name(raw_name)
+            if not name or name in seen_in_rig:
+                continue
+            seen_in_rig.add(name)
+            transform = source_ls[source_index]
+            if transform is not None and name not in first_transform_by_name:
+                first_transform_by_name[name] = transform
+    return [transform if (transform := first_transform_by_name.get(name)) is not None else _identity_trs() for name in meta_bone_names]
+
+
+def _merge_rig_data_into_state(
+    rig_data,
+    rig_order,
+    names,
+    index_by_meta_name,
+    transforms,
+    parents,
+    track_names,
+    track_index_by_name,
+    reference_tracks,
+    parts,
+    bone_sources,
+    rig_bone_mappings,
+    rig_track_mappings,
+):
+    """Merge one rig's bones and tracks into the shared state."""
+    source_ls = _rig_apose_ls(rig_data)
+    source_names = rig_data.bone_names
+    source_meta_names = [meta_bone_name(name) for name in source_names]
+    parent_indices = rig_data.parent_indices.tolist() if hasattr(rig_data.parent_indices, 'tolist') else list(rig_data.parent_indices)
+
+    bone_mapping = [-1] * len(source_names)
+    for bone_index, raw_bone_name in enumerate(source_names):
+        bone_name = source_meta_names[bone_index]
+        existing_index = index_by_meta_name.get(bone_name)
+        if existing_index is not None:
+            bone_mapping[bone_index] = existing_index
+            continue
+
+        source_parent = int(parent_indices[bone_index]) if bone_index < len(parent_indices) else -1
+        if 0 <= source_parent < len(source_names):
+            parent_name = source_meta_names[source_parent]
+            merged_parent = index_by_meta_name.get(parent_name, -1)
+        else:
+            parent_name = ''
+            merged_parent = -1
+
+        merged_index = len(names)
+        index_by_meta_name[bone_name] = merged_index
+        names.append(bone_name)
+        transforms.append(
+            source_ls[bone_index]
+            if bone_index < len(source_ls) and source_ls[bone_index]
+            else _identity_trs()
+        )
+        parents.append(merged_parent)
+        bone_mapping[bone_index] = merged_index
+        bone_sources[bone_name] = {
+            'rig_order': rig_order,
+            'rig_name': rig_data.rig_name,
+            'source_index': bone_index,
+            'source_name': raw_bone_name,
+            'meta_name': bone_name,
+            'parent_meta_name': parent_name,
+        }
+
+    # The engine omits source bone zero from AnimPartMetaMapping, but it still inserts
+    # that bone into the MetaRig. Preserve the full source->meta map here and expose the
+    # exact runtime mapping separately.
+    rig_bone_mappings.append({
+        'rig_name': rig_data.rig_name,
+        'all': bone_mapping,
+        'runtime': [
+            (source_index, target_index)
+            for source_index, target_index in enumerate(bone_mapping)
+            if source_index != 0 and target_index >= 0
+        ],
+    })
+
+    track_mapping = []
+    for track_index, track_name in enumerate(rig_data.track_names):
+        existing_index = track_index_by_name.get(track_name)
+        if existing_index is None:
+            existing_index = len(track_names)
+            track_index_by_name[track_name] = existing_index
+            track_names.append(track_name)
+            reference_tracks.append(
+                rig_data.reference_tracks[track_index]
+                if track_index < len(rig_data.reference_tracks)
+                else 0.0
+            )
+        track_mapping.append((track_index, existing_index))
+    rig_track_mappings.append({'rig_name': rig_data.rig_name, 'runtime': track_mapping})
+
+    if rig_data.parts:
+        parts.extend(rig_data.parts)
+
+
+def merge_rig_datas(rig_datas, merged_name: str, return_metadata: bool = False):
+    """Build the merged rig topology and its local A-pose.
+
+    Rigs are consumed in caller order. Bone names, parents, tracks, and mappings use
+    first-wins resolution. Local transforms are then resolved in the same order before
+    model space is accumulated through the merged hierarchy.
+    """
+    if not rig_datas:
+        return (None, {}) if return_metadata else None
+    rig_datas = list(rig_datas)
+    source_ids = tuple(id(rig_data) for rig_data in rig_datas)
+    cache_key = (merged_name, source_ids)
+    cached = _MERGED_RIG_DATA_CACHE.get(cache_key)
+    if cached is not None:
+        cached_sources, cached_merged, cached_metadata = cached
+        if len(cached_sources) == len(rig_datas) and all(a is b for a, b in zip(cached_sources, rig_datas)):
+            return (cached_merged, cached_metadata) if return_metadata else cached_merged
+
+    names: list[str] = []
+    index_by_meta_name: dict[str, int] = {}
+    transforms: list[dict] = []
+    parents: list[int] = []
+    track_names: list[str] = []
+    track_index_by_name: dict[str, int] = {}
+    reference_tracks: list[Any] = []
+    parts: list[Any] = []
+    bone_sources: dict[str, dict] = {}
+    rig_bone_mappings: list[dict] = []
+    rig_track_mappings: list[dict] = []
+
+    base_rig = rig_datas[0]
+    for rig_order, rig_data in enumerate(rig_datas):
+        _merge_rig_data_into_state(
+            rig_data,
+            rig_order,
+            names,
+            index_by_meta_name,
+            transforms,
+            parents,
+            track_names,
+            track_index_by_name,
+            reference_tracks,
+            parts,
+            bone_sources,
+            rig_bone_mappings,
+            rig_track_mappings,
+        )
+
+    # Resolve local transforms after the first-wins topology and mappings are complete.
+    transforms = _precise_meta_pose_ls(rig_datas, names)
+
+    q, t, s = _extract_trs(transforms, len(names))
+    merged = RigData(
+        num_bones=len(names),
+        parent_indices=np.asarray(parents, dtype=np.int16),
+        bone_names=names,
+        track_names=track_names,
+        ls_q=q,
+        ls_t=t,
+        ls_s=s,
+        rig_name=merged_name,
+        disable_connect=True,
+        apose_ls=list(transforms),
+        bone_transforms=list(transforms),
+        parts=parts,
+        rig_extra_tracks=list(base_rig.rig_extra_tracks),
+        reference_tracks=reference_tracks,
+        cooking_platform=base_rig.cooking_platform,
+        distance_category_to_lod_map=list(base_rig.distance_category_to_lod_map),
+        ik_setups=list(base_rig.ik_setups),
+        level_of_detail_start_indices=list(base_rig.level_of_detail_start_indices),
+        ragdoll_desc=list(base_rig.ragdoll_desc),
+        ragdoll_names=list(base_rig.ragdoll_names),
+    )
+    metadata = {
+        'bone_sources': bone_sources,
+        'bone_index_by_name': dict(index_by_meta_name),
+        'rig_bone_mappings': rig_bone_mappings,
+        'rig_track_mappings': rig_track_mappings,
+        'rig_order': [rig_data.rig_name for rig_data in rig_datas],
+    }
+    _bounded_cache_store(
+        _MERGED_RIG_DATA_CACHE,
+        cache_key,
+        (tuple(rig_datas), merged, metadata),
+        limit=32,
+    )
+    return (merged, metadata) if return_metadata else merged
+
+
+def rig_data_to_root_chunk(rig_data) -> dict:
+    """Represent a merged RigData as the RootChunk shape used by entity_import."""
+    if rig_data is None:
+        return {}
+    return {
+        'boneNames': [{'$value': name} for name in rig_data.bone_names],
+        'boneParentIndexes': rig_data.parent_indices.tolist(),
+        'boneTransforms': list(rig_data.bone_transforms),
+        'aPoseLS': list(rig_data.apose_ls),
+        'aPoseMS': [],
+        'trackNames': [{'$value': name} for name in rig_data.track_names],
+        'referenceTracks': list(rig_data.reference_tracks),
+        'levelOfDetailStartIndices': list(rig_data.level_of_detail_start_indices),
+        'distanceCategoryToLodMap': list(rig_data.distance_category_to_lod_map),
+    }
+
+
+def _matrix_is_identity(mat: Matrix, eps: float = 1e-6) -> bool:
+    return (
+        abs(mat[0][0] - 1.0) <= eps and abs(mat[0][1]) <= eps and abs(mat[0][2]) <= eps and abs(mat[0][3]) <= eps
+        and abs(mat[1][0]) <= eps and abs(mat[1][1] - 1.0) <= eps and abs(mat[1][2]) <= eps and abs(mat[1][3]) <= eps
+        and abs(mat[2][0]) <= eps and abs(mat[2][1]) <= eps and abs(mat[2][2] - 1.0) <= eps and abs(mat[2][3]) <= eps
+        and abs(mat[3][0]) <= eps and abs(mat[3][1]) <= eps and abs(mat[3][2]) <= eps and abs(mat[3][3] - 1.0) <= eps
+    )
+
+
+def create_armature_from_rig_data(rig_data, bind_pose: str, create_debug: bool = False, source_rig_file: str = ''):
+    start_time = time.time()
+    rig_col = None
+
+    print(f'Beginning Import of: {rig_data.rig_name} from: {source_rig_file} Bind Pose: {bind_pose}')
     context = bpy.context
     safe_mode_switch('OBJECT')
     coll_scene = context.scene.collection
-    if not bpy.data.collections.get(rig_data.rig_name):
-        rig_col=bpy.data.collections.new(rig_data.rig_name)
+    rig_col = bpy.data.collections.get(rig_data.rig_name)
+    if rig_col is None:
+        rig_col = bpy.data.collections.new(rig_data.rig_name)
         coll_scene.children.link(rig_col)
-    else:
-        rig_col = bpy.data.collections.get(rig_data.rig_name)      
     bpy.ops.object.add(type='ARMATURE', enter_editmode=True, location=(0, 0, 0))
     arm_obj = context.object
     rig_col.objects.link(arm_obj)
@@ -379,9 +728,10 @@ def create_armature_from_data(filepath: str, bind_pose: str, create_debug: bool 
     arm_data = arm_obj.data
     arm_obj.name = rig_data.rig_name
     arm_data.name = f"{rig_data.rig_name}_Data"
-    arm_data['source_rig_file'] = filepath
+    parent_indices_list = rig_data.parent_indices.tolist()
+    arm_data['source_rig_file'] = source_rig_file
     arm_data['boneNames'] = rig_data.bone_names
-    arm_data['boneParentIndexes'] = rig_data.parent_indices.tolist()
+    arm_data['boneParentIndexes'] = parent_indices_list
     arm_data['rig_extra_tracks'] = rig_data.rig_extra_tracks
 
     edit_bones = arm_data.edit_bones
@@ -393,7 +743,7 @@ def create_armature_from_data(filepath: str, bind_pose: str, create_debug: bool 
         b.tail = Vector((0, 0.05, 0))
         bone_index_map[i] = b
 
-    for i, parent_idx in enumerate(rig_data.parent_indices.tolist()):
+    for i, parent_idx in enumerate(parent_indices_list):
         child_bone = bone_index_map[i]
         if parent_idx != -1:
             parent_bone = bone_index_map[parent_idx]
@@ -402,28 +752,32 @@ def create_armature_from_data(filepath: str, bind_pose: str, create_debug: bool 
             if not rig_data.disable_connect and not special:
                 child_bone.use_connect = False
 
-    global_transforms: dict[int, Matrix] = {}
-    for i in range(len(rig_data.bone_names)):
-        mat = compute_global_transform(i, rig_data.bone_transforms, rig_data.parent_indices, global_transforms)
-        global_transforms[i] = mat
+    mats = build_apose_matrices(rig_data.apose_ms, rig_data.apose_ls, rig_data.bone_names, rig_data.parent_indices) if bind_pose == 'A-Pose' else None
+    if mats is None:
+        global_transforms = _model_space_matrices_cached(rig_data.bone_transforms, rig_data.parent_indices)
 
-    for i, tr in enumerate(rig_data.bone_transforms):
-        if is_identity_transform(tr):
-            continue
-        apply_bone_from_matrix(i, global_transforms[i], bone_index_map, rig_data.parent_indices, global_transforms)
+        for i in range(len(rig_data.bone_names)):
+            mat = global_transforms[i] if i < len(global_transforms) else None
+            # Skip on the accumulated transform: a bone whose local transform is identity but
+            # whose parent is transformed still needs placing at that parent.
+            if mat is None or _matrix_is_identity(mat):
+                continue
+            apply_bone_from_matrix(i, mat, bone_index_map, rig_data.parent_indices, global_transforms)
 
     arm_data['T-Pose'] = True
 
     if bind_pose == 'A-Pose':
         if not rig_data.apose_ls and not rig_data.apose_ms:
-            print(f"No A-Pose found in {rig_data.rig_name}.json at {filepath}, falling back to T-Pose")
-        mats = build_apose_matrices(rig_data.apose_ms, rig_data.apose_ls, rig_data.bone_names, rig_data.parent_indices)
+            print(f"No A-Pose found in {rig_data.rig_name}.json at {source_rig_file}, falling back to T-Pose")
         if mats is not None:
+            # Tail directions must be derived from the same pose as the heads and rolls.
+            # Using reference-pose child positions here creates a hybrid A/T-pose rest rig.
+            apose_global_transforms = mats
             for i, m in enumerate(mats):
-                apply_bone_from_matrix(i, m, bone_index_map, rig_data.parent_indices, global_transforms)
+                apply_bone_from_matrix(i, m, bone_index_map, rig_data.parent_indices, apose_global_transforms)
             arm_data['T-Pose'] = False
         else:
-            print(f"No A-Pose found in {rig_data.rig_name}.json at {filepath}, falling back to T-Pose")
+            print(f"No A-Pose found in {rig_data.rig_name}.json at {source_rig_file}, falling back to T-Pose")
 
     shape = create_bone_shape()
     assign_part_groups(arm_obj, rig_data.parts)
@@ -434,6 +788,7 @@ def create_armature_from_data(filepath: str, bind_pose: str, create_debug: bool 
         create_debug_empties(arm_obj, rig_data.bone_names, rig_data.parent_indices, rig_data.bone_transforms, rig_data.apose_ls, rig_data.apose_ms, bind_pose)
 
     safe_mode_switch('OBJECT')
+    _PARENT_CHILDREN_CACHE.pop(id(rig_data.parent_indices), None)
     print(f"Successfully imported {rig_data.rig_name} in {time.time() - start_time:.2f} seconds.")
     return arm_obj
 
@@ -465,7 +820,10 @@ def create_bone_shape():
 
 
 def assign_bone_shapes(arm, disable_connect, shape=None):
-    anim_bones = CP77animBones()
+    global _ANIM_BONE_SET
+    if _ANIM_BONE_SET is None:
+        _ANIM_BONE_SET = frozenset(CP77animBones())
+    anim_bones = _ANIM_BONE_SET
     if shape is None or not isinstance(shape, bpy.types.Object):
         shape = create_bone_shape()
 
@@ -478,11 +836,11 @@ def assign_bone_shapes(arm, disable_connect, shape=None):
 
         if name in {"Root", "Hips,","Trajectory"}:
             pb.custom_shape = shape
-            pb.custom_shape_scale_xyz = Vector((0.075, 0.075, 0.075))
+            pb.custom_shape_scale_xyz = _SHAPE_SCALE_ROOT
             pb.use_custom_shape_bone_size = False
         elif name in {"WeaponLeft", "WeaponRight"}:
             pb.custom_shape = shape
-            pb.custom_shape_scale_xyz = Vector((0.0125, 0.0125, 0.0125))
+            pb.custom_shape_scale_xyz = _SHAPE_SCALE_WEAPON
             pb.use_custom_shape_bone_size = False
             edit_bone = arm.data.edit_bones.get(name)
             if edit_bone:
@@ -492,12 +850,12 @@ def assign_bone_shapes(arm, disable_connect, shape=None):
             if use_shape:
                 pb.custom_shape = shape
                 if disable_connect:
-                    pb.custom_shape_scale_xyz = Vector((0.05, 0.05, 0.05))
+                    pb.custom_shape_scale_xyz = _SHAPE_SCALE_SMALL
                     pb.use_custom_shape_bone_size = True
                 elif name not in anim_bones:
-                    pb.custom_shape_scale_xyz = Vector((0.1, 0.1, 0.1))
+                    pb.custom_shape_scale_xyz = _SHAPE_SCALE_LARGE
                 else:
-                    pb.custom_shape_scale_xyz = Vector((0.05, 0.05, 0.05))
+                    pb.custom_shape_scale_xyz = _SHAPE_SCALE_SMALL
 
 
 def assign_part_groups(arm_obj, parts):
@@ -505,85 +863,112 @@ def assign_part_groups(arm_obj, parts):
         return
 
     arm_data = arm_obj.data
-
     arm_obj.hide_set(False)
     arm_obj.hide_viewport = False
     arm_obj.hide_render = False
     arm_obj.select_set(True)
     bpy.context.view_layer.objects.active = arm_obj
-
-    current_mode = get_safe_mode()
     safe_mode_switch("EDIT")
 
-    def collect_root_bones(tree):
-        bones = []
-        root_entry = tree.get("rootBone", {}) if isinstance(tree, dict) else {}
-        root = root_entry.get("$value") if isinstance(root_entry, dict) else None
-        if root:
-            bones.append(root)
-        for subtree in tree.get("subtreesToChange", []):
-            bones.extend(collect_root_bones(subtree))
-        return bones
+    bones = arm_data.bones
+    children_by_name = {}
+    for bone in bones:
+        if bone.parent:
+            children_by_name.setdefault(bone.parent.name, []).append(bone.name)
 
-    def get_descendants(bone_name, bone_map):
+    def collect_root_bones(tree):
+        roots = []
+        stack = [tree]
+        while stack:
+            current = stack.pop()
+            if not isinstance(current, dict):
+                continue
+            root_entry = current.get("rootBone", {})
+            root = root_entry.get("$value") if isinstance(root_entry, dict) else None
+            if root:
+                roots.append(root)
+            subtrees = current.get("subtreesToChange", [])
+            if subtrees:
+                stack.extend(reversed(subtrees))
+        return roots
+
+    descendants_cache = {}
+
+    def get_descendants(bone_name):
+        cached = descendants_cache.get(bone_name)
+        if cached is not None:
+            return cached
         descendants = []
-        for b in bone_map.values():
-            if b.parent and b.parent.name == bone_name:
-                descendants.append(b.name)
-                descendants.extend(get_descendants(b.name, bone_map))
+        stack = list(reversed(children_by_name.get(bone_name, ())))
+        while stack:
+            child_name = stack.pop()
+            descendants.append(child_name)
+            children = children_by_name.get(child_name)
+            if children:
+                stack.extend(reversed(children))
+        descendants_cache[bone_name] = descendants
         return descendants
 
-    target_layer = arm_data.edit_bones
-
+    pose_rotation_bones = []
+    pose_rotation_seen = set()
+    final_bones_with_rot_ms = []
+    final_mask_entries = {}
+    final_mask_rot_ms = []
+    has_part_metadata = False
     for part in parts:
         if not isinstance(part, dict):
             continue
-
         part_name = part.get("name", {}).get("$value")
         if not isinstance(part_name, str):
             continue
 
         collection = arm_data.collections.get(part_name) or arm_data.collections.new(name=part_name)
-
         for bone_entry in part.get("singleBones", []):
             bone_name = bone_entry.get("$value") if isinstance(bone_entry, dict) else None
             if isinstance(bone_name, str):
-                bone = arm_data.bones.get(bone_name)
+                bone = bones.get(bone_name) or bones.get(meta_bone_name(bone_name))
                 if bone:
                     collection.assign(bone)
 
         for tree in part.get("treeBones", []):
             if not isinstance(tree, dict):
                 continue
-            root_bones = collect_root_bones(tree)
-            for root_name in root_bones:
+            for root_name in collect_root_bones(tree):
                 if not isinstance(root_name, str):
                     continue
-                root_bone = arm_data.bones.get(root_name)
+                resolved_root_name = root_name if bones.get(root_name) else meta_bone_name(root_name)
+                root_bone = bones.get(resolved_root_name)
                 if root_bone:
                     collection.assign(root_bone)
-                for child_name in get_descendants(root_name, arm_data.bones):
-                    child_bone = arm_data.bones.get(child_name)
+                for child_name in get_descendants(resolved_root_name):
+                    child_bone = bones.get(child_name)
                     if child_bone:
                         collection.assign(child_bone)
 
         bones_with_rot_ms = [entry.get("$value") for entry in part.get("bonesWithRotationInModelSpace", []) if isinstance(entry, dict) and "$value" in entry]
         mask_entries = {str(entry["index"]): entry["weight"] for entry in part.get("mask", []) if isinstance(entry, dict) and "index" in entry and "weight" in entry}
         mask_rot_ms = part.get("maskRotMS", [])
+        has_part_metadata = True
+        final_bones_with_rot_ms = bones_with_rot_ms
+        final_mask_entries = mask_entries
+        final_mask_rot_ms = mask_rot_ms
+        for name in bones_with_rot_ms:
+            if isinstance(name, str) and name not in pose_rotation_seen:
+                pose_rotation_seen.add(name)
+                pose_rotation_bones.append(name)
 
-        arm_obj["bonesWithRotationInModelSpace"] = bones_with_rot_ms
-        arm_obj["mask"] = json.dumps(mask_entries)
-        arm_obj["maskRotMS"] = mask_rot_ms
+    if has_part_metadata:
+        arm_obj["bonesWithRotationInModelSpace"] = final_bones_with_rot_ms
+        arm_obj["mask"] = json.dumps(final_mask_entries)
+        arm_obj["maskRotMS"] = final_mask_rot_ms
 
+    if pose_rotation_bones:
         safe_mode_switch("POSE")
         pose_bones = arm_obj.pose.bones
-
-        for bone_name in bones_with_rot_ms:
-            if not isinstance(bone_name, str):
-                continue
-            pb = pose_bones.get(bone_name)
-            if pb:
-                pb["maskRotMS"] = True
+        for bone_name in pose_rotation_bones:
+            pose_bone = pose_bones.get(bone_name) or pose_bones.get(meta_bone_name(bone_name))
+            if pose_bone:
+                pose_bone["maskRotMS"] = True
     safe_mode_switch('OBJECT')
 
 

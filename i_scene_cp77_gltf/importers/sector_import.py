@@ -15,7 +15,7 @@
 # 3) If you want it to generate the _new collections for you to add new stuff in set am_modding to True
 # 4) Run it
 from ..main.common import *
-from ..jsontool import JSONTool
+from ..jsontool import JSONTool, resolve_entity_appearance
 import os
 import bpy
 import math
@@ -30,7 +30,7 @@ from ..collisiontools.pxbridge.io_phys import import_collider_as_actor
 from .collision_mesh_import import CP77CollisionTriangleMeshJSONimport_by_hashes
 from operator import add
 import bmesh
-from .entity_import import importEnt, resolve_entity_appearance_for_file
+from .entity_import import importEnt
 from .import_with_materials import *
 from .import_common import add_to_list, get_group, meshes_from_mesheswapps, _collection_import_snapshot, _imported_collection_from_diff
 from ..datakrash import DepotAssetIndex
@@ -689,7 +689,9 @@ def _importSectors_cached(filepath, with_mats, remap_depot, want_collisions, am_
     print('path is ', raw_root)
     project = os.path.dirname(filepath)
     project_name = os.path.basename(project)
-    asset_index = DepotAssetIndex.cached(raw_root, SECTOR_INDEX_EXTENSIONS)
+    # A sector import is a user-facing operation boundary: rescan so exports created since
+    # the last import are visible; per-entity imports inside the batch reuse this index.
+    asset_index = DepotAssetIndex.cached(raw_root, SECTOR_INDEX_EXTENSIONS, force_refresh=True)
     # If your importing to edit the sectors and want to add stuff then set the am_modding to True and it will auto create the _new collectors
     # want_collisions when True will import/generate the box and capsule collisions
 
@@ -923,7 +925,7 @@ def _importSectors_cached(filepath, with_mats, remap_depot, want_collisions, am_
                         if not entpath:
                             print(f"Entity template not indexed: {ent_depot}")
                             continue
-                        resolved_app = resolve_entity_appearance_for_file(entpath, app)
+                        resolved_app = resolve_entity_appearance(entpath, app)
                         if resolved_app != app:
                             print(f"Entity appearance alias resolved: {app} -> {resolved_app}")
                         ent_groupnames = _entity_collection_candidates(entpath, app, resolved_app)

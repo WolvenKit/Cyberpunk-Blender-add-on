@@ -2,11 +2,15 @@
 
 import logging
 import os
+from functools import lru_cache
 from typing import Dict, Iterable, List, Set
 
 _file_index_cache: Dict[str, Set[str]] = {}
 _cache_root = None
 _cache_extensions: Set[str] = set()
+_root_index_cache = {}
+_depot_asset_index_cache = {}
+
 _SKIP_DIRS = frozenset({'__pycache__', '.git', '.svn', 'node_modules', '.vscode', '.idea', 'archive', 'backup'})
 DEFAULT_IMAGE_EXTENSIONS = (
     '.png',
@@ -26,6 +30,7 @@ COOKED_RESOURCE_EXPORTS = {
     '.physicalscene': ('.physicalscene.glb', '.physicalscene.json'),
     '.w2mesh': ('.w2mesh.glb', '.w2mesh.json'),
     '.rig': ('.rig.json',),
+    '.xbm': ('.png',),
     '.ent': ('.ent.json',),
     '.app': ('.app.json',),
     '.streamingsector_inplace': ('.streamingsector_inplace.json',),
@@ -48,20 +53,35 @@ _EXPORT_GROUPS_BY_OUTPUT_EXTENSION = {
     for exports in COOKED_RESOURCE_EXPORTS.values()
     for export_extension in exports
 }
+_COOKED_RESOURCE_SUFFIXES = tuple(sorted(COOKED_RESOURCE_EXPORTS, key=len, reverse=True))
+_EXPORTED_RESOURCE_SUFFIXES = tuple(sorted(_EXPORT_GROUPS_BY_OUTPUT_EXTENSION, key=len, reverse=True))
+
+
+@lru_cache(maxsize=131072)
+def _normalize_absolute_path(path: str) -> str:
+    return os.path.normpath(path)
 
 
 def _normalize_path(path: str) -> str:
-    return os.path.abspath(os.path.normpath(path)) if path else ''
+    if not path:
+        return ''
+    normalized = os.path.normpath(path)
+    if os.path.isabs(normalized):
+        return _normalize_absolute_path(normalized)
+    return os.path.abspath(normalized)
 
 
+@lru_cache(maxsize=262144)
 def _path_key(path: str) -> str:
     return os.path.normcase(os.path.normpath(path)).replace('\\', '/') if path else ''
 
 
+@lru_cache(maxsize=131072)
 def _local_ref(reference: str) -> str:
     return reference.replace('\\', os.sep).replace('/', os.sep) if reference else ''
 
 
+@lru_cache(maxsize=128)
 def _extension_key(extension: str) -> str:
     if not extension:
         return ''
@@ -79,16 +99,26 @@ def _normalize_extensions(extensions: Iterable[str]) -> Set[str]:
     }
 
 
+def _normalized_extension_tuple(extensions: Iterable[str]):
+    return tuple(sorted(_normalize_extensions(extensions), key=len, reverse=True))
+
+
+@lru_cache(maxsize=256)
+def _ordered_suffixes(suffixes):
+    return tuple(sorted(suffixes, key=len, reverse=True))
+
+
 def _first_matching_suffix(value: str, suffixes: Iterable[str]) -> str:
     key = _path_key(value)
-    for suffix in sorted(suffixes, key=len, reverse=True):
+    ordered = _ordered_suffixes(tuple(suffixes))
+    for suffix in ordered:
         if key.endswith(suffix):
             return suffix
     return ''
 
 
 def _matching_export_extension(path: str, extensions: Iterable[str]) -> str:
-    return _first_matching_suffix(path, _normalize_extensions(extensions))
+    return _first_matching_suffix(path, _normalized_extension_tuple(extensions))
 
 
 def _append_exported_extension(base: str, extension: str) -> str:
@@ -122,7 +152,7 @@ def dataKrash_fast(root: str, extensions: List[str]) -> Dict[str, Set[str]]:
                         name_lower = entry.name.lower()
                         for ext in norm_exts:
                             if name_lower.endswith(ext):
-                                ext_map[ext].add(_normalize_path(entry.path))
+                                ext_map[ext].add(os.path.normpath(entry.path))
                                 break
                     except (PermissionError, OSError) as exc:
                         logging.debug("Could not access %s: %s", entry.path, exc)
@@ -132,23 +162,45 @@ def dataKrash_fast(root: str, extensions: List[str]) -> Dict[str, Set[str]]:
     return ext_map
 
 
+def _build_root_index(root: str, requested: Set[str], force_refresh: bool = False):
+    root = _normalize_path(root)
+    state = _root_index_cache.get(root)
+    if not force_refresh and state is not None and requested.issubset(state['extensions']):
+        return state
+
+    extensions = requested if force_refresh or state is None else state['extensions'].union(requested)
+    files_by_ext = dataKrash_fast(root, tuple(sorted(extensions, key=len, reverse=True)))
+    for ext in extensions:
+        files_by_ext.setdefault(ext, set())
+    keys_by_ext = {
+        ext: {_path_key(path): path for path in paths}
+        for ext, paths in files_by_ext.items()
+    }
+    state = {
+        'extensions': frozenset(extensions),
+        'files_by_ext': files_by_ext,
+        'keys_by_ext': keys_by_ext,
+    }
+    _root_index_cache[root] = state
+
+    stale_keys = [key for key in _depot_asset_index_cache if key[0] == root]
+    for key in stale_keys:
+        del _depot_asset_index_cache[key]
+    return state
+
+
 def dataKrash_cached(root: str, extensions: List[str], force_refresh: bool = False) -> Dict[str, Set[str]]:
     """Return a cached recursive index for root, expanding when new suffixes are requested."""
     global _file_index_cache, _cache_root, _cache_extensions
 
     root = _normalize_path(root)
     requested = _normalize_extensions(extensions)
+    state = _build_root_index(root, requested, force_refresh=force_refresh)
 
-    if not force_refresh and _cache_root == root and _file_index_cache and requested.issubset(_cache_extensions):
-        return {ext: set(_file_index_cache.get(ext, set())) for ext in requested}
-
-    same_root = _cache_root == root
     _cache_root = root
-    _cache_extensions = requested if force_refresh or not same_root else _cache_extensions.union(requested)
-    _file_index_cache = dataKrash_fast(root, sorted(_cache_extensions, key=len, reverse=True))
-    for ext in _cache_extensions:
-        _file_index_cache.setdefault(ext, set())
-    return {ext: set(_file_index_cache.get(ext, set())) for ext in requested}
+    _cache_extensions = set(state['extensions'])
+    _file_index_cache = state['files_by_ext']
+    return {ext: set(state['files_by_ext'].get(ext, ())) for ext in requested}
 
 
 def clear_dataKrash_cache():
@@ -157,6 +209,13 @@ def clear_dataKrash_cache():
     _file_index_cache = {}
     _cache_root = None
     _cache_extensions = set()
+    _root_index_cache.clear()
+    _depot_asset_index_cache.clear()
+    _normalize_absolute_path.cache_clear()
+    _path_key.cache_clear()
+    _local_ref.cache_clear()
+    _extension_key.cache_clear()
+    _ordered_suffixes.cache_clear()
 
 
 def dataKrash(root: str, extensions: List[str]) -> Dict[str, Set[str]]:
@@ -169,22 +228,45 @@ class DepotAssetIndex:
 
     def __init__(self, root: str, extensions: Iterable[str] = DEFAULT_ASSET_EXTENSIONS, force_refresh: bool = False, warn_missing: bool = True):
         self.root = _normalize_path(root)
-        self.extensions = tuple(sorted(_normalize_extensions(extensions), key=len, reverse=True))
+        self.extensions = _normalized_extension_tuple(extensions)
         self.warn_missing = warn_missing
-        self.files_by_ext = dataKrash_cached(self.root, list(self.extensions), force_refresh=force_refresh)
-        for ext in self.extensions:
-            self.files_by_ext.setdefault(ext, set())
-        self._keys_by_ext = {
-            ext: {_path_key(path): path for path in paths}
-            for ext, paths in self.files_by_ext.items()
+        state = _build_root_index(self.root, set(self.extensions), force_refresh=force_refresh)
+        self.files_by_ext = {
+            ext: set(state['files_by_ext'].get(ext, ()))
+            for ext in self.extensions
         }
+        self._keys_by_ext = {
+            ext: state['keys_by_ext'].get(ext, {})
+            for ext in self.extensions
+        }
+        self._sorted_files_by_ext = {}
 
     @classmethod
     def cached(cls, root: str, extensions: Iterable[str] = DEFAULT_ASSET_EXTENSIONS, force_refresh: bool = False, warn_missing: bool = True):
-        return cls(root, extensions, force_refresh=force_refresh, warn_missing=warn_missing)
+        normalized_root = _normalize_path(root)
+        normalized_extensions = _normalized_extension_tuple(extensions)
+        key = (normalized_root, normalized_extensions, bool(warn_missing))
+        if not force_refresh:
+            cached = _depot_asset_index_cache.get(key)
+            if cached is not None:
+                return cached
+
+        instance = cls(
+            normalized_root,
+            normalized_extensions,
+            force_refresh=force_refresh,
+            warn_missing=warn_missing,
+        )
+        _depot_asset_index_cache[key] = instance
+        return instance
 
     def get_files_by_extension(self, extension: str):
-        return sorted(self.files_by_ext.get(_extension_key(extension), set()))
+        ext = _extension_key(extension)
+        cached = self._sorted_files_by_ext.get(ext)
+        if cached is None:
+            cached = tuple(sorted(self.files_by_ext.get(ext, ())))
+            self._sorted_files_by_ext[ext] = cached
+        return list(cached)
 
     def files(self, extension: str):
         return self.get_files_by_extension(extension)
@@ -200,7 +282,7 @@ class DepotAssetIndex:
         return _normalize_path(local if os.path.isabs(local) else os.path.join(self.root, local))
 
     def _resolve_candidate(self, candidate: str):
-        extension = _matching_export_extension(candidate, self.extensions)
+        extension = _first_matching_suffix(candidate, self.extensions)
         if not extension:
             return None
         return self._keys_by_ext.get(extension, {}).get(_path_key(self._candidate(candidate)))
@@ -211,8 +293,8 @@ class DepotAssetIndex:
             return []
 
         requested = _normalize_extensions(export_extensions or self.extensions)
-        cooked_suffix = _first_matching_suffix(local, COOKED_RESOURCE_EXPORTS)
-        exported_suffix = '' if cooked_suffix else _first_matching_suffix(local, _EXPORT_GROUPS_BY_OUTPUT_EXTENSION)
+        cooked_suffix = _first_matching_suffix(local, _COOKED_RESOURCE_SUFFIXES)
+        exported_suffix = '' if cooked_suffix else _first_matching_suffix(local, _EXPORTED_RESOURCE_SUFFIXES)
 
         if cooked_suffix:
             base = local[:-len(cooked_suffix)]
@@ -221,7 +303,7 @@ class DepotAssetIndex:
             base = local[:-len(exported_suffix)]
             outputs = _EXPORT_GROUPS_BY_OUTPUT_EXTENSION[exported_suffix]
         else:
-            current_extension = _matching_export_extension(local, requested)
+            current_extension = _first_matching_suffix(local, tuple(sorted(requested, key=len, reverse=True)))
             if current_extension:
                 return [local]
             outputs = tuple(sorted(requested, key=len, reverse=True))

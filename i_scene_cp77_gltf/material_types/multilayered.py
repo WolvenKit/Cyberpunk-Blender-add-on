@@ -6,6 +6,33 @@ from ..jsontool import JSONTool
 from ..datakrash import DepotAssetIndex
 import numpy as np
 
+_LAYER_NODE_GROUP_CACHE = {}
+_LAYER_NODE_TEMPLATE_CACHE = {}
+_ML_TEMPLATE_GROUP_CACHE = {}
+
+
+def _cached_node_group(cache, key):
+    name = cache.get(key)
+    if not name:
+        return None
+    group = bpy.data.node_groups.get(name)
+    if group is None:
+        cache.pop(key, None)
+    return group
+
+
+def _datablock_identity(datablock):
+    if datablock is None:
+        return 0
+    try:
+        return datablock.as_pointer()
+    except Exception:
+        return getattr(datablock, 'name_full', getattr(datablock, 'name', ''))
+
+
+def _template_path_key(path):
+    return os.path.normcase(os.path.normpath(path.replace('\\', os.sep))) if path else ''
+
 def np_array_from_image(img_name):
     img = bpy.data.images[img_name]
     # foreach_get reads the pixel buffer directly instead of boxing every
@@ -548,7 +575,17 @@ class Multilayered:
 
 
     def createMLTemplateGroup(self,matTemplateObj,mltemplate):
+        template_key = _template_path_key(mltemplate)
+        cached = _cached_node_group(_ML_TEMPLATE_GROUP_CACHE, template_key)
+        if cached is not None:
+            return cached
+
         name=os.path.basename(mltemplate.replace('\\',os.sep))
+        existing = bpy.data.node_groups.get(name.split('.')[0])
+        if existing is not None:
+            _ML_TEMPLATE_GROUP_CACHE[template_key] = existing.name
+            return existing
+
         CT = imageFromRelPath(matTemplateObj["colorTexture"]["DepotPath"]["$value"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
         NT = imageFromRelPath(matTemplateObj["normalTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True,DepotPath=self.BasePath, ProjPath=self.ProjPath)
         RT = imageFromRelPath(matTemplateObj["roughnessTexture"]["DepotPath"]["$value"],self.image_format,isNormal = True,DepotPath=self.BasePath, ProjPath=self.ProjPath)
@@ -665,6 +702,7 @@ class Multilayered:
         NG.links.new(combineOffUV.outputs[0],MapN.inputs[1])
         NG.links.new(ColorRampOut.outputs[0],colorScaleMix.inputs[0])
 
+        _ML_TEMPLATE_GROUP_CACHE[template_key] = NG.name
         # Returning NG lets callers use the freshly built group directly
         # instead of re-scanning bpy.data.node_groups for it right after creation.
         return NG
@@ -741,9 +779,22 @@ class Multilayered:
         apply_override(inputs, 'RoughLevelsOut', values['roughLevelsOut'], override_table['RoughLevelsOut'], (1, 0))
 
     def _get_or_create_layer_node_tree(self, Mat, group_name, BaseMat, MBI, vers):
+        cached = _cached_node_group(_LAYER_NODE_GROUP_CACHE, group_name)
+        if cached is not None:
+            return cached
+
         existing = bpy.data.node_groups.get(group_name)
         if existing:
+            _LAYER_NODE_GROUP_CACHE[group_name] = existing.name
             return existing
+
+        template_key = (vers[0], _datablock_identity(BaseMat), _datablock_identity(MBI))
+        template = _cached_node_group(_LAYER_NODE_TEMPLATE_CACHE, template_key)
+        if template is not None:
+            NG = template.copy()
+            NG.name = group_name
+            _LAYER_NODE_GROUP_CACHE[group_name] = NG.name
+            return NG
 
         NG = bpy.data.node_groups.new(group_name, "ShaderNodeTree")
         is_legacy_nodes = vers[0] < 5
@@ -967,6 +1018,8 @@ class Multilayered:
         NG.links.new(rLevelsInGroup.outputs[0], rLevelsOutGroup.inputs[0])
         NG.links.new(MBN.outputs[0], mask_mixergroup.inputs['Microblend'])
         NG.links.new(MBN.outputs[1], mask_mixergroup.inputs['Microblend Alpha'])
+        _LAYER_NODE_GROUP_CACHE[group_name] = NG.name
+        _LAYER_NODE_TEMPLATE_CACHE[template_key] = NG.name
         return NG
 
     def setupMaterial(self, LayerName, LayerCount, CurMat, mlmaskpath, normalimgpath):
@@ -1102,10 +1155,15 @@ class Multilayered:
                 mltemplate, OverrideTable = cached_template
 
             material_norm = material.replace('\\', os.sep)
-            base_mat_name = os.path.basename(material_norm).split('.')[0]
-            BaseMat = bpy.data.node_groups.get(base_mat_name)
+            template_key = _template_path_key(material_norm)
+            BaseMat = _cached_node_group(_ML_TEMPLATE_GROUP_CACHE, template_key)
             if BaseMat is None:
-                BaseMat = self.createMLTemplateGroup(mltemplate, material_norm)
+                base_mat_name = os.path.basename(material_norm).split('.')[0]
+                BaseMat = bpy.data.node_groups.get(base_mat_name)
+                if BaseMat is None:
+                    BaseMat = self.createMLTemplateGroup(mltemplate, material_norm)
+                else:
+                    _ML_TEMPLATE_GROUP_CACHE[template_key] = BaseMat.name
 
             group_name = safe_layer_group_name(file_name, vers[0], material_norm, Microblend or '')
             NG = self._get_or_create_layer_node_tree(Mat, group_name, BaseMat, MBI, vers)

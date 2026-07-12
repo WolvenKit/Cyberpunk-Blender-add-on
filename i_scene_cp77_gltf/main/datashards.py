@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any
 import numpy as np
 import mathutils 
 
@@ -17,28 +17,7 @@ class MeshReference:
 
 
 @dataclass(slots=True)
-class ParsedComponent:
-    raw: dict
-    type: str
-    name: str
-    mesh_depot: str
-    graphics_mesh_depot: str
-    mesh_appearance: str
-    rig_depot: str
-    enabled: bool
-    local_transform: dict
-    visual_scale: dict | None
-    slots: list | None
-    parent_transform_handle: object
-    skinning_handle: object
-
-
-@dataclass(slots=True)
 class ParsedEntity:
-    filepath: str
-    name: str
-    raw: dict
-    root: dict
     appearances: list
     appearance_names: list
     appearance_index_by_name: dict
@@ -47,7 +26,6 @@ class ParsedEntity:
     default_appearance: str
     component_dicts: list
     component_data: list
-    parsed_components: list
     components_by_name: dict
     components_by_id: dict
     component_ids: set
@@ -59,16 +37,12 @@ class ParsedEntity:
     collider_components: list
     simple_collider_components: list
     light_channel_components: list
-    rig_components: dict
     resolved_dependencies: list
     vehicle_slot_component: dict | None
 
 
 @dataclass(slots=True)
 class ParsedApp:
-    filepath: str
-    raw: dict
-    root: dict
     appearances: list
     appearance_names: list
     appearances_by_name: dict
@@ -136,14 +110,12 @@ class RigData:
     ragdoll_desc: List[Any] = field(default_factory=list)
     ragdoll_names: List[Any] = field(default_factory=list)
 
-def __post_init__(self) -> None:
-    # Normalize array dtypes/shapes
-    self.parent_indices = np.asarray(self.parent_indices, dtype=np.int16).reshape(-1)
-    self.ls_q = np.asarray(self.ls_q, dtype=np.float32).reshape((-1, 4))
-    self.ls_t = np.asarray(self.ls_t, dtype=np.float32).reshape((-1, 3))
-    self.ls_s = np.asarray(self.ls_s, dtype=np.float32).reshape((-1, 3))
-
-
-    # Ensure num_bones agrees with arrays
-    n = len(self.bone_names) if self.bone_names else int(self.parent_indices.shape[0])
-    self.num_bones = int(n)
+    def __post_init__(self) -> None:
+        # Normalize array dtypes/shapes and keep num_bones consistent with them.
+        # Previously defined at module level by mistake, so it never ran.
+        self.parent_indices = np.asarray(self.parent_indices, dtype=np.int16).reshape(-1)
+        self.ls_q = np.asarray(self.ls_q, dtype=np.float32).reshape((-1, 4))
+        self.ls_t = np.asarray(self.ls_t, dtype=np.float32).reshape((-1, 3))
+        self.ls_s = np.asarray(self.ls_s, dtype=np.float32).reshape((-1, 3))
+        n = len(self.bone_names) if self.bone_names else int(self.parent_indices.shape[0])
+        self.num_bones = int(n)
