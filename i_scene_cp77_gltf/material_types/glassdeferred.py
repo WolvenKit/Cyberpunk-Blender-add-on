@@ -49,8 +49,35 @@ class GlassDeferred:
             CurMat.links.new(rImgNode.outputs[0],pBSDF.inputs['Roughness'])
 #
         if "Normal" in Data:
-            nMap = CreateShaderNodeNormalMap(CurMat,self.BasePath + Data["Normal"],-200,-500,'Normal',self.image_format)
-            CurMat.links.new(nMap.outputs[0],glassBSDF.inputs['Normal'])
+            normal_path = self.BasePath + Data["Normal"]
+            nMap = CreateShaderNodeNormalMap(CurMat, normal_path, -600, -500, 'Normal', self.image_format)
+            
+            # Normal Strength
+            if "NormalStrength" in Data:
+                strength_val = float(Data.get("NormalStrength", 1.0))
+                strength_node = CreateShaderNodeValue(CurMat, strength_val, -450, -550, "NormalStrength")
+                CurMat.links.new(strength_node.outputs[0], nMap.inputs['Strength'])
+            
+            # NormalTileAndOffset
+            if "NormalTileAndOffset" in Data:
+                tile_offset = Data["NormalTileAndOffset"]
+                # Vector4: (tileX, tileY, offsetX, offsetY)
+                uv_map = create_node(CurMat.nodes, "ShaderNodeUVMap", (-200, -500), label="UV Map")
+                mapping = create_node(CurMat.nodes, "ShaderNodeMapping", (-400, -500), label="Normal Mapping")
+                
+                # Tile (scale)
+                mapping.inputs['Scale'].default_value[0] = float(tile_offset.get('X', 1.0))
+                mapping.inputs['Scale'].default_value[1] = float(tile_offset.get('Y', 1.0))
+                # Offset
+                mapping.inputs['Location'].default_value[0] = float(tile_offset.get('Z', 0.0))
+                mapping.inputs['Location'].default_value[1] = float(tile_offset.get('W', 0.0))
+                
+                tex_nodes = [n for n in CurMat.nodes if isinstance(n, bpy.types.ShaderNodeTexImage) and n.label == 'Normal']
+                if tex_nodes:
+                    CurMat.links.new(uv_map.outputs[0], mapping.inputs[0])
+                    CurMat.links.new(mapping.outputs[0], tex_nodes[0].inputs[0])
+            
+            CurMat.links.new(nMap.outputs[0], glassBSDF.inputs['Normal'])
 #       
      
 #  

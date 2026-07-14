@@ -8,6 +8,7 @@ from mathutils import Color
 import pkg_resources
 import bmesh
 import inspect
+from functools import lru_cache
 from mathutils import Vector
 import json
 scale_factor=1.0
@@ -87,93 +88,202 @@ def get_classes(module):
 
     return sorted_operators, sorted_other_classes
 
+def _value(data, *names, default=0):
+    if not isinstance(data, dict):
+        return default
+    for name in names:
+        if name in data:
+            return data[name]
+    return default
+
+
+def _xyz(data, default=0):
+    props = data.get('Properties', data) if isinstance(data, dict) else {}
+    return [
+        _value(props, 'X', 'x', default=default) / scale_factor,
+        _value(props, 'Y', 'y', default=default) / scale_factor,
+        _value(props, 'Z', 'z', default=default) / scale_factor,
+    ]
+
+
+def _image_format_extension(image_format):
+    if not image_format:
+        return ''
+    return image_format if image_format.startswith('.') else f'.{image_format}'
+
+
+def _with_image_extension(path, image_format):
+    ext = _image_format_extension(image_format)
+    return f'{path[:-4]}{ext}' if path.lower().endswith('.xbm') else f'{path[:-3]}{image_format}'
+
+
+@lru_cache(maxsize=32768)
+def _cached_filepath_key(path):
+    try:
+        path = bpy.path.abspath(path)
+    except Exception:
+        pass
+    return os.path.normcase(os.path.abspath(os.path.normpath(path)))
+
+
+def _filepath_key(path):
+    if not path:
+        return ''
+    try:
+        path = os.fspath(path)
+    except TypeError:
+        path = str(path)
+    if path.startswith('//'):
+        try:
+            path = bpy.path.abspath(path)
+        except Exception:
+            pass
+        return os.path.normcase(os.path.abspath(os.path.normpath(path)))
+    return _cached_filepath_key(path)
+
+
+def _matches_colorspace(image, is_normal):
+    non_color = image.colorspace_settings.name == 'Non-Color'
+    return non_color if is_normal else not non_color
+
+
+_image_lookup_cache = {}
+_image_lookup_complete = False
+_image_lookup_count = -1
+_asset_index_cache = {}
+
+
+def _rebuild_image_lookup_cache():
+    global _image_lookup_complete, _image_lookup_count
+    _image_lookup_cache.clear()
+    for image in bpy.data.images:
+        filepath = getattr(image, 'filepath', '')
+        filepath_key = _filepath_key(filepath)
+        if filepath_key:
+            is_normal = image.colorspace_settings.name == 'Non-Color'
+            _image_lookup_cache.setdefault((filepath_key, is_normal), image.name)
+    _image_lookup_count = len(bpy.data.images)
+    _image_lookup_complete = True
+
+
+def _find_loaded_image(filepath, is_normal=False):
+    global _image_lookup_complete
+    filepath_key = _filepath_key(filepath)
+    if not filepath_key:
+        return None
+
+    if not _image_lookup_complete or _image_lookup_count != len(bpy.data.images):
+        _rebuild_image_lookup_cache()
+
+    key = (filepath_key, bool(is_normal))
+    cached_name = _image_lookup_cache.get(key)
+    if not cached_name:
+        return None
+
+    image = bpy.data.images.get(cached_name)
+    if image and _filepath_key(image.filepath) == filepath_key and _matches_colorspace(image, is_normal):
+        return image
+
+    _rebuild_image_lookup_cache()
+    cached_name = _image_lookup_cache.get(key)
+    image = bpy.data.images.get(cached_name) if cached_name else None
+    return image if image and _matches_colorspace(image, is_normal) else None
+
+
+def _resolve_indexed_image(reference, root, image_format):
+    if not reference or not root:
+        return None
+    try:
+        from .datakrash import DepotAssetIndex
+    except Exception:
+        return None
+
+    ext = _image_format_extension(image_format)
+    if not ext:
+        return None
+
+    root = os.path.abspath(os.path.normpath(root.replace('\\', os.sep)))
+    cache_key = (root, ext.lower())
+    index = _asset_index_cache.get(cache_key)
+    if index is None:
+        try:
+            index = DepotAssetIndex.cached(root, extensions=(ext,), warn_missing=False)
+        except Exception:
+            return None
+        _asset_index_cache[cache_key] = index
+
+    local_reference = reference.replace('\\', os.sep).replace('/', os.sep)
+    indexed_reference = _with_image_extension(local_reference, image_format)
+    try:
+        return index.resolve_expected(indexed_reference, ext, warn=False)
+    except Exception:
+        return None
+
+
+def _new_file_image(name, filepath, is_normal=False):
+    global _image_lookup_count
+    image = bpy.data.images.new(name, 1, 1)
+    image.source = 'FILE'
+    image.alpha_mode = 'CHANNEL_PACKED'
+    image.filepath = filepath
+    if is_normal:
+        image.colorspace_settings.name = 'Non-Color'
+    _image_lookup_cache[(_filepath_key(filepath), bool(is_normal))] = image.name
+    _image_lookup_count = len(bpy.data.images)
+    return image
+
+
+def clear_image_lookup_cache():
+    global _image_lookup_complete, _image_lookup_count
+    _image_lookup_cache.clear()
+    _image_lookup_complete = False
+    _image_lookup_count = -1
+    _asset_index_cache.clear()
+    _cached_filepath_key.cache_clear()
+
+
 def get_pos(inst):
-    pos=[0,0,0]
-    if 'Position' in inst.keys():
-        if '$type' in inst['Position'].keys() and inst['Position']['$type']=='WorldPosition':
-            pos[0]=inst['Position']['x']['Bits']/131072*scale_factor
-            pos[1]=inst['Position']['y']['Bits']/131072*scale_factor
-            pos[2]=inst['Position']['z']['Bits']/131072*scale_factor
-        else:
-            if 'Properties' in inst['Position'].keys():
-                pos[0] = inst['Position']['Properties']['X'] /scale_factor
-                pos[1] = inst['Position']['Properties']['Y'] /scale_factor
-                pos[2] = inst['Position']['Properties']['Z'] /scale_factor
-            else:
-                if 'X' in inst['Position'].keys():
-                    pos[0] = inst['Position']['X'] /scale_factor
-                    pos[1] = inst['Position']['Y'] /scale_factor
-                    pos[2] = inst['Position']['Z'] /scale_factor
-                else:
-                    pos[0] = inst['Position']['x'] /scale_factor
-                    pos[1] = inst['Position']['y'] /scale_factor
-                    pos[2] = inst['Position']['z'] /scale_factor
-    elif 'position' in inst.keys():
-        if 'X' in inst['position'].keys():
-                pos[0] = inst['position']['X'] /scale_factor
-                pos[1] = inst['position']['Y'] /scale_factor
-                pos[2] = inst['position']['Z'] /scale_factor
-    elif 'translation' in inst.keys():
-        pos[0] = inst['translation']['X'] /scale_factor
-        pos[1] = inst['translation']['Y'] /scale_factor
-        pos[2] = inst['translation']['Z'] /scale_factor
-    elif 'Translation' in inst.keys():
-        pos[0] = inst['Translation']['X'] /scale_factor
-        pos[1] = inst['Translation']['Y'] /scale_factor
-        pos[2] = inst['Translation']['Z'] /scale_factor
-    return pos
+    pos_data = inst.get('Position') or inst.get('position') or inst.get('translation') or inst.get('Translation')
+    if not isinstance(pos_data, dict):
+        return [0, 0, 0]
+
+    if pos_data.get('$type') == 'WorldPosition':
+        return [
+            _value(pos_data.get('x'), 'Bits') / 131072 * scale_factor,
+            _value(pos_data.get('y'), 'Bits') / 131072 * scale_factor,
+            _value(pos_data.get('z'), 'Bits') / 131072 * scale_factor,
+        ]
+
+    return _xyz(pos_data)
+
 
 def get_rot(inst):
-    rot=[1,0,0,0]
-    if 'Orientation' in inst.keys():
-        if 'Properties' in inst['Orientation'].keys():
-            rot[0] = inst['Orientation']['Properties']['r']
-            rot[1] = inst['Orientation']['Properties']['i']
-            rot[2] = inst['Orientation']['Properties']['j']
-            rot[3] = inst['Orientation']['Properties']['k']
-        else:
-            rot[0] = inst['Orientation']['r']
-            rot[1] = inst['Orientation']['i']
-            rot[2] = inst['Orientation']['j']
-            rot[3] = inst['Orientation']['k']
-    elif 'orientation' in inst.keys():
-            rot[0] = inst['orientation']['r']
-            rot[1] = inst['orientation']['i']
-            rot[2] = inst['orientation']['j']
-            rot[3] = inst['orientation']['k']
-    elif 'Rotation' in inst.keys() and 'r' in inst['Rotation'].keys():
-            rot[0] = inst['Rotation']['r']
-            rot[1] = inst['Rotation']['i']
-            rot[2] = inst['Rotation']['j']
-            rot[3] = inst['Rotation']['k']
-    elif 'Rotation' in inst.keys() and 'X' in inst['Rotation'].keys():
-            rot[0] = inst['Rotation']['W']
-            rot[1] = inst['Rotation']['X']
-            rot[2] = inst['Rotation']['Y']
-            rot[3] = inst['Rotation']['Z']
-    elif 'rotation' in inst.keys():
-            rot[0] = inst['rotation']['r']
-            rot[1] = inst['rotation']['i']
-            rot[2] = inst['rotation']['j']
-            rot[3] = inst['rotation']['k']
-    return rot
+    rot_data = inst.get('Orientation') or inst.get('orientation') or inst.get('Rotation') or inst.get('rotation')
+    if not isinstance(rot_data, dict):
+        return [1, 0, 0, 0]
+
+    props = rot_data.get('Properties', rot_data)
+    if 'r' in props:
+        return [
+            _value(props, 'r', default=1),
+            _value(props, 'i'),
+            _value(props, 'j'),
+            _value(props, 'k'),
+        ]
+
+    return [
+        _value(props, 'W', 'w', default=1),
+        _value(props, 'X', 'x'),
+        _value(props, 'Y', 'y'),
+        _value(props, 'Z', 'z'),
+    ]
+
 
 def get_scale(inst):
-    scale=[0,0,0]
-    if 'Scale' in inst.keys():
-        if 'Properties' in inst['Scale'].keys():
-            scale[0] = inst['Scale']['Properties']['X'] /scale_factor
-            scale[1] = inst['Scale']['Properties']['Y'] /scale_factor
-            scale[2] = inst['Scale']['Properties']['Z'] /scale_factor
-        else:
-            scale[0] = inst['Scale']['X'] /scale_factor
-            scale[1] = inst['Scale']['Y'] /scale_factor
-            scale[2] = inst['Scale']['Z'] /scale_factor
-    elif 'scale' in inst.keys():
-        scale[0] = inst['scale']['X'] /scale_factor
-        scale[1] = inst['scale']['Y'] /scale_factor
-        scale[2] = inst['scale']['Z'] /scale_factor
-    return scale
+    scale_data = inst.get('Scale') or inst.get('scale')
+    if not isinstance(scale_data, dict):
+        return [0, 0, 0]
+    return _xyz(scale_data)
 
 def loc(nodename):
     return bpy.app.translations.pgettext(nodename)
@@ -212,10 +322,11 @@ def get_inputs(tree):
     else:
         return ([x for x in tree.interface.items_tree if (x.item_type == 'SOCKET' and x.in_out == 'INPUT')])
 
+
 def get_outputs(tree):
     vers=bpy.app.version
     if vers[0]<4:
-        return tree.inputs
+        return tree.outputs
     else:
         return ([x for x in tree.interface.items_tree if (x.item_type == 'SOCKET' and x.in_out == 'OUTPUT')])
 
@@ -240,87 +351,38 @@ def bsdf_socket_names():
         socket_names['Emission']= 'Emission Color'
     return socket_names
 
-def imageFromPath(Img,image_format,isNormal = False):
-    # The speedtree materials use the same name textures for different plants this code was loading the same leaves on all of them
-    Im = bpy.data.images.get(os.path.basename(Img)[:-4])
-    if Im and Im.filepath==Img[:-3]+ image_format:
-        if Im.colorspace_settings.name != 'Non-Color':
-            if isNormal:
-                Im = None
-        else:
-            if not isNormal:
-                Im = None
-    else:
-        Im=None
-    if not Im :
-        Im = bpy.data.images.get(os.path.basename(Img)[:-4] + ".001")
-        if Im and Im.filepath==Img[:-3]+ image_format:
-            if Im.colorspace_settings.name != 'Non-Color':
-                if isNormal:
-                    Im = None
-            else:
-                if not isNormal:
-                    Im = None
-        else :
-            Im = None
 
-    if not Im:
-        Im = bpy.data.images.new(os.path.basename(Img)[:-4],1,1)
-        Im.source = "FILE"
-        Im.alpha_mode = 'CHANNEL_PACKED'
-        Im.filepath = Img[:-3]+ image_format
-        if isNormal:
-            Im.colorspace_settings.name = 'Non-Color'
-    return Im
+def imageFromPath(Img,image_format,isNormal = False):
+    filepath = _with_image_extension(Img, image_format)
+    image = _find_loaded_image(filepath, isNormal)
+    if image:
+        return image
+
+    return _new_file_image(os.path.basename(Img)[:-4], filepath, isNormal)
+
 
 def imageFromRelPath(ImgPath, image_format='png', isNormal = False, DepotPath='',ProjPath=''):
-    # The speedtree materials use the same name textures for different plants this code was loading the same leaves on all of them
-    # Also copes with the fact that theres black.xbm in base and engine for instance
     DepotPath=DepotPath.replace('\\',os.sep)
     ProjPath=ProjPath.replace('\\',os.sep)
-    if ImgPath is float:
+    if isinstance(ImgPath, float):
         print(f"refusing to process unresolved relative image path {ImgPath}")
         return
-    if ProjPath is float:
+    if isinstance(ProjPath, float):
         print(f"refusing to process unresolved project path {ProjPath}")
         return
 
-    inProj=os.path.join(ProjPath,ImgPath)[:-3]+ image_format
-    inDepot=os.path.join(DepotPath,ImgPath)[:-3]+ image_format
-    img_names=[k for k in bpy.data.images.keys() if bpy.data.images[k].filepath==inProj]
-    img_name=None
-    if len(img_names)>0:
-        img_name=img_names[0]
-    if not img_name:
-        img_names=[k for k in bpy.data.images.keys() if bpy.data.images[k].filepath==inDepot]
-        if len(img_names)>0:
-            img_name=img_names[0]
-    if img_name:
-        Im = bpy.data.images.get(img_name)
-    else:
-        Im = None
+    inProj = _with_image_extension(os.path.join(ProjPath, ImgPath), image_format)
+    inDepot = _with_image_extension(os.path.join(DepotPath, ImgPath), image_format)
 
-    if Im:
-        if Im.colorspace_settings.name != 'Non-Color':
-            if isNormal:
-                Im = None
-        else:
-            if not isNormal:
-                Im = None
-    else:
-        Im=None
+    image = _find_loaded_image(inProj, isNormal) or _find_loaded_image(inDepot, isNormal)
+    if image:
+        return image
 
-    if not Im:
-        Im = bpy.data.images.new(os.path.basename(ImgPath)[:-4],1,1)
-        Im.source = "FILE"
-        Im.alpha_mode = 'CHANNEL_PACKED'
-        if os.path.exists(inProj):
-            Im.filepath = inProj
-        else:
-            Im.filepath = inDepot
-        if isNormal:
-            Im.colorspace_settings.name = 'Non-Color'
-    return Im
+    resolved = _resolve_indexed_image(ImgPath, ProjPath, image_format) or _resolve_indexed_image(ImgPath, DepotPath, image_format)
+    if not resolved:
+        resolved = inProj if os.path.exists(inProj) else inDepot
+
+    return _new_file_image(os.path.basename(ImgPath)[:-4], resolved, isNormal)
 
 def CreateShaderNodeTexImage(curMat,path = None, x = 0, y = 0, name = None, image_format = 'png', nonCol = False):
     ImgNode = curMat.nodes.new("ShaderNodeTexImage")
@@ -734,8 +796,9 @@ def createOverrideTable(matTemplateObj):
         return Output
 
 def createParallaxGroup():
-    if 'CP77_Parallax' in bpy.data.node_groups.keys():
-        return bpy.data.node_groups['CP77_Parallax']
+    CurMat = bpy.data.node_groups.get('CP77_Parallax')
+    if CurMat:
+        return CurMat
     else:
         CurMat = bpy.data.node_groups.new('CP77_Parallax', 'ShaderNodeTree')
         vers=bpy.app.version
@@ -778,49 +841,35 @@ def createParallaxGroup():
         CurMat.links.new(VectorMath002.outputs['Value'], CombineXYZ.inputs[1])
         return CurMat
 
-def CreateGradMapRamp(CurMat, grad_image_node, location=(-400, 250)):
-    # Get image dimensions
-    image_width = grad_image_node.image.size[0]
 
-    # Calculate stop positions
-    stop_positions = [i / (image_width) for i in range(image_width)]
-    #print(len(stop_positions))
+def CreateGradMapRamp(CurMat, grad_image_node, location=(-400, 250)):
+    image = grad_image_node.image
+    image_width = image.size[0]
     row_index = 0
-    # Get colors from the row
-    colors = []
-    alphas = []
-    for x in range(image_width):
-        pixel_data = grad_image_node.image.pixels[(row_index * image_width + x) * 4: (row_index * image_width + x) * 4 + 4]
-        color = Color()
-        color.r, color.g, color.b = pixel_data[0:3]
-        colors.append(color)
-        alphas.append(pixel_data[3])
-        # Create ColorRamp node
+    all_pixels = tuple(image.pixels)
+
     color_ramp_node = CurMat.nodes.new('ShaderNodeValToRGB')
     color_ramp_node.location = location
-    #print(len(colors))
-    step=1
-    if len(colors)>32:
-        step=math.ceil(len(colors)/32)
-    # Set the stops
+
+    step = math.ceil(image_width / 32) if image_width > 32 else 1
     color_ramp_node.color_ramp.elements.remove(color_ramp_node.color_ramp.elements[1])
-    for i, color in enumerate(colors):
-        if i%step==0:
-            if i>0:
-                element = color_ramp_node.color_ramp.elements.new(i / (len(colors) ))
-            else:
-                element = color_ramp_node.color_ramp.elements[0]
-            element.color = (color.r, color.g, color.b, alphas[i])
-            element.position = stop_positions[i]
+
+    first = True
+    for i in range(0, image_width, step):
+        idx = (row_index * image_width + i) * 4
+        r, g, b, a = all_pixels[idx:idx + 4]
+        element = color_ramp_node.color_ramp.elements[0] if first else color_ramp_node.color_ramp.elements.new(i / image_width)
+        element.color = (r, g, b, a)
+        element.position = i / image_width
+        first = False
 
     color_ramp_node.color_ramp.interpolation = 'CONSTANT'
     return color_ramp_node
 
- # (1-t)a+tb
-
 def createLerpGroup():
-    if 'lerp' in bpy.data.node_groups.keys():
-        return bpy.data.node_groups['lerp']
+    CurMat = bpy.data.node_groups.get('lerp')
+    if CurMat:
+        return CurMat
     else:
         CurMat = bpy.data.node_groups.new('lerp', 'ShaderNodeTree')
         vers=bpy.app.version
@@ -854,8 +903,9 @@ def createLerpGroup():
 
 # (1-t)a+tb for vectors
 def createVecLerpGroup():
-    if 'vecLerp' in bpy.data.node_groups.keys():
-        return bpy.data.node_groups['vecLerp']
+    CurMat = bpy.data.node_groups.get('vecLerp')
+    if CurMat:
+        return CurMat
     else:
         CurMat = bpy.data.node_groups.new('vecLerp', 'ShaderNodeTree')
         vers=bpy.app.version
@@ -892,8 +942,9 @@ def show_message(message):
 
 
 def createHash12Group():
-    if 'hash12' in bpy.data.node_groups.keys():
-        return bpy.data.node_groups['hash12']
+    CurMat = bpy.data.node_groups.get('hash12')
+    if CurMat:
+        return CurMat
     else:
         CurMat = bpy.data.node_groups.new('hash12', 'ShaderNodeTree')
         vers=bpy.app.version
@@ -964,32 +1015,45 @@ def save_presets(presets):
 
 def update_presets_items():
     presets = get_color_presets()
-    items = [(name, name, "") for name in presets.keys()]
+    items = [(name, name, "") for name in presets]
     return items
 
 
+
 def get_selected_collection():
-    selected_objects = [ obj for obj in bpy.context.selected_objects if obj != bpy.context.active_object ]
-    if len(selected_objects) == 0 and bpy.context.active_object is not None:
-        selected_objects.append(bpy.context.active_object)
+    active = bpy.context.active_object
+    selected_objects = [obj for obj in bpy.context.selected_objects if obj != active]
+    if not selected_objects and active is not None:
+        selected_objects.append(active)
 
-    collections = [coll for coll in bpy.data.collections if any(obj.name in [o.name for o in coll.objects] for obj in selected_objects)]
-    if (collections is not None and len(collections) == 1):
-        return collections[0]
+    selected_names = {obj.name for obj in selected_objects}
+    matches = []
+    for coll in bpy.data.collections:
+        if any(name in coll.objects for name in selected_names):
+            matches.append(coll)
+            if len(matches) > 1:
+                return None
 
-    return None
+    return matches[0] if matches else None
+
 
 def get_active_collection():
-    if bpy.context.active_object is None:
+    active = bpy.context.active_object
+    if active is None:
         return None
 
-    collections = [coll for coll in bpy.data.collections if bpy.context.active_object.name in [o.name for o in coll.objects]]
-    if (collections is not None and len(collections) == 1):
-        return collections[0]
+    matches = []
+    for coll in bpy.data.collections:
+        if active.name in coll.objects:
+            matches.append(coll)
+            if len(matches) > 1:
+                return None
 
-    return None
+    return matches[0] if matches else None
 
 _TARGET_TYPES = Literal["MESH", "ARMATURE", "ALL"]
+
+
 def get_collection_children(target_collection_name, target_type:_TARGET_TYPES = "MESH"):
     options = get_args(_TARGET_TYPES)
     assert target_type in options, f"'{target_type}' is not in {options}"
