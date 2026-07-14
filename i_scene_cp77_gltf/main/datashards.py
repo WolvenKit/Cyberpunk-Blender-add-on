@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any
 import numpy as np
 import mathutils 
 
@@ -16,49 +16,43 @@ class MeshReference:
     material_overrides: List[MaterialOverride] = field(default_factory=list)
 
 
-@dataclass
-class AppearanceComponent:
-    name: str
-    type: str
-    mesh: Optional[MeshReference] = None
-    transform: Optional[Dict[str, List[float]]] = None  # {'position': [...], 'orientation': [...], 'scale': [...]}
-    parent_transform_ref_id: Optional[int] = None
-    parent_transform_data: Optional[Dict] = None
-    extra_data: Dict = field(default_factory=dict)
+@dataclass(slots=True)
+class ParsedEntity:
+    appearances: list
+    appearance_names: list
+    appearance_index_by_name: dict
+    appearances_by_appearance: dict
+    appearances_by_name: dict
+    default_appearance: str
+    component_dicts: list
+    component_data: list
+    components_by_name: dict
+    components_by_id: dict
+    component_ids: set
+    component_data_ids: set
+    parent_transform_lookup: dict
+    skinning_lookup: dict
+    shape_lookup: dict
+    slot_component_lookups: dict
+    collider_components: list
+    simple_collider_components: list
+    light_channel_components: list
+    resolved_dependencies: list
+    vehicle_slot_component: dict | None
 
 
-@dataclass
-class AppearanceData:
-    name: str
-    components: List[AppearanceComponent]
-
-
-@dataclass
-class EntityComponent:
-    name: str
-    type: str
-    mesh_path: Optional[str] = None
-    graphics_mesh_path: Optional[str] = None
-    mesh_appearance: Optional[str] = None
-    transform: Optional[Dict[str, List[float]]] = None
-    parent_transform_ref_id: Optional[int] = None
-    parent_transform_data: Optional[Dict] = None
-    extra_data: Dict = field(default_factory=dict)
-
-
-@dataclass
-class ResolvedDependency:
-    path: str
-
-
-@dataclass
-class EntityData:
-    name: str
-    default_appearance: Optional[str]
-    global_components: List[EntityComponent] = field(default_factory=list)
-    appearances: List[AppearanceData] = field(default_factory=list)
-    resolved_dependencies: List[ResolvedDependency] = field(default_factory=list)
-
+@dataclass(slots=True)
+class ParsedApp:
+    appearances: list
+    appearance_names: list
+    appearances_by_name: dict
+    components_by_appearance_name: dict
+    chunks_by_appearance_name: dict
+    parent_transform_lookup_by_appearance_name: dict
+    skinning_lookup_by_appearance_name: dict
+    shape_lookup_by_appearance_name: dict
+    light_channels_by_appearance_name: dict
+    
 @dataclass(slots=True)
 class BoneTransformCache:
     location: mathutils.Vector
@@ -116,14 +110,12 @@ class RigData:
     ragdoll_desc: List[Any] = field(default_factory=list)
     ragdoll_names: List[Any] = field(default_factory=list)
 
-def __post_init__(self) -> None:
-    # Normalize array dtypes/shapes
-    self.parent_indices = np.asarray(self.parent_indices, dtype=np.int16).reshape(-1)
-    self.ls_q = np.asarray(self.ls_q, dtype=np.float32).reshape((-1, 4))
-    self.ls_t = np.asarray(self.ls_t, dtype=np.float32).reshape((-1, 3))
-    self.ls_s = np.asarray(self.ls_s, dtype=np.float32).reshape((-1, 3))
-
-
-    # Ensure num_bones agrees with arrays
-    n = len(self.bone_names) if self.bone_names else int(self.parent_indices.shape[0])
-    self.num_bones = int(n)
+    def __post_init__(self) -> None:
+        # Normalize array dtypes/shapes and keep num_bones consistent with them.
+        # Previously defined at module level by mistake, so it never ran.
+        self.parent_indices = np.asarray(self.parent_indices, dtype=np.int16).reshape(-1)
+        self.ls_q = np.asarray(self.ls_q, dtype=np.float32).reshape((-1, 4))
+        self.ls_t = np.asarray(self.ls_t, dtype=np.float32).reshape((-1, 3))
+        self.ls_s = np.asarray(self.ls_s, dtype=np.float32).reshape((-1, 3))
+        n = len(self.bone_names) if self.bone_names else int(self.parent_indices.shape[0])
+        self.num_bones = int(n)

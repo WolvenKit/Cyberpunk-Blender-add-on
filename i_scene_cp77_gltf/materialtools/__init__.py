@@ -14,6 +14,162 @@ from bpy.props import (StringProperty, EnumProperty, PointerProperty, Collection
 from bpy.types import (Scene, Operator, Panel)
 
 
+_ENUM_CACHE = {}
+_PARSED_OVERRIDE_CACHE = {}
+_COLOR_TIMER_ACTIVE = False
+
+_OVERRIDE_ENUM_KEYS = {
+    'normalstr': 'NormalStrengthList',
+    'metalin': 'MetalLevelsInList',
+    'metalout': 'MetalLevelsOutList',
+    'roughin': 'RoughLevelsInList',
+    'roughout': 'RoughLevelsOutList',
+}
+
+
+def _clear_palette_override_cache():
+    _ENUM_CACHE.clear()
+    _PARSED_OVERRIDE_CACHE.clear()
+
+
+def _active_palette(context):
+    if not context:
+        return None
+    tool_settings = getattr(context, "tool_settings", None)
+    gpencil_paint = getattr(tool_settings, "gpencil_paint", None)
+    return getattr(gpencil_paint, "palette", None)
+
+
+def _palette_enum_key(palette, key):
+    try:
+        palette_id = palette.as_pointer()
+    except Exception:
+        palette_id = palette.name
+    return palette_id, palette.name, key
+
+
+def _get_palette_values(palette, key):
+    if not palette:
+        return []
+    values = palette.get(key, [])
+    return values if values is not None else []
+
+
+def _get_cached_palette_enum(context, key):
+    palette = _active_palette(context)
+    if not palette:
+        return []
+
+    cache_key = _palette_enum_key(palette, key)
+    cached = _ENUM_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    items = [(str(value), str(value), f"Select {value}") for value in _get_palette_values(palette, key)]
+    _ENUM_CACHE[cache_key] = items
+    return items
+
+
+def _parse_override_vector(value):
+    if isinstance(value, (tuple, list)):
+        return tuple(float(v) for v in value)
+
+    key = str(value)
+    cached = _PARSED_OVERRIDE_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    parsed = ast.literal_eval(key)
+    if not isinstance(parsed, (tuple, list)):
+        parsed = (parsed,)
+
+    cached = tuple(float(v) for v in parsed)
+    _PARSED_OVERRIDE_CACHE[key] = cached
+    return cached
+
+
+def _coerce_override_for_socket(socket, value):
+    parsed = _parse_override_vector(value)
+    current = getattr(socket, 'default_value', None)
+
+    try:
+        target_len = len(current)
+    except TypeError:
+        return parsed[0] if parsed else 0.0
+
+    if len(parsed) == target_len:
+        return parsed
+    if len(parsed) > target_len:
+        return parsed[:target_len]
+
+    try:
+        baseline = tuple(float(v) for v in current)
+    except (TypeError, ValueError):
+        baseline = (0.0,) * target_len
+
+    return parsed + baseline[len(parsed):]
+
+
+def _apply_override_vector(layer_group, socket_name, enum_value):
+    socket = layer_group.inputs.get(socket_name)
+    if socket is not None:
+        socket.default_value = _coerce_override_for_socket(socket, enum_value)
+
+
+def _find_matching_scalar(palette, key, target, tolerance):
+    for value in _get_palette_values(palette, key):
+        try:
+            if abs(float(value) - target) < tolerance:
+                return str(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _find_matching_vector(palette, key, target, tolerance):
+    for value in _get_palette_values(palette, key):
+        try:
+            parsed = _parse_override_vector(value)
+        except (SyntaxError, ValueError, TypeError):
+            continue
+
+        err = sum(abs(a - b) for a, b in zip(parsed, target))
+        if abs(err) < tolerance:
+            return str(value)
+    return None
+
+
+def _mltemplate_name_from_path(ml_template_path):
+    template_name = str(ml_template_path).replace('/', '\\').rsplit('\\', 1)[-1]
+    if template_name.endswith('.mltemplate'):
+        return template_name[:-11]
+    if template_name.endswith('.mltemplate.json'):
+        return template_name[:-16]
+    return Path(template_name).stem
+
+
+def _schedule_color_update():
+    global _COLOR_TIMER_ACTIVE
+
+    if _COLOR_TIMER_ACTIVE:
+        return
+
+    _COLOR_TIMER_ACTIVE = True
+    bpy.app.timers.register(_apply_color_debounced, first_interval=0.1)
+
+
+def _apply_color_debounced():
+    global _COLOR_TIMER_ACTIVE
+
+    _COLOR_TIMER_ACTIVE = False
+    try:
+        send_color_to_shader()
+    except Exception as e:
+        print(f"Callback failed: {e}")
+
+    return None
+
+
 # JATO: LLM suggestion because the subscribe functions unregister when loading a new blender file
 @persistent
 def load_post_handler(dummy):
@@ -33,36 +189,33 @@ def subscribe_to_color():
     bpy.msgbus.subscribe_rna(key=subscribe_to,owner=bpy.types.PaletteColor,args=(),notify=color_changed_callback)
     
 def color_changed_callback():
-    ts = bpy.context.tool_settings
-    palette = ts.gpencil_paint.palette
+    palette = _active_palette(bpy.context)
+    if not palette:
+        return
+
     props = bpy.context.scene.cp77_ml_props
+    new_palette_color = tuple(palette.colors.active.color)
 
-    if palette:
-        new_palette_color = palette.colors.active.color
-        if new_palette_color != props.last_palette_color:
-            # JATO: I think this should work but blender doesnt like?
-            #bpy.app.timers.register(lambda: bpy.ops.apply_color_override.mlsetup(), first_interval=0.01)
+    if new_palette_color != tuple(props.last_palette_color):
+        _schedule_color_update()
 
-            # LLM: We use a try/except because the context might be 'restricted' during callbacks
-            try:
-                send_color_to_shader()
-            except Exception as e:
-                print(f"Callback failed: {e}")
-
-        props.last_palette_color = palette.colors.active.color
+    props.last_palette_color = new_palette_color
 
 def send_color_to_shader():
-    ts = bpy.context.tool_settings
-    if 'MLTemplatePath' not in ts.gpencil_paint.palette:
+    palette = _active_palette(bpy.context)
+    if not palette or palette.get('MLTemplatePath') is None:
         return
-    palette = ts.gpencil_paint.palette
-    if ts.gpencil_paint.palette:
-        colR, colG, colB = palette.colors.active.color
-        active_color = (colR, colG, colB, 1)
 
     LayerGroup = get_layernode_by_socket()
+    if LayerGroup is None:
+        return
 
-    LayerGroup.inputs['ColorScale'].default_value = active_color
+    color_socket = LayerGroup.inputs.get('ColorScale')
+    if color_socket is None:
+        return
+
+    colR, colG, colB = palette.colors.active.color
+    color_socket.default_value = (colR, colG, colB, 1)
 
 
 def subscribe_to_object():
@@ -194,7 +347,7 @@ def generate_multilayer_material(self,context):
     new_material = reload_mats(self, context)
     new_material['BaseMaterial'] = "engine\\materials\\multilayered.mt"
     new_material['DiffuseMap'] = "None"
-    new_material['GlobalNormal'] = "engine\\textures\editor\\normal.xbm"
+    new_material['GlobalNormal'] = "engine\\textures\\editor\\normal.xbm"
     new_material['MultilayerMask'] = "default.mlmask"
     new_material['m'] = {'Name': 'Multilayer Default', 'BaseMaterial': 'engine\\materials\\multilayered.mt', 'GlobalNormal': 'engine\\textures\\editor\\normal.xbm', 'MultilayerMask': 'default.mlmask', 'DiffuseMap': 'None'}
 
@@ -337,26 +490,19 @@ def load_panel_data(self, context):
     props.multilayer_has_linked_layer = True
     props.multilayer_layergroup_string = LayerGroup.name
 
-    # JATO: try setting mask as active then update any image editor windows to show active mask
     nodes = bpy.context.active_object.active_material.node_tree.nodes
-    MaskNode = None
-    socket_name = "Mask"
-    socket = LayerGroup.inputs.get(socket_name)
+    socket = LayerGroup.inputs.get("Mask")
     if socket.is_linked:
         props.multilayer_paint_mask_enable_bool = True
-        maskNodeLink = socket.links[0]
-        linkedMaskNodeName = maskNodeLink.from_node.name
-        MaskNode=nodes[linkedMaskNodeName]
+        MaskNode = nodes[socket.links[0].from_node.name]
         nodes.active = MaskNode
         for window in bpy.context.window_manager.windows:
-                for area in window.screen.areas:
-                    if area.type == 'IMAGE_EDITOR':
-                        space = area.spaces.active
-                        space.image = MaskNode.image
+            for area in window.screen.areas:
+                if area.type == 'IMAGE_EDITOR':
+                    area.spaces.active.image = MaskNode.image
     else:
         props.multilayer_paint_mask_enable_bool = False
 
-    # JATO: TODO test error tolerance numbers
     # JATO: 0.00005 causes color mismatch on panam pants group #3 / layer 4, narrowed to 0.00001
     matchTolerance = 0.00001
 
@@ -366,61 +512,29 @@ def load_panel_data(self, context):
         apply_paint_mask(self, context)
 
     colorscale = (LayerGroup.inputs['ColorScale'].default_value[::])[:-1]
-    normstr = (LayerGroup.inputs['NormalStrength'].default_value)
-    metin = (LayerGroup.inputs['MetalLevelsIn'].default_value[::])
-    metout = (LayerGroup.inputs['MetalLevelsOut'].default_value[::])
-    rouin = (LayerGroup.inputs['RoughLevelsIn'].default_value[::])
-    rouout = (LayerGroup.inputs['RoughLevelsOut'].default_value[::])
+    normstr = LayerGroup.inputs['NormalStrength'].default_value
+    metin = LayerGroup.inputs['MetalLevelsIn'].default_value[::]
+    metout = LayerGroup.inputs['MetalLevelsOut'].default_value[::]
+    rouin = LayerGroup.inputs['RoughLevelsIn'].default_value[::]
+    rouout = LayerGroup.inputs['RoughLevelsOut'].default_value[::]
 
     props.multilayer_has_generated_overrides = False
-    # JATO: We get overrides after selecting the right layer and before matching palette color
     load_mltemplate_and_microblend(self,context,node_group_name=LayerGroup.name)
 
     active_palette = bpy.context.tool_settings.gpencil_paint.palette
-
     if active_palette:
-        palette_colors = active_palette.colors
-
         pal_col = None
-        for pal_col in palette_colors:
+        for pal_col in active_palette.colors:
             col_tuple = pal_col.color[:]
             err = sum(abs(a - b) for a, b in zip(col_tuple, colorscale))
             if abs(err) < matchTolerance:
                 break
 
-        elem_nrmstr = None
-        for elem_nrmstr in active_palette['NormalStrengthList']:
-            err = float(elem_nrmstr) - normstr
-            if abs(err) < matchTolerance:
-                break
-
-        elem_metin = None
-        for elem_metin in active_palette['MetalLevelsInList']:
-            elem_metin_list = ast.literal_eval(elem_metin)
-            err = sum(abs(a - b) for a, b in zip(elem_metin_list, metin))
-            if abs(err) < matchTolerance:
-                break
-
-        elem_metout = None
-        for elem_metout in active_palette['MetalLevelsOutList']:
-            elem_metout_list = ast.literal_eval(elem_metout)
-            err = sum(abs(a - b) for a, b in zip(elem_metout_list, metout))
-            if abs(err) < matchTolerance:
-                break
-
-        elem_rouin = None
-        for elem_rouin in active_palette['RoughLevelsInList']:
-            elem_rouin_list = ast.literal_eval(elem_rouin)
-            err = sum(abs(a - b) for a, b in zip(elem_rouin_list, rouin))
-            if abs(err) < matchTolerance:
-                break
-
-        elem_rouout = None
-        for elem_rouout in active_palette['RoughLevelsOutList']:
-            elem_rouout_list = ast.literal_eval(elem_rouout)
-            err = sum(abs(a - b) for a, b in zip(elem_rouout_list, rouout))
-            if abs(err) < matchTolerance:
-                break
+        elem_nrmstr = _find_matching_scalar(active_palette, 'NormalStrengthList', normstr, matchTolerance)
+        elem_metin = _find_matching_vector(active_palette, 'MetalLevelsInList', metin, matchTolerance)
+        elem_metout = _find_matching_vector(active_palette, 'MetalLevelsOutList', metout, matchTolerance)
+        elem_rouin = _find_matching_vector(active_palette, 'RoughLevelsInList', rouin, matchTolerance)
+        elem_rouout = _find_matching_vector(active_palette, 'RoughLevelsOutList', rouout, matchTolerance)
 
         if pal_col is not None:
             bpy.context.tool_settings.gpencil_paint.palette.colors.active = pal_col
@@ -442,32 +556,23 @@ def load_mltemplate_and_microblend(self,context,node_group_name):
     ts = context.tool_settings
 
     LayerGroup = active_material.node_tree.nodes.get(node_group_name)
+    if LayerGroup is None:
+        props.multilayer_has_linked_layer = False
+        return
 
-    microblendtexnode = LayerGroup.node_tree.nodes['Image Texture']
-    props.multilayer_microblend_pointer = microblendtexnode.image
+    microblendtexnode = LayerGroup.node_tree.nodes.get('Image Texture')
+    if microblendtexnode:
+        props.multilayer_microblend_pointer = microblendtexnode.image
 
     mlTemplateGroupInputNode = LayerGroup.node_tree.nodes['Group'].node_tree.nodes['Group Input']
     mlTemplatePath = str(mlTemplateGroupInputNode['mlTemplate'])
-    mlTemplatePathStripped = ((mlTemplatePath.split('\\'))[-1])[:-11]
+    mlTemplatePathStripped = _mltemplate_name_from_path(mlTemplatePath)
 
-    # JATO: for performance, first we try getting palette by direct name-match and ensure the mlTemplate path matches
-    # If mlTemplate paths don't match try searching all palettes which can be slow
-    match_palette = None
-    palette_byname = bpy.data.palettes.get(mlTemplatePathStripped)
-    if palette_byname and palette_byname['MLTemplatePath'] == mlTemplateGroupInputNode['mlTemplate']:
-        match_palette = palette_byname
-    else:
-        for palette in bpy.data.palettes:
-            if 'MLTemplatePath' not in palette:
-                if not props.multilayer_has_generated_overrides:
-                    props.multilayer_has_generated_overrides = True
-                    bpy.ops.generate_layer_overrides.mlsetup()
-                return
-            if palette['MLTemplatePath'] == mlTemplateGroupInputNode['mlTemplate']:
-                match_palette = palette
-    if match_palette == None:
+    match_palette = bpy.data.palettes.get(mlTemplatePathStripped)
+    if not match_palette or match_palette.get('MLTemplatePath') != mlTemplateGroupInputNode['mlTemplate']:
         if not props.multilayer_has_generated_overrides:
             props.multilayer_has_generated_overrides = True
+            _clear_palette_override_cache()
             bpy.ops.generate_layer_overrides.mlsetup()
         return
 
@@ -522,41 +627,30 @@ def apply_mltemplate(self,context):
 
 def send_mltemplate_to_shader(self,context):
     ts = context.tool_settings
-    if not ts.gpencil_paint.palette:
+    palette = ts.gpencil_paint.palette
+    if not palette:
         # self.report({'WARNING'}, 'No active palette to match with MLTEMPLATE.')
         return {'CANCELLED'}
-    if 'MLTemplatePath' not in ts.gpencil_paint.palette:
+
+    ml_template_path = palette.get('MLTemplatePath')
+    if ml_template_path is None:
         # self.report({'WARNING'}, 'MLTEMPLATE path not found on active palette.')
         return {'CANCELLED'}
-    palette_name = ts.gpencil_paint.palette.name
 
     LayerGroup = get_layernode_by_socket()
     if LayerGroup == None:
-        return
+        return {'CANCELLED'}
 
-        # JATO: for performance, first we try getting node group by direct name-match and ensure the mlTemplate path matches
-        # If mlTemplate paths don't match try searching all node-groups which can be slow
-        ngmatch = None
-        nodeGroup = bpy.data.node_groups.get(palette_name)
-        if nodeGroup and 'mlTemplate' in nodeGroup and nodeGroup['mlTemplate'] == ts.gpencil_paint.palette['MLTemplatePath']:
-            ngmatch = nodeGroup
-        else:
-            for ng in bpy.data.node_groups:
-                if 'mlTemplate' in ng:
-                    if ng['mlTemplate'] == ts.gpencil_paint.palette['MLTemplatePath']:
-                        ngmatch = ng
-        if ngmatch == None:
-            self.report({'WARNING'}, 'A Palette and Node Group with corresponding MLTEMPLATE path were not found.')
-            return {'CANCELLED'}
+    template_name = _mltemplate_name_from_path(ml_template_path)
+    ngmatch = bpy.data.node_groups.get(palette.name) or bpy.data.node_groups.get(template_name)
 
-        LayerGroup.node_tree.nodes['Group'].node_tree = ngmatch
+    if not ngmatch or ngmatch.get('mlTemplate') != ml_template_path:
+        self.report({'WARNING'}, 'A Palette and Node Group with corresponding MLTEMPLATE path were not found.')
+        return {'CANCELLED'}
 
-        palette = ts.gpencil_paint.palette
-        if ts.gpencil_paint.palette:
-            colR, colG, colB = palette.colors.active.color
-            active_color = (colR, colG, colB, 1)
-
-        LayerGroup.inputs['ColorScale'].default_value = active_color
+    LayerGroup.node_tree.nodes['Group'].node_tree = ngmatch
+    send_color_to_shader()
+    return {'FINISHED'}
 
 
 def microblend_filter(self,object):
@@ -576,77 +670,60 @@ def apply_microblend_mlsetup(self,context):
 
 
 def get_normalstr_ovrd(self, context):
-    normal_str_list = []
-    ts = context.tool_settings
-    active_palette = ts.gpencil_paint.palette
-    if active_palette:
-        for x in active_palette['NormalStrengthList']:
-            normal_str_list.append((x, x, f"Select {x}"))
-        return normal_str_list
+    return _get_cached_palette_enum(context, 'NormalStrengthList')
+
 def get_metalin_ovrd(self, context):
-    metal_in_list = []
-    ts = context.tool_settings
-    active_palette = ts.gpencil_paint.palette
-    if active_palette:
-        for x in active_palette['MetalLevelsInList']:
-            metal_in_list.append((x, x, f"Select {x}"))
-        return metal_in_list
+    return _get_cached_palette_enum(context, 'MetalLevelsInList')
+
 def get_metalout_ovrd(self, context):
-    metal_out_list = []
-    ts = context.tool_settings
-    active_palette = ts.gpencil_paint.palette
-    if active_palette:
-        for x in active_palette['MetalLevelsOutList']:
-            metal_out_list.append((x, x, f"Select {x}"))
-        return metal_out_list
+    return _get_cached_palette_enum(context, 'MetalLevelsOutList')
+
 def get_roughin_ovrd(self, context):
-    rough_in_list = []
-    ts = context.tool_settings
-    active_palette = ts.gpencil_paint.palette
-    if active_palette:
-        for x in active_palette['RoughLevelsInList']:
-            rough_in_list.append((x, x, f"Select {x}"))
-        return rough_in_list
+    return _get_cached_palette_enum(context, 'RoughLevelsInList')
+
 def get_roughout_ovrd(self, context):
-    rough_out_list = []
-    ts = context.tool_settings
-    active_palette = ts.gpencil_paint.palette
-    if active_palette:
-        for x in active_palette['RoughLevelsOutList']:
-            rough_out_list.append((x, x, f"Select {x}"))
-        return rough_out_list
+    return _get_cached_palette_enum(context, 'RoughLevelsOutList')
 
 def apply_normalstr_ovrd(self, context):
     props = bpy.context.scene.cp77_ml_props
     if props.last_multilayer_index != props.multilayer_index_int:
         return
     LayerGroup = get_layernode_by_socket()
-    LayerGroup.inputs['NormalStrength'].default_value = float(props.multilayer_normalstr_enum)
+    if LayerGroup:
+        LayerGroup.inputs['NormalStrength'].default_value = float(props.multilayer_normalstr_enum)
+
 def apply_metalin_ovrd(self, context):
     props = bpy.context.scene.cp77_ml_props
     if props.last_multilayer_index != props.multilayer_index_int:
         return
     LayerGroup = get_layernode_by_socket()
-    LayerGroup.inputs['MetalLevelsIn'].default_value = ast.literal_eval(props.multilayer_metalin_enum)
+    if LayerGroup:
+        _apply_override_vector(LayerGroup, 'MetalLevelsIn', props.multilayer_metalin_enum)
+
 def apply_metalout_ovrd(self, context):
     props = bpy.context.scene.cp77_ml_props
     if props.last_multilayer_index != props.multilayer_index_int:
         return
     LayerGroup = get_layernode_by_socket()
-    LayerGroup.inputs['MetalLevelsOut'].default_value = ast.literal_eval(props.multilayer_metalout_enum)
+    if LayerGroup:
+        _apply_override_vector(LayerGroup, 'MetalLevelsOut', props.multilayer_metalout_enum)
+
 def apply_roughin_ovrd(self, context):
     props = bpy.context.scene.cp77_ml_props
     if props.last_multilayer_index != props.multilayer_index_int:
         return
     LayerGroup = get_layernode_by_socket()
-    LayerGroup.inputs['RoughLevelsIn'].default_value = ast.literal_eval(props.multilayer_roughin_enum)
+    if LayerGroup:
+        _apply_override_vector(LayerGroup, 'RoughLevelsIn', props.multilayer_roughin_enum)
+
 def apply_roughout_ovrd(self, context):
     props = bpy.context.scene.cp77_ml_props
     if props.last_multilayer_index != props.multilayer_index_int:
         props.last_multilayer_index = props.multilayer_index_int
         return
     LayerGroup = get_layernode_by_socket()
-    LayerGroup.inputs['RoughLevelsOut'].default_value = ast.literal_eval(props.multilayer_roughout_enum)
+    if LayerGroup:
+        _apply_override_vector(LayerGroup, 'RoughLevelsOut', props.multilayer_roughout_enum)
 
     #JATO: important we do this here because this is the last "update" func to trigger
     props.last_multilayer_index = props.multilayer_index_int
@@ -841,6 +918,7 @@ class CP77MlSetupGenerateOverrides(Operator):
 
         props = bpy.context.scene.cp77_ml_props
         mlsetup_export.cp77_mlsetup_generateoverrides(self, context)
+        _clear_palette_override_cache()
 
         LayerGroup = get_layernode_by_socket()
         if LayerGroup == None:
@@ -870,6 +948,7 @@ class CP77MlSetupGenerateOverridesDisconnected(Operator):
 
         props = bpy.context.scene.cp77_ml_props
         mlsetup_export.cp77_mlsetup_generateoverrides(self, context, include_disconnected=True)
+        _clear_palette_override_cache()
 
         props.multilayer_index_int = 1
 

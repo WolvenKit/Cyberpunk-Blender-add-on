@@ -1,4 +1,3 @@
-import os
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterable
 
@@ -29,7 +28,7 @@ from ..material_types.pbr_layer import pbr_layer
 from ..material_types.invisible import Invisible
 
 def _norm(path: str) -> str:
-    return path.replace('/', '\\') if path else path
+    return path.replace('/', '\\').lower() if path else path
 
 
 @dataclass(frozen=True)
