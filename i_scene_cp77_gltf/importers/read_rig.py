@@ -3,6 +3,9 @@ from __future__ import annotations
 import os
 import time
 import json
+import copy
+import base64
+import zlib
 from typing import Any
 
 import bpy
@@ -14,8 +17,6 @@ from ..jsontool import JSONTool
 from ..cyber_props import CP77animBones
 from ..main.datashards import RigData
 from ..main.bartmoss_functions import *
-
-
 _PARENT_CHILDREN_CACHE = {}
 _RIG_DATA_FILE_CACHE = {}
 _MERGED_RIG_DATA_CACHE = {}
@@ -26,6 +27,117 @@ _SHAPE_SCALE_WEAPON = (0.0125, 0.0125, 0.0125)
 _SHAPE_SCALE_SMALL = (0.05, 0.05, 0.05)
 _SHAPE_SCALE_LARGE = (0.1, 0.1, 0.1)
 
+_RIG_SPACE_CONTRACT = "CP77_RE_MODEL_BL_BONE_X_NEGZ_Y_Y_Z_X_V1"
+_RIG_EXPORT_TEMPLATE_KEY = "cp77_rig_export_template_zlib_b64"
+_RIG_EXPORT_TEMPLATE_VERSION = 1
+_RIG_IMPORT_MATRIX_KEY = "cp77_rig_import_matrix"
+_RIG_IMPORT_SOURCE_MODEL_KEY = "cp77_rig_import_source_model_matrix"
+_RIG_IMPORT_MATRIX_VERSION = 2
+_SOURCE_DOCUMENT_CACHE = {}
+
+
+
+def _matrix_to_flat_list(matrix: Matrix) -> list[float]:
+    return [float(matrix[row][column]) for row in range(4) for column in range(4)]
+
+
+def _cache_source_document(filepath: str, signature, document: dict) -> None:
+    normalized = os.path.normcase(os.path.abspath(filepath))
+    _SOURCE_DOCUMENT_CACHE[normalized] = (signature, document)
+
+
+def _source_document_for_filepath(filepath: str) -> dict | None:
+    normalized, signature = _rig_file_signature(filepath)
+    cached = _SOURCE_DOCUMENT_CACHE.get(normalized)
+    if cached is not None and cached[0] == signature:
+        return copy.deepcopy(cached[1])
+    try:
+        data = JSONTool.jsonload(filepath)
+    except Exception:
+        return None
+    _SOURCE_DOCUMENT_CACHE[normalized] = (signature, data)
+    return copy.deepcopy(data)
+
+
+def _minimal_rig_document(source_rig_file: str = '') -> dict:
+    archive_path = source_rig_file[:-5] if source_rig_file.lower().endswith('.json') else source_rig_file
+    return {
+        'Header': {
+            'WKitJsonVersion': '0.0.9',
+            'DataType': 'CR2W',
+            'ArchiveFileName': archive_path,
+        },
+        'Data': {
+            'RootChunk': {
+                '$type': 'animRig',
+                'aPoseLS': [],
+                'aPoseMS': [],
+                'boneNames': [],
+                'boneParentIndexes': [],
+                'boneTransforms': [],
+                'referencePoseMS': [],
+                'referenceTracks': [],
+                'rigExtraTracks': [],
+                'trackNames': [],
+            }
+        },
+    }
+
+
+def _cname_entry(name: str) -> dict:
+    return {'$type': 'CName', '$storage': 'string', '$value': str(name)}
+
+
+def _merged_rig_document(filepaths, merged_rig_data, source_label: str = '') -> dict:
+    base_document = _source_document_for_filepath(filepaths[0]) if filepaths else None
+    document = base_document or _minimal_rig_document(source_label)
+    root = document.setdefault('Data', {}).setdefault('RootChunk', {})
+    root.update(rig_data_to_root_chunk(merged_rig_data))
+    root['$type'] = 'animRig'
+    root['boneNames'] = [_cname_entry(name) for name in merged_rig_data.bone_names]
+    root['trackNames'] = [_cname_entry(name) for name in merged_rig_data.track_names]
+    root.setdefault('aPoseMS', [])
+    root.setdefault('referencePoseMS', [])
+    if source_label:
+        archive_path = source_label[:-5] if source_label.lower().endswith('.json') else source_label
+        document.setdefault('Header', {})['ArchiveFileName'] = archive_path
+    return document
+
+
+def _encode_rig_export_template(document: dict) -> str:
+    raw = json.dumps(document, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+    return base64.b64encode(zlib.compress(raw, 9)).decode('ascii')
+
+
+def _attach_rig_export_metadata(arm_obj, source_document: dict | None) -> None:
+    arm_data = arm_obj.data
+    source_path = str(arm_data.get('source_rig_file', ''))
+    if source_document is None and source_path and ';' not in source_path and os.path.isfile(source_path):
+        source_document = _source_document_for_filepath(source_path)
+    document = copy.deepcopy(source_document) if source_document else _minimal_rig_document(source_path)
+    try:
+        arm_data[_RIG_EXPORT_TEMPLATE_KEY] = _encode_rig_export_template(document)
+        arm_data['cp77_rig_export_template_version'] = _RIG_EXPORT_TEMPLATE_VERSION
+    except (TypeError, ValueError, OverflowError):
+        if _RIG_EXPORT_TEMPLATE_KEY in arm_data:
+            del arm_data[_RIG_EXPORT_TEMPLATE_KEY]
+    arm_data['cp77_rig_imported_pose'] = 'T_POSE' if bool(arm_data.get('T-Pose', True)) else 'A_POSE'
+
+
+def _attach_imported_bone_matrices(arm_obj, source_model_matrices) -> None:
+    for source_index, source_name in enumerate(arm_obj.data.get('boneNames', [])):
+        bone = arm_obj.data.bones.get(str(source_name))
+        if bone is None:
+            continue
+        bone[_RIG_IMPORT_MATRIX_KEY] = _matrix_to_flat_list(bone.matrix_local)
+        bone['cp77_rig_import_matrix_version'] = _RIG_IMPORT_MATRIX_VERSION
+        if source_index < len(source_model_matrices):
+            source_matrix = source_model_matrices[source_index]
+            if source_matrix is not None:
+                bone[_RIG_IMPORT_SOURCE_MODEL_KEY] = _matrix_to_flat_list(source_matrix)
+                continue
+        if _RIG_IMPORT_SOURCE_MODEL_KEY in bone:
+            del bone[_RIG_IMPORT_SOURCE_MODEL_KEY]
 
 def _bounded_cache_store(cache, key, value, limit=64):
     cache[key] = value
@@ -156,6 +268,7 @@ def read_rig(filepath: str) -> RigData:
         return cached[1]
 
     data = JSONTool.jsonload(filepath)
+    _cache_source_document(filepath, signature, data)
     base_name = os.path.basename(filepath)
     rig_name = base_name.replace(".rig.json", "")
 
@@ -393,10 +506,12 @@ def _children_by_parent(parent_indices):
 
 
 def apply_bone_from_matrix(bone_index: int, mat: Matrix, edit_bones: dict[int, bpy.types.EditBone], parent_indices: np.ndarray, global_transforms: dict[int, Matrix], default_length: float = 0.01):
-    """Apply a complete model-space transform to an edit bone.
+    """Apply a REDengine model-space transform to an edit bone.
 
-    Child spacing determines a practical Blender bone length. The serialized rotation
-    determines the bone axis and roll.
+    Blender uses local Y as the bone length axis and ``align_roll`` aligns local Z.
+    With the serialized Y direction used for the tail and serialized X supplied to
+    ``align_roll``, the generated local basis is X=-RE Z, Y=RE Y, Z=RE X. The
+    armature is tagged with this contract for consumers of bone-local data.
     """
     active_object = bpy.context.object
     if active_object is None or getattr(active_object, 'mode', None) != 'EDIT':
@@ -444,7 +559,13 @@ def create_armature_from_data(filepath: str, bind_pose: str, create_debug: bool 
     if not rig_data:
         show_message(f"Failed to load rig data from {filepath} ERROR")
         return None
-    return create_armature_from_rig_data(rig_data, bind_pose, create_debug, source_rig_file=filepath)
+    return create_armature_from_rig_data(
+        rig_data,
+        bind_pose,
+        create_debug,
+        source_rig_file=filepath,
+        source_document=_source_document_for_filepath(filepath),
+    )
 
 
 def create_armature_from_rig_files(filepaths, merged_name: str = '', source_label: str = '', create_debug: bool = False):
@@ -463,7 +584,14 @@ def create_armature_from_rig_files(filepaths, merged_name: str = '', source_labe
         return None
     # A single rig uses the same remapping, pose fallback, parent, and track rules.
     merged = merge_rig_datas(rig_datas, merged_name or rig_datas[0].rig_name + '_metarig')
-    return create_armature_from_rig_data(merged, 'A-Pose', create_debug, source_rig_file=source_label or ';'.join(filepaths))
+    merged_source = source_label or ';'.join(filepaths)
+    return create_armature_from_rig_data(
+        merged,
+        'A-Pose',
+        create_debug,
+        source_rig_file=merged_source,
+        source_document=_merged_rig_document(filepaths, merged, source_label),
+    )
 
 
 def _identity_trs() -> dict:
@@ -709,7 +837,13 @@ def _matrix_is_identity(mat: Matrix, eps: float = 1e-6) -> bool:
     )
 
 
-def create_armature_from_rig_data(rig_data, bind_pose: str, create_debug: bool = False, source_rig_file: str = ''):
+def create_armature_from_rig_data(
+    rig_data,
+    bind_pose: str,
+    create_debug: bool = False,
+    source_rig_file: str = '',
+    source_document: dict | None = None,
+):
     start_time = time.time()
     rig_col = None
 
@@ -730,9 +864,14 @@ def create_armature_from_rig_data(rig_data, bind_pose: str, create_debug: bool =
     arm_data.name = f"{rig_data.rig_name}_Data"
     parent_indices_list = rig_data.parent_indices.tolist()
     arm_data['source_rig_file'] = source_rig_file
+    arm_data['cp77_rig_space_contract'] = _RIG_SPACE_CONTRACT
+    arm_data['cp77_model_space_axes'] = 'REDengine XYZ; Blender armature space is numerically identical'
+    arm_data['cp77_bone_local_basis'] = 'Blender X=-RE Z, Y=RE Y, Z=RE X'
     arm_data['boneNames'] = rig_data.bone_names
     arm_data['boneParentIndexes'] = parent_indices_list
     arm_data['rig_extra_tracks'] = rig_data.rig_extra_tracks
+    arm_data['trackNames'] = list(rig_data.track_names)
+    arm_data['referenceTracks'] = list(rig_data.reference_tracks)
 
     edit_bones = arm_data.edit_bones
     bone_index_map: dict[int, bpy.types.EditBone] = {}
@@ -753,8 +892,9 @@ def create_armature_from_rig_data(rig_data, bind_pose: str, create_debug: bool =
                 child_bone.use_connect = False
 
     mats = build_apose_matrices(rig_data.apose_ms, rig_data.apose_ls, rig_data.bone_names, rig_data.parent_indices) if bind_pose == 'A-Pose' else None
+    global_transforms = _model_space_matrices_cached(rig_data.bone_transforms, rig_data.parent_indices)
+    imported_model_matrices = mats if mats is not None else global_transforms
     if mats is None:
-        global_transforms = _model_space_matrices_cached(rig_data.bone_transforms, rig_data.parent_indices)
 
         for i in range(len(rig_data.bone_names)):
             mat = global_transforms[i] if i < len(global_transforms) else None
@@ -788,6 +928,13 @@ def create_armature_from_rig_data(rig_data, bind_pose: str, create_debug: bool =
         create_debug_empties(arm_obj, rig_data.bone_names, rig_data.parent_indices, rig_data.bone_transforms, rig_data.apose_ls, rig_data.apose_ms, bind_pose)
 
     safe_mode_switch('OBJECT')
+    for source_index, source_name in enumerate(rig_data.bone_names):
+        bone = arm_data.bones.get(source_name)
+        if bone is not None:
+            bone['cp77_rig_index'] = source_index
+            bone['cp77_rig_source_name'] = source_name
+    _attach_rig_export_metadata(arm_obj, source_document)
+    _attach_imported_bone_matrices(arm_obj, imported_model_matrices)
     _PARENT_CHILDREN_CACHE.pop(id(rig_data.parent_indices), None)
     print(f"Successfully imported {rig_data.rig_name} in {time.time() - start_time:.2f} seconds.")
     return arm_obj

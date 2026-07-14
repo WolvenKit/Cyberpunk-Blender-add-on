@@ -12,7 +12,7 @@ from functools import lru_cache
 from mathutils import Vector, Matrix, Quaternion
 from ..main.common import *
 from ..jsontool import JSONTool, ent_appearance_name, resolve_ent_appearance_alias, resolve_requested_appearance_name
-from .phys_import import cp77_phys_import
+from .phys_import import cp77_phys_import_into_collection
 from ..collisiontools.pxbridge.io_phys import import_collider_as_actor
 from .import_common import *
 from .import_common import _remap_copied_object_references, submesh_index_for_object, clear_submesh_index_cache
@@ -627,6 +627,164 @@ def create_entity_light(component, filepath):
     light_obj.show_in_front = True
     _store_light_metadata(light_obj, component, filepath)
     return light_obj
+
+
+def _physx_actor_type(component):
+    simulation_type = cname_value(component.get('simulationType')) if isinstance(component, dict) else ''
+    actor_type = str(simulation_type).rsplit('::', 1)[-1].upper()
+    return actor_type if actor_type in {'STATIC', 'DYNAMIC', 'KINEMATIC'} else 'STATIC'
+
+
+def _collider_component_mass(component):
+    if not isinstance(component, dict):
+        return 0.0
+    for key in ('massOverride', 'mass'):
+        value = component.get(key)
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            continue
+        if value > 0.0:
+            return value
+    return 0.0
+
+
+def _collect_handle_data(value, lookup):
+    if isinstance(value, dict):
+        data = value.get('Data')
+        handle_id = value.get('HandleId')
+        if handle_id is not None and isinstance(data, dict):
+            lookup.setdefault(str(handle_id), data)
+        for child in value.values():
+            _collect_handle_data(child, lookup)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            _collect_handle_data(child, lookup)
+
+
+def _resolve_handle_data(value, lookup):
+    if not isinstance(value, dict):
+        return None
+    data = value.get('Data')
+    if isinstance(data, dict):
+        return data
+    handle_ref = value.get('HandleRefId')
+    if handle_ref is not None:
+        return lookup.get(str(handle_ref))
+    return value if '$type' in value else None
+
+
+def _new_collection_object(collection, existing_objects, expected_name):
+    for obj in collection.objects:
+        if obj not in existing_objects:
+            return obj
+    return collection.objects.get(expected_name)
+
+
+def _import_registered_entity_colliders(components, transform_resolver, handle_sources, target_collection, context):
+    handle_lookup = {}
+    _collect_handle_data(handle_sources, handle_lookup)
+    actor_count = 0
+    shape_count = 0
+
+    for component in components or ():
+        if not isinstance(component, dict) or not is_component_enabled(component):
+            continue
+
+        collider_refs = component.get('colliders')
+        if isinstance(collider_refs, dict):
+            collider_refs = [collider_refs]
+        if not collider_refs:
+            continue
+
+        if transform_resolver is not None:
+            resolved_matrix, bind_name, slot_name, binding_type, attach_armature = transform_resolver.resolve_component_matrix(component)
+        else:
+            resolved_matrix, bind_name, slot_name, binding_type, attach_armature = Matrix.Identity(4), '', '', 'none', None
+
+        component_type = component.get('$type', 'entColliderComponent')
+        component_label = component_name(component) or component_type
+        actor_type = _physx_actor_type(component)
+        mass = _collider_component_mass(component)
+        inertia = component.get('inertia')
+        com_offset = component.get('comOffset')
+        component_filter = component.get('filterData') or component.get('filter')
+        actor_obj = None
+        component_shapes = 0
+
+        for shape_index, collider_ref in enumerate(collider_refs):
+            collider_data = _resolve_handle_data(collider_ref, handle_lookup)
+            if not isinstance(collider_data, dict):
+                continue
+
+            collider_type = collider_data.get('$type', 'physicsColliderBox')
+            actor_name = f'{component_label}_{component_type}'
+            submesh_name = actor_name if actor_obj is None else f'{actor_name}_{shape_index}_{collider_type}'
+            existing_objects = set(target_collection.objects) if actor_obj is None else None
+
+            try:
+                shape_item = import_collider_as_actor(
+                    collider_data,
+                    submesh_name,
+                    target_collection,
+                    actor_obj=actor_obj,
+                    context=context,
+                    actor_type=actor_type,
+                    mass=mass,
+                    inertia=inertia,
+                    com_offset=com_offset,
+                    filter_data=collider_data.get('filterData') or component_filter,
+                )
+            except Exception as exc:
+                print(f'Error importing {collider_type} for {component_label}: {exc}')
+                continue
+
+            if shape_item is None:
+                continue
+
+            if actor_obj is None:
+                actor_obj = _new_collection_object(target_collection, existing_objects, actor_name)
+                if actor_obj is None:
+                    print(f'PhysX actor registration did not create an actor object for {component_label}')
+                    break
+                actor_obj.matrix_world = resolved_matrix
+                actor_obj['ntype'] = component_type
+                actor_obj['componentName'] = component_label
+                actor_obj['bindingType'] = binding_type
+                actor_obj['actorType'] = actor_type
+                if bind_name:
+                    actor_obj['bindname'] = bind_name
+                if slot_name:
+                    actor_obj['slotName'] = slot_name
+                if 'simulationType' in component:
+                    actor_obj['simulationType'] = component['simulationType']
+
+                if actor_type != 'DYNAMIC' and binding_type in {'slot', 'bone'} and bind_name and attach_armature is not None:
+                    configure_child_of_constraint(
+                        actor_obj,
+                        attach_armature,
+                        bind_name,
+                        child_of_inverse_matrix(attach_armature, bind_name),
+                    )
+
+            shape_item.name = f'{component_label}_{shape_index}_{shape_item.name}'[:63]
+            component_shapes += 1
+
+        if actor_obj is not None and component_shapes:
+            actor_count += 1
+            shape_count += component_shapes
+
+    scene_physx = getattr(context.scene, 'physx', None)
+    if scene_physx is not None and actor_count:
+        if hasattr(scene_physx, 'scene_built'):
+            scene_physx.scene_built = False
+        if hasattr(scene_physx, 'active_actor_count'):
+            scene_physx.active_actor_count = len(scene_physx.actors)
+        print(f'Registered {actor_count} PhysX actors with {shape_count} collider shapes')
+    elif actor_count == 0:
+        print('No supported entity collider shapes were registered')
+
+    return actor_count, shape_count
 
 
 def build_component_pass_index(components):
@@ -1764,6 +1922,8 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
         appearances = list(appearances)
     if not appearances:
         appearances = ['']
+    if include_collisions and not include_phys and not include_entCollider:
+        include_entCollider = True
     excluded_meshes = {norm_path_key(mesh) for mesh in (exclude_meshes or []) if mesh}
     if not cp77_addon_prefs.non_verbose:
         print('\n-------------------- Importing Cyberpunk 2077 Entity --------------------')
@@ -2579,88 +2739,37 @@ def importEnt(with_materials, filepath='', appearances=None, exclude_meshes=None
                 )
 
             if include_collisions:
-                collision_collection = bpy.data.collections.new('colliders')
-                # Colliders belong to the entity: every imported appearance owns the collection,
-                # not just whichever appearance the loop finished on.
-                for appearance_collection in imported_appearance_collections:
-                    appearance_collection.children.link(collision_collection)
+                collision_target_collection = imported_appearance_collections[0] if imported_appearance_collections else coll_scene
                 if include_phys:
                     try:
                         physJsonPaths = asset_index.get_files_by_extension('.phys.json')
                         if len(physJsonPaths) == 0:
                             print('No phys file JSONs found in path')
                         elif not chassis_info:
-                            # Without a Chassis component there is no collisionResource to match a phys file against.
                             print('No Chassis component in entity; skipping chassis collision import')
                         else:
-                            chassis_z = chassis_info['localTransform']['Position']['z']['Bits'] / FIXED_POINT_DIVISOR
+                            chassis_matrix = transform_matrix(chassis_info.get('localTransform', {}))
                             chassis_phys_j = os.path.basename(chassis_info['collisionResource']['DepotPath']['$value']) + '.json'
                             for physJsonPath in physJsonPaths:
                                 if os.path.basename(physJsonPath) == chassis_phys_j:
-                                    cp77_phys_import(physJsonPath, rig, chassis_z)
+                                    cp77_phys_import_into_collection(
+                                        physJsonPath,
+                                        rig=rig,
+                                        target_collection=collision_target_collection,
+                                        actor_matrix=chassis_matrix,
+                                        context=bpy.context,
+                                    )
                     except Exception as e:
                         print(e)
 
                 if include_entCollider:
-                    if len(ent_colliderComps) == 0 and len(ent_simpleCollComps) == 0:
-                        print('No entColliderComponent or entSimpleColliderComponents found')
-                    else:
-                        for component in ent_colliderComps + ent_simpleCollComps:
-                            component_type = component.get('$type', 'entColliderComponent')
-                            component_label = component_name(component) or component_type
-                            new_col = collision_collection.children.get(component_label)
-                            if new_col is None:
-                                new_col = bpy.data.collections.new(component_label)
-                                collision_collection.children.link(new_col)
-
-                            if collision_transform_resolver is not None:
-                                resolved_matrix, bind_name, slot_name, binding_type, attach_armature = collision_transform_resolver.resolve_component_matrix(component)
-                            else:
-                                resolved_matrix, bind_name, slot_name, binding_type, attach_armature = Matrix.Identity(4), '', '', 'none', None
-
-                            simulation_type = cname_value(component.get('simulationType'))
-                            simulation_type_name = str(simulation_type)
-                            simulation_is_dynamic = simulation_type_name.rsplit('::', 1)[-1].lower() == 'dynamic'
-                            colliders = component.get('colliders') or []
-                            if isinstance(colliders, dict):
-                                colliders = [colliders]
-                            for collider_index, collider_ref in enumerate(colliders):
-                                cdata = collider_ref.get('Data') if isinstance(collider_ref, dict) else None
-                                if cdata is None and isinstance(collider_ref, dict) and '$type' in collider_ref:
-                                    cdata = collider_ref
-                                if not isinstance(cdata, dict):
-                                    continue
-                                collision_shape = cdata.get('$type', 'Collider')
-                                submesh_name = f'_{component_label}_{collider_index}_{collision_shape}'
-                                try:
-                                    obj = import_collider_as_actor(cdata, submesh_name, new_col)
-                                    if obj is None:
-                                        continue
-                                    obj.matrix_world = resolved_matrix @ obj.matrix_world
-                                    obj['componentName'] = component_label
-                                    obj['componentType'] = component_type
-                                    obj['colliderIndex'] = collider_index
-                                    obj['bindingType'] = binding_type
-                                    if bind_name:
-                                        obj['bindname'] = bind_name
-                                    if slot_name:
-                                        obj['slotName'] = slot_name
-                                    if simulation_type:
-                                        obj['simulationType'] = simulation_type
-                                    if (
-                                        binding_type in {'slot', 'bone'}
-                                        and bind_name
-                                        and attach_armature is not None
-                                        and not simulation_is_dynamic
-                                    ):
-                                        configure_child_of_constraint(
-                                            obj,
-                                            attach_armature,
-                                            bind_name,
-                                            child_of_inverse_matrix(attach_armature, bind_name),
-                                        )
-                                except Exception as exc:
-                                    print(f'Error importing {collision_shape} via pxbridge: {exc}')
+                    _import_registered_entity_colliders(
+                        ent_colliderComps + ent_simpleCollComps,
+                        collision_transform_resolver,
+                        (ent_components, ent_component_data),
+                        collision_target_collection,
+                        bpy.context,
+                    )
         if len(error_messages) > 0:
             show_message('Errors during import:\n\t' + '\n\t'.join(error_messages))
         if not cp77_addon_prefs.non_verbose:
