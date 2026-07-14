@@ -107,19 +107,16 @@ def update_collision_bits(self, context):
 
 
 def get_bone_world_matrix(armature_obj, bone_name):
-    """Get the world space matrix for a bone's head position."""
     if not armature_obj or armature_obj.type != 'ARMATURE':
         return Matrix.Identity(4)
 
-    if bone_name not in armature_obj.data.bones:
-        return Matrix.Identity(4)
+    if bone_name in armature_obj.pose.bones:
+        return armature_obj.matrix_world @ armature_obj.pose.bones[bone_name].matrix
 
-    if armature_obj.mode == 'POSE' and bone_name in armature_obj.pose.bones:
-        pose_bone = armature_obj.pose.bones[bone_name]
-        return armature_obj.matrix_world @ pose_bone.matrix
-    else:
-        bone = armature_obj.data.bones[bone_name]
-        return armature_obj.matrix_world @ bone.matrix_local
+    if bone_name in armature_obj.data.bones:
+        return armature_obj.matrix_world @ armature_obj.data.bones[bone_name].matrix_local
+
+    return Matrix.Identity(4)
 
 
 def set_bone_world_matrix(armature_obj, bone_name, world_matrix):

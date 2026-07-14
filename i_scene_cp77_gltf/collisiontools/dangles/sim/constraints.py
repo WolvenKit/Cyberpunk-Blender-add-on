@@ -1,15 +1,10 @@
-
 import math
 import numpy as np
 import bpy
 from mathutils import Vector, Quaternion, Matrix
+from . import spaces
 
-
-# Bone-space conversion constant
-# Rotation(+90deg, Z) applied as:  bone_re_compat = bone_blender @ RE_BONE_CONV
-# This makes column-0 (X) of the result = bone forward direction.
-# For axis vectors:  bl_axis = RE_BONE_CONV @ re_axis   maps (1,0,0)->(0,1,0)
-RE_BONE_CONV = Quaternion((0, 0, 1), math.radians(90)).to_matrix().to_4x4()
+RE_BONE_CONV = spaces.RE_TO_BLENDER_BONE_LOCAL_CURRENT
 
 
 def _resolve_bone(sim, particle_idx, bone_name):
@@ -51,21 +46,26 @@ def _compile_links(sim):
             lower.append(c.lower_ratio * 0.01)
             upper.append(c.upper_ratio * 0.01)
 
-            # Rest distance: prefer cached value, else compute from pose
             if c.explicit_rest_distance > 0.0:
                 rest.append(c.explicit_rest_distance)
             else:
-                rest.append(
-                    float(np.linalg.norm(sim.pos_ms[i] - sim.pos_ms[tgt_idx]))
-                )
+                source_bone = sim.arm_obj.data.bones.get(p_cfg.bone_name)
+                target_bone = sim.arm_obj.data.bones.get(c.target_bone)
+                if source_bone is not None and target_bone is not None:
+                    rest.append(float((
+                        source_bone.head_local - target_bone.head_local
+                    ).length))
+                else:
+                    rest.append(float(np.linalg.norm(
+                        sim.pos_ms[i] - sim.pos_ms[tgt_idx]
+                    )))
 
-            # Per-link look-at axis:
-            # Stored in Blender bone-local space (Y=forward) since v3.6.
-            bl_axis = Vector(getattr(c, 'look_at_axis', (0.0, 1.0, 0.0)))
-            if bl_axis.length_squared > 1e-8:
-                bl_axis.normalize()
-            else:
-                bl_axis = Vector((0, 1, 0))  # Blender bone-forward fallback
+            re_axis = Vector(getattr(c, 'look_at_axis', (1.0, 0.0, 0.0)))
+            if re_axis.length_squared < 1e-8:
+                re_axis = Vector((1.0, 0.0, 0.0))
+            bl_axis = spaces.re_axis_to_blender_bone(
+                re_axis, sim.arm_obj
+            ).normalized()
             look_axes.append(list(bl_axis))
 
     if idx_a:
@@ -83,7 +83,7 @@ def _compile_links(sim):
 #  Ellipsoids 
 def _compile_ellipsoids(sim):
     ell_idx, ell_centers, ell_radii, ell_s1, ell_s2 = [], [], [], [], []
-    ell_xform_ls = []  # per-ellipsoid local-space 4x4 (RE_BONE_CONV @ authored)
+    ell_xform_ls = []  # REDengine LS converted to the generated Blender bone basis
 
     for i, p_cfg in enumerate(sim.particles):
         for c in p_cfg.ellipsoid_constraints:
@@ -103,9 +103,11 @@ def _compile_ellipsoids(sim):
                                      (0.0, 0.0, 0.0)))
                 ls_mat = q.to_matrix().to_4x4()
                 ls_mat.translation = off
-                # Pre-multiply by RE_BONE_CONV (same convention as cones):
-                # ellipsoidTransformMS = bone_BL @ RE_BONE_CONV @ ellipsoidTransformLS
-                ell_xform_ls.append(RE_BONE_CONV @ ls_mat)
+                ell_xform_ls.append(
+                    spaces.re_local_transform_to_blender_bone(
+                        ls_mat, sim.arm_obj
+                    )
+                )
 
     if ell_idx:
         sim.ell_idx      = np.array(ell_idx, dtype=np.int32)
@@ -165,8 +167,13 @@ def _compile_cones(sim):
             xf = getattr(c, 'cone_transform_ls_quat', (1.0, 0.0, 0.0, 0.0))
             q = Quaternion(xf)  # already wxyz
             raw_ls = q.to_matrix().to_4x4()
+            raw_ls.translation = Vector(
+                getattr(c, 'cone_transform_ls_offset', (0.0, 0.0, 0.0))
+            )
 
-            adjusted_ls = RE_BONE_CONV @ raw_ls
+            adjusted_ls = spaces.re_local_transform_to_blender_bone(
+                raw_ls, sim.arm_obj
+            )
             c_cone_xform_adjusted.append(adjusted_ls)
 
     if c_idx:
@@ -176,7 +183,7 @@ def _compile_cones(sim):
         sim.cone_cos        = np.array(c_cos, dtype=np.float32)
         sim.cone_sin_hh     = np.array(c_sin_hh, dtype=np.float32)
         sim.cone_cos_hh     = np.array(c_cos_hh, dtype=np.float32)
-        sim.cone_xform_ls   = c_cone_xform_adjusted  # already includes RE_BONE_CONV
+        sim.cone_xform_ls   = c_cone_xform_adjusted
         sim.cone_proj_type  = np.array(c_proj_type, dtype=np.int32)
         sim.cone_col_radius = np.array(c_col_radius, dtype=np.float32)
         sim.cone_col_height = np.array(c_col_height, dtype=np.float32)
@@ -203,10 +210,9 @@ def satisfy_dyng_links_vectorized(sim):
 
     cur_len = np.linalg.norm(diff, axis=1)
     zero_mask = cur_len < 1e-6
-    diff[zero_mask] = np.array([1.0, 0.0, 0.0], dtype=np.float32)
-    cur_len[zero_mask] = 1.0
-
-    norm_diff = diff / cur_len[:, np.newaxis]
+    safe_len = np.where(zero_mask, 1.0, cur_len)
+    norm_diff = diff / safe_len[:, np.newaxis]
+    norm_diff[zero_mask] = np.array([1.0, 0.0, 0.0], dtype=np.float32)
     desired_len = np.copy(sim.link_rest)
 
     # KeepFixedDistance: target = lower_ratio * rest
@@ -347,6 +353,47 @@ def satisfy_dyng_ellipsoids_vectorized(sim):
 
 # Cone (Pendulum) Solver
 
+def _distance_preserving_ray_position(
+    line_start, line_direction, sphere_center, sphere_radius, previous_position,
+):
+    """Match REDengine's sphere-line branch selection for cone constraints."""
+    line_start = np.asarray(line_start, dtype=np.float64)
+    direction = np.asarray(line_direction, dtype=np.float64)
+    sphere_center = np.asarray(sphere_center, dtype=np.float64)
+    previous = np.asarray(previous_position, dtype=np.float64)
+
+    direction_length = float(np.linalg.norm(direction))
+    if direction_length <= 1e-12:
+        return previous.astype(np.float32)
+    direction /= direction_length
+
+    oc = line_start - sphere_center
+    b_coeff = 2.0 * float(np.dot(oc, direction))
+    c_coeff = float(np.dot(oc, oc)) - float(sphere_radius) ** 2
+    discriminant = b_coeff * b_coeff - 4.0 * c_coeff
+
+    candidates = []
+    if discriminant >= -1e-12:
+        sqrt_disc = math.sqrt(max(0.0, discriminant))
+        far_alpha = (-b_coeff + sqrt_disc) * 0.5
+        near_alpha = (-b_coeff - sqrt_disc) * 0.5
+        if near_alpha >= 0.0:
+            candidates.append(line_start + direction * near_alpha)
+        if far_alpha >= 0.0 and (
+            not candidates or abs(far_alpha - near_alpha) > 1e-10
+        ):
+            candidates.append(line_start + direction * far_alpha)
+
+    if candidates:
+        return min(
+            candidates,
+            key=lambda point: float(np.dot(point - previous, point - previous)),
+        ).astype(np.float32)
+
+    alpha = max(0.0, float(np.dot(direction, previous - line_start)))
+    return (line_start + direction * alpha).astype(np.float32)
+
+
 def satisfy_pendulums_vectorized(sim):
     """Satisfy Cone (Pendulum) Constraints"""
     if sim.cone_idx is None:
@@ -359,12 +406,12 @@ def satisfy_pendulums_vectorized(sim):
         cos_half  = sim.cone_cos[ci]
         sin_hh    = sim.cone_sin_hh[ci]
         cos_hh    = sim.cone_cos_hh[ci]
-        xform_ls  = sim.cone_xform_ls[ci]   # already RE_BONE_CONV @ raw_ls
+        xform_ls  = sim.cone_xform_ls[ci]
 
         if not (sim.is_free[p_idx] and sim.active_mask[p_idx]):
             continue
 
-        # coneTransformMS = attachBone_BL @ (RE_BONE_CONV @ coneTransformLS)
+        # coneTransformMS = attachment bone matrix @ converted REDengine LS transform
         attach_xform = sim._interp_bone_xform[a_idx]
         cone_xform_ms = attach_xform @ xform_ls
 
@@ -412,37 +459,14 @@ def satisfy_pendulums_vectorized(sim):
                 cone_to_particle = q_rot @ initial_axis
                 cone_to_particle.normalize()
 
-        #  Distance preservation via sphere-ray intersection 
         original_dist = (attachment_pos - constrained_pos).length
         if original_dist < 1e-6:
             continue
 
-        oc = cone_origin_ms - attachment_pos
-        b_coeff = 2.0 * oc.dot(cone_to_particle)
-        c_coeff = oc.length_squared - original_dist * original_dist
-        discriminant = b_coeff * b_coeff - 4.0 * c_coeff
-
-        if discriminant >= 0:
-            sqrt_disc = discriminant ** 0.5
-            t1 = (-b_coeff + sqrt_disc) * 0.5
-            t2 = (-b_coeff - sqrt_disc) * 0.5
-
-            candidates = sorted([t for t in [t1, t2] if t >= 0])
-            if candidates:
-                new_pos = cone_origin_ms + cone_to_particle * candidates[0]
-            else:
-                t_closest = max(0.0, -b_coeff * 0.5)
-                closest = cone_origin_ms + cone_to_particle * t_closest
-                to_closest = closest - attachment_pos
-                if to_closest.length > 1e-6:
-                    to_closest.normalize()
-                new_pos = attachment_pos + to_closest * original_dist
-        else:
-            t_closest = max(0.0, -b_coeff * 0.5)
-            closest = cone_origin_ms + cone_to_particle * t_closest
-            to_closest = closest - attachment_pos
-            if to_closest.length > 1e-6:
-                to_closest.normalize()
-            new_pos = attachment_pos + to_closest * original_dist
-
-        sim.pos_ms[p_idx] = np.array(new_pos, dtype=np.float32)
+        sim.pos_ms[p_idx] = _distance_preserving_ray_position(
+            cone_origin_ms,
+            cone_to_particle,
+            attachment_pos,
+            original_dist,
+            constrained_pos,
+        )

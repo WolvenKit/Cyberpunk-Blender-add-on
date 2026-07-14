@@ -1,6 +1,7 @@
 import math
 import numpy as np
 from enum import IntEnum
+from .frame_time import AverageFrameTimeCalculator
 
 class _OvershootState(IntEnum):
     FREE_MOVEMENT = 0
@@ -12,7 +13,8 @@ class DragPostProcessor:
         self.sim = sim
         state = sim.state
 
-        indices = []
+        source_indices = []
+        target_indices = []
         fps_list = []
         speed_mult = []
         has_overshoot = []
@@ -23,12 +25,17 @@ class DragPostProcessor:
         steps_speed_mult = []
         time_between = []
         time_in = []
+        config_indices = []
 
-        for dn in state.drag_nodes:
-            p_idx = sim.bone_idx_map.get(dn.bone_name)
-            if p_idx is None:
+        for config_index, dn in enumerate(state.drag_nodes):
+            source_name = dn.source_bone_name or dn.bone_name
+            source_idx = sim.bone_idx_map.get(source_name)
+            target_idx = sim.bone_idx_map.get(dn.bone_name)
+            if source_idx is None or target_idx is None:
                 continue
-            indices.append(p_idx)
+            config_indices.append(config_index)
+            source_indices.append(source_idx)
+            target_indices.append(target_idx)
             fps_list.append(max(1.0, dn.simulation_fps))
             speed_mult.append(max(0.001, dn.source_speed_multiplier))
             has_overshoot.append(bool(dn.has_overshoot))
@@ -47,11 +54,17 @@ class DragPostProcessor:
             )
             time_in.append(float(getattr(dn, 'time_in_step', 0.1)))
 
-        self.num_drags = len(indices)
+        self.num_drags = len(target_indices)
+        self.source_indices = np.asarray(source_indices, dtype=np.int32)
+        self.drag_indices = np.asarray(target_indices, dtype=np.int32)
+        self.config_indices = np.asarray(config_indices, dtype=np.int32)
+        self.config_to_runtime = {
+            int(config_index): runtime_index
+            for runtime_index, config_index in enumerate(self.config_indices)
+        }
         if self.num_drags == 0:
             return
 
-        self.drag_indices = np.array(indices, dtype=np.int32)
         self.drag_fps = np.array(fps_list, dtype=np.float32)
         self.speed_mult = np.array(speed_mult, dtype=np.float32)
 
@@ -81,17 +94,22 @@ class DragPostProcessor:
 
         self.step_timer = np.zeros(n, dtype=np.float32)
 
-        self.avg_frame_time = np.zeros(n, dtype=np.float32)
+        self.frame_time_calculators = [
+            AverageFrameTimeCalculator() for _ in range(n)
+        ]
 
         self._initialized = np.zeros(n, dtype=bool)
 
     def reset(self):
         if self.num_drags == 0:
             return
-        bone_pos = self.sim.pos_ms[self.drag_indices].copy()
-        self.source_pos[:] = bone_pos
-        self.target_pos[:] = bone_pos
-        self.last_frame_target_bone_pos[:] = bone_pos
+        source_bone_pos = np.asarray([
+            self._bone_position(int(index)) for index in self.source_indices
+        ], dtype=np.float32)
+        target_bone_pos = self._current_target_positions()
+        self.source_pos[:] = source_bone_pos
+        self.target_pos[:] = target_bone_pos
+        self.last_frame_target_bone_pos[:] = target_bone_pos
         self.overshoot_state[:] = _OvershootState.FREE_MOVEMENT
         self.can_overshoot[:] = True
         self.initial_overshoot_vel[:] = 0.0
@@ -99,36 +117,60 @@ class DragPostProcessor:
         self.overshoot_timer[:] = 0.0
         self.stopped_target_queue = [[] for _ in range(self.num_drags)]
         self.step_timer[:] = 0.0
-        self.avg_frame_time[:] = 0.0
+        self.frame_time_calculators = [
+            AverageFrameTimeCalculator() for _ in range(self.num_drags)
+        ]
         self._initialized[:] = True
 
     def step(self, raw_dt):
         if self.num_drags == 0:
             return
+        for runtime_index in range(self.num_drags):
+            self.step_runtime(runtime_index, raw_dt)
 
-        this_frame_bone_pos = self.sim.pos_ms[self.drag_indices].copy()
+    def step_runtime(self, runtime_index, raw_dt):
+        if not 0 <= runtime_index < self.num_drags:
+            return
 
-        for di in range(self.num_drags):
-            if not self._initialized[di]:
-                self.source_pos[di] = this_frame_bone_pos[di]
-                self.target_pos[di] = this_frame_bone_pos[di]
-                self.last_frame_target_bone_pos[di] = this_frame_bone_pos[di]
-                self.can_overshoot[di] = True
-                self.stopped_target_queue[di] = []
-                self.overshoot_state[di] = _OvershootState.FREE_MOVEMENT
-                self.step_timer[di] = 0.0
-                self._initialized[di] = True
-                continue
+        this_frame_bone_pos = self._bone_position(
+            int(self.drag_indices[runtime_index])
+        )
+        if not self._initialized[runtime_index]:
+            self.source_pos[runtime_index] = self._bone_position(
+                int(self.source_indices[runtime_index])
+            )
+            self.target_pos[runtime_index] = this_frame_bone_pos
+            self.last_frame_target_bone_pos[runtime_index] = (
+                this_frame_bone_pos
+            )
+            self.can_overshoot[runtime_index] = True
+            self.stopped_target_queue[runtime_index] = []
+            self.overshoot_state[runtime_index] = (
+                _OvershootState.FREE_MOVEMENT
+            )
+            self.step_timer[runtime_index] = 0.0
+            self._initialized[runtime_index] = True
+            return
 
-            self._step_single(di, raw_dt, this_frame_bone_pos[di])
-            self.last_frame_target_bone_pos[di] = this_frame_bone_pos[di]
+        self._step_single(runtime_index, raw_dt, this_frame_bone_pos)
+        self.last_frame_target_bone_pos[runtime_index] = this_frame_bone_pos
 
-        self.sim.pos_ms[self.drag_indices] = self.source_pos
+    def _bone_position(self, tracked_index):
+        bone_name = self.sim.bone_names[tracked_index]
+        pose_bone = self.sim.arm_obj.pose.bones.get(bone_name)
+        if pose_bone is None:
+            return np.zeros(3, dtype=np.float32)
+        return np.asarray(pose_bone.matrix.translation, dtype=np.float32)
+
+    def _current_target_positions(self):
+        return np.asarray([
+            self._bone_position(int(index)) for index in self.drag_indices
+        ], dtype=np.float32)
 
     def _step_single(self, di, raw_dt, this_frame_bone_pos):
-        alpha = 0.3
-        self.avg_frame_time[di] += alpha * (raw_dt - self.avg_frame_time[di])
-        avg_dt = self.avg_frame_time[di]
+        calculator = self.frame_time_calculators[di]
+        calculator.recalculate(raw_dt)
+        avg_dt = calculator.average_frame_time
 
         if abs(avg_dt) < 0.00001:
             return
