@@ -1,24 +1,22 @@
 from __future__ import annotations
+
 import traceback
-import bpy
+
+from bpy.props import BoolProperty, CollectionProperty, EnumProperty, IntProperty, StringProperty
 from bpy.types import Operator, OperatorFileListElement
-from bpy.props import StringProperty, BoolProperty, EnumProperty, IntProperty, CollectionProperty
-from ..main.bartmoss_functions import *
+
+from .animtools import *
+from .animtools import _assign_action, animBones
+from .draw import _draw_callback
+from .generate_rigs import DIRECTION_FORWARD, DIRECTION_REVERSE, cp77_to_rigify, find_pair, get_constraint_direction, \
+    set_constraint_direction
 from ..cyber_props import cp77riglist
 from ..importers.import_with_materials import CP77GLBimport
-from .animtools import *
-from .animtools import animBones, _assign_action
-from .generate_rigs import cp77_to_rigify
-from .draw import _draw_callback
-from .generate_rigs import (
-    find_pair,
-    get_constraint_direction,
-    set_constraint_direction,
-    DIRECTION_FORWARD,
-    DIRECTION_REVERSE,
-)
-_handle  = None
+
+_handle = None
 _running = False
+
+
 def _set_pose_bone_select(pose_bone, selected: bool) -> bool:
     """Toggle pose-bone selection across Blender 5.0 and 5.1+.
  
@@ -36,6 +34,8 @@ def _set_pose_bone_select(pose_bone, selected: bool) -> bool:
         return True
     except (AttributeError, TypeError):
         return False
+
+
 class CP77_OT_ToggleSIMD(Operator):
     bl_idname = "cp77.toggle_simd"
     bl_label = "Toggle SIMD Encoding"
@@ -55,11 +55,13 @@ class CP77_OT_ToggleSIMD(Operator):
         new_val = not bool(current)
         action["optimizationHints"] = {
             "preferSIMD": new_val,
-            "maxRotationCompression": hints.get("maxRotationCompression", 0) if hasattr(hints, 'get') else hints["maxRotationCompression"]
-        }
+            "maxRotationCompression": hints.get("maxRotationCompression", 0) if hasattr(hints, 'get') else hints[
+                "maxRotationCompression"]
+            }
         label = "SIMD" if new_val else "Compressed"
         self.report({'INFO'}, f"'{self.name}' encoding set to {label}")
         return {'FINISHED'}
+
 
 class BHLS_OT_Start(Operator):
     bl_idname = "view3d.bhls_start"
@@ -88,6 +90,7 @@ class BHLS_OT_Start(Operator):
         context.area.tag_redraw()
         return {'FINISHED'}
 
+
 class BHLS_OT_Stop(Operator):
     bl_idname = "view3d.bhls_stop"
     bl_label = "Stop Bone Lines"
@@ -107,6 +110,7 @@ class BHLS_OT_Stop(Operator):
 
         return {'FINISHED'}
 
+
 class CP77AnimsDelete(Operator):
     bl_idname = 'cp77.delete_anims'
     bl_label = 'Delete action'
@@ -123,6 +127,7 @@ class CP77AnimsDelete(Operator):
         delete_anim(self, context)
         return {'FINISHED'}
 
+
 class LoadAPose(Operator):
     bl_idname = 'cp77.load_apose'
     bl_label = 'Load A-Pose'
@@ -134,17 +139,14 @@ class LoadAPose(Operator):
                 self.report({'ERROR'}, "Select an armature object.")
                 return {'CANCELLED'}
 
-            arm_data = arm_obj.data
-            arm_data["T-Pose"] = False
-
-            load_apose(self, arm_obj)
-
-            return {'FINISHED'}
+            result = load_apose(self, arm_obj)
+            return result if result is not None else {'FINISHED'}
 
         except Exception as e:
             print(traceback.format_exc())
             self.report({'ERROR'}, f"Failed: {e}")
             return {'CANCELLED'}
+
 
 class LoadTPose(Operator):
     bl_idname = "cp77.load_tpose"
@@ -156,13 +158,14 @@ class LoadTPose(Operator):
             self.report({'ERROR'}, "This isnt' an armature, can't load T-Pose")
             return {'CANCELLED'}
         try:
-            load_tpose(self, arm_obj)
-            return {'FINISHED'}
+            result = load_tpose(self, arm_obj)
+            return result if result is not None else {'FINISHED'}
 
         except Exception as e:
             print(traceback.format_exc())
             self.report({'ERROR'}, f"Failed: {e}")
             return {'CANCELLED'}
+
 
 class CP77Animset(Operator):
     bl_idname = 'cp77.set_animset'
@@ -175,10 +178,12 @@ class CP77Animset(Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object and context.active_object.animation_data
+        return context.active_object is not None and context.active_object.type == 'ARMATURE'
 
     def execute(self, context):
         obj = context.active_object
+        if obj.animation_data is None:
+            obj.animation_data_create()
         if not self.name:
             obj.animation_data.action = None
             return {'FINISHED'}
@@ -212,6 +217,7 @@ class CP77Animset(Operator):
             self.new_name = ""
             return self.execute(context)
 
+
 class CP77ToRigify(Operator):
     bl_idname = "rigify_generator.cp77"
     bl_parent_id = "CP77_PT_animspanel"
@@ -221,6 +227,7 @@ class CP77ToRigify(Operator):
     def execute(self, context):
         cp77_to_rigify()
         return {'FINISHED'}
+
 
 class CP77BoneHider(Operator):
     bl_idname = "bone_hider.cp77"
@@ -232,6 +239,7 @@ class CP77BoneHider(Operator):
         hide_extra_bones(self, context)
         return {'FINISHED'}
 
+
 class CP77BoneUnhider(Operator):
     bl_idname = "bone_unhider.cp77"
     bl_parent_id = "CP77_PT_animspanel"
@@ -241,6 +249,7 @@ class CP77BoneUnhider(Operator):
     def execute(self, context):
         unhide_extra_bones(self, context)
         return {'FINISHED'}
+
 
 class CP77Keyframe(Operator):
     bl_idname = "insert_keyframe.cp77"
@@ -263,6 +272,7 @@ class CP77Keyframe(Operator):
         row = layout.row(align=True)
         row.prop(props, "frameall", text="")
 
+
 class CP77ResetArmature(Operator):
     bl_idname = "reset_armature.cp77"
     bl_parent_id = "CP77_PT_animspanel"
@@ -271,6 +281,7 @@ class CP77ResetArmature(Operator):
     def execute(self, context):
         reset_armature(self, context)
         return {"FINISHED"}
+
 
 class CP77_OT_ToggleConstraintDirection(Operator):
     """Reverse which rig drives which: Rigify ↔ source"""
@@ -296,6 +307,7 @@ class CP77_OT_ToggleConstraintDirection(Operator):
         ok, msg = set_constraint_direction(source, rig, target)
         self.report({'INFO'} if ok else {'ERROR'}, msg)
         return {'FINISHED'} if ok else {'CANCELLED'}
+
 
 class CP77_OT_ActivateLinkedRig(Operator):
     """Make the named armature the active object"""
@@ -327,6 +339,7 @@ class CP77_OT_ActivateLinkedRig(Operator):
         context.view_layer.objects.active = target
         return {'FINISHED'}
 
+
 class CP77_OT_BakeRigifyToSource(Operator):
     """Bake Rigify-driven motion to keyframes on the CP77 source rig
  
@@ -338,34 +351,34 @@ class CP77_OT_BakeRigifyToSource(Operator):
     bl_idname = 'cp77.bake_rigify_to_source'
     bl_label = 'Bake Rigify to Cyberpunk'
     bl_options = {'REGISTER', 'UNDO'}
- 
+
     action_name: StringProperty(
-        name='Action Name',
-        description="Name of the new action. Defaults to '<rigify action>_baked'",
-        default='',
-    )
+            name='Action Name',
+            description="Name of the new action. Defaults to '<rigify action>_baked'",
+            default='',
+            )
     overwrite: BoolProperty(
-        name='Overwrite Existing',
-        description='Replace the target action if it already exists',
-        default=False,
-    )
+            name='Overwrite Existing',
+            description='Replace the target action if it already exists',
+            default=False,
+            )
     frame_range_source: EnumProperty(
-        name='Frame Range',
-        items=[
-            ('SCENE',  'Scene Range',  "Use scene.frame_start / scene.frame_end"),
-            ('ACTION', 'Action Range', "Use the Rigify action's own frame_range"),
-            ('MANUAL', 'Manual',       'Specify start and end frames'),
-        ],
-        default='SCENE',
-    )
+            name='Frame Range',
+            items=[
+                ('SCENE', 'Scene Range', "Use scene.frame_start / scene.frame_end"),
+                ('ACTION', 'Action Range', "Use the Rigify action's own frame_range"),
+                ('MANUAL', 'Manual', 'Specify start and end frames'),
+                ],
+            default='SCENE',
+            )
     frame_start: IntProperty(name='Start', default=1, min=0)
-    frame_end:   IntProperty(name='End',   default=250, min=0)
-    step:        IntProperty(
-        name='Step',
-        description='Frame step (1 = every frame)',
-        default=1, min=1, max=10,
-    )
- 
+    frame_end: IntProperty(name='End', default=250, min=0)
+    step: IntProperty(
+            name='Step',
+            description='Frame step (1 = every frame)',
+            default=1, min=1, max=10,
+            )
+
     @classmethod
     def poll(cls, context):
         obj = context.active_object
@@ -376,42 +389,44 @@ class CP77_OT_BakeRigifyToSource(Operator):
             return False
         return (rig.animation_data is not None
                 and rig.animation_data.action is not None)
- 
+
     def invoke(self, context, event):
         source, rig = find_pair(context.active_object)
         if rig is None or rig.animation_data is None or rig.animation_data.action is None:
             self.report({'ERROR'}, 'Rigify rig has no action to bake')
             return {'CANCELLED'}
- 
+
         rig_action = rig.animation_data.action
         self.action_name = f"{rig_action.name}_baked"
- 
+
         fr = rig_action.frame_range
         self.frame_start = int(fr[0])
-        self.frame_end   = int(fr[1])
- 
+        self.frame_end = int(fr[1])
+
         if get_constraint_direction(source) != DIRECTION_FORWARD:
             self.report(
-                {'WARNING'},
-                "Constraints are in REVERSE direction — source already follows itself. "
-                "Switch to FORWARD before baking for meaningful results.",
-            )
- 
+                    {'WARNING'},
+                    "Constraints are in REVERSE direction — source already follows itself. "
+                    "Switch to FORWARD before baking for meaningful results.",
+                    )
+
         return context.window_manager.invoke_props_dialog(self, width=400)
- 
+
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
- 
+
         source, rig = find_pair(context.active_object)
         if rig is not None and rig.animation_data and rig.animation_data.action:
             col = layout.column(align=True)
             col.enabled = False
-            col.label(text=f"From: {rig.name} → {rig.animation_data.action.name}",
-                      icon='ARMATURE_DATA')
+            col.label(
+                text=f"From: {rig.name} → {rig.animation_data.action.name}",
+                icon='ARMATURE_DATA'
+                )
             col.label(text=f"Onto: {source.name}", icon='OUTLINER_OB_ARMATURE')
             layout.separator()
- 
+
         layout.prop(self, 'action_name')
         layout.prop(self, 'overwrite')
         layout.separator()
@@ -421,15 +436,17 @@ class CP77_OT_BakeRigifyToSource(Operator):
             row.prop(self, 'frame_start')
             row.prop(self, 'frame_end')
         layout.prop(self, 'step')
- 
+
         layout.separator()
         info = layout.column(align=True)
         info.scale_y = 0.85
         info.label(text='Animation-bone subset only (animBones).', icon='INFO')
-        info.label(text='Forward constraints are preserved — mute them later',
-                   icon='INFO')
+        info.label(
+            text='Forward constraints are preserved — mute them later',
+            icon='INFO'
+            )
         info.label(text='to play the baked action standalone.')
- 
+
     def execute(self, context):
         source, rig = find_pair(context.active_object)
         if not source or not rig:
@@ -438,7 +455,7 @@ class CP77_OT_BakeRigifyToSource(Operator):
         if not (rig.animation_data and rig.animation_data.action):
             self.report({'ERROR'}, 'Rigify rig has no action to bake')
             return {'CANCELLED'}
- 
+
         if self.frame_range_source == 'SCENE':
             start, end = context.scene.frame_start, context.scene.frame_end
         elif self.frame_range_source == 'ACTION':
@@ -446,23 +463,25 @@ class CP77_OT_BakeRigifyToSource(Operator):
             start, end = int(fr[0]), int(fr[1])
         else:
             start, end = self.frame_start, self.frame_end
- 
+
         if end < start:
             self.report({'ERROR'}, f"Invalid frame range: {start} → {end}")
             return {'CANCELLED'}
- 
+
         action_name = self.action_name.strip() or f"{rig.animation_data.action.name}_baked"
-        existing    = bpy.data.actions.get(action_name)
+        existing = bpy.data.actions.get(action_name)
         if existing is not None and not self.overwrite:
-            self.report({'ERROR'},
-                        f"Action '{action_name}' already exists — enable Overwrite to replace")
+            self.report(
+                    {'ERROR'},
+                    f"Action '{action_name}' already exists — enable Overwrite to replace"
+                    )
             return {'CANCELLED'}
         if existing is not None and self.overwrite:
             bpy.data.actions.remove(existing)
- 
+
         target_action = bpy.data.actions.new(action_name)
         target_action.use_fake_user = True
- 
+
         store_current_context()
         try:
             if context.mode != 'OBJECT':
@@ -470,56 +489,57 @@ class CP77_OT_BakeRigifyToSource(Operator):
                     bpy.ops.object.mode_set(mode='OBJECT')
                 except Exception:
                     pass
- 
+
             for o in context.selected_objects:
                 o.select_set(False)
             if source.hide_get():
                 source.hide_set(False)
             source.select_set(True)
             context.view_layer.objects.active = source
- 
+
             bpy.ops.object.mode_set(mode='POSE')
- 
+
             if not source.animation_data:
                 source.animation_data_create()
             _assign_action(source.animation_data, target_action)
- 
+
             present_anim_bones = set()
             for pb in source.pose.bones:
                 is_anim = pb.name in animBones
                 _set_pose_bone_select(pb, is_anim)
                 if is_anim:
                     present_anim_bones.add(pb.name)
- 
+
             if not present_anim_bones:
                 self.report({'ERROR'}, 'No animation bones present on source rig')
                 return {'CANCELLED'}
- 
+
             bpy.ops.nla.bake(
-                frame_start=start,
-                frame_end=end,
-                step=self.step,
-                only_selected=True,
-                visual_keying=True,
-                clear_constraints=False,
-                clear_parents=False,
-                use_current_action=True,
-                bake_types={'POSE'},
-            )
+                    frame_start=start,
+                    frame_end=end,
+                    step=self.step,
+                    only_selected=True,
+                    visual_keying=True,
+                    clear_constraints=False,
+                    clear_parents=False,
+                    use_current_action=True,
+                    bake_types={'POSE'},
+                    )
         except Exception as e:
             traceback.print_exc()
             self.report({'ERROR'}, f"Bake failed: {e}")
             return {'CANCELLED'}
         finally:
             restore_previous_context()
- 
+
         self.report(
-            {'INFO'},
-            f"Baked '{target_action.name}' "
-            f"({start}→{end}, step {self.step}, {len(present_anim_bones)} bones). "
-            f"Mute the constraints on source bones to play it standalone."
-        )
+                {'INFO'},
+                f"Baked '{target_action.name}' "
+                f"({start}→{end}, step {self.step}, {len(present_anim_bones)} bones). "
+                f"Mute the constraints on source bones to play it standalone."
+                )
         return {'FINISHED'}
+
 
 class CP77NewAction(Operator):
     bl_idname = 'cp77.new_action'
@@ -530,13 +550,13 @@ class CP77NewAction(Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object is not None
+        return context.active_object is not None and context.active_object.type == 'ARMATURE'
 
     def execute(self, context):
         obj = context.active_object
         if not obj.animation_data:
             obj.animation_data_create()
-        new_action               = bpy.data.actions.new(self.name)
+        new_action = bpy.data.actions.new(self.name)
         new_action.use_fake_user = True
         reset_armature(self, context)
         _assign_action(obj.animation_data, new_action)
@@ -544,6 +564,7 @@ class CP77NewAction(Operator):
 
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
+
 
 class CP77RigLoader(Operator):
     bl_idname = "cp77.rig_loader"
@@ -567,10 +588,18 @@ class CP77RigLoader(Operator):
             selected_rig = rig_files[rig_names.index(selected_rig_name)]
             self.filepath = selected_rig
             CP77GLBimport(
-                self, exclude_unused_mats=True, image_format='PNG',
-                filepath=selected_rig, hide_armatures=False, import_garmentsupport=False, files=[], directory='',
-                appearances="ALL", remap_depot=False, scripting=True
-                )
+                    with_materials=False,
+                    exclude_unused_mats=True,
+                    image_format='PNG',
+                    filepath=selected_rig,
+                    hide_armatures=False,
+                    import_garmentsupport=False,
+                    files=[],
+                    directory='',
+                    appearances=['ALL'],
+                    remap_depot=False,
+                    scripting=True,
+                    )
             if props.fbx_rot:
                 rotate_quat_180(self, context)
             if self.rigify_it:
@@ -587,6 +616,7 @@ class CP77RigLoader(Operator):
         col = box.column()
         col.prop(self, 'rigify_it', text="Generate Rigify Control Rig")
         col.prop(props, 'fbx_rot', text="Load Rig in FBX Orientation")
+
 
 class CP77AnimNamer(Operator):
     bl_idname = "cp77.anim_namer"

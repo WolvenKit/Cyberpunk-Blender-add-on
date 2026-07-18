@@ -1,6 +1,7 @@
-import sys
+import importlib
 import subprocess
-import importlib 
+import sys
+
 
 def install_dependency(pip_name: str, import_name: str) -> bool:
     """
@@ -9,17 +10,17 @@ def install_dependency(pip_name: str, import_name: str) -> bool:
     """
     if sys.platform != 'win32':
         return False
-    
+
     python_executable = sys.executable
-    
+
     try:
         subprocess.check_call(
-            [python_executable, "-m", "pip", "install", pip_name]
-        )
-        
+                [python_executable, "-m", "pip", "install", pip_name]
+                )
+
     except subprocess.CalledProcessError:
         pass
-    
+
     try:
         importlib.import_module(import_name)
         return True

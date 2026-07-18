@@ -17,66 +17,63 @@ for visualization only; the authoritative data is always the CollectionProperty.
 """
 
 import bpy
-from bpy.props import (
-    StringProperty, IntProperty, BoolProperty, FloatProperty,
-    CollectionProperty, EnumProperty,
-)
-from bpy.types import PropertyGroup, UIList, Panel, Operator
-
+from bpy.props import (BoolProperty, CollectionProperty, EnumProperty, FloatProperty, IntProperty, StringProperty)
+from bpy.types import Operator, Panel, PropertyGroup, UIList
 
 # ─────────────────────────────────────────────────────────────
 # Event type enum — maps to animAnimEvent subclasses
 # ─────────────────────────────────────────────────────────────
 EVENT_TYPES = [
-    ('Sound',             'Sound',             'Wwise sound event (animAnimEvent_Sound)'),
-    ('SoundFromEmitter',  'SoundFromEmitter',  'Sound from named emitter (animAnimEvent_SoundFromEmitter)'),
-    ('Effect',            'Effect',            'VFX trigger (animAnimEvent_Effect)'),
-    ('EffectDuration',    'EffectDuration',    'VFX trigger with duration (animAnimEvent_EffectDuration)'),
-    ('Simple',            'Simple',            'Simple event — no extra fields (animAnimEvent_Simple)'),
-    ('Phase',             'Phase',             'Phase event (animAnimEvent_Phase)'),
-    ('KeyPose',           'KeyPose',           'Key pose marker (animAnimEvent_KeyPose)'),
-    ('ForceRagdoll',      'ForceRagdoll',      'Force ragdoll (animAnimEvent_ForceRagdoll)'),
-    ('ItemEffect',        'ItemEffect',        'Item effect (animAnimEvent_ItemEffect)'),
-    ('ItemEffectDuration','ItemEffectDuration', 'Item effect with duration (animAnimEvent_ItemEffectDuration)'),
-    ('FootIK',            'FootIK',            'Foot IK event (animAnimEvent_FootIK)'),
-    ('FootPlant',         'FootPlant',         'Foot plant event (animAnimEvent_FootPlant)'),
-    ('FootPhase',         'FootPhase',         'Foot phase event (animAnimEvent_FootPhase)'),
-    ('FoleyAction',       'FoleyAction',       'Foley action (animAnimEvent_FoleyAction)'),
-    ('GameplayVo',        'GameplayVo',        'Gameplay VO (animAnimEvent_GameplayVo)'),
-    ('Slide',             'Slide',             'Slide event (animAnimEvent_Slide)'),
-    ('SafeCut',           'SafeCut',           'Safe cut event (animAnimEvent_SafeCut)'),
-    ('SimpleDuration',    'SimpleDuration',    'Simple event with duration (animAnimEvent_SimpleDuration)'),
+    ('Sound', 'Sound', 'Wwise sound event (animAnimEvent_Sound)'),
+    ('SoundFromEmitter', 'SoundFromEmitter', 'Sound from named emitter (animAnimEvent_SoundFromEmitter)'),
+    ('Effect', 'Effect', 'VFX trigger (animAnimEvent_Effect)'),
+    ('EffectDuration', 'EffectDuration', 'VFX trigger with duration (animAnimEvent_EffectDuration)'),
+    ('Simple', 'Simple', 'Simple event — no extra fields (animAnimEvent_Simple)'),
+    ('Phase', 'Phase', 'Phase event (animAnimEvent_Phase)'),
+    ('KeyPose', 'KeyPose', 'Key pose marker (animAnimEvent_KeyPose)'),
+    ('ForceRagdoll', 'ForceRagdoll', 'Force ragdoll (animAnimEvent_ForceRagdoll)'),
+    ('ItemEffect', 'ItemEffect', 'Item effect (animAnimEvent_ItemEffect)'),
+    ('ItemEffectDuration', 'ItemEffectDuration', 'Item effect with duration (animAnimEvent_ItemEffectDuration)'),
+    ('FootIK', 'FootIK', 'Foot IK event (animAnimEvent_FootIK)'),
+    ('FootPlant', 'FootPlant', 'Foot plant event (animAnimEvent_FootPlant)'),
+    ('FootPhase', 'FootPhase', 'Foot phase event (animAnimEvent_FootPhase)'),
+    ('FoleyAction', 'FoleyAction', 'Foley action (animAnimEvent_FoleyAction)'),
+    ('GameplayVo', 'GameplayVo', 'Gameplay VO (animAnimEvent_GameplayVo)'),
+    ('Slide', 'Slide', 'Slide event (animAnimEvent_Slide)'),
+    ('SafeCut', 'SafeCut', 'Safe cut event (animAnimEvent_SafeCut)'),
+    ('SimpleDuration', 'SimpleDuration', 'Simple event with duration (animAnimEvent_SimpleDuration)'),
     ('TrajectoryAdjustment', 'TrajectoryAdjustment', 'Trajectory adjustment (animAnimEvent_TrajectoryAdjustment)'),
-    ('WorkspotFastExitCutoff', 'WorkspotFastExitCutoff', 'Workspot fast exit cutoff (animAnimEvent_WorkspotFastExitCutoff)'),
-    ('Valued',            'Valued',            'Valued event (animAnimEvent_Valued)'),
-    ('SceneItem',         'SceneItem',         'Scene item event (animAnimEvent_SceneItem)'),
-    ('WorkspotItem',      'WorkspotItem',      'Workspot item event (animAnimEvent_WorkspotItem)'),
+    ('WorkspotFastExitCutoff', 'WorkspotFastExitCutoff',
+     'Workspot fast exit cutoff (animAnimEvent_WorkspotFastExitCutoff)'),
+    ('Valued', 'Valued', 'Valued event (animAnimEvent_Valued)'),
+    ('SceneItem', 'SceneItem', 'Scene item event (animAnimEvent_SceneItem)'),
+    ('WorkspotItem', 'WorkspotItem', 'Workspot item event (animAnimEvent_WorkspotItem)'),
     ('WorkspotPlayFacialAnim', 'WorkspotPlayFacialAnim', 'Workspot facial anim (animAnimEvent_WorkspotPlayFacialAnim)'),
-]
+    ]
 
 GENDER_ALT_ENUM = [
-    ('None',    'None',    'No gender alt'),
-    ('Female',  'Female',  'Female alternative'),
-    ('Male',    'Male',    'Male alternative'),
-]
+    ('None', 'None', 'No gender alt'),
+    ('Female', 'Female', 'Female alternative'),
+    ('Male', 'Male', 'Male alternative'),
+    ]
 
 LEG_ENUM = [
-    ('Left',  'Left',  'Left leg'),
+    ('Left', 'Left', 'Left leg'),
     ('Right', 'Right', 'Right leg'),
-]
+    ]
 
 SIDE_ENUM = [
-    ('Left',  'Left',  'Left side'),
+    ('Left', 'Left', 'Left side'),
     ('Right', 'Right', 'Right side'),
-]
+    ]
 
 FOOT_PHASE_ENUM = [
-    ('RightUp',       'Right Up',       'Right foot up'),
-    ('RightForward',  'Right Forward',  'Right foot forward'),
-    ('LeftUp',        'Left Up',        'Left foot up'),
-    ('LeftForward',   'Left Forward',   'Left foot forward'),
+    ('RightUp', 'Right Up', 'Right foot up'),
+    ('RightForward', 'Right Forward', 'Right foot forward'),
+    ('LeftUp', 'Left Up', 'Left foot up'),
+    ('LeftForward', 'Left Forward', 'Left foot forward'),
     ('NotConsidered', 'Not Considered', 'Phase not considered'),
-]
+    ]
 
 
 # ─────────────────────────────────────────────────────────────
@@ -138,29 +135,29 @@ class CP77_AnimEventParamItem(PropertyGroup):
 
 
 WORKSPOT_ACTION_TYPES = [
-    ('EquipItemToSlot',       'Equip Item To Slot',       'Equip an item to a specific slot'),
-    ('EquipPropToSlot',       'Equip Prop To Slot',       'Equip a prop with attachment options'),
-    ('EquipInventoryWeapon',  'Equip Inventory Weapon',   'Equip a weapon from inventory'),
-    ('UnequipFromSlot',       'Unequip From Slot',        'Unequip from a slot'),
-    ('UnequipProp',           'Unequip Prop',             'Unequip a prop'),
-    ('UnequipItem',           'Unequip Item',             'Unequip an item'),
-]
+    ('EquipItemToSlot', 'Equip Item To Slot', 'Equip an item to a specific slot'),
+    ('EquipPropToSlot', 'Equip Prop To Slot', 'Equip a prop with attachment options'),
+    ('EquipInventoryWeapon', 'Equip Inventory Weapon', 'Equip a weapon from inventory'),
+    ('UnequipFromSlot', 'Unequip From Slot', 'Unequip from a slot'),
+    ('UnequipProp', 'Unequip Prop', 'Unequip a prop'),
+    ('UnequipItem', 'Unequip Item', 'Unequip an item'),
+    ]
 
 ATTACH_METHOD_ENUM = [
-    ('BonePosition',     'Bone Position',     'Attach at bone position'),
+    ('BonePosition', 'Bone Position', 'Attach at bone position'),
     ('RelativePosition', 'Relative Position', 'Attach at relative position'),
-    ('Custom',           'Custom',            'Custom offset'),
-]
+    ('Custom', 'Custom', 'Custom offset'),
+    ]
 
 
 class CP77_WorkspotActionItem(PropertyGroup):
     """One workspot item action — polymorphic, flattened with type discriminator."""
     action_type: EnumProperty(
-        name="Action Type",
-        items=WORKSPOT_ACTION_TYPES,
-        default='EquipItemToSlot',
-        description="Workspot action subtype",
-    )
+            name="Action Type",
+            items=WORKSPOT_ACTION_TYPES,
+            default='EquipItemToSlot',
+            description="Workspot action subtype",
+            )
     # EquipItemToSlot / UnequipItem: item TweakDBID
     item: StringProperty(name="Item", default="", description="TweakDBID as numeric string")
     # EquipItemToSlot / EquipPropToSlot / UnequipFromSlot: slot TweakDBID
@@ -169,8 +166,8 @@ class CP77_WorkspotActionItem(PropertyGroup):
     item_id: StringProperty(name="Item ID", default="", description="CName of prop item")
     # EquipPropToSlot: attach method
     attach_method: EnumProperty(
-        name="Attach Method", items=ATTACH_METHOD_ENUM, default='BonePosition',
-    )
+            name="Attach Method", items=ATTACH_METHOD_ENUM, default='BonePosition',
+            )
     # EquipPropToSlot: custom offset position
     offset_pos_x: FloatProperty(name="Offset X", default=0.0)
     offset_pos_y: FloatProperty(name="Offset Y", default=0.0)
@@ -191,74 +188,74 @@ class CP77_AnimEventItem(PropertyGroup):
     """One animation event — maps to animAnimEvent and subclasses."""
 
     event_type: EnumProperty(
-        name="Type",
-        items=EVENT_TYPES,
-        default='Simple',
-        description="Event type (maps to animAnimEvent subclass)",
-        update=on_event_update,
-    )
+            name="Type",
+            items=EVENT_TYPES,
+            default='Simple',
+            description="Event type (maps to animAnimEvent subclass)",
+            update=on_event_update,
+            )
     event_name: StringProperty(
-        name="Event Name",
-        default="",
-        description="CName of the event (e.g. w_gun_hmg_militech_handle_push)",
-        update=on_event_update,
-    )
+            name="Event Name",
+            default="",
+            description="CName of the event (e.g. w_gun_hmg_militech_handle_push)",
+            update=on_event_update,
+            )
     start_frame: IntProperty(
-        name="Start Frame",
-        default=0,
-        min=0,
-        description="Frame at which the event fires",
-        update=on_event_update,
-    )
+            name="Start Frame",
+            default=0,
+            min=0,
+            description="Frame at which the event fires",
+            update=on_event_update,
+            )
     duration_in_frames: IntProperty(
-        name="Duration",
-        default=0,
-        min=0,
-        description="Duration in frames (0 for instant events)",
-    )
+            name="Duration",
+            default=0,
+            min=0,
+            description="Duration in frames (0 for instant events)",
+            )
 
     # ── Sound fields ──
     switches: CollectionProperty(type=CP77_AnimEventSwitchItem)
     params: CollectionProperty(type=CP77_AnimEventParamItem)
     dynamic_params: StringProperty(
-        name="Dynamic Params",
-        default="",
-        description="Comma-separated list of dynamic parameter CNames",
-    )
+            name="Dynamic Params",
+            default="",
+            description="Comma-separated list of dynamic parameter CNames",
+            )
     metadata_context: StringProperty(name="Metadata Context", default="")
     only_play_on: StringProperty(name="Only Play On", default="")
     dont_play_on: StringProperty(name="Don't Play On", default="")
     player_gender_alt: EnumProperty(
-        name="Gender Alt",
-        items=GENDER_ALT_ENUM,
-        default='None',
-        description="Player gender alternative",
-    )
+            name="Gender Alt",
+            items=GENDER_ALT_ENUM,
+            default='None',
+            description="Player gender alternative",
+            )
 
     # ── SoundFromEmitter fields ──
     emitter_name: StringProperty(
-        name="Emitter Name",
-        default="",
-        description="Named emitter for sound playback",
-    )
+            name="Emitter Name",
+            default="",
+            description="Named emitter for sound playback",
+            )
 
     # ── Effect / EffectDuration / ItemEffect / ItemEffectDuration fields ──
     effect_name: StringProperty(
-        name="Effect Name",
-        default="",
-        description="VFX effect name",
-    )
+            name="Effect Name",
+            default="",
+            description="VFX effect name",
+            )
     sequence_shift: IntProperty(
-        name="Sequence Shift",
-        default=0,
-        min=0,
-        description="Sequence shift for effect duration events",
-    )
+            name="Sequence Shift",
+            default=0,
+            min=0,
+            description="Sequence shift for effect duration events",
+            )
     break_all_loops_on_stop: BoolProperty(
-        name="Break All Loops On Stop",
-        default=False,
-        description="Whether to break all loops when the event stops",
-    )
+            name="Break All Loops On Stop",
+            default=False,
+            description="Whether to break all loops when the event stops",
+            )
 
     # Sub-list indices for switches/params UILists
     switches_index: IntProperty(default=0)
@@ -266,72 +263,72 @@ class CP77_AnimEventItem(PropertyGroup):
 
     # ── Valued field ──
     event_value: FloatProperty(
-        name="Value",
-        default=0.0,
-        description="Numeric value for Valued events",
-    )
+            name="Value",
+            default=0.0,
+            description="Numeric value for Valued events",
+            )
 
     # ── FoleyAction field ──
     action_name: StringProperty(
-        name="Action Name",
-        default="",
-        description="Foley action CName",
-    )
+            name="Action Name",
+            default="",
+            description="Foley action CName",
+            )
 
     # ── SceneItem field ──
     bone_name: StringProperty(
-        name="Bone Name",
-        default="",
-        description="Target bone CName for scene item",
-    )
+            name="Bone Name",
+            default="",
+            description="Target bone CName for scene item",
+            )
 
     # ── WorkspotPlayFacialAnim field ──
     facial_anim_name: StringProperty(
-        name="Facial Anim Name",
-        default="",
-        description="Facial animation CName",
-    )
+            name="Facial Anim Name",
+            default="",
+            description="Facial animation CName",
+            )
 
     # ── FootIK field ──
     leg: EnumProperty(
-        name="Leg",
-        items=LEG_ENUM,
-        default='Left',
-        description="Which leg for IK",
-    )
+            name="Leg",
+            items=LEG_ENUM,
+            default='Left',
+            description="Which leg for IK",
+            )
 
     # ── FootPhase field ──
     foot_phase: EnumProperty(
-        name="Foot Phase",
-        items=FOOT_PHASE_ENUM,
-        default='RightUp',
-        description="Foot phase state",
-    )
+            name="Foot Phase",
+            items=FOOT_PHASE_ENUM,
+            default='RightUp',
+            description="Foot phase state",
+            )
 
     # ── GameplayVo fields ──
     vo_context: StringProperty(
-        name="VO Context",
-        default="",
-        description="Gameplay VO context CName",
-    )
+            name="VO Context",
+            default="",
+            description="Gameplay VO context CName",
+            )
     is_quest: BoolProperty(
-        name="Is Quest",
-        default=False,
-        description="Whether this is a quest VO",
-    )
+            name="Is Quest",
+            default=False,
+            description="Whether this is a quest VO",
+            )
 
     # ── FootPlant fields ──
     side: EnumProperty(
-        name="Side",
-        items=SIDE_ENUM,
-        default='Left',
-        description="Which side for foot plant",
-    )
+            name="Side",
+            items=SIDE_ENUM,
+            default='Left',
+            description="Which side for foot plant",
+            )
     custom_event: StringProperty(
-        name="Custom Event",
-        default="",
-        description="Custom event CName for foot plant",
-    )
+            name="Custom Event",
+            default="",
+            description="Custom event CName for foot plant",
+            )
 
     # ── WorkspotItem fields ──
     workspot_actions: CollectionProperty(type=CP77_WorkspotActionItem)
@@ -421,11 +418,11 @@ class CP77_PT_AnimEventsPanel(Panel):
         # ── Event list ──
         row = layout.row()
         row.template_list(
-            "CP77_UL_anim_event_list", "",
-            action, "cp77_anim_events",
-            action, "cp77_anim_events_index",
-            rows=4,
-        )
+                "CP77_UL_anim_event_list", "",
+                action, "cp77_anim_events",
+                action, "cp77_anim_events_index",
+                rows=4,
+                )
 
         col = row.column(align=True)
         col.operator("cp77.anim_event_add", icon='ADD', text="")
@@ -487,11 +484,11 @@ class CP77_PT_AnimEventsPanel(Panel):
         sub.label(text="Workspot Actions:")
         row = sub.row()
         row.template_list(
-            "CP77_UL_workspot_action_list", "",
-            evt, "workspot_actions",
-            evt, "workspot_actions_index",
-            rows=3,
-        )
+                "CP77_UL_workspot_action_list", "",
+                evt, "workspot_actions",
+                evt, "workspot_actions_index",
+                rows=3,
+                )
         col = row.column(align=True)
         col.operator("cp77.anim_event_add_workspot_action", icon='ADD', text="")
         col.operator("cp77.anim_event_remove_workspot_action", icon='REMOVE', text="")
@@ -541,11 +538,11 @@ class CP77_PT_AnimEventsPanel(Panel):
         sub.label(text="Wwise Switches:")
         row = sub.row()
         row.template_list(
-            "CP77_UL_switch_list", "",
-            evt, "switches",
-            evt, "switches_index",
-            rows=2,
-        )
+                "CP77_UL_switch_list", "",
+                evt, "switches",
+                evt, "switches_index",
+                rows=2,
+                )
         col = row.column(align=True)
         col.operator("cp77.anim_event_add_switch", icon='ADD', text="")
         col.operator("cp77.anim_event_remove_switch", icon='REMOVE', text="")
@@ -555,11 +552,11 @@ class CP77_PT_AnimEventsPanel(Panel):
         sub.label(text="Wwise Parameters:")
         row = sub.row()
         row.template_list(
-            "CP77_UL_param_list", "",
-            evt, "params",
-            evt, "params_index",
-            rows=2,
-        )
+                "CP77_UL_param_list", "",
+                evt, "params",
+                evt, "params_index",
+                rows=2,
+                )
         col = row.column(align=True)
         col.operator("cp77.anim_event_add_param", icon='ADD', text="")
         col.operator("cp77.anim_event_remove_param", icon='REMOVE', text="")
@@ -647,9 +644,9 @@ class CP77_OT_AnimEventMove(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     direction: EnumProperty(
-        items=[('UP', 'Up', ''), ('DOWN', 'Down', '')],
-        default='UP',
-    )
+            items=[('UP', 'Up', ''), ('DOWN', 'Down', '')],
+            default='UP',
+            )
 
     def execute(self, context):
         action = _get_active_action(context)
@@ -1010,8 +1007,10 @@ def save_events_to_idproperty(action):
             # original rather than destroying it.
             existing = _get(action, "animEvents")
             if existing is not None and hasattr(existing, '__len__') and len(existing) > 0:
-                print(f"[CP77] Warning: '{action.name}' events CollectionProperty is empty "
-                      f"but IDProperty has {len(existing)} events — preserving original")
+                print(
+                    f"[CP77] Warning: '{action.name}' events CollectionProperty is empty "
+                    f"but IDProperty has {len(existing)} events — preserving original"
+                    )
                 return
             if "animEvents" in action:
                 del action["animEvents"]
@@ -1024,7 +1023,7 @@ def save_events_to_idproperty(action):
             "eventName": evt.event_name,
             "startFrame": evt.start_frame,
             "durationInFrames": evt.duration_in_frames,
-        }
+            }
 
         if evt.event_type == 'Sound':
             if len(evt.switches) > 0:
@@ -1039,9 +1038,9 @@ def save_events_to_idproperty(action):
                         "enterCurveTime": p.enter_curve_time,
                         "exitCurveType": p.exit_curve_type,
                         "exitCurveTime": p.exit_curve_time,
-                    }
+                        }
                     for p in evt.params
-                ]
+                    ]
             if evt.dynamic_params.strip():
                 entry["dynamicParams"] = [s.strip() for s in evt.dynamic_params.split(",") if s.strip()]
             if evt.metadata_context:
@@ -1163,7 +1162,7 @@ _classes = [
     CP77_OT_AnimEventRemoveParam,
     CP77_OT_AnimEventAddWorkspotAction,
     CP77_OT_AnimEventRemoveWorkspotAction,
-]
+    ]
 
 
 def register_anim_events():

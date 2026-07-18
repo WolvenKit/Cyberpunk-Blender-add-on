@@ -1,8 +1,12 @@
-import bpy
 import os
+
+import bpy
 import bpy.utils.previews
+
 from ..main.common import get_icon_dir
+
 custom_icons = None
+
 
 def load_icons():
     global custom_icons
@@ -26,6 +30,7 @@ def unload_icons():
     if custom_icons is not None:
         bpy.utils.previews.remove(custom_icons)
         custom_icons = None
+
 
 def get_icon(name):
     if custom_icons and name in custom_icons:

@@ -8,9 +8,9 @@ from functools import lru_cache
 
 import bpy
 
-from ..main.setup import bcolors, clear_material_cache
 from .import_with_materials import CP77GLBimport
 from ..jsontool import JSONTool
+from ..main.setup import bcolors, clear_material_cache
 
 NAME_MAX_LEN = 256
 SUBMESH_PATTERN = re.compile(r"submesh_(\d+)", re.IGNORECASE)
@@ -323,7 +323,10 @@ def _mesh_glb_path(path, mesh_key, mesh_data, glbs):
     return _fallback_meshpath(path, mesh_key)
 
 
-def meshes_from_mesheswapps(meshes_w_apps, path='', from_mesh_no=0, to_mesh_no=10000000, with_mats=False, glbs=None, mesh_jsons=None, Masters=None, generate_overrides=False):
+def meshes_from_mesheswapps(
+        meshes_w_apps, path='', from_mesh_no=0, to_mesh_no=10000000, with_mats=False, glbs=None, mesh_jsons=None,
+        Masters=None, generate_overrides=False,
+        ):
     clear_material_cache()
     initiated_cache = False
     if not JSONTool._use_cache:
@@ -368,13 +371,13 @@ def meshes_from_mesheswapps(meshes_w_apps, path='', from_mesh_no=0, to_mesh_no=1
             try:
                 before_collections, before_objects = _collection_import_snapshot()
                 CP77GLBimport(
-                    with_materials=with_mats,
-                    remap_depot=props.remap_depot,
-                    filepath=meshpath,
-                    appearances=apps,
-                    scripting=True,
-                    generate_overrides=generate_overrides,
-                )
+                        with_materials=with_mats,
+                        remap_depot=props.remap_depot,
+                        filepath=meshpath,
+                        appearances=apps,
+                        scripting=True,
+                        generate_overrides=generate_overrides,
+                        )
 
                 move_coll = _imported_collection_from_diff(before_collections, before_objects, groupname)
                 if move_coll is None:

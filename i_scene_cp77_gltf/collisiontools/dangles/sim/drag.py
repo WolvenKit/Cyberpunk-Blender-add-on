@@ -1,7 +1,10 @@
 import math
-import numpy as np
 from enum import IntEnum
+
+import numpy as np
+
 from .frame_time import AverageFrameTimeCalculator
+
 
 class _OvershootState(IntEnum):
     FREE_MOVEMENT = 0
@@ -29,8 +32,8 @@ class DragPostProcessor:
 
         for config_index, dn in enumerate(state.drag_nodes):
             source_name = dn.source_bone_name or dn.bone_name
-            source_idx = sim.bone_idx_map.get(source_name)
-            target_idx = sim.bone_idx_map.get(dn.bone_name)
+            source_idx = sim.resolve_bone_index(source_name)
+            target_idx = sim.resolve_bone_index(dn.bone_name)
             if source_idx is None or target_idx is None:
                 continue
             config_indices.append(config_index)

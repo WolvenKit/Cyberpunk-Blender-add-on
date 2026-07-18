@@ -1,9 +1,14 @@
 import json
-import bpy
 import os
+import re
+from json.decoder import scanstring
+
+import bpy
+
 from .sim import spaces
+
 EDITOR_FORMAT = "DanglePhysicsEditor"
-EDITOR_VERSION = 12
+EDITOR_VERSION = 13
 
 LINK_MAP = {
     "KeepFixedDistance": "FIXED",
@@ -43,15 +48,22 @@ def _get_bone_name(node_dict, key):
     val = name_obj.get("$value", "") if isinstance(name_obj, dict) else name_obj
     return str(val) if val else ""
 
+def _iter_nested_values(root):
+    stack = [root]
+    while stack:
+        value = stack.pop()
+        yield value
+        if isinstance(value, dict):
+            for key in reversed(value):
+                stack.append(value[key])
+        elif isinstance(value, list):
+            stack.extend(reversed(value))
+
+
 def _build_handle_map(obj, node_map):
-    if isinstance(obj, dict):
-        if "HandleId" in obj and "Data" in obj:
-            node_map[obj["HandleId"]] = obj["Data"]
-        for v in obj.values():
-            _build_handle_map(v, node_map)
-    elif isinstance(obj, list):
-        for item in obj:
-            _build_handle_map(item, node_map)
+    for value in _iter_nested_values(obj):
+        if isinstance(value, dict) and "HandleId" in value and "Data" in value:
+            node_map[value["HandleId"]] = value["Data"]
 
 def _resolve_handle(obj, node_map):
     if not isinstance(obj, dict):
@@ -67,21 +79,15 @@ def _resolve_handle(obj, node_map):
 def _build_handle_maps(obj):
     node_map = {}
     node_ids = {}
-
-    def walk(value):
-        if isinstance(value, dict):
-            if "HandleId" in value and isinstance(value.get("Data"), dict):
-                handle_id = str(value["HandleId"])
-                data = value["Data"]
-                node_map[handle_id] = data
-                node_ids[id(data)] = handle_id
-            for child in value.values():
-                walk(child)
-        elif isinstance(value, list):
-            for child in value:
-                walk(child)
-
-    walk(obj)
+    for value in _iter_nested_values(obj):
+        if not isinstance(value, dict):
+            continue
+        data = value.get("Data")
+        if "HandleId" not in value or not isinstance(data, dict):
+            continue
+        handle_id = str(value["HandleId"])
+        node_map[handle_id] = data
+        node_ids[id(data)] = handle_id
     return node_map, node_ids
 
 
@@ -104,9 +110,27 @@ def _pose_link_target(value, node_map):
     return _get_wk(resolved, "node", None)
 
 
+def _static_switch_branch(node):
+    """Return the runtime pose branch for an unevaluated StaticSwitch.
+
+    Static switches are driven by engine-side conditions such as visual tags.
+    The editor has no runtime condition context, so the engine-compatible
+    neutral state is the False branch. Both branches are still imported as
+    authoring data; this only controls graph evaluation order.
+    """
+    return _get_wk(node, "False", None)
+
+
 def _iter_pose_inputs(node, node_map):
     if not isinstance(node, dict):
         return
+
+    if node.get("$type") == "animAnimNode_StaticSwitch":
+        target = _pose_link_target(_static_switch_branch(node), node_map)
+        if target is not None:
+            yield target
+        return
+
     for _key, value in node.items():
         target = _pose_link_target(value, node_map)
         if target is not None:
@@ -119,8 +143,11 @@ def _iter_pose_inputs(node, node_map):
                     yield target
 
 
-def _collect_graph_operations(data, node_map, node_ids):
-    roots = _find_nodes_by_type(data, "animAnimNode_Root")
+def _collect_graph_operations(data, node_map, node_ids, nodes_by_type=None):
+    nodes_by_type = nodes_by_type or {}
+    roots = nodes_by_type.get("animAnimNode_Root")
+    if roots is None:
+        roots = _find_nodes_by_type(data, "animAnimNode_Root")
     start_nodes = []
     for root_index, root in enumerate(roots):
         for node_index, reference in enumerate(_get_wk(root, "nodes", [])):
@@ -132,49 +159,68 @@ def _collect_graph_operations(data, node_map, node_ids):
             start_nodes.append((output_target, f"root[{root_index}].outputNode"))
 
     if not start_nodes:
-        for output_index, output in enumerate(
-            _find_nodes_by_type(data, "animAnimNode_Output")
-        ):
+        outputs = nodes_by_type.get("animAnimNode_Output")
+        if outputs is None:
+            outputs = _find_nodes_by_type(data, "animAnimNode_Output")
+        for output_index, output in enumerate(outputs):
             start_nodes.append((output, f"output[{output_index}]"))
 
     operations = []
     visited = set()
     visiting = set()
 
-    def visit(reference, path):
-        node = _resolve_handle(reference, node_map)
-        if not isinstance(node, dict):
-            return
-        identity = _node_identity(reference, node, node_ids)
-        if identity in visited or identity in visiting:
-            return
-        visiting.add(identity)
-        for input_index, child in enumerate(_iter_pose_inputs(node, node_map)):
-            visit(child, f"{path}.input[{input_index}]")
-        visiting.remove(identity)
-        visited.add(identity)
-
-        node_type = node.get("$type")
-        if node_type == "animAnimNode_Dangle":
-            operations.append(("DANGLE", node, identity, path))
-        elif node_type == "animAnimNode_Drag":
-            operations.append(("DRAG", node, identity, path))
-
     for reference, path in start_nodes:
-        visit(reference, path)
+        stack = [(reference, path, False)]
+        while stack:
+            current_reference, current_path, expanded = stack.pop()
+            node = _resolve_handle(current_reference, node_map)
+            if not isinstance(node, dict):
+                continue
+            identity = _node_identity(current_reference, node, node_ids)
+
+            if expanded:
+                if identity not in visiting:
+                    continue
+                visiting.remove(identity)
+                if identity in visited:
+                    continue
+                visited.add(identity)
+                node_type = node.get("$type")
+                if node_type == "animAnimNode_Dangle":
+                    operations.append(("DANGLE", node, identity, current_path))
+                elif node_type == "animAnimNode_Drag":
+                    operations.append(("DRAG", node, identity, current_path))
+                continue
+
+            if identity in visited or identity in visiting:
+                continue
+
+            visiting.add(identity)
+            stack.append((current_reference, current_path, True))
+            children = list(_iter_pose_inputs(node, node_map))
+            for input_index in range(len(children) - 1, -1, -1):
+                stack.append((
+                    children[input_index],
+                    f"{current_path}.input[{input_index}]",
+                    False,
+                ))
+
     return operations
 
-def _find_nodes_by_type(data, target_type):
-    results = []
-    if isinstance(data, dict):
-        if data.get("$type") == target_type:
-            results.append(data)
-        for v in data.values():
-            results.extend(_find_nodes_by_type(v, target_type))
-    elif isinstance(data, list):
-        for item in data:
-            results.extend(_find_nodes_by_type(item, target_type))
+def _find_nodes_by_types(data, target_types):
+    targets = set(target_types)
+    results = {target_type: [] for target_type in targets}
+    for value in _iter_nested_values(data):
+        if not isinstance(value, dict):
+            continue
+        node_type = value.get("$type")
+        if node_type in results:
+            results[node_type].append(value)
     return results
+
+
+def _find_nodes_by_type(data, target_type):
+    return _find_nodes_by_types(data, (target_type,))[target_type]
 
 def _parse_quat(q_dict):
     if not isinstance(q_dict, dict):
@@ -718,7 +764,15 @@ def _append_graph_operation(addon_state, node_type, node_index, identity, path):
 
 def _parse_wolvenkit_animgraph(data, addon_state):
     node_map, node_ids = _build_handle_maps(data)
-    ordered = _collect_graph_operations(data, node_map, node_ids)
+    nodes_by_type = _find_nodes_by_types(data, {
+        "animAnimNode_Root",
+        "animAnimNode_Output",
+        "animAnimNode_Dangle",
+        "animAnimNode_Drag",
+    })
+    ordered = _collect_graph_operations(
+        data, node_map, node_ids, nodes_by_type
+    )
 
     dangle_indices = {}
     drag_indices = {}
@@ -754,7 +808,7 @@ def _parse_wolvenkit_animgraph(data, addon_state):
             )
 
     # Preserve disconnected authoring nodes for editing, but do not execute them.
-    for raw_node in _find_nodes_by_type(data, "animAnimNode_Dangle"):
+    for raw_node in nodes_by_type["animAnimNode_Dangle"]:
         if id(raw_node) in parsed_dangle_nodes:
             continue
         info = _extract_dangle_info(raw_node, node_map)
@@ -772,7 +826,7 @@ def _parse_wolvenkit_animgraph(data, addon_state):
         (node.source_bone_name, node.bone_name)
         for node in addon_state.drag_nodes
     }
-    for raw_node in _find_nodes_by_type(data, "animAnimNode_Drag"):
+    for raw_node in nodes_by_type["animAnimNode_Drag"]:
         if id(raw_node) in parsed_drag_nodes:
             continue
         source = _get_bone_name(raw_node, "sourceBone")
@@ -839,7 +893,8 @@ def _serialize_editor_state(addon_state):
     data = {
         "format": EDITOR_FORMAT,
         "version": EDITOR_VERSION,
-        "coordinateSpace": spaces.rig_space_contract(arm_obj),
+        "coordinateSpace": spaces.EDITOR_SPACE_CONTRACT,
+        "rigSpaceContract": spaces.rig_space_contract(arm_obj),
         "runtime": "ORDERED_DYNG_POSITION_PROJECTION_SPRING_PENDULUM_DRAG",
         "gravityWS": gravity,
         "externalForceWS": list(addon_state.external_force_ws),
@@ -1009,6 +1064,22 @@ def _parse_editor_shape(raw, collection, existing=None):
 def _parse_editor_state(data, addon_state):
     if not isinstance(data, dict) or not isinstance(data.get("dangleNodes", []), list):
         raise ValueError("Invalid Dangle Physics Editor JSON")
+
+    coordinate_space = data.get("coordinateSpace")
+    supported_spaces = {
+        None,
+        spaces.EDITOR_SPACE_CONTRACT,
+        spaces.RIG_SPACE_CONTRACT_CURRENT,
+        spaces.RIG_SPACE_CONTRACT_DIRECT,
+    }
+    if coordinate_space not in supported_spaces:
+        raise ValueError(
+            f"Unsupported Dangle editor coordinate space: {coordinate_space}"
+        )
+    # Versions <= 12 wrote the target rig contract here even though all local
+    # axes/transforms were still serialized as authored REDengine values. They
+    # therefore require no numeric migration; version 13 names that data space
+    # explicitly and records the target rig contract separately.
 
     addon_state.external_force_ws = _sequence(
         data.get("externalForceWS"), 3, (0.0, 0.0, 0.0)
@@ -1253,11 +1324,196 @@ def _parse_editor_state(data, addon_state):
     return len(addon_state.dangle_nodes)
 
 
+
+_JSON_NUMBER = re.compile(
+    r"-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?"
+)
+
+
+def _skip_json_whitespace(text, index):
+    length = len(text)
+    while index < length and text[index] in " \t\r\n":
+        index += 1
+    return index
+
+
+def _parse_json_primitive(text, index):
+    character = text[index]
+    if character == '"':
+        return scanstring(text, index + 1, True)
+    if text.startswith("true", index):
+        return True, index + 4
+    if text.startswith("false", index):
+        return False, index + 5
+    if text.startswith("null", index):
+        return None, index + 4
+    if text.startswith("NaN", index):
+        return float("nan"), index + 3
+    if text.startswith("Infinity", index):
+        return float("inf"), index + 8
+    if text.startswith("-Infinity", index):
+        return float("-inf"), index + 9
+
+    match = _JSON_NUMBER.match(text, index)
+    if match is None:
+        raise json.JSONDecodeError("Expecting value", text, index)
+    token = match.group(0)
+    if "." in token or "e" in token or "E" in token:
+        return float(token), match.end()
+    return int(token), match.end()
+
+
+def _loads_iterative(text):
+    root = {"kind": "root", "state": "value", "value": None}
+    stack = [root]
+    index = 0
+    length = len(text)
+
+    def attach_value(frame, value):
+        if frame["kind"] == "root":
+            frame["value"] = value
+            frame["state"] = "done"
+        elif frame["kind"] == "array":
+            frame["value"].append(value)
+            frame["state"] = "comma_or_end"
+        else:
+            frame["value"][frame["key"]] = value
+            frame["key"] = None
+            frame["state"] = "comma_or_end"
+
+    def begin_value(frame, value_index):
+        character = text[value_index]
+        if character == "[":
+            value = []
+            attach_value(frame, value)
+            stack.append({
+                "kind": "array",
+                "state": "value_or_end",
+                "value": value,
+            })
+            return value_index + 1
+        if character == "{":
+            value = {}
+            attach_value(frame, value)
+            stack.append({
+                "kind": "object",
+                "state": "key_or_end",
+                "value": value,
+                "key": None,
+            })
+            return value_index + 1
+        value, next_index = _parse_json_primitive(text, value_index)
+        attach_value(frame, value)
+        return next_index
+
+    while stack:
+        frame = stack[-1]
+        index = _skip_json_whitespace(text, index)
+
+        if frame["kind"] == "root":
+            if frame["state"] == "value":
+                if index >= length:
+                    raise json.JSONDecodeError("Expecting value", text, index)
+                index = begin_value(frame, index)
+                continue
+            if len(stack) > 1:
+                continue
+            if index != length:
+                raise json.JSONDecodeError("Extra data", text, index)
+            return frame["value"]
+
+        if frame["kind"] == "array":
+            if frame["state"] in {"value_or_end", "value"}:
+                if index >= length:
+                    raise json.JSONDecodeError("Expecting value", text, index)
+                if text[index] == "]":
+                    if frame["state"] == "value":
+                        raise json.JSONDecodeError("Expecting value", text, index)
+                    stack.pop()
+                    index += 1
+                    continue
+                index = begin_value(frame, index)
+                continue
+            if index >= length:
+                raise json.JSONDecodeError("Expecting ',' delimiter", text, index)
+            if text[index] == ",":
+                frame["state"] = "value"
+                index += 1
+                continue
+            if text[index] == "]":
+                stack.pop()
+                index += 1
+                continue
+            raise json.JSONDecodeError("Expecting ',' delimiter", text, index)
+
+        state = frame["state"]
+        if state in {"key_or_end", "key"}:
+            if index >= length:
+                raise json.JSONDecodeError(
+                    "Expecting property name enclosed in double quotes",
+                    text,
+                    index,
+                )
+            if text[index] == "}":
+                if state == "key":
+                    raise json.JSONDecodeError(
+                        "Expecting property name enclosed in double quotes",
+                        text,
+                        index,
+                    )
+                stack.pop()
+                index += 1
+                continue
+            if text[index] != '"':
+                raise json.JSONDecodeError(
+                    "Expecting property name enclosed in double quotes",
+                    text,
+                    index,
+                )
+            frame["key"], index = scanstring(text, index + 1, True)
+            frame["state"] = "colon"
+            continue
+
+        if state == "colon":
+            if index >= length or text[index] != ":":
+                raise json.JSONDecodeError("Expecting ':' delimiter", text, index)
+            frame["state"] = "value"
+            index += 1
+            continue
+
+        if state == "value":
+            if index >= length:
+                raise json.JSONDecodeError("Expecting value", text, index)
+            index = begin_value(frame, index)
+            continue
+
+        if index >= length:
+            raise json.JSONDecodeError("Expecting ',' delimiter", text, index)
+        if text[index] == ",":
+            frame["state"] = "key"
+            index += 1
+            continue
+        if text[index] == "}":
+            stack.pop()
+            index += 1
+            continue
+        raise json.JSONDecodeError("Expecting ',' delimiter", text, index)
+
+    raise json.JSONDecodeError("Expecting value", text, index)
+
+
+def _load_json_document(filepath):
+    with open(filepath, "r", encoding="utf-8") as file:
+        text = file.read()
+    try:
+        return json.loads(text)
+    except RecursionError:
+        return _loads_iterative(text)
+
 def import_chains(filepath, addon_state):
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"File not found: {filepath}")
-    with open(filepath, "r", encoding="utf-8") as file:
-        data = json.load(file)
+    data = _load_json_document(filepath)
 
     is_wolvenkit = (
         isinstance(data, dict)
@@ -1278,8 +1534,30 @@ def import_chains(filepath, addon_state):
     _clear_addon_state(addon_state)
     try:
         if is_wolvenkit:
-            return _parse_wolvenkit_animgraph(data, addon_state)
-        return _parse_editor_state(data, addon_state)
+            count = _parse_wolvenkit_animgraph(data, addon_state)
+        else:
+            count = _parse_editor_state(data, addon_state)
+
+        arm_obj = getattr(addon_state, "id_data", None)
+        space_errors = spaces.armature_space_errors(arm_obj)
+        if space_errors:
+            raise ValueError(space_errors[0])
+        missing = spaces.unresolved_state_bones(
+            arm_obj, addon_state, executable_only=True
+        )
+        if missing:
+            names = []
+            seen = set()
+            for _role, name in missing:
+                if name not in seen:
+                    seen.add(name)
+                    names.append(name)
+            preview = ", ".join(names[:12])
+            suffix = f" (+{len(names) - 12} more)" if len(names) > 12 else ""
+            raise ValueError(
+                f"The selected MetaRig is missing Dangle bones: {preview}{suffix}"
+            )
+        return count
     except Exception:
         _clear_addon_state(addon_state)
         _parse_editor_state(backup, addon_state)

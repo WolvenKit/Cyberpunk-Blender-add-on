@@ -1,9 +1,11 @@
-import bpy
-import math
 import base64
+import math
 from math import inf
-from mathutils import Matrix, Vector, Quaternion, Euler
-from bpy_extras.view3d_utils import region_2d_to_vector_3d, region_2d_to_origin_3d
+
+import bpy
+from bpy_extras.view3d_utils import region_2d_to_origin_3d, region_2d_to_vector_3d
+from mathutils import Euler, Matrix, Quaternion, Vector
+
 from . import physx_utils, viz
 
 FABRIC_PRESETS = {
@@ -12,44 +14,44 @@ FABRIC_PRESETS = {
         'linear_drag': 0.05, 'solver_frequency': 280.0, 'stiffness_frequency': 120.0,
         'tether_scale': 1.0, 'tether_stiffness': 1.0, 'self_collision_distance': 0.004,
         'self_collision_stiffness': 0.5,
-    },
+        },
     'DENIM': {
         'mass': 1.8, 'friction': 0.6, 'drag': 0.04, 'damping': 0.2,
         'linear_drag': 0.08, 'solver_frequency': 300.0, 'stiffness_frequency': 160.0,
         'tether_scale': 0.8, 'tether_stiffness': 1.0, 'self_collision_distance': 0.006,
         'self_collision_stiffness': 0.7,
-    },
+        },
     'LEATHER': {
         'mass': 2.5, 'friction': 0.6, 'drag': 0.05, 'damping': 0.35,
         'linear_drag': 0.12, 'solver_frequency': 300.0, 'stiffness_frequency': 180.0,
         'tether_scale': 0.65, 'tether_stiffness': 1.0, 'self_collision_distance': 0.007,
         'self_collision_stiffness': 0.75,
-    },
+        },
     'SILK': {
         'mass': 0.45, 'friction': 0.35, 'drag': 0.015, 'damping': 0.06,
         'linear_drag': 0.02, 'solver_frequency': 260.0, 'stiffness_frequency': 80.0,
         'tether_scale': 1.2, 'tether_stiffness': 0.85, 'self_collision_distance': 0.003,
         'self_collision_stiffness': 0.35,
-    },
+        },
     'NYLON': {
         'mass': 0.65, 'friction': 0.4, 'drag': 0.015, 'damping': 0.08,
         'linear_drag': 0.025, 'solver_frequency': 270.0, 'stiffness_frequency': 100.0,
         'tether_scale': 1.0, 'tether_stiffness': 0.9, 'self_collision_distance': 0.003,
         'self_collision_stiffness': 0.4,
-    },
+        },
     'RUBBER': {
         'mass': 1.9, 'friction': 0.6, 'drag': 0.04, 'damping': 0.3,
         'linear_drag': 0.1, 'solver_frequency': 300.0, 'stiffness_frequency': 160.0,
         'tether_scale': 0.9, 'tether_stiffness': 0.85, 'self_collision_distance': 0.006,
         'self_collision_stiffness': 0.65,
-    },
-}
+        },
+    }
 
 QUALITY_MULTIPLIERS = {
     'DRAFT': {'solver_frequency': 0.65, 'stiffness_frequency': 0.75},
     'PREVIEW': {'solver_frequency': 1.0, 'stiffness_frequency': 1.0},
     'FINAL': {'solver_frequency': 1.2, 'stiffness_frequency': 1.15},
-}
+    }
 
 
 def _cloth_setting(obj, name, fallback=None):
@@ -120,7 +122,8 @@ def _iter_active_cloths(context):
 def _disable_live_deform_modifiers(obj):
     disabled = []
     for mod in obj.modifiers:
-        if mod.type in {'ARMATURE', 'LATTICE', 'MESH_DEFORM', 'SURFACE_DEFORM', 'SHRINKWRAP', 'CLOTH'} and mod.show_viewport:
+        if mod.type in {'ARMATURE', 'LATTICE', 'MESH_DEFORM', 'SURFACE_DEFORM', 'SHRINKWRAP',
+                        'CLOTH'} and mod.show_viewport:
             disabled.append(mod.name)
             mod.show_viewport = False
     if disabled:
@@ -286,14 +289,14 @@ def _apply_native_constraints(obj, cloth_handle, verts, vertex_count, _bridge):
         _bridge.nvcloth_set_motion_constraints(cloth_handle, motion)
         if hasattr(_bridge, "nvcloth_set_motion_constraint_scale_bias"):
             _bridge.nvcloth_set_motion_constraint_scale_bias(
-                cloth_handle,
-                float(getattr(obj.cp77_cloth, "motion_constraint_scale", 1.0)),
-                float(getattr(obj.cp77_cloth, "motion_constraint_bias", 0.0)),
-            )
+                    cloth_handle,
+                    float(getattr(obj.cp77_cloth, "motion_constraint_scale", 1.0)),
+                    float(getattr(obj.cp77_cloth, "motion_constraint_bias", 0.0)),
+                    )
         if hasattr(_bridge, "nvcloth_set_motion_constraint_stiffness"):
             _bridge.nvcloth_set_motion_constraint_stiffness(
-                cloth_handle, float(getattr(obj.cp77_cloth, "motion_constraint_stiffness", 1.0))
-            )
+                    cloth_handle, float(getattr(obj.cp77_cloth, "motion_constraint_stiffness", 1.0))
+                    )
     elif hasattr(_bridge, "nvcloth_clear_motion_constraints"):
         _bridge.nvcloth_clear_motion_constraints(cloth_handle)
         obj.cp77_cloth.last_motion_constraint_count = 0
@@ -440,7 +443,9 @@ def validate_cloth_object(obj, context):
     scale = obj.matrix_world.to_scale()
     if min(abs(scale.x), abs(scale.y), abs(scale.z)) < 1.0e-6:
         errors.append(f"{obj.name}: object scale contains a zero axis")
-    elif max(abs(scale.x), abs(scale.y), abs(scale.z)) / max(min(abs(scale.x), abs(scale.y), abs(scale.z)), 1.0e-6) > 1.25:
+    elif max(abs(scale.x), abs(scale.y), abs(scale.z)) / max(
+            min(abs(scale.x), abs(scale.y), abs(scale.z)), 1.0e-6
+            ) > 1.25:
         warnings.append(f"{obj.name}: non-uniform scale can make cloth/collider spacing harder to tune")
 
     cloth = obj.cp77_cloth
@@ -525,9 +530,11 @@ def update_cloth_colliders(cloth_obj, cloth_handle_int, context, _bridge, init_c
 
         idx = len(sphere_idx_map)
         sphere_idx_map[key] = idx
-        spheres_data.extend([
-            pos_local.x, pos_local.y, pos_local.z, max(abs(radius), 1.0e-4)
-        ])
+        spheres_data.extend(
+                [
+                    pos_local.x, pos_local.y, pos_local.z, max(abs(radius), 1.0e-4)
+                    ]
+                )
         return idx
 
     def add_bone_sphere(arm_obj, bone_name, radius):
@@ -552,17 +559,33 @@ def update_cloth_colliders(cloth_obj, cloth_handle_int, context, _bridge, init_c
         capsule_pairs.extend([a, b])
 
     if hasattr(_bridge, "nvcloth_enable_continuous_collision"):
-        _bridge.nvcloth_enable_continuous_collision(cloth_handle_int, bool(getattr(cloth_obj.cp77_cloth, "continuous_collision", True)))
+        _bridge.nvcloth_enable_continuous_collision(
+            cloth_handle_int, bool(getattr(cloth_obj.cp77_cloth, "continuous_collision", True))
+            )
     if hasattr(_bridge, "nvcloth_set_collision_mass_scale"):
-        _bridge.nvcloth_set_collision_mass_scale(cloth_handle_int, float(getattr(cloth_obj.cp77_cloth, "collision_mass_scale", 3.0)))
+        _bridge.nvcloth_set_collision_mass_scale(
+            cloth_handle_int, float(getattr(cloth_obj.cp77_cloth, "collision_mass_scale", 3.0))
+            )
 
     _bridge.nvcloth_set_spheres(cloth_handle_int, spheres_data)
     _bridge.nvcloth_set_capsules(cloth_handle_int, capsule_pairs)
 
-    counts = _bridge.nvcloth_get_collider_counts(cloth_handle_int) if hasattr(_bridge, "nvcloth_get_collider_counts") else {}
-    cloth_obj["pxbridge_cloth_sphere_count"] = int(counts.get("spheres", len(spheres_data) // 4)) if hasattr(counts, "get") else len(spheres_data) // 4
-    cloth_obj["pxbridge_cloth_capsule_count"] = int(counts.get("capsules", len(capsule_pairs) // 2)) if hasattr(counts, "get") else len(capsule_pairs) // 2
-    cloth_obj["pxbridge_cloth_capsule_slot_count"] = int(counts.get("capsule_slots", len(capsule_pairs) // 2)) if hasattr(counts, "get") else len(capsule_pairs) // 2
+    counts = _bridge.nvcloth_get_collider_counts(cloth_handle_int) if hasattr(
+        _bridge, "nvcloth_get_collider_counts"
+        ) else {}
+    cloth_obj["pxbridge_cloth_sphere_count"] = int(counts.get("spheres", len(spheres_data) // 4)) if hasattr(
+        counts, "get"
+        ) else len(
+        spheres_data
+        ) // 4
+    cloth_obj["pxbridge_cloth_capsule_count"] = int(counts.get("capsules", len(capsule_pairs) // 2)) if hasattr(
+        counts, "get"
+        ) else len(
+        capsule_pairs
+        ) // 2
+    cloth_obj["pxbridge_cloth_capsule_slot_count"] = int(
+        counts.get("capsule_slots", len(capsule_pairs) // 2)
+        ) if hasattr(counts, "get") else len(capsule_pairs) // 2
     cloth_obj["pxbridge_cloth_virtual_capsule_count"] = 0
     cloth_obj["pxbridge_cloth_avatar_mesh_triangle_count"] = 0
     cloth_obj["pxbridge_cloth_capsule_mode"] = "native_capsules_ccd"
@@ -741,7 +764,9 @@ class PHYSX_OT_build_scene(bpy.types.Operator):
                     inv_masses = _build_inv_masses(obj, vertex_count)
                     fixed_count = sum(1 for m in inv_masses if m <= 0.0)
                     if fixed_count >= vertex_count:
-                        raise RuntimeError(f"{obj.name}: all cloth particles are pinned; unpin part of the garment before preparing")
+                        raise RuntimeError(
+                            f"{obj.name}: all cloth particles are pinned; unpin part of the garment before preparing"
+                            )
 
                     g = context.scene.physx.gravity
                     local_g = _cloth_local_gravity(obj, g)
@@ -768,7 +793,9 @@ class PHYSX_OT_build_scene(bpy.types.Operator):
                     _bridge.nvcloth_set_gravity(cloth_handle, local_g)
                     _bridge.nvcloth_set_solver_frequency(cloth_handle, _cloth_setting(obj, 'solver_frequency', 300.0))
                     if hasattr(_bridge, "nvcloth_set_stiffness_frequency"):
-                        _bridge.nvcloth_set_stiffness_frequency(cloth_handle, _cloth_setting(obj, 'stiffness_frequency', 120.0))
+                        _bridge.nvcloth_set_stiffness_frequency(
+                            cloth_handle, _cloth_setting(obj, 'stiffness_frequency', 120.0)
+                            )
                     if hasattr(_bridge, "nvcloth_set_damping"):
                         d = _cloth_setting(obj, 'damping', 0.12)
                         _bridge.nvcloth_set_damping(cloth_handle, [d, d, d])
@@ -776,19 +803,37 @@ class PHYSX_OT_build_scene(bpy.types.Operator):
                         ld = _cloth_setting(obj, 'linear_drag', 0.05)
                         _bridge.nvcloth_set_linear_drag(cloth_handle, [ld, ld, ld])
                     if hasattr(_bridge, "nvcloth_set_tether_constraint_scale"):
-                        _bridge.nvcloth_set_tether_constraint_scale(cloth_handle, _cloth_setting(obj, 'tether_scale', 1.0))
+                        _bridge.nvcloth_set_tether_constraint_scale(
+                            cloth_handle, _cloth_setting(obj, 'tether_scale', 1.0)
+                            )
                     if hasattr(_bridge, "nvcloth_set_tether_constraint_stiffness"):
-                        _bridge.nvcloth_set_tether_constraint_stiffness(cloth_handle, _cloth_setting(obj, 'tether_stiffness', 1.0))
+                        _bridge.nvcloth_set_tether_constraint_stiffness(
+                            cloth_handle, _cloth_setting(obj, 'tether_stiffness', 1.0)
+                            )
                     if hasattr(_bridge, "nvcloth_set_self_collision_distance"):
-                        _bridge.nvcloth_set_self_collision_distance(cloth_handle, _cloth_setting(obj, 'self_collision_distance', 0.0))
+                        _bridge.nvcloth_set_self_collision_distance(
+                            cloth_handle, _cloth_setting(obj, 'self_collision_distance', 0.0)
+                            )
                     if hasattr(_bridge, "nvcloth_set_self_collision_stiffness"):
-                        _bridge.nvcloth_set_self_collision_stiffness(cloth_handle, _cloth_setting(obj, 'self_collision_stiffness', 0.5))
+                        _bridge.nvcloth_set_self_collision_stiffness(
+                            cloth_handle, _cloth_setting(
+                                obj, 'self_collision_stiffness', 0.5
+                                )
+                            )
                     _apply_native_constraints(obj, cloth_handle, verts, vertex_count, _bridge)
                     _bridge.nvcloth_set_friction(cloth_handle, _cloth_setting(obj, 'friction', 0.5))
                     if hasattr(_bridge, "nvcloth_enable_continuous_collision"):
-                        _bridge.nvcloth_enable_continuous_collision(cloth_handle, bool(getattr(obj.cp77_cloth, "continuous_collision", True)))
+                        _bridge.nvcloth_enable_continuous_collision(
+                            cloth_handle, bool(
+                                getattr(obj.cp77_cloth, "continuous_collision", True)
+                                )
+                            )
                     if hasattr(_bridge, "nvcloth_set_collision_mass_scale"):
-                        _bridge.nvcloth_set_collision_mass_scale(cloth_handle, float(getattr(obj.cp77_cloth, "collision_mass_scale", 3.0)))
+                        _bridge.nvcloth_set_collision_mass_scale(
+                            cloth_handle, float(
+                                getattr(obj.cp77_cloth, "collision_mass_scale", 3.0)
+                                )
+                            )
                     _bridge.nvcloth_set_drag_coefficient(cloth_handle, _cloth_setting(obj, 'drag', 0.0))
                     if hasattr(_bridge, "nvcloth_clear_inertia"):
                         _bridge.nvcloth_clear_inertia(cloth_handle)

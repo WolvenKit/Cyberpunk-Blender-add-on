@@ -1,7 +1,9 @@
-import bpy
 import os
 
-def cp77_mlmask_export(self,context, filepath, export_format):
+import bpy
+
+
+def cp77_mlmask_export(self, context, filepath, export_format):
     active_object = bpy.context.active_object
     active_material = active_object.active_material
     nodes = active_material.node_tree.nodes
@@ -18,7 +20,7 @@ def cp77_mlmask_export(self,context, filepath, export_format):
     mlBSDFGroup = nodes.get("Multilayered 1.8.0")
     if not mlBSDFGroup:
         self.report({'ERROR'}, 'Multilayered shader node not found within selected material.')
-        return # TODO throw error in OP
+        return  # TODO throw error in OP
 
     mask_output_dir = bpy.path.abspath(mask_outpath)
     if not os.path.exists(mask_output_dir):
@@ -28,8 +30,8 @@ def cp77_mlmask_export(self,context, filepath, export_format):
 
     numLayers = 20
     layerBSDF = 1
-    while layerBSDF<=numLayers:
-        socket_name = ("Layer "+str(layerBSDF))
+    while layerBSDF <= numLayers:
+        socket_name = ("Layer " + str(layerBSDF))
         socket = mlBSDFGroup.inputs.get(socket_name)
         # JATO: if there's no connected node group skip to next layer. TODO warn user this breaks mlmask/mlsetup relationship? or maybe write dummy mask?
         if not socket.is_linked:
@@ -38,7 +40,7 @@ def cp77_mlmask_export(self,context, filepath, export_format):
 
         layerGroupLink = socket.links[0]
         linkedLayerGroupName = layerGroupLink.from_node.name
-        LayerGroup= nodes[linkedLayerGroupName]
+        LayerGroup = nodes[linkedLayerGroupName]
 
         MaskNode = None
         socket_name = "Mask"
@@ -49,7 +51,7 @@ def cp77_mlmask_export(self,context, filepath, export_format):
             continue
         maskNodeLink = socket.links[0]
         linkedMaskNodeName = maskNodeLink.from_node.name
-        MaskNode=nodes[linkedMaskNodeName]
+        MaskNode = nodes[linkedMaskNodeName]
 
         if MaskNode and MaskNode.type == 'TEX_IMAGE' and MaskNode.image:
             img = MaskNode.image

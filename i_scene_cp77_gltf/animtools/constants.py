@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from typing import FrozenSet
 
 WEIGHT_THRESHOLD: float = 0.001
@@ -7,23 +8,23 @@ WEIGHT_THRESHOLD: float = 0.001
 NUM_ENVELOPE_TRACKS: int = 13
 
 # Primary envelope tracks
-ENV_FACE_ENVELOPE: int = 0       # faceEnvelope 
-ENV_UPPER_FACE: int = 1          # upperFace
-ENV_LOWER_FACE: int = 2          # lowerFace
-ENV_ANTI_STRETCH: int = 3        # antiStretch
-ENV_LIPSYNC_ENVELOPE: int = 4    # lipSyncEnvelope
-ENV_LIPSYNC_LEFT: int = 5        # lipSyncLeftEnvelope
-ENV_LIPSYNC_RIGHT: int = 6       # lipSyncRightEnvelope 
+ENV_FACE_ENVELOPE: int = 0  # faceEnvelope
+ENV_UPPER_FACE: int = 1  # upperFace
+ENV_LOWER_FACE: int = 2  # lowerFace
+ENV_ANTI_STRETCH: int = 3  # antiStretch
+ENV_LIPSYNC_ENVELOPE: int = 4  # lipSyncEnvelope
+ENV_LIPSYNC_LEFT: int = 5  # lipSyncLeftEnvelope
+ENV_LIPSYNC_RIGHT: int = 6  # lipSyncRightEnvelope
 
 # JALI control tracks
-ENV_JALI_JAW: int = 7            # jaliJaw
-ENV_JALI_LIPS: int = 8           # jaliLips
+ENV_JALI_JAW: int = 7  # jaliJaw
+ENV_JALI_LIPS: int = 8  # jaliLips
 
 # Muzzle envelope tracks
-ENV_MUZZLE_LIPS: int = 9         # muzzleLips
-ENV_MUZZLE_EYES: int = 10        # muzzleEyes
-ENV_MUZZLE_BROWS: int = 11       # muzzleBrows
-ENV_MUZZLE_EYE_DIRS: int = 12    # muzzleEyeDirections 
+ENV_MUZZLE_LIPS: int = 9  # muzzleLips
+ENV_MUZZLE_EYES: int = 10  # muzzleEyes
+ENV_MUZZLE_BROWS: int = 11  # muzzleBrows
+ENV_MUZZLE_EYE_DIRS: int = 12  # muzzleEyeDirections
 
 LIPSYNC_OVERRIDE_OFFSET: int = 140
 """AnimOverrideWeight tracks start at this index"""
@@ -42,7 +43,6 @@ INFLUENCE_EXPONENTIAL: int = 1
 
 INFLUENCE_ORGANIC: int = 2
 """Organic influence: weight *= (1 - sum)²"""
-
 
 CORRECTIVE_INFLUENCE_BY_SPEED: int = 1
 """Flag: Corrective influenced by animation speed"""
@@ -98,15 +98,19 @@ TONGUE_ONLY: FrozenSet[str] = frozenset({'L', 'N', 'T', 'D', 'K', 'G', 'NG'})
 LIP_HEAVY: FrozenSet[str] = frozenset({'UW', 'OW', 'OY', 'W', 'SH', 'ZH', 'CH', 'JH'})
 """Lip-heavy start early and end late (Paper §4.2 Rule 2)"""
 
-OBSTRUENTS_NASALS: FrozenSet[str] = frozenset({
-    'D', 'T', 'G', 'K', 'F', 'V', 'P', 'B', 'M', 'N', 'NG'
-})
+OBSTRUENTS_NASALS: FrozenSet[str] = frozenset(
+        {
+            'D', 'T', 'G', 'K', 'F', 'V', 'P', 'B', 'M', 'N', 'NG'
+            }
+        )
 """Obstruents and nasals (Paper §4.2 Rules 6-7)"""
 
-VOWELS: FrozenSet[str] = frozenset({
-    'AA', 'AE', 'AH', 'AO', 'AW', 'AY', 'EH', 'ER', 'EY',
-    'IH', 'IY', 'OW', 'OY', 'UH', 'UW', 'AX', 'IX'
-})
+VOWELS: FrozenSet[str] = frozenset(
+        {
+            'AA', 'AE', 'AH', 'AO', 'AW', 'AY', 'EH', 'ER', 'EY',
+            'IH', 'IY', 'OW', 'OY', 'UH', 'UW', 'AX', 'IX'
+            }
+        )
 """All vowel phonemes (Arpabet)"""
 
 ROUNDED_VOWELS: FrozenSet[str] = frozenset({'UW', 'OW', 'OY', 'AO', 'AW'})
@@ -142,23 +146,23 @@ LIPSYNC_POSE_SUFFIX: str = 'LipsyncPoseOutput'
 __all__ = [
     # Thresholds
     'WEIGHT_THRESHOLD',
-    
+
     # Envelope track indices
     'NUM_ENVELOPE_TRACKS',
     'ENV_FACE_ENVELOPE', 'ENV_UPPER_FACE', 'ENV_LOWER_FACE', 'ENV_ANTI_STRETCH',
     'ENV_LIPSYNC_ENVELOPE', 'ENV_LIPSYNC_LEFT', 'ENV_LIPSYNC_RIGHT',
     'ENV_JALI_JAW', 'ENV_JALI_LIPS',
     'ENV_MUZZLE_LIPS', 'ENV_MUZZLE_EYES', 'ENV_MUZZLE_BROWS', 'ENV_MUZZLE_EYE_DIRS',
-    
+
     # Track offsets
     'LIPSYNC_OVERRIDE_OFFSET', 'LIPSYNC_POSE_OFFSET', 'WRINKLE_START_DEFAULT',
-    
+
     # Influence types
     'INFLUENCE_LINEAR', 'INFLUENCE_EXPONENTIAL', 'INFLUENCE_ORGANIC',
-    
+
     # Corrective flags
     'CORRECTIVE_INFLUENCE_BY_SPEED', 'CORRECTIVE_INFLUENCE_LINEAR_CORRECTION',
-    
+
     # Tongue indices
     'TONGUE_MID_BASE_L', 'TONGUE_MID_BASE_R', 'TONGUE_MID_BASE_DN',
     'TONGUE_MID_BASE_UP', 'TONGUE_MID_BASE_FWD', 'TONGUE_MID_BASE_FRONT',
@@ -166,17 +170,17 @@ __all__ = [
     'TONGUE_MID_TIP_L', 'TONGUE_MID_TIP_R', 'TONGUE_MID_TIP_DN',
     'TONGUE_MID_TIP_UP', 'TONGUE_MID_TWIST_L', 'TONGUE_MID_TWIST_R',
     'TONGUE_MID_THICK',
-    
+
     # Phoneme sets
     'BILABIALS', 'LABIODENTALS', 'SIBILANTS', 'DENTALS', 'ALVEOLARS',
     'VELARS', 'GLIDES', 'TONGUE_ONLY', 'LIP_HEAVY', 'OBSTRUENTS_NASALS',
     'VOWELS', 'ROUNDED_VOWELS', 'WIDE_VOWELS', 'PAUSES',
-    
+
     # JALI timing
     'JALI_DEFAULT_ONSET_MS', 'JALI_DEFAULT_DECAY_MS',
     'JALI_LIP_HEAVY_ONSET_MS', 'JALI_LIP_HEAVY_DECAY_MS',
     'JALI_SUSTAIN_RATIO', 'JALI_DEFAULT_TAU',
-    
+
     # Track naming
     'LIPSYNC_POSE_SUFFIX',
-]
+    ]

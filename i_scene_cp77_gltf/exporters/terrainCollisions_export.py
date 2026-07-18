@@ -1,14 +1,15 @@
-import bpy
 import random
-import numpy as np
 import re
+
+import numpy as np
 from mathutils import Quaternion
-from ..main.common import *
-from ..cyber_props import *
+
 from .physxHeightfieldWriter import PhysXWriter
+from ..main.common import *
 
 resources_dir = get_resources_dir()
 epsilon = 1e-4
+
 
 class MaskCache:
     def __init__(self, image):
@@ -32,17 +33,21 @@ class MaskCache:
         region = self.data[y_start:y_end, x_start:x_end]
         return region.mean()
 
+
 def getBaseSector():
     with open(os.path.join(get_resources_dir(), 'empty.streamingsector.json'), 'r') as f:
         return json.load(f)
+
 
 def getBaseNodeData():
     with open(os.path.join(get_resources_dir(), 'base.nodeData.json'), 'r') as f:
         return json.load(f)
 
+
 def getBaseNode():
     with open(os.path.join(get_resources_dir(), 'base.worldTerrainCollisionNode.json'), 'r') as f:
         return json.load(f)
+
 
 def is_multilayer(tex_node):
     for out in tex_node.outputs:
@@ -50,11 +55,12 @@ def is_multilayer(tex_node):
             to_node = link.to_node
 
             if (to_node.type == "GROUP"
-                and to_node.node_tree
-                and to_node.node_tree.name.lower().startswith("multilayer")):
+                    and to_node.node_tree
+                    and to_node.node_tree.name.lower().startswith("multilayer")):
                 return True
 
     return False
+
 
 def sort_images_by_number(images):
     def extract_number(img):
@@ -67,6 +73,7 @@ def sort_images_by_number(images):
         return int(m.group(1))
 
     return sorted(images, key=extract_number, reverse=True)
+
 
 def get_masks(mat: bpy.types.Material):
     images = set()
@@ -84,8 +91,8 @@ def get_masks(mat: bpy.types.Material):
 
     return sort_images_by_number(images)
 
-def generate_terrain_collision(obj, node):
 
+def generate_terrain_collision(obj, node):
     bm = bmesh.new()
     bm.from_mesh(obj.data)
 
@@ -127,13 +134,13 @@ def generate_terrain_collision(obj, node):
         "min_max_bounds": {
             "min": {"x": 0.0, "y": 0.0, "z": 0.0},
             "max": {"x": rows, "y": 32767.0, "z": columns},
-        },
+            },
         "sample_stride": 4,
         "nb_samples": rows * columns,
         "min_height": 0.0,
         "max_height": 32767.0,
         "samples": [],
-    }
+        }
 
     masks = set()
     for slot in obj.material_slots:
@@ -218,7 +225,6 @@ def generate_terrain_collision(obj, node):
                 rayS1.x += quadQuarterStepColWorld
                 resultS1, locationS1, normalS1, indexS1 = obj.ray_cast(rayS0, ray_direction)
 
-
                 hits = 0
                 if resultCenter:
                     heightAvg = locationCenter.z
@@ -251,11 +257,11 @@ def generate_terrain_collision(obj, node):
             # sample texture for t0
             for mask_cache in mask_caches:
                 avgValue = mask_cache.sample_region(
-                    centerU - quadHalfStepColPixel,
-                    centerU,
-                    centerV,
-                    centerV + quadHalfStepRowPixel
-                )
+                        centerU - quadHalfStepColPixel,
+                        centerU,
+                        centerV,
+                        centerV + quadHalfStepRowPixel
+                        )
 
                 if avgValue is None:
                     t0Mat -= 1
@@ -269,11 +275,11 @@ def generate_terrain_collision(obj, node):
             # sample texture for t1
             for mask_cache in mask_caches:
                 avgValue = mask_cache.sample_region(
-                    centerU,
-                    centerU + quadHalfStepColPixel,
-                    centerV - quadHalfStepRowPixel,
-                    centerV
-                )
+                        centerU,
+                        centerU + quadHalfStepColPixel,
+                        centerV - quadHalfStepRowPixel,
+                        centerV
+                        )
 
                 if avgValue is None:
                     t1Mat -= 1
@@ -291,16 +297,16 @@ def generate_terrain_collision(obj, node):
                 height = 0
 
             hf["samples"].append(
-                {
-                    "height": height * 32767,
-                    "material_index_0": t0Mat if hitT0 else 127,
-                    "material_index_1": t1Mat if hitT1 else 127,
-                }
-            )
+                    {
+                        "height": height * 32767,
+                        "material_index_0": t0Mat if hitT0 else 127,
+                        "material_index_1": t1Mat if hitT1 else 127,
+                        }
+                    )
 
     bm.free()
 
-    node["Data"]["heightfieldGeometry"]["Bytes"] =  PhysXWriter.write(hf)
+    node["Data"]["heightfieldGeometry"]["Bytes"] = PhysXWriter.write(hf)
     return None
 
 
@@ -367,6 +373,7 @@ def set_transforms(obj, nodeData, node):
 
     return None
 
+
 def generate_sector_node(obj):
     nodeData = getBaseNodeData()
     node = getBaseNode()
@@ -377,6 +384,7 @@ def generate_sector_node(obj):
     set_transforms(obj, nodeData, node)
 
     return nodeData, node
+
 
 def export_selected_terrain(filePath):
     ctx = bpy.context

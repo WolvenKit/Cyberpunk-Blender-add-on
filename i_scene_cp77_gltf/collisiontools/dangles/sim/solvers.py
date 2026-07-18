@@ -1,5 +1,5 @@
 import bpy
-from mathutils import Vector, Matrix
+from mathutils import Matrix, Vector
 
 from . import spaces
 
@@ -102,11 +102,13 @@ def _matrix_lerp_qs(current, target, alpha):
     return Matrix.LocRotScale(location, rotation, scale)
 
 
-def _pose_matrix_map(arm):
-    return {
-        pose_bone.name: pose_bone.matrix.copy()
-        for pose_bone in arm.pose.bones
-    }
+def _pose_matrix_map(arm, bone_names):
+    matrices = {}
+    for name in bone_names:
+        pose_bone = arm.pose.bones.get(name)
+        if pose_bone is not None:
+            matrices[name] = pose_bone.matrix.copy()
+    return matrices
 
 
 def _add_subtree_names(pose_bone, names):
@@ -153,7 +155,21 @@ def _compose_dangle_node_matrices(sim, node_index):
     arm = sim.arm_obj
     dnode = sim.state.dangle_nodes[node_index]
     lookat_map = _build_lookat_map(sim, node_index)
-    matrices = _pose_matrix_map(arm)
+
+    matrix_names = set()
+    for particle_index in _node_particle_indices(sim, node_index):
+        target_bone = arm.pose.bones.get(sim.bone_names[particle_index])
+        if target_bone is not None:
+            _add_subtree_names(target_bone, matrix_names)
+        for source_index, _axis, _obligatory in lookat_map.get(
+            particle_index, ()
+        ):
+            if 0 <= source_index < len(sim.bone_names):
+                source_bone = arm.pose.bones.get(sim.bone_names[source_index])
+                if source_bone is not None:
+                    _add_subtree_names(source_bone, matrix_names)
+
+    matrices = _pose_matrix_map(arm, matrix_names)
     apply_names = set()
     alpha = max(0.0, min(1.0, float(getattr(dnode, 'alpha', 1.0))))
 
@@ -313,7 +329,7 @@ def _apply_model_space_matrices(arm, matrices, apply_names):
         parent_matrix = (
             matrices[parent.name]
             if parent is not None and parent.name in matrices
-            else Matrix.Identity(4)
+            else (parent.matrix.copy() if parent is not None else Matrix.Identity(4))
         )
         basis_by_name[pose_bone.name] = _model_matrix_to_basis(
             pose_bone,

@@ -1,8 +1,10 @@
 import json
-import os 
+
 import bpy
-from mathutils import Vector, Euler, Quaternion
+from mathutils import Euler, Quaternion, Vector
+
 from ..main.common import show_message
+
 
 def export_colliders_to_phys(collections, filepath):
     # Initialize a list to store collider information
@@ -38,30 +40,30 @@ def export_colliders_to_phys(collections, filepath):
                                 "j": obj.rotation_quaternion.x,
                                 "k": obj.rotation_quaternion.y,
                                 "r": obj.rotation_quaternion.w
-                            },
+                                },
                             "position": {
                                 "$type": "Vector4",
                                 "W": 0,
                                 "X": obj.location.x,
                                 "Y": obj.location.y,
                                 "Z": obj.location.z
-                            }
-                        },
+                                }
+                            },
                         "material": {
                             "$type": "CName",
                             "$storage": "string",
                             "$value": obj.get('physics_material', 'None')
-                        },
+                            },
                         "materialApperanceOverrides": [],
                         "tag": {
                             "$type": "CName",
                             "$storage": "string",
                             "$value": "None"
-                        },
+                            },
                         "volumeModifier": 1
+                        }
                     }
-                }
-                
+
                 # Add collider-specific data
                 if obj['collisionShape'] == "physicsColliderConvex":
                     mesh = obj.data
@@ -77,7 +79,7 @@ def export_colliders_to_phys(collections, filepath):
                         vertices.append(position)
                     # Add vertices data
                     collider_info["Data"]["vertices"] = vertices
-                    
+
                 elif obj['collisionShape'] == "physicsColliderBox":
                     # Add halfExtents data
                     collider_info["Data"]["halfExtents"] = {
@@ -85,16 +87,16 @@ def export_colliders_to_phys(collections, filepath):
                         "X": obj.dimensions.x / 2,
                         "Y": obj.dimensions.y / 2,
                         "Z": obj.dimensions.z / 2
-                    }
-                
+                        }
+
                 elif obj['collisionShape'] == "physicsColliderCapsule":
-                    collider_info['Data']['radius'] = obj.dimensions.x / 2 
+                    collider_info['Data']['radius'] = obj.dimensions.x / 2
                     collider_info['Data']['height'] = obj.dimensions.z
-               
+
                 elif obj['collisionShape'] == "physicsColliderSphere":
-                    collider_info['Data']['radius'] = obj.dimensions.x / 2  
-                
-                # Append collider info to list
+                    collider_info['Data']['radius'] = obj.dimensions.x / 2
+
+                    # Append collider info to list
                 colliders.append(collider_info)
                 index += 1
 
@@ -107,7 +109,7 @@ def export_colliders_to_phys(collections, filepath):
             "ExportedDateTime": "2024-04-11T03:57:18.3818438Z",
             "DataType": "CR2W",
             "ArchiveFileName": filepath
-        },
+            },
         "Data": {
             "Version": 195,
             "BuildVersion": 0,
@@ -115,50 +117,50 @@ def export_colliders_to_phys(collections, filepath):
                 "$type": "physicsSystemResource",
                 "bodies": [
                     {
-                      "HandleId": "0",
-                      "Data": {
-                        "$type": "physicsSystemBody",
-                        "collisionShapes": colliders,
-                        "isQueryBodyOnly": 0,
-                        "localToModel": {
-                            "$type": "Transform",
-                            "orientation": {"$type": "Quaternion", "i": 0, "j": 0, "k": 0, "r": 1},
-                            "position": {"$type": "Vector4", "W": 0, "X": 0, "Y": 0, "Z": 0}
-                        },
-                        "mappedBoneName": {"$type": "CName", "$storage": "string", "$value": "None"},
-                        "mappedBoneToBody": {
-                            "$type": "Transform",
-                            "orientation": {"$type": "Quaternion", "i": 0, "j": 0, "k": 0, "r": 1},
-                            "position": {"$type": "Vector4", "W": 0, "X": 0, "Y": 0, "Z": 0}
-                        },
-                        "name": {"$type": "CName", "$storage": "string", "$value": "Actor"},
-                        "params": {
-                            "$type": "physicsSystemBodyParams",
-                            "angularDamping": 0,
-                            "comOffset": {
+                        "HandleId": "0",
+                        "Data": {
+                            "$type": "physicsSystemBody",
+                            "collisionShapes": colliders,
+                            "isQueryBodyOnly": 0,
+                            "localToModel": {
                                 "$type": "Transform",
                                 "orientation": {"$type": "Quaternion", "i": 0, "j": 0, "k": 0, "r": 1},
                                 "position": {"$type": "Vector4", "W": 0, "X": 0, "Y": 0, "Z": 0}
-                            },
-                            "inertia": {"$type": "Vector3", "X": inertia_X, "Y": inertia_Y, "Z": inertia_Z},
-                            "linearDamping": -1,
-                            "mass": total_mass,
-                            "maxAngularVelocity": -1,
-                            "maxContactImpulse": -1,
-                            "maxDepenetrationVelocity": -1,
-                            "simulationType": "Static",
-                            "solverIterationsCountPosition": 4,
-                            "solverIterationsCountVelocity": 1
-                }
-          }
+                                },
+                            "mappedBoneName": {"$type": "CName", "$storage": "string", "$value": "None"},
+                            "mappedBoneToBody": {
+                                "$type": "Transform",
+                                "orientation": {"$type": "Quaternion", "i": 0, "j": 0, "k": 0, "r": 1},
+                                "position": {"$type": "Vector4", "W": 0, "X": 0, "Y": 0, "Z": 0}
+                                },
+                            "name": {"$type": "CName", "$storage": "string", "$value": "Actor"},
+                            "params": {
+                                "$type": "physicsSystemBodyParams",
+                                "angularDamping": 0,
+                                "comOffset": {
+                                    "$type": "Transform",
+                                    "orientation": {"$type": "Quaternion", "i": 0, "j": 0, "k": 0, "r": 1},
+                                    "position": {"$type": "Vector4", "W": 0, "X": 0, "Y": 0, "Z": 0}
+                                    },
+                                "inertia": {"$type": "Vector3", "X": inertia_X, "Y": inertia_Y, "Z": inertia_Z},
+                                "linearDamping": -1,
+                                "mass": total_mass,
+                                "maxAngularVelocity": -1,
+                                "maxContactImpulse": -1,
+                                "maxDepenetrationVelocity": -1,
+                                "simulationType": "Static",
+                                "solverIterationsCountPosition": 4,
+                                "solverIterationsCountVelocity": 1
+                                }
+                            }
+                        }
+                    ],
+                "cookingPlatform": "PLATFORM_PC",
+                "joints": []
+                },
+            "EmbeddedFiles": []
+            }
         }
-      ],
-      "cookingPlatform": "PLATFORM_PC",
-      "joints": []
-    },
-    "EmbeddedFiles": []
-  }
-}
     message = f"Collider information exported to: {filepath}"
     # Write the data to a JSON file
     with open(filepath, 'w') as json_file:

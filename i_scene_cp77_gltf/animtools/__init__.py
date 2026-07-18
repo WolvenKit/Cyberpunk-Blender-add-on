@@ -1,30 +1,21 @@
-import sys
 import bpy
-from bpy.utils import register_class, unregister_class
-from bpy.types import Panel
 from bpy.props import StringProperty
+from bpy.types import Panel
+from bpy.utils import register_class, unregister_class
+
+from . import anim_events, anim_ops, facial_ops, pose_preview, rig_binding, rigify_ui, root_motion, \
+    solver as _solver_mod
+from .anim_ops import BHLS_OT_Start, BHLS_OT_Stop
+from .animtools import CP77AnimsList
+from .facial_ops import (
+    G2P_AVAILABLE, PARSELMOUTH_AVAILABLE, _CACHE, _PREVIEW_SNAPSHOT, _get_pose_count, _get_pose_track_name,
+    )
+from .generate_rigs import find_pair as _find_rigify_pair
 from ..cyber_props import CP77_FacialProps
 from ..icons.cp77_icons import get_icon
 from ..main.common import get_classes
-from . import root_motion
-from . import anim_events
-from . import anim_ops
-from . import facial_ops
-from . import rig_binding
-from . import pose_preview
-from . import solver as _solver_mod
-from . import rigify_ui
-from .generate_rigs import find_pair as _find_rigify_pair
-from .anim_ops import BHLS_OT_Start, BHLS_OT_Stop
-from .facial_ops import (
-    _CACHE,
-    _PREVIEW_SNAPSHOT,
-    _get_pose_count,
-    _get_pose_track_name,
-    PARSELMOUTH_AVAILABLE,
-    G2P_AVAILABLE,
-)
-from .animtools import CP77AnimsList
+
+
 class CP77_PT_AnimsPanel(Panel):
     bl_idname = "CP77_PT_animspanel"
     bl_label = "Animation Tools"
@@ -112,7 +103,6 @@ class CP77_PT_AnimsPanel(Panel):
 
         rigify_ui.draw_rigify_controls(layout, context)
 
-
     def draw_animation_tab(self, context, layout, obj):
         """Animation playback, management, and keyframing"""
         if obj is None or obj.type != 'ARMATURE':
@@ -199,16 +189,16 @@ class CP77_PT_AnimsPanel(Panel):
         col = box.column(align=True)
         source, rig = _find_rigify_pair(obj)
         if source is not None and rig is not None:
-            col.operator('cp77.bake_rigify_to_source', text='Bake Rigify to Cyberpunk',)
+            col.operator('cp77.bake_rigify_to_source', text='Bake Rigify to Cyberpunk', )
         col.operator('insert_keyframe.cp77', text="Insert Keyframe")
         col.operator('cp77.anim_namer', text="Fix Anim Names")
 
     def draw_facial_tab(self, context, layout, obj):
         """Facial animation: setup files, weighted pose preview, baking, JALI."""
-        props  = context.scene.cp77_facial
+        props = context.scene.cp77_facial
         loaded = _CACHE.get("rig") is not None
 
-        #Facial Setup Files
+        # Facial Setup Files
         header, panel = layout.panel("facial_setup_files", default_closed=False)
         header.label(text="Facial Setup Files", icon='FILE_FOLDER')
         if loaded:
@@ -216,22 +206,22 @@ class CP77_PT_AnimsPanel(Panel):
 
         if panel:
             col = panel.column(align=True)
-            col.prop(props, "rig_json",    text="Rig JSON")
+            col.prop(props, "rig_json", text="Rig JSON")
             col.prop(props, "facial_json", text="Facial JSON")
             col.operator("cp77.load_facial", text="Load Facial Setup", icon='FILE_FOLDER')
 
             if loaded:
-                rig   = _CACHE["rig"]
+                rig = _CACHE["rig"]
                 setup = _CACHE["setup"]
                 n_main = _get_pose_count(setup, "face")
                 n_corr = setup.face.num_correctives
-                info   = panel.column(align=True)
+                info = panel.column(align=True)
                 info.scale_y = 0.85
                 info.separator(factor=0.5)
                 info.label(text=f"Bones: {rig.num_bones}  ·  Tracks: {len(rig.track_names)}", icon='ARMATURE_DATA')
-                info.label(text=f"Main poses: {n_main}  ·  Correctives: {n_corr}",            icon='ANIM_DATA')
+                info.label(text=f"Main poses: {n_main}  ·  Correctives: {n_corr}", icon='ANIM_DATA')
 
-        #Pose Preview
+        # Pose Preview
         preview_on = getattr(props, 'preview_active', False)
         header, panel = layout.panel("facial_pose_preview", default_closed=False)
         header.label(text="Pose Preview", icon='HIDE_OFF' if preview_on else 'HIDE_ON')
@@ -240,7 +230,7 @@ class CP77_PT_AnimsPanel(Panel):
             if not loaded:
                 panel.label(text="Load a facial setup to enable preview.", icon='INFO')
             else:
-                rig   = _CACHE["rig"]
+                rig = _CACHE["rig"]
                 setup = _CACHE["setup"]
 
                 # Part selector
@@ -253,9 +243,13 @@ class CP77_PT_AnimsPanel(Panel):
                 part = getattr(props, 'preview_part', 'face')
 
                 # Pose index + count
-                n_poses    = _get_pose_count(setup, part)
-                pose_index = int(getattr(props, 'preview_pose_index',
-                                         getattr(props, 'main_pose', 0)))
+                n_poses = _get_pose_count(setup, part)
+                pose_index = int(
+                    getattr(
+                        props, 'preview_pose_index',
+                        getattr(props, 'main_pose', 0)
+                        )
+                    )
                 pose_index = max(0, min(pose_index, max(0, n_poses - 1)))
 
                 idx_row = panel.row(align=True)
@@ -288,24 +282,24 @@ class CP77_PT_AnimsPanel(Panel):
 
                 # Clear / restore
                 clear = panel.row()
-                clear.enabled = preview_on or (obj is not None and obj.name in _PREVIEW_SNAPSHOT)
+                clear.enabled = preview_on or (obj is not None and pose_preview.has_snapshot(obj))
                 clear.operator("cp77.clear_pose_preview", text="Clear Preview", icon='LOOP_BACK')
 
                 panel.separator(factor=0.3)
 
                 # Reset row
                 reset_row = panel.row(align=True)
-                reset_row.operator("cp77.reset_neutral",         text="Rest Pose",       icon='ARMATURE_DATA')
-                reset_row.operator("cp77.reset_tracks_defaults", text="Reset Defaults",  icon='FILE_REFRESH')
+                reset_row.operator("cp77.reset_neutral", text="Rest Pose", icon='ARMATURE_DATA')
+                reset_row.operator("cp77.reset_tracks_defaults", text="Reset Defaults", icon='FILE_REFRESH')
 
-        #Animation Baking
+        # Animation Baking
         header, panel = layout.panel("facial_baking", default_closed=False)
         header.label(text="Animation Baking", icon='REC')
 
         if panel:
             col = panel.column(align=True)
             row = col.row(align=True)
-            row.operator("cp77.bake_facial_animation",  text="Bake",  icon='REC')
+            row.operator("cp77.bake_facial_animation", text="Bake", icon='REC')
             row.operator("cp77.clear_facial_animation", text="Clear", icon='X')
 
         #  JALI Lipsync
@@ -321,26 +315,38 @@ class CP77_PT_AnimsPanel(Panel):
                 box = panel.box()
                 box.label(text="Dependencies required:", icon='ERROR')
                 row = box.row()
-                row.label(text="parselmouth",
-                          icon='CHECKMARK' if PARSELMOUTH_AVAILABLE else 'X')
+                row.label(
+                    text="parselmouth",
+                    icon='CHECKMARK' if PARSELMOUTH_AVAILABLE else 'X'
+                    )
                 row = box.row()
-                row.label(text="g2p_en (optional)",
-                          icon='CHECKMARK' if G2P_AVAILABLE else 'X')
-                box.operator("cp77_facial.install_jali_deps",
-                             text="Install Dependencies", icon='IMPORT')
+                row.label(
+                    text="g2p_en (optional)",
+                    icon='CHECKMARK' if G2P_AVAILABLE else 'X'
+                    )
+                box.operator(
+                    "cp77_facial.install_jali_deps",
+                    text="Install Dependencies", icon='IMPORT'
+                    )
             elif not loaded:
                 panel.label(text="Load a facial setup first.", icon='INFO')
             else:
                 if not G2P_AVAILABLE:
                     row = panel.row()
-                    row.label(text="g2p_en not installed — transcript mode unavailable",
-                              icon='INFO')
+                    row.label(
+                        text="g2p_en not installed — transcript mode unavailable",
+                        icon='INFO'
+                        )
 
                 col = panel.column(align=True)
-                col.operator("cp77.generate_jali_lipsync",
-                             text="Generate JALI Lipsync")
-                col.operator("cp77.preview_facial_pose",
-                             text="Preview JALI Pose")
+                col.operator(
+                    "cp77.generate_jali_lipsync",
+                    text="Generate JALI Lipsync"
+                    )
+                col.operator(
+                    "cp77.preview_facial_pose",
+                    text="Preview JALI Pose"
+                    )
 
         # Real-Time Solver
         if loaded:
@@ -348,18 +354,20 @@ class CP77_PT_AnimsPanel(Panel):
 
             active = _solver.is_solver_active()
             header, panel = layout.panel("facial_solver", default_closed=True)
-            header.label(text="Real-Time Solver",
-                         icon='REC' if active else 'PLAY')
+            header.label(
+                text="Real-Time Solver",
+                icon='REC' if active else 'PLAY'
+                )
 
             if panel:
                 row = panel.row(align=True)
                 row.scale_y = 1.15
                 row.operator(
-                    "cp77_facial.toggle_solver",
-                    text="Stop Solver" if active else "Start Solver",
-                    icon='PAUSE' if active else 'PLAY',
-                    depress=active,
-                )
+                        "cp77_facial.toggle_solver",
+                        text="Stop Solver" if active else "Start Solver",
+                        icon='PAUSE' if active else 'PLAY',
+                        depress=active,
+                        )
 
                 # Timing readout
                 timing = bpy.app.driver_namespace.get("cp77_facial_last_ms", {})
@@ -370,8 +378,10 @@ class CP77_PT_AnimsPanel(Panel):
                         tcol.label(text=f"{name}: {ms:.1f} ms", icon='TIME')
 
                 row = panel.row()
-                row.operator("cp77_facial.solve_now", text="Solve Now",
-                              icon='RENDER_STILL')
+                row.operator(
+                    "cp77_facial.solve_now", text="Solve Now",
+                    icon='RENDER_STILL'
+                    )
 
 
 class CP77_UL_AnimList(bpy.types.UIList):
@@ -391,7 +401,9 @@ class CP77_UL_AnimList(bpy.types.UIList):
             _is_simd = False
             if _hints is not None:
                 try:
-                    _is_simd = bool(_hints.get("preferSIMD", False)) if hasattr(_hints, 'get') else bool(_hints["preferSIMD"])
+                    _is_simd = bool(_hints.get("preferSIMD", False)) if hasattr(_hints, 'get') else bool(
+                            _hints["preferSIMD"]
+                            )
                 except (KeyError, TypeError):
                     pass
             _simd_icon = 'FORCE_MAGNETIC' if _is_simd else 'FORCE_CHARGE'
@@ -454,6 +466,7 @@ class CP77_UL_AnimList(bpy.types.UIList):
             flt_neworder = helper_funcs.sort_items_by_name(actions, "name")
 
         return flt_flags, flt_neworder
+
 
 def register_animtools():
     """Register all animation tool classes."""

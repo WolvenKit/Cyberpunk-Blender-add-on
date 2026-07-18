@@ -11,6 +11,14 @@ import bpy
 from bpy.props import StringProperty
 from bpy.types import Operator
 
+from .compat import (
+    ensure_float_idproperty,
+    is_read_rig_armature,
+    resolve_pose_bone,
+    resolve_rig_path,
+    )
+
+
 def _import_loader():
     """Return the facial_setup_loader module, importing it if needed."""
     mod_name = "facial_setup_loader"
@@ -37,11 +45,11 @@ def _import_loader():
 DRIVER_NS_KEY = "cp77_facial"
 
 # Armature custom-property markers
-PROP_BOUND       = "_cp77_bound"         # bool flag
-PROP_SETUP_PATH  = "_cp77_setup_path"    # str
-PROP_RIG_PATH    = "_cp77_rig_path"      # str
-PROP_USED_BONES  = "_cp77_used_bones"    # JSON list of bone names (persistence)
-PROP_NUM_TRACKS  = "_cp77_num_tracks"    # int
+PROP_BOUND = "_cp77_bound"  # bool flag
+PROP_SETUP_PATH = "_cp77_setup_path"  # str
+PROP_RIG_PATH = "_cp77_rig_path"  # str
+PROP_USED_BONES = "_cp77_used_bones"  # JSON list of bone names (persistence)
+PROP_NUM_TRACKS = "_cp77_num_tracks"  # int
 
 # Tracks whose valid range is [0, 2] instead of [0, 1]
 _TRACKS_RANGE_2: frozenset[int] = frozenset({1, 2, 7, 8})
@@ -57,57 +65,66 @@ _OUTPUT_TRACK_GROUPS = ("lipsync_output", "wrinkles")
 @dataclass(frozen=True)
 class TrackSegments:
     """Byte-precise track index ranges for each group in the rig track array."""
-    num_tracks:          int   # total tracks in rig
+    num_tracks: int  # total tracks in rig
 
-    envelope_start:      int   # always 0
-    envelope_end:        int   # = num_envelopes (13)
+    envelope_start: int  # always 0
+    envelope_end: int  # = num_envelopes (13)
 
-    main_start:          int   # = num_envelopes
-    main_end:            int   # = num_envelopes + num_main_poses
+    main_start: int  # = num_envelopes
+    main_end: int  # = num_envelopes + num_main_poses
 
-    lipsync_ovr_start:   int
-    lipsync_ovr_end:     int
+    lipsync_ovr_start: int
+    lipsync_ovr_end: int
 
-    lipsync_out_start:   int
-    lipsync_out_end:     int
+    lipsync_out_start: int
+    lipsync_out_end: int
 
-    wrinkle_start:       int
-    wrinkle_end:         int
+    wrinkle_start: int
+    wrinkle_end: int
 
     @classmethod
     def from_tracks_mapping(cls, tm: dict, num_tracks: int) -> "TrackSegments":
-        ne  = tm["numEnvelopes"]        # 13
-        nm  = tm["numMainPoses"]        # 141
-        nlo = tm["numLipsyncOverrides"] # 86
-        nw  = tm["numWrinkles"]         # 33
+        ne = tm["numEnvelopes"]  # 13
+        nm = tm["numMainPoses"]  # 141
+        nlo = tm["numLipsyncOverrides"]  # 86
+        nw = tm["numWrinkles"]  # 33
 
-        env_s   = 0;          env_e  = ne
-        main_s  = env_e;      main_e = main_s + nm
-        lovr_s  = main_e;     lovr_e = lovr_s + nlo
-        lout_s  = lovr_e;     lout_e = lout_s + nm   # output mirrors main count
-        wrnk_s  = lout_e;     wrnk_e = wrnk_s + nw
+        env_s = 0;
+        env_e = ne
+        main_s = env_e;
+        main_e = main_s + nm
+        lovr_s = main_e;
+        lovr_e = lovr_s + nlo
+        lout_s = lovr_e;
+        lout_e = lout_s + nm  # output mirrors main count
+        wrnk_s = lout_e;
+        wrnk_e = wrnk_s + nw
+        if wrnk_e > num_tracks:
+            raise ValueError(
+                    f"Facial setup requires {wrnk_e} tracks, but the rig provides {num_tracks}"
+                    )
 
         return cls(
-            num_tracks       = num_tracks,
-            envelope_start   = env_s,  envelope_end   = env_e,
-            main_start       = main_s, main_end       = main_e,
-            lipsync_ovr_start= lovr_s, lipsync_ovr_end= lovr_e,
-            lipsync_out_start= lout_s, lipsync_out_end= lout_e,
-            wrinkle_start    = wrnk_s, wrinkle_end    = wrnk_e,
-        )
+                num_tracks=num_tracks,
+                envelope_start=env_s, envelope_end=env_e,
+                main_start=main_s, main_end=main_e,
+                lipsync_ovr_start=lovr_s, lipsync_ovr_end=lovr_e,
+                lipsync_out_start=lout_s, lipsync_out_end=lout_e,
+                wrinkle_start=wrnk_s, wrinkle_end=wrnk_e,
+                )
 
     def is_input(self, track_idx: int) -> bool:
         """Return True if this track is a keyframeable input (not solver output)."""
         return (
-            self.envelope_start    <= track_idx < self.envelope_end    or
-            self.main_start        <= track_idx < self.main_end        or
-            self.lipsync_ovr_start <= track_idx < self.lipsync_ovr_end
+                self.envelope_start <= track_idx < self.envelope_end or
+                self.main_start <= track_idx < self.main_end or
+                self.lipsync_ovr_start <= track_idx < self.lipsync_ovr_end
         )
 
     def is_output(self, track_idx: int) -> bool:
         return (
-            self.lipsync_out_start <= track_idx < self.lipsync_out_end or
-            self.wrinkle_start     <= track_idx < self.wrinkle_end
+                self.lipsync_out_start <= track_idx < self.lipsync_out_end or
+                self.wrinkle_start <= track_idx < self.wrinkle_end
         )
 
 
@@ -116,13 +133,17 @@ class TrackSegments:
 @dataclass
 class BindingCache:
     """Per-armature runtime data held in driver_namespace."""
-    setup:            object         # FacialSetupData (numpy)
-    rig:              object         # RigData (numpy)
-    used_bone_names:  List[str]      # rig bone names for each used_bone_index
-    track_segments:   TrackSegments
-    setup_path:       str
-    rig_path:         str
-    bind_time:        float          # time.time() at bind
+    setup: object  # FacialSetupData (numpy)
+    rig: object  # RigData (numpy)
+    used_bone_names: List[str]  # rig bone names for each used_bone_index
+    track_segments: TrackSegments
+    setup_path: str
+    rig_path: str
+    bind_time: float  # time.time() at bind
+    armature: object = None
+    armature_pointer: int = 0
+    track_names: tuple = ()
+    pose_bones: tuple = ()
 
 
 def _get_ns() -> dict:
@@ -133,18 +154,49 @@ def _get_ns() -> dict:
     return ns[DRIVER_NS_KEY]
 
 
-def get_cache(armature_name: str) -> Optional[BindingCache]:
-    """Return cached BindingCache for the named armature, or None."""
-    return _get_ns().get(armature_name)
+def _resolve_armature(value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return bpy.data.objects.get(value)
+    return value
 
 
-def _set_cache(armature_name: str, cache: BindingCache) -> None:
-    _get_ns()[armature_name] = cache
+def _armature_pointer(obj) -> int:
+    try:
+        return int(obj.as_pointer())
+    except (AttributeError, ReferenceError, TypeError, ValueError):
+        return 0
 
 
-def _del_cache(armature_name: str) -> None:
-    ns = _get_ns()
-    ns.pop(armature_name, None)
+def get_cache(armature) -> Optional[BindingCache]:
+    obj = _resolve_armature(armature)
+    pointer = _armature_pointer(obj)
+    if not pointer:
+        return None
+    cache = _get_ns().get(pointer)
+    if not isinstance(cache, BindingCache):
+        return None
+    return cache if cache.armature is obj and cache.armature_pointer == pointer else None
+
+
+def _set_cache(armature, cache: BindingCache) -> None:
+    obj = _resolve_armature(armature)
+    pointer = _armature_pointer(obj)
+    if not pointer:
+        raise ValueError("Cannot cache a missing armature")
+    cache.armature = obj
+    cache.armature_pointer = pointer
+    cache.track_names = tuple(str(name) for name in cache.rig.track_names)
+    cache.pose_bones = tuple(resolve_pose_bone(obj, str(name)) for name in cache.rig.bone_names)
+    _get_ns()[pointer] = cache
+
+
+def _del_cache(armature) -> None:
+    obj = _resolve_armature(armature)
+    pointer = _armature_pointer(obj)
+    if pointer:
+        _get_ns().pop(pointer, None)
 
 
 def is_bound(obj: bpy.types.Object) -> bool:
@@ -155,20 +207,20 @@ def is_bound(obj: bpy.types.Object) -> bool:
 # Custom property helpers
 
 _ENVELOPE_DESCS: Dict[int, str] = {
-    0:  "Face envelope — master facial weight",
-    1:  "Upper face envelope (0–2; multiplied against all upper-face poses)",
-    2:  "Lower face envelope (0–2; multiplied against all lower-face poses)",
-    3:  "Anti-stretch envelope",
-    4:  "Lipsync envelope — master lipsync blend weight",
-    5:  "Lipsync left-side envelope",
-    6:  "Lipsync right-side envelope",
-    7:  "JALI jaw slider (0–2; 1.0 = neutral, 2.0 = full open)",
-    8:  "JALI lips slider (0–2; 1.0 = neutral, 2.0 = full pucker)",
-    9:  "Muzzle lips (suppresses lips poses when > 0)",
+    0: "Face envelope — master facial weight",
+    1: "Upper face envelope (0–2; multiplied against all upper-face poses)",
+    2: "Lower face envelope (0–2; multiplied against all lower-face poses)",
+    3: "Anti-stretch envelope",
+    4: "Lipsync envelope — master lipsync blend weight",
+    5: "Lipsync left-side envelope",
+    6: "Lipsync right-side envelope",
+    7: "JALI jaw slider (0–2; 1.0 = neutral, 2.0 = full open)",
+    8: "JALI lips slider (0–2; 1.0 = neutral, 2.0 = full pucker)",
+    9: "Muzzle lips (suppresses lips poses when > 0)",
     10: "Muzzle eyes (suppresses eye poses when > 0)",
     11: "Muzzle brows (suppresses brow poses when > 0)",
     12: "Muzzle eye directions (suppresses eye-direction poses when > 0)",
-}
+    }
 
 
 def _track_prop_range(track_idx: int, seg: TrackSegments):
@@ -193,30 +245,26 @@ def _track_description(track_idx: int, track_name: str, seg: TrackSegments) -> s
 
 
 def register_track_properties(obj: bpy.types.Object, rig, seg: TrackSegments) -> None:
-    """
-    Create a float custom property on `obj` for every track in the rig.
-    Input tracks (envelopes, main poses, lipsync overrides) get full
-    keyframeable float properties with correct min/max ranges.
-    Output tracks (lipsync outputs, wrinkles) are registered read-only
-    with a [0,1] range — the solver writes them each frame.
-    """
-    track_names = rig.track_names  # numpy object array of str
-    for i, name in enumerate(track_names):
-        name = str(name)
+    """Ensure the rig's real track properties exist without replacing read_rig defaults."""
+    track_names = rig.track_names
+    defaults = getattr(rig, "reference_tracks", ())
+    for i, raw_name in enumerate(track_names):
+        name = str(raw_name)
+        if not name:
+            continue
+        default_value = float(defaults[i]) if i < len(defaults) else 0.0
         current = obj.get(name)
-
-        if current is None:
-            obj[name] = 0.0
-        elif not isinstance(current, float):
-            obj[name] = float(current)
+        ensure_float_idproperty(
+                obj,
+                name,
+                default_value if current is None else float(current),
+                )
 
         mn, mx, smn, smx = _track_prop_range(i, seg)
         desc = _track_description(i, name, seg)
-
-        ui = obj.id_properties_ui(name)
-
         try:
-            ui.update(
+            obj.id_properties_ui(name).update(
+                    default=default_value,
                     min=float(mn),
                     max=float(mx),
                     soft_min=float(smn),
@@ -228,14 +276,13 @@ def register_track_properties(obj: bpy.types.Object, rig, seg: TrackSegments) ->
 
 
 def unregister_track_properties(obj: bpy.types.Object, rig) -> None:
-    """Remove all facial track custom properties from the armature object."""
-    track_names = rig.track_names
-    for name in track_names:
-        name = str(name)
-        if name in obj:
-            del obj[name]
+    """Remove binding markers while preserving canonical read_rig track properties."""
+    if not is_read_rig_armature(obj):
+        for raw_name in rig.track_names:
+            name = str(raw_name)
+            if name in obj:
+                del obj[name]
 
-    # Remove internal marker props
     for key in (PROP_BOUND, PROP_SETUP_PATH, PROP_RIG_PATH,
                 PROP_USED_BONES, PROP_NUM_TRACKS):
         if key in obj:
@@ -251,7 +298,7 @@ def build_used_bone_names(setup, rig) -> List[str]:
     Returns a list parallel to setup.used_bone_indices where
     used_bone_names[i] = rig.bone_names[setup.used_bone_indices[i]].
     """
-    bone_names = rig.bone_names   # numpy object array
+    bone_names = rig.bone_names  # numpy object array
     return [str(bone_names[idx]) for idx in setup.used_bone_indices]
 
 
@@ -261,17 +308,16 @@ def validate_bones(obj: bpy.types.Object, used_bone_names: List[str]) -> List[st
 
     Returns a list of missing bone names (empty → all OK).
     """
-    pose_bones = obj.pose.bones
-    return [n for n in used_bone_names if n not in pose_bones]
+    return [name for name in used_bone_names if resolve_pose_bone(obj, name) is None]
 
 
 # Persistence helpers (survive file save/load without cache)
 
 def _persist_to_object(obj: bpy.types.Object, cache: BindingCache) -> None:
     """Write minimal binding info as custom properties so it survives a file reload."""
-    obj[PROP_BOUND]      = True
+    obj[PROP_BOUND] = True
     obj[PROP_SETUP_PATH] = cache.setup_path
-    obj[PROP_RIG_PATH]   = cache.rig_path
+    obj[PROP_RIG_PATH] = cache.rig_path
     obj[PROP_USED_BONES] = json.dumps(cache.used_bone_names)
     obj[PROP_NUM_TRACKS] = cache.track_segments.num_tracks
 
@@ -281,7 +327,7 @@ def _paths_from_object(obj: bpy.types.Object):
     return (
         obj.get(PROP_SETUP_PATH),
         obj.get(PROP_RIG_PATH),
-    )
+        )
 
 
 def restore_cache_from_object(obj: bpy.types.Object) -> Optional[BindingCache]:
@@ -302,26 +348,29 @@ def restore_cache_from_object(obj: bpy.types.Object) -> Optional[BindingCache]:
 
     try:
         loader = _import_loader()
-        rig    = loader.load_rig(rig_path)
-        setup  = loader.load_facial_setup(setup_path, rig)
-        seg    = TrackSegments.from_tracks_mapping(
-            {"numEnvelopes": setup.num_envelope_tracks,
-             "numMainPoses": setup.num_main_poses,
-             "numLipsyncOverrides": setup.num_lipsync_overrides,
-             "numWrinkles": setup.num_wrinkle_tracks},
-            rig.num_tracks,
-        )
+        rig = loader.load_rig(rig_path)
+        setup = loader.load_facial_setup(setup_path, rig)
+        seg = TrackSegments.from_tracks_mapping(
+                {"numEnvelopes": setup.num_envelope_tracks,
+                 "numMainPoses": setup.num_main_poses,
+                 "numLipsyncOverrides": setup.num_lipsync_overrides,
+                 "numWrinkles": setup.num_wrinkle_tracks},
+                rig.num_tracks,
+                )
         used_bone_names = build_used_bone_names(setup, rig)
+        if used_bone_names and len(validate_bones(obj, used_bone_names)) == len(used_bone_names):
+            return None
+        register_track_properties(obj, rig, seg)
         cache = BindingCache(
-            setup           = setup,
-            rig             = rig,
-            used_bone_names = used_bone_names,
-            track_segments  = seg,
-            setup_path      = setup_path,
-            rig_path        = rig_path,
-            bind_time       = time.time(),
-        )
-        _set_cache(obj.name, cache)
+                setup=setup,
+                rig=rig,
+                used_bone_names=used_bone_names,
+                track_segments=seg,
+                setup_path=setup_path,
+                rig_path=rig_path,
+                bind_time=time.time(),
+                )
+        _set_cache(obj, cache)
         return cache
     except Exception as e:
         print(f"[CP77 Facial] Cache restore failed for '{obj.name}': {e}")
@@ -332,30 +381,30 @@ def restore_cache_from_object(obj: bpy.types.Object) -> Optional[BindingCache]:
 
 class FACIAL_OT_Bind(Operator):
     """Load CP77 .facialsetup + animRig JSONs and bind them to the active armature"""
-    bl_idname  = "cp77_facial.bind"
-    bl_label   = "Bind Facial Setup"
+    bl_idname = "cp77_facial.bind"
+    bl_label = "Bind Facial Setup"
     bl_options = {"REGISTER", "UNDO"}
 
     setup_path: StringProperty(
-        name        = "Facial Setup JSON",
-        description = "Path to the WolvenKit-exported .facialsetup JSON file",
-        subtype     = "FILE_PATH",
-        default     = "",
-    )  # type: ignore
+            name="Facial Setup JSON",
+            description="Path to the WolvenKit-exported .facialsetup JSON file",
+            subtype="FILE_PATH",
+            default="",
+            )  # type: ignore
 
     rig_path: StringProperty(
-        name        = "Rig JSON",
-        description = "Path to the WolvenKit-exported animRig JSON file",
-        subtype     = "FILE_PATH",
-        default     = "",
-    )  # type: ignore
+            name="Rig JSON",
+            description="Path to the WolvenKit-exported animRig JSON file",
+            subtype="FILE_PATH",
+            default="",
+            )  # type: ignore
 
     # Poll: only run on a selected armature object
     @classmethod
     def poll(cls, context):
         return (
-            context.object is not None and
-            context.object.type == "ARMATURE"
+                context.object is not None and
+                context.object.type == "ARMATURE"
         )
 
     # Invoke: open a properties dialog so the user can enter paths
@@ -374,6 +423,8 @@ class FACIAL_OT_Bind(Operator):
                 self.setup_path = sp
             if rp and not self.rig_path:
                 self.rig_path = rp
+        if not self.rig_path:
+            self.rig_path = resolve_rig_path(context.object)
 
         return context.window_manager.invoke_props_dialog(self, width=600)
 
@@ -381,7 +432,7 @@ class FACIAL_OT_Bind(Operator):
         layout = self.layout
         layout.use_property_split = True
         layout.prop(self, "setup_path", icon="FILE_BLEND")
-        layout.prop(self, "rig_path",   icon="ARMATURE_DATA")
+        layout.prop(self, "rig_path", icon="ARMATURE_DATA")
 
     # Execute: parse → validate → register props → cache
     def execute(self, context):
@@ -389,7 +440,7 @@ class FACIAL_OT_Bind(Operator):
 
         #  Path validation 
         sp = bpy.path.abspath(self.setup_path)
-        rp = bpy.path.abspath(self.rig_path)
+        rp = resolve_rig_path(obj, self.rig_path)
 
         if not sp:
             self.report({"ERROR"}, "No facial setup path specified")
@@ -398,7 +449,7 @@ class FACIAL_OT_Bind(Operator):
             self.report({"ERROR"}, f"Facial setup file not found:\n{sp}")
             return {"CANCELLED"}
         if not rp:
-            self.report({"ERROR"}, "No rig path specified")
+            self.report({"ERROR"}, "No single rig path is available on the selected read_rig armature")
             return {"CANCELLED"}
         if not os.path.isfile(rp):
             self.report({"ERROR"}, f"Rig file not found:\n{rp}")
@@ -413,7 +464,7 @@ class FACIAL_OT_Bind(Operator):
             return {"CANCELLED"}
 
         try:
-            rig   = loader.load_rig(rp)
+            rig = loader.load_rig(rp)
         except Exception as e:
             self.report({"ERROR"}, f"Failed to parse rig JSON: {e}")
             return {"CANCELLED"}
@@ -428,26 +479,26 @@ class FACIAL_OT_Bind(Operator):
 
         #  Build track segments 
         seg = TrackSegments.from_tracks_mapping(
-            {
-                "numEnvelopes":        setup.num_envelope_tracks,
-                "numMainPoses":        setup.num_main_poses,
-                "numLipsyncOverrides": setup.num_lipsync_overrides,
-                "numWrinkles":         setup.num_wrinkle_tracks,
-            },
-            rig.num_tracks,
-        )
+                {
+                    "numEnvelopes": setup.num_envelope_tracks,
+                    "numMainPoses": setup.num_main_poses,
+                    "numLipsyncOverrides": setup.num_lipsync_overrides,
+                    "numWrinkles": setup.num_wrinkle_tracks,
+                    },
+                rig.num_tracks,
+                )
 
         #  Bone validation 
         used_bone_names = build_used_bone_names(setup, rig)
         missing = validate_bones(obj, used_bone_names)
         if missing:
             sample = ", ".join(missing[:5])
-            extra  = f" (and {len(missing) - 5} more)" if len(missing) > 5 else ""
+            extra = f" (and {len(missing) - 5} more)" if len(missing) > 5 else ""
             self.report(
-                {"WARNING"},
-                f"{len(missing)} bones not found in armature: {sample}{extra}. "
-                "Solve will skip missing bones."
-            )
+                    {"WARNING"},
+                    f"{len(missing)} bones not found in armature: {sample}{extra}. "
+                    "Solve will skip missing bones."
+                    )
 
         #  Register custom properties 
         t1 = time.time()
@@ -456,15 +507,15 @@ class FACIAL_OT_Bind(Operator):
 
         #  Build and store cache 
         cache = BindingCache(
-            setup           = setup,
-            rig             = rig,
-            used_bone_names = used_bone_names,
-            track_segments  = seg,
-            setup_path      = sp,
-            rig_path        = rp,
-            bind_time       = time.time(),
-        )
-        _set_cache(obj.name, cache)
+                setup=setup,
+                rig=rig,
+                used_bone_names=used_bone_names,
+                track_segments=seg,
+                setup_path=sp,
+                rig_path=rp,
+                bind_time=time.time(),
+                )
+        _set_cache(obj, cache)
 
         #  Persist paths + markers on the object 
         _persist_to_object(obj, cache)
@@ -473,39 +524,38 @@ class FACIAL_OT_Bind(Operator):
         scene_props = getattr(context.scene, "cp77_facial", None)
         if scene_props:
             scene_props.bound_facial_path = sp
-            scene_props.bound_rig_path    = rp
+            scene_props.bound_rig_path = rp
 
         total_ms = (time.time() - t0) * 1000
         self.report(
-            {"INFO"},
-            f"Bound '{obj.name}': "
-            f"{rig.num_bones} bones, {rig.num_tracks} tracks, "
-            f"{len(setup.used_bone_indices)} used bones "
-            f"({len(missing)} missing). "
-            f"Parse {parse_ms:.0f}ms · Props {prop_ms:.0f}ms · Total {total_ms:.0f}ms"
-        )
+                {"INFO"},
+                f"Bound '{obj.name}': "
+                f"{rig.num_bones} bones, {rig.num_tracks} tracks, "
+                f"{len(setup.used_bone_indices)} used bones "
+                f"({len(missing)} missing). "
+                f"Parse {parse_ms:.0f}ms · Props {prop_ms:.0f}ms · Total {total_ms:.0f}ms"
+                )
         return {"FINISHED"}
 
 
-
 class FACIAL_OT_Unbind(Operator):
-    """Remove facial setup binding and all track properties from the active armature"""
-    bl_idname  = "cp77_facial.unbind"
-    bl_label   = "Unbind Facial Setup"
+    """Remove facial setup binding while preserving read_rig track properties"""
+    bl_idname = "cp77_facial.unbind"
+    bl_label = "Unbind Facial Setup"
     bl_options = {"REGISTER", "UNDO"}
 
     keep_properties: bpy.props.BoolProperty(
-        name        = "Keep Track Properties",
-        description = "Keep the float custom properties on the object (preserves keyframes)",
-        default     = False,
-    )  # type: ignore
+            name="Keep Track Properties",
+            description="Keep the float custom properties on the object (preserves keyframes)",
+            default=False,
+            )  # type: ignore
 
     @classmethod
     def poll(cls, context):
         return (
-            context.object is not None and
-            context.object.type == "ARMATURE" and
-            is_bound(context.object)
+                context.object is not None and
+                context.object.type == "ARMATURE" and
+                is_bound(context.object)
         )
 
     def invoke(self, context, event):
@@ -533,28 +583,27 @@ class FACIAL_OT_Unbind(Operator):
                 if key in obj:
                     del obj[key]
 
-        _del_cache(obj.name)
+        _del_cache(obj)
         self.report({"INFO"}, f"Unbound facial setup from '{obj.name}'")
         return {"FINISHED"}
 
 
-
 class FACIAL_OT_RebuildCache(Operator):
     """Reload the facial setup JSON files and rebuild the runtime cache (no UI change)"""
-    bl_idname  = "cp77_facial.rebuild_cache"
-    bl_label   = "Rebuild Cache"
+    bl_idname = "cp77_facial.rebuild_cache"
+    bl_label = "Rebuild Cache"
     bl_options = {"REGISTER"}
 
     @classmethod
     def poll(cls, context):
         return (
-            context.object is not None and
-            context.object.type == "ARMATURE" and
-            is_bound(context.object)
+                context.object is not None and
+                context.object.type == "ARMATURE" and
+                is_bound(context.object)
         )
 
     def execute(self, context):
-        obj    = context.object
+        obj = context.object
         result = restore_cache_from_object(obj)
         if result is None:
             self.report({"ERROR"}, "Cache rebuild failed — check file paths")
@@ -566,18 +615,14 @@ class FACIAL_OT_RebuildCache(Operator):
 # Read-back helpers (used by solver and preview modules)
 
 def read_tracks(obj: bpy.types.Object, cache: BindingCache):
-    """
-    Read all track custom properties from the armature object into a
-    numpy float32 array of length rig.num_tracks.
-
-    Missing properties (e.g. not yet created) default to 0.0.
-    """
+    """Read track values, falling back to the rig's reference-track defaults."""
     import numpy as np
-    track_names = cache.rig.track_names   # numpy object array
+    track_names = cache.track_names or tuple(str(name) for name in cache.rig.track_names)
+    defaults = getattr(cache.rig, "reference_tracks", ())
     arr = np.zeros(cache.track_segments.num_tracks, dtype=np.float32)
     for i, name in enumerate(track_names):
-        v = obj.get(str(name), 0.0)
-        arr[i] = float(v)
+        default = float(defaults[i]) if i < len(defaults) else 0.0
+        arr[i] = float(obj.get(name, default))
     return arr
 
 
@@ -589,13 +634,14 @@ def write_output_tracks(obj: bpy.types.Object, cache: BindingCache, out_tracks) 
     `out_tracks` is a numpy float32 array of length num_tracks.
     Only writes the output segments — input tracks are left unchanged.
     """
-    seg        = cache.track_segments
-    track_names = cache.rig.track_names
+    seg = cache.track_segments
+    track_names = cache.track_names or tuple(str(name) for name in cache.rig.track_names)
 
-    for i in range(seg.lipsync_out_start, seg.lipsync_out_end):
+    limit = min(len(track_names), len(out_tracks))
+    for i in range(seg.lipsync_out_start, min(seg.lipsync_out_end, limit)):
         obj[str(track_names[i])] = float(out_tracks[i])
 
-    for i in range(seg.wrinkle_start, seg.wrinkle_end):
+    for i in range(seg.wrinkle_start, min(seg.wrinkle_end, limit)):
         obj[str(track_names[i])] = float(out_tracks[i])
 
 
@@ -605,7 +651,7 @@ _CLASSES = (
     FACIAL_OT_Bind,
     FACIAL_OT_Unbind,
     FACIAL_OT_RebuildCache,
-)
+    )
 
 
 def register():

@@ -1,28 +1,29 @@
-import json
-import os 
 import bpy
 from bpy.props import StringProperty
 from bpy.types import Operator
-from .. import show_message
+
 from .phys_export import export_colliders_to_phys
 from .terrainCollisions_export import export_selected_terrain
+from ..main.common import show_message
+
 
 def get_collider_collections(context, collider_name):
     collider_collections = []
-    
+
     for collection in bpy.data.collections:
         if collider_name in collection.name:
             collider_collections.append(collection.name)
     if not collider_collections:
-        if len(context.selected_objects)>0:
+        if len(context.selected_objects) > 0:
             for obj in context.selected_objects:
                 if 'collisionShape' in obj and obj.users_collection[0].name not in collider_collections:
                     collider_collections.append(obj.users_collection[0].name)
     if not collider_collections:
         print(f"Error: Collider collection '{collider_name}' not found.")
         return None
-    else: 
+    else:
         return collider_collections
+
 
 def cp77_collision_export(filepath, collision_type):
     context = bpy.context
@@ -36,4 +37,3 @@ def cp77_collision_export(filepath, collision_type):
         show_message('Exporting of Entity Colliders is not yet supported')
     if collision_type == 'WORLD':
         show_message('Exporting of collision nodes is not yet supported')
-

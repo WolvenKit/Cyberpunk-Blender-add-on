@@ -1,10 +1,7 @@
-import bpy
-
 if __name__ != "__main__":
     from ..main.common import *
 else:
     from common import *
-
 
 HOLOGRAM_GROUP_NAME = "Cyberpunk_Hologram_Base"
 
@@ -110,7 +107,7 @@ def _configure_principled(node):
         "Sheen Roughness": 0.5,
         "Sheen Tint": (1.0, 1.0, 1.0, 1.0),
         "Emission Strength": 30.0,
-    }
+        }
     for key, value in defaults.items():
         _set_input(node, sockets.get(key, key), value)
 
@@ -230,8 +227,14 @@ def get_or_create_hologram_group():
     _link(group, wave_texture.outputs.get('Color'), color_ramp.inputs.get('Fac'))
     _link(group, color_ramp.outputs.get('Color'), alpha_mul.inputs[0])
     _link(group, alpha_mul.outputs[0], _socket(principled.inputs, sockets.get("Alpha", "Alpha"), 4))
-    _link(group, color_mix.outputs.get('Result') or color_mix.outputs[2], _socket(principled.inputs, sockets.get("Base Color", "Base Color"), 0))
-    _link(group, color_mix.outputs.get('Result') or color_mix.outputs[2], _socket(principled.inputs, sockets.get("Emission", "Emission Color"), 27))
+    _link(
+        group, color_mix.outputs.get('Result') or color_mix.outputs[2],
+        _socket(principled.inputs, sockets.get("Base Color", "Base Color"), 0)
+        )
+    _link(
+        group, color_mix.outputs.get('Result') or color_mix.outputs[2],
+        _socket(principled.inputs, sockets.get("Emission", "Emission Color"), 27)
+        )
     _link(group, geometry.outputs.get('Backfacing'), backface_mix.inputs[0])
     _link(group, principled.outputs.get('BSDF'), backface_mix.inputs[1])
     _link(group, transparent.outputs.get('BSDF'), backface_mix.inputs[2])

@@ -1,9 +1,11 @@
+import os
+from collections import defaultdict
+
 import bpy
 import numpy as np
-import os
+from bpy.props import BoolProperty, EnumProperty, IntProperty, StringProperty
 from bpy_extras.io_utils import ImportHelper
-from bpy.props import StringProperty, BoolProperty, EnumProperty, IntProperty
-from collections import defaultdict
+
 from ..main.common import get_char_dir
 
 MAGIC_MESH = b"MSHZ"
@@ -198,6 +200,7 @@ _BREAST_KEYS = {
     2: "t0_000_wa_base__full_breast_big_breast",
     }
 
+
 def _update_body_breasts(props):
     """Toggle breast shape keys on the body mesh."""
     body_obj = bpy.data.objects.get(props.body_mesh_name)
@@ -209,6 +212,7 @@ def _update_body_breasts(props):
         kb = sk.key_blocks.get(key_name)
         if kb:
             kb.value = 1.0 if props.breasts == val else 0.0
+
 
 # MESH IMPORT
 
@@ -301,6 +305,7 @@ def _build_mesh_object(context, data, prefix="", obj_name=None, link_to_collecti
 
     return obj
 
+
 def load_mesh_npz(context, filepath, link_to_collection=None):
     """Import mesh from NPZ — handles both single (v1) and collection (v2) formats.
 
@@ -327,8 +332,10 @@ def load_mesh_npz(context, filepath, link_to_collection=None):
 
         objects = []
         for i in range(count):
-            obj = _build_mesh_object(context, data, prefix=f"sub{i}_",
-                                     obj_name=sub_names[i], link_to_collection=coll)
+            obj = _build_mesh_object(
+                context, data, prefix=f"sub{i}_",
+                obj_name=sub_names[i], link_to_collection=coll
+                )
             objects.append(obj)
 
         return coll, objects
@@ -336,6 +343,7 @@ def load_mesh_npz(context, filepath, link_to_collection=None):
     # Single mesh format
     obj = _build_mesh_object(context, data, link_to_collection=link_to_collection)
     return None, [obj]
+
 
 # SHAPEKEY IMPORT
 
@@ -362,6 +370,7 @@ def _apply_shapekeys_to_object(obj, data, prefix="", replace_values=True):
         kb.data.foreach_set("co", coords[i])
         if replace_values:
             kb.value = float(values[i])
+
 
 def load_shapekeys_npz(target, filepath, replace_values=True):
     """Import shape keys from NPZ — handles both single (v2) and collection (v3) formats.
@@ -413,6 +422,7 @@ def load_shapekeys_npz(target, filepath, replace_values=True):
         raise TypeError("Object must be a Mesh")
     _apply_shapekeys_to_object(obj, data, replace_values=replace_values)
 
+
 # OPERATORS
 
 class CP77_OT_NpzImportMesh(bpy.types.Operator, ImportHelper):
@@ -432,6 +442,7 @@ class CP77_OT_NpzImportMesh(bpy.types.Operator, ImportHelper):
         except Exception as e:
             self.report({'ERROR'}, str(e))
             return {'CANCELLED'}
+
 
 class CP77_OT_NpzImportShapeKeys(bpy.types.Operator, ImportHelper):
     """Import Shape Keys from NPZ format"""
@@ -455,30 +466,32 @@ class CP77_OT_NpzImportShapeKeys(bpy.types.Operator, ImportHelper):
             self.report({'ERROR'}, str(e))
             return {'CANCELLED'}
 
+
 # BASE CHARACTER RESOURCES
 
 _BASE_CHAR_RESOURCES = {
     'MASC': {
         'body_mesh': "t0_000_ma_base__full_hql.npz",
-        'body_sk':   "ma_base_shapekeys.npz",
+        'body_sk': "ma_base_shapekeys.npz",
         'head_parts': [
-            ("h0_000_ma_c__basehead.npz",  "h0_000_pma__morphs.npz"),
-            ("he_000_ma_c__basehead.npz",  "he_000_ma_morphs.npz"),
-            ("ht_000_ma_c__basehead.npz",  "ht_000_ma_morphs.npz"),
+            ("h0_000_ma_c__basehead.npz", "h0_000_pma__morphs.npz"),
+            ("he_000_ma_c__basehead.npz", "he_000_ma_morphs.npz"),
+            ("ht_000_ma_c__basehead.npz", "ht_000_ma_morphs.npz"),
             ("heb_000_ma_c__basehead.npz", "heb_000_ma_morphs.npz"),
-        ],
-    },
+            ],
+        },
     'FEM': {
         'body_mesh': "t0_000_wa_base__full_hql.npz",
-        'body_sk':   "wa_base_shapekeys.npz",
+        'body_sk': "wa_base_shapekeys.npz",
         'head_parts': [
-            ("h0_000_wa_c__basehead.npz",  "wa_basehead__shapekeys.npz"),
-            ("he_000_wa_c__basehead.npz",  "he_000_wa__morphs.npz"),
-            ("ht_000_wa_c__basehead.npz",  "ht_000_wa__morphs.npz"),
+            ("h0_000_wa_c__basehead.npz", "wa_basehead__shapekeys.npz"),
+            ("he_000_wa_c__basehead.npz", "he_000_wa__morphs.npz"),
+            ("ht_000_wa_c__basehead.npz", "ht_000_wa__morphs.npz"),
             ("heb_000_wa_c__basehead.npz", "heb_000_wa__morphs.npz"),
-        ],
-    },
-}
+            ],
+        },
+    }
+
 
 class CP77_OT_LoadBaseCharacter(bpy.types.Operator):
     """Load a CP77 base character mesh with shape keys"""
@@ -487,13 +500,13 @@ class CP77_OT_LoadBaseCharacter(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     gender: EnumProperty(
-        name="Character",
-        items=[
-            ('MASC', "Masculine", "Male body base"),
-            ('FEM', "Feminine", "Female body base"),
-        ],
-        default='FEM'
-    )
+            name="Character",
+            items=[
+                ('MASC', "Masculine", "Male body base"),
+                ('FEM', "Feminine", "Female body base"),
+                ],
+            default='FEM'
+            )
 
     load_head: BoolProperty(name="Head", default=True)
     load_body: BoolProperty(name="Body", default=True)

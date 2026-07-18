@@ -1,6 +1,7 @@
-import bpy
 import ctypes
 import os
+
+import bpy
 
 from . import io_phys, physx_ops, physx_props, physx_ui, physx_utils, viz
 
@@ -31,7 +32,6 @@ load_physx_lib("PhysX3_x64.dll")
 load_physx_lib("PhysX3Cooking_x64.dll")
 load_physx_lib("NvCloth_x64.dll")
 
-
 classes = (
     physx_props.PhysXShapeItem,
     physx_props.PhysXActorItem,
@@ -61,7 +61,7 @@ classes = (
     physx_ui.PHYSX_UL_actor_list,
     physx_ui.PHYSX_UL_shape_list,
     physx_ui.PhysXToolsGizmoGroup,
-)
+    )
 
 
 @bpy.app.handlers.persistent
@@ -74,11 +74,11 @@ def register():
         bpy.utils.register_class(cls)
 
     bpy.types.Object.physx = bpy.props.PointerProperty(
-        type=physx_props.PhysXObjectProperties
-    )
+            type=physx_props.PhysXObjectProperties
+            )
     bpy.types.Scene.physx = bpy.props.PointerProperty(
-        type=physx_props.PhysXSceneProperties
-    )
+            type=physx_props.PhysXSceneProperties
+            )
 
     viz.register_viz()
     handlers = bpy.app.handlers.depsgraph_update_post

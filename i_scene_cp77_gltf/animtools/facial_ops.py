@@ -1,22 +1,20 @@
 from __future__ import annotations
+
+import importlib
 import sys
 import time
-import numpy as np
-import bpy
-import importlib
-from bpy.types import Operator
-from bpy.props import BoolProperty, IntProperty, FloatProperty
-from pathlib import Path
 from typing import Tuple
 
+import bpy
+import numpy as np
+from bpy.props import BoolProperty, FloatProperty, IntProperty
+from bpy.types import Operator
 
-from ..main.common import get_classes, show_message
+from . import pose_preview, rig_binding, solver as _solver
 from .compat import get_action_fcurves
-
-from . import rig_binding
-from . import pose_preview
-from . import solver as _solver
-from .facial_setup_loader import load_rig, load_facial_setup
+from .facial_setup_loader import load_facial_setup, load_rig
+from ..jsontool import JSONTool
+from ..main.common import get_classes, show_message
 
 # Optional JALI dependencies
 try:
@@ -46,6 +44,15 @@ except ImportError:
     keyframe_tracks = None
     JALI_AVAILABLE = False
     
+
+def _resolve_json_path(path_value: str, expected_extension: str) -> str:
+    resolved = JSONTool.resolve_asset_path(
+        path_value, extensions=(expected_extension,), warn_missing=False
+    )
+    if not resolved:
+        raise FileNotFoundError(path_value)
+    return resolved
+
 
 _CACHE: dict = {
     "rig":   None,   # RigData
@@ -113,11 +120,11 @@ def _cache_ensure_loaded(context) -> bool:
     setup_path = getattr(props, "facial_json", "")
     if rig_path and setup_path:
         try:
-            rig   = load_rig(bpy.path.abspath(rig_path))
-            setup = load_facial_setup(bpy.path.abspath(setup_path), rig)
-            _bind_to_object(context, obj, rig, setup,
-                            bpy.path.abspath(setup_path),
-                            bpy.path.abspath(rig_path))
+            rig_path = _resolve_json_path(rig_path, '.rig.json')
+            setup_path = _resolve_json_path(setup_path, '.facialsetup.json')
+            rig = load_rig(rig_path)
+            setup = load_facial_setup(setup_path, rig)
+            _bind_to_object(context, obj, rig, setup, setup_path, rig_path)
             return True
         except Exception:
             pass
@@ -175,8 +182,8 @@ class CP77_OT_LoadFacial(Operator):
             self.report({'ERROR'}, "Select an armature first")
             return {'CANCELLED'}
 
-        sp = bpy.path.abspath(props.facial_json)
-        rp = bpy.path.abspath(props.rig_json)
+        sp = _resolve_json_path(props.facial_json, '.facialsetup.json')
+        rp = _resolve_json_path(props.rig_json, '.rig.json')
 
         try:
             t0 = time.time()
@@ -697,8 +704,10 @@ class CP77_OT_GenerateJALILipSync(Operator):
             self.report({'ERROR'}, "Install parselmouth: pip install praat-parselmouth")
             return {'CANCELLED'}
 
-        audio_path = bpy.path.abspath(self.audio_path)
-        if not audio_path or not Path(audio_path).exists():
+        audio_path = JSONTool.resolve_existing_path(
+            self.audio_path, warn_missing=False
+        )
+        if not audio_path:
             self.report({'ERROR'}, f"Audio file not found: {audio_path}")
             return {'CANCELLED'}
 

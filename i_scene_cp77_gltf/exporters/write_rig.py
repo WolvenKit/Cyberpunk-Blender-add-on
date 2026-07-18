@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import os
-import json
-import copy
 import base64
-import zlib
+import copy
 import heapq
+import json
+import os
+import zlib
 from datetime import datetime, timezone
 from typing import Any
 
@@ -15,7 +15,6 @@ from mathutils import Matrix, Quaternion, Vector
 from ..jsontool import JSONTool
 from ..main.bartmoss_functions import safe_mode_switch
 
-
 RIG_SPACE_CONTRACT = "CP77_RE_MODEL_BL_BONE_X_NEGZ_Y_Y_Z_X_V1"
 RIG_EXPORT_TEMPLATE_KEY = "cp77_rig_export_template_zlib_b64"
 RIG_EXPORT_TEMPLATE_VERSION = 1
@@ -23,8 +22,6 @@ RIG_IMPORT_MATRIX_KEY = 'cp77_rig_import_matrix'
 RIG_IMPORT_SOURCE_MODEL_KEY = 'cp77_rig_import_source_model_matrix'
 RIG_IMPORT_MATRIX_VERSION = 2
 _SOURCE_DOCUMENT_CACHE = {}
-
-
 
 
 def _matrix_to_flat_list(matrix: Matrix) -> list[float]:
@@ -65,15 +62,16 @@ def attach_imported_bone_matrices(arm_obj, source_document: dict | None = None) 
         bone['cp77_rig_import_matrix_version'] = RIG_IMPORT_MATRIX_VERSION
         source_index = _bone_source_index(bone, source_names)
         if (
-            source_index is not None
-            and 0 <= source_index < len(source_pose['model_matrices'])
-            and source_pose['model_matrices'][source_index] is not None
+                source_index is not None
+                and 0 <= source_index < len(source_pose['model_matrices'])
+                and source_pose['model_matrices'][source_index] is not None
         ):
             bone[RIG_IMPORT_SOURCE_MODEL_KEY] = _matrix_to_flat_list(
-                source_pose['model_matrices'][source_index]
-            )
+                    source_pose['model_matrices'][source_index]
+                    )
         elif RIG_IMPORT_SOURCE_MODEL_KEY in bone:
             del bone[RIG_IMPORT_SOURCE_MODEL_KEY]
+
 
 def _imported_bone_matrix(bone) -> Matrix | None:
     return _matrix_from_flat_value(bone.get(RIG_IMPORT_MATRIX_KEY))
@@ -126,7 +124,7 @@ def _rig_data_to_root_chunk(rig_data) -> dict:
         'referenceTracks': list(rig_data.reference_tracks),
         'levelOfDetailStartIndices': list(rig_data.level_of_detail_start_indices),
         'distanceCategoryToLodMap': list(rig_data.distance_category_to_lod_map),
-    }
+        }
 
 
 def source_document_for_filepath(filepath: str) -> dict | None:
@@ -151,7 +149,7 @@ def _minimal_rig_document(source_rig_file: str = '') -> dict:
             'WKitJsonVersion': '0.0.9',
             'DataType': 'CR2W',
             'ArchiveFileName': archive_path,
-        },
+            },
         'Data': {
             'RootChunk': {
                 '$type': 'animRig',
@@ -164,9 +162,9 @@ def _minimal_rig_document(source_rig_file: str = '') -> dict:
                 'referenceTracks': [],
                 'rigExtraTracks': [],
                 'trackNames': [],
-            }
-        },
-    }
+                }
+            },
+        }
 
 
 def merged_rig_document(filepaths, merged_rig_data, source_label: str = '') -> dict:
@@ -281,8 +279,8 @@ def _ordered_export_bones(arm_data):
         child_name = str(bone.name)
         if parent_name not in bone_by_name:
             raise ValueError(
-                f"Bone '{child_name}' references parent '{parent_name}', which is not in the armature."
-            )
+                    f"Bone '{child_name}' references parent '{parent_name}', which is not in the armature."
+                    )
         children_by_name[parent_name].append(child_name)
         indegree[child_name] = 1
 
@@ -320,14 +318,14 @@ def _parent_indices_for_ordered_bones(bones):
         parent_name = str(parent.name)
         if parent_name not in export_index:
             raise ValueError(
-                f"Bone '{bone.name}' references parent '{parent_name}', which is not in the export order."
-            )
+                    f"Bone '{bone.name}' references parent '{parent_name}', which is not in the export order."
+                    )
         parent_index = export_index[parent_name]
         if parent_index >= child_index:
             raise ValueError(
-                f"Invalid export order: parent '{parent_name}' ({parent_index}) must precede "
-                f"child '{bone.name}' ({child_index})."
-            )
+                    f"Invalid export order: parent '{parent_name}' ({parent_index}) must precede "
+                    f"child '{bone.name}' ({child_index})."
+                    )
         parent_indices.append(parent_index)
     return parent_indices
 
@@ -348,12 +346,12 @@ def _validate_export_topology(bone_names, parent_indices, *parallel_arrays):
             continue
         if parent_index < 0 or parent_index >= count:
             raise ValueError(
-                f'boneParentIndexes[{child_index}]={parent_index} is outside the boneNames array.'
-            )
+                    f'boneParentIndexes[{child_index}]={parent_index} is outside the boneNames array.'
+                    )
         if parent_index >= child_index:
             raise ValueError(
-                f'boneParentIndexes[{child_index}]={parent_index} does not precede its child.'
-            )
+                    f'boneParentIndexes[{child_index}]={parent_index} does not precede its child.'
+                    )
 
 
 def _cname_entry(name: str, template: Any = None) -> dict:
@@ -368,11 +366,13 @@ def _transform_scale(transform: Any) -> Vector:
     if not isinstance(transform, dict):
         return Vector((1.0, 1.0, 1.0))
     scale = transform.get('Scale', {})
-    return Vector((
-        float(scale.get('X', 1.0)),
-        float(scale.get('Y', 1.0)),
-        float(scale.get('Z', 1.0)),
-    ))
+    return Vector(
+            (
+                float(scale.get('X', 1.0)),
+                float(scale.get('Y', 1.0)),
+                float(scale.get('Z', 1.0)),
+                )
+            )
 
 
 def _quaternion_length_squared(quaternion: Quaternion) -> float:
@@ -384,12 +384,14 @@ def _transform_quaternion(transform: Any) -> Quaternion | None:
         return None
     rotation = transform.get('Rotation', {})
     try:
-        quat = Quaternion((
-            float(rotation.get('r', 1.0)),
-            float(rotation.get('i', 0.0)),
-            float(rotation.get('j', 0.0)),
-            float(rotation.get('k', 0.0)),
-        ))
+        quat = Quaternion(
+                (
+                    float(rotation.get('r', 1.0)),
+                    float(rotation.get('i', 0.0)),
+                    float(rotation.get('j', 0.0)),
+                    float(rotation.get('k', 0.0)),
+                    )
+                )
     except (TypeError, ValueError):
         return None
     if _quaternion_length_squared(quat) < 1e-12:
@@ -409,7 +411,10 @@ def _clean_export_float(value: float, eps: float = 1e-9) -> float:
     return value
 
 
-def _matrix_to_qs_transform(matrix: Matrix, reference_transform: Any = None, scale_override: Vector | None = None, translation_w: float = 1.0) -> dict:
+def _matrix_to_qs_transform(
+        matrix: Matrix, reference_transform: Any = None, scale_override: Vector | None = None,
+        translation_w: float = 1.0,
+        ) -> dict:
     translation, rotation, matrix_scale = matrix.decompose()
     if _quaternion_length_squared(rotation) < 1e-12:
         rotation = Quaternion((1.0, 0.0, 0.0, 0.0))
@@ -464,11 +469,13 @@ def _qs_transform_to_matrix(transform: Any) -> Matrix:
     if not isinstance(transform, dict):
         return Matrix.Identity(4)
     translation_value = transform.get('Translation', {})
-    translation = Vector((
-        float(translation_value.get('X', 0.0)),
-        float(translation_value.get('Y', 0.0)),
-        float(translation_value.get('Z', 0.0)),
-    ))
+    translation = Vector(
+            (
+                float(translation_value.get('X', 0.0)),
+                float(translation_value.get('Y', 0.0)),
+                float(translation_value.get('Z', 0.0)),
+                )
+            )
     rotation = _transform_quaternion(transform) or Quaternion((1.0, 0.0, 0.0, 0.0))
     return _compose_qs_matrix(translation, rotation, _transform_scale(transform))
 
@@ -484,10 +491,10 @@ def _rigid_matrix(matrix: Matrix) -> Matrix:
 
 def _matrix_max_abs_difference(first: Matrix, second: Matrix) -> float:
     return max(
-        abs(float(first[row][column]) - float(second[row][column]))
-        for row in range(4)
-        for column in range(4)
-    )
+            abs(float(first[row][column]) - float(second[row][column]))
+            for row in range(4)
+            for column in range(4)
+            )
 
 
 def _source_pose_data(root: dict, local_array_name: str, model_array_name: str | None):
@@ -497,7 +504,7 @@ def _source_pose_data(root: dict, local_array_name: str, model_array_name: str |
     parents = [
         int(parents_raw[index]) if isinstance(parents_raw, list) and index < len(parents_raw) else -1
         for index in range(count)
-    ]
+        ]
     local_values = root.get(local_array_name, [])
     if not isinstance(local_values, list) or len(local_values) != count:
         local_values = []
@@ -544,17 +551,19 @@ def _source_pose_data(root: dict, local_array_name: str, model_array_name: str |
                 else model_matrix.copy()
             )
 
-    basis = Matrix((
-        (0.0, 0.0, -1.0, 0.0),
-        (0.0, 1.0, 0.0, 0.0),
-        (1.0, 0.0, 0.0, 0.0),
-        (0.0, 0.0, 0.0, 1.0),
-    ))
+    basis = Matrix(
+            (
+                (0.0, 0.0, -1.0, 0.0),
+                (0.0, 1.0, 0.0, 0.0),
+                (1.0, 0.0, 0.0, 0.0),
+                (0.0, 0.0, 0.0, 1.0),
+                )
+            )
     basis_inverse = basis.inverted()
     expected_blender_models = [
         _rigid_matrix(model_matrix) @ basis_inverse if model_matrix is not None else None
         for model_matrix in model_matrices
-    ]
+        ]
     return {
         'names': names,
         'parents': parents,
@@ -563,7 +572,7 @@ def _source_pose_data(root: dict, local_array_name: str, model_array_name: str |
         'local_matrices': local_matrices,
         'model_matrices': model_matrices,
         'expected_blender_models': expected_blender_models,
-    }
+        }
 
 
 def _reference_transform_for_bone(root: dict, array_name: str, bone, fallback_array: str = 'boneTransforms'):
@@ -590,12 +599,14 @@ def _build_topology_export_context(arm_obj, root: dict):
     source_names = _to_list_of_strings(root.get('boneNames', []))
     source_count = len(source_names)
 
-    basis = Matrix((
-        (0.0, 0.0, -1.0, 0.0),
-        (0.0, 1.0, 0.0, 0.0),
-        (1.0, 0.0, 0.0, 0.0),
-        (0.0, 0.0, 0.0, 1.0),
-    ))
+    basis = Matrix(
+            (
+                (0.0, 0.0, -1.0, 0.0),
+                (0.0, 1.0, 0.0, 0.0),
+                (1.0, 0.0, 0.0, 0.0),
+                (0.0, 0.0, 0.0, 1.0),
+                )
+            )
     current_blender_models = [_rigid_matrix(bone.matrix_local.copy()) for bone in bones]
 
     imported_pose_name = _resolve_rig_export_pose_target(arm_data, 'IMPORTED')
@@ -608,9 +619,9 @@ def _build_topology_export_context(arm_obj, root: dict):
     for bone in bones:
         source_index = _bone_source_index(bone, source_names)
         if (
-            source_index is not None
-            and 0 <= source_index < source_count
-            and source_index not in seen_source_indices
+                source_index is not None
+                and 0 <= source_index < source_count
+                and source_index not in seen_source_indices
         ):
             seen_source_indices.add(source_index)
             source_indices.append(source_index)
@@ -648,20 +659,20 @@ def _build_topology_export_context(arm_obj, root: dict):
             )
             if imported_blender is None:
                 if (
-                    expected_blender is None
-                    or _matrix_max_abs_difference(current_blender, expected_blender) > 2e-5
+                        expected_blender is None
+                        or _matrix_max_abs_difference(current_blender, expected_blender) > 2e-5
                 ):
                     raise ValueError(
-                        f"Bone '{bone.name}' has no stored import rotation baseline and no longer "
-                        "matches the source rig. Re-import it with the current read_rig.py "
-                        "before exporting edited rotations."
-                    )
+                            f"Bone '{bone.name}' has no stored import rotation baseline and no longer "
+                            "matches the source rig. Re-import it with the current read_rig.py "
+                            "before exporting edited rotations."
+                            )
                 imported_blender = expected_blender
             if source_model is None:
                 raise ValueError(
-                    f"Bone '{bone.name}' has no REDengine source model transform for the "
-                    f"imported {imported_pose_name.replace('_', '-').lower()}."
-                )
+                        f"Bone '{bone.name}' has no REDengine source model transform for the "
+                        f"imported {imported_pose_name.replace('_', '-').lower()}."
+                        )
             imported_blender = _rigid_matrix(imported_blender)
             edit_delta = _rigid_matrix(current_blender @ imported_blender.inverted_safe())
             edit_deltas[index] = edit_delta
@@ -694,15 +705,15 @@ def _build_topology_export_context(arm_obj, root: dict):
         'imported_pose_name': imported_pose_name,
         'imported_desired_models': imported_desired_models,
         'new_local_matrices': new_local_matrices,
-    }
+        }
 
 
 def _export_pose_from_context(
-    context: dict,
-    root: dict,
-    local_array_name: str,
-    model_array_name: str | None,
-):
+        context: dict,
+        root: dict,
+        local_array_name: str,
+        model_array_name: str | None,
+        ):
     bones = context['bones']
     parents = context['parent_indices']
     source_indices = context['source_indices']
@@ -756,10 +767,10 @@ def _export_pose_from_context(
 
         current_parent_source = source_indices[parent_index] if parent_index >= 0 else -1
         can_preserve = (
-            source_local is not None
-            and source_model is not None
-            and context['unchanged'][index]
-            and source_parent == current_parent_source
+                source_local is not None
+                and source_model is not None
+                and context['unchanged'][index]
+                and source_parent == current_parent_source
         )
 
         if source_model is not None:
@@ -780,11 +791,11 @@ def _export_pose_from_context(
             local_matrix = parent_model.inverted_safe() @ desired_model if parent_model is not None else desired_model.copy()
             reference = source_local
             local_transform = _matrix_to_qs_transform(
-                local_matrix,
-                reference,
-                scale_override=None,
-                translation_w=1.0 if parent_index < 0 else 0.0,
-            )
+                    local_matrix,
+                    reference,
+                    scale_override=None,
+                    translation_w=1.0 if parent_index < 0 else 0.0,
+                    )
             reconstructed_count += 1
             if has_nonuniform_scaled_ancestry(index):
                 nonuniform_scaled_edit_count += 1
@@ -793,11 +804,11 @@ def _export_pose_from_context(
             model_transform = copy.deepcopy(model_reference)
         else:
             model_transform = _matrix_to_qs_transform(
-                desired_model,
-                model_reference,
-                scale_override=None,
-                translation_w=1.0,
-            )
+                    desired_model,
+                    model_reference,
+                    scale_override=None,
+                    translation_w=1.0,
+                    )
 
         local_matrices[index] = local_matrix
         model_matrices[index] = desired_model
@@ -815,7 +826,8 @@ def _export_pose_from_context(
         'preserved_transform_count': preserved_count,
         'reconstructed_transform_count': reconstructed_count,
         'nonuniform_scaled_edit_count': nonuniform_scaled_edit_count,
-    }
+        }
+
 
 def _resolve_rig_export_pose_target(arm_data, pose_target: str) -> str:
     normalized = str(pose_target or 'IMPORTED').upper()
@@ -843,17 +855,19 @@ def build_rig_json_from_armature(arm_obj, pose_target: str = 'IMPORTED') -> tupl
     topology = _build_topology_export_context(arm_obj, source_root)
 
     original_names = _to_list_of_strings(source_root.get('boneNames', []))
-    original_parents = list(source_root.get('boneParentIndexes', [])) if isinstance(source_root.get('boneParentIndexes'), list) else []
+    original_parents = list(source_root.get('boneParentIndexes', [])) if isinstance(
+        source_root.get('boneParentIndexes'), list
+        ) else []
     topology_changed = (
-        topology['bone_names'] != original_names
-        or topology['parent_indices'] != original_parents
+            topology['bone_names'] != original_names
+            or topology['parent_indices'] != original_parents
     )
 
     original_name_entries = source_root.get('boneNames', []) if isinstance(source_root.get('boneNames'), list) else []
     exported_name_entries = []
     for name, bone, source_index in zip(
-        topology['bone_names'], topology['bones'], topology['source_indices']
-    ):
+            topology['bone_names'], topology['bones'], topology['source_indices']
+            ):
         template = (
             original_name_entries[source_index]
             if source_index is not None and 0 <= source_index < len(original_name_entries)
@@ -888,10 +902,10 @@ def build_rig_json_from_armature(arm_obj, pose_target: str = 'IMPORTED') -> tupl
         if isinstance(values, list) and values:
             populated_parallel_arrays.append((array_name, values))
     _validate_export_topology(
-        topology['bone_names'],
-        root['boneParentIndexes'],
-        *populated_parallel_arrays,
-    )
+            topology['bone_names'],
+            root['boneParentIndexes'],
+            *populated_parallel_arrays,
+            )
 
     track_names = _to_list_of_strings(root.get('trackNames', []))
     if not track_names:
@@ -900,9 +914,11 @@ def build_rig_json_from_armature(arm_obj, pose_target: str = 'IMPORTED') -> tupl
     if track_names:
         existing_reference_tracks = root.get('referenceTracks', [])
         root['referenceTracks'] = [
-            float(arm_obj.get(name, existing_reference_tracks[index] if index < len(existing_reference_tracks) else 0.0))
+            float(
+                arm_obj.get(name, existing_reference_tracks[index] if index < len(existing_reference_tracks) else 0.0)
+                )
             for index, name in enumerate(track_names)
-        ]
+            ]
 
     header = document.setdefault('Header', {})
     header['ExportedDateTime'] = datetime.now(timezone.utc).isoformat(timespec='microseconds').replace('+00:00', 'Z')
@@ -923,9 +939,12 @@ def build_rig_json_from_armature(arm_obj, pose_target: str = 'IMPORTED') -> tupl
         'total_preserved_transform_count': sum(p['preserved_transform_count'] for p in pose_summaries),
         'total_reconstructed_transform_count': sum(p['reconstructed_transform_count'] for p in pose_summaries),
         'new_bone_count': sum(index is None for index in topology['source_indices']),
-        'deleted_bone_count': max(0, len(original_names) - sum(index is not None for index in topology['source_indices'])),
-    }
+        'deleted_bone_count': max(
+            0, len(original_names) - sum(index is not None for index in topology['source_indices'])
+            ),
+        }
     return document, summary
+
 
 def export_armature_to_rig_json(arm_obj, filepath: str, pose_target: str = 'IMPORTED') -> dict:
     previous_mode = getattr(arm_obj, 'mode', 'OBJECT')

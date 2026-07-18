@@ -1,6 +1,8 @@
 import bpy
-from ..main.common import exclusion_cache
 from io_scene_gltf2.io.imp.gltf2_io_binary import BinaryData
+
+from ..main.common import exclusion_cache
+
 vers = bpy.app.version
 if vers[0] == 4 and vers[1] < 3:
     from io_scene_gltf2.blender.imp.gltf2_blender_mesh import points_edges_tris
@@ -9,12 +11,14 @@ else:
     from io_scene_gltf2.blender.imp.mesh import points_edges_tris
     from io_scene_gltf2.blender.imp.mesh import squish
 
+
 def rename_color_attribute(mesh, name_before, name_after):
     if mesh.color_attributes is None:
         return
     col_layer = mesh.color_attributes.get(name_before)
     if col_layer is not None:
         col_layer.name = name_after
+
 
 def manage_garment_support(existingMeshes, gltf_importer_data):
     exclusion_cache.clear_cache()
@@ -37,10 +41,14 @@ def manage_garment_support(existingMeshes, gltf_importer_data):
             indices = get_indices(gltf_importer, prim)
             if '_GARMENTSUPPORTWEIGHT' in prim.attributes:
                 mesh.color_attributes.remove(mesh.color_attributes['_GARMENTSUPPORTWEIGHT'])
-                add_vertex_color_attribute('_GARMENTSUPPORTWEIGHT', '_GARMENTSUPPORTWEIGHT', gltf_importer, mesh, prim, indices)
+                add_vertex_color_attribute(
+                    '_GARMENTSUPPORTWEIGHT', '_GARMENTSUPPORTWEIGHT', gltf_importer, mesh, prim, indices
+                    )
             if '_GARMENTSUPPORTCAP' in prim.attributes:
                 mesh.color_attributes.remove(mesh.color_attributes['_GARMENTSUPPORTCAP'])
-                add_vertex_color_attribute('_GARMENTSUPPORTCAP', '_GARMENTSUPPORTCAP', gltf_importer, mesh, prim, indices)
+                add_vertex_color_attribute(
+                    '_GARMENTSUPPORTCAP', '_GARMENTSUPPORTCAP', gltf_importer, mesh, prim, indices
+                    )
             mesh.color_attributes.render_color_index = 0
 
         # rename attributes
@@ -48,7 +56,6 @@ def manage_garment_support(existingMeshes, gltf_importer_data):
         rename_color_attribute(mesh, "_GARMENTSUPPORTWEIGHT", "_GarmentSupportWeight")
 
         curMeshCount = curMeshCount + 1
-
 
 
 def add_vertex_color_attribute(accessor_name, attribute_name, gltf_importer_data, mesh, prim, indices):
@@ -69,6 +76,7 @@ def add_vertex_color_attribute(accessor_name, attribute_name, gltf_importer_data
             mesh.color_attributes[layer.name].data.foreach_set('color', squish(cols))
         except:
             print('something blew up setting gs attributes')
+
 
 def get_indices(gltf_importer_data, prim):
     gltf_importer = gltf_importer_data

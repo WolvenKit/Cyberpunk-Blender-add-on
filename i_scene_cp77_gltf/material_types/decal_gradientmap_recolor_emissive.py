@@ -1,6 +1,3 @@
-import bpy
-import os
-
 if __name__ != "__main__":
     from ..main.common import *
 
@@ -13,12 +10,12 @@ class DecalGradientmapRecolorEmissive:
 
     def found(self, tex):
         result = os.path.exists(
-            os.path.join(self.BasePath, tex)[:-3] + self.image_format
-        )
+                os.path.join(self.BasePath, tex)[:-3] + self.image_format
+                )
         if not result:
             result = os.path.exists(
-                os.path.join(self.ProjPath, tex)[:-3] + self.image_format
-            )
+                    os.path.join(self.ProjPath, tex)[:-3] + self.image_format
+                    )
             if not result:
                 print(f"Texture not found: {tex}")
         return result
@@ -53,78 +50,78 @@ class DecalGradientmapRecolorEmissive:
 
         if self.found(difftex) and self.found(gradmap):
             diffImg = imageFromRelPath(
-                difftex,
-                self.image_format,
-                DepotPath=self.BasePath,
-                ProjPath=self.ProjPath,
-                isNormal=True,
-            )
+                    difftex,
+                    self.image_format,
+                    DepotPath=self.BasePath,
+                    ProjPath=self.ProjPath,
+                    isNormal=True,
+                    )
             diff_image_node = create_node(
-                CurMat.nodes,
-                "ShaderNodeTexImage",
-                (-800, -300),
-                label="DiffuseTexture",
-                image=diffImg,
-            )
+                    CurMat.nodes,
+                    "ShaderNodeTexImage",
+                    (-800, -300),
+                    label="DiffuseTexture",
+                    image=diffImg,
+                    )
 
             gradImg = imageFromRelPath(
-                gradmap,
-                self.image_format,
-                DepotPath=self.BasePath,
-                ProjPath=self.ProjPath,
-            )
+                    gradmap,
+                    self.image_format,
+                    DepotPath=self.BasePath,
+                    ProjPath=self.ProjPath,
+                    )
             grad_image_node = create_node(
-                CurMat.nodes,
-                "ShaderNodeTexImage",
-                (-500, -200),
-                label="GradientMap",
-                image=gradImg,
-            )
+                    CurMat.nodes,
+                    "ShaderNodeTexImage",
+                    (-500, -200),
+                    label="GradientMap",
+                    image=gradImg,
+                    )
             CurMat.links.new(diff_image_node.outputs[0], grad_image_node.inputs[0])
             CurMat.links.new(grad_image_node.outputs[0], pBSDF.inputs["Base Color"])
             CurMat.links.new(grad_image_node.outputs[0], pBSDF.inputs[sockets["Emission"]])
 
             if emissive_gradmap and self.found(emissive_gradmap):
                 emissiveGradImg = imageFromRelPath(
-                    emissive_gradmap,
-                    self.image_format,
-                    DepotPath=self.BasePath,
-                    ProjPath=self.ProjPath,
-                    isNormal=True,
-                )
+                        emissive_gradmap,
+                        self.image_format,
+                        DepotPath=self.BasePath,
+                        ProjPath=self.ProjPath,
+                        isNormal=True,
+                        )
                 emissive_grad_node = create_node(
-                    CurMat.nodes,
-                    "ShaderNodeTexImage",
-                    (-500, -500),
-                    label="EmissiveGradientMap",
-                    image=emissiveGradImg,
-                )
+                        CurMat.nodes,
+                        "ShaderNodeTexImage",
+                        (-500, -500),
+                        label="EmissiveGradientMap",
+                        image=emissiveGradImg,
+                        )
                 CurMat.links.new(diff_image_node.outputs[0], emissive_grad_node.inputs[0])
                 emissive_mult = create_node(
-                    CurMat.nodes, "ShaderNodeMath", (-300, -500), operation="MULTIPLY"
-                )
+                        CurMat.nodes, "ShaderNodeMath", (-300, -500), operation="MULTIPLY"
+                        )
                 emissive_mult.inputs[1].default_value = emissiveEV
                 CurMat.links.new(emissive_grad_node.outputs[0], emissive_mult.inputs[0])
                 CurMat.links.new(emissive_mult.outputs[0], pBSDF.inputs["Emission Strength"])
 
             if masktex and self.found(masktex):
                 maskImg = imageFromRelPath(
-                    masktex,
-                    self.image_format,
-                    DepotPath=self.BasePath,
-                    ProjPath=self.ProjPath,
-                    isNormal=True,
-                )
+                        masktex,
+                        self.image_format,
+                        DepotPath=self.BasePath,
+                        ProjPath=self.ProjPath,
+                        isNormal=True,
+                        )
                 mask_image_node = create_node(
-                    CurMat.nodes,
-                    "ShaderNodeTexImage",
-                    (-800, -600),
-                    label="MaskTexture",
-                    image=maskImg,
-                )
+                        CurMat.nodes,
+                        "ShaderNodeTexImage",
+                        (-800, -600),
+                        label="MaskTexture",
+                        image=maskImg,
+                        )
                 alpha_mult = create_node(
-                    CurMat.nodes, "ShaderNodeMath", (-300, -350), operation="MULTIPLY"
-                )
+                        CurMat.nodes, "ShaderNodeMath", (-300, -350), operation="MULTIPLY"
+                        )
                 CurMat.links.new(grad_image_node.outputs[1], alpha_mult.inputs[0])
                 CurMat.links.new(mask_image_node.outputs[0], alpha_mult.inputs[1])
                 CurMat.links.new(alpha_mult.outputs[0], pBSDF.inputs["Alpha"])

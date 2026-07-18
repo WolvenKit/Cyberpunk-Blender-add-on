@@ -1,9 +1,8 @@
-import bpy
 import json
-import os
 from datetime import datetime
 
-def cp77_materialinstance_export(self,context, filepath):
+
+def cp77_materialinstance_export(self, context, filepath):
     active_object = context.active_object
     active_material = active_object.active_material
 
@@ -19,7 +18,7 @@ def cp77_materialinstance_export(self,context, filepath):
             "ExportedDateTime": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
             "DataType": "CR2W",
             "ArchiveFileName": ""
-        },
+            },
         "Data": {
             "Version": 195,
             "BuildVersion": 0,
@@ -29,15 +28,15 @@ def cp77_materialinstance_export(self,context, filepath):
                     "$type": "CName",
                     "$storage": "string",
                     "$value": "None"
-                },
+                    },
                 "baseMaterial": {
                     "DepotPath": {
                         "$type": "ResourcePath",
                         "$storage": "string",
                         "$value": "engine\\materials\\multilayered.mt"
-                    },
+                        },
                     "Flags": "Default"
-                },
+                    },
                 "cookingPlatform": "PLATFORM_PC",
                 "enableMask": 0,
                 "metadata": None,
@@ -50,10 +49,10 @@ def cp77_materialinstance_export(self,context, filepath):
                                 "$type": "ResourcePath",
                                 "$storage": "string",
                                 "$value": mlmask
-                            },
+                                },
                             "Flags": "Default"
-                        }
-                    },
+                            }
+                        },
                     {
                         "$type": "rRef:Multilayer_Setup",
                         "MultilayerSetup": {
@@ -61,10 +60,10 @@ def cp77_materialinstance_export(self,context, filepath):
                                 "$type": "ResourcePath",
                                 "$storage": "string",
                                 "$value": mlsetup
-                            },
+                                },
                             "Flags": "Default"
-                        }
-                    },
+                            }
+                        },
                     {
                         "$type": "rRef:ITexture",
                         "GlobalNormal": {
@@ -72,15 +71,15 @@ def cp77_materialinstance_export(self,context, filepath):
                                 "$type": "ResourcePath",
                                 "$storage": "string",
                                 "$value": gnormal
-                            },
+                                },
                             "Flags": "Default"
+                            }
                         }
-                    }
-                ]
-            },
+                    ]
+                },
             "EmbeddedFiles": []
+            }
         }
-    }
 
     try:
         with open(filepath, 'w', encoding='utf-8') as f:

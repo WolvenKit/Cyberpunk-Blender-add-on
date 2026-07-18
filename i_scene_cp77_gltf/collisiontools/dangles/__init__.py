@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Dangle Physics Editor",
     "author": "",
-    "version": (1, 7, 3),
+    "version": (1, 8, 0),
     "blender": (5, 0, 0),
     "location": "3D View > CP77 Modding > Physics Tools > Dangles",
     "description": "Authoring and preview for REDengine Dyng, Position Projection, Spring, Pendulum, and Drag physics.",

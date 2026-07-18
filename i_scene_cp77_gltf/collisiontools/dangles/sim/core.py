@@ -1,7 +1,8 @@
-import numpy as np
 import bpy
-from mathutils import Vector, Matrix
-from . import constraints, collision, spaces, spring, pendulum
+import numpy as np
+from mathutils import Matrix, Vector
+
+from . import collision, constraints, pendulum, spaces, spring
 from .drag import DragPostProcessor
 
 DAMPING_ACCEL_LIMIT = 50.0
@@ -14,6 +15,49 @@ TELEPORT_KEEP_SQ  = 1.0
 TELEPORT_RESET_SQ = 25.0
 
 class DyngSimulator:
+    def _register_bone_aliases(self, authored_name, actual_name, index):
+        for alias in spaces.bone_name_candidates(authored_name):
+            self.bone_idx_map.setdefault(alias, index)
+        for alias in spaces.bone_name_candidates(actual_name):
+            self.bone_idx_map.setdefault(alias, index)
+
+    def _append_extra_bone(self, authored_name, required=True):
+        authored_name = str(authored_name or "")
+        if not authored_name:
+            return -1
+        actual_name = spaces.resolve_bone_name(self.arm_obj, authored_name)
+        if not actual_name:
+            if required:
+                self._missing_bone_references.add(authored_name)
+            return -1
+        existing = self._actual_bone_idx.get(actual_name)
+        if existing is not None:
+            self._register_bone_aliases(authored_name, actual_name, existing)
+            return existing
+        index = len(self.bone_names)
+        self._actual_bone_idx[actual_name] = index
+        self.bone_names.append(actual_name)
+        self._extra_bone_names.append(actual_name)
+        self._register_bone_aliases(authored_name, actual_name, index)
+        return index
+
+    def resolve_bone_index(self, bone_name, particle_index=None, node_index=None):
+        if node_index is None and particle_index is not None:
+            if 0 <= int(particle_index) < len(self._particle_node_idx):
+                node_index = int(self._particle_node_idx[int(particle_index)])
+        if node_index is not None and 0 <= int(node_index) < len(self._node_bone_maps):
+            node_map = self._node_bone_maps[int(node_index)]
+            for alias in spaces.bone_name_candidates(bone_name):
+                index = node_map.get(alias)
+                if index is not None:
+                    return index
+        for alias in spaces.bone_name_candidates(bone_name):
+            index = self.bone_idx_map.get(alias)
+            if index is not None:
+                return index
+        actual_name = spaces.resolve_bone_name(self.arm_obj, bone_name)
+        return self.bone_idx_map.get(actual_name) if actual_name else None
+
     def __init__(self, rig_obj):
         self.arm_obj = rig_obj
         self.state = rig_obj.dangle_state
@@ -39,44 +83,77 @@ class DyngSimulator:
             )
 
         self.num_particles = len(self.particles)
+        (
+            self._executable_dangle_indices,
+            self._executable_drag_indices,
+        ) = spaces.executable_node_indices(self.state)
+        self._particle_node_idx = np.zeros(self.num_particles, dtype=np.int32)
+        for node_index, (start, end) in enumerate(self._node_ranges):
+            self._particle_node_idx[start:end] = node_index
 
-        self.bone_names = [p.bone_name for p in self.particles]
+        self.authored_bone_names = [str(p.bone_name or "") for p in self.particles]
+        self.bone_names = []
+        self.bone_idx_map = {}
+        self._actual_bone_idx = {}
+        self._missing_bone_references = set()
+        self._extra_bone_names = []
+
+        for particle_index, authored_name in enumerate(self.authored_bone_names):
+            node_index = int(self._particle_node_idx[particle_index])
+            required = node_index in self._executable_dangle_indices
+            actual_name = spaces.resolve_bone_name(self.arm_obj, authored_name)
+            if not actual_name:
+                if required:
+                    self._missing_bone_references.add(
+                        authored_name or "<unnamed particle>"
+                    )
+                actual_name = authored_name
+            self._actual_bone_idx.setdefault(actual_name, particle_index)
+            self.bone_names.append(actual_name)
+            self._register_bone_aliases(authored_name, actual_name, particle_index)
 
         self._node_bone_maps = []
-        for ni in range(len(self._node_ranges)):
-            start, end = self._node_ranges[ni]
-            nmap = {}
-            for pi in range(start, end):
-                bn = self.particles[pi].bone_name
-                if bn not in nmap:
-                    nmap[bn] = pi
-            self._node_bone_maps.append(nmap)
+        for node_index, (start, end) in enumerate(self._node_ranges):
+            node_map = {}
+            for particle_index in range(start, end):
+                authored_name = self.authored_bone_names[particle_index]
+                actual_name = self.bone_names[particle_index]
+                for alias in spaces.bone_name_candidates(authored_name):
+                    node_map.setdefault(alias, particle_index)
+                for alias in spaces.bone_name_candidates(actual_name):
+                    node_map.setdefault(alias, particle_index)
+            self._node_bone_maps.append(node_map)
 
-        self._particle_node_idx = np.zeros(self.num_particles, dtype=np.int32)
-        for ni, (start, end) in enumerate(self._node_ranges):
-            self._particle_node_idx[start:end] = ni
-
-        self.bone_idx_map = {}
-        for i, name in enumerate(self.bone_names):
-            self.bone_idx_map.setdefault(name, i)
-
-        self._extra_bone_names = []
+        global_shapes_required = bool(self._executable_dangle_indices)
         for shape in self.state.collision_shapes:
-            bn = shape.bone_name
-            if bn and bn not in self.bone_idx_map:
-                idx = self.num_particles + len(self._extra_bone_names)
-                self.bone_idx_map[bn] = idx
-                self._extra_bone_names.append(bn)
-                self.bone_names.append(bn)
-
-        for dnode in self.state.dangle_nodes:
+            self._append_extra_bone(
+                shape.bone_name, required=global_shapes_required
+            )
+        for node_index, dnode in enumerate(self.state.dangle_nodes):
+            required = node_index in self._executable_dangle_indices
             for shape in dnode.collision_shapes:
-                bn = shape.bone_name
-                if bn and bn not in self.bone_idx_map:
-                    idx = self.num_particles + len(self._extra_bone_names)
-                    self.bone_idx_map[bn] = idx
-                    self._extra_bone_names.append(bn)
-                    self.bone_names.append(bn)
+                self._append_extra_bone(shape.bone_name, required=required)
+
+        for node_index, (start, end) in enumerate(self._node_ranges):
+            required = node_index in self._executable_dangle_indices
+            for particle_index in range(start, end):
+                particle = self.particles[particle_index]
+                if particle.direction_reference_bone:
+                    self._append_extra_bone(
+                        particle.direction_reference_bone, required=required
+                    )
+                for link in particle.link_constraints:
+                    self._append_extra_bone(
+                        link.target_bone, required=required
+                    )
+                for ellipsoid in particle.ellipsoid_constraints:
+                    self._append_extra_bone(
+                        ellipsoid.target_bone, required=required
+                    )
+                for pendulum_constraint in particle.pendulum_constraints:
+                    self._append_extra_bone(
+                        pendulum_constraint.target_bone, required=required
+                    )
 
         for node_index, solver_type in enumerate(self._node_solver_types):
             if solver_type not in {'PBD', 'SPRING', 'PENDULUM'}:
@@ -85,29 +162,32 @@ class DyngSimulator:
             if start >= end:
                 continue
             particle = self.particles[start]
-            pose_bone = self.arm_obj.pose.bones.get(particle.bone_name)
-            required_names = []
-            if solver_type == 'PBD':
-                required_names.append(particle.direction_reference_bone)
+            pose_bone = spaces.resolve_pose_bone(self.arm_obj, particle.bone_name)
+            required = node_index in self._executable_dangle_indices
+            if solver_type == 'PBD' and particle.direction_reference_bone:
+                self._append_extra_bone(
+                    particle.direction_reference_bone, required=required
+                )
             if pose_bone is not None and pose_bone.parent is not None:
-                required_names.append(pose_bone.parent.name)
-            for bone_name in required_names:
-                if bone_name and bone_name not in self.bone_idx_map:
-                    index = self.num_particles + len(self._extra_bone_names)
-                    self.bone_idx_map[bone_name] = index
-                    self._extra_bone_names.append(bone_name)
-                    self.bone_names.append(bone_name)
+                self._append_extra_bone(
+                    pose_bone.parent.name, required=required
+                )
 
-        for drag_node in self.state.drag_nodes:
+        for drag_index, drag_node in enumerate(self.state.drag_nodes):
+            required = drag_index in self._executable_drag_indices
             source_name = drag_node.source_bone_name or drag_node.bone_name
-            for bn in (source_name, drag_node.bone_name):
-                if bn and bn not in self.bone_idx_map:
-                    idx = self.num_particles + len(self._extra_bone_names)
-                    self.bone_idx_map[bn] = idx
-                    self._extra_bone_names.append(bn)
-                    self.bone_names.append(bn)
+            self._append_extra_bone(source_name, required=required)
+            self._append_extra_bone(drag_node.bone_name, required=required)
 
-        total_tracked = self.num_particles + len(self._extra_bone_names)
+        if self._missing_bone_references:
+            missing = ", ".join(sorted(self._missing_bone_references)[:12])
+            extra = len(self._missing_bone_references) - 12
+            suffix = f" (+{extra} more)" if extra > 0 else ""
+            raise ValueError(
+                f"The selected MetaRig is missing required Dangle bones: {missing}{suffix}"
+            )
+
+        total_tracked = len(self.bone_names)
 
         self.pos_ms = np.zeros((total_tracked, 3), dtype=np.float32)
         self.vel_ms = np.zeros((total_tracked, 3), dtype=np.float32)
@@ -174,6 +254,8 @@ class DyngSimulator:
             self.drag_post, 'config_to_runtime', {}
         )
         for operation in operations:
+            if not spaces.operation_uses_default_branch(operation):
+                continue
             node_type = getattr(operation, 'node_type', '')
             node_index = int(getattr(operation, 'node_index', -1))
             if node_type == 'DANGLE':
@@ -184,7 +266,7 @@ class DyngSimulator:
                 if runtime_index is not None:
                     plan.append(('DRAG', int(runtime_index)))
 
-        if not plan:
+        if not operations:
             plan.extend(
                 ('DANGLE', node_index)
                 for node_index in range(len(self._node_ranges))
@@ -256,7 +338,7 @@ class DyngSimulator:
 
     def _init_state(self):
         for i, p_cfg in enumerate(self.particles):
-            pb = self.arm_obj.pose.bones.get(p_cfg.bone_name)
+            pb = self.arm_obj.pose.bones.get(self.bone_names[i])
             if pb:
                 ms_head = np.array(pb.matrix.translation, dtype=np.float32)
                 self.pos_ms[i] = ms_head
@@ -324,13 +406,17 @@ class DyngSimulator:
             if end - start != 1:
                 continue
             particle = self.particles[start]
-            pose_bone = self.arm_obj.pose.bones.get(particle.bone_name)
+            pose_bone = self.arm_obj.pose.bones.get(self.bone_names[start])
             parent_index = -1
             if pose_bone is not None and pose_bone.parent is not None:
-                parent_index = self.bone_idx_map.get(pose_bone.parent.name, -1)
-            reference_index = self.bone_idx_map.get(
-                particle.direction_reference_bone, -1
+                parent_index = self.resolve_bone_index(pose_bone.parent.name)
+                if parent_index is None:
+                    parent_index = -1
+            reference_index = self.resolve_bone_index(
+                particle.direction_reference_bone, node_index=node_index
             )
+            if reference_index is None:
+                reference_index = -1
             self._position_projection_nodes[node_index] = {
                 'particle_index': start,
                 'parent_index': parent_index,
@@ -647,9 +733,9 @@ class DyngSimulator:
 
     def _build_feedback_bone_set(self):
         names = {
-            particle.bone_name
-            for particle in self.particles
-            if particle.bone_name
+            self.bone_names[index]
+            for index in range(self.num_particles)
+            if self.bone_names[index]
         }
 
         if getattr(self, 'link_idx_a', None) is not None:
@@ -690,8 +776,10 @@ class DyngSimulator:
         # Applying a model-space output to a pose bone rewrites local overrides for
         # every descendant that is restored or corrected afterward. Remove those
         # overrides before the next input sample as well.
-        for particle in self.particles:
-            pose_bone = self.arm_obj.pose.bones.get(particle.bone_name)
+        for particle_index in range(self.num_particles):
+            pose_bone = self.arm_obj.pose.bones.get(
+                self.bone_names[particle_index]
+            )
             if pose_bone is not None:
                 names.update(self._descendant_names(pose_bone))
 

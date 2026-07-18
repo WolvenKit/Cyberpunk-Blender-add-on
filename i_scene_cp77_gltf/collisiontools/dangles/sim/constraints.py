@@ -1,19 +1,18 @@
 import math
+
 import numpy as np
-import bpy
-from mathutils import Vector, Quaternion, Matrix
+from mathutils import Matrix, Quaternion, Vector
+
 from . import spaces
 
 RE_BONE_CONV = spaces.RE_TO_BLENDER_BONE_LOCAL_CURRENT
 
 
 def _resolve_bone(sim, particle_idx, bone_name):
-    """Resolve a bone name to a flat particle index."""
-    if hasattr(sim, '_node_bone_maps') and hasattr(sim, '_particle_node_idx'):
-        ni = int(sim._particle_node_idx[particle_idx])
-        idx = sim._node_bone_maps[ni].get(bone_name)
-        if idx is not None:
-            return idx
+    """Resolve authored source-rig names against the merged MetaRig."""
+    resolver = getattr(sim, "resolve_bone_index", None)
+    if resolver is not None:
+        return resolver(bone_name, particle_index=particle_idx)
     return sim.bone_idx_map.get(bone_name)
 
 
@@ -49,8 +48,8 @@ def _compile_links(sim):
             if c.explicit_rest_distance > 0.0:
                 rest.append(c.explicit_rest_distance)
             else:
-                source_bone = sim.arm_obj.data.bones.get(p_cfg.bone_name)
-                target_bone = sim.arm_obj.data.bones.get(c.target_bone)
+                source_bone = spaces.resolve_data_bone(sim.arm_obj, p_cfg.bone_name)
+                target_bone = spaces.resolve_data_bone(sim.arm_obj, c.target_bone)
                 if source_bone is not None and target_bone is not None:
                     rest.append(float((
                         source_bone.head_local - target_bone.head_local

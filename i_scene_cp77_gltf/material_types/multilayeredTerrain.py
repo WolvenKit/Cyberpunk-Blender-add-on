@@ -1,7 +1,4 @@
-import bpy
-import os
 from ..main.common import *
-from ..jsontool import JSONTool
 
 _ASSET_INDEX_CACHE = {}
 
@@ -93,9 +90,9 @@ def get_or_create_layer_blend_group():
 
     group = bpy.data.node_groups.new(name, 'ShaderNodeTree')
     for socket_name in (
-        'Color A', 'Metalness A', 'Roughness A', 'Normal A',
-        'Color B', 'Metalness B', 'Roughness B', 'Normal B', 'Mask'
-    ):
+            'Color A', 'Metalness A', 'Roughness A', 'Normal A',
+            'Color B', 'Metalness B', 'Roughness B', 'Normal B', 'Mask'
+            ):
         _add_socket(group, socket_name, 'NodeSocketColor', 'INPUT')
     for socket_name in ('Color', 'Metalness', 'Roughness', 'Normal'):
         _add_socket(group, socket_name, 'NodeSocketColor', 'OUTPUT')
@@ -132,9 +129,15 @@ class MultilayeredTerrain:
         mt_path = matTemplateObj['metalnessTexture']['DepotPath']['$value']
 
         CT = imageFromRelPath(ct_path, self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
-        NT = imageFromRelPath(nt_path, self.image_format, isNormal=True, DepotPath=self.BasePath, ProjPath=self.ProjPath)
-        RT = imageFromRelPath(rt_path, self.image_format, isNormal=True, DepotPath=self.BasePath, ProjPath=self.ProjPath)
-        MT = imageFromRelPath(mt_path, self.image_format, isNormal=True, DepotPath=self.BasePath, ProjPath=self.ProjPath)
+        NT = imageFromRelPath(
+            nt_path, self.image_format, isNormal=True, DepotPath=self.BasePath, ProjPath=self.ProjPath
+            )
+        RT = imageFromRelPath(
+            rt_path, self.image_format, isNormal=True, DepotPath=self.BasePath, ProjPath=self.ProjPath
+            )
+        MT = imageFromRelPath(
+            mt_path, self.image_format, isNormal=True, DepotPath=self.BasePath, ProjPath=self.ProjPath
+            )
         tile_mult = float(matTemplateObj.get('tilingMultiplier', 1))
 
         group = bpy.data.node_groups.new(group_name, 'ShaderNodeTree')
@@ -142,17 +145,24 @@ class MultilayeredTerrain:
         for socket_name in ('Color', 'Metalness', 'Roughness', 'Normal'):
             _add_socket(group, socket_name, 'NodeSocketColor', 'OUTPUT')
 
-        color_node = _node(group.nodes, 'ShaderNodeTexImage', (0, 0)); color_node.image = CT
-        metal_node = _node(group.nodes, 'ShaderNodeTexImage', (0, -50)); metal_node.image = MT
-        rough_node = _node(group.nodes, 'ShaderNodeTexImage', (0, -100)); rough_node.image = RT
-        normal_node = _node(group.nodes, 'ShaderNodeTexImage', (0, -150)); normal_node.image = NT
+        color_node = _node(group.nodes, 'ShaderNodeTexImage', (0, 0));
+        color_node.image = CT
+        metal_node = _node(group.nodes, 'ShaderNodeTexImage', (0, -50));
+        metal_node.image = MT
+        rough_node = _node(group.nodes, 'ShaderNodeTexImage', (0, -100));
+        rough_node.image = RT
+        normal_node = _node(group.nodes, 'ShaderNodeTexImage', (0, -150));
+        normal_node.image = NT
         mapping = _node(group.nodes, 'ShaderNodeMapping', (-310, -64))
         tex_coord = _node(group.nodes, 'ShaderNodeTexCoord', (-500, -64))
-        tile_value = _node(group.nodes, 'ShaderNodeValue', (-700, -90)); tile_value.outputs[0].default_value = tile_mult
+        tile_value = _node(group.nodes, 'ShaderNodeValue', (-700, -90));
+        tile_value.outputs[0].default_value = tile_mult
         group_input = _node(group.nodes, 'NodeGroupInput', (-700, -180))
         vec_math = _node(group.nodes, 'ShaderNodeVectorMath', (-500, -135), operation='MULTIPLY')
-        normal_sep = _node(group.nodes, 'ShaderNodeSeparateColor', (300, -150)); normal_sep.mode = 'RGB'
-        normal_combine = _node(group.nodes, 'ShaderNodeCombineRGB', (500, -150)); normal_combine.inputs[2].default_value = 1
+        normal_sep = _node(group.nodes, 'ShaderNodeSeparateColor', (300, -150));
+        normal_sep.mode = 'RGB'
+        normal_combine = _node(group.nodes, 'ShaderNodeCombineRGB', (500, -150));
+        normal_combine.inputs[2].default_value = 1
         group_output = _node(group.nodes, 'NodeGroupOutput', (700, 0))
 
         for image_node in (color_node, normal_node, rough_node, metal_node):
@@ -174,7 +184,9 @@ class MultilayeredTerrain:
         GNA = _node(CurMat.nodes, 'ShaderNodeVectorMath', (-400, -250), operation='ADD')
         GNS = _node(CurMat.nodes, 'ShaderNodeVectorMath', (-600, -250), operation='SUBTRACT')
         GNGeo = _node(CurMat.nodes, 'ShaderNodeNewGeometry', (-800, -250))
-        path = self.BasePath + normalimgpath if os.path.exists(self.BasePath + normalimgpath[:-3] + 'png') else self.ProjPath + normalimgpath
+        path = self.BasePath + normalimgpath if os.path.exists(
+            self.BasePath + normalimgpath[:-3] + 'png'
+            ) else self.ProjPath + normalimgpath
         GNMap = CreateShaderNodeNormalMap(CurMat, path, -600, -550, 'GlobalNormal', self.image_format)
         CurMat.links.new(GNGeo.outputs['Normal'], GNS.inputs[1])
         CurMat.links.new(GNMap.outputs[0], GNS.inputs[0])
@@ -186,9 +198,13 @@ class MultilayeredTerrain:
     def _mask_texture(self, mlmaskpath, index):
         mask_base = os.path.splitext(mlmaskpath)[0]
         mask_name = mlmaskpath.split('\\')[-1:][0][:-7]
-        project_path = os.path.splitext(self.ProjPath + mlmaskpath)[0] + '_layers\\' + mask_name + '_' + str(index) + '.png'
+        project_path = os.path.splitext(self.ProjPath + mlmaskpath)[0] + '_layers\\' + mask_name + '_' + str(
+            index
+            ) + '.png'
         depot_path = os.path.splitext(self.BasePath + mlmaskpath)[0] + '_' + str(index) + '.png'
-        return imageFromPath(project_path if os.path.exists(project_path) else depot_path, self.image_format, isNormal=True)
+        return imageFromPath(
+            project_path if os.path.exists(project_path) else depot_path, self.image_format, isNormal=True
+            )
 
     def createLayerMaterial(self, LayerName, LayerCount, CurMat, mlmaskpath, normalimgpath):
         blend_group = get_or_create_layer_blend_group()
@@ -230,7 +246,7 @@ class MultilayeredTerrain:
             _add_socket(group, 'NormalStrength', 'NodeSocketFloat', 'INPUT'),
             _add_socket(group, 'Opacity', 'NodeSocketFloat', 'INPUT'),
             _add_socket(group, 'Mask', 'NodeSocketColor', 'INPUT'),
-        ]
+            ]
         for socket_name in ('Color', 'Metalness', 'Roughness', 'Normal', 'Layer Mask'):
             _add_socket(group, socket_name, 'NodeSocketColor', 'OUTPUT')
         for index, minimum, maximum in ((4, 0, None), (6, 0, 1)):
@@ -246,7 +262,9 @@ class MultilayeredTerrain:
         normal_table = OverrideTable.get('NormalStrength', {})
 
         color_scale = values['colorScale']
-        LayerGroupN.inputs[0].default_value = color_table[color_scale] if color_scale not in (None, 'null') and color_scale in color_table else (1.0, 1.0, 1.0, 1.0)
+        LayerGroupN.inputs[0].default_value = color_table[color_scale] if color_scale not in (None,
+                                                                                              'null') and color_scale in color_table else (
+            1.0, 1.0, 1.0, 1.0)
         LayerGroupN.inputs[1].default_value = _as_float(values['MatTile'])
         LayerGroupN.inputs[2].default_value = _as_float(values['MbScale'])
         LayerGroupN.inputs[3].default_value = _as_float(values['microblendNormalStrength'])
@@ -277,7 +295,8 @@ class MultilayeredTerrain:
 
         mb_greater = _node(group.nodes, 'ShaderNodeMath', (-1200, -350), operation='GREATER_THAN')
         mb_greater.inputs[1].default_value = 0
-        mb_mix = _node(group.nodes, 'ShaderNodeMixRGB', (-1200, -400)); mb_mix.blend_type = 'MIX'
+        mb_mix = _node(group.nodes, 'ShaderNodeMixRGB', (-1200, -400));
+        mb_mix.blend_type = 'MIX'
         mb_ramp = _node(group.nodes, 'ShaderNodeValToRGB', (-1350, -500))
         mb_ramp.color_ramp.elements.remove(mb_ramp.color_ramp.elements[1])
         for color, position in (((0.25, 0.25, 0.25, 1), 0.9), ((1, 1, 1, 1), 0.99608)):
@@ -311,12 +330,21 @@ class MultilayeredTerrain:
             metal_ramp.color_ramp.elements[1].color = metal_table[metal_levels][0]
             metal_ramp.color_ramp.elements[0].color = metal_table[metal_levels][1]
 
-        mask_mix1 = _node(group.nodes, 'ShaderNodeMixRGB', (-1600, -500)); mask_mix1.blend_type = 'OVERLAY'; mask_mix1.inputs[0].default_value = 1
-        mask_mix2 = _node(group.nodes, 'ShaderNodeMixRGB', (-1600, -600)); mask_mix2.blend_type = 'MIX'; mask_mix2.inputs[0].default_value = 1
+        mask_mix1 = _node(group.nodes, 'ShaderNodeMixRGB', (-1600, -500));
+        mask_mix1.blend_type = 'OVERLAY';
+        mask_mix1.inputs[0].default_value = 1
+        mask_mix2 = _node(group.nodes, 'ShaderNodeMixRGB', (-1600, -600));
+        mask_mix2.blend_type = 'MIX';
+        mask_mix2.inputs[0].default_value = 1
         mask_op = _node(group.nodes, 'NodeReroute', (-1600, -650), hide=False)
-        mask_mix3 = _node(group.nodes, 'ShaderNodeMixRGB', (-600, -550), label='OPACITY MIX'); mask_mix3.blend_type = 'MULTIPLY'; mask_mix3.inputs[0].default_value = 1
-        mask_mb_multiply = _node(group.nodes, 'ShaderNodeMath', (-1600, -450), operation='MULTIPLY'); mask_mb_multiply.inputs[1].default_value = 6.0
-        mask_mb_power = _node(group.nodes, 'ShaderNodeMath', (-1600, -550), operation='POWER'); mask_mb_power.inputs[1].default_value = 100.0; mask_mb_power.use_clamp = True
+        mask_mix3 = _node(group.nodes, 'ShaderNodeMixRGB', (-600, -550), label='OPACITY MIX');
+        mask_mix3.blend_type = 'MULTIPLY';
+        mask_mix3.inputs[0].default_value = 1
+        mask_mb_multiply = _node(group.nodes, 'ShaderNodeMath', (-1600, -450), operation='MULTIPLY');
+        mask_mb_multiply.inputs[1].default_value = 6.0
+        mask_mb_power = _node(group.nodes, 'ShaderNodeMath', (-1600, -550), operation='POWER');
+        mask_mb_power.inputs[1].default_value = 100.0;
+        mask_mb_power.use_clamp = True
 
         links = group.links
         links.new(group_input.outputs[0], color_mix.inputs[2])
@@ -382,7 +410,9 @@ class MultilayeredTerrain:
             normal_strength = _get_ref_value(layer, 'NormalStrength')
             rough_levels_out = _get_ref_value(layer, 'RoughLevelsOut')
             metal_levels_out = _get_ref_value(layer, 'MetalLevelsOut')
-            microblend_image = imageFromRelPath(microblend, self.image_format, True, self.BasePath, self.ProjPath) if microblend != 'null' else None
+            microblend_image = imageFromRelPath(
+                microblend, self.image_format, True, self.BasePath, self.ProjPath
+                ) if microblend != 'null' else None
 
             template_path = _resolve_indexed_json(self.BasePath, material)
             mltemplate = _jsonload_cached(template_path, template_cache)['Data']['RootChunk']
@@ -412,14 +442,14 @@ class MultilayeredTerrain:
                 'normalStrength': normal_strength,
                 'roughLevelsOut': rough_levels_out,
                 'metalLevelsOut': metal_levels_out,
-            }
+                }
             self._configure_layer_defaults(layer_node, values, override_table)
             self._build_layer_nodes(group, base_group, microblend_image, values, override_table)
 
         self.createLayerMaterial(
-            os.path.basename(Data['MultilayerSetup'])[:-8] + '_Layer_',
-            layer_count,
-            CurMat,
-            Data['MultilayerMask'],
-            Data.get('GlobalNormal')
-        )
+                os.path.basename(Data['MultilayerSetup'])[:-8] + '_Layer_',
+                layer_count,
+                CurMat,
+                Data['MultilayerMask'],
+                Data.get('GlobalNormal')
+                )

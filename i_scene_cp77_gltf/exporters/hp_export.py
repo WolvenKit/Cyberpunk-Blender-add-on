@@ -1,9 +1,10 @@
-import bpy
-import os
 import json
+import os
+
+import bpy
+
 
 def cp77_hp_export(filepath):
-
     script_directory = os.path.dirname(os.path.abspath(__file__))
     template_relative_path = os.path.join('..', 'resources', 'hair_profile_template.hp.json')
 
@@ -17,13 +18,13 @@ def cp77_hp_export(filepath):
 
     if active_slot is None:
         print("No active material")
-        
+
     else:
         mat = obj.active_material
-        ProjPath=mat.get('ProjPath')
-        hair=[]
-        if mat.get('MaterialTemplate') =="base\materials\hair.mt":
-            hair=mat.get('MaterialTemplate')
+        ProjPath = mat.get('ProjPath')
+        hair = []
+        if mat.get('MaterialTemplate') == "base\materials\hair.mt":
+            hair = mat.get('MaterialTemplate')
         if not hair:
             print("Active Material is not a Hair Profile")
             bpy.ops.cp77.message_box('INVOKE_DEFAULT', message="Active Material is not a Hair Profile")
@@ -69,16 +70,18 @@ def cp77_hp_export(filepath):
                                 "Blue": int(stop.color[2] * 255),
                                 "Green": int(stop.color[1] * 255),
                                 "Red": int(stop.color[0] * 255),
-                            },
+                                },
                             "value": stop.position,
-                        }
+                            }
 
                         j_data.append(new_entry)
 
             mat_name = mat.name.replace("_cards", "")
 
             # Construct the output path
-            outpath = os.path.join(ProjPath,'base\\characters\\common\\hair\\textures\\hair_profiles\\' f'mod_{mat_name}.hp.json')
+            outpath = os.path.join(
+                ProjPath, 'base\\characters\\common\\hair\\textures\\hair_profiles\\' f'mod_{mat_name}.hp.json'
+                )
 
             if not os.path.exists(os.path.dirname(outpath)):
                 os.makedirs(os.path.dirname(outpath))

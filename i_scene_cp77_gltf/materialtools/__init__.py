@@ -1,18 +1,18 @@
-import bpy
-from bpy.app.handlers import persistent
-import bpy.utils.previews
-import sys
-import shutil
-import numpy as np
 import ast
+import shutil
+import sys
 from pathlib import Path
+
+import bpy.utils.previews
+import numpy as np
+from bpy.app.handlers import persistent
+from bpy.props import (CollectionProperty, EnumProperty, PointerProperty, StringProperty)
+from bpy.types import (Operator, Panel, Scene)
+
+from ..exporters import mlsetup_export
+from ..importers.import_with_materials import CP77GLBimport, reload_mats
 from ..main.bartmoss_functions import *
 from ..main.common import get_classes
-from .. exporters import CP77HairProfileExport, mi_export, mlsetup_export, mlmask_export
-from .. importers.import_with_materials import CP77GLBimport, reload_mats
-from bpy.props import (StringProperty, EnumProperty, PointerProperty, CollectionProperty)
-from bpy.types import (Scene, Operator, Panel)
-
 
 _ENUM_CACHE = {}
 _PARSED_OVERRIDE_CACHE = {}
@@ -24,7 +24,7 @@ _OVERRIDE_ENUM_KEYS = {
     'metalout': 'MetalLevelsOutList',
     'roughin': 'RoughLevelsInList',
     'roughout': 'RoughLevelsOutList',
-}
+    }
 
 
 def _clear_palette_override_cache():
@@ -178,16 +178,19 @@ def load_post_handler(dummy):
     subscribe_to_color()
     subscribe_to_material()
 
+
 # JATO: TODO figure out how irresponsible this is and add check to prevent from always setting this prop on undo/redo
 @persistent
 def trigger_update_on_undo(scene):
     bpy.context.scene.cp77_ml_props.multilayer_index_int = bpy.context.scene.cp77_ml_props.multilayer_index_int
 
+
 def subscribe_to_color():
     bpy.msgbus.clear_by_owner(bpy.types.PaletteColor)
     subscribe_to = bpy.types.PaletteColor, "color"
-    bpy.msgbus.subscribe_rna(key=subscribe_to,owner=bpy.types.PaletteColor,args=(),notify=color_changed_callback)
-    
+    bpy.msgbus.subscribe_rna(key=subscribe_to, owner=bpy.types.PaletteColor, args=(), notify=color_changed_callback)
+
+
 def color_changed_callback():
     palette = _active_palette(bpy.context)
     if not palette:
@@ -200,6 +203,7 @@ def color_changed_callback():
         _schedule_color_update()
 
     props.last_palette_color = new_palette_color
+
 
 def send_color_to_shader():
     palette = _active_palette(bpy.context)
@@ -221,8 +225,9 @@ def send_color_to_shader():
 def subscribe_to_object():
     bpy.msgbus.clear_by_owner(bpy.types.LayerObjects)
     subscribe_to = bpy.types.LayerObjects, "active"
-    bpy.msgbus.subscribe_rna(key=subscribe_to,owner=bpy.types.LayerObjects,args=(),notify=object_changed_callback)
-    
+    bpy.msgbus.subscribe_rna(key=subscribe_to, owner=bpy.types.LayerObjects, args=(), notify=object_changed_callback)
+
+
 def object_changed_callback():
     props = bpy.context.scene.cp77_ml_props
     obj = bpy.context.active_object
@@ -249,11 +254,17 @@ def object_changed_callback():
     else:
         props.last_palette_color = (0.0, 0.0, 0.0)
 
+
 def subscribe_to_material():
     owner = bpy.types.WindowManager
     bpy.msgbus.clear_by_owner(owner)
-    bpy.msgbus.subscribe_rna(key=(bpy.types.Object, "active_material"),owner=owner,args=(),notify=material_changed_callback)
-    bpy.msgbus.subscribe_rna(key=(bpy.types.Object, "active_material_index"),owner=owner,args=(),notify=material_changed_callback)
+    bpy.msgbus.subscribe_rna(
+        key=(bpy.types.Object, "active_material"), owner=owner, args=(), notify=material_changed_callback
+        )
+    bpy.msgbus.subscribe_rna(
+        key=(bpy.types.Object, "active_material_index"), owner=owner, args=(), notify=material_changed_callback
+        )
+
 
 def material_changed_callback():
     props = bpy.context.scene.cp77_ml_props
@@ -262,7 +273,7 @@ def material_changed_callback():
         return
 
     if obj.active_material != props.last_active_material:
-        #print("cur mat: ",bpy.context.active_object.active_material, "  |  last mat: ", props.last_active_material)
+        # print("cur mat: ",bpy.context.active_object.active_material, "  |  last mat: ", props.last_active_material)
         mat = bpy.context.object.active_material
         props.multilayer_object_bool = False
         if mat and 'MLSetup' in mat:
@@ -288,7 +299,7 @@ def get_layernode_by_socket():
     if bpy.context.object.active_material.get('MLSetup') is None:
         return
 
-    active_object=bpy.context.active_object
+    active_object = bpy.context.active_object
     active_material = active_object.active_material
     props = bpy.context.scene.cp77_ml_props
     LayerGroup = None
@@ -298,12 +309,12 @@ def get_layernode_by_socket():
 
     mlBSDFGroup = nodes.get("Multilayered 1.8.0")
     if mlBSDFGroup:
-        socket_name = ("Layer "+str(layer_index))
+        socket_name = ("Layer " + str(layer_index))
         socket = mlBSDFGroup.inputs.get(socket_name)
         if socket.is_linked:
             layerGroupLink = socket.links[0]
             linkedLayerGroupName = layerGroupLink.from_node.name
-            LayerGroup=nodes[linkedLayerGroupName]
+            LayerGroup = nodes[linkedLayerGroupName]
             # print(layer_index, " | ", LayerGroup.name)
         else:
             return None
@@ -311,15 +322,19 @@ def get_layernode_by_socket():
     return LayerGroup
 
 
-def generate_multilayer_material(self,context):
+def generate_multilayer_material(self, context):
     active_object = context.active_object
     cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
     script_directory = os.path.dirname(os.path.abspath(__file__))
     relative_filepath = os.path.join('..', 'resources', 'all_multilayered_resources.glb')
     filepath = os.path.normpath(os.path.join(script_directory, relative_filepath))
     active_material_index = None
-    mlsetup_default_filepath = Path(os.path.normpath(os.path.join(script_directory, os.path.join('..', 'resources', 'default.mlsetup.json'))))
-    mlsetup_default_depot_filepath = Path(os.path.normpath(os.path.join(cp77_addon_prefs.depotfolder_path, 'default.mlsetup.json')))
+    mlsetup_default_filepath = Path(
+        os.path.normpath(os.path.join(script_directory, os.path.join('..', 'resources', 'default.mlsetup.json')))
+        )
+    mlsetup_default_depot_filepath = Path(
+        os.path.normpath(os.path.join(cp77_addon_prefs.depotfolder_path, 'default.mlsetup.json'))
+        )
     # original_material = None
 
     if not mlsetup_default_depot_filepath.exists():
@@ -329,7 +344,9 @@ def generate_multilayer_material(self,context):
     dummy_material = bpy.data.materials.new(name="Multilayer Default")
     dummy_material['MeshPath'] = filepath[:-4]
     # JATO: we have to set 'm' here to get the original mat-name, otherwise name-incrementing will break reload
-    dummy_material['m'] = {'Name': 'Multilayer Default', 'BaseMaterial': 'engine\\materials\\multilayered.mt', 'GlobalNormal': 'engine\\textures\\editor\\normal.xbm', 'MultilayerMask': 'default.mlmask', 'DiffuseMap': 'None'}
+    dummy_material['m'] = {'Name': 'Multilayer Default', 'BaseMaterial': 'engine\\materials\\multilayered.mt',
+                           'GlobalNormal': 'engine\\textures\\editor\\normal.xbm', 'MultilayerMask': 'default.mlmask',
+                           'DiffuseMap': 'None'}
 
     if os.path.exists(cp77_addon_prefs.depotfolder_path):
         DepotPath = cp77_addon_prefs.depotfolder_path
@@ -349,7 +366,9 @@ def generate_multilayer_material(self,context):
     new_material['DiffuseMap'] = "None"
     new_material['GlobalNormal'] = "engine\\textures\\editor\\normal.xbm"
     new_material['MultilayerMask'] = "default.mlmask"
-    new_material['m'] = {'Name': 'Multilayer Default', 'BaseMaterial': 'engine\\materials\\multilayered.mt', 'GlobalNormal': 'engine\\textures\\editor\\normal.xbm', 'MultilayerMask': 'default.mlmask', 'DiffuseMap': 'None'}
+    new_material['m'] = {'Name': 'Multilayer Default', 'BaseMaterial': 'engine\\materials\\multilayered.mt',
+                         'GlobalNormal': 'engine\\textures\\editor\\normal.xbm', 'MultilayerMask': 'default.mlmask',
+                         'DiffuseMap': 'None'}
 
     # JATO: clear these so user doesnt try exporting to appdata...
     new_material['MeshPath'] = ""
@@ -365,7 +384,8 @@ def generate_multilayer_material(self,context):
     if active_material_index:
         bpy.context.active_object.active_material_index = active_material_index
 
-def generate_mlmask_images(self,context,dimensions=1024):
+
+def generate_mlmask_images(self, context, dimensions=1024):
     if isinstance(dimensions, str):
         dimensions = int(dimensions)
     active_object = context.active_object
@@ -380,11 +400,11 @@ def generate_mlmask_images(self,context,dimensions=1024):
 
     numLayers = 20
     layerBSDF = 1
-    while layerBSDF<=numLayers:
+    while layerBSDF <= numLayers:
         if layerBSDF == 1:
             layerBSDF += 1
             continue
-        socket_name = ("Layer "+str(layerBSDF))
+        socket_name = ("Layer " + str(layerBSDF))
         socket = mlBSDFGroup.inputs.get(socket_name)
         if not socket.is_linked:
             layerBSDF += 1
@@ -392,7 +412,7 @@ def generate_mlmask_images(self,context,dimensions=1024):
 
         layerGroupLink = socket.links[0]
         linkedLayerGroupName = layerGroupLink.from_node.name
-        LayerGroup= nodes[linkedLayerGroupName]
+        LayerGroup = nodes[linkedLayerGroupName]
         # print("# ", socket.name, " linked to Node Group: ", LayerGroup.name)
 
         MaskNode = None
@@ -400,13 +420,13 @@ def generate_mlmask_images(self,context,dimensions=1024):
         socket = LayerGroup.inputs.get(socket_name)
 
         image_name = "ml_default_masksset_" + str(layerBSDF)
-        new_img = bpy.data.images.new(name=image_name,width=dimensions,height=dimensions,alpha=False)
+        new_img = bpy.data.images.new(name=image_name, width=dimensions, height=dimensions, alpha=False)
         new_img.source = 'GENERATED'
         new_img.generated_type = 'BLANK'
         new_img.colorspace_settings.name = 'Non-Color'
 
-        img_node= nodes.new(type='ShaderNodeTexImage')
-        img_node.location = (-1250,800-(400*layerBSDF))
+        img_node = nodes.new(type='ShaderNodeTexImage')
+        img_node.location = (-1250, 800 - (400 * layerBSDF))
         img_node.width = 300
         img_node.image = new_img
 
@@ -422,12 +442,15 @@ def switch_brush_44(brush_name):
         return False
     try:
         identifier = "brushes\\essentials_brushes-mesh_texture.blend\\Brush\\" + brush.name
-        bpy.ops.brush.asset_activate(asset_library_type='ESSENTIALS',asset_library_identifier="",relative_asset_identifier=identifier)
+        bpy.ops.brush.asset_activate(
+            asset_library_type='ESSENTIALS', asset_library_identifier="", relative_asset_identifier=identifier
+            )
         # print(f"Successfully activated: {brush.name}")
         return True
     except Exception as e:
         # print(f"Failed to switch brush: {e}")
         return False
+
 
 def apply_view_mask(self, context):
     if bpy.context.object is None:
@@ -457,6 +480,7 @@ def apply_view_mask(self, context):
     else:
         nodes.remove(nodes.get('Multilayered Mask Output'))
 
+
 def apply_paint_mask(self, context):
     props = bpy.context.scene.cp77_ml_props
     if props.multilayer_index_int == 1:
@@ -472,7 +496,7 @@ def apply_paint_mask(self, context):
 
 
 def load_panel_data(self, context):
-    if bpy.app.version[0]<5:
+    if bpy.app.version[0] < 5:
         return
     if bpy.context.active_object is None:
         return
@@ -519,7 +543,7 @@ def load_panel_data(self, context):
     rouout = LayerGroup.inputs['RoughLevelsOut'].default_value[::]
 
     props.multilayer_has_generated_overrides = False
-    load_mltemplate_and_microblend(self,context,node_group_name=LayerGroup.name)
+    load_mltemplate_and_microblend(self, context, node_group_name=LayerGroup.name)
 
     active_palette = bpy.context.tool_settings.gpencil_paint.palette
     if active_palette:
@@ -549,8 +573,9 @@ def load_panel_data(self, context):
         if elem_rouout is not None:
             props.multilayer_roughout_enum = elem_rouout
 
-def load_mltemplate_and_microblend(self,context,node_group_name):
-    active_object=bpy.context.active_object
+
+def load_mltemplate_and_microblend(self, context, node_group_name):
+    active_object = bpy.context.active_object
     active_material = active_object.active_material
     props = bpy.context.scene.cp77_ml_props
     ts = context.tool_settings
@@ -581,7 +606,7 @@ def load_mltemplate_and_microblend(self,context,node_group_name):
     props.multilayer_has_generated_overrides = False
 
 
-def apply_mltemplate(self,context):
+def apply_mltemplate(self, context):
     ts = context.tool_settings
     props = bpy.context.scene.cp77_ml_props
 
@@ -599,7 +624,7 @@ def apply_mltemplate(self,context):
 
     active_palette = ts.gpencil_paint.palette
     if active_palette != props.last_palette:
-        send_mltemplate_to_shader(self,context)
+        send_mltemplate_to_shader(self, context)
 
         # JATO: after we change mltemplate, get the new overrides and set idx-0 enum which is null/default
         normalstr_enums = get_normalstr_ovrd(None, context)
@@ -625,7 +650,8 @@ def apply_mltemplate(self,context):
 
     props.last_palette = ts.gpencil_paint.palette
 
-def send_mltemplate_to_shader(self,context):
+
+def send_mltemplate_to_shader(self, context):
     ts = context.tool_settings
     palette = ts.gpencil_paint.palette
     if not palette:
@@ -653,14 +679,15 @@ def send_mltemplate_to_shader(self,context):
     return {'FINISHED'}
 
 
-def microblend_filter(self,object):
+def microblend_filter(self, object):
     props = bpy.context.scene.cp77_ml_props
     if props.multilayer_microblend_filter_bool == False:
         return True
     abs_path = bpy.path.abspath(object.filepath)
     return "microblend" in abs_path.lower()
 
-def apply_microblend_mlsetup(self,context):
+
+def apply_microblend_mlsetup(self, context):
     props = bpy.context.scene.cp77_ml_props
     if props.last_multilayer_index != props.multilayer_index_int:
         return
@@ -672,17 +699,22 @@ def apply_microblend_mlsetup(self,context):
 def get_normalstr_ovrd(self, context):
     return _get_cached_palette_enum(context, 'NormalStrengthList')
 
+
 def get_metalin_ovrd(self, context):
     return _get_cached_palette_enum(context, 'MetalLevelsInList')
+
 
 def get_metalout_ovrd(self, context):
     return _get_cached_palette_enum(context, 'MetalLevelsOutList')
 
+
 def get_roughin_ovrd(self, context):
     return _get_cached_palette_enum(context, 'RoughLevelsInList')
 
+
 def get_roughout_ovrd(self, context):
     return _get_cached_palette_enum(context, 'RoughLevelsOutList')
+
 
 def apply_normalstr_ovrd(self, context):
     props = bpy.context.scene.cp77_ml_props
@@ -692,6 +724,7 @@ def apply_normalstr_ovrd(self, context):
     if LayerGroup:
         LayerGroup.inputs['NormalStrength'].default_value = float(props.multilayer_normalstr_enum)
 
+
 def apply_metalin_ovrd(self, context):
     props = bpy.context.scene.cp77_ml_props
     if props.last_multilayer_index != props.multilayer_index_int:
@@ -699,6 +732,7 @@ def apply_metalin_ovrd(self, context):
     LayerGroup = get_layernode_by_socket()
     if LayerGroup:
         _apply_override_vector(LayerGroup, 'MetalLevelsIn', props.multilayer_metalin_enum)
+
 
 def apply_metalout_ovrd(self, context):
     props = bpy.context.scene.cp77_ml_props
@@ -708,6 +742,7 @@ def apply_metalout_ovrd(self, context):
     if LayerGroup:
         _apply_override_vector(LayerGroup, 'MetalLevelsOut', props.multilayer_metalout_enum)
 
+
 def apply_roughin_ovrd(self, context):
     props = bpy.context.scene.cp77_ml_props
     if props.last_multilayer_index != props.multilayer_index_int:
@@ -715,6 +750,7 @@ def apply_roughin_ovrd(self, context):
     LayerGroup = get_layernode_by_socket()
     if LayerGroup:
         _apply_override_vector(LayerGroup, 'RoughLevelsIn', props.multilayer_roughin_enum)
+
 
 def apply_roughout_ovrd(self, context):
     props = bpy.context.scene.cp77_ml_props
@@ -725,7 +761,7 @@ def apply_roughout_ovrd(self, context):
     if LayerGroup:
         _apply_override_vector(LayerGroup, 'RoughLevelsOut', props.multilayer_roughout_enum)
 
-    #JATO: important we do this here because this is the last "update" func to trigger
+    # JATO: important we do this here because this is the last "update" func to trigger
     props.last_multilayer_index = props.multilayer_index_int
 
 
@@ -750,7 +786,7 @@ class CP77_PT_MaterialTools(Panel):
         scene = context.scene
         my_props = scene.cp77_ml_props
         props = context.scene.cp77_panel_props
-        vers=bpy.app.version
+        vers = bpy.app.version
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
 
         if not cp77_addon_prefs.show_modtools:
@@ -769,7 +805,7 @@ class CP77_PT_MaterialTools(Panel):
             box1.label(text="No active material", icon="MATERIAL")
 
         col = box1.column()
-        if vers[0]<5:
+        if vers[0] < 5:
             row_error = col.row()
             row_error.alert = True
             row_error.label(text='Upgrade to Blender 5 for Multilayer features', icon='ERROR')
@@ -800,7 +836,7 @@ class CP77_PT_MaterialTools(Panel):
         if (my_props.multilayer_object_bool == False) or (not active_object):
             row_error = col.row()
             row_error.alignment = 'CENTER'
-            row_error.scale_y= 3
+            row_error.scale_y = 3
             row_error.label(text='Select a Multilayer object to access Multilayer Editing')
             return
         if not active_palette:
@@ -814,7 +850,7 @@ class CP77_PT_MaterialTools(Panel):
         if 'MLTemplatePath' not in active_palette:
             row_error = col.row()
             row_error.alignment = 'CENTER'
-            row_error.scale_y= 3
+            row_error.scale_y = 3
             row_error.alert = True
             row_error.label(text='Active Palette does not have MLTemplate Data', icon='ERROR')
             return
@@ -829,7 +865,9 @@ class CP77_PT_MaterialTools(Panel):
             row_mltemplate_split.prop(my_props, "multilayer_index_int", text="")
             return
         elif my_props.multilayer_has_linked_layer:
-            row_mltemplate_split.prop_search(my_props, "multilayer_palette_string", bpy.data, "palettes", text="", icon="NODE_MATERIAL")
+            row_mltemplate_split.prop_search(
+                my_props, "multilayer_palette_string", bpy.data, "palettes", text="", icon="NODE_MATERIAL"
+                )
             row_mltemplate_split.prop(my_props, "multilayer_index_int", text="")
         else:
             row_mltemplate_split.label(text=f"Empty Layer - No link detected", icon='ERROR')
@@ -847,7 +885,7 @@ class CP77_PT_MaterialTools(Panel):
         row_mb.scale_x = 1.25
         row_mb.scale_y = 1.25
         row_mb.prop(my_props, "multilayer_microblend_pointer", text="", icon="NODE_TEXTURE")
-        row_mb.prop(my_props, "multilayer_microblend_filter_bool", text="", icon="VIEWZOOM",toggle=True)
+        row_mb.prop(my_props, "multilayer_microblend_filter_bool", text="", icon="VIEWZOOM", toggle=True)
 
         row = col.row()
         row.scale_y = 1.5
@@ -883,23 +921,24 @@ class CP77_PT_MaterialTools(Panel):
         row_normalstr_split.prop(my_props, "multilayer_normalstr_enum", text="")
 
         node = active_object.active_material.node_tree.nodes.get(my_props.multilayer_layergroup_string)
-        col.prop(node.inputs['MatTile'],"default_value",text="MatTile")
-        col.prop(node.inputs['OffsetU'],"default_value",text="OffsetU")
-        col.prop(node.inputs['OffsetV'],"default_value",text="OffsetV")
-        col.prop(node.inputs['MicroblendNormalStrength'],"default_value",text="MicroblendNormalStrength")
-        col.prop(node.inputs['MicroblendContrast'],"default_value",text="MicroblendContrast")
-        col.prop(node.inputs['MbTile'],"default_value",text="MbTile")
-        col.prop(node.inputs['MicroblendOffsetU'],"default_value",text="MicroblendOffsetU")
-        col.prop(node.inputs['MicroblendOffsetV'],"default_value",text="MicroblendOffsetV")
-        col.prop(node.inputs['Opacity'],"default_value",text="Opacity")
+        col.prop(node.inputs['MatTile'], "default_value", text="MatTile")
+        col.prop(node.inputs['OffsetU'], "default_value", text="OffsetU")
+        col.prop(node.inputs['OffsetV'], "default_value", text="OffsetV")
+        col.prop(node.inputs['MicroblendNormalStrength'], "default_value", text="MicroblendNormalStrength")
+        col.prop(node.inputs['MicroblendContrast'], "default_value", text="MicroblendContrast")
+        col.prop(node.inputs['MbTile'], "default_value", text="MbTile")
+        col.prop(node.inputs['MicroblendOffsetU'], "default_value", text="MicroblendOffsetU")
+        col.prop(node.inputs['MicroblendOffsetV'], "default_value", text="MicroblendOffsetV")
+        col.prop(node.inputs['Opacity'], "default_value", text="Opacity")
 
         row_mltemp = col.row()
         row_mltemp.label(text=(str(active_palette['MLTemplatePath'])).split(".")[0])
-        row_mltemp.active=False
+        row_mltemp.active = False
 
         if my_props.multilayer_paint_mask_bool == False:
             palette_box = box3.column()
-            palette_box.template_palette(ts.gpencil_paint,"palette",color=True)
+            palette_box.template_palette(ts.gpencil_paint, "palette", color=True)
+
 
 class CP77MlSetupGenerateOverrides(Operator):
     bl_idname = "generate_layer_overrides.mlsetup"
@@ -923,13 +962,16 @@ class CP77MlSetupGenerateOverrides(Operator):
         LayerGroup = get_layernode_by_socket()
         if LayerGroup == None:
             props.multilayer_has_linked_layer = False
-            self.report({'WARNING'}, f'A valid Multilayered node group was not found on Layer {props.multilayer_index_int}.')
+            self.report(
+                    {'WARNING'}, f'A valid Multilayered node group was not found on Layer {props.multilayer_index_int}.'
+                    )
             return {'FINISHED'}
         props.multilayer_has_linked_layer = True
 
-        load_mltemplate_and_microblend(self,context,node_group_name=LayerGroup.name)
+        load_mltemplate_and_microblend(self, context, node_group_name=LayerGroup.name)
 
         return {'FINISHED'}
+
 
 class CP77MlSetupGenerateOverridesDisconnected(Operator):
     bl_idname = "generate_layer_overrides_disconnected.mlsetup"
@@ -955,13 +997,16 @@ class CP77MlSetupGenerateOverridesDisconnected(Operator):
         LayerGroup = get_layernode_by_socket()
         if LayerGroup == None:
             props.multilayer_has_linked_layer = False
-            self.report({'WARNING'}, f'A valid Multilayered node group was not found on Layer {props.multilayer_index_int}.')
+            self.report(
+                    {'WARNING'}, f'A valid Multilayered node group was not found on Layer {props.multilayer_index_int}.'
+                    )
             return {'FINISHED'}
         props.multilayer_has_linked_layer = True
 
-        load_mltemplate_and_microblend(self,context,node_group_name=LayerGroup.name)
+        load_mltemplate_and_microblend(self, context, node_group_name=LayerGroup.name)
 
         return {'FINISHED'}
+
 
 class CP77MlSetupRefreshOverrides(Operator):
     bl_idname = "refresh_layer.mlsetup"
@@ -974,6 +1019,7 @@ class CP77MlSetupRefreshOverrides(Operator):
 
         return {'FINISHED'}
 
+
 class CP77MlSetupEnterTexturePaint(Operator):
     bl_idname = "enter_texture_paint.mlsetup"
     bl_label = "Paint Mask"
@@ -983,7 +1029,7 @@ class CP77MlSetupEnterTexturePaint(Operator):
         if LayerGroup == None:
             return
 
-        active_object=bpy.context.active_object
+        active_object = bpy.context.active_object
         active_material = active_object.active_material
         nodes = active_material.node_tree.nodes
         MaskNode = None
@@ -995,7 +1041,7 @@ class CP77MlSetupEnterTexturePaint(Operator):
             return {'CANCELLED'}
         maskNodeLink = socket.links[0]
         linkedMaskNodeName = maskNodeLink.from_node.name
-        MaskNode=nodes[linkedMaskNodeName]
+        MaskNode = nodes[linkedMaskNodeName]
         # print(layer_index, " | ", MaskNode.name)
 
         nodes.active = MaskNode
@@ -1003,6 +1049,7 @@ class CP77MlSetupEnterTexturePaint(Operator):
         bpy.ops.object.mode_set(mode='TEXTURE_PAINT')
 
         return {'FINISHED'}
+
 
 # JATO: unused operator - is there any situation where user would want to import suzanne?
 class CP77MlSetupCreateMultilayerObject(Operator):
@@ -1012,17 +1059,18 @@ class CP77MlSetupCreateMultilayerObject(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     dimensions: bpy.props.EnumProperty(
-        name="Mask Resolution",
-        description="Sets the dimensions of the generated mask images in width and height",
-        items=[('128', "128", "128 x 128"),
-               ('256', "256", "256 x 256"),
-               ('512', "512", "512 x 512"),
-               ('1024', "1024", "1024 x 1024"),
-               ('2048', "2048", "2048 x 2048"),
-               ('4096', "4096 (recommended to downscale before export)", "4096 x 4096 (recommended to downscale before export)")
-        ],
-        default='1024'
-        )
+            name="Mask Resolution",
+            description="Sets the dimensions of the generated mask images in width and height",
+            items=[('128', "128", "128 x 128"),
+                   ('256', "256", "256 x 256"),
+                   ('512', "512", "512 x 512"),
+                   ('1024', "1024", "1024 x 1024"),
+                   ('2048', "2048", "2048 x 2048"),
+                   ('4096', "4096 (recommended to downscale before export)",
+                    "4096 x 4096 (recommended to downscale before export)")
+                   ],
+            default='1024'
+            )
 
     def execute(self, context):
         script_directory = os.path.dirname(os.path.abspath(__file__))
@@ -1031,16 +1079,17 @@ class CP77MlSetupCreateMultilayerObject(Operator):
 
         CP77GLBimport(with_materials=True, remap_depot=True, scripting=True, filepath=filepath)
 
-        generate_mlmask_images(self,context,self.dimensions)
+        generate_mlmask_images(self, context, self.dimensions)
 
         active_object = context.active_object
         active_material = active_object.active_material
 
-        #JATO: clear these so user doesnt try exporting to appdata...
+        # JATO: clear these so user doesnt try exporting to appdata...
         active_material['MeshPath'] = ""
         active_material['ProjPath'] = ""
 
         return {'FINISHED'}
+
 
 class CP77MlSetupCreateMultilayerMaterial(Operator):
     bl_idname = "create_multilayer_material.mlsetup"
@@ -1049,17 +1098,18 @@ class CP77MlSetupCreateMultilayerMaterial(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     dimensions: bpy.props.EnumProperty(
-        name="Mask Resolution",
-        description="Sets the dimensions of the generated mask images in width and height",
-        items=[('128', "128", "128 x 128"),
-               ('256', "256", "256 x 256"),
-               ('512', "512", "512 x 512"),
-               ('1024', "1024", "1024 x 1024"),
-               ('2048', "2048", "2048 x 2048"),
-               ('4096', "4096 (recommended to downscale before export)", "4096 x 4096 (recommended to downscale before export)")
-        ],
-        default='1024'
-        )
+            name="Mask Resolution",
+            description="Sets the dimensions of the generated mask images in width and height",
+            items=[('128', "128", "128 x 128"),
+                   ('256', "256", "256 x 256"),
+                   ('512', "512", "512 x 512"),
+                   ('1024', "1024", "1024 x 1024"),
+                   ('2048', "2048", "2048 x 2048"),
+                   ('4096', "4096 (recommended to downscale before export)",
+                    "4096 x 4096 (recommended to downscale before export)")
+                   ],
+            default='1024'
+            )
 
     def execute(self, context):
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
@@ -1067,13 +1117,14 @@ class CP77MlSetupCreateMultilayerMaterial(Operator):
             self.report({'ERROR'}, "This functionality requires you to set your Depot Path within add-on Preferences")
             return {'CANCELLED'}
 
-        generate_multilayer_material(self,context)
+        generate_multilayer_material(self, context)
 
-        generate_mlmask_images(self,context,self.dimensions)
+        generate_mlmask_images(self, context, self.dimensions)
 
         bpy.ops.refresh_layer.mlsetup()
 
         return {'FINISHED'}
+
 
 class CP77MlSetupRelocateMesh(Operator):
     bl_idname = "relocate_mesh.mlsetup"
@@ -1082,23 +1133,23 @@ class CP77MlSetupRelocateMesh(Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     filepath: StringProperty(
-        name="File Path",
-        description="Path to the file",
-        subtype='FILE_PATH'
-    )
+            name="File Path",
+            description="Path to the file",
+            subtype='FILE_PATH'
+            )
 
     filter_glob: StringProperty(
-        default="*.glb",
-        options={'HIDDEN'}
-    )
+            default="*.glb",
+            options={'HIDDEN'}
+            )
 
     def execute(self, context):
         active_object = context.active_object
         active_material = active_object.active_material
 
-        MeshPath= self.filepath[:-4]
-        before,mid,after=MeshPath.partition('source\\raw\\'.replace('\\',os.sep))
-        ProjPath=before+mid
+        MeshPath = self.filepath[:-4]
+        before, mid, after = MeshPath.partition('source\\raw\\'.replace('\\', os.sep))
+        ProjPath = before + mid
 
         active_material['MeshPath'] = MeshPath
         active_material['ProjPath'] = ProjPath
@@ -1119,37 +1170,58 @@ class CP77MlSetupRelocateMesh(Operator):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
+
 class CP77MlPropertyGroup(bpy.types.PropertyGroup):
-    multilayer_index_int: bpy.props.IntProperty(name="Layer",default=1,min=1,max=20,update=load_panel_data)
-    multilayer_object_bool: bpy.props.BoolProperty(name="",default=False)
-    multilayer_overrides_disconnected_bool: bpy.props.BoolProperty(name="Toggle Override Method",default=False)
-    multilayer_view_mask_bool: bpy.props.BoolProperty(name="View Mask",default=False,update=apply_view_mask)
-    multilayer_paint_mask_bool: bpy.props.BoolProperty(name="Paint Mask",default=False,update=apply_paint_mask)
-    multilayer_paint_mask_enable_bool: bpy.props.BoolProperty(name="",default=False)
-    multilayer_has_linked_layer: bpy.props.BoolProperty(name="",default=True)
-    multilayer_has_generated_overrides: bpy.props.BoolProperty(name="",default=False)
+    multilayer_index_int: bpy.props.IntProperty(name="Layer", default=1, min=1, max=20, update=load_panel_data)
+    multilayer_object_bool: bpy.props.BoolProperty(name="", default=False)
+    multilayer_overrides_disconnected_bool: bpy.props.BoolProperty(name="Toggle Override Method", default=False)
+    multilayer_view_mask_bool: bpy.props.BoolProperty(name="View Mask", default=False, update=apply_view_mask)
+    multilayer_paint_mask_bool: bpy.props.BoolProperty(name="Paint Mask", default=False, update=apply_paint_mask)
+    multilayer_paint_mask_enable_bool: bpy.props.BoolProperty(name="", default=False)
+    multilayer_has_linked_layer: bpy.props.BoolProperty(name="", default=True)
+    multilayer_has_generated_overrides: bpy.props.BoolProperty(name="", default=False)
 
-    multilayer_palette_string: bpy.props.StringProperty(name="MLTEMPLATE",update=apply_mltemplate)
-    multilayer_normalstr_enum: bpy.props.EnumProperty(name="NormalStrength",description="NormalStrength",items=get_normalstr_ovrd,update=apply_normalstr_ovrd,default=0)
-    multilayer_metalin_enum: bpy.props.EnumProperty(name="MetalLevelsIn",description="MetalLevelsIn",items=get_metalin_ovrd,update=apply_metalin_ovrd,default=0)
-    multilayer_metalout_enum: bpy.props.EnumProperty(name="MetalLevelsOut",description="MetalLevelsOut",items=get_metalout_ovrd,update=apply_metalout_ovrd,default=0)
-    multilayer_roughin_enum: bpy.props.EnumProperty(name="RoughLevelsIn",description="RoughLevelsIn",items=get_roughin_ovrd,update=apply_roughin_ovrd,default=0)
-    multilayer_roughout_enum: bpy.props.EnumProperty(name="RoughLevelsOut",description="RoughLevelsOut",items=get_roughout_ovrd,update=apply_roughout_ovrd,default=0)
+    multilayer_palette_string: bpy.props.StringProperty(name="MLTEMPLATE", update=apply_mltemplate)
+    multilayer_normalstr_enum: bpy.props.EnumProperty(
+        name="NormalStrength", description="NormalStrength", items=get_normalstr_ovrd, update=apply_normalstr_ovrd,
+        default=0
+        )
+    multilayer_metalin_enum: bpy.props.EnumProperty(
+        name="MetalLevelsIn", description="MetalLevelsIn", items=get_metalin_ovrd, update=apply_metalin_ovrd, default=0
+        )
+    multilayer_metalout_enum: bpy.props.EnumProperty(
+        name="MetalLevelsOut", description="MetalLevelsOut", items=get_metalout_ovrd, update=apply_metalout_ovrd,
+        default=0
+        )
+    multilayer_roughin_enum: bpy.props.EnumProperty(
+        name="RoughLevelsIn", description="RoughLevelsIn", items=get_roughin_ovrd, update=apply_roughin_ovrd, default=0
+        )
+    multilayer_roughout_enum: bpy.props.EnumProperty(
+        name="RoughLevelsOut", description="RoughLevelsOut", items=get_roughout_ovrd, update=apply_roughout_ovrd,
+        default=0
+        )
 
-    multilayer_microblend_pointer: bpy.props.PointerProperty(type=bpy.types.Image,name="Microblend",update=apply_microblend_mlsetup,poll=microblend_filter)
-    multilayer_microblend_filter_bool: bpy.props.BoolProperty(name="Microblend Filter",description="Filters available images for filepaths containing 'microblend'",default=True,)
+    multilayer_microblend_pointer: bpy.props.PointerProperty(
+        type=bpy.types.Image, name="Microblend", update=apply_microblend_mlsetup, poll=microblend_filter
+        )
+    multilayer_microblend_filter_bool: bpy.props.BoolProperty(
+        name="Microblend Filter", description="Filters available images for filepaths containing 'microblend'",
+        default=True, )
 
-    multilayer_layergroup_string: bpy.props.StringProperty(name="",default="")
+    multilayer_layergroup_string: bpy.props.StringProperty(name="", default="")
 
     last_palette: bpy.props.PointerProperty(type=bpy.types.Palette)
-    last_palette_color: bpy.props.FloatVectorProperty(name="r",subtype='COLOR',default=(1.0, 1.0, 1.0),min=0.0, max=1.0)
+    last_palette_color: bpy.props.FloatVectorProperty(
+        name="r", subtype='COLOR', default=(1.0, 1.0, 1.0), min=0.0, max=1.0
+        )
     last_paint_brush: bpy.props.StringProperty(name="")
     last_active_object: bpy.props.PointerProperty(type=bpy.types.Object)
     last_active_material: bpy.props.PointerProperty(type=bpy.types.Material)
-    last_multilayer_index: bpy.props.IntProperty(name="",default=0)
+    last_multilayer_index: bpy.props.IntProperty(name="", default=0)
 
 
 operators, other_classes = get_classes(sys.modules[__name__])
+
 
 def register_materialtools():
     for cls in operators:
@@ -1165,6 +1237,7 @@ def register_materialtools():
     bpy.app.handlers.undo_post.append(trigger_update_on_undo)
     bpy.app.handlers.redo_post.append(trigger_update_on_undo)
     bpy.types.Scene.cp77_ml_props = bpy.props.PointerProperty(type=CP77MlPropertyGroup)
+
 
 def unregister_materialtools():
     for cls in reversed(other_classes):

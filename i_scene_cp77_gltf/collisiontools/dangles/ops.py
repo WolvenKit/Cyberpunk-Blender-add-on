@@ -1,14 +1,65 @@
-import bpy
 import time
-from bpy.props import StringProperty, IntProperty
+
+import bpy
+from bpy.props import IntProperty, StringProperty
 from bpy_extras.io_utils import ExportHelper, ImportHelper
-from .sim import core, solvers
+
 from . import draw, io
-from .ui import get_active_rig, get_active_dangle_node, get_active_chain
+from .sim import core, solvers, spaces
+from .ui import get_active_chain, get_active_dangle_node, get_active_rig
+
+try:
+    from ...main.animation_api import assign_action_with_slot
+except (ImportError, ValueError):
+    def assign_action_with_slot(id_data, action):
+        animation_data = id_data.animation_data_create()
+        animation_data.action = action
+        slots = getattr(action, "slots", None)
+        if slots is None:
+            return animation_data
+        if len(slots):
+            slot = slots[0]
+        else:
+            try:
+                slot = slots.new(id_type=id_data.id_type, name=id_data.name)
+            except TypeError:
+                slot = slots.new(id_type=id_data.id_type)
+        if hasattr(animation_data, "action_slot"):
+            animation_data.action_slot = slot
+        return animation_data
 
 
 SUPPORTED_PREVIEW_SOLVERS = {'DYNG', 'PBD', 'SPRING', 'PENDULUM'}
 _ACTIVE_PREVIEW_SESSIONS = {}
+
+
+def _runtime_target_errors(rig, require_state=True):
+    errors = list(spaces.armature_space_errors(rig))
+    if require_state:
+        missing = spaces.unresolved_state_bones(
+            rig, rig.dangle_state, executable_only=True
+        )
+        if missing:
+            names = []
+            seen = set()
+            for _role, name in missing:
+                if name not in seen:
+                    seen.add(name)
+                    names.append(name)
+            preview = ", ".join(names[:10])
+            suffix = f" (+{len(names) - 10} more)" if len(names) > 10 else ""
+            errors.append(
+                f"MetaRig is missing required Dangle bones: {preview}{suffix}"
+            )
+    return errors
+
+
+def _report_target_errors(operator, rig, require_state=True):
+    errors = _runtime_target_errors(rig, require_state=require_state)
+    if not errors:
+        return False
+    operator.report({'ERROR'}, errors[0])
+    return True
 
 
 def _preview_session_key(rig):
@@ -58,6 +109,8 @@ class DANGLE_OT_enable_rig(bpy.types.Operator):
 
     def execute(self, context):
         if context.active_object and context.active_object.type == 'ARMATURE':
+            if _report_target_errors(self, context.active_object, require_state=False):
+                return {'CANCELLED'}
             context.active_object.dangle_state.is_dangle_rig = True
             for i, obj in enumerate(context.scene.objects):
                 if obj == context.active_object:
@@ -140,6 +193,8 @@ class DANGLE_OT_preview_play(bpy.types.Operator):
         if not rig:
             return {'CANCELLED'}
         state = rig.dangle_state
+        if _report_target_errors(self, rig):
+            return {'CANCELLED'}
         if not state.dangle_nodes and not state.drag_nodes:
             self.report({'WARNING'}, "No Dangle or Drag nodes imported.")
             return {'CANCELLED'}
@@ -162,7 +217,13 @@ class DANGLE_OT_preview_play(bpy.types.Operator):
         self._closed = False
         self._rig = rig
         self._cache_key = f"{rig.as_pointer()}"
-        self._simulator = core.DyngSimulator(rig)
+        try:
+            self._simulator = core.DyngSimulator(rig)
+        except Exception as exc:
+            self.report({'ERROR'}, str(exc))
+            self._rig = None
+            self._cache_key = None
+            return {'CANCELLED'}
         self._last_time = time.time()
 
         wm = context.window_manager
@@ -241,6 +302,8 @@ class DANGLE_OT_bake_to_keyframes(bpy.types.Operator):
         if not rig:
             return {'CANCELLED'}
         st = rig.dangle_state
+        if _report_target_errors(self, rig):
+            return {'CANCELLED'}
         if not st.dangle_nodes and not st.drag_nodes:
             self.report({'WARNING'}, "No Dangle or Drag nodes imported.")
             return {'CANCELLED'}
@@ -259,21 +322,24 @@ class DANGLE_OT_bake_to_keyframes(bpy.types.Operator):
 
         scene.frame_set(scene.frame_start)
         context.view_layer.update()
-        simulator = core.DyngSimulator(rig)
+        try:
+            simulator = core.DyngSimulator(rig)
+        except Exception as exc:
+            scene.frame_set(original_frame)
+            self.report({'ERROR'}, str(exc))
+            return {'CANCELLED'}
         dt = (1.0 / scene.render.fps) * scene.render.fps_base
 
-        if not rig.animation_data:
-            rig.animation_data_create()
         action = bpy.data.actions.new(name=f"{rig.name}_DangleBake")
-        rig.animation_data.action = action
+        assign_action_with_slot(rig, action)
 
         for frame in range(scene.frame_start, scene.frame_end + 1):
             scene.frame_set(frame)
             solvers.update_simulation(simulator, dt)
 
             keyed_bones = {
-                particle.bone_name
-                for index, particle in enumerate(simulator.particles)
+                simulator.bone_names[index]
+                for index in range(simulator.num_particles)
                 if simulator.active_mask[index]
             }
             if getattr(simulator, 'link_idx_a', None) is not None:
@@ -282,7 +348,9 @@ class DANGLE_OT_bake_to_keyframes(bpy.types.Operator):
                     for index in simulator.link_idx_a
                 )
             keyed_bones.update(
-                drag.bone_name for drag in st.drag_nodes if drag.bone_name
+                simulator.bone_names[int(index)]
+                for index in getattr(simulator.drag_post, 'drag_indices', ())
+                if 0 <= int(index) < len(simulator.bone_names)
             )
             for bone_name in keyed_bones:
                 pose_bone = rig.pose.bones.get(bone_name)
@@ -591,6 +659,14 @@ class DANGLE_OT_copy_chain(bpy.types.Operator):
             new_p.spring_pull_force_origin_ls = src_p.spring_pull_force_origin_ls
             new_p.spring_projection_type = src_p.spring_projection_type
             new_p.spring_collision_radius = src_p.spring_collision_radius
+            new_p.pendulum_simulation_fps = src_p.pendulum_simulation_fps
+            new_p.pendulum_constraint_type = src_p.pendulum_constraint_type
+            new_p.pendulum_half_aperture_angle = src_p.pendulum_half_aperture_angle
+            new_p.pendulum_constraint_orientation = src_p.pendulum_constraint_orientation
+            new_p.pendulum_pull_force_direction_ls = src_p.pendulum_pull_force_direction_ls
+            new_p.pendulum_projection_type = src_p.pendulum_projection_type
+            new_p.pendulum_collision_radius = src_p.pendulum_collision_radius
+            new_p.pendulum_collision_height = src_p.pendulum_collision_height
             
             for src_link in src_p.link_constraints:
                 new_link = new_p.link_constraints.add()

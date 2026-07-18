@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Dict, List, Optional
+from dataclasses import dataclass
+from typing import Optional
 
 import numpy as np
+
+from ..jsontool import JSONTool
+from ..main.datashards import RigData
 
 NUM_ENVELOPE_TRACKS = 13
 NUM_ENVELOPE_WEIGHTS = 6  # face, upper, lower, lipsync, JALI_jaw, JALI_lips
@@ -49,39 +50,7 @@ CORR_INFL_BOTH = 2
 CORR_INFL_SIMPLE = 3
 
 
-# Rig data
-
-@dataclass
-class RigData:
-    """Parsed animRig — bone names, hierarchy, reference pose, tracks."""
-
-    # Bone table
-    bone_names: np.ndarray  # [num_bones]  object (str)
-    bone_parents: np.ndarray  # [num_bones]  int16  (-1 = root)
-    num_bones: int
-
-    # Reference pose — bone-space (boneTransforms / LS rest pose)
-    ref_quats: np.ndarray  # [num_bones, 4] float32  xyzw
-    ref_trans: np.ndarray  # [num_bones, 3] float32  xyz
-    ref_scales: np.ndarray  # [num_bones, 3] float32  xyz
-
-    # Track table (facial float tracks come from here)
-    track_names: np.ndarray  # [num_tracks]  object (str)
-    num_tracks: int
-
-    # LOD bone split points (facial LOD thresholds)
-    lod_start_indices: np.ndarray  # [num_lod_groups] int32
-
-    # Convenience: name → index maps
-    _bone_index_map: Dict[str, int] = field(default_factory=dict, repr=False)
-    _track_index_map: Dict[str, int] = field(default_factory=dict, repr=False)
-
-    def bone_index(self, name: str) -> int:
-        return self._bone_index_map[name]
-
-    def track_index(self, name: str) -> int:
-        return self._track_index_map[name]
-
+# Canonical rig data is defined in main.datashards.
 
 # Per-part pose data
 
@@ -508,71 +477,70 @@ def _parse_facial_part(
 
 # Public loaders
 
-def load_rig(path: str | Path) -> RigData:
-    """
-    Parse a WolvenKit-exported rig JSON into RigData.
-
-    Parameters
-    """
-    with open(path, "r", encoding="utf-8") as f:
-        raw = json.load(f)
+def load_rig(path: str) -> RigData:
+    """Load a WolvenKit rig JSON through the canonical JSONTool pipeline."""
+    raw = JSONTool.jsonload(path)
+    if raw is None:
+        raise FileNotFoundError(path)
 
     rc = raw["Data"]["RootChunk"]
+    bone_names = [_cname(value) for value in rc.get("boneNames", ())]
+    track_names = [_cname(value) for value in rc.get("trackNames", ())]
 
-    # Bone names & parents
-    bone_names_raw = rc["boneNames"]
-    num_bones = len(bone_names_raw)
-    bone_names = np.array([_cname(b) for b in bone_names_raw], dtype=object)
-    bone_parents = np.array(rc["boneParentIndexes"], dtype=np.int16)
+    transforms = rc.get("boneTransforms") or rc.get("aPoseLS") or ()
+    num_bones = len(bone_names)
+    if len(transforms) != num_bones:
+        raise ValueError(
+            f"Rig transform count {len(transforms)} does not match "
+            f"bone count {num_bones}"
+        )
 
-    # Reference pose from boneTransforms (bone-space QsTransform)
-    bt = rc["boneTransforms"]
-    ref_quats = np.empty((num_bones, 4), dtype=np.float32)
-    ref_trans = np.empty((num_bones, 3), dtype=np.float32)
-    ref_scales = np.empty((num_bones, 3), dtype=np.float32)
-    for i, xform in enumerate(bt):
-        r = xform["Rotation"]
-        ref_quats[i] = (r["i"], r["j"], r["k"], r["r"])
-        t = xform["Translation"]
-        ref_trans[i] = (t["X"], t["Y"], t["Z"])
-        s = xform["Scale"]
-        ref_scales[i] = (s["X"], s["Y"], s["Z"])
-
-    # Track names
-    track_names_raw = rc["trackNames"]
-    num_tracks = len(track_names_raw)
-    track_names = np.array([_cname(t) for t in track_names_raw], dtype=object)
-
-    # LOD split indices
-    lod_starts = np.array(rc.get("levelOfDetailStartIndices", []), dtype=np.int32)
-
-    # Build lookup maps
-    bone_index_map = {n: i for i, n in enumerate(bone_names)}
-    track_index_map = {n: i for i, n in enumerate(track_names)}
+    ls_q = np.empty((num_bones, 4), dtype=np.float32)
+    ls_t = np.empty((num_bones, 3), dtype=np.float32)
+    ls_s = np.empty((num_bones, 3), dtype=np.float32)
+    for index, transform in enumerate(transforms):
+        rotation = transform["Rotation"]
+        translation = transform["Translation"]
+        scale = transform["Scale"]
+        ls_q[index] = (rotation["i"], rotation["j"], rotation["k"], rotation["r"])
+        ls_t[index] = (translation["X"], translation["Y"], translation["Z"])
+        ls_s[index] = (scale["X"], scale["Y"], scale["Z"])
 
     return RigData(
-            bone_names=bone_names,
-            bone_parents=bone_parents,
-            num_bones=num_bones,
-            ref_quats=ref_quats,
-            ref_trans=ref_trans,
-            ref_scales=ref_scales,
-            track_names=track_names,
-            num_tracks=num_tracks,
-            lod_start_indices=lod_starts,
-            _bone_index_map=bone_index_map,
-            _track_index_map=track_index_map,
-            )
+        num_bones=num_bones,
+        parent_indices=np.asarray(rc.get("boneParentIndexes", ()), dtype=np.int16),
+        bone_names=bone_names,
+        track_names=track_names,
+        ls_q=ls_q,
+        ls_t=ls_t,
+        ls_s=ls_s,
+        rig_name=str(rc.get("name", "")),
+        disable_connect=bool(rc.get("disableConnect", False)),
+        apose_ms=list(rc.get("aPoseMS", ())),
+        apose_ls=list(rc.get("aPoseLS", ())),
+        bone_transforms=list(rc.get("boneTransforms", ())),
+        parts=list(rc.get("parts", ())),
+        track_names_extra=list(rc.get("trackNamesExtra", ())),
+        rig_extra_tracks=list(rc.get("rigExtraTracks", ())),
+        reference_tracks=list(rc.get("referenceTracks", ())),
+        cooking_platform=str(rc.get("cookingPlatform", "")),
+        distance_category_to_lod_map=list(rc.get("distanceCategoryToLodMap", ())),
+        ik_setups=list(rc.get("ikSetups", ())),
+        level_of_detail_start_indices=list(rc.get("levelOfDetailStartIndices", ())),
+        ragdoll_desc=list(rc.get("ragdollDesc", ())),
+        ragdoll_names=list(rc.get("ragdollNames", ())),
+    )
 
 
-def load_facial_setup(path: str | Path, rig: Optional[RigData] = None) -> FacialSetupData:
+def load_facial_setup(path: str, rig: Optional[RigData] = None) -> FacialSetupData:
     """
     Parse a WolvenKit-exported .facialsetup JSON into FacialSetupData.
 
     Parameters
     """
-    with open(path, "r", encoding="utf-8") as f:
-        raw = json.load(f)
+    raw = JSONTool.jsonload(path)
+    if raw is None:
+        raise FileNotFoundError(path)
 
     rc = raw["Data"]["RootChunk"]
 

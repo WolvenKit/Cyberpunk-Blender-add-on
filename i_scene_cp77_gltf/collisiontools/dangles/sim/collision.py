@@ -1,12 +1,14 @@
 
 import math
+
 import numpy as np
-import bpy
-from mathutils import Vector, Quaternion, Matrix
+from mathutils import Matrix, Quaternion, Vector
+
 from . import spaces
 
 
 def _compile_shape(sim, shape):
+    resolved_bone_name = spaces.resolve_bone_name(sim.arm_obj, shape.bone_name)
     ls_quat = Quaternion(shape.rotation_ls_quat)
     ls_mat = ls_quat.to_matrix().to_4x4()
     ls_mat.translation = Vector(shape.offset_ls)
@@ -14,7 +16,7 @@ def _compile_shape(sim, shape):
         ls_mat, sim.arm_obj
     )
 
-    pb = sim.arm_obj.pose.bones.get(shape.bone_name)
+    pb = spaces.resolve_pose_bone(sim.arm_obj, shape.bone_name)
     current_ms = pb.matrix @ adjusted_ls if pb else Matrix.Identity(4)
     extents = np.array((
         shape.x_box_extent, shape.y_box_extent, shape.height_extent
@@ -26,7 +28,8 @@ def _compile_shape(sim, shape):
         capsule_axis_local[2] = 1.0
 
     return {
-        'bone_name': shape.bone_name,
+        'bone_name': resolved_bone_name or shape.bone_name,
+        'authored_bone_name': shape.bone_name,
         'shape_type': shape.shape_type,
         'is_capsule': shape.shape_type == 'CAPSULE',
         'radius': shape.radius,
@@ -92,7 +95,7 @@ def update_collision_transforms_begin(sim, shapes=None):
     shapes = sim.col_shapes if shapes is None else shapes
     for shape in shapes:
         shape['prev_xform_ms'] = shape['cur_xform_ms'].copy()
-        pb = sim.arm_obj.pose.bones.get(shape['bone_name'])
+        pb = spaces.resolve_pose_bone(sim.arm_obj, shape['bone_name'])
         if pb:
             shape['cur_xform_ms'] = pb.matrix @ shape['ls_mat']
 
@@ -100,7 +103,7 @@ def update_collision_transforms_begin(sim, shapes=None):
 def initialize_collision_transforms(sim, shapes=None):
     shapes = sim.col_shapes if shapes is None else shapes
     for shape in shapes:
-        pb = sim.arm_obj.pose.bones.get(shape['bone_name'])
+        pb = spaces.resolve_pose_bone(sim.arm_obj, shape['bone_name'])
         current = (
             pb.matrix @ shape['ls_mat']
             if pb is not None else shape['cur_xform_ms'].copy()

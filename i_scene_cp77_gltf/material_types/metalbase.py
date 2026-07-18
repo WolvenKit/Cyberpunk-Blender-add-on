@@ -1,5 +1,3 @@
-import bpy
-import os
 from ..main.common import *
 
 try:
@@ -62,12 +60,12 @@ class MetalBase:
 
         if image is None:
             image = imageFromRelPath(
-                reference,
-                self.image_format,
-                DepotPath=self.BasePath,
-                ProjPath=self.ProjPath,
-                isNormal=is_normal,
-            )
+                    reference,
+                    self.image_format,
+                    DepotPath=self.BasePath,
+                    ProjPath=self.ProjPath,
+                    isNormal=is_normal,
+                    )
 
         self._image_cache[cache_key] = image
         return image
@@ -146,13 +144,13 @@ class MetalBase:
             return None
 
         nMap = CreateShaderNodeGlobalNormalMap(
-            CurMat,
-            self._normal_reference(Data["Normal"]),
-            -1000,
-            -200,
-            'Normal',
-            self.image_format,
-        )
+                CurMat,
+                self._normal_reference(Data["Normal"]),
+                -1000,
+                -200,
+                'Normal',
+                self.image_format,
+                )
         if layerTileMapping:
             try:
                 CurMat.links.new(layerTileMapping.outputs[0], nMap.inputs[0])
@@ -174,13 +172,13 @@ class MetalBase:
         detail_normal = None
         if "DetailNormal" in Data:
             dNNode = CreateShaderNodeGlobalNormalMap(
-                CurMat,
-                self._normal_reference(Data["DetailNormal"]),
-                -1000,
-                -500,
-                'Normal',
-                self.image_format,
-            )
+                    CurMat,
+                    self._normal_reference(Data["DetailNormal"]),
+                    -1000,
+                    -500,
+                    'Normal',
+                    self.image_format,
+                    )
             if detailMapping:
                 CurMat.links.new(detailMapping.outputs[0], dNNode.inputs[0])
 
@@ -255,7 +253,9 @@ class MetalBase:
 
         if 'GradientMap' in Data:
             gradImg = self._image_from_rel_path(Data["GradientMap"])
-            grad_image_node = create_node(CurMat.nodes, "ShaderNodeTexImage", (-800, 0), label="GradientMap", image=gradImg)
+            grad_image_node = create_node(
+                CurMat.nodes, "ShaderNodeTexImage", (-800, 0), label="GradientMap", image=gradImg
+                )
             color_ramp_node = CreateGradMapRamp(CurMat, grad_image_node)
             CurMat.links.new(mixRGB.outputs[0], color_ramp_node.inputs[0])
             CurMat.links.new(color_ramp_node.outputs[0], pBSDF.inputs['Base Color'])
@@ -338,4 +338,4 @@ used_params = [
     'EmissiveColor',
     'LayerTile',
     'VehicleDamageInfluence',
-]
+    ]

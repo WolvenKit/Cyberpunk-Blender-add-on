@@ -1,9 +1,10 @@
+import base64
+import math
+
 import bpy
 import gpu
-import math
-import base64
-from mathutils import Matrix, Vector
 from gpu_extras.batch import batch_for_shader
+from mathutils import Matrix, Vector
 
 _handle = None
 _shader = None
@@ -56,7 +57,6 @@ def _collect_primitive_lines(shape_type, dims):
         rad = dims[0]
         segments = 8
         rings = 8
-
 
         # Start from the top pole and go down to bottom
         for r in range(rings + 1):
@@ -216,24 +216,26 @@ def _build_visualization_data(context):
                     from . import physx_utils
                     if col.collider_type == 'SPHERE' and col.bone in obj.pose.bones:
                         mat_final = physx_utils.get_bone_world_matrix(obj, col.bone)
-                        local_verts, local_lines = _collect_primitive_lines('SPHERE', (_avatar_visual_radius(obj, col), 0, 0))
-                        
+                        local_verts, local_lines = _collect_primitive_lines(
+                            'SPHERE', (_avatar_visual_radius(obj, col), 0, 0)
+                            )
+
                         for v in local_verts:
                             all_verts.append(mat_final @ Vector(v))
                         for l in local_lines:
                             all_indices.append((l[0] + idx_offset, l[1] + idx_offset))
                         idx_offset += len(local_verts)
-                        
+
                     elif col.collider_type == 'CAPSULE' and col.bone in obj.pose.bones and col.target_bone in obj.pose.bones:
                         p1 = physx_utils.get_bone_world_matrix(obj, col.bone).to_translation()
                         p2 = physx_utils.get_bone_world_matrix(obj, col.target_bone).to_translation()
-                        
+
                         dist = (p2 - p1).length
                         if dist < 0.0001:
                             continue
-                            
+
                         half_h = dist / 2.0
-                        
+
                         r1 = 0.08
                         r2 = 0.08
                         for s_col in obj.cp77_cloth_colliders:
@@ -245,28 +247,28 @@ def _build_visualization_data(context):
                                 elif s_col.bone == col.target_bone:
                                     r2 = _avatar_visual_radius(obj, s_col)
                         avg_radius = max((r1 + r2) / 2.0, _avatar_visual_radius(obj, col))
-                        
+
                         local_verts, local_lines = _collect_primitive_lines('CAPSULE', (avg_radius, half_h))
-                        
+
                         center = (p1 + p2) / 2.0
                         direction = (p2 - p1).normalized()
                         up = Vector((0, 0, 1))
                         if abs(direction.dot(up)) > 0.99:
                             up = Vector((1, 0, 0))
-                            
+
                         x_axis = up.cross(direction).normalized()
                         y_axis = direction.cross(x_axis).normalized()
                         z_axis = direction
-                        
+
                         rot_mat = Matrix((x_axis, y_axis, z_axis)).transposed().to_4x4()
                         cap_mat = Matrix.Translation(center) @ rot_mat
-                        
+
                         for v in local_verts:
                             all_verts.append(cap_mat @ Vector(v))
                         for l in local_lines:
                             all_indices.append((l[0] + idx_offset, l[1] + idx_offset))
                         idx_offset += len(local_verts)
-                        
+
                 except Exception as e:
                     print(f"Error visualizing cloth collider: {e}")
 

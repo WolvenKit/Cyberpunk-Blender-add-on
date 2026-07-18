@@ -1,9 +1,12 @@
 # Import a mlsetup file
 # needs a mesh to apply to so a plane is created
-import bpy
-import os
 import json
+import os
+
+import bpy
+
 from ..material_types.multilayered import Multilayered
+
 
 def import_mlsetup_and_create_plane():
     # Prompt user for .mlsetup.json file
@@ -44,7 +47,7 @@ def import_mlsetup_and_create_plane():
                 plane.data.uv_layers.new(name="UVMap")
             uv_layer = plane.data.uv_layers.active.data
             # Set UVs for a quad (plane)
-            uv_coords = [(0,0), (1,0), (1,1), (0,1)]
+            uv_coords = [(0, 0), (1, 0), (1, 1), (0, 1)]
             for i, loop in enumerate(plane.data.loops):
                 uv_layer[loop.index].uv = uv_coords[i % 4]
 

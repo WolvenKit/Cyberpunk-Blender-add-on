@@ -1,10 +1,10 @@
 import math
+
 import numpy as np
 from mathutils import Matrix, Quaternion, Vector
 
 from . import collision, spaces
 from .frame_time import AverageFrameTimeCalculator
-
 
 _MIN_FRAME_TIME = 0.001
 _MAX_FRAME_TIME = 0.1
@@ -22,10 +22,12 @@ def compile_spring_nodes(sim):
         if end - start != 1:
             continue
         particle = sim.particles[start]
-        pose_bone = sim.arm_obj.pose.bones.get(particle.bone_name)
+        pose_bone = sim.arm_obj.pose.bones.get(sim.bone_names[start])
         parent_index = -1
         if pose_bone is not None and pose_bone.parent is not None:
-            parent_index = sim.bone_idx_map.get(pose_bone.parent.name, -1)
+            parent_index = sim.resolve_bone_index(pose_bone.parent.name)
+            if parent_index is None:
+                parent_index = -1
         sim._spring_nodes[node_index] = {
             'particle_index': start,
             'parent_index': parent_index,
@@ -48,7 +50,9 @@ def spring_node_is_valid(sim, node_index):
     if parent_index < 0 or not sim.active_mask[parent_index]:
         return False
     for shape in sim._node_col_shapes[node_index]:
-        shape_index = sim.bone_idx_map.get(shape['bone_name'], -1)
+        shape_index = sim.resolve_bone_index(shape['bone_name'])
+        if shape_index is None:
+            shape_index = -1
         if shape_index < 0 or not sim.active_mask[shape_index]:
             return False
     return True

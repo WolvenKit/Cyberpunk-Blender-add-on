@@ -1,9 +1,8 @@
 import bpy
-import sys
-from mathutils import Vector, Matrix
-from .dangles.ui import get_active_rig, get_active_dangle_node, get_active_chain
-from . import pxbridge
-from . import dangles
+from mathutils import Matrix, Vector
+
+from . import dangles, pxbridge
+from .dangles.ui import get_active_chain, get_active_dangle_node, get_active_rig
 
 
 def _active_item(collection, index):
@@ -21,10 +20,10 @@ def _draw_dangle_nodes(layout, context, rig):
 
     row = panel.row()
     row.template_list(
-        "DANGLE_UL_dangle_nodes", "",
-        st, "dangle_nodes",
-        st, "active_dangle_node",
-    )
+            "DANGLE_UL_dangle_nodes", "",
+            st, "dangle_nodes",
+            st, "active_dangle_node",
+            )
     col = row.column(align=True)
     col.operator("dangle.add_node", icon='ADD', text="")
     col.operator("dangle.remove_node", icon='REMOVE', text="")
@@ -45,9 +44,9 @@ def _draw_dangle_nodes(layout, context, rig):
                 )
                 icon = 'CON_FOLLOWPATH'
             order_box.label(
-                text=f"{order_index + 1}. {operation.node_type.title()}: {label}",
-                icon=icon,
-            )
+                    text=f"{order_index + 1}. {operation.node_type.title()}: {label}",
+                    icon=icon,
+                    )
 
     dnode = get_active_dangle_node(context)
     if dnode is None:
@@ -100,10 +99,10 @@ def _draw_dangle_chains(layout, context):
 
     row = panel.row()
     row.template_list(
-        "DANGLE_UL_chains", "",
-        dnode, "chains",
-        dnode, "active_chain",
-    )
+            "DANGLE_UL_chains", "",
+            dnode, "chains",
+            dnode, "active_chain",
+            )
     col = row.column(align=True)
     col.operator("dangle.add_chain", icon='ADD', text="")
     col.operator("dangle.remove_chain", icon='REMOVE', text="")
@@ -136,10 +135,10 @@ def _draw_dangle_particles(layout, context, rig):
 
     row = panel.row()
     row.template_list(
-        "DANGLE_UL_particles", "",
-        chain, "particles",
-        chain, "active_particle_index",
-    )
+            "DANGLE_UL_particles", "",
+            chain, "particles",
+            chain, "active_particle_index",
+            )
     col = row.column(align=True)
     col.operator("dangle.add_particle", icon='ADD', text="")
     col.operator("dangle.remove_particle", icon='REMOVE', text="")
@@ -156,9 +155,9 @@ def _draw_dangle_particles(layout, context, rig):
         box.prop(particle, "pos_projection_type")
         if particle.pos_projection_type == 'DIRECTIONAL':
             box.prop_search(
-                particle, "direction_reference_bone", rig.data, "bones",
-                text="Direction Reference",
-            )
+                    particle, "direction_reference_bone", rig.data, "bones",
+                    text="Direction Reference",
+                    )
             box.prop(particle, "capsule_axis_ls", text="Fallback Axis (LS)")
             box.prop(particle, "capsule_height")
         box.prop(particle, "capsule_radius")
@@ -303,10 +302,10 @@ def _draw_dangle_collision_shapes(layout, context, rig):
 
     row = panel.row()
     row.template_list(
-        "DANGLE_UL_collision_shapes", "",
-        dnode, "collision_shapes",
-        dnode, "active_shape_index",
-    )
+            "DANGLE_UL_collision_shapes", "",
+            dnode, "collision_shapes",
+            dnode, "active_shape_index",
+            )
     col = row.column(align=True)
     col.operator("dangle.add_shape", icon='ADD', text="")
     col.operator("dangle.remove_shape", icon='REMOVE', text="")
@@ -363,10 +362,10 @@ def _draw_drag_nodes(layout, rig):
 def _draw_dangles(layout, context, px_s):
     row = layout.row()
     row.template_list(
-        "DANGLE_UL_rigs", "",
-        context.scene, "objects",
-        context.scene, "dangle_active_rig_index",
-    )
+            "DANGLE_UL_rigs", "",
+            context.scene, "objects",
+            context.scene, "dangle_active_rig_index",
+            )
     col = row.column(align=True)
     col.operator("dangle.enable_rig", icon='ADD', text="")
     col.operator("dangle.disable_rig", icon='REMOVE', text="")

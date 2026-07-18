@@ -1,5 +1,5 @@
 import bpy
-from mathutils import Vector, Matrix
+from mathutils import Matrix, Vector
 
 
 class PhysXToolsGizmoGroup(bpy.types.GizmoGroup):

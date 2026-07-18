@@ -1,8 +1,9 @@
-﻿import bpy
+﻿import math
+
 import bmesh
-import math
-import os
-from mathutils import Matrix, Vector, Quaternion
+import bpy
+from mathutils import Matrix, Quaternion, Vector
+
 from ...main.common import exclusion_cache
 
 # fallback incase the preset lib doesn't load
@@ -194,7 +195,10 @@ def get_raw_mesh_data(obj):
     obj_eval.to_mesh_clear()
     return verts, indices
 
-def add_ground_plane(offset_below: float = 0.05, size_xy: float = 100000.0, thickness: float = 0.01, name: str = "GroundPlane") -> bpy.types.Object:
+
+def add_ground_plane(
+        offset_below: float = 0.05, size_xy: float = 100000.0, thickness: float = 0.01, name: str = "GroundPlane",
+        ) -> bpy.types.Object:
     """
     Instantiates a procedural ground plane object with defined volumetric extents.
     Calculates the scene's global minimum Z bounding coordinate to position the 
@@ -227,14 +231,14 @@ def add_ground_plane(offset_below: float = 0.05, size_xy: float = 100000.0, thic
 
     verts = [
         (-dx, -dy, -dz), (dx, -dy, -dz), (dx, dy, -dz), (-dx, dy, -dz),
-        (-dx, -dy, dz),  (dx, -dy, dz),  (dx, dy, dz),  (-dx, dy, dz),
-    ]
+        (-dx, -dy, dz), (dx, -dy, dz), (dx, dy, dz), (-dx, dy, dz),
+        ]
 
     faces = [
-        (0, 1, 2, 3), (4, 5, 6, 7), 
-        (0, 1, 5, 4), (1, 2, 6, 5), 
+        (0, 1, 2, 3), (4, 5, 6, 7),
+        (0, 1, 5, 4), (1, 2, 6, 5),
         (2, 3, 7, 6), (3, 0, 4, 7)
-    ]
+        ]
 
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(verts, [], faces)

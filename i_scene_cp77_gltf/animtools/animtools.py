@@ -1,27 +1,16 @@
-import bpy
-import json
 import re
-from ..importers.read_rig import *
-from ..main.bartmoss_functions import safe_mode_switch, store_current_context, restore_previous_context
 
-animBones = [
-    "Hips", "Spine", "Spine1", "Spine2", "Spine3",
-    "LeftShoulder", "LeftArm", "LeftForeArm", "LeftHand", "WeaponLeft",
-    "LeftInHandThumb", "LeftHandThumb1", "LeftHandThumb2",
-    "LeftInHandIndex", "LeftHandIndex1", "LeftHandIndex2", "LeftHandIndex3",
-    "LeftInHandMiddle", "LeftHandMiddle1", "LeftHandMiddle2", "LeftHandMiddle3",
-    "LeftInHandRing", "LeftHandRing1", "LeftHandRing2", "LeftHandRing3",
-    "LeftInHandPinky", "LeftHandPinky1", "LeftHandPinky2", "LeftHandPinky3",
-    "RightShoulder", "RightArm", "RightForeArm", "RightHand", "WeaponRight",
-    "RightInHandThumb", "RightHandThumb1", "RightHandThumb2",
-    "RightInHandIndex", "RightHandIndex1", "RightHandIndex2", "RightHandIndex3",
-    "RightInHandMiddle", "RightHandMiddle1", "RightHandMiddle2", "RightHandMiddle3",
-    "RightInHandRing", "RightHandRing1", "RightHandRing2", "RightHandRing3",
-    "RightInHandPinky", "RightHandPinky1", "RightHandPinky2", "RightHandPinky3",
-    "Neck", "Neck1", "Head", "LeftEye", "RightEye",
-    "LeftUpLeg", "LeftLeg", "LeftFoot", "LeftHeel", "LeftToeBase",
-    "RightUpLeg", "RightLeg", "RightFoot", "RightHeel", "RightToeBase"
-]
+from .compat import (
+    assign_action_with_slot,
+    configure_float_idproperty,
+    get_action_fcurves,
+    )
+from ..importers.read_rig import *
+from ..importers.read_rig import _model_space_matrices_cached
+from ..main.animation_bones import ANIMATION_BONES, ANIMATION_BONE_SET
+from ..main.bartmoss_functions import restore_previous_context, safe_mode_switch, store_current_context
+
+animBones = list(ANIMATION_BONES)
 
 def CP77AnimsList(self, context):
     for action in bpy.data.actions:
@@ -30,23 +19,11 @@ def CP77AnimsList(self, context):
         yield action
 
 def _assign_action(adt, action):
-    adt.action = action
-
-    if not hasattr(adt, 'action_slot'):
-        return
-
-    suitable = getattr(adt, 'action_suitable_slots', ())
-    if suitable:
-        adt.action_slot = suitable[0]
-        return
-
-    slots = getattr(action, 'slots', None)
-    if slots is not None:
-        try:
-            slot = slots.new(id_type='OBJECT')
-            adt.action_slot = slot
-        except Exception as e:
-            print(f"[CP77] Could not create action slot: {e}")
+    owner = getattr(adt, "id_data", None)
+    if owner is None:
+        adt.action = action
+        return adt
+    return assign_action_with_slot(owner, action)
 
 
 def reset_armature(self, context):
@@ -55,49 +32,36 @@ def reset_armature(self, context):
         self.report({'ERROR'}, "Active object must be an armature.")
         return {'CANCELLED'}
 
-    reset_count = 0
     for pose_bone in obj.pose.bones:
         pose_bone.matrix_basis.identity()
-        reset_count += 1
 
     return {'FINISHED'}
 
 def create_track_properties(armature_obj, rig, apply_defaults: bool = True):
-    if not armature_obj or armature_obj.type != 'ARMATURE':
+    """Ensure canonical track properties without replacing facial UI metadata."""
+    if not armature_obj or armature_obj.type != "ARMATURE":
         return
-
-    track_names = [
-        str(n) if not isinstance(n, dict) else n.get('$value', '')
-        for n in rig.track_names
-    ]
-
-    defaults = rig.reference_tracks if hasattr(rig, 'reference_tracks') else None
-
-    for i, track_name in enumerate(track_names):
+    defaults = getattr(rig, "reference_tracks", ())
+    for index, raw_name in enumerate(rig.track_names):
+        track_name = raw_name.get("$value", "") if isinstance(raw_name, dict) else str(raw_name)
         if not track_name:
             continue
-
-        default_value = 0.0
-        if defaults is not None and i < len(defaults):
-            default_value = float(defaults[i])
-
-        if track_name not in armature_obj:
-            armature_obj[track_name] = default_value if apply_defaults else 0.0
-            try:
-                ui = armature_obj.id_properties_ui(track_name)
-                ui.update(
-                        description=f"Facial track {i}: {track_name}",
-                        default=default_value,
-                        min=0.0,
-                        max=1.0,
-                        soft_min=0.0,
-                        soft_max=1.0,
-                        subtype='FACTOR'
-                        )
-            except Exception as e:
-                print(f"Warning: Could not set UI for {track_name}: {e}")
-        elif apply_defaults:
-            armature_obj[track_name] = default_value
+        default_value = float(defaults[index]) if index < len(defaults) else 0.0
+        current = armature_obj.get(track_name)
+        value = default_value if apply_defaults or current is None else float(current)
+        configure_float_idproperty(
+            armature_obj,
+            track_name,
+            value,
+            default=default_value,
+            minimum=0.0,
+            maximum=1.0,
+            soft_minimum=0.0,
+            soft_maximum=1.0,
+            description=f"Facial track {index}: {track_name}",
+            subtype="FACTOR",
+            overwrite_ui=False,
+        )
 
 def cp77_keyframe(self, context, frameall=False):
     current_context = bpy.context.mode
@@ -146,36 +110,20 @@ def cp77_keyframe(self, context, frameall=False):
 
     finally:
         if bpy.context.mode != current_context:
-            try:
-                bpy.ops.object.mode_set(mode=current_context)
-            except Exception:
-                pass
+            safe_mode_switch(current_context)
 
 def remap_action_to_armature(source_action, armature_obj):
     new_action = source_action.copy()
-    new_action.name = source_action.name + "_REMAPPED_" + armature_obj.name
-
-    bone_prefix = 'pose.bones["'
-    bone_prefix_alt = "pose.bones['"
-
-    for fcurve in new_action.fcurves:
-        dp = fcurve.data_path
-        if dp.startswith(bone_prefix) or dp.startswith(bone_prefix_alt):
-            try:
-                bone_name = dp.split('"')[1] if '"' in dp else dp.split("'")[1]
-            except:
-                continue
-
-            if bone_name not in armature_obj.pose.bones:
-                continue
-
-            suffix = dp.split(']')[1]
-            new_data_path = f'pose.bones["{bone_name}"]{suffix}'
-            fcurve.data_path = new_data_path
-        elif dp.startswith('["') or dp.startswith("[\'"):
-            pass
-        else:
-            pass
+    new_action.name = f"{source_action.name}_REMAPPED_{armature_obj.name}"
+    pattern = re.compile(r'^pose\.bones\[(["\'])(.*?)\1\](.*)$')
+    for fcurve in get_action_fcurves(new_action, armature_obj) or ():
+        match = pattern.match(fcurve.data_path)
+        if match is None:
+            continue
+        bone_name = match.group(2)
+        if bone_name not in armature_obj.pose.bones:
+            continue
+        fcurve.data_path = f'pose.bones["{bone_name}"]{match.group(3)}'
     return new_action
 
 def play_anim(self, context, anim_name: str):
@@ -243,68 +191,58 @@ def play_anim(self, context, anim_name: str):
 
     return {'FINISHED'}
 
-def load_apose(self, arm_obj):
+def _load_bind_pose(self, arm_obj, *, use_tpose: bool):
     arm_data = arm_obj.data
-    filepath = arm_data.get('source_rig_file', None)
-    bone_names = arm_data.get('boneNames', [])
-    bone_parents = arm_data.get('boneParentIndexes', [])
-    store_current_context()
-    safe_mode_switch('EDIT')
-    edit_bones = arm_data.edit_bones
-    if not os.path.exists(filepath):
-        self.report({'ERROR'}, f"Invalid path to json source {filepath} not found")
-        return
+    filepath = arm_data.get("source_rig_file", "")
+    if not filepath or ";" in filepath or not os.path.isfile(filepath):
+        self.report({"ERROR"}, f"Invalid single-rig JSON source: {filepath}")
+        return {"CANCELLED"}
+
     rig_data = read_rig(filepath)
-    apose_ms = rig_data.apose_ms
-    apose_ls = rig_data.apose_ls
+    matrices = (
+        list(_model_space_matrices_cached(rig_data.bone_transforms, rig_data.parent_indices))
+        if use_tpose
+        else build_apose_matrices(
+            rig_data.apose_ms,
+            rig_data.apose_ls,
+            rig_data.bone_names,
+            rig_data.parent_indices,
+        )
+    )
+    if not matrices:
+        pose_name = "T-Pose" if use_tpose else "A-Pose"
+        self.report({"ERROR"}, f"No complete {pose_name} found in {rig_data.rig_name}")
+        return {"CANCELLED"}
 
-    if apose_ms is None and apose_ls is None:
-        self.report({'ERROR'}, f"No A-Pose found in {rig_data.rig_name} json source")
-        return
+    store_current_context()
+    try:
+        safe_mode_switch("EDIT")
+        edit_bones = arm_data.edit_bones
+        bone_index_map = {index: edit_bones.get(name) for index, name in enumerate(rig_data.bone_names)}
+        missing = [rig_data.bone_names[index] for index, bone in bone_index_map.items() if bone is None]
+        if missing:
+            self.report({"ERROR"}, f"Armature is missing {len(missing)} rig bones")
+            return {"CANCELLED"}
+        for index, matrix in enumerate(matrices):
+            apply_bone_from_matrix(
+                index, matrix, bone_index_map, rig_data.parent_indices, matrices
+            )
+        arm_data["T-Pose"] = use_tpose
+    finally:
+        restore_previous_context()
 
-    bone_index_map = {}
-    for i, name in enumerate(rig_data.bone_names):
-        bone = edit_bones.get(name)
-        bone_index_map[i] = bone
-    pose_matrices = build_apose_matrices(apose_ms, apose_ls, bone_names, bone_parents)
-    if not pose_matrices:
-        self.report({'ERROR'}, f"Error building A-Pose matrices for {rig_data.rig_name}")
-        return
-    for i, name in enumerate(rig_data.bone_names):
-        mat = pose_matrices[i]
-        apply_bone_from_matrix(i, mat, bone_index_map, rig_data.parent_indices, pose_matrices)
-    restore_previous_context()
-    self.report({'INFO'}, "A-Pose loaded")
+    for pose_bone in arm_obj.pose.bones:
+        pose_bone.matrix_basis.identity()
+    self.report({"INFO"}, "T-Pose loaded" if use_tpose else "A-Pose loaded")
+    return {"FINISHED"}
+
+
+def load_apose(self, arm_obj):
+    return _load_bind_pose(self, arm_obj, use_tpose=False)
+
 
 def load_tpose(self, arm_obj):
-    arm_data = arm_obj.data
-    filepath = arm_data.get('source_rig_file', None)
-    store_current_context()
-    safe_mode_switch('EDIT')
-    edit_bones = arm_data.edit_bones
-    if not os.path.exists(filepath):
-        self.report({'ERROR'}, f"Invalid path to json source {filepath} not found")
-        return
-    rig_data = read_rig(filepath)
-    bone_index_map = {}
-    for i, name in enumerate(rig_data.bone_names):
-        bone = edit_bones.get(name)
-        bone_index_map[i] = bone
-
-    global_transforms = {}
-    for i in range(len(rig_data.bone_names)):
-        mat_red = compute_global_transform(i, rig_data.bone_transforms, rig_data.parent_indices, global_transforms)
-        global_transforms[i] = mat_red
-    for i in range(len(rig_data.bone_transforms)):
-        transform_data = rig_data.bone_transforms[i]
-        if is_identity_transform(transform_data):
-            continue
-        apply_bone_from_matrix(i, global_transforms[i], bone_index_map, rig_data.parent_indices, global_transforms)
-        arm_data['T-Pose'] = True
-    restore_previous_context()
-
-    self.report({'INFO'}, "T-Pose loaded")
-    return
+    return _load_bind_pose(self, arm_obj, use_tpose=True)
 
 def delete_anim(self, context):
     if not hasattr(self, 'name'):
@@ -342,7 +280,7 @@ def hide_extra_bones(self, context):
 
     bones_to_hide = [
         b.name for b in selected_object.pose.bones
-        if b.name not in animBones
+        if b.name not in ANIMATION_BONE_SET
         ]
 
     _set_bone_visibility(selected_object, True, bones_to_hide)
@@ -373,10 +311,10 @@ def unhide_extra_bones(self, context):
     print("Unhidden all bones")
 
 def get_animation_bones():
-    return animBones.copy()
+    return list(ANIMATION_BONES)
 
 def is_animation_bone(bone_name):
-    return bone_name in animBones
+    return bone_name in ANIMATION_BONE_SET
 
 def validate_armature(obj):
     if not obj or obj.type != 'ARMATURE':

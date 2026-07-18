@@ -1,9 +1,8 @@
-import bpy
-import os
 from ..main.common import *
 
+
 class Skin:
-    def __init__(self, BasePath, image_format,ProjPath):
+    def __init__(self, BasePath, image_format, ProjPath):
         self.BasePath = str(BasePath)
         self.ProjPath = str(ProjPath)
         self.image_format = image_format
@@ -12,7 +11,7 @@ class Skin:
         ng_name = "Skin 2077 1.8.0"
         if ng_name in bpy.data.node_groups:
             return bpy.data.node_groups[ng_name]
-        nodegroup = bpy.data.node_groups.new(type = 'ShaderNodeTree', name = ng_name)
+        nodegroup = bpy.data.node_groups.new(type='ShaderNodeTree', name=ng_name)
 
         nodegroup.color_tag = 'NONE'
         nodegroup.description = ""
@@ -27,7 +26,9 @@ class Skin:
         image_socket_2.structure_type = 'AUTO'
 
         # Socket Microdetail Influence
-        microdetail_influence_socket = nodegroup.interface.new_socket(name="Microdetail Influence", in_out='INPUT', socket_type='NodeSocketFloat')
+        microdetail_influence_socket = nodegroup.interface.new_socket(
+            name="Microdetail Influence", in_out='INPUT', socket_type='NodeSocketFloat'
+            )
         microdetail_influence_socket.default_value = 0.0
         microdetail_influence_socket.min_value = -3.4028234663852886e+38
         microdetail_influence_socket.max_value = 3.4028234663852886e+38
@@ -37,7 +38,9 @@ class Skin:
         microdetail_influence_socket.structure_type = 'AUTO'
 
         # Socket TintColor | Green (MD Mask)
-        tintcolor___green__md_mask__socket = nodegroup.interface.new_socket(name="TintColor | Green (MD Mask)", in_out='INPUT', socket_type='NodeSocketFloat')
+        tintcolor___green__md_mask__socket = nodegroup.interface.new_socket(
+            name="TintColor | Green (MD Mask)", in_out='INPUT', socket_type='NodeSocketFloat'
+            )
         tintcolor___green__md_mask__socket.default_value = 0.0
         tintcolor___green__md_mask__socket.min_value = 0.0
         tintcolor___green__md_mask__socket.max_value = 1.0
@@ -47,7 +50,9 @@ class Skin:
         tintcolor___green__md_mask__socket.structure_type = 'AUTO'
 
         # Socket TintColor | Blue (Scale)
-        tintcolor___blue__scale__socket = nodegroup.interface.new_socket(name="TintColor | Blue (Scale)", in_out='INPUT', socket_type='NodeSocketFloat')
+        tintcolor___blue__scale__socket = nodegroup.interface.new_socket(
+            name="TintColor | Blue (Scale)", in_out='INPUT', socket_type='NodeSocketFloat'
+            )
         tintcolor___blue__scale__socket.default_value = 0.0
         tintcolor___blue__scale__socket.min_value = 0.0
         tintcolor___blue__scale__socket.max_value = 1.0
@@ -64,14 +69,18 @@ class Skin:
         normal_socket.structure_type = 'AUTO'
 
         # Socket Detail Normal
-        detail_normal_socket = nodegroup.interface.new_socket(name="Detail Normal", in_out='INPUT', socket_type='NodeSocketColor')
+        detail_normal_socket = nodegroup.interface.new_socket(
+            name="Detail Normal", in_out='INPUT', socket_type='NodeSocketColor'
+            )
         detail_normal_socket.default_value = (0.0, 0.0, 0.0, 1.0)
         detail_normal_socket.attribute_domain = 'POINT'
         detail_normal_socket.default_input = 'VALUE'
         detail_normal_socket.structure_type = 'AUTO'
 
         # Socket DetailNormalInfluence
-        detailnormalinfluence_socket = nodegroup.interface.new_socket(name="DetailNormalInfluence", in_out='INPUT', socket_type='NodeSocketFloat')
+        detailnormalinfluence_socket = nodegroup.interface.new_socket(
+            name="DetailNormalInfluence", in_out='INPUT', socket_type='NodeSocketFloat'
+            )
         detailnormalinfluence_socket.default_value = 0.0
         detailnormalinfluence_socket.min_value = -3.4028234663852886e+38
         detailnormalinfluence_socket.max_value = 3.4028234663852886e+38
@@ -81,7 +90,9 @@ class Skin:
         detailnormalinfluence_socket.structure_type = 'AUTO'
 
         # Socket MicroDetailUVScale01
-        microdetailuvscale01_socket = nodegroup.interface.new_socket(name="MicroDetailUVScale01", in_out='INPUT', socket_type='NodeSocketFloat')
+        microdetailuvscale01_socket = nodegroup.interface.new_socket(
+            name="MicroDetailUVScale01", in_out='INPUT', socket_type='NodeSocketFloat'
+            )
         microdetailuvscale01_socket.default_value = 0.0
         microdetailuvscale01_socket.min_value = -3.4028234663852886e+38
         microdetailuvscale01_socket.max_value = 3.4028234663852886e+38
@@ -91,7 +102,9 @@ class Skin:
         microdetailuvscale01_socket.structure_type = 'AUTO'
 
         # Socket MicroDetailUVScale02
-        microdetailuvscale02_socket = nodegroup.interface.new_socket(name="MicroDetailUVScale02", in_out='INPUT', socket_type='NodeSocketFloat')
+        microdetailuvscale02_socket = nodegroup.interface.new_socket(
+            name="MicroDetailUVScale02", in_out='INPUT', socket_type='NodeSocketFloat'
+            )
         microdetailuvscale02_socket.default_value = 0.0
         microdetailuvscale02_socket.min_value = -3.4028234663852886e+38
         microdetailuvscale02_socket.max_value = 3.4028234663852886e+38
@@ -480,8 +493,7 @@ class Skin:
 
         return nodegroup
 
-
-    def create(self,Data,Mat):
+    def create(self, Data, Mat):
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes[loc('Principled BSDF')]
         pBSDF.subsurface_method = 'RANDOM_WALK_SKIN'
@@ -492,93 +504,102 @@ class Skin:
         pBSDF.inputs['Subsurface Radius'].default_value[2] = 0.2
         pBSDF.inputs['Subsurface Anisotropy'].default_value = 0.8
 
-        sockets=bsdf_socket_names()
-        #SSS/s
-        #sVcol = create_node(CurMat.nodes,"ShaderNodeVertexColor", (-1400,150))
-        #sSepRGB = create_node(CurMat.nodes,"ShaderNodeSeparateColor", (-1200,150))
-        #sSepRGB.mode = 'RGB'
+        sockets = bsdf_socket_names()
+        # SSS/s
+        # sVcol = create_node(CurMat.nodes,"ShaderNodeVertexColor", (-1400,150))
+        # sSepRGB = create_node(CurMat.nodes,"ShaderNodeSeparateColor", (-1200,150))
+        # sSepRGB.mode = 'RGB'
 
         # This value is completely arbitary in Blender 3.6 and lower. However it's tied to the assets physical size in Blender. SSS is refactored completely in upcoming Blender 4.0
-        #sMultiply = create_node(CurMat.nodes,"ShaderNodeMath", (-800,150), operation = 'MULTIPLY')
-        #sMultiply.inputs[1].default_value = (0.025)
+        # sMultiply = create_node(CurMat.nodes,"ShaderNodeMath", (-800,150), operation = 'MULTIPLY')
+        # sMultiply.inputs[1].default_value = (0.025)
 
-        #CurMat.links.new(sVcol.outputs[0],sSepRGB.inputs[0])
-        #CurMat.links.new(sSepRGB.outputs[1],sMultiply.inputs[0])
-        #CurMat.links.new(sMultiply.outputs[0],pBSDF.inputs[sockets['Subsurface']])
-        #pBSDF.inputs[sockets['Subsurface Color']].default_value = (0.8, 0.14908, 0.0825199, 1)
-        
+        # CurMat.links.new(sVcol.outputs[0],sSepRGB.inputs[0])
+        # CurMat.links.new(sSepRGB.outputs[1],sMultiply.inputs[0])
+        # CurMat.links.new(sMultiply.outputs[0],pBSDF.inputs[sockets['Subsurface']])
+        # pBSDF.inputs[sockets['Subsurface Color']].default_value = (0.8, 0.14908, 0.0825199, 1)
+
         if "MicroDetail" in Data:
-            mdMapAImg = imageFromRelPath(Data["MicroDetail"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
+            mdMapAImg = imageFromRelPath(
+                    Data["MicroDetail"], DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True
+                    )
 
-        skinnodegroup =self.create_skin_node_group(mdMapAImg if "MicroDetail" in Data else None)
+        skinnodegroup = self.create_skin_node_group(mdMapAImg if "MicroDetail" in Data else None)
         # Node Group
         skingroup = CurMat.nodes.new("ShaderNodeGroup")
         skingroup.name = "SkinGroup"
         skingroup.node_tree = skinnodegroup
-        skingroup.location = (-750,-550)
+        skingroup.location = (-750, -550)
         skingroup.width = 300.0
 
-        #Albedo/a
+        # Albedo/a
 
-        if "Albedo" in Data: # should always be param has a value in the skin.mt
-            aImg=imageFromRelPath(Data["Albedo"],DepotPath=self.BasePath, ProjPath=self.ProjPath)
-            aImgNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-800,450), label="Albedo", image=aImg)
+        if "Albedo" in Data:  # should always be param has a value in the skin.mt
+            aImg = imageFromRelPath(Data["Albedo"], DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            aImgNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-800, 450), label="Albedo", image=aImg)
             aImgNode.hide = False
 
         if "TintColor" in Data:
-            tColor = CreateShaderNodeRGB(CurMat, Data["TintColor"],-500,250,"TintColor")
-            tColor.hide=False
-        
-        if "TintColorMask" in Data: # should always be param has a value in the skin.mt
-            tImg=imageFromRelPath(Data["TintColorMask"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=False)
-            tmaskNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-1800,-200), label="TintColorMask", image=tImg)
+            tColor = CreateShaderNodeRGB(CurMat, Data["TintColor"], -500, 250, "TintColor")
+            tColor.hide = False
+
+        if "TintColorMask" in Data:  # should always be param has a value in the skin.mt
+            tImg = imageFromRelPath(
+                    Data["TintColorMask"], DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=False
+                    )
+            tmaskNode = create_node(
+                CurMat.nodes, "ShaderNodeTexImage", (-1800, -200), label="TintColorMask", image=tImg
+                )
             tmaskNode.hide = False
             # Jatos new sep and maprange
-            tcmSep =  create_node(CurMat.nodes, "ShaderNodeSeparateColor", (-1300,-250))
+            tcmSep = create_node(CurMat.nodes, "ShaderNodeSeparateColor", (-1300, -250))
             tcmSep.mode = 'RGB'
             tcmMapRange = CurMat.nodes.new("ShaderNodeMapRange")
             tcmMapRange.interpolation_type = 'STEPPED'
             tcmMapRange.location = (-1100, -300)
-            tcmMapRange.inputs[5].default_value = 4.0 #steps
-            CurMat.links.new(tmaskNode.outputs[0],tcmSep.inputs[0])
-            CurMat.links.new(tcmSep.outputs[1],skingroup.inputs["TintColor | Green (MD Mask)"])
-            CurMat.links.new(tcmSep.outputs[2],tcmMapRange.inputs[0])
-            CurMat.links.new(tcmMapRange.outputs[0],skingroup.inputs["TintColor | Blue (Scale)"])
-
+            tcmMapRange.inputs[5].default_value = 4.0  # steps
+            CurMat.links.new(tmaskNode.outputs[0], tcmSep.inputs[0])
+            CurMat.links.new(tcmSep.outputs[1], skingroup.inputs["TintColor | Green (MD Mask)"])
+            CurMat.links.new(tcmSep.outputs[2], tcmMapRange.inputs[0])
+            CurMat.links.new(tcmMapRange.outputs[0], skingroup.inputs["TintColor | Blue (Scale)"])
 
         if "TintScale" in Data:
-            tintScale = CreateShaderNodeValue(CurMat, Data["TintScale"],-500,450,"TintScale")
+            tintScale = CreateShaderNodeValue(CurMat, Data["TintScale"], -500, 450, "TintScale")
         else:
-            tintScale = CreateShaderNodeValue(CurMat, 1.0,  -500,450,"TintScale")
-        tintScale.hide=False
+            tintScale = CreateShaderNodeValue(CurMat, 1.0, -500, 450, "TintScale")
+        tintScale.hide = False
 
         tintColorGamma = CurMat.nodes.new("ShaderNodeGamma")
-        tintColorGamma.location = (-500,300)
-        tintColorGamma.hide=True
+        tintColorGamma.location = (-500, 300)
+        tintColorGamma.hide = True
         tintColorGamma.inputs[1].default_value = 2.2
 
-        albedoTintMix = create_node(CurMat.nodes,"ShaderNodeMix",(-500, 350), blend_type='MULTIPLY', label="Mix")
-        albedoTintMix.data_type='RGBA'
+        albedoTintMix = create_node(CurMat.nodes, "ShaderNodeMix", (-500, 350), blend_type='MULTIPLY', label="Mix")
+        albedoTintMix.data_type = 'RGBA'
         albedoTintMix.inputs[0].default_value = 1.0
-        albedoTintMix.hide=True
+        albedoTintMix.hide = True
 
-        CurMat.links.new(tColor.outputs[0],tintColorGamma.inputs[0])
-        CurMat.links.new(tintScale.outputs[0],albedoTintMix.inputs[0])
-        CurMat.links.new(aImgNode.outputs[0],albedoTintMix.inputs[6])
-        CurMat.links.new(tintColorGamma.outputs[0],albedoTintMix.inputs[7])
+        CurMat.links.new(tColor.outputs[0], tintColorGamma.inputs[0])
+        CurMat.links.new(tintScale.outputs[0], albedoTintMix.inputs[0])
+        CurMat.links.new(aImgNode.outputs[0], albedoTintMix.inputs[6])
+        CurMat.links.new(tintColorGamma.outputs[0], albedoTintMix.inputs[7])
 
-        #Secondary Albedo/a
-        if "SecondaryAlbedo" in Data and Data["SecondaryAlbedo"]!='engine\\textures\\editor\\white.xbm':
-            saImg=imageFromRelPath(Data["SecondaryAlbedo"], DepotPath=self.BasePath, ProjPath=self.ProjPath)
-            saImgNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-900,550), label="Secondary Albedo", image=saImg)
+        # Secondary Albedo/a
+        if "SecondaryAlbedo" in Data and Data["SecondaryAlbedo"] != 'engine\\textures\\editor\\white.xbm':
+            saImg = imageFromRelPath(Data["SecondaryAlbedo"], DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            saImgNode = create_node(
+                CurMat.nodes, "ShaderNodeTexImage", (-900, 550), label="Secondary Albedo", image=saImg
+                )
 
-            overlay = create_node(CurMat.nodes, "ShaderNodeMix", (-150,500), blend_type="OVERLAY", label="Overlay")
+            overlay = create_node(CurMat.nodes, "ShaderNodeMix", (-150, 500), blend_type="OVERLAY", label="Overlay")
             overlay.data_type = "RGBA"
 
             if "SecondaryAlbedoInfluence" in Data:
-                SecondaryAlbedoInf = CreateShaderNodeValue(CurMat, Data["SecondaryAlbedoInfluence"],-250,550,"SecondaryAlbedoInf")
-                
-                saMul =  create_node(CurMat.nodes, "ShaderNodeMath", (-200,520), operation = 'MULTIPLY')
+                SecondaryAlbedoInf = CreateShaderNodeValue(
+                    CurMat, Data["SecondaryAlbedoInfluence"], -250, 550, "SecondaryAlbedoInf"
+                    )
+
+                saMul = create_node(CurMat.nodes, "ShaderNodeMath", (-200, 520), operation='MULTIPLY')
                 CurMat.links.new(saMul.outputs[0], overlay.inputs[0])
                 CurMat.links.new(SecondaryAlbedoInf.outputs[0], saMul.inputs[0])
                 CurMat.links.new(saImgNode.outputs[1], saMul.inputs[1])
@@ -590,87 +611,95 @@ class Skin:
         else:
             CurMat.links.new(albedoTintMix.outputs[2], pBSDF.inputs['Base Color'])
 
-        #ROUGHNESS+MASK/rm
+        # ROUGHNESS+MASK/rm
 
         if "Roughness" in Data:
-            rImg=imageFromRelPath(Data["Roughness"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
-            rImgNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-1800,100), label="Roughness", image=rImg)
+            rImg = imageFromRelPath(Data["Roughness"], DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
+            rImgNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-1800, 100), label="Roughness", image=rImg)
             rImgNode.hide = False
 
-        rmSep =  create_node(CurMat.nodes, "ShaderNodeSeparateColor", (-1300,50))
+        rmSep = create_node(CurMat.nodes, "ShaderNodeSeparateColor", (-1300, 50))
         rmSep.mode = 'RGB'
 
-        rmMul =  create_node(CurMat.nodes, "ShaderNodeMath", (-1000,-200), operation = 'MULTIPLY')
-		
+        rmMul = create_node(CurMat.nodes, "ShaderNodeMath", (-1000, -200), operation='MULTIPLY')
 
-        #NORMAL/n
+        # NORMAL/n
 
-        
+        nNormalMap = create_node(CurMat.nodes, "ShaderNodeNormalMap", (-425, -300))
 
-        nNormalMap =  create_node(CurMat.nodes,"ShaderNodeNormalMap", (-425, -300))
-		
         if "Normal" in Data:
-            nImg = imageFromRelPath(Data["Normal"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
-            nMap = create_node(CurMat.nodes, "ShaderNodeTexImage", (-1800,-500), label="Normal", image=nImg)
+            nImg = imageFromRelPath(Data["Normal"], DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
+            nMap = create_node(CurMat.nodes, "ShaderNodeTexImage", (-1800, -500), label="Normal", image=nImg)
             nMap.hide = False
-            nMap.image.colorspace_settings.name='Non-Color'
-	
+            nMap.image.colorspace_settings.name = 'Non-Color'
+
         if "DetailNormal" in Data:
-            dnImg = imageFromRelPath(Data["DetailNormal"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
-            dnMap = create_node(CurMat.nodes, "ShaderNodeTexImage", (-1800,-800), label="DetailNormal", image=dnImg)
+            dnImg = imageFromRelPath(
+                    Data["DetailNormal"], DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True
+                    )
+            dnMap = create_node(CurMat.nodes, "ShaderNodeTexImage", (-1800, -800), label="DetailNormal", image=dnImg)
             dnMap.hide = False
-            dnMap.image.colorspace_settings.name='Non-Color'
-			
-        
+            dnMap.image.colorspace_settings.name = 'Non-Color'
+
         if "DetailNormalInfluence" in Data:
-            nDNInfluence = CreateShaderNodeValue(CurMat, Data["DetailNormalInfluence"],-950,-800,"DetailNormalInfluence")
+            nDNInfluence = CreateShaderNodeValue(
+                CurMat, Data["DetailNormalInfluence"], -950, -800, "DetailNormalInfluence"
+                )
             nDNInfluence.hide = False
 
         if "MicroDetailUVScale01" in Data:
-            mdScale01 = CreateShaderNodeValue(CurMat, Data["MicroDetailUVScale01"],-950,-860,"MicroDetailUVScale01")
+            mdScale01 = CreateShaderNodeValue(CurMat, Data["MicroDetailUVScale01"], -950, -860, "MicroDetailUVScale01")
             mdScale01.hide = False
 
         if "MicroDetailUVScale02" in Data:
-            mdScale02 = CreateShaderNodeValue(CurMat, Data["MicroDetailUVScale02"],-950,-915,"MicroDetailUVScale02")
+            mdScale02 = CreateShaderNodeValue(CurMat, Data["MicroDetailUVScale02"], -950, -915, "MicroDetailUVScale02")
             mdScale02.hide = False
 
         if "MicroDetailInfluence" in Data:
-            mdInfluence = CreateShaderNodeValue(CurMat, Data["MicroDetailInfluence"],-1250,-100,"MicroDetailInfluence")
+            mdInfluence = CreateShaderNodeValue(
+                CurMat, Data["MicroDetailInfluence"], -1250, -100, "MicroDetailInfluence"
+                )
             mdInfluence.hide = False
 
         if "Detailmap_Squash" in Data:
-            sqshImg = imageFromRelPath(Data["Detailmap_Squash"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
-            ndSqImgNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-2200,250), label="Detailmap_Squash", image=sqshImg)
+            sqshImg = imageFromRelPath(
+                    Data["Detailmap_Squash"], DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True
+                    )
+            ndSqImgNode = create_node(
+                CurMat.nodes, "ShaderNodeTexImage", (-2200, 250), label="Detailmap_Squash", image=sqshImg
+                )
 
         if "Detailmap_Stretch" in Data:
-            strchImg =  imageFromRelPath(Data["Detailmap_Stretch"],DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True)
-            ndStImg = create_node(CurMat.nodes, "ShaderNodeTexImage", (-2200,200), label="Detailmap_Stretch", image=strchImg)
+            strchImg = imageFromRelPath(
+                    Data["Detailmap_Stretch"], DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True
+                    )
+            ndStImg = create_node(
+                CurMat.nodes, "ShaderNodeTexImage", (-2200, 200), label="Detailmap_Stretch", image=strchImg
+                )
 
+        CurMat.links.new(rImgNode.outputs[0], rmSep.inputs[0])
+        CurMat.links.new(rmSep.outputs[0], pBSDF.inputs['Roughness'])
+        CurMat.links.new(rmSep.outputs[1], pBSDF.inputs['Metallic'])
+        CurMat.links.new(rmSep.outputs[2], rmMul.inputs[0])
 
-        CurMat.links.new(rImgNode.outputs[0],rmSep.inputs[0])
-        CurMat.links.new(rmSep.outputs[0],pBSDF.inputs['Roughness'])
-        CurMat.links.new(rmSep.outputs[1],pBSDF.inputs['Metallic'])
-        CurMat.links.new(rmSep.outputs[2],rmMul.inputs[0])
-        
-        CurMat.links.new(rmMul.outputs[0],skingroup.inputs["Microdetail Influence"])
-        CurMat.links.new(mdInfluence.outputs[0],rmMul.inputs[1])
+        CurMat.links.new(rmMul.outputs[0], skingroup.inputs["Microdetail Influence"])
+        CurMat.links.new(mdInfluence.outputs[0], rmMul.inputs[1])
 
-        CurMat.links.new(nMap.outputs[0],skingroup.inputs["Normal"])
-        CurMat.links.new(dnMap.outputs[0],skingroup.inputs["Detail Normal"])
-        CurMat.links.new(nDNInfluence.outputs[0],skingroup.inputs["DetailNormalInfluence"])
+        CurMat.links.new(nMap.outputs[0], skingroup.inputs["Normal"])
+        CurMat.links.new(dnMap.outputs[0], skingroup.inputs["Detail Normal"])
+        CurMat.links.new(nDNInfluence.outputs[0], skingroup.inputs["DetailNormalInfluence"])
 
-        CurMat.links.new(mdScale01.outputs[0],skingroup.inputs["MicroDetailUVScale01"])
-        CurMat.links.new(mdScale02.outputs[0],skingroup.inputs["MicroDetailUVScale02"])
-               
-        CurMat.links.new(skingroup.outputs[0],nNormalMap.inputs[1])
+        CurMat.links.new(mdScale01.outputs[0], skingroup.inputs["MicroDetailUVScale01"])
+        CurMat.links.new(mdScale02.outputs[0], skingroup.inputs["MicroDetailUVScale02"])
 
-        CurMat.links.new(nNormalMap.outputs[0],pBSDF.inputs['Normal'])
+        CurMat.links.new(skingroup.outputs[0], nNormalMap.inputs[1])
 
+        CurMat.links.new(nNormalMap.outputs[0], pBSDF.inputs['Normal'])
 
-        #OTHER
+        # OTHER
         if "BloodColor" in Data:
-            bfColor = CreateShaderNodeRGB(CurMat, Data["BloodColor"],-2200,300,"BloodColor")
+            bfColor = CreateShaderNodeRGB(CurMat, Data["BloodColor"], -2200, 300, "BloodColor")
 
         if "Bloodflow" in Data:
-            bldImg = imageFromRelPath(Data["Bloodflow"],DepotPath=self.BasePath, ProjPath=self.ProjPath)
-            bfImgNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-2200,350), label="Bloodflow", image=bldImg)
+            bldImg = imageFromRelPath(Data["Bloodflow"], DepotPath=self.BasePath, ProjPath=self.ProjPath)
+            bfImgNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-2200, 350), label="Bloodflow", image=bldImg)

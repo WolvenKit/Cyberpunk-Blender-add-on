@@ -5,7 +5,7 @@ from gpu_extras.batch import batch_for_shader
 _handle = None  # draw handler
 _running = False
 
-LINE_COLOR = (1.0, 0.0, 0.0, 1.0) # Red
+LINE_COLOR = (1.0, 0.0, 0.0, 1.0)  # Red
 LINE_WIDTH = 2.0
 
 
@@ -25,19 +25,19 @@ def _draw_callback(arm_obj_name):
     # Draw
     gpu.state.blend_set('ALPHA')
     gpu.state.line_width_set(LINE_WIDTH)
-    
+
     shader.bind()
     shader.uniform_float("color", LINE_COLOR)
     batch.draw(shader)
-    
+
     gpu.state.blend_set('NONE')
+
 
 def _collect_lines_world(arm_obj) -> list:
     """Builds line segments: [head, parent_head, head, parent_head...]"""
     coords = []
     if not arm_obj or arm_obj.type != 'ARMATURE':
         return coords
-
 
     depsgraph = bpy.context.evaluated_depsgraph_get()
     arm_eval = arm_obj.evaluated_get(depsgraph)

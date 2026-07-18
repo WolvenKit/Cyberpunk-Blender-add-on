@@ -6,7 +6,8 @@ import bpy
 valid_object_types = [
     'MESH',
     'ARMATURE'
-]
+    ]
+
 
 def apply_object_transformations(ob):
     try:
@@ -20,11 +21,12 @@ def apply_object_transformations(ob):
     except Exception as e:
         print("Exception when trying to apply transformations: " + str(e))
 
+
 def cleanup_names_and_apply_transformations(old_object_names):
     mesh_index = 0
     new_object_names = []
     for object_name in old_object_names:
-        object =  bpy.data.objects[object_name]
+        object = bpy.data.objects[object_name]
         if object == None:
             continue
         apply_object_transformations(object)
@@ -37,6 +39,7 @@ def cleanup_names_and_apply_transformations(old_object_names):
         new_object_names.append(object.name)
 
     return new_object_names
+
 
 # traverse the object's parent hierarchy all the way up, and collect all empties
 def get_parented_empties(current_obj):
@@ -53,6 +56,7 @@ def get_parented_empties(current_obj):
     empties.extend(get_parented_empties(current_obj.parent))
     return empties
 
+
 # if the object is nested under something we'd like to keep (an armature or a mesh), we need to re-parent it
 # after removing all intermediate empties
 def get_closest_valid_parent(obj):
@@ -62,11 +66,9 @@ def get_closest_valid_parent(obj):
         return obj.parent
     return get_closest_valid_parent(obj.parent)
 
+
 def CP77_cleanup_external_export(importedObjects):
-
-    empties=[]
-    
-
+    empties = []
 
     # collect mesh names for iterating
     validObjectNames = sorted([obj.name for obj in filter(lambda obj: obj.type in valid_object_types, importedObjects)])
@@ -109,5 +111,3 @@ def CP77_cleanup_external_export(importedObjects):
 
     for object_name in new_object_names:
         bpy.data.objects[object_name].select_set(True)
-
-

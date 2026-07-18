@@ -1,19 +1,32 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
-import numpy as np
 import bpy
+import numpy as np
 from bpy.props import EnumProperty, IntProperty
 from bpy.types import Operator
 from mathutils import Quaternion, Vector
-from . import solver as _solver
-from . import rig_binding
 
+from . import rig_binding, solver as _solver
+from .compat import resolve_pose_bone
 
 # Module-level snapshot store
 # { armature_name: { bone_name: (Quaternion, Vector, str) } }
-_snapshots: Dict[str, Dict[str, Tuple]] = {}
+_snapshots: Dict[int, Dict[str, Tuple]] = {}
+
+
+def _snapshot_key(obj) -> int:
+    try:
+        return int(obj.as_pointer())
+    except (AttributeError, ReferenceError, TypeError, ValueError):
+        return 0
+
+
+def has_snapshot(obj) -> bool:
+    key = _snapshot_key(obj)
+    return bool(key and key in _snapshots)
+
 
 def _find_gce_solo_correctives(part, target_track: int) -> List[int]:
     """
@@ -26,6 +39,7 @@ def _find_gce_solo_correctives(part, target_track: int) -> List[int]:
         if (e - s) == 1 and int(part.gcorr_tracks[s]) == target_track:
             results.append(c)
     return results
+
 
 def _find_ice_correctives(part, target_ib: int) -> List[int]:
     """
@@ -42,58 +56,48 @@ def _find_ice_correctives(part, target_ib: int) -> List[int]:
                 break
     return results
 
+
 def _snapshot_pose(
-    obj: bpy.types.Object,
-    bone_names: List[str],
-) -> Dict[str, Tuple]:
-    """Save rotation_quaternion, location, and rotation_mode for each bone."""
+        obj: bpy.types.Object,
+        bone_names: List[str],
+        ) -> Dict[str, Tuple]:
+    """Save the complete pose-bone basis and rotation mode."""
     snapshot = {}
-    pb = obj.pose.bones
+    pose_bones = obj.pose.bones
     for name in bone_names:
-        if name in pb:
-            pbone = pb[name]
-            prev_mode = pbone.rotation_mode
-            pbone.rotation_mode = "QUATERNION"
-            snapshot[name] = (
-                pbone.rotation_quaternion.copy(),
-                pbone.location.copy(),
-                prev_mode,
-            )
+        pbone = resolve_pose_bone(obj, name)
+        if pbone is not None:
+            snapshot[name] = (pbone.matrix_basis.copy(), pbone.rotation_mode)
     return snapshot
 
+
 def _restore_pose(obj: bpy.types.Object, snapshot: Dict[str, Tuple]) -> None:
-    """Restore pose bone state from a _snapshot_pose result."""
-    pb = obj.pose.bones
-    for name, (rot, loc, mode) in snapshot.items():
-        if name in pb:
-            pbone = pb[name]
-            pbone.rotation_mode = "QUATERNION"
-            pbone.rotation_quaternion = rot
-            pbone.location = loc
-            pbone.rotation_mode = mode
+    """Restore pose-bone basis matrices saved by _snapshot_pose."""
+    pose_bones = obj.pose.bones
+    for name, (matrix_basis, rotation_mode) in snapshot.items():
+        pbone = resolve_pose_bone(obj, name)
+        if pbone is not None:
+            pbone.matrix_basis = matrix_basis
+            pbone.rotation_mode = rotation_mode
 
 
 def _reset_bones_to_rest(obj: bpy.types.Object, bone_names: List[str]) -> None:
-    """Reset named pose bones to rest (identity rotation, zero location)."""
-    pb       = obj.pose.bones
-    identity = Quaternion()
-    zero     = Vector()
+    """Reset named pose bones to the imported armature rest pose."""
+    pose_bones = obj.pose.bones
     for name in bone_names:
-        if name in pb:
-            pbone = pb[name]
-            pbone.rotation_mode = "QUATERNION"
-            pbone.rotation_quaternion = identity
-            pbone.location = zero
+        pbone = resolve_pose_bone(obj, name)
+        if pbone is not None:
+            pbone.matrix_basis.identity()
 
 
 # Core preview / clear
 
 def preview_apply_pose(
-    obj:        bpy.types.Object,
-    cache:      rig_binding.BindingCache,
-    part_name:  str,
-    pose_index: int,
-) -> Tuple[bool, str]:
+        obj: bpy.types.Object,
+        cache: rig_binding.BindingCache,
+        part_name: str,
+        pose_index: int,
+        ) -> Tuple[bool, str]:
     part = _get_part(cache.setup, part_name)
     if part is None:
         return False, f"Unknown part '{part_name}'"
@@ -103,8 +107,9 @@ def preview_apply_pose(
             f"[0, {part.num_main_poses - 1}] for part '{part_name}'"
         )
 
-    if obj.name not in _snapshots:
-        _snapshots[obj.name] = _snapshot_pose(obj, cache.used_bone_names)
+    snapshot_key = _snapshot_key(obj)
+    if snapshot_key and snapshot_key not in _snapshots:
+        _snapshots[snapshot_key] = _snapshot_pose(obj, cache.used_bone_names)
 
     part_bone_names = _part_bone_names(part, cache)
     _reset_bones_to_rest(obj, part_bone_names)
@@ -115,10 +120,10 @@ def preview_apply_pose(
     bone_quats[:, 3] = 1.0
     bone_trans = np.zeros((N, 3), dtype=np.float32)
 
-    pa      = part.main_poses
+    pa = part.main_poses
     target_ib = int(part.ib_row_ptr[pose_index + 1]) - 1
-    start   = int(pa.row_ptr[target_ib])
-    end     = int(pa.row_ptr[target_ib + 1])
+    start = int(pa.row_ptr[target_ib])
+    end = int(pa.row_ptr[target_ib + 1])
 
     if end > start:
         bones = pa.pose_bones[start:end].astype(int)
@@ -130,8 +135,8 @@ def preview_apply_pose(
     target_track = int(part.main_tracks[pose_index])
     scene_props = getattr(bpy.context.scene, "cp77_facial", None)
     if scene_props is not None:
-        scene_props.preview_active     = True
-        scene_props.preview_part       = part_name
+        scene_props.preview_active = True
+        scene_props.preview_part = part_name
         scene_props.preview_pose_index = pose_index
 
     _tag_redraw()
@@ -141,14 +146,14 @@ def preview_apply_pose(
 
 
 def preview_clear(
-    obj: bpy.types.Object,
-    cache: rig_binding.BindingCache,
-) -> Tuple[bool, str]:
+        obj: bpy.types.Object,
+        cache: rig_binding.BindingCache,
+        ) -> Tuple[bool, str]:
     """
     Restore the pose saved before the last preview_apply_pose call.
     Falls back to resetting all used bones to rest if no snapshot exists.
     """
-    snap = _snapshots.pop(obj.name, None)
+    snap = _snapshots.pop(_snapshot_key(obj), None)
 
     if snap is not None:
         _restore_pose(obj, snap)
@@ -202,61 +207,61 @@ def get_pose_track_name(cache: rig_binding.BindingCache, part_name: str, pose_in
 
 
 def get_corrective_count(
-    cache: rig_binding.BindingCache,
-    part_name: str,
-    pose_index: int,
-) -> Tuple[int, int]:
+        cache: rig_binding.BindingCache,
+        part_name: str,
+        pose_index: int,
+        ) -> Tuple[int, int]:
     """Return (num_gce_solo, num_ice_solo) without running the preview."""
     part = _get_part(cache.setup, part_name)
     if part is None or pose_index < 0 or pose_index >= part.num_main_poses:
         return 0, 0
     target_track = int(part.main_tracks[pose_index])
-    target_ib    = int(part.ib_row_ptr[pose_index + 1]) - 1
+    target_ib = int(part.ib_row_ptr[pose_index + 1]) - 1
     return (
         len(_find_gce_solo_correctives(part, target_track)),
         len(_find_ice_correctives(part, target_ib)),
-    )
+        )
 
 
 # Operators
 
 class FACIAL_OT_PreviewPose(Operator):
     """Preview a single main pose at full weight on the active armature"""
-    bl_idname  = "cp77_facial.preview_pose"
-    bl_label   = "Preview Pose"
+    bl_idname = "cp77_facial.preview_pose"
+    bl_label = "Preview Pose"
     bl_options = {"REGISTER", "UNDO"}
 
     part: EnumProperty(
-        name  = "Part",
-        items = [
-            ("face",   "Face",   "Face main poses (121)"),
-            ("eyes",   "Eyes",   "Eye main poses (12)"),
-            ("tongue", "Tongue", "Tongue main poses (18)"),
-        ],
-        default = "face",
-    )  # type: ignore
+            name="Part",
+            items=[
+                ("face", "Face", "Face main poses (121)"),
+                ("eyes", "Eyes", "Eye main poses (12)"),
+                ("tongue", "Tongue", "Tongue main poses (18)"),
+                ],
+            default="face",
+            )  # type: ignore
 
     pose_index: IntProperty(
-        name    = "Pose Index",
-        default = 0,
-        min     = 0,
-        max     = 255,
-    )  # type: ignore
+            name="Pose Index",
+            default=0,
+            min=0,
+            max=255,
+            )  # type: ignore
 
     @classmethod
     def poll(cls, context):
         obj = context.object
         return (
-            obj is not None
-            and obj.type == "ARMATURE"
-            and rig_binding.is_bound(obj)
-            and rig_binding.get_cache(obj.name) is not None
+                obj is not None
+                and obj.type == "ARMATURE"
+                and rig_binding.is_bound(obj)
+                and rig_binding.get_cache(obj.name) is not None
         )
 
     def invoke(self, context, event):
         scene_props = getattr(context.scene, "cp77_facial", None)
         if scene_props is not None:
-            self.part       = scene_props.preview_part
+            self.part = scene_props.preview_part
             self.pose_index = scene_props.preview_pose_index
 
         cache = rig_binding.get_cache(context.object.name)
@@ -287,12 +292,12 @@ class FACIAL_OT_PreviewPose(Operator):
         if scene_props is not None and getattr(scene_props, "solver_active", False):
             layout.separator()
             layout.label(
-                text="Solver active — preview will be overwritten on next frame",
-                icon="ERROR",
-            )
+                    text="Solver active — preview will be overwritten on next frame",
+                    icon="ERROR",
+                    )
 
     def execute(self, context):
-        obj   = context.object
+        obj = context.object
         cache = rig_binding.get_cache(obj.name)
         if cache is None:
             self.report({"ERROR"}, "No binding cache — please rebind first")
@@ -303,11 +308,10 @@ class FACIAL_OT_PreviewPose(Operator):
         return {"FINISHED"} if ok else {"CANCELLED"}
 
 
-
 class FACIAL_OT_ClearPreview(Operator):
     """Restore the pose that was active before the last preview"""
-    bl_idname  = "cp77_facial.clear_preview"
-    bl_label   = "Clear Preview"
+    bl_idname = "cp77_facial.clear_preview"
+    bl_label = "Clear Preview"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -318,10 +322,10 @@ class FACIAL_OT_ClearPreview(Operator):
         scene_props = getattr(context.scene, "cp77_facial", None)
         if scene_props is not None and scene_props.preview_active:
             return True
-        return obj.name in _snapshots
+        return has_snapshot(obj)
 
     def execute(self, context):
-        obj   = context.object
+        obj = context.object
         cache = rig_binding.get_cache(obj.name)
         if cache is None:
             self.report({"ERROR"}, "No binding cache — please rebind first")
@@ -332,11 +336,10 @@ class FACIAL_OT_ClearPreview(Operator):
         return {"FINISHED"} if ok else {"CANCELLED"}
 
 
-
 class FACIAL_OT_BrowsePoses(Operator):
     """Step through main poses one at a time for the selected part"""
-    bl_idname  = "cp77_facial.browse_poses"
-    bl_label   = "Browse Poses"
+    bl_idname = "cp77_facial.browse_poses"
+    bl_label = "Browse Poses"
     bl_options = {"REGISTER", "UNDO"}
 
     direction: IntProperty(name="Direction", default=1, min=-1, max=1)  # type: ignore
@@ -345,15 +348,15 @@ class FACIAL_OT_BrowsePoses(Operator):
     def poll(cls, context):
         obj = context.object
         return (
-            obj is not None
-            and obj.type == "ARMATURE"
-            and rig_binding.is_bound(obj)
-            and rig_binding.get_cache(obj.name) is not None
+                obj is not None
+                and obj.type == "ARMATURE"
+                and rig_binding.is_bound(obj)
+                and rig_binding.get_cache(obj.name) is not None
         )
 
     def execute(self, context):
-        obj         = context.object
-        cache       = rig_binding.get_cache(obj.name)
+        obj = context.object
+        cache = rig_binding.get_cache(obj.name)
         scene_props = getattr(context.scene, "cp77_facial", None)
 
         if cache is None or scene_props is None:
@@ -377,7 +380,7 @@ _CLASSES = (
     FACIAL_OT_PreviewPose,
     FACIAL_OT_ClearPreview,
     FACIAL_OT_BrowsePoses,
-)
+    )
 
 
 def register():

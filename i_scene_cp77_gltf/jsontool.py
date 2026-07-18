@@ -1,12 +1,13 @@
-import bpy
 import json
 import os
 import re
 from functools import lru_cache
 from pathlib import Path
-from .main.common import show_message, load_zip
-from .main.datashards import ParsedApp, ParsedEntity
 
+import bpy
+
+from .main.common import load_zip, show_message
+from .main.datashards import ParsedApp, ParsedEntity
 
 # Error messages for different file types
 invalid_json_error = (
@@ -21,7 +22,6 @@ invalid_phys_error = "Import may continue, but .phys colliders will not be impor
 
 MIN_WOLVENKIT_VERSION = (8, 17)
 MIN_MATERIAL_JSON_VERSION = (1, 0)
-
 
 
 def _cname_value(value, default=''):
@@ -50,7 +50,7 @@ def _build_app_lookup(appearances):
     by_appearance = {}
     by_name = {}
     appearance_names = []
-    for index, app in enumerate(appearances or ()): 
+    for index, app in enumerate(appearances or ()):
         if type(app) is not dict:
             continue
         appearance = _cname_value(app.get('appearanceName'))
@@ -146,7 +146,8 @@ def resolve_requested_appearance_name(app_name, ent_default, ent_apps, by_appear
 
 
 def _components_by_type(components, type_name):
-    return [component for component in components or () if type(component) is dict and component.get('$type') == type_name]
+    return [component for component in components or () if
+            type(component) is dict and component.get('$type') == type_name]
 
 
 def _normalize_default_appearance(default_appearance, appearances, by_appearance, by_name):
@@ -179,6 +180,7 @@ class JSONTool:
         '.mesh.json',
         '.gradient.json',
         '.rig.json',
+        '.facialsetup.json',
         '.cfoliage.json',
         '.hp.json',
         '.phys.json',
@@ -186,7 +188,7 @@ class JSONTool:
         '.mltemplate.json',
         '.mt.json',
         '.mi.json',
-    }
+        }
 
     passthrough_errors = {
         '.ent.json': invalid_json_error,
@@ -196,6 +198,7 @@ class JSONTool:
         '.mesh.json': invalid_json_error,
         '.gradient.json': invalid_json_error,
         '.rig.json': invalid_json_error,
+        '.facialsetup.json': invalid_json_error,
         '.cfoliage.json': invalid_json_error,
         '.hp.json': invalid_json_error,
         '.phys.json': invalid_phys_error,
@@ -203,7 +206,50 @@ class JSONTool:
         '.mltemplate.json': invalid_material_error,
         '.mt.json': invalid_material_error,
         '.mi.json': invalid_material_error,
-    }
+        }
+
+    @staticmethod
+    def resolve_asset_path(reference, roots=(), extensions=(), warn_missing=False):
+        """Resolve an explicit path or depot reference through DepotAssetIndex."""
+        if not reference:
+            return ""
+
+        from .datakrash import DEFAULT_ASSET_EXTENSIONS, DepotAssetIndex
+
+        expanded = bpy.path.abspath(str(reference))
+        requested = tuple(extensions) or DEFAULT_ASSET_EXTENSIONS
+        for root in roots:
+            if not root:
+                continue
+            index = DepotAssetIndex.cached(
+                bpy.path.abspath(str(root)),
+                extensions=requested,
+                warn_missing=warn_missing,
+            )
+            resolved = index.resolve_any(expanded, requested, warn=warn_missing)
+            if resolved:
+                return resolved
+
+        parent = os.path.dirname(expanded)
+        if not parent:
+            return ""
+        index = DepotAssetIndex.cached(
+            parent, extensions=requested, warn_missing=warn_missing
+        )
+        return index.resolve_any(expanded, requested, warn=warn_missing) or ""
+
+    @staticmethod
+    def resolve_existing_path(reference, roots=(), warn_missing=False):
+        """Resolve an existing local file through the indexed path resolver."""
+        if not reference:
+            return ""
+        expanded = bpy.path.abspath(str(reference))
+        suffix = _full_suffix(os.path.basename(expanded))
+        extensions = (suffix,) if suffix else ()
+        return JSONTool.resolve_asset_path(
+            expanded, roots=roots, extensions=extensions,
+            warn_missing=warn_missing,
+        )
 
     @staticmethod
     def normalize_paths(data):
@@ -262,7 +308,7 @@ class JSONTool:
         version_fields = {
             'MaterialJsonVersion': MIN_MATERIAL_JSON_VERSION,
             'WolvenKitVersion': MIN_WOLVENKIT_VERSION,
-        }
+            }
         found_version = False
 
         for field, minimum in version_fields.items():
@@ -332,8 +378,7 @@ class JSONTool:
             data['lattice_interpolation_u'],
             data['lattice_interpolation_v'],
             data['lattice_interpolation_w'],
-        )
-
+            )
 
     @staticmethod
     def _parsed_cache_key(filepath):
@@ -381,7 +426,9 @@ class JSONTool:
 
         has_error = not is_cached and not is_refitter and not JSONTool.json_ver_validate(data)
         specific_error = JSONTool.passthrough_errors.get(file_extension, invalid_json_error)
-        JSONTool._create_error_if_needed(has_error, suppress_verbose, base_name, file_extension, specific_error, errorMessages)
+        JSONTool._create_error_if_needed(
+            has_error, suppress_verbose, base_name, file_extension, specific_error, errorMessages
+            )
         return data
 
     @staticmethod
@@ -400,7 +447,9 @@ class JSONTool:
         components = root.get('components') or []
         component_data = compiled_data.get('Data', {}).get('Chunks', []) if type(compiled_data) is dict else []
         appearance_names, by_appearance, by_name = _build_app_lookup(appearances)
-        default_appearance = _normalize_default_appearance(_cname_value(root.get('defaultAppearance')), appearances, by_appearance, by_name)
+        default_appearance = _normalize_default_appearance(
+            _cname_value(root.get('defaultAppearance')), appearances, by_appearance, by_name
+            )
         components_by_name = _build_component_lookup(components)
         appearance_index_by_name = {}
         for index, name in enumerate(appearance_names):
@@ -408,31 +457,38 @@ class JSONTool:
                 appearance_index_by_name.setdefault(name, index)
         component_ids = {id(component) for component in components}
         component_data_ids = {id(component) for component in component_data}
-        vehicle_slot_component = next((component for component in components if _component_name(component) in ('vehicle_slots', 'slots')), None)
+        vehicle_slot_component = next(
+                (component for component in components if _component_name(component) in ('vehicle_slots', 'slots')),
+                None
+                )
 
         parsed = ParsedEntity(
-            appearances=appearances,
-            appearance_names=appearance_names,
-            appearance_index_by_name=appearance_index_by_name,
-            appearances_by_appearance=by_appearance,
-            appearances_by_name=by_name,
-            default_appearance=default_appearance,
-            component_dicts=components,
-            component_data=component_data,
-            components_by_name=components_by_name,
-            components_by_id={id(component): component for component in components},
-            component_ids=component_ids,
-            component_data_ids=component_data_ids,
-            parent_transform_lookup=_build_chunk_lookup(component_data, 'parentTransform'),
-            skinning_lookup=_build_chunk_lookup(component_data, 'skinning'),
-            shape_lookup=_build_chunk_lookup(component_data, 'shape'),
-            slot_component_lookups=_build_slot_component_lookups(components),
-            collider_components=_components_by_type(component_data, 'entColliderComponent'),
-            simple_collider_components=_components_by_type(component_data, 'entSimpleColliderComponent'),
-            light_channel_components=_components_by_type(component_data, 'entLightChannelComponent') + _components_by_type(components, 'entLightChannelComponent'),
-            resolved_dependencies=root.get('resolvedDependencies') or [],
-            vehicle_slot_component=vehicle_slot_component,
-        )
+                appearances=appearances,
+                appearance_names=appearance_names,
+                appearance_index_by_name=appearance_index_by_name,
+                appearances_by_appearance=by_appearance,
+                appearances_by_name=by_name,
+                default_appearance=default_appearance,
+                component_dicts=components,
+                component_data=component_data,
+                components_by_name=components_by_name,
+                components_by_id={id(component): component for component in components},
+                component_ids=component_ids,
+                component_data_ids=component_data_ids,
+                parent_transform_lookup=_build_chunk_lookup(component_data, 'parentTransform'),
+                skinning_lookup=_build_chunk_lookup(component_data, 'skinning'),
+                shape_lookup=_build_chunk_lookup(component_data, 'shape'),
+                slot_component_lookups=_build_slot_component_lookups(components),
+                collider_components=_components_by_type(component_data, 'entColliderComponent'),
+                simple_collider_components=_components_by_type(component_data, 'entSimpleColliderComponent'),
+                light_channel_components=_components_by_type(
+                    component_data, 'entLightChannelComponent'
+                    ) + _components_by_type(
+                    components, 'entLightChannelComponent'
+                    ),
+                resolved_dependencies=root.get('resolvedDependencies') or [],
+                vehicle_slot_component=vehicle_slot_component,
+                )
 
         if JSONTool._use_cache:
             JSONTool._entity_cache[cache_key] = parsed
@@ -474,19 +530,21 @@ class JSONTool:
             parent_by_name[name] = _build_chunk_lookup(chunks, 'parentTransform')
             skinning_by_name[name] = _build_chunk_lookup(chunks, 'skinning')
             shape_by_name[name] = _build_chunk_lookup(chunks, 'shape')
-            light_by_name[name] = _components_by_type(chunks, 'entLightChannelComponent') + _components_by_type(components, 'entLightChannelComponent')
+            light_by_name[name] = _components_by_type(chunks, 'entLightChannelComponent') + _components_by_type(
+                components, 'entLightChannelComponent'
+                )
 
         parsed = ParsedApp(
-            appearances=appearances,
-            appearance_names=names,
-            appearances_by_name=by_name,
-            components_by_appearance_name=components_by_name,
-            chunks_by_appearance_name=chunks_by_name,
-            parent_transform_lookup_by_appearance_name=parent_by_name,
-            skinning_lookup_by_appearance_name=skinning_by_name,
-            shape_lookup_by_appearance_name=shape_by_name,
-            light_channels_by_appearance_name=light_by_name,
-        )
+                appearances=appearances,
+                appearance_names=names,
+                appearances_by_name=by_name,
+                components_by_appearance_name=components_by_name,
+                chunks_by_appearance_name=chunks_by_name,
+                parent_transform_lookup_by_appearance_name=parent_by_name,
+                skinning_lookup_by_appearance_name=skinning_by_name,
+                shape_lookup_by_appearance_name=shape_by_name,
+                light_channels_by_appearance_name=light_by_name,
+                )
 
         if JSONTool._use_cache:
             JSONTool._app_cache[cache_key] = parsed
@@ -539,13 +597,15 @@ class JSONTool:
 
 
 def resolve_entity_appearance(filepath, requested_app, error_messages=None):
-    parsed_ent = JSONTool.load_entity(filepath, error_messages if error_messages is not None else []) if filepath else None
+    parsed_ent = JSONTool.load_entity(
+        filepath, error_messages if error_messages is not None else []
+        ) if filepath else None
     if parsed_ent is None:
         return requested_app
     return resolve_requested_appearance_name(
-        requested_app,
-        parsed_ent.default_appearance,
-        parsed_ent.appearances,
-        parsed_ent.appearances_by_appearance,
-        parsed_ent.appearances_by_name,
-    )
+            requested_app,
+            parsed_ent.default_appearance,
+            parsed_ent.appearances,
+            parsed_ent.appearances_by_appearance,
+            parsed_ent.appearances_by_name,
+            )

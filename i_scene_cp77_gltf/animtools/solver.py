@@ -1,54 +1,54 @@
 from __future__ import annotations
 
 import time
-from typing import Optional
-import numpy as np
+
 import bpy
 import bpy.app.handlers
+import numpy as np
 from bpy.app.handlers import persistent
 from bpy.props import BoolProperty, IntProperty
 from bpy.types import Operator
 
 from . import rig_binding
-
+from ..main.transform_math import quat_multiply_xyzw, quat_nlerp_xyzw
 
 # Constants
 
 WEIGHT_THRESHOLD = 0.001
 
 # Envelope track indices (fixed positions in every CP77 facial rig)
-_T_UPPER_FACE       = 1
-_T_LOWER_FACE       = 2
-_T_LIPSYNC_ENV      = 4
-_T_LIPSYNC_LEFT     = 5
-_T_LIPSYNC_RIGHT    = 6
-_T_JALI_JAW         = 7
-_T_JALI_LIPS        = 8
-_T_MUZZLE_LIPS      = 9
-_T_MUZZLE_EYES      = 10
-_T_MUZZLE_BROWS     = 11
-_T_MUZZLE_EYE_DIR   = 12
+_T_UPPER_FACE = 1
+_T_LOWER_FACE = 2
+_T_LIPSYNC_ENV = 4
+_T_LIPSYNC_LEFT = 5
+_T_LIPSYNC_RIGHT = 6
+_T_JALI_JAW = 7
+_T_JALI_LIPS = 8
+_T_MUZZLE_LIPS = 9
+_T_MUZZLE_EYES = 10
+_T_MUZZLE_BROWS = 11
+_T_MUZZLE_EYE_DIR = 12
 
 # other_muzzles lookup: indexed by env_type (0-5)
 #   0=MUZZLE_LIPS, 1=MUZZLE_JAW → 1.0 (handled by stage 4)
 #   2=MUZZLE_EYES, 3=MUZZLE_BROWS, 4=MUZZLE_EYE_DIRECTIONS, 5=MUZZLE_NONE
-_MUZZLE_EYES      = 2
-_MUZZLE_BROWS     = 3
-_MUZZLE_EYE_DIR   = 4
+_MUZZLE_EYES = 2
+_MUZZLE_BROWS = 3
+_MUZZLE_EYE_DIR = 4
 
 # Influence type constants
-_INFL_LINEAR      = 0
+_INFL_LINEAR = 0
 _INFL_EXPONENTIAL = 1
-_INFL_ORGANIC     = 2
+_INFL_ORGANIC = 2
 
 # Lipsync side constants
-_SIDE_MID   = 0
-_SIDE_LEFT  = 1
+_SIDE_MID = 0
+_SIDE_LEFT = 1
 _SIDE_RIGHT = 2
 
-_PART_NONE    = 0   # passthrough (1.0)
-_PART_UPPER   = 1
-_PART_LOWER   = 2
+_PART_NONE = 0  # passthrough (1.0)
+_PART_UPPER = 1
+_PART_LOWER = 2
 
 # Handler re-registration guard
 _solving = False
@@ -57,36 +57,12 @@ _solving = False
 # Quaternion helpers
 
 def _quat_mul_batch(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """
-    Batch quaternion multiply: a[N,4] * b[N,4] → result[N,4]  (xyzw convention).
-    """
-    ax, ay, az, aw = a[:, 0], a[:, 1], a[:, 2], a[:, 3]
-    bx, by, bz, bw = b[:, 0], b[:, 1], b[:, 2], b[:, 3]
-    return np.stack([
-        aw * bx + ax * bw + ay * bz - az * by,
-        aw * by - ax * bz + ay * bw + az * bx,
-        aw * bz + ax * by - ay * bx + az * bw,
-        aw * bw - ax * bx - ay * by - az * bz,
-    ], axis=1)
+    return quat_multiply_xyzw(a, b)
 
 
 def _quat_nlerp_batch(a: np.ndarray, b: np.ndarray, t: float) -> np.ndarray:
-    """
-    Normalized lerp between a[N,4] and b[N,4] at scalar blend t.
-    Now Including shortest-path alignment and zero-collapse fallback.
-    """
+    return quat_nlerp_xyzw(a, b, t)
 
-    dot_products = np.sum(a * b, axis=1, keepdims=True)
-    b_corrected = np.where(dot_products < 0, -b, b)
-
-    interp = a + t * (b_corrected - a)
-    norms = np.linalg.norm(interp, axis=1, keepdims=True)
-    _norms = np.where(norms < 1e-8, 1.0, norms)
-    result = interp / _norms
-
-    result = np.where(norms < 1e-8, a, result)
-
-    return result
 
 # Per-part helpers
 
@@ -116,41 +92,41 @@ def _lerp(a: float, b: float, t: float) -> float:
 # Stage implementations (operates on numpy arrays in-place)
 
 def _stage_3_envelope_weights(
-    part,
-    in_tracks:  np.ndarray,   # [T] float32  original input
-    lod:        int,
-    lod_weight: float,
-    muzzle_eyes: float,
-    muzzle_brows: float,
-    muzzle_eye_dir: float,
-    out_tracks: np.ndarray,   # [T] float32  modified in-place
-) -> None:
+        part,
+        in_tracks: np.ndarray,  # [T] float32  original input
+        lod: int,
+        lod_weight: float,
+        muzzle_eyes: float,
+        muzzle_brows: float,
+        muzzle_eye_dir: float,
+        out_tracks: np.ndarray,  # [T] float32  modified in-place
+        ) -> None:
     """
     Stage 3: Copy main pose weights from in_tracks, apply LOD gate and muzzle.
     Jaw/lips poses (env_types 0,1) pass through at 1.0 muzzle — handled by stage 4.
     """
     # other_muzzles per entry: indexed by env_type
     other_muzzles = np.ones(6, dtype=np.float32)
-    other_muzzles[_MUZZLE_EYES]    = 1.0 - muzzle_eyes
-    other_muzzles[_MUZZLE_BROWS]   = 1.0 - muzzle_brows
+    other_muzzles[_MUZZLE_EYES] = 1.0 - muzzle_eyes
+    other_muzzles[_MUZZLE_BROWS] = 1.0 - muzzle_brows
     other_muzzles[_MUZZLE_EYE_DIR] = 1.0 - muzzle_eye_dir
 
-    env_tracks = part.env_tracks   # [M] int16
-    env_lods   = part.env_lods     # [M] uint8
-    env_types  = part.env_types    # [M] uint8
+    env_tracks = part.env_tracks  # [M] int16
+    env_lods = part.env_lods  # [M] uint8
+    env_types = part.env_types  # [M] uint8
 
     # Base weights from input tracks, clamped [0,1]
     weights = np.clip(in_tracks[env_tracks].astype(np.float32), 0.0, 1.0)
 
     # LOD gating
-    above = env_lods > lod    # active this LOD — apply muzzle, full contribution
-    at    = env_lods == lod   # boundary — fade with lod_weight
-    below = env_lods < lod    # lower-detail — zero out
+    above = env_lods > lod  # active this LOD — apply muzzle, full contribution
+    at = env_lods == lod  # boundary — fade with lod_weight
+    below = env_lods < lod  # lower-detail — zero out
 
     muzzle_per_entry = other_muzzles[env_types]
 
     weights = np.where(above, weights * muzzle_per_entry, weights)
-    weights = np.where(at,    weights * muzzle_per_entry * (1.0 - lod_weight), weights)
+    weights = np.where(at, weights * muzzle_per_entry * (1.0 - lod_weight), weights)
     weights = np.where(below, 0.0, weights)
     weights[weights <= WEIGHT_THRESHOLD] = 0.0
 
@@ -159,13 +135,13 @@ def _stage_3_envelope_weights(
 
 
 def _stage_4_global_limits(
-    part,
-    jali_jaw:    float,
-    jali_lips:   float,
-    muzzle_lips: float,
-    lipsync_env: float,
-    out_tracks:  np.ndarray,
-) -> None:
+        part,
+        jali_jaw: float,
+        jali_lips: float,
+        muzzle_lips: float,
+        lipsync_env: float,
+        out_tracks: np.ndarray,
+        ) -> None:
     """
     Stage 4: Apply JALI jaw/lips slider limits to pose weights.
     Only runs if lipsync_env > 0.
@@ -176,15 +152,15 @@ def _stage_4_global_limits(
     envelopes = [jali_jaw, jali_lips]  # indexed by limit_envelope (0=jaw, 1=lips)
 
     for i in range(part.limit_num):
-        t_idx  = int(part.limit_tracks[i])
+        t_idx = int(part.limit_tracks[i])
         env_id = int(part.limit_envelope[i])
         slider = envelopes[env_id] if env_id < 2 else 1.0
-        max_w  = _limit_weight(
-            slider,
-            float(part.limit_min[i]),
-            float(part.limit_mid[i]),
-            float(part.limit_max[i]),
-        )
+        max_w = _limit_weight(
+                slider,
+                float(part.limit_min[i]),
+                float(part.limit_mid[i]),
+                float(part.limit_max[i]),
+                )
         current = out_tracks[t_idx]
         if current > max_w:
             out_tracks[t_idx] = _lerp(current, max_w, muzzle_lips)
@@ -219,27 +195,27 @@ def _stage_5_9_influences(part, out_tracks: np.ndarray) -> None:
 
 
 def _stage_6_upper_lower(
-    part,
-    upper_face:  float,
-    lower_face:  float,
-    out_tracks:  np.ndarray,
-) -> None:
+        part,
+        upper_face: float,
+        lower_face: float,
+        out_tracks: np.ndarray,
+        ) -> None:
     """Stage 6: Multiply each pose by its upper/lower face envelope.
     Part 0 = passthrough (1.0), Part 1 = upper, Part 2 = lower.
     """
     fw = np.array([1.0, upper_face, lower_face], dtype=np.float32)
-    mults = fw[part.ulf_parts]   # [M] per-entry multiplier
-    cur   = out_tracks[part.ulf_tracks].astype(np.float32)
+    mults = fw[part.ulf_parts]  # [M] per-entry multiplier
+    cur = out_tracks[part.ulf_tracks].astype(np.float32)
     out_tracks[part.ulf_tracks] = np.clip(cur * mults, 0.0, 1.0)
 
 
 def _stage_7_lipsync_overrides(
-    setup,
-    lipsync_env: float,
-    in_tracks:   np.ndarray,
-    out_tracks:  np.ndarray,
-    seg,                          # TrackSegments
-) -> None:
+        setup,
+        lipsync_env: float,
+        in_tracks: np.ndarray,
+        out_tracks: np.ndarray,
+        seg,  # TrackSegments
+        ) -> None:
     """
     Stage 7: Override tracks suppress main pose weights based on lipsync activity.
     formula: main_weight *= lerp(1.0, override_v, lipsync_env)
@@ -248,13 +224,13 @@ def _stage_7_lipsync_overrides(
     if lipsync_env == 0.0:
         return
 
-    ovr_map    = setup.lipsync_override_idx_map   # [86] main pose track indices
-    ovr_start  = seg.lipsync_ovr_start            # = 154
+    ovr_map = setup.lipsync_override_idx_map  # [86] main pose track indices
+    ovr_start = seg.lipsync_ovr_start  # = 154
 
     for j, main_track in enumerate(ovr_map):
-        ovr_track   = ovr_start + j
-        override_v  = float(in_tracks[ovr_track])
-        scale       = _lerp(1.0, override_v, lipsync_env)
+        ovr_track = ovr_start + j
+        override_v = float(in_tracks[ovr_track])
+        scale = _lerp(1.0, override_v, lipsync_env)
         out_tracks[int(main_track)] *= scale
 
 
@@ -282,38 +258,38 @@ def _stage_8_lipsync_poses(
 
 
 def _stage_10_inbetween_weights(
-    part,
-    out_tracks: np.ndarray,
-) -> np.ndarray:
+        part,
+        out_tracks: np.ndarray,
+        ) -> np.ndarray:
     """
     Stage 10: Distribute each main pose's scalar weight across its inbetween poses.
     Returns ib_weights: float32 array of length num_ib_poses.
     """
-    num_main   = part.num_main_poses
-    num_ib     = part.num_ib_poses
+    num_main = part.num_main_poses
+    num_ib = part.num_ib_poses
     ib_weights = np.zeros(num_ib, dtype=np.float32)
 
-    main_tracks    = part.main_tracks       # [num_main] int16
-    ib_row_ptr     = part.ib_row_ptr        # [num_main+1] int32
-    ib_thresholds  = part.ib_thresholds     # [num_ib] float32
-    sm_row_ptr     = part.sm_row_ptr        # [num_main+1] int32
-    ib_scope_mults = part.ib_scope_mults    # [num_scope_mults] float32
+    main_tracks = part.main_tracks  # [num_main] int16
+    ib_row_ptr = part.ib_row_ptr  # [num_main+1] int32
+    ib_thresholds = part.ib_thresholds  # [num_ib] float32
+    sm_row_ptr = part.sm_row_ptr  # [num_main+1] int32
+    ib_scope_mults = part.ib_scope_mults  # [num_scope_mults] float32
 
     for m in range(num_main):
         w = float(out_tracks[int(main_tracks[m])])
         ib_s = int(ib_row_ptr[m])
         ib_e = int(ib_row_ptr[m + 1])
-        n    = ib_e - ib_s
+        n = ib_e - ib_s
 
         if w < WEIGHT_THRESHOLD:
-            continue   # output slice stays zero
+            continue  # output slice stays zero
 
         if n == 1:
             ib_weights[ib_s] = w
             continue
 
-        thresholds = ib_thresholds[ib_s : ib_e]  # length n
-        sm_s       = int(sm_row_ptr[m])           # start of scope mults for this pose
+        thresholds = ib_thresholds[ib_s: ib_e]  # length n
+        sm_s = int(sm_row_ptr[m])  # start of scope mults for this pose
 
         if w <= thresholds[0]:
             # Below first inbetween threshold — scale against it
@@ -326,22 +302,22 @@ def _stage_10_inbetween_weights(
         else:
             # Binary search for bracketing inbetween
             # np.searchsorted gives end: thresholds[end-1] <= w < thresholds[end]
-            end   = int(np.searchsorted(thresholds, w, side='right'))
+            end = int(np.searchsorted(thresholds, w, side='right'))
             start = end - 1
             # scope_mults[sm_s + end - 1] is the reciprocal of the gap width
             end_w = (w - thresholds[start]) * float(ib_scope_mults[sm_s + end - 1])
             ib_weights[ib_s + start] = 1.0 - end_w
-            ib_weights[ib_s + end]   = end_w
+            ib_weights[ib_s + end] = end_w
 
     return ib_weights
 
 
 def _stage_12_13_correctives(
-    part,
-    out_tracks:  np.ndarray,
-    ib_weights:  np.ndarray,
-    lod:         int,
-) -> np.ndarray:
+        part,
+        out_tracks: np.ndarray,
+        ib_weights: np.ndarray,
+        lod: int,
+        ) -> np.ndarray:
     """
     Stages 12 + 13: Compute corrective pose weights.
     Returns corr_weights: float32 array of length num_correctives.
@@ -358,8 +334,8 @@ def _stage_12_13_correctives(
 
     #  Stage 12: GCE
     gcorr_row_ptr = part.gcorr_row_ptr
-    gcorr_tracks  = part.gcorr_tracks
-    gcorr_flags   = part.gcorr_flags
+    gcorr_tracks = part.gcorr_tracks
+    gcorr_flags = part.gcorr_flags
 
     for c in range(n_corr):
         s = int(gcorr_row_ptr[c])
@@ -374,8 +350,8 @@ def _stage_12_13_correctives(
 
     #  Stage 13: ICE
     icorr_row_ptr = part.icorr_row_ptr
-    icorr_tracks  = part.icorr_tracks
-    icorr_flags   = part.icorr_flags
+    icorr_tracks = part.icorr_tracks
+    icorr_flags = part.icorr_flags
 
     for c in range(n_corr):
         if corr_weights[c] <= 0.0:
@@ -395,9 +371,9 @@ def _stage_12_13_correctives(
 
 
 def _stage_14_corrective_influences(
-    part,
-    corr_weights: np.ndarray,
-) -> None:
+        part,
+        corr_weights: np.ndarray,
+        ) -> None:
     """
     Stage 14: Suppress corrective poses that are opposed by other active correctives.
     Modifies corr_weights in-place.
@@ -408,13 +384,13 @@ def _stage_14_corrective_influences(
       2 (linear):   linear corr   → w *= (1-s)
       3 (both):     organic       → w *= (1-s)²
     """
-    _FLAG_BY_SPEED          = 1
+    _FLAG_BY_SPEED = 1
     _FLAG_LINEAR_CORRECTION = 2
 
-    row_ptr      = part.corr_infl_row_ptr
-    influencers  = part.corr_infl_influencers
+    row_ptr = part.corr_infl_row_ptr
+    influencers = part.corr_infl_influencers
     pose_indices = part.corr_infl_pose_idx
-    types        = part.corr_infl_types
+    types = part.corr_infl_types
 
     for i in range(part.num_corr_infl):
         c = int(pose_indices[i])
@@ -427,31 +403,31 @@ def _stage_14_corrective_influences(
         inf_sum = float(np.sum(corr_weights[influencers[s:e]]))
 
         flags = int(types[i])
-        by_speed          = bool(flags & _FLAG_BY_SPEED)
+        by_speed = bool(flags & _FLAG_BY_SPEED)
         linear_correction = bool(flags & _FLAG_LINEAR_CORRECTION)
 
         if linear_correction:
             opp = 1.0 - inf_sum
             current *= opp
             if by_speed:
-                current *= opp          # total: current *= (1-s)²
+                current *= opp  # total: current *= (1-s)²
         else:
             if inf_sum >= 1.0:
                 current = 0.0
             elif not by_speed:
-                current = min(current, 1.0 - inf_sum)   # simple clamp
+                current = min(current, 1.0 - inf_sum)  # simple clamp
             else:  # by_speed only
-                current *= 1.0 - inf_sum * inf_sum       # exponential
+                current *= 1.0 - inf_sum * inf_sum  # exponential
 
         corr_weights[c] = max(0.0, current)
 
 
 def _stage_15_16_blend_transforms(
-    pose_arrays,
-    weights:      np.ndarray,    # [num_poses] float32
-    bone_quats:   np.ndarray,    # [num_bones, 4] float32 xyzw — modified in-place
-    bone_trans:   np.ndarray,    # [num_bones, 3] float32     — modified in-place
-) -> None:
+        pose_arrays,
+        weights: np.ndarray,  # [num_poses] float32
+        bone_quats: np.ndarray,  # [num_bones, 4] float32 xyzw — modified in-place
+        bone_trans: np.ndarray,  # [num_bones, 3] float32     — modified in-place
+        ) -> None:
     """
     Stages 15 & 16: Additively blend weighted bone transforms.
 
@@ -462,7 +438,7 @@ def _stage_15_16_blend_transforms(
     Bones are processed per-pose but the per-bone math within a pose
     is fully vectorized via _quat_mul_batch.
     """
-    row_ptr    = pose_arrays.row_ptr     # [num_poses+1] int32
+    row_ptr = pose_arrays.row_ptr  # [num_poses+1] int32
     pose_bones = pose_arrays.pose_bones  # [total] int16
     pose_quats = pose_arrays.pose_quats  # [total, 4] float32 xyzw
     pose_trans = pose_arrays.pose_trans  # [total, 3] float32
@@ -477,11 +453,11 @@ def _stage_15_16_blend_transforms(
         if s == e:
             continue
 
-        bones  = pose_bones[s:e].astype(np.int32)   # [K]
-        dq     = pose_quats[s:e]                     # [K, 4] xyzw
-        dt     = pose_trans[s:e]                     # [K, 3]
+        bones = pose_bones[s:e].astype(np.int32)  # [K]
+        dq = pose_quats[s:e]  # [K, 4] xyzw
+        dt = pose_trans[s:e]  # [K, 3]
 
-        cur_q  = bone_quats[bones]   # [K, 4]
+        cur_q = bone_quats[bones]  # [K, 4]
 
         # Translation: always linear
         bone_trans[bones] += dt * w
@@ -495,10 +471,10 @@ def _stage_15_16_blend_transforms(
 
 
 def _stage_17_wrinkles(
-    part,
-    out_tracks: np.ndarray,
-    wrinkle_start: int,
-) -> None:
+        part,
+        out_tracks: np.ndarray,
+        wrinkle_start: int,
+        ) -> None:
     """
     Stage 17: Compute wrinkle track values.
     wrinkle[i] = 1 - (1 - out_tracks[source_track[i]])^2
@@ -507,43 +483,43 @@ def _stage_17_wrinkles(
         return
 
     src = part.wrinkle_source_tracks.astype(np.int32)
-    u   = 1.0 - out_tracks[src]
-    out_tracks[wrinkle_start : wrinkle_start + part.wrinkle_count] = np.clip(
-        1.0 - u * u, 0.0, 1.0
-    )
+    u = 1.0 - out_tracks[src]
+    out_tracks[wrinkle_start: wrinkle_start + part.wrinkle_count] = np.clip(
+            1.0 - u * u, 0.0, 1.0
+            )
 
 
 # Per-part solve
 
 def _solve_part(
-    part,
-    setup,
-    seg,
-    in_tracks:  np.ndarray,
-    out_tracks: np.ndarray,
-    bone_quats: np.ndarray,
-    bone_trans: np.ndarray,
-    lod:        int,
-    lod_weight: float,
-) -> None:
+        part,
+        setup,
+        seg,
+        in_tracks: np.ndarray,
+        out_tracks: np.ndarray,
+        bone_quats: np.ndarray,
+        bone_trans: np.ndarray,
+        lod: int,
+        lod_weight: float,
+        ) -> None:
     """Run all 17 stages for one facial part (tongue / eyes / face)."""
 
     #  Extract envelope scalars
-    upper_face    = _clamp02(float(out_tracks[_T_UPPER_FACE]))
-    lower_face    = _clamp02(float(out_tracks[_T_LOWER_FACE]))
-    lipsync_env   = _clamp01(float(out_tracks[_T_LIPSYNC_ENV]))
-    jali_jaw      = _clamp02(float(out_tracks[_T_JALI_JAW]))
-    jali_lips     = _clamp02(float(out_tracks[_T_JALI_LIPS]))
-    muzzle_lips   = _clamp01(float(out_tracks[_T_MUZZLE_LIPS]))
-    muzzle_eyes   = _clamp01(float(out_tracks[_T_MUZZLE_EYES]))
-    muzzle_brows  = _clamp01(float(out_tracks[_T_MUZZLE_BROWS]))
-    muzzle_eye_dir= _clamp01(float(out_tracks[_T_MUZZLE_EYE_DIR]))
+    upper_face = _clamp02(float(out_tracks[_T_UPPER_FACE]))
+    lower_face = _clamp02(float(out_tracks[_T_LOWER_FACE]))
+    lipsync_env = _clamp01(float(out_tracks[_T_LIPSYNC_ENV]))
+    jali_jaw = _clamp02(float(out_tracks[_T_JALI_JAW]))
+    jali_lips = _clamp02(float(out_tracks[_T_JALI_LIPS]))
+    muzzle_lips = _clamp01(float(out_tracks[_T_MUZZLE_LIPS]))
+    muzzle_eyes = _clamp01(float(out_tracks[_T_MUZZLE_EYES]))
+    muzzle_brows = _clamp01(float(out_tracks[_T_MUZZLE_BROWS]))
+    muzzle_eye_dir = _clamp01(float(out_tracks[_T_MUZZLE_EYE_DIR]))
 
     #  Stage 3
     _stage_3_envelope_weights(
-        part, in_tracks, lod, lod_weight,
-        muzzle_eyes, muzzle_brows, muzzle_eye_dir, out_tracks
-    )
+            part, in_tracks, lod, lod_weight,
+            muzzle_eyes, muzzle_brows, muzzle_eye_dir, out_tracks
+            )
 
     #  Stage 4
     _stage_4_global_limits(part, jali_jaw, jali_lips, muzzle_lips, lipsync_env, out_tracks)
@@ -585,22 +561,22 @@ def _solve_part(
 # Public numpy solver
 
 def facial_solve_numpy(
-    setup,
-    rig,
-    seg,
-    in_tracks:  np.ndarray,
-    lod:        int   = 0,
-    lod_weight: float = 0.0,
-):
+        setup,
+        rig,
+        seg,
+        in_tracks: np.ndarray,
+        lod: int = 0,
+        lod_weight: float = 0.0,
+        ):
     """
     Full facial solve.  Pure numpy.
     """
-    num_bones  = rig.num_bones
+    num_bones = rig.num_bones
     num_tracks = rig.num_tracks
 
     # Output bone buffers start at rest (identity rotation, zero translation)
     bone_quats = np.zeros((num_bones, 4), dtype=np.float32)
-    bone_quats[:, 3] = 1.0   # w = 1 (identity quaternion xyzw)
+    bone_quats[:, 3] = 1.0  # w = 1 (identity quaternion xyzw)
     bone_trans = np.zeros((num_bones, 3), dtype=np.float32)
 
     # out_tracks starts as a copy of in_tracks — modified in-place by each stage
@@ -609,45 +585,77 @@ def facial_solve_numpy(
     # Execute parts in order: tongue (0), eyes (1), face (2)
     for part in (setup.tongue, setup.eyes, setup.face):
         _solve_part(
-            part, setup, seg,
-            in_tracks, out_tracks,
-            bone_quats, bone_trans,
-            lod, lod_weight,
-        )
+                part, setup, seg,
+                in_tracks, out_tracks,
+                bone_quats, bone_trans,
+                lod, lod_weight,
+                )
 
     return bone_quats, bone_trans, out_tracks
 
 
 def write_bones(
-    arm_obj:    bpy.types.Object,
-    cache:      rig_binding.BindingCache,
-    bone_quats: np.ndarray,
-    bone_trans: np.ndarray,
-) -> int:
-    """
-    Write solver output transforms back to Blender pose bones.
-    Only writes used_bone_indices — all other bones are untouched.
-    Returns the number of bones successfully written.
-    """
-    pb          = arm_obj.pose.bones
-    bone_names  = cache.rig.bone_names
-    used_idx    = cache.setup.used_bone_indices
+        arm_obj: bpy.types.Object,
+        cache: rig_binding.BindingCache,
+        bone_quats: np.ndarray,
+        bone_trans: np.ndarray,
+        ) -> int:
+    """Write REDengine-local facial deltas into Blender pose-bone basis channels."""
+    pose_bones = getattr(cache, "pose_bones", None)
+    bone_names = cache.rig.bone_names
+    used_indices = cache.setup.used_bone_indices
+
+    contract = str(
+        getattr(arm_obj, "data", {}).get(
+            "cp77_rig_space_contract",
+            "CP77_RE_MODEL_BL_BONE_X_NEGZ_Y_Y_Z_X_V1",
+        )
+    )
+    current_contract = "CP77_RE_MODEL_BL_BONE_X_NEGZ_Y_Y_Z_X_V1"
+    direct_contract = "CP77_RE_MODEL_BL_BONE_DIRECT_V1"
+    if contract not in {current_contract, direct_contract}:
+        raise RuntimeError(
+            f"Unsupported facial solver rig-space contract: {contract!r}"
+        )
 
     written = 0
-    for i, bone_idx in enumerate(used_idx):
-        name = str(bone_names[int(bone_idx)])
-        if name not in pb:
+    for bone_idx in used_indices:
+        bone_index = int(bone_idx)
+        if pose_bones is not None:
+            if bone_index >= len(pose_bones):
+                continue
+            pose_bone = pose_bones[bone_index]
+        else:
+            name = str(bone_names[bone_index])
+            pose_bone = arm_obj.pose.bones.get(name)
+            if pose_bone is None and name.endswith("_plug"):
+                pose_bone = arm_obj.pose.bones.get(name[:-5] + "_slot")
+        if pose_bone is None:
             continue
-        pbone = pb[name]
-        pbone.rotation_mode = "QUATERNION"
-        # xyzw → Blender (w, x, y, z)
-        q = bone_quats[int(bone_idx)]
-        pbone.rotation_quaternion = (float(q[3]), float(q[2]), float(q[0]), float(q[1]))
-        t = bone_trans[int(bone_idx)]
-        pbone.location = (float(-t[2]), float(t[0]), float(t[1]))
+
+        qx, qy, qz, qw = (
+            float(component) for component in bone_quats[bone_index]
+        )
+        tx, ty, tz = (
+            float(component) for component in bone_trans[bone_index]
+        )
+
+        pose_bone.rotation_mode = "QUATERNION"
+        if contract == current_contract:
+            # read_rig local basis:
+            #   Blender X = -RED Z
+            #   Blender Y =  RED Y
+            #   Blender Z =  RED X
+            # Quaternion similarity B * Qre * inverse(B) yields xyzw=(-z,y,x,w).
+            pose_bone.rotation_quaternion = (qw, -qz, qy, qx)
+            pose_bone.location = (-tz, ty, tx)
+        else:
+            pose_bone.rotation_quaternion = (qw, qx, qy, qz)
+            pose_bone.location = (tx, ty, tz)
         written += 1
 
     return written
+
 
 
 
@@ -664,20 +672,29 @@ def solve_frame(scene, depsgraph=None):
     """
     global _solving
     if _solving:
-        return   # prevent recursion
+        return  # prevent recursion
     _solving = True
 
     try:
-        ns     = rig_binding._get_ns()
+        ns = rig_binding._get_ns()
         timing = {}
 
-        for arm_name, cache in list(ns.items()):
-            # Skip non-cache entries (ns may contain other objects)
+        for cache_key, cache in list(ns.items()):
             if not isinstance(cache, rig_binding.BindingCache):
                 continue
 
-            arm_obj = scene.objects.get(arm_name)
-            if arm_obj is None or arm_obj.type != "ARMATURE":
+            arm_obj = cache.armature
+            try:
+                live = (
+                        arm_obj is not None
+                        and arm_obj.type == "ARMATURE"
+                        and int(arm_obj.as_pointer()) == cache.armature_pointer
+                        and bpy.data.objects.get(arm_obj.name) is arm_obj
+                )
+            except (AttributeError, ReferenceError, TypeError, ValueError):
+                live = False
+            if not live:
+                ns.pop(cache_key, None)
                 continue
             if not rig_binding.is_bound(arm_obj):
                 continue
@@ -689,13 +706,13 @@ def solve_frame(scene, depsgraph=None):
 
             # Solve
             bone_quats, bone_trans, out_tracks = facial_solve_numpy(
-                cache.setup,
-                cache.rig,
-                cache.track_segments,
-                in_tracks,
-                lod        = _get_lod(scene),
-                lod_weight = 0.0,
-            )
+                    cache.setup,
+                    cache.rig,
+                    cache.track_segments,
+                    in_tracks,
+                    lod=_get_lod(scene),
+                    lod_weight=0.0,
+                    )
 
             # Write transforms to pose bones
             write_bones(arm_obj, cache, bone_quats, bone_trans)
@@ -704,7 +721,7 @@ def solve_frame(scene, depsgraph=None):
             rig_binding.write_output_tracks(arm_obj, cache, out_tracks)
 
             elapsed_ms = (time.perf_counter() - t0) * 1000.0
-            timing[arm_name] = elapsed_ms
+            timing[arm_obj.name] = elapsed_ms
 
         # Store timing for UI readout
         bpy.app.driver_namespace["cp77_facial_last_ms"] = timing
@@ -769,8 +786,8 @@ def restore_handler_on_load() -> None:
 
 class FACIAL_OT_ToggleSolver(Operator):
     """Enable or disable the real-time facial facial solver"""
-    bl_idname  = "cp77_facial.toggle_solver"
-    bl_label   = "Toggle Solver"
+    bl_idname = "cp77_facial.toggle_solver"
+    bl_label = "Toggle Solver"
     bl_options = {"REGISTER"}
 
     @classmethod
@@ -793,8 +810,8 @@ class FACIAL_OT_ToggleSolver(Operator):
 
 class FACIAL_OT_SolveNow(Operator):
     """Run a single facial solve on the current frame (one-shot, no handler needed)"""
-    bl_idname  = "cp77_facial.solve_now"
-    bl_label   = "Solve Now"
+    bl_idname = "cp77_facial.solve_now"
+    bl_label = "Solve Now"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -821,7 +838,7 @@ class FACIAL_OT_SolveNow(Operator):
 _CLASSES = (
     FACIAL_OT_ToggleSolver,
     FACIAL_OT_SolveNow,
-)
+    )
 
 
 def register():

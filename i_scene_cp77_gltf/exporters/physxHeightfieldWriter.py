@@ -1,6 +1,7 @@
 import base64
 import struct
 
+
 class BinaryWriter:
     def __init__(self):
         self._buffer = bytearray()
@@ -29,6 +30,7 @@ class BinaryWriter:
 
     def write_single(self, value):
         self._write_internal(struct.pack("f", float(value)))
+
 
 class PhysXWriter:
     @staticmethod
@@ -103,4 +105,3 @@ class PhysXWriter:
 
         raw_bytes = bw.buffer
         return base64.b64encode(raw_bytes).decode("ascii")
-

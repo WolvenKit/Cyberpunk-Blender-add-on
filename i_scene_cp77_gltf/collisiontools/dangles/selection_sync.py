@@ -1,15 +1,26 @@
 import bpy
 
+from .sim import spaces
+
 SYNC_LOCK = False
 _LAST_ACTIVE = (None, None)
 _POLL_INTERVAL = 0.15
 
 
-def _find_particle_for_bone(state, bone_name):
+def _rig_key(rig):
+    try:
+        return int(rig.as_pointer())
+    except (AttributeError, ReferenceError):
+        return None
+
+
+def _find_particle_for_bone(rig, state, bone_name):
     for ni, dnode in enumerate(state.dangle_nodes):
         for ci, chain in enumerate(dnode.chains):
             for pi, particle in enumerate(chain.particles):
-                if particle.bone_name == bone_name:
+                if spaces.bone_names_equivalent(
+                    rig, particle.bone_name, bone_name
+                ):
                     return ni, ci, pi
     return None
 
@@ -26,11 +37,11 @@ def _select_single_pose_bone(rig, bone_name):
     for pb in pose.bones:
         if pb.bone.select:
             pb.bone.select = False
-    target_pb = pose.bones.get(bone_name)
+    target_pb = spaces.resolve_pose_bone(rig, bone_name)
     if target_pb is None:
         return
     target_pb.bone.select = True
-    target_bone = rig.data.bones.get(bone_name)
+    target_bone = target_pb.bone if target_pb is not None else None
     if target_bone is not None:
         rig.data.bones.active = target_bone
     _tag_view3d_redraw()
@@ -51,15 +62,15 @@ def _poll_selection():
 
     active_pb = getattr(ctx, "active_pose_bone", None)
     if active_pb is None or active_pb.id_data is not obj:
-        _LAST_ACTIVE = (obj.name, None)
+        _LAST_ACTIVE = (_rig_key(obj), None)
         return _POLL_INTERVAL
 
-    key = (obj.name, active_pb.name)
+    key = (_rig_key(obj), active_pb.name)
     if key == _LAST_ACTIVE:
         return _POLL_INTERVAL
     _LAST_ACTIVE = key
 
-    hit = _find_particle_for_bone(obj.dangle_state, active_pb.name)
+    hit = _find_particle_for_bone(obj, obj.dangle_state, active_pb.name)
     if hit is None:
         return _POLL_INTERVAL
     ni, ci, pi = hit
@@ -106,10 +117,13 @@ def on_active_particle_update(self, context):
     particle = self.particles[self.active_particle_index]
     if not particle.bone_name:
         return
+    target_name = spaces.resolve_bone_name(rig, particle.bone_name)
+    if not target_name:
+        return
     SYNC_LOCK = True
     try:
-        _select_single_pose_bone(rig, particle.bone_name)
-        _LAST_ACTIVE = (rig.name, particle.bone_name)
+        _select_single_pose_bone(rig, target_name)
+        _LAST_ACTIVE = (_rig_key(rig), target_name)
     finally:
         SYNC_LOCK = False
 

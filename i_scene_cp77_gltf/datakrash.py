@@ -22,7 +22,7 @@ DEFAULT_IMAGE_EXTENSIONS = (
     '.webp',
     '.tif',
     '.tiff',
-)
+    )
 
 COOKED_RESOURCE_EXPORTS = {
     '.mesh': ('.glb', '.mesh.json'),
@@ -30,21 +30,22 @@ COOKED_RESOURCE_EXPORTS = {
     '.physicalscene': ('.physicalscene.glb', '.physicalscene.json'),
     '.w2mesh': ('.w2mesh.glb', '.w2mesh.json'),
     '.rig': ('.rig.json',),
+    '.facialsetup': ('.facialsetup.json',),
     '.xbm': ('.png',),
     '.ent': ('.ent.json',),
     '.app': ('.app.json',),
     '.streamingsector_inplace': ('.streamingsector_inplace.json',),
     '.streamingsector': ('.streamingsector.json',),
     '.phys': ('.phys.json',),
-}
+    }
 
 EXPORTED_RESOURCE_EXTENSIONS = tuple(
-    sorted(
-        {ext for exports in COOKED_RESOURCE_EXPORTS.values() for ext in exports},
-        key=len,
-        reverse=True,
-    )
-)
+        sorted(
+                {ext for exports in COOKED_RESOURCE_EXPORTS.values() for ext in exports},
+                key=len,
+                reverse=True,
+                )
+        )
 
 DEFAULT_ASSET_EXTENSIONS = (*EXPORTED_RESOURCE_EXTENSIONS, *DEFAULT_IMAGE_EXTENSIONS)
 _COOKED_DEPOT_EXTENSIONS = frozenset(COOKED_RESOURCE_EXPORTS)
@@ -52,7 +53,7 @@ _EXPORT_GROUPS_BY_OUTPUT_EXTENSION = {
     export_extension: exports
     for exports in COOKED_RESOURCE_EXPORTS.values()
     for export_extension in exports
-}
+    }
 _COOKED_RESOURCE_SUFFIXES = tuple(sorted(COOKED_RESOURCE_EXPORTS, key=len, reverse=True))
 _EXPORTED_RESOURCE_SUFFIXES = tuple(sorted(_EXPORT_GROUPS_BY_OUTPUT_EXTENSION, key=len, reverse=True))
 
@@ -96,7 +97,7 @@ def _normalize_extensions(extensions: Iterable[str]) -> Set[str]:
         ext
         for ext in (_extension_key(extension) for extension in extensions if extension)
         if ext and ext not in _COOKED_DEPOT_EXTENSIONS
-    }
+        }
 
 
 def _normalized_extension_tuple(extensions: Iterable[str]):
@@ -175,12 +176,12 @@ def _build_root_index(root: str, requested: Set[str], force_refresh: bool = Fals
     keys_by_ext = {
         ext: {_path_key(path): path for path in paths}
         for ext, paths in files_by_ext.items()
-    }
+        }
     state = {
         'extensions': frozenset(extensions),
         'files_by_ext': files_by_ext,
         'keys_by_ext': keys_by_ext,
-    }
+        }
     _root_index_cache[root] = state
 
     stale_keys = [key for key in _depot_asset_index_cache if key[0] == root]
@@ -226,7 +227,10 @@ def dataKrash(root: str, extensions: List[str]) -> Dict[str, Set[str]]:
 class DepotAssetIndex:
     """Indexed source/raw asset resolver with exact extension-bucket membership checks."""
 
-    def __init__(self, root: str, extensions: Iterable[str] = DEFAULT_ASSET_EXTENSIONS, force_refresh: bool = False, warn_missing: bool = True):
+    def __init__(
+            self, root: str, extensions: Iterable[str] = DEFAULT_ASSET_EXTENSIONS, force_refresh: bool = False,
+            warn_missing: bool = True,
+            ):
         self.root = _normalize_path(root)
         self.extensions = _normalized_extension_tuple(extensions)
         self.warn_missing = warn_missing
@@ -234,15 +238,18 @@ class DepotAssetIndex:
         self.files_by_ext = {
             ext: set(state['files_by_ext'].get(ext, ()))
             for ext in self.extensions
-        }
+            }
         self._keys_by_ext = {
             ext: state['keys_by_ext'].get(ext, {})
             for ext in self.extensions
-        }
+            }
         self._sorted_files_by_ext = {}
 
     @classmethod
-    def cached(cls, root: str, extensions: Iterable[str] = DEFAULT_ASSET_EXTENSIONS, force_refresh: bool = False, warn_missing: bool = True):
+    def cached(
+            cls, root: str, extensions: Iterable[str] = DEFAULT_ASSET_EXTENSIONS, force_refresh: bool = False,
+            warn_missing: bool = True,
+            ):
         normalized_root = _normalize_path(root)
         normalized_extensions = _normalized_extension_tuple(extensions)
         key = (normalized_root, normalized_extensions, bool(warn_missing))
@@ -252,11 +259,11 @@ class DepotAssetIndex:
                 return cached
 
         instance = cls(
-            normalized_root,
-            normalized_extensions,
-            force_refresh=force_refresh,
-            warn_missing=warn_missing,
-        )
+                normalized_root,
+                normalized_extensions,
+                force_refresh=force_refresh,
+                warn_missing=warn_missing,
+                )
         _depot_asset_index_cache[key] = instance
         return instance
 
@@ -330,9 +337,9 @@ class DepotAssetIndex:
 
         if self.warn_missing if warn is None else warn:
             logging.warning(
-                "Exported asset reference is not indexed and will be skipped: %s",
-                self._candidate(reference),
-            )
+                    "Exported asset reference is not indexed and will be skipped: %s",
+                    self._candidate(reference),
+                    )
         return None
 
     def resolve_expected(self, reference: str, expected_extension: str, warn=None):

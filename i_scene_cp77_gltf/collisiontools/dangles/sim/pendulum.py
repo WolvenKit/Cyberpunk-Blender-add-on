@@ -1,4 +1,5 @@
 import math
+
 import numpy as np
 from mathutils import Matrix, Quaternion, Vector
 
@@ -21,11 +22,13 @@ def compile_pendulum_nodes(sim):
         if end - start != 1:
             continue
         particle = sim.particles[start]
-        pose_bone = sim.arm_obj.pose.bones.get(particle.bone_name)
+        pose_bone = sim.arm_obj.pose.bones.get(sim.bone_names[start])
         parent_index = -1
         axis_length = 0.0
         if pose_bone is not None and pose_bone.parent is not None:
-            parent_index = sim.bone_idx_map.get(pose_bone.parent.name, -1)
+            parent_index = sim.resolve_bone_index(pose_bone.parent.name)
+            if parent_index is None:
+                parent_index = -1
             local_rest = pose_bone.parent.bone.matrix_local.inverted() @ pose_bone.bone.matrix_local
             axis_length = local_rest.translation.length
         sim._pendulum_nodes[node_index] = {
@@ -48,10 +51,11 @@ def pendulum_node_is_valid(sim, node_index):
         return False
     if not sim.active_mask[pi] or not sim.active_mask[parent]:
         return False
-    return all(
-        sim.bone_idx_map.get(shape['bone_name'], -1) >= 0
-        for shape in sim._node_col_shapes[node_index]
-    )
+    for shape in sim._node_col_shapes[node_index]:
+        shape_index = sim.resolve_bone_index(shape['bone_name'])
+        if shape_index is None or shape_index < 0:
+            return False
+    return True
 
 
 def _lerp_transform(previous, current, factor):

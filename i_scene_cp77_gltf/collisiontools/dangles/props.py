@@ -1,8 +1,8 @@
 import bpy
 from bpy.props import (
-    StringProperty, BoolProperty, FloatProperty, EnumProperty,
-    CollectionProperty, FloatVectorProperty, PointerProperty, IntProperty,
-)
+    BoolProperty, CollectionProperty, EnumProperty, FloatProperty, FloatVectorProperty, IntProperty, PointerProperty,
+    StringProperty,
+    )
 
 ENUM_SOLVER_TYPE = [
     ("DYNG", "Dyng (Particles)", "Particle-based dynamic bone simulation"),

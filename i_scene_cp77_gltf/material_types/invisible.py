@@ -1,8 +1,3 @@
-import bpy
-import os
-from ..main.common import *
-
-
 class Invisible:
     def __init__(self, BasePath, image_format, ProjPath):
         self.BasePath = BasePath
@@ -29,10 +24,8 @@ class Invisible:
 
         # Enable backface culling like the game does
         Mat.use_backface_culling = True
-        
+
         try:
             Mat.shadow_method = 'HASHED'
         except Exception:
             pass
-
-

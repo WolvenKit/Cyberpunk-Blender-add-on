@@ -16,6 +16,7 @@ except ImportError:
 
 try:
     import g2p_en
+
     G2P_AVAILABLE = True
 except ImportError:
     G2P_AVAILABLE = False
@@ -233,12 +234,13 @@ PHONEME_TO_VISEME = {
     'TH': 'TTH', 'DH': 'TTH',
     'L': 'LNTD', 'N': 'LNTD',
     'K': 'GK', 'G': 'GK', 'NG': 'GK',
-}
+    }
 
 
 def _get_viseme(phoneme: str) -> str:
     """Map phoneme to viseme group (paper Figure 4)."""
     return PHONEME_TO_VISEME.get(phoneme.rstrip('012'), phoneme)
+
 
 # DOMINANCE BLENDER (Paper §4.2)
 
@@ -278,8 +280,8 @@ class DominanceBlender:
         natural_onset = 0.150 if is_lip_heavy else 0.120
         natural_decay = 0.150 if is_lip_heavy else 0.120
 
-        t_apex = event.apex                    # original_start (natural)
-        t_sustain_end = event.sustain_end       # 75% of natural duration
+        t_apex = event.apex  # original_start (natural)
+        t_sustain_end = event.sustain_end  # 75% of natural duration
 
         # Onset begins at natural pre-onset or at the extended start,
         # whichever is earlier.  This lets lip-heavy phonemes have a
@@ -328,7 +330,7 @@ class DominanceBlender:
     def blend_jali_parameters(
             self,
             events: List[PhonemeEvent],
-            duration: float
+            duration: float,
             ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Blend JALI parameters using dominance weighting.
 
@@ -399,13 +401,13 @@ class CoarticulationEngine:
         self._infer_word_prominence(events)
 
         # Apply rules in order
-        self._substitute_pauses(events)    # Figure 10: pause substitution
-        self._merge_duplicates(events)     # Rule 1
-        self._extend_lip_heavy(events)     # Rule 2
+        self._substitute_pauses(events)  # Figure 10: pause substitution
+        self._merge_duplicates(events)  # Rule 1
+        self._extend_lip_heavy(events)  # Rule 2
         self._override_lip_shapes(events)  # Rules 3, 4
-        self._apply_tongue_only(events)    # Rule 5
+        self._apply_tongue_only(events)  # Rule 5
         self._apply_obstruent_rules(events)  # Rules 6, 7
-        self._apply_anticipation(events)   # Rule 8
+        self._apply_anticipation(events)  # Rule 8
         self._enforce_constraints(events)  # Constraints 1-4
         self._apply_stress_amplitude(events)  # Conventions
 
@@ -460,7 +462,6 @@ class CoarticulationEngine:
             if event.phoneme in PAUSES:
                 next_pause_start = event.start
 
-
     @staticmethod
     def _substitute_pauses(events: List[PhonemeEvent]):
         """Figure 10: Pause substitution.
@@ -486,9 +487,11 @@ class CoarticulationEngine:
                 continue
 
             has_prev_speech = any(
-                events[j].phoneme not in PAUSES for j in range(i))
+                    events[j].phoneme not in PAUSES for j in range(i)
+                    )
             has_next_speech = any(
-                events[j].phoneme not in PAUSES for j in range(i + 1, n))
+                    events[j].phoneme not in PAUSES for j in range(i + 1, n)
+                    )
             is_interior = has_prev_speech and has_next_speech
 
             if is_interior:
@@ -841,8 +844,10 @@ class AcousticAnalyzer:
             self.hf_intensity = None
 
     @staticmethod
-    def _bucket(z: float, low: Tuple[float, float], mid: Tuple[float, float],
-                high: Tuple[float, float]) -> float:
+    def _bucket(
+            z: float, low: Tuple[float, float], mid: Tuple[float, float],
+            high: Tuple[float, float],
+            ) -> float:
         """Paper Tables 1-3: bucketed rig setting from z-score.
 
         Uses deterministic midpoints of each range
@@ -988,9 +993,9 @@ class MotionCurveGenerator:
         onset_dur = event.onset_duration
         decay_dur = event.decay_duration
 
-        t_onset_start = event.start - onset_dur   # onset begins before
-        t_apex = event.start                       # apex = sound start
-        t_sustain_end = event.sustain_end           # 75% through
+        t_onset_start = event.start - onset_dur  # onset begins before
+        t_apex = event.start  # apex = sound start
+        t_sustain_end = event.sustain_end  # 75% through
         t_decay_end = t_sustain_end + decay_dur
 
         curve = np.zeros_like(times, dtype=np.float32)
@@ -1018,7 +1023,7 @@ def create_phoneme_event(
         phoneme: str,
         start: float,
         end: float,
-        lexically_stressed: bool = False
+        lexically_stressed: bool = False,
         ) -> PhonemeEvent:
     """Create PhonemeEvent from phoneme string and timing.
 
@@ -1081,9 +1086,9 @@ class AcousticPhonemeDetector:
         """Detect phonemes from audio using acoustic features."""
         intensity = self.sound.to_intensity()
         textgrid = call(
-            intensity, "To TextGrid (silences)",
-            -25, 0.1, 0.05, "silent", "sounding"
-            )
+                intensity, "To TextGrid (silences)",
+                -25, 0.1, 0.05, "silent", "sounding"
+                )
 
         events: List[PhonemeEvent] = []
         num_intervals = call(textgrid, "Get number of intervals", 1)
@@ -1185,7 +1190,7 @@ class TranscriptAligner:
         self.vowels = {
             'AA', 'AE', 'AH', 'AO', 'AW', 'AY', 'EH', 'ER', 'EY',
             'IH', 'IY', 'OW', 'OY', 'UH', 'UW', 'AX', 'IX',
-        }
+            }
 
     def align_phonemes(self) -> List[PhonemeEvent]:
         sound = parselmouth.Sound(self.audio_path)
@@ -1194,12 +1199,12 @@ class TranscriptAligner:
         # Praat speech-interval detection
         intensity = sound.to_intensity()
         textgrid = call(
-            intensity, "To TextGrid (silences)",
-            -25, 0.1, 0.05, "silent", "sounding",
-        )
+                intensity, "To TextGrid (silences)",
+                -25, 0.1, 0.05, "silent", "sounding",
+                )
 
-        intervals: List[Tuple[float, float]] = []       # sounding
-        silent_intervals: List[Tuple[float, float]] = [] # silent
+        intervals: List[Tuple[float, float]] = []  # sounding
+        silent_intervals: List[Tuple[float, float]] = []  # silent
         num_intervals = call(textgrid, "Get number of intervals", 1)
         for i in range(1, num_intervals + 1):
             label = call(textgrid, "Get label of interval", 1, i)
@@ -1260,9 +1265,9 @@ class TranscriptAligner:
 
     @staticmethod
     def _map_time(
-        speech_time: float,
-        intervals: List[Tuple[float, float]],
-    ) -> float:
+            speech_time: float,
+            intervals: List[Tuple[float, float]],
+            ) -> float:
         """Convert continuous speech-time to absolute audio time, skipping silences."""
         accumulated = 0.0
         for start, end in intervals:

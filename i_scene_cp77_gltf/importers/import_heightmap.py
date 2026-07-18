@@ -1,13 +1,16 @@
 import base64
 import json
 import struct
+
 import bpy
 import numpy as np
+
 
 def load_json(filename):
     with open(filename) as json_file:
         data = json.load(json_file)
     return data
+
 
 class BinaryReader:
     __position = 0
@@ -30,7 +33,7 @@ class BinaryReader:
         return self.__length
 
     def __read_internal(self, count):
-        data = self.__buffer[self.position : self.position + count]
+        data = self.__buffer[self.position: self.position + count]
         self.position += count
         return data
 
@@ -61,14 +64,14 @@ class PhysX:
             "mismatch": (br.read_byte() & 1) != 1,
             "type2": br.read_chars(4),
             "version": br.read_uint32()
-        }
+            }
 
     @staticmethod
     def __load_heightfield(br, header):
         result = {
             "rows": br.read_uint32(),
             "columns": br.read_uint32(),
-        }
+            }
 
         if header["version"] >= 2:
             result["row_limit"] = br.read_uint32()
@@ -89,13 +92,13 @@ class PhysX:
                 "x": 0,
                 "y": 0,
                 "z": 0
-            },
+                },
             "max": {
                 "x": 0,
                 "y": 0,
                 "z": 0
+                }
             }
-        }
         result["min_max_bounds"]["min"]["x"] = br.read_single()
         result["min_max_bounds"]["min"]["y"] = br.read_single()
         result["min_max_bounds"]["min"]["z"] = br.read_single()
@@ -113,11 +116,13 @@ class PhysX:
         nb_verts = result["rows"] * result["columns"]
         if nb_verts > 0:
             for i in range(nb_verts):
-                result["samples"].append({
-                    "height": br.read_int16(),
-                    "material_index_0": br.read_byte(),
-                    "material_index_1": br.read_byte(),
-                })
+                result["samples"].append(
+                        {
+                            "height": br.read_int16(),
+                            "material_index_0": br.read_byte(),
+                            "material_index_1": br.read_byte(),
+                            }
+                        )
 
         return result
 
@@ -137,6 +142,7 @@ class PhysX:
                 raise Exception()
 
         return result
+
 
 def create_geom_from_heightfield(heightfieldGeometry):
     tmp = PhysX.load(heightfieldGeometry['Bytes'])
@@ -235,15 +241,17 @@ def create_geom_from_heightfield(heightfieldGeometry):
     print(f"Heightfield mesh created with {len(unique_mats)} materials")
     return obj
 
+
 def main():
-    data = load_json(r"C:\CPMod\terrain_collision\source\raw\base\worlds\03_night_city\_compiled\default\exterior_-2_-8_0_3.streamingsector.json")
-    wtcs=[node for node in data['Data']['RootChunk']['nodes'] if node['Data']['$type'] == 'worldTerrainCollisionNode']
+    data = load_json(
+        r"C:\CPMod\terrain_collision\source\raw\base\worlds\03_night_city\_compiled\default\exterior_-2_-8_0_3.streamingsector.json"
+        )
+    wtcs = [node for node in data['Data']['RootChunk']['nodes'] if node['Data']['$type'] == 'worldTerrainCollisionNode']
     for node in wtcs:
         heightfieldGeometry = node['Data']['heightfieldGeometry']
-                
-        obj=create_geom_from_heightfield(heightfieldGeometry)
-        obj['NodeIndex']=node['Data']['NodeIndex']
 
+        obj = create_geom_from_heightfield(heightfieldGeometry)
+        obj['NodeIndex'] = node['Data']['NodeIndex']
 
 
 if __name__ == '__main__':

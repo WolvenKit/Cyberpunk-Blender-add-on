@@ -41,22 +41,26 @@ def _resolve_handle_data(value, lookup):
 def _vector3(value, default=(0.0, 0.0, 0.0)):
     if not isinstance(value, dict):
         return Vector(default)
-    return Vector((
-        float(value.get('X', value.get('x', default[0]))),
-        float(value.get('Y', value.get('y', default[1]))),
-        float(value.get('Z', value.get('z', default[2]))),
-    ))
+    return Vector(
+            (
+                float(value.get('X', value.get('x', default[0]))),
+                float(value.get('Y', value.get('y', default[1]))),
+                float(value.get('Z', value.get('z', default[2]))),
+                )
+            )
 
 
 def _quaternion(value):
     if not isinstance(value, dict):
         return Quaternion((1.0, 0.0, 0.0, 0.0))
-    rotation = Quaternion((
-        float(value.get('r', value.get('W', 1.0))),
-        float(value.get('i', value.get('X', 0.0))),
-        float(value.get('j', value.get('Y', 0.0))),
-        float(value.get('k', value.get('Z', 0.0))),
-    ))
+    rotation = Quaternion(
+            (
+                float(value.get('r', value.get('W', 1.0))),
+                float(value.get('i', value.get('X', 0.0))),
+                float(value.get('j', value.get('Y', 0.0))),
+                float(value.get('k', value.get('Z', 0.0))),
+                )
+            )
     rotation.normalize()
     return rotation
 
@@ -141,17 +145,17 @@ def _cp77_phys_import(filepath, rig=None, chassis_z=None, target_collection=None
 
             try:
                 shape_item = import_collider_as_actor(
-                    collider_data,
-                    submesh_name,
-                    target_collection,
-                    actor_obj=actor_obj,
-                    context=context,
-                    actor_type=actor_type,
-                    mass=mass,
-                    inertia=inertia,
-                    com_offset=com_offset,
-                    filter_data=collider_data.get('filterData') or body_filter,
-                )
+                        collider_data,
+                        submesh_name,
+                        target_collection,
+                        actor_obj=actor_obj,
+                        context=context,
+                        actor_type=actor_type,
+                        mass=mass,
+                        inertia=inertia,
+                        com_offset=com_offset,
+                        filter_data=collider_data.get('filterData') or body_filter,
+                        )
             except Exception as exc:
                 print(f'Error importing {collider_type} for {body_name}: {exc}')
                 continue
@@ -201,9 +205,9 @@ def cp77_phys_import(filepath, rig=None, chassis_z=None):
 
 def cp77_phys_import_into_collection(filepath, target_collection, actor_matrix=None, context=None, rig=None):
     return _cp77_phys_import(
-        filepath,
-        rig=rig,
-        target_collection=target_collection,
-        actor_matrix=actor_matrix,
-        context=context,
-    )
+            filepath,
+            rig=rig,
+            target_collection=target_collection,
+            actor_matrix=actor_matrix,
+            context=context,
+            )

@@ -1,16 +1,22 @@
 from __future__ import annotations
+
+from typing import Dict, List, Tuple
+
 import bpy
-from bpy.types import Operator, Panel, PoseBone
 from bpy.props import PointerProperty
+from bpy.types import Operator, Panel, PoseBone
 from mathutils import Vector
-from ..main.datashards import BoneTransformCache
-from ..main.bartmoss_functions import pose_mtx, world_mtx, valid_armature
+
+from .compat import get_action_fcurves
 from ..cyber_props import RootMotionData
-from typing import List, Tuple, Dict
+from ..main.bartmoss_functions import pose_mtx, valid_armature, world_mtx
+from ..main.datashards import BoneTransformCache
+
 
 def get_frame_range(action) -> Tuple[int, int]:
     f = action.frame_range
     return int(f.x), int(f.y)
+
 
 def generate_frame_list(scene, start: int, end: int) -> List[int]:
     step = scene.rm_data.step
@@ -19,35 +25,40 @@ def generate_frame_list(scene, start: int, end: int) -> List[int]:
         frames.append(end)
     return frames
 
+
 def cache_bone_transforms(context, armature, bone_name: str, frames: List[int]) -> Dict[int, BoneTransformCache]:
     bone = armature.pose.bones.get(bone_name)
     if not bone:
         raise ValueError(f"Bone '{bone_name}' not found")
     cache: Dict[int, BoneTransformCache] = {}
-    depsgraph = context.evaluated_depsgraph_get()
     for f in frames:
         context.scene.frame_set(f)
-        depsgraph.update()
         cache[f] = BoneTransformCache(
-            bone.location.copy(),
-            bone.rotation_quaternion.copy(),
-            bone.scale.copy(),
-            bone.matrix.copy(),
-            world_mtx(armature, bone).copy(),
-        )
+                bone.location.copy(),
+                bone.rotation_quaternion.copy(),
+                bone.scale.copy(),
+                bone.matrix.copy(),
+                world_mtx(armature, bone).copy(),
+                )
     return cache
 
-def clear_bone_fcurves(action, bone_name: str):
-    """Remove all animation curves for specified bone cleanly"""
+
+def clear_bone_fcurves(action, armature, bone_name: str):
+    """Remove all animation curves for one bone from the armature's action slot."""
+    fcurves = get_action_fcurves(action, armature)
+    if fcurves is None:
+        return
     target = f'pose.bones["{bone_name}"]'
-    for fc in [c for c in action.fcurves if c.data_path.startswith(target)]:
-        action.fcurves.remove(fc)
+    for curve in [curve for curve in fcurves if curve.data_path.startswith(target)]:
+        fcurves.remove(curve)
+
 
 def keyframe_bone(pb: PoseBone, frame: int, include_rot: bool = True):
     pb.keyframe_insert("location", frame=frame)
     if include_rot:
         pb.keyframe_insert("rotation_quaternion", frame=frame)
     pb.keyframe_insert("scale", frame=frame)
+
 
 class RootMotionOperatorBase(Operator):
     bl_options = {'REGISTER', 'UNDO'}
@@ -69,6 +80,7 @@ class RootMotionOperatorBase(Operator):
         start, end = get_frame_range(arm.animation_data.action)
         return arm, data, start, end
 
+
 class CP77HipMotionToRoot(RootMotionOperatorBase):
     """Extract root motion from hip bone animation"""
     bl_idname = "cp77.hip_to_root_motion"
@@ -80,9 +92,8 @@ class CP77HipMotionToRoot(RootMotionOperatorBase):
             return {'CANCELLED'}
 
         try:
-            frames_all = list(range(start, end + 1))
             keyframes = generate_frame_list(context.scene, start, end)
-            hip_cache = cache_bone_transforms(context, arm, data.hip, frames_all)
+            hip_cache = cache_bone_transforms(context, arm, data.hip, keyframes)
 
             root = arm.pose.bones[data.root]
             hip = arm.pose.bones[data.hip]
@@ -91,7 +102,7 @@ class CP77HipMotionToRoot(RootMotionOperatorBase):
             init_vec = (hip.head - hip.tail).copy()
             init_vec.z = 0
 
-            clear_bone_fcurves(arm.animation_data.action, data.hip)
+            clear_bone_fcurves(arm.animation_data.action, arm, data.hip)
 
             for f in keyframes:
                 context.scene.frame_set(f)
@@ -99,7 +110,8 @@ class CP77HipMotionToRoot(RootMotionOperatorBase):
                 delta = c.world_matrix.translation - init_world.translation
                 if not data.do_vert:
                     delta.z = 0
-                root.location = delta
+                armature_delta = arm.matrix_world.to_3x3().inverted_safe() @ delta
+                root.location = root.bone.matrix_local.to_3x3().inverted_safe() @ armature_delta
                 if not data.no_rot:
                     vec = (hip.head - hip.tail).copy()
                     vec.z = 0
@@ -113,8 +125,10 @@ class CP77HipMotionToRoot(RootMotionOperatorBase):
 
         except Exception as e:
             self.report({'ERROR'}, f"Root motion failed: {e}")
-            import traceback; traceback.print_exc()
+            import traceback;
+            traceback.print_exc()
             return {'CANCELLED'}
+
 
 class CP77RootToHipMotion(RootMotionOperatorBase):
     """Integrate root motion back into hip bone"""
@@ -126,12 +140,11 @@ class CP77RootToHipMotion(RootMotionOperatorBase):
         if not arm:
             return {'CANCELLED'}
         try:
-            frames_all = list(range(start, end + 1))
             keyframes = generate_frame_list(context.scene, start, end)
-            hip_cache = cache_bone_transforms(context, arm, data.hip, frames_all)
+            hip_cache = cache_bone_transforms(context, arm, data.hip, keyframes)
 
-            clear_bone_fcurves(arm.animation_data.action, data.root)
-            clear_bone_fcurves(arm.animation_data.action, data.hip)
+            clear_bone_fcurves(arm.animation_data.action, arm, data.root)
+            clear_bone_fcurves(arm.animation_data.action, arm, data.hip)
 
             root = arm.pose.bones[data.root]
             hip = arm.pose.bones[data.hip]
@@ -154,8 +167,10 @@ class CP77RootToHipMotion(RootMotionOperatorBase):
 
         except Exception as e:
             self.report({'ERROR'}, f"Integration failed: {e}")
-            import traceback; traceback.print_exc()
+            import traceback;
+            traceback.print_exc()
             return {'CANCELLED'}
+
 
 class CP77RemoveRootMotion(RootMotionOperatorBase):
     """Remove root motion for in-place animation"""
@@ -174,7 +189,7 @@ class CP77RemoveRootMotion(RootMotionOperatorBase):
             return {'CANCELLED'}
 
         start, end = get_frame_range(arm.animation_data.action)
-        clear_bone_fcurves(arm.animation_data.action, data.root)
+        clear_bone_fcurves(arm.animation_data.action, arm, data.root)
 
         root = arm.pose.bones[data.root]
         for f in (start, end):
@@ -193,12 +208,14 @@ classes = (
     CP77HipMotionToRoot,
     CP77RootToHipMotion,
     CP77RemoveRootMotion,
-)
+    )
+
 
 def register_rm():
     for cls in classes:
         bpy.utils.register_class(cls)
     bpy.types.Scene.rm_data = PointerProperty(type=RootMotionData)
+
 
 def unregister_rm():
     if hasattr(bpy.types.Scene, "rm_data"):

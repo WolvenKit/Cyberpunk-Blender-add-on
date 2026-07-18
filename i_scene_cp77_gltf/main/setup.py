@@ -1,11 +1,12 @@
-import bpy
 import hashlib
 import json
 import os
 import sys
-from ..material_types.unknown import unknownMaterial
-from .material_registry import REGISTRY, DECAL_REGISTRY
 
+import bpy
+
+from .material_registry import DECAL_REGISTRY, REGISTRY
+from ..material_types.unknown import unknownMaterial
 
 _MATERIAL_CACHE = {}
 
@@ -64,8 +65,8 @@ class MaterialBuilder:
 
         try:
             experimental = bool(
-                bpy.context.preferences.addons[__name__.split('.')[0]].preferences.experimental_features
-            )
+                    bpy.context.preferences.addons[__name__.split('.')[0]].preferences.experimental_features
+                    )
         except Exception:
             experimental = False
 
@@ -78,13 +79,13 @@ class MaterialBuilder:
             'blender_version': tuple(bpy.app.version),
             'addon_version': tuple(self.addon_ver),
             'experimental_features': experimental,
-        }
+            }
         encoded = json.dumps(
-            payload,
-            sort_keys=True,
-            separators=(',', ':'),
-            ensure_ascii=False,
-        ).encode('utf-8')
+                payload,
+                sort_keys=True,
+                separators=(',', ':'),
+                ensure_ascii=False,
+                ).encode('utf-8')
         signature = hashlib.blake2b(encoded, digest_size=20).hexdigest()
         self._signature_cache[cache_key] = signature
         return signature
