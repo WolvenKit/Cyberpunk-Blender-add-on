@@ -1,16 +1,11 @@
 if __name__ != "__main__":
     from ..main.common import *
+    from .mat_common import coerce_color, coerce_texture_path, unwrap_param
 else:
     from common import *
+    from mat_common import coerce_color, coerce_texture_path, unwrap_param
 
 HOLOGRAM_GROUP_NAME = "Cyberpunk_Hologram_Base"
-
-
-def _add_socket(group, name, socket_type, in_out):
-    if bpy.app.version[0] < 4:
-        sockets = group.inputs if in_out == 'INPUT' else group.outputs
-        return sockets.new(socket_type, name)
-    return group.interface.new_socket(name=name, socket_type=socket_type, in_out=in_out)
 
 
 def _node(nodes, node_type, location, name=None, **attrs):
@@ -41,35 +36,9 @@ def _link(tree, output_socket, input_socket):
         tree.links.new(output_socket, input_socket)
 
 
-def _rgba(value, default=(0.0, 0.65, 1.0, 1.0)):
-    if not isinstance(value, dict):
-        return default
-    keys = ("Red", "Green", "Blue", "Alpha")
-    channels = []
-    for key, fallback in zip(keys, default):
-        raw = value.get(key, fallback)
-        try:
-            raw = float(raw)
-        except (TypeError, ValueError):
-            raw = fallback
-        channels.append(raw / 255.0 if raw > 1.0 else raw)
-    return tuple(channels)
-
-
-def _depot_path(value):
-    if isinstance(value, str):
-        return value if value and value != "null" else None
-    if isinstance(value, dict):
-        if "$value" in value:
-            return _depot_path(value.get("$value"))
-        if "DepotPath" in value:
-            return _depot_path(value.get("DepotPath"))
-    return None
-
-
 def _hologram_texture_path(data):
     for key in ("Diffuse", "Scanline", "Texture", "MainTexture", "Albedo"):
-        path = _depot_path(data.get(key)) if isinstance(data, dict) else None
+        path = coerce_texture_path(data.get(key)) if isinstance(data, dict) else None
         if path:
             return path
     return None
@@ -118,9 +87,9 @@ def get_or_create_hologram_group():
         return group
 
     group = bpy.data.node_groups.new(HOLOGRAM_GROUP_NAME, "ShaderNodeTree")
-    _add_socket(group, "Texture Color", 'NodeSocketColor', 'INPUT')
-    _add_socket(group, "Dots Color", 'NodeSocketColor', 'INPUT')
-    _add_socket(group, "Shader", 'NodeSocketShader', 'OUTPUT')
+    group.interface.new_socket(name="Texture Color", socket_type='NodeSocketColor', in_out='INPUT')
+    group.interface.new_socket(name="Dots Color", socket_type='NodeSocketColor', in_out='INPUT')
+    group.interface.new_socket(name="Shader", socket_type='NodeSocketShader', in_out='OUTPUT')
 
     nodes = group.nodes
     links = group.links
@@ -274,7 +243,9 @@ class Hologram:
 
         holo = _node(tree.nodes, "ShaderNodeGroup", (100, 0), name="Cyberpunk Hologram")
         holo.node_tree = get_or_create_hologram_group()
-        holo.inputs["Dots Color"].default_value = _rgba(Data.get("DotsColor") if isinstance(Data, dict) else None)
+        holo.inputs["Dots Color"].default_value = coerce_color(
+            unwrap_param(Data.get("DotsColor")) if isinstance(Data, dict) else None, (0.0, 0.65, 1.0, 1.0)
+            )
 
         image = self._image_from_data(Data if isinstance(Data, dict) else {})
         if image:

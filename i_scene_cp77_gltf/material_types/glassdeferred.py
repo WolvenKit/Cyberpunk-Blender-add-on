@@ -5,6 +5,8 @@ import bpy
 if __name__ != "__main__":
     from ..main.common import *
 
+from .mat_common import create_normal_map_rel
+
 
 class GlassDeferred:
     def __init__(self, BasePath, image_format, ProjPath):
@@ -54,8 +56,9 @@ class GlassDeferred:
             CurMat.links.new(rImgNode.outputs[0], pBSDF.inputs['Roughness'])
         #
         if "Normal" in Data:
-            normal_path = self.BasePath + Data["Normal"]
-            nMap = CreateShaderNodeNormalMap(CurMat, normal_path, -600, -500, 'Normal', self.image_format)
+            nMap = create_normal_map_rel(
+                CurMat, Data["Normal"], -600, -500, 'Normal', self.image_format, self.BasePath, self.ProjPath
+                )
 
             # Normal Strength
             if "NormalStrength" in Data:

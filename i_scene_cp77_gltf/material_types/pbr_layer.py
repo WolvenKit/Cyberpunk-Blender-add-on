@@ -31,17 +31,20 @@ class pbr_layer:
                 )
 
         if "Normal" in Data:
-            nImg = imageFromPath(self.BasePath + Data["Normal"], self.image_format, True)
+            nImg = imageFromRelPath(
+                    Data["Normal"], self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=True
+                    )
             nNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-900, -400), label="Normal", image=nImg)
 
-        nMap = create_node(CurMat.nodes, "ShaderNodeNormalMap", (-200, -250))
-        NRG = CreateRebildNormalGroup(CurMat, -350, -250, "DetailNormal Rebuilt")
-        CurMat.links.new(nNode.outputs[0], NRG.inputs[0])
-        CurMat.links.new(NRG.outputs[0], nMap.inputs[1])
+            nMap = create_node(CurMat.nodes, "ShaderNodeNormalMap", (-200, -250))
+            NRG = CreateRebildNormalGroup(CurMat, -350, -250, "DetailNormal Rebuilt")
+            CurMat.links.new(nNode.outputs[0], NRG.inputs[0])
+            CurMat.links.new(NRG.outputs[0], nMap.inputs[1])
+            CurMat.links.new(nMap.outputs[0], pBSDF.inputs['Normal'])
 
         # final links
-        CurMat.links.new(diffNode.outputs[0], pBSDF.inputs['Base Color'])
+        if "Diffuse" in Data:
+            CurMat.links.new(diffNode.outputs[0], pBSDF.inputs['Base Color'])
         if "RoughMetalBlend" in Data:
             CurMat.links.new(rmbNode.outputs[0], pBSDF.inputs['Roughness'])
             CurMat.links.new(rmbNode.outputs[0], pBSDF.inputs['Metallic'])
-        CurMat.links.new(nMap.outputs[0], pBSDF.inputs['Normal'])

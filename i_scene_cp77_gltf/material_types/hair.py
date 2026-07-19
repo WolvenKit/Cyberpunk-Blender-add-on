@@ -1,6 +1,8 @@
 from ..jsontool import JSONTool
 from ..main.common import *
 
+from .mat_common import populate_color_ramp
+
 
 class Hair:
     def __init__(self, BasePath, image_format, ProjPath):
@@ -19,8 +21,9 @@ class Hair:
         pBSDF.inputs['Anisotropic'].default_value = 1.0
         pBSDF.inputs['Anisotropic Rotation'].default_value = 0.75
 
-        file = (self.BasePath + hair["HairProfile"] + ".json")
-        profile = JSONTool.jsonload(file)
+        depot_file = self.BasePath + hair["HairProfile"] + ".json"
+        proj_file = self.ProjPath + hair["HairProfile"] + ".json"
+        profile = JSONTool.jsonload(proj_file if os.path.exists(proj_file) else depot_file)
         if profile is None:
             return
 
@@ -31,7 +34,6 @@ class Hair:
 
         # JATO: what, if anything does this do in 4.5+? eevee totally refactored shadows/transparency settings
         # Mat.blend_method = 'HASHED'
-        vers = bpy.app.version
 
         idImg = imageFromRelPath(
                 hair["Strand_ID"], DepotPath=self.BasePath, ProjPath=self.ProjPath, image_format=self.image_format,
@@ -60,38 +62,12 @@ class Hair:
         flowNormalNode = create_node(Ns, "ShaderNodeNormalMap", (-1000, -600))
 
         ID = create_node(Ns, "ShaderNodeValToRGB", (-1000, 350), label="GradientEntriesID")
-        ID.color_ramp.elements.remove(ID.color_ramp.elements[0])
         ID.hide = False
-        counter = 0
-        for Entry in profile["gradientEntriesID"]:
-            if counter == 0:
-                ID.color_ramp.elements[0].position = Entry.get("value", 0)
-                colr = Entry["color"]
-                ID.color_ramp.elements[0].color = (float(colr["Red"]) / 255, float(colr["Green"]) / 255,
-                                                   float(colr["Blue"]) / 255, float(1))
-            else:
-                element = ID.color_ramp.elements.new(Entry.get("value", 0))
-                colr = Entry["color"]
-                element.color = (float(colr["Red"]) / 255, float(colr["Green"]) / 255, float(colr["Blue"]) / 255,
-                                 float(1))
-            counter = counter + 1
+        populate_color_ramp(ID, profile["gradientEntriesID"])
 
         RootToTip = create_node(Ns, "ShaderNodeValToRGB", (-1000, 50), label="GradientEntriesRootToTip")
-        RootToTip.color_ramp.elements.remove(RootToTip.color_ramp.elements[0])
         RootToTip.hide = False
-        counter = 0
-        for Entry in profile["gradientEntriesRootToTip"]:
-            if counter == 0:
-                RootToTip.color_ramp.elements[0].position = Entry.get("value", 0)
-                colr = Entry["color"]
-                RootToTip.color_ramp.elements[0].color = (float(colr["Red"]) / 255, float(colr["Green"]) / 255,
-                                                          float(colr["Blue"]) / 255, float(1))
-            else:
-                element = RootToTip.color_ramp.elements.new(Entry.get("value", 0))
-                colr = Entry["color"]
-                element.color = (float(colr["Red"]) / 255, float(colr["Green"]) / 255, float(colr["Blue"]) / 255,
-                                 float(1))
-            counter = counter + 1
+        populate_color_ramp(RootToTip, profile["gradientEntriesRootToTip"])
 
         gammaID = create_node(Ns, "ShaderNodeGamma", (-650, 350))
         gammaID.inputs[1].default_value = 2.2

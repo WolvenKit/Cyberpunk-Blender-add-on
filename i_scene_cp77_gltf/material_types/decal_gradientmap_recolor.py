@@ -1,5 +1,4 @@
 import bpy
-from mathutils import Color
 
 if __name__ != "__main__":
     from ..main.common import *
@@ -22,6 +21,7 @@ class DecalGradientmapRecolor:
     def create(self, Data, Mat):
         masktex = ''
         difftex = ''
+        gradmap = ''
         diffAsMask = 1
         if 'enableMask' in Data.keys():
             if Data['enableMask'] == True:
@@ -29,10 +29,8 @@ class DecalGradientmapRecolor:
 
         for i in range(len(Data["values"])):
             for value in Data["values"][i]:
-                # print(value)
                 if value == "DiffuseTexture":
                     difftex = Data["values"][i]["DiffuseTexture"]["DepotPath"]['$value']
-                # print(f"Diffuse Texture path is:  {difftex}")
                 if value == "GradientMap":
                     gradmap = Data["values"][i]["GradientMap"]["DepotPath"]['$value']
                 if value == "MaskTexture":
@@ -46,11 +44,7 @@ class DecalGradientmapRecolor:
             diff_image_node = create_node(
                 CurMat.nodes, "ShaderNodeTexImage", (-800, -300), label="DiffuseTexture", image=diffImg
                 )
-            vers = bpy.app.version
-            if vers[0] < 4:
-                diff_image_node.image.colorspace_settings.name = 'Linear'
-            else:
-                diff_image_node.image.colorspace_settings.name = 'Linear Rec.709'
+            diff_image_node.image.colorspace_settings.name = 'Linear Rec.709'
             gradImg = imageFromRelPath(gradmap, self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
             grad_image_node = create_node(
                 CurMat.nodes, "ShaderNodeTexImage", (-500, -200), label="GradientMap", image=gradImg

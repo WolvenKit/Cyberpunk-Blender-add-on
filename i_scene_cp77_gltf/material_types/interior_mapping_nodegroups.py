@@ -272,21 +272,13 @@ def andrew_willmotts_plane_interior_mapping_node_group():
         group_output = andrew_willmotts_interior_mapping.nodes.new("NodeGroupOutput")
         # andrew_willmott_s_plane_interior_mapping_1 outputs
         # output Vector
-        vers = bpy.app.version
-        if vers[0] < 4:
-            andrew_willmotts_interior_mapping.outputs.new('NodeSocketVector', "Vector")
-            andrew_willmotts_interior_mapping.outputs[0].default_value = (0.0, 0.0, 0.0)
-            andrew_willmotts_interior_mapping.outputs[0].min_value = -3.4028234663852886e+38
-            andrew_willmotts_interior_mapping.outputs[0].max_value = 3.4028234663852886e+38
-            andrew_willmotts_interior_mapping.outputs[0].attribute_domain = 'POINT'
-        else:
-            output0 = andrew_willmotts_interior_mapping.interface.new_socket(
-                name="Vector", socket_type='NodeSocketVector', in_out='OUTPUT'
-                )
-            output0.default_value = (0.0, 0.0, 0.0)
-            output0.min_value = -3.4028234663852886e+38
-            output0.max_value = 3.4028234663852886e+38
-            output0.attribute_domain = 'POINT'
+        output0 = andrew_willmotts_interior_mapping.interface.new_socket(
+            name="Vector", socket_type='NodeSocketVector', in_out='OUTPUT'
+            )
+        output0.default_value = (0.0, 0.0, 0.0)
+        output0.min_value = -3.4028234663852886e+38
+        output0.max_value = 3.4028234663852886e+38
+        output0.attribute_domain = 'POINT'
 
         # node Separate XYZ.004
         separate_xyz_004 = andrew_willmotts_interior_mapping.nodes.new("ShaderNodeSeparateXYZ")
@@ -396,32 +388,23 @@ def andrew_willmotts_plane_interior_mapping_node_group():
         group_input = andrew_willmotts_interior_mapping.nodes.new("NodeGroupInput")
         # andrew_willmott_s_plane_interior_mapping_1 inputs
 
-        # Setup all the inputs (will need B4 proofing)
-        vers = bpy.app.version
-        if vers[0] < 4:
-            andrew_willmotts_interior_mapping.inputs.new('NodeSocketVector', "UVs")
-            andrew_willmotts_interior_mapping.inputs.new('NodeSocketFloat', "Interior Depth")
-            andrew_willmotts_interior_mapping.inputs.new('NodeSocketFloat', "Flip X UVs?")
-            andrew_willmotts_interior_mapping.inputs.new('NodeSocketFloat', "Flip Y UVs?")
-            andrew_willmotts_interior_mapping.inputs.new('NodeSocketFloat', "Aspect Ratio")
-            andrew_willmotts_interior_mapping_inputs = andrew_willmotts_interior_mapping.inputs
-        else:
-            andrew_willmotts_interior_mapping.interface.new_socket(
-                name="UVs", socket_type='NodeSocketVector', in_out='INPUT'
-                )
-            andrew_willmotts_interior_mapping.interface.new_socket(
-                name="Interior Depth", socket_type='NodeSocketFloat', in_out='INPUT'
-                )
-            andrew_willmotts_interior_mapping.interface.new_socket(
-                name="Flip X UVs?", socket_type='NodeSocketFloat', in_out='INPUT'
-                )
-            andrew_willmotts_interior_mapping.interface.new_socket(
-                name="Flip Y UVs?", socket_type='NodeSocketFloat', in_out='INPUT'
-                )
-            andrew_willmotts_interior_mapping.interface.new_socket(
-                name="Aspect Ratio", socket_type='NodeSocketFloat', in_out='INPUT'
-                )
-            andrew_willmotts_interior_mapping_inputs = get_inputs(andrew_willmotts_interior_mapping)
+        # Setup all the inputs
+        andrew_willmotts_interior_mapping.interface.new_socket(
+            name="UVs", socket_type='NodeSocketVector', in_out='INPUT'
+            )
+        andrew_willmotts_interior_mapping.interface.new_socket(
+            name="Interior Depth", socket_type='NodeSocketFloat', in_out='INPUT'
+            )
+        andrew_willmotts_interior_mapping.interface.new_socket(
+            name="Flip X UVs?", socket_type='NodeSocketFloat', in_out='INPUT'
+            )
+        andrew_willmotts_interior_mapping.interface.new_socket(
+            name="Flip Y UVs?", socket_type='NodeSocketFloat', in_out='INPUT'
+            )
+        andrew_willmotts_interior_mapping.interface.new_socket(
+            name="Aspect Ratio", socket_type='NodeSocketFloat', in_out='INPUT'
+            )
+        andrew_willmotts_interior_mapping_inputs = get_inputs(andrew_willmotts_interior_mapping)
 
         # input UVs
         andrew_willmotts_interior_mapping_inputs[0].default_value = (0.0, 0.0, 0.0)
@@ -1142,27 +1125,17 @@ def flipbook_function_node_group():
         group_input_002 = flipbook_function.nodes.new("NodeGroupInput")
         # flipbook_function inputs
 
-        vers = bpy.app.version
-        if vers[0] < 4:
-            flipbook_function.inputs.new('NodeSocketVector', "UVs")
-            flipbook_function.inputs.new('NodeSocketFloat', "Index")
-            flipbook_function.inputs.new('NodeSocketFloat', "Index Start Point")
-            flipbook_function.inputs.new('NodeSocketFloat', "Total Frames to Play")
-            flipbook_function.inputs.new('NodeSocketFloat', "X / Columns")
-            flipbook_function.inputs.new('NodeSocketFloat', "Y / Rows")
-            flipbook_function_inputs = flipbook_function.inputs
-        else:
-            flipbook_function.interface.new_socket(name="UVs", socket_type='NodeSocketVector', in_out='INPUT')
-            flipbook_function.interface.new_socket(name="Index", socket_type='NodeSocketFloat', in_out='INPUT')
-            flipbook_function.interface.new_socket(
-                name="Index Start Point", socket_type='NodeSocketFloat', in_out='INPUT'
-                )
-            flipbook_function.interface.new_socket(
-                name="Total Frames to Play", socket_type='NodeSocketFloat', in_out='INPUT'
-                )
-            flipbook_function.interface.new_socket(name="X / Columns", socket_type='NodeSocketFloat', in_out='INPUT')
-            flipbook_function.interface.new_socket(name="Y / Rows", socket_type='NodeSocketFloat', in_out='INPUT')
-            flipbook_function_inputs = get_inputs(flipbook_function)
+        flipbook_function.interface.new_socket(name="UVs", socket_type='NodeSocketVector', in_out='INPUT')
+        flipbook_function.interface.new_socket(name="Index", socket_type='NodeSocketFloat', in_out='INPUT')
+        flipbook_function.interface.new_socket(
+            name="Index Start Point", socket_type='NodeSocketFloat', in_out='INPUT'
+            )
+        flipbook_function.interface.new_socket(
+            name="Total Frames to Play", socket_type='NodeSocketFloat', in_out='INPUT'
+            )
+        flipbook_function.interface.new_socket(name="X / Columns", socket_type='NodeSocketFloat', in_out='INPUT')
+        flipbook_function.interface.new_socket(name="Y / Rows", socket_type='NodeSocketFloat', in_out='INPUT')
+        flipbook_function_inputs = get_inputs(flipbook_function)
 
         # input UVs
         flipbook_function_inputs[0].default_value = (0.0, 0.0, 0.0)
@@ -1340,12 +1313,9 @@ def flipbook_function_node_group():
         group_output = flipbook_function.nodes.new("NodeGroupOutput")
         # flipbook_function outputs
         # output Output
-        if vers[0] < 4:
-            fbOut0 = flipbook_function.outputs.new('NodeSocketVector', "Output")
-        else:
-            fbOut0 = flipbook_function.interface.new_socket(
-                name="Output", socket_type='NodeSocketVector', in_out='OUTPUT'
-                )
+        fbOut0 = flipbook_function.interface.new_socket(
+            name="Output", socket_type='NodeSocketVector', in_out='OUTPUT'
+            )
         fbOut0.default_value = (0.0, 0.0, 0.0)
         fbOut0.min_value = -3.4028234663852886e+38
         fbOut0.max_value = 3.4028234663852886e+38

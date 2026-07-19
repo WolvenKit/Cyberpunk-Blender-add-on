@@ -25,20 +25,13 @@ class EyeShadow:
                     )
             mImgNode = create_node(CurMat.nodes, "ShaderNodeTexImage", (-1000, 250), label="Mask", image=mImg)
 
+            separateColor = CurMat.nodes.new("ShaderNodeSeparateColor")
+            separateColor.location = (-600, -100)
+
+            CurMat.links.new(mImgNode.outputs[0], separateColor.inputs[0])
+            CurMat.links.new(mImgNode.outputs[1], pBSDF.inputs['Coat Weight'])
+            CurMat.links.new(separateColor.outputs[0], pBSDF.inputs['Alpha'])
+
         if "ShadowColor" in Data:
             msColorNode = CreateShaderNodeRGB(CurMat, Data["ShadowColor"], -600, 300, 'ShadowColor')
-
-        separateColor = CurMat.nodes.new("ShaderNodeSeparateColor")
-        separateColor.location = (-600, -100)
-
-        # mixNode = CurMat.nodes.new("ShaderNodeMixRGB")
-        # mixNode.blend_type = 'MULTIPLY'
-        # mixNode.location = (-600,200)
-        # mixNode.inputs[1].default_value = (1,1,1,1)
-        # mixNode.hide = True
-
-        CurMat.links.new(mImgNode.outputs[0], separateColor.inputs[0])
-        CurMat.links.new(mImgNode.outputs[1], pBSDF.inputs['Coat Weight'])
-
-        CurMat.links.new(msColorNode.outputs[0], pBSDF.inputs['Base Color'])
-        CurMat.links.new(separateColor.outputs[0], pBSDF.inputs['Alpha'])
+            CurMat.links.new(msColorNode.outputs[0], pBSDF.inputs['Base Color'])

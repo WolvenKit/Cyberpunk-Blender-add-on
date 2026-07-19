@@ -50,7 +50,8 @@ class MeshDecalEmissive:
         if "EmissiveEV" in Data:
             pBSDF.inputs['Emission Strength'].default_value = Data["EmissiveEV"]
 
-        if "AnimationSpeed" in Data and "AnimationFramesWidth" in Data and "AnimationFramesHeight" in Data:
+        if ("AnimationSpeed" in Data and "AnimationFramesWidth" in Data and "AnimationFramesHeight" in Data
+                and "DiffuseTexture" in Data):
             if Data["AnimationFramesWidth"] > 1 or Data["AnimationFramesHeight"] > 1:
                 mapping_node = create_node(CurMat.nodes, "ShaderNodeMapping", (-1075, -75))
                 UVMapNode = create_node(CurMat.nodes, "ShaderNodeUVMap", (-1370, -75.))

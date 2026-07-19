@@ -1,32 +1,30 @@
 from ..main.common import *
 
-try:
-    from ..main.datakrash import DepotAssetIndex, DEFAULT_IMAGE_EXTENSIONS
-except (ImportError, AttributeError):
-    DepotAssetIndex = None
-    DEFAULT_IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.tga', '.dds', '.bmp', '.webp', '.tif', '.tiff')
+from .mat_common import add_group_node, create_param_value_nodes, get_or_build_node_group
+
+from .scalar_params import scalar_parameter_data, scalar_value
 
 _VALUE_PARAM_SPECS = (
-    ("BlinkingSpeed", "blinkingSpeed", 450, "BlinkingSpeed"),
-    ("LayersSeparation", "layersSeparation", 100, "LayersSeparation"),
-    ("ScanlinesIntensity", "scanlinesIntensity", 0, "ScanlinesIntensity"),
-    ("ImageScale", "imageScale", -200, "ImageScale"),
-    ("ScrollSpeed1", "scrollSpeed1", -250, "ScrollSpeed1"),
-    ("ScrollStepFactor1", "scrollStepFactor1", -300, "ScrollStepFactor1"),
-    ("ScrollMaskHeight1", "scrollMaskHeight1", -350, "ScrollMaskHeight1"),
-    ("ScrollMaskStartPoint1", "scrollMaskStartPoint1", -400, "ScrollMaskStartPoint1"),
-    ("ScrollSpeed2", "scrollSpeed2", -500, "ScrollSpeed2"),
-    ("ScrollStepFactor2", "scrollStepFactor2", -550, "ScrollStepFactor2"),
-    ("ScrollMaskHeight2", "scrollMaskHeight2", -600, "ScrollMaskHeight2"),
-    ("ScrollMaskStartPoint2", "scrollMaskStartPoint2", -650, "ScrollMaskStartPoint2"),
-    ("IsBroken", "isBroken", -700, "IsBroken"),
-    ("ScrollVerticalOrHorizontal", "scrollVerticalOrHorizontal", -750, "ScrollVerticalOrHorizontal"),
-    ("Emissive", "emissive", -800, "Emissive"),
-    ("EmissiveEV", "emissive", -800, "Emissive"),
-    ("FixForBlack", "fixForBlack", -1000, "FixForBlack"),
-    ("Metalness", "metalness", -1050, "Metalness"),
-    ("Roughness", "roughness", -1100, "Roughness"),
-    ("RoughnessScale", "roughness", -1100, "Roughness"),
+    ("BlinkingSpeed", "blinkingSpeed", 450, "BlinkingSpeed", 0.0),
+    ("LayersSeparation", "layersSeparation", 100, "LayersSeparation", 0.0),
+    ("ScanlinesIntensity", "scanlinesIntensity", 0, "ScanlinesIntensity", 1.0),
+    ("ImageScale", "imageScale", -200, "ImageScale", 1.0),
+    ("ScrollSpeed1", "scrollSpeed1", -250, "ScrollSpeed1", 0.0),
+    ("ScrollStepFactor1", "scrollStepFactor1", -300, "ScrollStepFactor1", 0.0),
+    ("ScrollMaskHeight1", "scrollMaskHeight1", -350, "ScrollMaskHeight1", 0.0),
+    ("ScrollMaskStartPoint1", "scrollMaskStartPoint1", -400, "ScrollMaskStartPoint1", 0.0),
+    ("ScrollSpeed2", "scrollSpeed2", -500, "ScrollSpeed2", 0.0),
+    ("ScrollStepFactor2", "scrollStepFactor2", -550, "ScrollStepFactor2", 0.0),
+    ("ScrollMaskHeight2", "scrollMaskHeight2", -600, "ScrollMaskHeight2", 0.0),
+    ("ScrollMaskStartPoint2", "scrollMaskStartPoint2", -650, "ScrollMaskStartPoint2", 0.0),
+    ("IsBroken", "isBroken", -700, "IsBroken", 0.0),
+    ("ScrollVerticalOrHorizontal", "scrollVerticalOrHorizontal", -750, "ScrollVerticalOrHorizontal", 0.0),
+    ("Emissive", "emissive", -800, "Emissive", 1.0),
+    ("EmissiveEV", "emissive", -800, "Emissive", 1.0),
+    ("FixForBlack", "fixForBlack", -1000, "FixForBlack", 0.0),
+    ("Metalness", "metalness", -1050, "Metalness", 0.0),
+    ("Roughness", "roughness", -1100, "Roughness", 0.5),
+    ("RoughnessScale", "roughness", -1100, "Roughness", 0.5),
     )
 
 _IMAGE_PARAM_SPECS = (
@@ -37,40 +35,7 @@ _IMAGE_PARAM_SPECS = (
     )
 
 
-def _add_group_io(group, vers, inputs, outputs):
-    if vers[0] < 4:
-        for socket_type, name in inputs:
-            group.inputs.new(socket_type, name)
-        for socket_type, name in outputs:
-            group.outputs.new(socket_type, name)
-        return
-
-    for socket_type, name in inputs:
-        group.interface.new_socket(name=name, socket_type=socket_type, in_out='INPUT')
-    for socket_type, name in outputs:
-        group.interface.new_socket(name=name, socket_type=socket_type, in_out='OUTPUT')
-
-
-def _node_group(name, vers, inputs, outputs, build):
-    group = bpy.data.node_groups.get(name)
-    if group is not None:
-        return group
-
-    group = bpy.data.node_groups.new(name, "ShaderNodeTree")
-    _add_group_io(group, vers, inputs, outputs)
-    build(group)
-    return group
-
-
-def _group_node(tree, group, loc, label=None, name=None):
-    node = create_node(tree.nodes, "ShaderNodeGroup", loc, label=label or group.name)
-    node.node_tree = group
-    if name:
-        node.name = name
-    return node
-
-
-def _create_scroll_group(layer, vers):
+def _create_scroll_group(layer):
     group_name = f"scroll{layer}"
     inputs = (
         ('NodeSocketFloat', f'ScrollSpeed{layer}'),
@@ -93,10 +58,10 @@ def _create_scroll_group(layer, vers):
         group.links.new(group_in.outputs[1], div.inputs[1])
         group.links.new(div.outputs[0], group_out.inputs[0])
 
-    return _node_group(group_name, vers, inputs, outputs, build)
+    return get_or_build_node_group(group_name, inputs, outputs, build)
 
 
-def _create_scroll_uv_group(layer, horizontal, vers):
+def _create_scroll_uv_group(layer, horizontal):
     suffix = f"{layer}X" if horizontal else str(layer)
     group_name = f"scrollUV{suffix}"
     inputs = (
@@ -138,10 +103,10 @@ def _create_scroll_uv_group(layer, horizontal, vers):
         group.links.new(separate.outputs[passthrough_axis], combine.inputs[passthrough_axis])
         group.links.new(combine.outputs[0], group_out.inputs[0])
 
-    return _node_group(group_name, vers, inputs, outputs, build)
+    return get_or_build_node_group(group_name, inputs, outputs, build)
 
 
-def _create_l1_group(vers):
+def _create_l1_group():
     inputs = (('NodeSocketVector', 'newUV'),)
     outputs = (('NodeSocketVector', 'l1'),)
 
@@ -159,10 +124,10 @@ def _create_l1_group(vers):
         group.links.new(clamp_y.outputs[0], combine.inputs[1])
         group.links.new(combine.outputs[0], group_out.inputs[0])
 
-    return _node_group("l1", vers, inputs, outputs, build)
+    return get_or_build_node_group("l1", inputs, outputs, build)
 
 
-def _create_layer_uv_group(layer, vers):
+def _create_layer_uv_group(layer):
     group_name = f"l{layer}"
     scale_socket = 'l2' if layer == 2 else 'LayersSeparation'
     output_name = 'newRandomOffset' if layer == 2 else 'l3'
@@ -200,7 +165,7 @@ def _create_layer_uv_group(layer, vers):
         group.links.new(clamp_y.outputs[0], combine.inputs[1])
         group.links.new(combine.outputs[0], group_out.inputs[0])
 
-    return _node_group(group_name, vers, inputs, outputs, build)
+    return get_or_build_node_group(group_name, inputs, outputs, build)
 
 
 class ParallaxScreen:
@@ -208,37 +173,11 @@ class ParallaxScreen:
         self.BasePath = BasePath
         self.ProjPath = ProjPath
         self.image_format = image_format
-        self._asset_index = None
-        self._image_cache = {}
-
-    def _get_asset_index(self):
-        if DepotAssetIndex is None:
-            return None
-        if self._asset_index is None:
-            root = self.ProjPath if os.path.isdir(self.ProjPath) else self.BasePath
-            self._asset_index = DepotAssetIndex.cached(root, DEFAULT_IMAGE_EXTENSIONS, warn_missing=False)
-        return self._asset_index
 
     def _image_from_rel_path(self, reference):
         if not reference:
             return None
-        cache_key = (reference, self.image_format, self.BasePath, self.ProjPath)
-        cached = self._image_cache.get(cache_key)
-        if cached is not None:
-            return cached
-
-        image = None
-        asset_index = self._get_asset_index()
-        if asset_index is not None:
-            image_path = asset_index.resolve_image(reference, self.image_format, warn=False)
-            if image_path:
-                image = bpy.data.images.load(image_path, check_existing=True)
-        if image is None:
-            image = imageFromRelPath(
-                reference, DepotPath=self.BasePath, ProjPath=self.ProjPath, image_format=self.image_format
-                )
-        self._image_cache[cache_key] = image
-        return image
+        return imageFromRelPath(reference, self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
 
     def createStepGroup(self):
         stepGroup = bpy.data.node_groups.get('step')
@@ -246,15 +185,9 @@ class ParallaxScreen:
             return stepGroup
         else:
             stepGroup = bpy.data.node_groups.new("step", "ShaderNodeTree")
-            vers = bpy.app.version
-            if vers[0] < 4:
-                stepGroup.inputs.new('NodeSocketFloat', 'y')
-                stepGroup.inputs.new('NodeSocketFloat', 'x')
-                stepGroup.outputs.new('NodeSocketFloat', 'result')
-            else:
-                stepGroup.interface.new_socket(name="y", socket_type='NodeSocketFloat', in_out='INPUT')
-                stepGroup.interface.new_socket(name="x", socket_type='NodeSocketFloat', in_out='INPUT')
-                stepGroup.interface.new_socket(name="result", socket_type='NodeSocketFloat', in_out='OUTPUT')
+            stepGroup.interface.new_socket(name="y", socket_type='NodeSocketFloat', in_out='INPUT')
+            stepGroup.interface.new_socket(name="x", socket_type='NodeSocketFloat', in_out='INPUT')
+            stepGroup.interface.new_socket(name="result", socket_type='NodeSocketFloat', in_out='OUTPUT')
 
             stepGroupI = create_node(stepGroup.nodes, "NodeGroupInput", (-1400, 0))
             stepGroupO = create_node(stepGroup.nodes, "NodeGroupOutput", (-200, 0))
@@ -282,13 +215,8 @@ class ParallaxScreen:
             return colorlessTexGroup
         else:
             colorlessTexGroup = bpy.data.node_groups.new("colorlessTex", "ShaderNodeTree")
-            vers = bpy.app.version
-            if vers[0] < 4:
-                colorlessTexGroup.inputs.new('NodeSocketColor', 'Color')
-                colorlessTexGroup.outputs.new('NodeSocketColor', 'Color')
-            else:
-                colorlessTexGroup.interface.new_socket(name="Color", socket_type='NodeSocketColor', in_out='INPUT')
-                colorlessTexGroup.interface.new_socket(name="Color", socket_type='NodeSocketColor', in_out='OUTPUT')
+            colorlessTexGroup.interface.new_socket(name="Color", socket_type='NodeSocketColor', in_out='INPUT')
+            colorlessTexGroup.interface.new_socket(name="Color", socket_type='NodeSocketColor', in_out='OUTPUT')
 
             colorlessTexGroupI = create_node(colorlessTexGroup.nodes, "NodeGroupInput", (-1400, 0))
             colorlessTexGroupO = create_node(colorlessTexGroup.nodes, "NodeGroupOutput", (-200, 0))
@@ -323,12 +251,10 @@ class ParallaxScreen:
         pBSDF = CurMat.nodes[loc('Principled BSDF')]
         sockets = bsdf_socket_names()
         pBSDF.inputs[sockets['Specular']].default_value = 0
-        vers = bpy.app.version
 
-        shader_nodes = {}
-        for key, var_name, y_coord, label in _VALUE_PARAM_SPECS:
-            if key in Data:
-                shader_nodes[var_name] = CreateShaderNodeValue(CurMat, Data[key], -2000, y_coord, label)
+        shader_nodes = create_param_value_nodes(
+            CurMat, scalar_parameter_data(Data, _VALUE_PARAM_SPECS), _VALUE_PARAM_SPECS
+            )
 
         blinkingSpeed = shader_nodes.get("blinkingSpeed")
         layersSeparation = shader_nodes.get("layersSeparation")
@@ -351,27 +277,51 @@ class ParallaxScreen:
 
         if "HSV_Mod" in Data:
             hsv_mod = Data["HSV_Mod"]
-            HSV_Mod_w = CreateShaderNodeValue(CurMat, hsv_mod["W"], -2000, 150, "HSV_Mod.w")
-            HSV_Mod_x = CreateShaderNodeValue(CurMat, hsv_mod["X"], -2000, -950, "HSV_Mod.x")
-            HSV_Mod_y = CreateShaderNodeValue(CurMat, hsv_mod["Y"], -2000, -900, "HSV_Mod.y")
+            HSV_Mod_w = CreateShaderNodeValue(
+                CurMat, scalar_value(hsv_mod.get("W"), 0.0, "W"), -2000, 150, "HSV_Mod.w"
+                )
+            HSV_Mod_x = CreateShaderNodeValue(
+                CurMat, scalar_value(hsv_mod.get("X"), 0.0, "X"), -2000, -950, "HSV_Mod.x"
+                )
+            HSV_Mod_y = CreateShaderNodeValue(
+                CurMat, scalar_value(hsv_mod.get("Y"), 0.0, "Y"), -2000, -900, "HSV_Mod.y"
+                )
 
         if "ScanlinesDensity" in Data:
-            if type(Data["ScanlinesDensity"]) is int:
+            density = Data["ScanlinesDensity"]
+            if isinstance(density, dict) and any(
+                    axis in density for axis in ("X", "Y", "Z", "W")
+                    ):
                 scanlinesDensity = CreateShaderNodeValue(
-                    CurMat, Data["ScanlinesDensity"], -2000, 50, "ScanlinesDensity"
+                    CurMat, scalar_value(density.get("X"), 1.0, "X"), -2200, -50, "ScanlinesDensity.x"
+                    )
+                scanlinesDensity_y = CreateShaderNodeValue(
+                    CurMat, scalar_value(density.get("Y"), 1.0, "Y"), -2200, -100, "ScanlinesDensity.y"
+                    )
+                scanlinesDensity_z = CreateShaderNodeValue(
+                    CurMat, scalar_value(density.get("Z"), 1.0, "Z"), -2200, -150, "ScanlinesDensity.z"
+                    )
+                scanlinesDensity_w = CreateShaderNodeValue(
+                    CurMat, scalar_value(density.get("W"), 1.0, "W"), -2200, -200, "ScanlinesDensity.w"
                     )
             else:
-                density = Data["ScanlinesDensity"]
-                scanlinesDensity = CreateShaderNodeValue(CurMat, density["X"], -2200, -50, "ScanlinesDensity.x")
-                scanlinesDensity_y = CreateShaderNodeValue(CurMat, density["Y"], -2200, -100, "ScanlinesDensity.y")
-                scanlinesDensity_z = CreateShaderNodeValue(CurMat, density["Z"], -2200, -150, "ScanlinesDensity.z")
-                scanlinesDensity_w = CreateShaderNodeValue(CurMat, density["W"], -2200, -200, "ScanlinesDensity.w")
+                scanlinesDensity = CreateShaderNodeValue(
+                    CurMat, scalar_value(density, 1.0, "ScanlinesDensity"),
+                    -2000, 50, "ScanlinesDensity"
+                    )
+        else:
+            scanlinesDensity = CreateShaderNodeValue(CurMat, 1.0, -2000, 50, "ScanlinesDensity")
 
-        if "IntensityPerLayer" in Data:
-            intensity = Data["IntensityPerLayer"]
-            intensityPerLayer_x = CreateShaderNodeValue(CurMat, intensity["X"], -2000, -50, "IntensityPerLayer.x")
-            intensityPerLayer_y = CreateShaderNodeValue(CurMat, intensity["Y"], -2000, -100, "IntensityPerLayer.y")
-            intensityPerLayer_z = CreateShaderNodeValue(CurMat, intensity["Z"], -2000, -150, "IntensityPerLayer.z")
+        intensity = Data.get("IntensityPerLayer") or {}
+        intensityPerLayer_x = CreateShaderNodeValue(
+            CurMat, scalar_value(intensity.get("X"), 1.0, "X"), -2000, -50, "IntensityPerLayer.x"
+            )
+        intensityPerLayer_y = CreateShaderNodeValue(
+            CurMat, scalar_value(intensity.get("Y"), 1.0, "Y"), -2000, -100, "IntensityPerLayer.y"
+            )
+        intensityPerLayer_z = CreateShaderNodeValue(
+            CurMat, scalar_value(intensity.get("Z"), 1.0, "Z"), -2000, -150, "IntensityPerLayer.z"
+            )
 
         emissiveColor = None
         for key in ("EmissiveColor", "Tint"):
@@ -434,16 +384,16 @@ class ParallaxScreen:
         timeDriver.driver.expression = "frame / 24"  # FIXME: frame / framerate variable
 
         # scroll1/scroll2
-        scroll1Group = _create_scroll_group(1, vers)
-        scroll1 = _group_node(CurMat, scroll1Group, (-1500, -200), label="scroll1", name="scroll1")
+        scroll1Group = _create_scroll_group(1)
+        scroll1 = add_group_node(CurMat, scroll1Group, (-1500, -200), label="scroll1", name="scroll1")
         if "ScrollSpeed1" in Data:
             CurMat.links.new(scrollSpeed1.outputs[0], scroll1.inputs['ScrollSpeed1'])
         if "ScrollStepFactor1" in Data:
             CurMat.links.new(scrollStepFactor1.outputs[0], scroll1.inputs['ScrollStepFactor1'])
         CurMat.links.new(time.outputs[0], scroll1.inputs['Time'])
 
-        scrollUV1Group = _create_scroll_uv_group(1, False, vers)
-        scrollUV1 = _group_node(CurMat, scrollUV1Group, (-1350, -200), label="scrollUV1", name="scrollUV1")
+        scrollUV1Group = _create_scroll_uv_group(1, False)
+        scrollUV1 = add_group_node(CurMat, scrollUV1Group, (-1350, -200), label="scrollUV1", name="scrollUV1")
         CurMat.links.new(vecAdd.outputs[0], scrollUV1.inputs['newUV'])
         if "ScrollMaskHeight1" in Data:
             CurMat.links.new(scrollMaskHeight1.outputs[0], scrollUV1.inputs['ScrollMaskHeight1'])
@@ -451,8 +401,8 @@ class ParallaxScreen:
         if "ScrollMaskStartPoint1" in Data:
             CurMat.links.new(scrollMaskStartPoint1.outputs[0], scrollUV1.inputs['ScrollMaskStartPoint1'])
 
-        scrollUV1XGroup = _create_scroll_uv_group(1, True, vers)
-        scrollUV1X = _group_node(CurMat, scrollUV1XGroup, (-1350, -250), label="scrollUV1X", name="scrollUV1X")
+        scrollUV1XGroup = _create_scroll_uv_group(1, True)
+        scrollUV1X = add_group_node(CurMat, scrollUV1XGroup, (-1350, -250), label="scrollUV1X", name="scrollUV1X")
         CurMat.links.new(vecAdd.outputs[0], scrollUV1X.inputs['newUV'])
         if "ScrollMaskHeight1" in Data:
             CurMat.links.new(scrollMaskHeight1.outputs[0], scrollUV1X.inputs['ScrollMaskHeight1'])
@@ -460,16 +410,16 @@ class ParallaxScreen:
         if "ScrollMaskStartPoint1" in Data:
             CurMat.links.new(scrollMaskStartPoint1.outputs[0], scrollUV1X.inputs['ScrollMaskStartPoint1'])
 
-        scroll2Group = _create_scroll_group(2, vers)
-        scroll2 = _group_node(CurMat, scroll2Group, (-1500, -300), label="scroll2", name="scroll2")
+        scroll2Group = _create_scroll_group(2)
+        scroll2 = add_group_node(CurMat, scroll2Group, (-1500, -300), label="scroll2", name="scroll2")
         if "ScrollSpeed2" in Data:
             CurMat.links.new(scrollSpeed2.outputs[0], scroll2.inputs['ScrollSpeed2'])
         if "ScrollStepFactor2" in Data:
             CurMat.links.new(scrollStepFactor2.outputs[0], scroll2.inputs['ScrollStepFactor2'])
         CurMat.links.new(time.outputs[0], scroll2.inputs['Time'])
 
-        scrollUV2Group = _create_scroll_uv_group(2, False, vers)
-        scrollUV2 = _group_node(CurMat, scrollUV2Group, (-1350, -300), label="scrollUV2", name="scrollUV2")
+        scrollUV2Group = _create_scroll_uv_group(2, False)
+        scrollUV2 = add_group_node(CurMat, scrollUV2Group, (-1350, -300), label="scrollUV2", name="scrollUV2")
         CurMat.links.new(vecAdd.outputs[0], scrollUV2.inputs['newUV'])
         if "ScrollMaskHeight2" in Data:
             CurMat.links.new(scrollMaskHeight2.outputs[0], scrollUV2.inputs['ScrollMaskHeight2'])
@@ -477,8 +427,8 @@ class ParallaxScreen:
         if "ScrollMaskStartPoint2" in Data:
             CurMat.links.new(scrollMaskStartPoint2.outputs[0], scrollUV2.inputs['ScrollMaskStartPoint2'])
 
-        scrollUV2XGroup = _create_scroll_uv_group(2, True, vers)
-        scrollUV2X = _group_node(CurMat, scrollUV2XGroup, (-1350, -350), label="scrollUV2X", name="scrollUV2X")
+        scrollUV2XGroup = _create_scroll_uv_group(2, True)
+        scrollUV2X = add_group_node(CurMat, scrollUV2XGroup, (-1350, -350), label="scrollUV2X", name="scrollUV2X")
         CurMat.links.new(vecAdd.outputs[0], scrollUV2X.inputs['newUV'])
         if "ScrollMaskHeight2" in Data:
             CurMat.links.new(scrollMaskHeight2.outputs[0], scrollUV2X.inputs['ScrollMaskHeight2'])
@@ -503,16 +453,10 @@ class ParallaxScreen:
         brokenUVGroup = bpy.data.node_groups.get('brokenUV')
         if brokenUVGroup is None:
             brokenUVGroup = bpy.data.node_groups.new("brokenUV", "ShaderNodeTree")
-            if vers[0] < 4:
-                brokenUVGroup.inputs.new('NodeSocketFloat', 'rndBlocks')
-                brokenUVGroup.inputs.new('NodeSocketFloat', 'Time')
-                brokenUVGroup.inputs.new('NodeSocketVector', 'UV')
-                brokenUVGroup.outputs.new('NodeSocketVector', 'brokenUV')
-            else:
-                brokenUVGroup.interface.new_socket(name="rndBlocks", socket_type='NodeSocketFloat', in_out='INPUT')
-                brokenUVGroup.interface.new_socket(name="Time", socket_type='NodeSocketFloat', in_out='INPUT')
-                brokenUVGroup.interface.new_socket(name="UV", socket_type='NodeSocketVector', in_out='INPUT')
-                brokenUVGroup.interface.new_socket(name="brokenUV", socket_type='NodeSocketVector', in_out='OUTPUT')
+            brokenUVGroup.interface.new_socket(name="rndBlocks", socket_type='NodeSocketFloat', in_out='INPUT')
+            brokenUVGroup.interface.new_socket(name="Time", socket_type='NodeSocketFloat', in_out='INPUT')
+            brokenUVGroup.interface.new_socket(name="UV", socket_type='NodeSocketVector', in_out='INPUT')
+            brokenUVGroup.interface.new_socket(name="brokenUV", socket_type='NodeSocketVector', in_out='OUTPUT')
 
             brokenUVGroupI = create_node(brokenUVGroup.nodes, "NodeGroupInput", (-1400, 0))
             brokenUVGroupO = create_node(brokenUVGroup.nodes, "NodeGroupOutput", (200, 0))
@@ -578,18 +522,12 @@ class ParallaxScreen:
         rndColorIGroup = bpy.data.node_groups.get('rndColorIndex')
         if rndColorIGroup is None:
             rndColorIGroup = bpy.data.node_groups.new("rndColorIndex", "ShaderNodeTree")
-            if vers[0] < 4:
-                rndColorIGroup.inputs.new('NodeSocketFloat', 'rndBlocks')
-                rndColorIGroup.inputs.new('NodeSocketFloat', 'Time')
-                rndColorIGroup.inputs.new('NodeSocketVector', 'brokenUV')
-                rndColorIGroup.outputs.new('NodeSocketInt', 'rndColorIndex')
-            else:
-                rndColorIGroup.interface.new_socket(name="rndBlocks", socket_type='NodeSocketFloat', in_out='INPUT')
-                rndColorIGroup.interface.new_socket(name="Time", socket_type='NodeSocketFloat', in_out='INPUT')
-                rndColorIGroup.interface.new_socket(name="brokenUV", socket_type='NodeSocketVector', in_out='INPUT')
-                rndColorIGroup.interface.new_socket(
-                    name="rndColorIndex", socket_type='NodeSocketFloat', in_out='OUTPUT'
-                    )
+            rndColorIGroup.interface.new_socket(name="rndBlocks", socket_type='NodeSocketFloat', in_out='INPUT')
+            rndColorIGroup.interface.new_socket(name="Time", socket_type='NodeSocketFloat', in_out='INPUT')
+            rndColorIGroup.interface.new_socket(name="brokenUV", socket_type='NodeSocketVector', in_out='INPUT')
+            rndColorIGroup.interface.new_socket(
+                name="rndColorIndex", socket_type='NodeSocketFloat', in_out='OUTPUT'
+                )
 
             rndColorIGroupI = create_node(rndColorIGroup.nodes, "NodeGroupInput", (-1400, 0))
             rndColorIGroupO = create_node(rndColorIGroup.nodes, "NodeGroupOutput", (400, 0))
@@ -635,12 +573,8 @@ class ParallaxScreen:
         rndColorGroup = bpy.data.node_groups.get('rndColor')
         if rndColorGroup is None:
             rndColorGroup = bpy.data.node_groups.new("rndColor", "ShaderNodeTree")
-            if vers[0] < 4:
-                rndColorGroup.inputs.new('NodeSocketInt', 'rndColorIndex')
-                rndColorGroup.outputs.new('NodeSocketColor', 'rndColor')
-            else:
-                rndColorGroup.interface.new_socket(name="rndColorIndex", socket_type='NodeSocketFloat', in_out='INPUT')
-                rndColorGroup.interface.new_socket(name="rndColor", socket_type='NodeSocketColor', in_out='OUTPUT')
+            rndColorGroup.interface.new_socket(name="rndColorIndex", socket_type='NodeSocketFloat', in_out='INPUT')
+            rndColorGroup.interface.new_socket(name="rndColor", socket_type='NodeSocketColor', in_out='OUTPUT')
 
             rndColorGroupI = create_node(rndColorGroup.nodes, "NodeGroupInput", (-1400, 0))
             rndColorGroupO = create_node(rndColorGroup.nodes, "NodeGroupOutput", (200, 0))
@@ -717,16 +651,10 @@ class ParallaxScreen:
         rndOffGroup = bpy.data.node_groups.get('rndOff')
         if rndOffGroup is None:
             rndOffGroup = bpy.data.node_groups.new("rndOff", "ShaderNodeTree")
-            if vers[0] < 4:
-                rndOffGroup.outputs.new('NodeSocketFloat', 'x')
-                rndOffGroup.outputs.new('NodeSocketFloat', 'y')
-                rndOffGroup.outputs.new('NodeSocketFloat', 'z')
-                rndOffGroup.outputs.new('NodeSocketFloat', 'w')
-            else:
-                rndOffGroup.interface.new_socket(name="x", socket_type='NodeSocketFloat', in_out='OUTPUT')
-                rndOffGroup.interface.new_socket(name="y", socket_type='NodeSocketFloat', in_out='OUTPUT')
-                rndOffGroup.interface.new_socket(name="z", socket_type='NodeSocketFloat', in_out='OUTPUT')
-                rndOffGroup.interface.new_socket(name="w", socket_type='NodeSocketFloat', in_out='OUTPUT')
+            rndOffGroup.interface.new_socket(name="x", socket_type='NodeSocketFloat', in_out='OUTPUT')
+            rndOffGroup.interface.new_socket(name="y", socket_type='NodeSocketFloat', in_out='OUTPUT')
+            rndOffGroup.interface.new_socket(name="z", socket_type='NodeSocketFloat', in_out='OUTPUT')
+            rndOffGroup.interface.new_socket(name="w", socket_type='NodeSocketFloat', in_out='OUTPUT')
 
             rndOffGroupO = create_node(rndOffGroup.nodes, "NodeGroupOutput", (0, 0))
             rndOffGroupO.inputs[0].default_value = -0.01
@@ -741,22 +669,14 @@ class ParallaxScreen:
         randomOffsetGroup = bpy.data.node_groups.get('randomOffset')
         if randomOffsetGroup is None:
             randomOffsetGroup = bpy.data.node_groups.new("randomOffset", "ShaderNodeTree")
-            if vers[0] < 4:
-                randomOffsetGroup.inputs.new('NodeSocketFloat', 'rand')
-                randomOffsetGroup.inputs.new('NodeSocketFloat', 'rndOff.x')
-                randomOffsetGroup.inputs.new('NodeSocketFloat', 'rndOff.y')
-                randomOffsetGroup.inputs.new('NodeSocketFloat', 'rndOff.z')
-                randomOffsetGroup.inputs.new('NodeSocketFloat', 'rndOff.w')
-                randomOffsetGroup.outputs.new('NodeSocketVector', 'randomOffset')
-            else:
-                randomOffsetGroup.interface.new_socket(name="rand", socket_type='NodeSocketFloat', in_out='INPUT')
-                randomOffsetGroup.interface.new_socket(name="rndOff.x", socket_type='NodeSocketFloat', in_out='INPUT')
-                randomOffsetGroup.interface.new_socket(name="rndOff.y", socket_type='NodeSocketFloat', in_out='INPUT')
-                randomOffsetGroup.interface.new_socket(name="rndOff.z", socket_type='NodeSocketFloat', in_out='INPUT')
-                randomOffsetGroup.interface.new_socket(name="rndOff.w", socket_type='NodeSocketFloat', in_out='INPUT')
-                randomOffsetGroup.interface.new_socket(
-                    name="randomOffset", socket_type='NodeSocketVector', in_out='OUTPUT'
-                    )
+            randomOffsetGroup.interface.new_socket(name="rand", socket_type='NodeSocketFloat', in_out='INPUT')
+            randomOffsetGroup.interface.new_socket(name="rndOff.x", socket_type='NodeSocketFloat', in_out='INPUT')
+            randomOffsetGroup.interface.new_socket(name="rndOff.y", socket_type='NodeSocketFloat', in_out='INPUT')
+            randomOffsetGroup.interface.new_socket(name="rndOff.z", socket_type='NodeSocketFloat', in_out='INPUT')
+            randomOffsetGroup.interface.new_socket(name="rndOff.w", socket_type='NodeSocketFloat', in_out='INPUT')
+            randomOffsetGroup.interface.new_socket(
+                name="randomOffset", socket_type='NodeSocketVector', in_out='OUTPUT'
+                )
             randomOffsetGroupI = create_node(randomOffsetGroup.nodes, "NodeGroupInput", (-400, 0))
             randomOffsetGroupO = create_node(randomOffsetGroup.nodes, "NodeGroupOutput", (200, 0))
             lerp3 = create_node(randomOffsetGroup.nodes, "ShaderNodeGroup", (-200, 0), label="lerp")
@@ -787,18 +707,13 @@ class ParallaxScreen:
         newRandomOffsetGroup = bpy.data.node_groups.get('newRandomOffset')
         if newRandomOffsetGroup is None:
             newRandomOffsetGroup = bpy.data.node_groups.new("newRandomOffset", "ShaderNodeTree")
-            if vers[0] < 4:
-                newRandomOffsetGroup.inputs.new('NodeSocketFloat', 'rand')
-                newRandomOffsetGroup.inputs.new('NodeSocketVector', 'randomOffset')
-                newRandomOffsetGroup.outputs.new('NodeSocketVector', 'newRandomOffset')
-            else:
-                newRandomOffsetGroup.interface.new_socket(name="rand", socket_type='NodeSocketFloat', in_out='INPUT')
-                newRandomOffsetGroup.interface.new_socket(
-                    name="randomOffset", socket_type='NodeSocketVector', in_out='INPUT'
-                    )
-                newRandomOffsetGroup.interface.new_socket(
-                    name="newRandomOffset", socket_type='NodeSocketVector', in_out='OUTPUT'
-                    )
+            newRandomOffsetGroup.interface.new_socket(name="rand", socket_type='NodeSocketFloat', in_out='INPUT')
+            newRandomOffsetGroup.interface.new_socket(
+                name="randomOffset", socket_type='NodeSocketVector', in_out='INPUT'
+                )
+            newRandomOffsetGroup.interface.new_socket(
+                name="newRandomOffset", socket_type='NodeSocketVector', in_out='OUTPUT'
+                )
 
             newRandomOffsetGroupI = create_node(newRandomOffsetGroup.nodes, "NodeGroupInput", (-800, 0))
             newRandomOffsetGroupO = create_node(newRandomOffsetGroup.nodes, "NodeGroupOutput", (200, 0))
@@ -821,18 +736,18 @@ class ParallaxScreen:
         CurMat.links.new(randomOffset.outputs[0], newRandomOffset.inputs[1])
 
         # l1/l2/l3
-        l1Group = _create_l1_group(vers)
-        l1 = _group_node(CurMat, l1Group, (-950, 300), label="l1")
+        l1Group = _create_l1_group()
+        l1 = add_group_node(CurMat, l1Group, (-950, 300), label="l1")
         CurMat.links.new(vecAdd.outputs[0], l1.inputs[0])
 
-        l2Group = _create_layer_uv_group(2, vers)
-        l2 = _group_node(CurMat, l2Group, (-950, 250), label="l2")
+        l2Group = _create_layer_uv_group(2)
+        l2 = add_group_node(CurMat, l2Group, (-950, 250), label="l2")
         CurMat.links.new(vecAdd.outputs[0], l2.inputs[1])
         CurMat.links.new(combine.outputs[0], l2.inputs[0])
         CurMat.links.new(layersSeparation.outputs[0], l2.inputs[2])
 
-        l3Group = _create_layer_uv_group(3, vers)
-        l3 = _group_node(CurMat, l3Group, (-950, 200), label="l3")
+        l3Group = _create_layer_uv_group(3)
+        l3 = add_group_node(CurMat, l3Group, (-950, 200), label="l3")
         CurMat.links.new(vecAdd.outputs[0], l3.inputs[1])
         CurMat.links.new(combine.outputs[0], l3.inputs[0])
         CurMat.links.new(layersSeparation.outputs[0], l3.inputs[2])
@@ -872,18 +787,11 @@ class ParallaxScreen:
         bl1Group = bpy.data.node_groups.get('if BlinkingSpeed > 0')
         if bl1Group is None:
             bl1Group = bpy.data.node_groups.new("if BlinkingSpeed > 0", "ShaderNodeTree")
-            if vers[0] < 4:
-                bl1Group.inputs.new('NodeSocketFloat', 'BlinkingSpeed')
-                bl1Group.inputs.new('NodeSocketFloat', 'time')
-                bl1Group.inputs.new('NodeSocketColor', 'iA')
-                bl1Group.inputs.new('NodeSocketColor', 'i1')
-                bl1Group.outputs.new('NodeSocketColor', 'new_i1')
-            else:
-                bl1Group.interface.new_socket(name="BlinkingSpeed", socket_type='NodeSocketFloat', in_out='INPUT')
-                bl1Group.interface.new_socket(name="time", socket_type='NodeSocketFloat', in_out='INPUT')
-                bl1Group.interface.new_socket(name="iA", socket_type='NodeSocketColor', in_out='INPUT')
-                bl1Group.interface.new_socket(name="i1", socket_type='NodeSocketColor', in_out='INPUT')
-                bl1Group.interface.new_socket(name="new_i1", socket_type='NodeSocketColor', in_out='OUTPUT')
+            bl1Group.interface.new_socket(name="BlinkingSpeed", socket_type='NodeSocketFloat', in_out='INPUT')
+            bl1Group.interface.new_socket(name="time", socket_type='NodeSocketFloat', in_out='INPUT')
+            bl1Group.interface.new_socket(name="iA", socket_type='NodeSocketColor', in_out='INPUT')
+            bl1Group.interface.new_socket(name="i1", socket_type='NodeSocketColor', in_out='INPUT')
+            bl1Group.interface.new_socket(name="new_i1", socket_type='NodeSocketColor', in_out='OUTPUT')
 
             bl1GroupI = create_node(bl1Group.nodes, "NodeGroupInput", (-1050, 0))
             bl1GroupO = create_node(bl1Group.nodes, "NodeGroupOutput", (300, 0))
@@ -926,18 +834,12 @@ class ParallaxScreen:
         scanlineUVGroup = bpy.data.node_groups.get('scanlineUV')
         if scanlineUVGroup is None:
             scanlineUVGroup = bpy.data.node_groups.new("scanlineUV", "ShaderNodeTree")
-            if vers[0] < 4:
-                scanlineUVGroup.inputs.new('NodeSocketFloat', 'ScanlinesDensity')
-                scanlineUVGroup.inputs.new('NodeSocketFloat', 'time')
-                scanlineUVGroup.inputs.new('NodeSocketVector', 'UV')
-                scanlineUVGroup.outputs.new('NodeSocketVector', 'scanlineUV')
-            else:
-                scanlineUVGroup.interface.new_socket(
-                    name="ScanlinesDensity", socket_type='NodeSocketFloat', in_out='INPUT'
-                    )
-                scanlineUVGroup.interface.new_socket(name="time", socket_type='NodeSocketFloat', in_out='INPUT')
-                scanlineUVGroup.interface.new_socket(name="UV", socket_type='NodeSocketVector', in_out='INPUT')
-                scanlineUVGroup.interface.new_socket(name="scanlineUV", socket_type='NodeSocketVector', in_out='OUTPUT')
+            scanlineUVGroup.interface.new_socket(
+                name="ScanlinesDensity", socket_type='NodeSocketFloat', in_out='INPUT'
+                )
+            scanlineUVGroup.interface.new_socket(name="time", socket_type='NodeSocketFloat', in_out='INPUT')
+            scanlineUVGroup.interface.new_socket(name="UV", socket_type='NodeSocketVector', in_out='INPUT')
+            scanlineUVGroup.interface.new_socket(name="scanlineUV", socket_type='NodeSocketVector', in_out='OUTPUT')
 
             scanlineUVGroupI = create_node(scanlineUVGroup.nodes, "NodeGroupInput", (-1050, 0))
             scanlineUVGroupO = create_node(scanlineUVGroup.nodes, "NodeGroupOutput", (300, 0))
@@ -1007,14 +909,9 @@ class ParallaxScreen:
         m2Group = bpy.data.node_groups.get('parallax_screen_m2')
         if m2Group is None:
             m2Group = bpy.data.node_groups.new("parallax_screen_m2", "ShaderNodeTree")
-            if vers[0] < 4:
-                m2Group.inputs.new('NodeSocketVector', 'i3')
-                m2Group.inputs.new('NodeSocketVector', 'i2')
-                m2Group.outputs.new('NodeSocketVector', 'm2')
-            else:
-                m2Group.interface.new_socket(name="i3", socket_type='NodeSocketVector', in_out='INPUT')
-                m2Group.interface.new_socket(name="i2", socket_type='NodeSocketVector', in_out='INPUT')
-                m2Group.interface.new_socket(name="m2", socket_type='NodeSocketVector', in_out='OUTPUT')
+            m2Group.interface.new_socket(name="i3", socket_type='NodeSocketVector', in_out='INPUT')
+            m2Group.interface.new_socket(name="i2", socket_type='NodeSocketVector', in_out='INPUT')
+            m2Group.interface.new_socket(name="m2", socket_type='NodeSocketVector', in_out='OUTPUT')
 
             m2GroupI = create_node(m2Group.nodes, "NodeGroupInput", (-1050, 0))
             m2GroupO = create_node(m2Group.nodes, "NodeGroupOutput", (300, 0))
@@ -1041,14 +938,9 @@ class ParallaxScreen:
         m3Group = bpy.data.node_groups.get('parallax_screen_m3')
         if m3Group is None:
             m3Group = bpy.data.node_groups.new("parallax_screen_m3", "ShaderNodeTree")
-            if vers[0] < 4:
-                m3Group.inputs.new('NodeSocketVector', 'm2')
-                m3Group.inputs.new('NodeSocketVector', 'i1')
-                m3Group.outputs.new('NodeSocketVector', 'm3')
-            else:
-                m3Group.interface.new_socket(name="m2", socket_type='NodeSocketVector', in_out='INPUT')
-                m3Group.interface.new_socket(name="i1", socket_type='NodeSocketVector', in_out='INPUT')
-                m3Group.interface.new_socket(name="m3", socket_type='NodeSocketVector', in_out='OUTPUT')
+            m3Group.interface.new_socket(name="m2", socket_type='NodeSocketVector', in_out='INPUT')
+            m3Group.interface.new_socket(name="i1", socket_type='NodeSocketVector', in_out='INPUT')
+            m3Group.interface.new_socket(name="m3", socket_type='NodeSocketVector', in_out='OUTPUT')
 
             m3GroupI = create_node(m3Group.nodes, "NodeGroupInput", (-1050, 0))
             m3GroupO = create_node(m3Group.nodes, "NodeGroupOutput", (300, 0))
@@ -1163,36 +1055,27 @@ class ParallaxScreen:
         finalScrollUVGroup = bpy.data.node_groups.get('finalScrollUV')
         if finalScrollUVGroup is None:
             finalScrollUVGroup = bpy.data.node_groups.new("finalScrollUV", "ShaderNodeTree")
-            if vers[0] < 4:
-                finalScrollUVGroup.inputs.new('NodeSocketVector', 'scrollUV2')
-                finalScrollUVGroup.inputs.new('NodeSocketVector', 'scrollUV1')
-                finalScrollUVGroup.inputs.new('NodeSocketColor', 'scrollMask')
-                finalScrollUVGroup.inputs.new('NodeSocketVector', 'scrollUV2X')
-                finalScrollUVGroup.inputs.new('NodeSocketVector', 'scrollUV1X')
-                finalScrollUVGroup.inputs.new('NodeSocketVector', 'ScrollVerticalOrHorizontal')
-                finalScrollUVGroup.outputs.new('NodeSocketVector', 'finalScrollUV')
-            else:
-                finalScrollUVGroup.interface.new_socket(
-                    name="scrollUV2", socket_type='NodeSocketVector', in_out='INPUT'
-                    )
-                finalScrollUVGroup.interface.new_socket(
-                    name="scrollUV1", socket_type='NodeSocketVector', in_out='INPUT'
-                    )
-                finalScrollUVGroup.interface.new_socket(
-                    name="scrollMask", socket_type='NodeSocketColor', in_out='INPUT'
-                    )
-                finalScrollUVGroup.interface.new_socket(
-                    name="scrollUV2X", socket_type='NodeSocketVector', in_out='INPUT'
-                    )
-                finalScrollUVGroup.interface.new_socket(
-                    name="scrollUV1X", socket_type='NodeSocketVector', in_out='INPUT'
-                    )
-                finalScrollUVGroup.interface.new_socket(
-                    name="ScrollVerticalOrHorizontal", socket_type='NodeSocketVector', in_out='INPUT'
-                    )
-                finalScrollUVGroup.interface.new_socket(
-                    name="finalScrollUV", socket_type='NodeSocketVector', in_out='OUTPUT'
-                    )
+            finalScrollUVGroup.interface.new_socket(
+                name="scrollUV2", socket_type='NodeSocketVector', in_out='INPUT'
+                )
+            finalScrollUVGroup.interface.new_socket(
+                name="scrollUV1", socket_type='NodeSocketVector', in_out='INPUT'
+                )
+            finalScrollUVGroup.interface.new_socket(
+                name="scrollMask", socket_type='NodeSocketColor', in_out='INPUT'
+                )
+            finalScrollUVGroup.interface.new_socket(
+                name="scrollUV2X", socket_type='NodeSocketVector', in_out='INPUT'
+                )
+            finalScrollUVGroup.interface.new_socket(
+                name="scrollUV1X", socket_type='NodeSocketVector', in_out='INPUT'
+                )
+            finalScrollUVGroup.interface.new_socket(
+                name="ScrollVerticalOrHorizontal", socket_type='NodeSocketVector', in_out='INPUT'
+                )
+            finalScrollUVGroup.interface.new_socket(
+                name="finalScrollUV", socket_type='NodeSocketVector', in_out='OUTPUT'
+                )
 
             finalScrollUVGroupI = create_node(finalScrollUVGroup.nodes, "NodeGroupInput", (-1050, 0))
             finalScrollUVGroupO = create_node(finalScrollUVGroup.nodes, "NodeGroupOutput", (-150, 0))

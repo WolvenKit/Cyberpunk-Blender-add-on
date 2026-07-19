@@ -1,5 +1,7 @@
 from ..main.common import *
 
+from .mat_common import create_normal_map_rel
+
 
 class SpeedTree:
     def __init__(self, BasePath, image_format, ProjPath):
@@ -54,16 +56,16 @@ class SpeedTree:
         CurMat.links.new(UVNode.outputs[2], dTexMapping.inputs[0])
 
         if "NormalMap" in Data:
-            nMap = CreateShaderNodeNormalMap(
-                CurMat, self.BasePath + Data["NormalMap"], -300, -350, 'NormalMap', self.image_format
+            nMap = create_normal_map_rel(
+                CurMat, Data["NormalMap"], -300, -350, 'NormalMap', self.image_format, self.BasePath, self.ProjPath
                 )
             CurMat.links.new(nMap.outputs[0], pBSDF.inputs['Normal'])
             nMap.inputs[1].links[0].from_node.inputs[0].links[0].from_node.hide = False
             nMap.inputs[1].links[0].from_node.inputs[0].links[0].from_node.location = (-800, -200)
 
         if "Normal" in Data:
-            nMap = CreateShaderNodeNormalMap(
-                CurMat, self.BasePath + Data["Normal"], -300, -350, 'NormalMap', self.image_format
+            nMap = create_normal_map_rel(
+                CurMat, Data["Normal"], -300, -350, 'NormalMap', self.image_format, self.BasePath, self.ProjPath
                 )
             CurMat.links.new(nMap.outputs[0], pBSDF.inputs['Normal'])
             nMap.inputs[1].links[0].from_node.inputs[0].links[0].from_node.hide = False

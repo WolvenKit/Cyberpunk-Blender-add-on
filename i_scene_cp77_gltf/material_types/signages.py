@@ -12,7 +12,6 @@ class Signages:
         pBSDF = CurMat.nodes[loc('Principled BSDF')]
         sockets = bsdf_socket_names()
         pBSDF.inputs[sockets['Specular']].default_value = 0
-        print('Creating neon sign')
         if "ColorOneStart" in Data:
             dCol = CreateShaderNodeRGB(CurMat, Data["ColorOneStart"], -800, 250, "ColorOneStart")
         else:
@@ -54,9 +53,6 @@ class Signages:
 
         if "FresnelAmount" in Data:
             pBSDF.inputs[sockets['Specular']].default_value = Data["FresnelAmount"]
-
-        if "ColorOneStart" in Data:
-            dCol = CreateShaderNodeRGB(CurMat, Data["ColorOneStart"], -850, 250, "ColorOneStart")
 
         if "ColorTwo" in Data:
             dCol = CreateShaderNodeRGB(CurMat, Data["ColorTwo"], -900, 250, "ColorTwo")

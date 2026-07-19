@@ -1,5 +1,7 @@
 from ..main.common import *
 
+from .mat_common import create_normal_map_rel, set_uv_transform
+
 
 class MeshDecal:
     def __init__(self, BasePath, image_format, ProjPath, enableMask):
@@ -70,7 +72,7 @@ class MeshDecal:
 
         # 'GradientMap' from meshdecalgradientmaprecolor.mt
         # We already check for gradientmap in data above so we can rely on this bool
-        if isGradientMapRecolor:
+        if isGradientMapRecolor and "DiffuseTexture" in Data:
             gImg = imageFromRelPath(
                     Data["GradientMap"], DepotPath=self.BasePath, ProjPath=self.ProjPath, image_format=self.img_format
                     )
@@ -90,21 +92,14 @@ class MeshDecal:
             mulAlphaMaskNode = create_node(Ns, "ShaderNodeMath", (-700, 350), operation='MULTIPLY')
 
             # Create this link AFTER DiffuseTexture to replace links
-            CurMat.links.new(dImgNode.outputs[1], mulAlphaMaskNode.inputs[1])
+            if "DiffuseTexture" in Data:
+                CurMat.links.new(dImgNode.outputs[1], mulAlphaMaskNode.inputs[1])
+            else:
+                mulAlphaMaskNode.inputs[1].default_value = 1.0
             CurMat.links.new(aImgNode.outputs[0], mulAlphaMaskNode.inputs[0])
             CurMat.links.new(mulAlphaMaskNode.outputs[0], alphaMultiply.inputs[0])
 
-        if "UVOffsetX" in Data:
-            dTexMapping.inputs[1].default_value[0] = Data["UVOffsetX"]
-        if "UVOffsetY" in Data:
-            dTexMapping.inputs[1].default_value[1] = Data["UVOffsetY"]
-        if "UVRotation" in Data:
-            dTexMapping.inputs[2].default_value[0] = Data["UVRotation"]
-            dTexMapping.inputs[2].default_value[1] = Data["UVRotation"]
-        if "UVScaleX" in Data:
-            dTexMapping.inputs[3].default_value[0] = Data["UVScaleX"]
-        if "UVScaleY" in Data:
-            dTexMapping.inputs[3].default_value[1] = Data["UVScaleY"]
+        set_uv_transform(dTexMapping, Data)
 
         UVNode = create_node(Ns, "ShaderNodeTexCoord", (-1800, 300))
         CurMat.links.new(UVNode.outputs[2], dTexMapping.inputs[0])
@@ -122,8 +117,9 @@ class MeshDecal:
             CurMat.links.new(colorGamma.outputs[0], mixRGB.inputs[1])
 
         if "NormalTexture" in Data:
-            nMap = CreateShaderNodeNormalMap(
-                CurMat, self.BasePath + Data["NormalTexture"], -800, -350, 'NormalTexture', self.img_format
+            nMap = create_normal_map_rel(
+                CurMat, Data["NormalTexture"], -800, -350, 'NormalTexture', self.img_format,
+                self.BasePath, self.ProjPath,
                 )
             CurMat.links.new(nMap.outputs[0], CurMat.nodes[loc('Principled BSDF')].inputs['Normal'])
 
@@ -179,7 +175,7 @@ class MeshDecal:
             CurMat.links.new(mImgNode.outputs[0], metalScaleMultiply.inputs[0])
 
         # JATO: this is a wacky hack to hide decal where there is no normal influence. game directly hides color channel and we can't do that...
-        if diffuseAlphaIsZero:
+        if diffuseAlphaIsZero and "NormalTexture" in Data:
             normalVectorize = create_node(Ns, "ShaderNodeVectorMath", (-900, 350), operation='MULTIPLY_ADD')
             normalVectorize.inputs[1].default_value = 2, 2, 0
             normalVectorize.inputs[2].default_value = -1, -1, 0

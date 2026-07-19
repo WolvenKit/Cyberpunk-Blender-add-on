@@ -27,10 +27,7 @@ class unknownMaterial:
 
         CurMat = Mat.node_tree
 
-        nodes = CurMat.nodes
-
         for param in Data:
-            current = Data[param]
             if isinstance(Data[param], str) and Data[param][-3:] == 'xbm':
                 text = imageFromRelPath(Data[param], self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
                 textNode = create_node(
@@ -39,7 +36,7 @@ class unknownMaterial:
 
                 if VERBOSE:
                     print(
-                        "\t" + param + "Img=imageFromRelPath(Data['" + param + "'],self.image_format,DepotPath=self.BasePath, self.ProjPath=ProjPath)"
+                        "\t" + param + "Img=imageFromRelPath(Data['" + param + "'],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)"
                         )
                     print(
                         "\t" + param + "ImgNode = create_node(CurMat.nodes,'ShaderNodeTexImage',  (" + str(
@@ -56,13 +53,13 @@ class unknownMaterial:
 
             elif isinstance(Data[param], int) or isinstance(Data[param], float):
                 scalar = CreateShaderNodeValue(CurMat, Data[param], x, y, param)
-                y = y - ydelta
                 if VERBOSE:
                     print(
                         "\t" + param + "Val = CreateShaderNodeValue(CurMat,Data['" + param + "']," + str(x) + ',' + str(
                             y
                             ) + ",'" + param + "')"
                         )
+                y = y - ydelta
             elif isinstance(Data[param], dict):
                 if 'Red' in Data[param]:
                     ColScale = CreateShaderNodeRGB(CurMat, Data[param], x, y, param, False)
@@ -87,18 +84,18 @@ class unknownMaterial:
                 elif 'Scale' in param or 'scale' in param:
                     vector = create_node(CurMat.nodes, 'ShaderNodeMapping', (x, y), label=param)
                     if Data[param]:
-                        vector.inputs[0][0] = Data[param]['X']
-                        vector.inputs[0][1] = Data[param]['Y']
-                        vector.inputs[0][2] = Data[param]['Z']
+                        vector.inputs[3].default_value[0] = Data[param]['X']
+                        vector.inputs[3].default_value[1] = Data[param]['Y']
+                        vector.inputs[3].default_value[2] = Data[param]['Z']
                         if VERBOSE:
                             print(
                                 "\tvector=create_node(CurMat.nodes,'ShaderNodeMapping',  (" + str(x) + ',' + str(
                                     y
                                     ) + "), label='" + param + "')"
                                 )
-                            print("\tvector.inputs[0][0]=Data['" + param + "']['X']")
-                            print("\tvector.inputs[0][1]=Data['" + param + "']['Y']")
-                            print("\tvector.inputs[0][2]=Data['" + param + "']['Z']")
+                            print("\tvector.inputs[3].default_value[0]=Data['" + param + "']['X']")
+                            print("\tvector.inputs[3].default_value[1]=Data['" + param + "']['Y']")
+                            print("\tvector.inputs[3].default_value[2]=Data['" + param + "']['Z']")
                 else:
                     print('dict not captured ', param)
                 y = y - ydelta

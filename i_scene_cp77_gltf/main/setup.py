@@ -11,6 +11,20 @@ from ..material_types.unknown import unknownMaterial
 _MATERIAL_CACHE = {}
 
 
+def _set_hashed_render_method(material):
+    if hasattr(material, "surface_render_method"):
+        try:
+            material.surface_render_method = "DITHERED"
+            return
+        except (TypeError, ValueError):
+            pass
+    if hasattr(material, "blend_method"):
+        try:
+            material.blend_method = "HASHED"
+        except (TypeError, ValueError):
+            pass
+
+
 def _context_path_key(path):
     if not path:
         return ''
@@ -119,14 +133,15 @@ class MaterialBuilder:
         if not rule:
             label = 'decal' if is_decal else 'mt'
             print(f'{bcolors.WARNING}Unhandled {label} - {template_path}{bcolors.ENDC}')
-            bpyMat.blend_method = 'HASHED'
+            _set_hashed_render_method(bpyMat)
             if not is_decal:
                 bpyMat['no_shadows'] = False
             return False
 
         instance = rule.factory(self, factory_data)
         instance.create(create_data, bpyMat)
-        bpyMat.blend_method = 'HASHED'
+        if not rule.preserve_render_method:
+            _set_hashed_render_method(bpyMat)
         if not is_decal:
             bpyMat['no_shadows'] = rule.no_shadows
         return True
@@ -158,7 +173,7 @@ class MaterialBuilder:
             unknown = unknownMaterial(self.BasePath, self.image_format, self.ProjPath)
             unknown.create(rawMat["Data"], bpyMat)
 
-        bpyMat.blend_method = 'HASHED'
+        _set_hashed_render_method(bpyMat)
         bpyMat['no_shadows'] = False
         _MATERIAL_CACHE[signature] = bpyMat
         return bpyMat
@@ -174,5 +189,5 @@ class MaterialBuilder:
             self._route_material(base_path, root, root, bpyMat, DECAL_REGISTRY, is_decal=True)
         else:
             print(f'{bcolors.WARNING}Unhandled decal - missing baseMaterial DepotPath{bcolors.ENDC}')
-            bpyMat.blend_method = 'HASHED'
+            _set_hashed_render_method(bpyMat)
         return bpyMat

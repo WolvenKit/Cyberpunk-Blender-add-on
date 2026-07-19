@@ -4,14 +4,6 @@ if __name__ != "__main__":
     from ..main.common import *
 
 
-def to_gam(c):
-    if c < 0.0031308:
-        srgb = 0.0 if c < 0.0 else c * 12.92
-    else:
-        srgb = 1.055 * math.pow(c, 1.0 / 2.4) - 0.055
-    return max(min(int(srgb * 255 + 0.5), 255), 0) / 255
-
-
 class Decal:
     def __init__(self, BasePath, image_format):
         self.BasePath = BasePath
@@ -19,7 +11,7 @@ class Decal:
 
     def create(self, Data, Mat):
         difftex = None
-        DiffuseTextureAsMaskTexture = 0
+        DiffuseTextureAsMaskTexture = None
         RoughnessTexture = None
         NormalTexture = None
         DiffuseColor = None
@@ -30,25 +22,18 @@ class Decal:
 
             if "DiffuseTexture" in Data["values"][i].keys():
                 difftex = Data["values"][i]["DiffuseTexture"]["DepotPath"]['$value'][:-3] + self.image_format
-                print("Diffuse Texture path is: ", difftex)
             elif "DiffuseTextureAsMaskTexture" in Data["values"][i].keys():
                 DiffuseTextureAsMaskTexture = Data["values"][i]["DiffuseTextureAsMaskTexture"]
-                print("DiffuseTextureAsMaskTexture  is: ", Data["values"][i]["DiffuseTextureAsMaskTexture"])
             elif "DiffuseColor" in Data["values"][i].keys():
                 DiffuseColor = Data["values"][i]["DiffuseColor"]
-                print("Diffuse Texture path is:  ", Data["values"][i]["DiffuseColor"])
             elif "DiffuseAlpha" in Data["values"][i].keys():
                 DiffuseAlpha = Data["values"][i]["DiffuseAlpha"]
-                print("DiffuseAlpha is:  ", Data["values"][i]["DiffuseAlpha"])
             elif "RoughnessTexture" in Data["values"][i].keys():
                 RoughnessTexture = Data["values"][i]["RoughnessTexture"]["DepotPath"]['$value'][:-3] + self.image_format
-                print("Roughness Texture path is:  ", Data["values"][i]["RoughnessTexture"])
             elif "NormalTexture" in Data["values"][i].keys():
                 NormalTexture = Data["values"][i]["NormalTexture"]["DepotPath"]['$value'][:-3] + self.image_format
-                print("Normal Texture path is:  ", Data["values"][i]["NormalTexture"])
             elif "MetalnessTexture" in Data["values"][i].keys():
                 MetalnessTexture = Data["values"][i]["MetalnessTexture"]["DepotPath"]['$value'][:-3] + self.image_format
-                print("Metalness Texture path is:  ", Data["values"][i]["MetalnessTexture"])
 
         CurMat = Mat.node_tree
         Prin_BSDF = CurMat.nodes[loc('Principled BSDF')]
@@ -90,12 +75,12 @@ class Decal:
                 mulNode1.inputs[0].default_value = 1.0
 
             if 'enableMask' in Data.keys():
-                if Data["enableMask"] and DiffuseTextureAsMaskTexture == None:
+                if Data["enableMask"] and DiffuseTextureAsMaskTexture is None:
                     DiffuseTextureAsMaskTexture = 0
                 else:
                     DiffuseTextureAsMaskTexture = 1
 
-            if DiffuseTextureAsMaskTexture > 0:
+            if DiffuseTextureAsMaskTexture:
                 CurMat.links.new(dImgNode.outputs[0], mulNode1.inputs[1])
             else:
                 CurMat.links.new(dImgNode.outputs[1], mulNode1.inputs[1])

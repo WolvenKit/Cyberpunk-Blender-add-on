@@ -1,10 +1,6 @@
 from ..main.common import *
 
-try:
-    from ..main.datakrash import DepotAssetIndex, DEFAULT_IMAGE_EXTENSIONS
-except (ImportError, AttributeError):
-    DepotAssetIndex = None
-    DEFAULT_IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.tga', '.dds', '.bmp', '.webp', '.tif', '.tiff')
+from .mat_common import create_global_normal_rel
 
 
 class MetalBase:
@@ -13,68 +9,13 @@ class MetalBase:
         self.ProjPath = ProjPath
         self.enableMask = enableMask
         self.image_format = image_format
-        self._asset_index = None
-        self._image_cache = {}
-        self._path_cache = {}
-
-    def _get_asset_index(self):
-        if DepotAssetIndex is None:
-            return None
-        if self._asset_index is None:
-            root = self.ProjPath if os.path.isdir(self.ProjPath) else self.BasePath
-            self._asset_index = DepotAssetIndex.cached(root, DEFAULT_IMAGE_EXTENSIONS, warn_missing=False)
-        return self._asset_index
-
-    def _resolve_image_path(self, reference):
-        if not reference:
-            return None
-        cache_key = (reference, self.image_format, self.BasePath, self.ProjPath)
-        cached = self._path_cache.get(cache_key)
-        if cached is not None:
-            return cached
-
-        resolved = None
-        asset_index = self._get_asset_index()
-        if asset_index is not None:
-            resolved = asset_index.resolve_image(reference, self.image_format, warn=False)
-        self._path_cache[cache_key] = resolved or ''
-        return resolved
 
     def _image_from_rel_path(self, reference, is_normal=False):
         if not reference:
             return None
-        cache_key = (reference, self.image_format, self.BasePath, self.ProjPath, is_normal)
-        cached = self._image_cache.get(cache_key)
-        if cached is not None:
-            return cached
-
-        image = None
-        image_path = self._resolve_image_path(reference)
-        if image_path:
-            image = bpy.data.images.load(image_path, check_existing=True)
-            if is_normal:
-                try:
-                    image.colorspace_settings.name = 'Non-Color'
-                except Exception:
-                    pass
-
-        if image is None:
-            image = imageFromRelPath(
-                    reference,
-                    self.image_format,
-                    DepotPath=self.BasePath,
-                    ProjPath=self.ProjPath,
-                    isNormal=is_normal,
-                    )
-
-        self._image_cache[cache_key] = image
-        return image
-
-    def _normal_reference(self, reference):
-        resolved = self._resolve_image_path(reference)
-        if resolved:
-            return resolved
-        return self.BasePath + reference
+        return imageFromRelPath(
+                reference, self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=is_normal,
+                )
 
     def _create_layer_tile_mapping(self, CurMat, Data):
         if "LayerTile" not in Data:
@@ -143,13 +84,8 @@ class MetalBase:
         if "Normal" not in Data:
             return None
 
-        nMap = CreateShaderNodeGlobalNormalMap(
-                CurMat,
-                self._normal_reference(Data["Normal"]),
-                -1000,
-                -200,
-                'Normal',
-                self.image_format,
+        nMap = create_global_normal_rel(
+                CurMat, Data["Normal"], -1000, -200, 'Normal', self.image_format, self.BasePath, self.ProjPath,
                 )
         if layerTileMapping:
             try:
@@ -171,13 +107,9 @@ class MetalBase:
 
         detail_normal = None
         if "DetailNormal" in Data:
-            dNNode = CreateShaderNodeGlobalNormalMap(
-                    CurMat,
-                    self._normal_reference(Data["DetailNormal"]),
-                    -1000,
-                    -500,
-                    'Normal',
-                    self.image_format,
+            dNNode = create_global_normal_rel(
+                    CurMat, Data["DetailNormal"], -1000, -500, 'Normal', self.image_format, self.BasePath,
+                    self.ProjPath,
                     )
             if detailMapping:
                 CurMat.links.new(detailMapping.outputs[0], dNNode.inputs[0])

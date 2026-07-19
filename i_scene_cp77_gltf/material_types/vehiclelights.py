@@ -1,5 +1,7 @@
 from ..main.common import *
 
+from .mat_common import create_normal_map_rel
+
 
 # Params from mt are as follows:
 #        
@@ -59,8 +61,8 @@ class VehicleLights:
             aThreshold = CreateShaderNodeValue(CurMat, Data["AlphaThreshold"], -1000, 0, "AlphaThreshold")
 
         if "Normal" in Data:
-            nMap = CreateShaderNodeNormalMap(
-                CurMat, self.BasePath + Data["Normal"], -200, -300, 'Normal', self.image_format
+            nMap = create_normal_map_rel(
+                CurMat, Data["Normal"], -200, -300, 'Normal', self.image_format, self.BasePath, self.ProjPath
                 )
             CurMat.links.new(nMap.outputs[0], pBSDF.inputs['Normal'])
 

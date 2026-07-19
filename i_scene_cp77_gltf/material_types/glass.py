@@ -5,6 +5,8 @@ import bpy
 if __name__ != "__main__":
     from ..main.common import *
 
+from .mat_common import create_normal_map_rel
+
 
 class Glass:
     def __init__(self, BasePath, image_format, ProjPath):
@@ -49,8 +51,9 @@ class Glass:
                 CurMat.links.new(rImgNode.outputs[1], pBDSF.inputs['Roughness'])
 
         if "Normal" in Data:
-            normal_path = self.BasePath + Data["Normal"]
-            nMap = CreateShaderNodeNormalMap(CurMat, normal_path, -600, -300, 'Normal', self.image_format)
+            nMap = create_normal_map_rel(
+                CurMat, Data["Normal"], -600, -300, 'Normal', self.image_format, self.BasePath, self.ProjPath
+                )
 
             # Normal Strength
             if "NormalStrength" in Data:
@@ -99,8 +102,15 @@ class Glass:
 
         mixRGB = create_node(CurMat.nodes, "ShaderNodeMixRGB", (-800, 400), blend_type='MULTIPLY')
         mixRGB.inputs[0].default_value = 1
-        CurMat.links.new(tintColor.outputs[0], mixRGB.inputs[1])
-        CurMat.links.new(mImgNode.outputs[0], mixRGB.inputs[2])
+        if "TintColor" in Data:
+            CurMat.links.new(tintColor.outputs[0], mixRGB.inputs[1])
+        else:
+            mixRGB.inputs[1].default_value = (1.0, 1.0, 1.0, 1.0)
+        if "MaskTexture" in Data:
+            CurMat.links.new(mImgNode.outputs[0], mixRGB.inputs[2])
+        else:
+            mixRGB.inputs[2].default_value = (1.0, 1.0, 1.0, 1.0)
+            transmissionMultiply.inputs[0].default_value = 0.0
         CurMat.links.new(mixRGB.outputs[0], pBDSF.inputs['Base Color'])
 
         transmissionInvert = create_node(CurMat.nodes, "ShaderNodeMath", (-600, 300), operation='SUBTRACT')

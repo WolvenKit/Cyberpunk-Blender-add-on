@@ -1,5 +1,7 @@
 from ..main.common import *
 
+from .mat_common import create_normal_map_rel, set_uv_transform
+
 
 class MeshDecalParallax:
     def __init__(self, BasePath, image_format, ProjPath):
@@ -38,17 +40,7 @@ class MeshDecalParallax:
             CurMat.links.new(dImgNode.outputs[0], mixRGB.inputs[2])
             CurMat.links.new(dImgNode.outputs[1], mulNode.inputs[1])
 
-        if "UVOffsetX" in Data:
-            dTexMapping.inputs[1].default_value[0] = Data["UVOffsetX"]
-        if "UVOffsetY" in Data:
-            dTexMapping.inputs[1].default_value[1] = Data["UVOffsetY"]
-        if "UVRotation" in Data:
-            dTexMapping.inputs[2].default_value[0] = Data["UVRotation"]
-            dTexMapping.inputs[2].default_value[1] = Data["UVRotation"]
-        if "UVScaleX" in Data:
-            dTexMapping.inputs[3].default_value[0] = Data["UVScaleX"]
-        if "UVScaleY" in Data:
-            dTexMapping.inputs[3].default_value[1] = Data["UVScaleY"]
+        set_uv_transform(dTexMapping, Data)
 
         UVNode = CurMat.nodes.new("ShaderNodeTexCoord")
         UVNode.location = (-1200, 300)
@@ -61,8 +53,9 @@ class MeshDecalParallax:
             CurMat.links.new(dColor.outputs[0], mixRGB.inputs[1])
 
         if "NormalTexture" in Data:
-            nMap = CreateShaderNodeNormalMap(
-                CurMat, self.BasePath + Data["NormalTexture"], -200, -250, 'NormalTexture', self.image_format
+            nMap = create_normal_map_rel(
+                CurMat, Data["NormalTexture"], -200, -250, 'NormalTexture', self.image_format,
+                self.BasePath, self.ProjPath,
                 )
             CurMat.links.new(nMap.outputs[0], pBSDF.inputs['Normal'])
 
