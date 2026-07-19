@@ -7,6 +7,7 @@ import numpy as np
 from mathutils import Matrix, Quaternion, Vector
 
 from .direct_anim_import import import_anims_glb_to_armature
+from .fog_volume import FOG_COMPONENT_TYPES, create_fog_volume_object, fog_volume_size
 from .import_common import *
 from .import_common import _remap_copied_object_references, clear_submesh_index_cache, submesh_index_for_object
 from .phys_import import cp77_phys_import_into_collection
@@ -438,6 +439,21 @@ def collect_light_components(*component_groups):
     for components in component_groups:
         for component in components or ():
             if not isinstance(component, dict) or component.get('$type') not in LIGHT_COMPONENT_TYPES:
+                continue
+            name = component_name(component)
+            key = name or str(component.get('id') or id(component))
+            if key not in collected:
+                collected[key] = component
+                order.append(key)
+    return [collected[key] for key in order]
+
+
+def collect_fog_volume_components(*component_groups):
+    collected = {}
+    order = []
+    for components in component_groups:
+        for component in components or ():
+            if not isinstance(component, dict) or component.get('$type') not in FOG_COMPONENT_TYPES:
                 continue
             name = component_name(component)
             key = name or str(component.get('id') or id(component))
@@ -2552,7 +2568,10 @@ def importEnt(
                     app_light_channels, chunks, comps, parsed_ent.light_channel_components, ent_components
                     )
                 light_components = collect_light_components(ent_component_data, ent_components, chunks, comps)
-                auxiliary_components = light_channel_components + light_components
+                fog_volume_components = collect_fog_volume_components(
+                    ent_component_data, ent_components, chunks, comps
+                    )
+                auxiliary_components = light_channel_components + light_components + fog_volume_components
                 for comp in auxiliary_components:
                     if id(comp) in ent_component_ids or id(comp) in ent_component_data_ids:
                         set_parent_lookup(comp, ent_parent_transform_lookup)
@@ -2776,6 +2795,61 @@ def importEnt(
                                 )
                             add_rotation_axis_driver(
                                 light_obj, transform_animator_target, transform_animator_info_value['axis_no']
+                                )
+
+                if fog_volume_components:
+                    fog_collection = bpy.data.collections.new(ent_coll.name + '_fog_volumes')
+                    fog_collection['nodeType'] = 'entFogVolumeComponent'
+                    fog_collection['entAppearance'] = app_name
+                    ent_coll.children.link(fog_collection)
+
+                    for c in fog_volume_components:
+                        fog_name = component_name(c) or 'FogVolume'
+                        resolved_matrix, bindname, slotname, binding_type, attach_armature = (
+                            transform_resolver.resolve_component_matrix(c)
+                        )
+                        fog_obj = create_fog_volume_object(
+                            fog_name,
+                            c,
+                            fog_collection,
+                            matrix=resolved_matrix,
+                            size=fog_volume_size(c),
+                            source_kind='entity',
+                            )
+                        fog_obj['ntype'] = c.get('$type', 'entFogVolumeComponent')
+                        fog_obj['componentName'] = fog_name
+                        fog_obj['entJSON'] = filepath
+                        fog_obj['bindingType'] = binding_type
+                        if bindname:
+                            fog_obj['bindname'] = bindname
+                        if slotname:
+                            fog_obj['slotName'] = slotname
+
+                        if binding_type in {'slot', 'bone'} and bindname and attach_armature is not None:
+                            configure_child_of_constraint(
+                                fog_obj,
+                                attach_armature,
+                                bindname,
+                                child_of_inverse_matrix(attach_armature, bindname),
+                                )
+
+                        transform_animator_name, transform_animator_info_value = (
+                            component_transform_animator_info(
+                                c,
+                                parent_transform_lookup,
+                                transform_animator_lookup,
+                                )
+                        )
+                        if transform_animator_info_value is not None:
+                            transform_animator_target = ensure_transform_animator_empty(
+                                ent_coll,
+                                transform_animator_name,
+                                transform_animator_info_value,
+                                )
+                            add_rotation_axis_driver(
+                                fog_obj,
+                                transform_animator_target,
+                                transform_animator_info_value['axis_no'],
                                 )
 
                 for c in light_channel_components:

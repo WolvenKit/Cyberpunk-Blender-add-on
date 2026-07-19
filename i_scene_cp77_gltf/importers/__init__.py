@@ -439,20 +439,57 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
         description="Generate _new collectors for sectors to allow modifications to be saved back to game"
         )
     with_lights: BoolProperty(
-        name="Import Lights", default=True, description="Import and setup Lights based on worldLightNodes"
+        name="Import Lights", default=True,
+        description="Import and setup Lights based on worldLightNodes"
+        )
+    import_proxies: BoolProperty(
+        name="Import Proxy Meshes", default=False,
+        description="Import proxy mesh nodes"
+        )
+    import_acoustics: BoolProperty(
+        name="Import Acoustic Data", default=False,
+        description="Import acoustic sector markers and resolve acoustic data resources"
+        )
+    import_occluders: BoolProperty(
+        name="Import Occluders", default=False,
+        description="Import static and instanced occluder geometry"
+        )
+    import_minimap: BoolProperty(
+        name="Import Minimap Data", default=False,
+        description="Import minimap data nodes and resolve minimap resources"
+        )
+    import_environment_probes: BoolProperty(
+        name="Import Environment Probes", default=False,
+        description="Import reflection probe volumes and resolve environment probe resources"
+        )
+    import_gi: BoolProperty(
+        name="Import GI Data", default=False,
+        description="Import global illumination nodes, spaces, and GI resources"
         )
 
     def draw(self, context):
         cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
         props = context.scene.cp77_panel_props
         layout = self.layout
+
         box = layout.box()
         box.label(text="Sector Import", icon='OUTLINER_OB_GROUP_INSTANCE')
         col = box.column()
-        col.prop(self, "want_collisions", )
-        col.prop(self, "with_lights")
         col.prop(self, "am_modding")
         col.prop(props, "with_materials")
+
+        box = layout.box()
+        box.label(text="Optional Sector Data")
+        col = box.column()
+        col.prop(self, "want_collisions")
+        col.prop(self, "with_lights")
+        col.prop(self, "import_proxies")
+        col.prop(self, "import_acoustics")
+        col.prop(self, "import_minimap")
+        col.prop(self, "import_occluders")
+        col.prop(self, "import_environment_probes")
+        col.prop(self, "import_gi")
+
         if cp77_addon_prefs.experimental_features:
             box = layout.box()
             col = box.column()
@@ -463,9 +500,21 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
         props = context.scene.cp77_panel_props
         print('Importing Sectors from project - ', bob)
         importSectors(
-            bob, props.with_materials, props.remap_depot, self.want_collisions, self.am_modding, self.with_lights
+            filepath=bob,
+            with_mats=props.with_materials,
+            remap_depot=props.remap_depot,
+            want_collisions=self.want_collisions,
+            am_modding=self.am_modding,
+            with_lights=self.with_lights,
+            import_proxies=self.import_proxies,
+            import_acoustics=self.import_acoustics,
+            import_occluders=self.import_occluders,
+            import_minimap=self.import_minimap,
+            import_environment_probes=self.import_environment_probes,
+            import_gi=self.import_gi,
             )
         return {'FINISHED'}
+
 
 
 def get_gltf_appearance_items(self, context):
@@ -615,43 +664,43 @@ class CP77Import(Operator, ImportHelper):
                     rows=min(10, len(self.appearance_list)),
                     )
 
-            if not props.with_materials:
-                box = layout.box()
-                col = box.column()
-                col.prop(props, 'with_materials')
-                if cp77_addon_prefs.experimental_features:
-                    col.prop(props, "remap_depot")
-                box = layout.box()
-                col = box.column()
-                col.prop(self, 'hide_armatures')
-                col.prop(self, 'import_garmentsupport')
-                if cp77_addon_prefs.experimental_features:
-                    col.prop(props, "remap_depot")
-            if props.with_materials:
-                box = layout.box()
-                col = box.column()
-                col.prop(props, 'with_materials')
-                if cp77_addon_prefs.experimental_features:
-                    col.prop(props, "remap_depot")
-                # col.prop(self, 'generate_overrides')
-                # if not self.show_appearance_selection:
-                #   col.prop(self, 'exclude_unused_mats')
-                box = layout.box()
-                col = box.column()
-                col.prop(props, 'use_vulkan')
-                col.prop(props, 'use_cycles')
-                if props.use_cycles:
-                    col.prop(props, 'update_gi')
-                box = layout.box()
-                box.label(text='Texture Format:')
-                box.prop(self, 'image_format', text='')
-                box = layout.box()
-                col = box.column()
-                col.prop(self, 'hide_armatures')
-                col.prop(self, 'import_garmentsupport')
+        if not props.with_materials:
             box = layout.box()
             col = box.column()
-            col.prop(self, 'import_tracks')
+            col.prop(props, 'with_materials')
+            if cp77_addon_prefs.experimental_features:
+                col.prop(props, "remap_depot")
+            box = layout.box()
+            col = box.column()
+            col.prop(self, 'hide_armatures')
+            col.prop(self, 'import_garmentsupport')
+            if cp77_addon_prefs.experimental_features:
+                col.prop(props, "remap_depot")
+        if props.with_materials:
+            box = layout.box()
+            col = box.column()
+            col.prop(props, 'with_materials')
+            if cp77_addon_prefs.experimental_features:
+                col.prop(props, "remap_depot")
+            # col.prop(self, 'generate_overrides')
+            # if not self.show_appearance_selection:
+            #   col.prop(self, 'exclude_unused_mats')
+            box = layout.box()
+            col = box.column()
+            col.prop(props, 'use_vulkan')
+            col.prop(props, 'use_cycles')
+            if props.use_cycles:
+                col.prop(props, 'update_gi')
+            box = layout.box()
+            box.label(text='Texture Format:')
+            box.prop(self, 'image_format', text='')
+            box = layout.box()
+            col = box.column()
+            col.prop(self, 'hide_armatures')
+            col.prop(self, 'import_garmentsupport')
+        box = layout.box()
+        col = box.column()
+        col.prop(self, 'import_tracks')
 
         # if not self.show_appearance_selection:
         #    col.prop(self, 'exclude_unused_mats')

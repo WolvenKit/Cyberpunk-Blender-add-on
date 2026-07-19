@@ -327,9 +327,9 @@ def meshes_from_mesheswapps(
         meshes_w_apps, path='', from_mesh_no=0, to_mesh_no=10000000, with_mats=False, glbs=None, mesh_jsons=None,
         Masters=None, generate_overrides=False,
         ):
-    clear_material_cache()
     initiated_cache = False
     if not JSONTool._use_cache:
+        clear_material_cache()
         JSONTool.start_caching()
         initiated_cache = True
 
@@ -400,4 +400,4 @@ def meshes_from_mesheswapps(
     finally:
         if initiated_cache:
             JSONTool.stop_caching()
-        clear_material_cache()
+            clear_material_cache()

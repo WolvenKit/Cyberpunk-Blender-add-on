@@ -526,7 +526,9 @@ def apply_bone_from_matrix(
     edit_bone.align_roll(x_axis)
 
 
-def create_armature_from_data(filepath: str, bind_pose: str, create_debug: bool = False):
+def create_armature_from_data(
+        filepath: str, bind_pose: str, create_debug: bool = False, assign_shapes: bool = True,
+        ):
     rig_data = read_rig(filepath)
     if not rig_data:
         show_message(f"Failed to load rig data from {filepath} ERROR")
@@ -537,11 +539,13 @@ def create_armature_from_data(filepath: str, bind_pose: str, create_debug: bool 
             create_debug,
             source_rig_file=filepath,
             source_document=_source_document_for_filepath(filepath),
+            assign_shapes=assign_shapes,
             )
 
 
 def create_armature_from_rig_files(
         filepaths, merged_name: str = '', source_label: str = '', create_debug: bool = False,
+        assign_shapes: bool = True,
         ):
     """Build one JSON-derived armature by merging each later rig into the first.
 
@@ -565,6 +569,7 @@ def create_armature_from_rig_files(
             create_debug,
             source_rig_file=merged_source,
             source_document=_merged_rig_document(filepaths, merged, source_label),
+            assign_shapes=assign_shapes,
             )
 
 
@@ -828,6 +833,7 @@ def create_armature_from_rig_data(
         create_debug: bool = False,
         source_rig_file: str = '',
         source_document: dict | None = None,
+        assign_shapes: bool = True,
         ):
     start_time = time.time()
     rig_col = None
@@ -907,9 +913,9 @@ def create_armature_from_rig_data(
         else:
             print(f"No A-Pose found in {rig_data.rig_name}.json at {source_rig_file}, falling back to T-Pose")
 
-    shape = create_bone_shape()
     assign_part_groups(arm_obj, rig_data.parts)
-    assign_bone_shapes(arm_obj, rig_data.disable_connect, shape)
+    if assign_shapes:
+        assign_bone_shapes(arm_obj, rig_data.disable_connect)
     assign_reference_tracks(arm_obj, rig_data.track_names, rig_data.reference_tracks)
 
     if create_debug:
