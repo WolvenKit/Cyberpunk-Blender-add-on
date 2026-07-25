@@ -21,9 +21,21 @@ class Hair:
         pBSDF.inputs['Anisotropic'].default_value = 1.0
         pBSDF.inputs['Anisotropic Rotation'].default_value = 0.75
 
-        depot_file = self.BasePath + hair["HairProfile"] + ".json"
-        proj_file = self.ProjPath + hair["HairProfile"] + ".json"
-        profile = JSONTool.jsonload(proj_file if os.path.exists(proj_file) else depot_file)
+        profile_reference = hair["HairProfile"] + ".json"
+        profile_path = JSONTool.resolve_asset_path(
+            profile_reference,
+            roots=(self.ProjPath, self.BasePath),
+            extensions=(".hp.json",),
+            warn_missing=False,
+        )
+        if not profile_path:
+            profile_path = os.path.normpath(
+                os.path.join(
+                    self.BasePath,
+                    profile_reference.replace("\\", os.sep),
+                )
+            )
+        profile = JSONTool.jsonload(profile_path)
         if profile is None:
             return
 

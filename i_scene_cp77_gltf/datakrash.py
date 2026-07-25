@@ -37,6 +37,7 @@ COOKED_RESOURCE_EXPORTS = {
     '.streamingsector_inplace': ('.streamingsector_inplace.json',),
     '.streamingsector': ('.streamingsector.json',),
     '.phys': ('.phys.json',),
+    '.dtex': ('.dtex.json',),
     }
 
 EXPORTED_RESOURCE_EXTENSIONS = tuple(
@@ -47,7 +48,35 @@ EXPORTED_RESOURCE_EXTENSIONS = tuple(
                 )
         )
 
-DEFAULT_ASSET_EXTENSIONS = (*EXPORTED_RESOURCE_EXTENSIONS, *DEFAULT_IMAGE_EXTENSIONS)
+JSON_RESOURCE_EXTENSIONS = (
+    '.Material.json',
+    '.streamingblock.json',
+    '.gradient.json',
+    '.cfoliage.json',
+    '.hp.json',
+    '.mlsetup.json',
+    '.mltemplate.json',
+    '.mt.json',
+    '.mi.json',
+    '.dtex.json',
+    '.particle.json',
+    '.effect.json',
+    '.acousticdata.json',
+    '.envprobe.json',
+    '.cminimap.json',
+    '.gidata.json',
+    '.smartobjects.json',
+    '.workspot.json',
+    '.actionanimdb.json',
+    '.ies.json',
+    '.ies',
+)
+
+DEFAULT_ASSET_EXTENSIONS = tuple(dict.fromkeys((
+    *EXPORTED_RESOURCE_EXTENSIONS,
+    *JSON_RESOURCE_EXTENSIONS,
+    *DEFAULT_IMAGE_EXTENSIONS,
+)))
 _COOKED_DEPOT_EXTENSIONS = frozenset(COOKED_RESOURCE_EXPORTS)
 _EXPORT_GROUPS_BY_OUTPUT_EXTENSION = {
     export_extension: exports
@@ -58,18 +87,30 @@ _COOKED_RESOURCE_SUFFIXES = tuple(sorted(COOKED_RESOURCE_EXPORTS, key=len, rever
 _EXPORTED_RESOURCE_SUFFIXES = tuple(sorted(_EXPORT_GROUPS_BY_OUTPUT_EXTENSION, key=len, reverse=True))
 
 
+def _strip_windows_extended_prefix(path: str) -> str:
+    if os.name != 'nt':
+        return path
+    extended_prefix = f"{os.sep}{os.sep}?{os.sep}"
+    unc_prefix = f"{extended_prefix}UNC{os.sep}"
+    if path.startswith(unc_prefix):
+        return f"{os.sep}{os.sep}" + path[len(unc_prefix):]
+    if path.startswith(extended_prefix):
+        return path[len(extended_prefix):]
+    return path
+
+
 @lru_cache(maxsize=131072)
 def _normalize_absolute_path(path: str) -> str:
-    return os.path.normpath(path)
+    return os.path.normcase(os.path.normpath(_strip_windows_extended_prefix(path)))
 
 
 def _normalize_path(path: str) -> str:
     if not path:
         return ''
-    normalized = os.path.normpath(path)
+    normalized = os.path.normpath(_strip_windows_extended_prefix(os.fspath(path)))
     if os.path.isabs(normalized):
         return _normalize_absolute_path(normalized)
-    return os.path.abspath(normalized)
+    return _normalize_absolute_path(os.path.abspath(normalized))
 
 
 @lru_cache(maxsize=262144)
@@ -184,9 +225,7 @@ def _build_root_index(root: str, requested: Set[str], force_refresh: bool = Fals
         }
     _root_index_cache[root] = state
 
-    stale_keys = [key for key in _depot_asset_index_cache if key[0] == root]
-    for key in stale_keys:
-        del _depot_asset_index_cache[key]
+    _depot_asset_index_cache.pop(root, None)
     return state
 
 
@@ -232,7 +271,7 @@ class DepotAssetIndex:
             warn_missing: bool = True,
             ):
         self.root = _normalize_path(root)
-        self.extensions = _normalized_extension_tuple(extensions)
+        self.extensions = _normalized_extension_tuple((*DEFAULT_ASSET_EXTENSIONS, *tuple(extensions or ())))
         self.warn_missing = warn_missing
         state = _build_root_index(self.root, set(self.extensions), force_refresh=force_refresh)
         self.files_by_ext = {
@@ -251,12 +290,15 @@ class DepotAssetIndex:
             warn_missing: bool = True,
             ):
         normalized_root = _normalize_path(root)
-        normalized_extensions = _normalized_extension_tuple(extensions)
-        key = (normalized_root, normalized_extensions, bool(warn_missing))
+        normalized_extensions = _normalized_extension_tuple(
+            (*DEFAULT_ASSET_EXTENSIONS, *tuple(extensions or ()))
+        )
         if not force_refresh:
-            cached = _depot_asset_index_cache.get(key)
+            cached = _depot_asset_index_cache.get(normalized_root)
             if cached is not None:
-                return cached
+                missing = set(normalized_extensions).difference(cached.extensions)
+                if not missing:
+                    return cached
 
         instance = cls(
                 normalized_root,
@@ -264,7 +306,7 @@ class DepotAssetIndex:
                 force_refresh=force_refresh,
                 warn_missing=warn_missing,
                 )
-        _depot_asset_index_cache[key] = instance
+        _depot_asset_index_cache[normalized_root] = instance
         return instance
 
     def get_files_by_extension(self, extension: str):
@@ -347,3 +389,31 @@ class DepotAssetIndex:
 
     def resolve_any(self, reference: str, extensions: Iterable[str] = None, warn=None):
         return self.resolve_export(reference, extensions, warn=warn)
+
+def asset_index_for_root(
+        root: str, extensions: Iterable[str] = DEFAULT_ASSET_EXTENSIONS, *,
+        force_refresh: bool = False, warn_missing: bool = False,
+        ):
+    """Return the one canonical DepotAssetIndex owned by a normalized root.
+
+    Known project and material resource suffixes are indexed on the first build,
+    so later narrow lookups reuse the same object without rescanning the root.
+    """
+    normalized_root = _normalize_path(root)
+    if not force_refresh:
+        cached = _depot_asset_index_cache.get(normalized_root)
+        if cached is not None:
+            requested = set(_normalized_extension_tuple(
+                (*DEFAULT_ASSET_EXTENSIONS, *tuple(extensions or ()))
+            ))
+            if requested.issubset(cached.extensions):
+                return cached
+    return DepotAssetIndex.cached(
+        normalized_root,
+        extensions=extensions,
+        force_refresh=force_refresh,
+        warn_missing=warn_missing,
+    )
+
+
+

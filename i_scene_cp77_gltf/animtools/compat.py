@@ -219,7 +219,7 @@ def get_action_channelbag(action, id_data=None, *, create: bool = False):
     for layer in action.layers:
         for strip in layer.strips:
             for channelbag in strip.channelbags:
-                if channelbag.slot is slot:
+                if channelbag.slot == slot:
                     return channelbag
     return None
 

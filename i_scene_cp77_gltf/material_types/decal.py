@@ -2,6 +2,9 @@ import bpy
 
 if __name__ != "__main__":
     from ..main.common import *
+    from .mat_common import decal_values, resolve_depot_texture
+else:
+    from mat_common import decal_values, resolve_depot_texture
 
 
 class Decal:
@@ -10,30 +13,57 @@ class Decal:
         self.image_format = image_format
 
     def create(self, Data, Mat):
-        difftex = None
-        DiffuseTextureAsMaskTexture = None
-        RoughnessTexture = None
-        NormalTexture = None
-        DiffuseColor = None
-        DiffuseAlpha = None
-        MetalnessTexture = None
+        values = decal_values(
+            Data,
+            (
+                "DiffuseTexture",
+                "DiffuseTextureAsMaskTexture",
+                "DiffuseColor",
+                "DiffuseAlpha",
+                "RoughnessTexture",
+                "NormalTexture",
+                "MetalnessTexture",
+            ),
+        )
+        diffuse = values.get("DiffuseTexture")
+        difftex = (
+            diffuse.get("DepotPath", {}).get("$value", "")[:-3]
+            + self.image_format
+            if isinstance(diffuse, dict)
+            else None
+        )
+        DiffuseTextureAsMaskTexture = values.get(
+            "DiffuseTextureAsMaskTexture"
+        )
+        RoughnessTexture = values.get("RoughnessTexture")
+        NormalTexture = values.get("NormalTexture")
+        DiffuseColor = values.get("DiffuseColor")
+        DiffuseAlpha = values.get("DiffuseAlpha")
+        MetalnessTexture = values.get("MetalnessTexture")
 
-        for i in range(len(Data["values"])):
+        def texture_path(value):
+            if not isinstance(value, dict):
+                return None
+            depot = value.get("DepotPath", {})
+            path = depot.get("$value", "") if isinstance(depot, dict) else ""
+            return path[:-3] + self.image_format if path else None
 
-            if "DiffuseTexture" in Data["values"][i].keys():
-                difftex = Data["values"][i]["DiffuseTexture"]["DepotPath"]['$value'][:-3] + self.image_format
-            elif "DiffuseTextureAsMaskTexture" in Data["values"][i].keys():
-                DiffuseTextureAsMaskTexture = Data["values"][i]["DiffuseTextureAsMaskTexture"]
-            elif "DiffuseColor" in Data["values"][i].keys():
-                DiffuseColor = Data["values"][i]["DiffuseColor"]
-            elif "DiffuseAlpha" in Data["values"][i].keys():
-                DiffuseAlpha = Data["values"][i]["DiffuseAlpha"]
-            elif "RoughnessTexture" in Data["values"][i].keys():
-                RoughnessTexture = Data["values"][i]["RoughnessTexture"]["DepotPath"]['$value'][:-3] + self.image_format
-            elif "NormalTexture" in Data["values"][i].keys():
-                NormalTexture = Data["values"][i]["NormalTexture"]["DepotPath"]['$value'][:-3] + self.image_format
-            elif "MetalnessTexture" in Data["values"][i].keys():
-                MetalnessTexture = Data["values"][i]["MetalnessTexture"]["DepotPath"]['$value'][:-3] + self.image_format
+        RoughnessTexture = texture_path(RoughnessTexture)
+        NormalTexture = texture_path(NormalTexture)
+        MetalnessTexture = texture_path(MetalnessTexture)
+
+        resolved_diffuse = resolve_depot_texture(
+            difftex, self.image_format, self.BasePath
+        ) if difftex else None
+        resolved_roughness = resolve_depot_texture(
+            RoughnessTexture, self.image_format, self.BasePath
+        ) if RoughnessTexture else None
+        resolved_normal = resolve_depot_texture(
+            NormalTexture, self.image_format, self.BasePath
+        ) if NormalTexture else None
+        resolved_metalness = resolve_depot_texture(
+            MetalnessTexture, self.image_format, self.BasePath
+        ) if MetalnessTexture else None
 
         CurMat = Mat.node_tree
         Prin_BSDF = CurMat.nodes[loc('Principled BSDF')]
@@ -41,9 +71,9 @@ class Decal:
         Prin_BSDF.inputs[sockets['Specular']].default_value = 0.5
         TexCoordinate = CurMat.nodes.new("ShaderNodeTexCoord")
         TexCoordinate.location = (-1000, 300)
-        if difftex and os.path.exists(os.path.join(self.BasePath, difftex)):
+        if resolved_diffuse:
             dImgNode = CreateShaderNodeTexImage(
-                CurMat, os.path.join(self.BasePath, difftex), -800, 300, 'DiffuseTexture', self.image_format
+                CurMat, resolved_diffuse, -800, 300, 'DiffuseTexture', self.image_format
                 )
             RGBnode = CurMat.nodes.new("ShaderNodeRGB")
             RGBnode.location = (-700, 500)
@@ -64,6 +94,8 @@ class Decal:
             CurMat.links.new(mulNode.outputs[0], Prin_BSDF.inputs['Base Color'])
             CurMat.links.new(TexCoordinate.outputs[0], dImgNode.inputs[0])
             mulNode1 = CurMat.nodes.new("ShaderNodeMath")
+            mulNode1.name = "CP77 Base Decal Alpha"
+            mulNode1.label = "CP77 Base Decal Alpha"
             mulNode1.operation = 'MULTIPLY'
             mulNode1.location = (-400, 100)
             if 'alpha' in Data.keys():
@@ -88,9 +120,11 @@ class Decal:
         else:
             CurMat.nodes[loc('Principled BSDF')].inputs['Alpha'].default_value = 0
             print(f"Texture is not found: {difftex}")
-        if RoughnessTexture and os.path.exists(os.path.join(self.BasePath, RoughnessTexture)):
+        Mat["cp77SectorAlphaHandled"] = True
+
+        if resolved_roughness:
             rImgNode = CreateShaderNodeTexImage(
-                CurMat, os.path.join(self.BasePath, RoughnessTexture), -800, 0, 'RoughnessTexture', self.image_format
+                CurMat, resolved_roughness, -800, 0, 'RoughnessTexture', self.image_format
                 )
             rImgNode.image.colorspace_settings.name = 'Non-Color'
             reroute = CurMat.nodes.new(type="NodeReroute")
@@ -99,9 +133,9 @@ class Decal:
             CurMat.links.new(reroute.outputs[0], Prin_BSDF.inputs['Roughness'])
             CurMat.links.new(TexCoordinate.outputs[0], rImgNode.inputs[0])
 
-        if NormalTexture and os.path.exists(os.path.join(self.BasePath, NormalTexture)):
+        if resolved_normal:
             nImgNode = CreateShaderNodeTexImage(
-                CurMat, os.path.join(self.BasePath, NormalTexture), -800, -300, 'NormalTexture', self.image_format
+                CurMat, resolved_normal, -800, -300, 'NormalTexture', self.image_format
                 )
             nImgNode.image.colorspace_settings.name = 'Non-Color'
             toNormalNode = CurMat.nodes.new('ShaderNodeNormalMap')
@@ -110,9 +144,9 @@ class Decal:
             CurMat.links.new(toNormalNode.outputs[0], Prin_BSDF.inputs['Normal'])
             CurMat.links.new(TexCoordinate.outputs[0], nImgNode.inputs[0])
 
-        if MetalnessTexture and os.path.exists(os.path.join(self.BasePath, MetalnessTexture)):
+        if resolved_metalness:
             mImgNode = CreateShaderNodeTexImage(
-                CurMat, os.path.join(self.BasePath, MetalnessTexture), -800, 150, 'MetalnessTexture', self.image_format
+                CurMat, resolved_metalness, -800, 150, 'MetalnessTexture', self.image_format
                 )
             mImgNode.image.colorspace_settings.name = 'Non-Color'
             reroute2 = CurMat.nodes.new(type="NodeReroute")

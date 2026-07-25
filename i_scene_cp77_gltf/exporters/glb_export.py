@@ -3,6 +3,7 @@ import os
 import bpy
 
 from .direct_anim_export import export_anims_glb_direct
+from .direct_mesh_export import export_mesh_glb_direct
 from .mesh_validation import (
     MeshValidationOptions, cleanup_validation_temporaries, format_fix_summary,
     prepare_meshes_for_export,
@@ -17,6 +18,7 @@ RED_COLOR = (1, 0, 0, 1)  # RGBA
 GARMENT_CAP_NAME = "_GarmentSupportCap"
 GARMENT_WEIGHT_NAME = "_GarmentSupportWeight"
 DIRECT_ANIMATION_EXPORT_MARKER = "CP77_DIRECT_ANIMATION_GLB_V1"
+DIRECT_MESH_EXPORT_MARKER = "CP77_DIRECT_MESH_GLB_V1"
 
 EXPORT_DEFAULTS = {
     'system': 'METRIC',
@@ -226,7 +228,6 @@ def export_cyberpunk_glb(
     user_settings = None if called_from_loop else save_user_settings_and_reset_to_default()
 
     objects = context.selected_objects
-    options = default_cp77_options()
 
     if not called_from_loop:
         store_current_context()
@@ -246,7 +247,7 @@ def export_cyberpunk_glb(
         export_anims(
             context,
             filepath,
-            options,
+            default_cp77_options(),
             armatures,
             True,
             active_action_only=bool(action_filter),
@@ -260,9 +261,8 @@ def export_cyberpunk_glb(
             raise ValueError("No meshes selected. Please select at least one mesh.")
 
         export_meshes(
-                context, filepath, export_visible, limit_selected,
-                is_skinned, try_fix, red_garment_col, apply_transform,
-                apply_modifiers, meshes, options,
+                context, filepath, is_skinned, try_fix, red_garment_col,
+                apply_transform, apply_modifiers, meshes,
                 mesh_validation_options=mesh_validation_options,
                 )
 
@@ -286,7 +286,7 @@ def export_anims(
     summary = export_anims_glb_direct(
         filepath,
         armatures[0],
-        export_tracks=True,
+        export_tracks=bool(export_tracks),
         active_action_only=active_action_only,
         selected_action_names=selected_action_names,
         )
@@ -311,12 +311,16 @@ def export_anims(
 
 
 def export_meshes(
-        context, filepath, export_visible, limit_selected,
-        is_skinned, try_fix, red_garment_col, apply_transform,
-        apply_modifiers, meshes, options, mesh_validation_options=None,
+        context, filepath, is_skinned, try_fix, red_garment_col,
+        apply_transform, apply_modifiers, meshes, mesh_validation_options=None,
         ):
-    """Orchestrate mesh preparation and Blender GLB export."""
-    options.update(cp77_mesh_options())
+    """Prepare meshes and write the CP77 GLB with the direct mesh writer.
+
+    The direct writer resolves object transforms, the armature binding and the
+    split-vertex expansion itself, so no selection state, transform_apply pass or
+    armature visibility juggling is required around it.
+    """
+    print(f"[CP77 Direct Export] {DIRECT_MESH_EXPORT_MARKER}: direct writer selected")
     validation_options = mesh_validation_options or MeshValidationOptions(try_fix=try_fix)
     validation_result = prepare_meshes_for_export(
         meshes,
@@ -326,7 +330,6 @@ def export_meshes(
     export_objects = validation_result["export_objects"]
     temp_objects = validation_result["temp_objects"]
     temp_armatures = validation_result["temp_armatures"]
-    armatures_to_hide = set()
 
     try:
         for mesh in export_objects:
@@ -334,50 +337,32 @@ def export_meshes(
                 add_garment_cap(mesh)
             if mesh.data.name != mesh.name:
                 mesh.data.name = mesh.name
-            if apply_transform:
-                bpy.ops.object.select_all(action='DESELECT')
-                mesh.select_set(True)
-                context.view_layer.objects.active = mesh
-                bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-            if apply_modifiers:
-                options['export_apply'] = True
-            if is_skinned:
-                modifier = next(
-                    (
-                        modifier
-                        for modifier in mesh.modifiers
-                        if modifier.type == 'ARMATURE' and modifier.object
-                    ),
-                    None,
-                )
-                if modifier is not None:
-                    armature = modifier.object
-                    armature.hide_set(False)
-                    armature.select_set(True)
-                    armatures_to_hide.add(armature)
 
-        bpy.ops.object.select_all(action='DESELECT')
-        for obj in export_objects:
-            obj.select_set(True)
-        for armature in armatures_to_hide:
-            armature.select_set(True)
+        summary = export_mesh_glb_direct(
+            filepath,
+            export_objects,
+            is_skinned=is_skinned,
+            apply_modifiers=apply_modifiers,
+            bake_transforms=apply_transform,
+        )
+        print(
+            f"[CP77 Direct Export] Exported {summary['submesh_count']} submeshes, "
+            f"{summary['vertex_count']} vertices, {summary['triangle_count']} triangles, "
+            f"{summary['joint_count']} joints and {summary['morph_count']} morph targets "
+            f"to {summary['filepath']}."
+        )
+        if summary.get("file_validation", {}).get("valid"):
+            print(
+                "[CP77 Direct Export] GLB 2.0 container, skin extras, per-vertex "
+                "attributes, morph targets and embedded BIN payload validated successfully."
+            )
 
-        if temp_objects or temp_armatures or limit_selected:
-            bpy.ops.export_scene.gltf(filepath=filepath, use_selection=True, **options)
-        elif export_visible:
-            bpy.ops.export_scene.gltf(filepath=filepath, use_visible=True, **options)
-        else:
-            bpy.ops.export_scene.gltf(filepath=filepath, **options)
-
-        summary = format_fix_summary(validation_result)
-        if summary:
-            show_message(summary)
+        fix_summary = format_fix_summary(validation_result)
+        if fix_summary:
+            show_message(fix_summary)
         return {'FINISHED'}
     finally:
         cleanup_validation_temporaries(temp_objects, temp_armatures)
-        for armature in armatures_to_hide:
-            if armature.name in bpy.data.objects:
-                armature.hide_set(True)
 
 
 def ExportAll(self, context):

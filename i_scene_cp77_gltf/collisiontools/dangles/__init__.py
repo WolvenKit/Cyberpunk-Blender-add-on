@@ -10,7 +10,9 @@ bl_info = {
 
 if "bpy" in locals():
     import importlib
-    from . import draw, io, ops, props, selection_sync, ui
+    from . import animgraph_bridge, animgraph_codec, draw, io, ops, props, selection_sync, ui
+    importlib.reload(animgraph_codec)
+    importlib.reload(animgraph_bridge)
     importlib.reload(selection_sync)
     importlib.reload(props)
     importlib.reload(draw)
@@ -28,6 +30,8 @@ if "bpy" in locals():
     importlib.reload(core)
     importlib.reload(solvers)
 else:
+    from . import animgraph_codec
+    from . import animgraph_bridge
     from . import selection_sync
     from . import props
     from .sim import spaces, collision, constraints, frame_time, spring, pendulum, core, drag, solvers

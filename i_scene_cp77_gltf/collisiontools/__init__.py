@@ -378,8 +378,18 @@ def _draw_dangles(layout, context, px_s):
     st = rig.dangle_state
 
     row = layout.row(align=True)
-    row.operator("dangle.import_json", icon='IMPORT', text="Import")
-    row.operator("dangle.export_json", icon='EXPORT', text="Export")
+    row.operator("dangle.import_json", icon='IMPORT', text="Import AnimGraph")
+    if st.animgraph_source_text:
+        row.operator("dangle.export_animgraph", icon='EXPORT', text="Export AnimGraph")
+
+    if st.animgraph_source_text:
+        row = layout.row(align=True)
+        row.operator("dangle.validate_animgraph", icon='CHECKMARK', text="Validate")
+        row.operator("dangle.switch_to_graph", icon='NODETREE', text="Graph View")
+        if st.animgraph_tree_name:
+            sync_row = layout.row(align=True)
+            sync_row.operator("dangle.push_to_graph", icon='EXPORT', text="Push to Graph")
+            sync_row.operator("dangle.pull_from_graph", icon='IMPORT', text="Pull from Graph")
 
     row = layout.row(align=True)
     if st.is_playing:

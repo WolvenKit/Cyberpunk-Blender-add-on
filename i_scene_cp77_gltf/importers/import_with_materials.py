@@ -1,80 +1,35 @@
 import json
 import os
+import re
 import time
 import traceback
 
-from io_scene_gltf2.blender.imp.blender_gltf import BlenderGlTF
-from io_scene_gltf2.io.imp.gltf2_io_gltf import glTFImporter
+import bpy
 
-from .attribute_import import manage_garment_support
-from .import_from_external import *
-from ..animtools.tracks import fix_anim_frame_alignment, import_anim_tracks
-from ..cyber_props import add_anim_props, add_skin_props
+from .direct_mesh_import import import_mesh_glb, reset_shape_key_values
+from .common.cache import acquire_json_cache, release_json_cache
+from .common.paths import absolute_path_key
+from .common.material_appearances import requested_material_names_by_submesh
 from ..jsontool import JSONTool
 from ..main.bartmoss_functions import UV_by_bounds
 from ..main.common import exclusion_cache, show_message
-from ..main.setup import MaterialBuilder, clear_material_cache
+from ..main.setup import MaterialBuilder, material_cache_stats, warm_material_cache_index
 
 
-def get_anim_info(animations, oldanims, import_tracks, armature=None):
-    """Attach imported extras only to actions created by the current GLB import."""
-    prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
-    verbose = not prefs.non_verbose
-    old_names = {getattr(item, 'name', item) for item in (oldanims or ())}
-    new_actions = [action for action in bpy.data.actions if action.name not in old_names]
-    for animation in animations or ():
-        base = animation.name
-        found = False
-        for action in new_actions:
-            name = action.name
-            if name != base and not (name.startswith(base + '.') and name[len(base) + 1:].isdigit()):
-                continue
-            add_anim_props(animation, action)
-            found = True
-            if import_tracks:
-                try:
-                    import_anim_tracks(action, armature=armature)
-                    fix_anim_frame_alignment(action, armature)
-                except Exception as error:
-                    if verbose:
-                        print(f"Track integration failed for action {name}: {error}")
-            if verbose:
-                print(f"Properties added to action: {name} successfully")
-        if not found and verbose:
-            print(f"No action found for {base}")
-    return {'FINISHED'}
-
-
-def _collection_type_counts(top_coll):
-    mesh_count = 0
-    armature_count = 0
-    for obj in top_coll.all_objects:
-        if obj.type == 'MESH':
-            mesh_count += 1
-        elif obj.type == 'ARMATURE':
-            armature_count += 1
-    return mesh_count, armature_count
-
-
-# will collapse glTF_not_exported collection in the outliner
-def disable_collection_by_name(collection_name):
-    for vl in bpy.context.scene.view_layers:
-        for l in vl.layer_collection.children:
-            if l.name.lower() == collection_name.lower():
-                l.exclude = True
+MATERIAL_PREPARATION_VERSION = 2
 
 
 def _is_direct_animation_armature(obj):
     return (
-            obj is not None
-            and getattr(obj, 'type', None) == 'ARMATURE'
-            and str(obj.data.get('cp77_rig_space_contract', ''))
-            == 'CP77_RE_MODEL_BL_BONE_X_NEGZ_Y_Y_Z_X_V1'
+        obj is not None
+        and getattr(obj, "type", None) == "ARMATURE"
+        and str(obj.data.get("cp77_rig_space_contract", ""))
+        == "CP77_RE_MODEL_BL_BONE_X_NEGZ_Y_Y_Z_X_V1"
     )
 
 
 def _resolve_direct_animation_target(context, explicit_target=None):
-    auto_target = explicit_target is None or explicit_target is True or explicit_target == 'AUTO'
+    auto_target = explicit_target is None or explicit_target is True or explicit_target == "AUTO"
     target = None if auto_target else explicit_target
     if isinstance(target, str):
         target = bpy.data.objects.get(target)
@@ -86,557 +41,951 @@ def _resolve_direct_animation_target(context, explicit_target=None):
     active = context.active_object
     if _is_direct_animation_armature(active):
         return active
-    if active is not None and getattr(active, 'type', None) == 'MESH':
+    if active is not None and getattr(active, "type", None) == "MESH":
         for modifier in active.modifiers:
-            if modifier.type == 'ARMATURE' and _is_direct_animation_armature(modifier.object):
+            if modifier.type == "ARMATURE" and _is_direct_animation_armature(modifier.object):
                 return modifier.object
 
     selected = [
-        obj for obj in context.selected_objects
+        obj
+        for obj in context.selected_objects
         if _is_direct_animation_armature(obj)
-        ]
+    ]
     return selected[0] if len(selected) == 1 else None
 
 
 def _try_direct_animation_import(
-        filepath,
-        context,
-        animation_target,
-        import_tracks,
-        verbose,
-        ):
+    filepath,
+    context,
+    animation_target,
+    import_tracks,
+    verbose,
+):
     from .direct_anim_import import (
         UnsupportedDirectAnimation,
         import_anims_glb_to_armature,
-        )
+    )
 
     direct_target = _resolve_direct_animation_target(context, animation_target)
     if direct_target is None:
         raise UnsupportedDirectAnimation(
-                "Select a read_rig armature or a mesh bound to one before importing an .anims.glb file."
-                )
+            "Select a read_rig armature or a mesh bound to one before importing an .anims.glb file."
+        )
 
     summary = import_anims_glb_to_armature(
-            filepath,
-            direct_target,
-            import_tracks=import_tracks,
-            verbose=verbose,
-            )
-
+        filepath,
+        direct_target,
+        import_tracks=import_tracks,
+        verbose=verbose,
+    )
     exclusion_cache.clear_cache()
     if verbose:
-        target_kind = "merged metarig" if direct_target.get("merged_rigs") or ";" in str(
-            direct_target.data.get("source_rig_file", "")
-            ) else "rig"
+        target_kind = (
+            "merged metarig"
+            if direct_target.get("merged_rigs")
+            or ";" in str(direct_target.data.get("source_rig_file", ""))
+            else "rig"
+        )
         print(
-                f"[CP77 Direct Anim] Imported {summary['animation_count']} "
-                f"animations directly onto {target_kind} {direct_target.name} in "
-                f"{summary['elapsed_seconds']:.3f} seconds."
-                )
+            f"[CP77 Direct Anim] Imported {summary['animation_count']} "
+            f"animations directly onto {target_kind} {direct_target.name} in "
+            f"{summary['elapsed_seconds']:.3f} seconds."
+        )
+
+
+def _load_file_entries(filepath, directory, files, scripting):
+    if scripting or not files:
+        if not filepath:
+            return ()
+        return ({"name": os.path.basename(filepath)},)
+    return tuple(files)
+
+
+def _entry_name(entry):
+    name = getattr(entry, "name", None)
+    return str(name if name is not None else entry["name"])
+
+
+def _material_asset_stem(file_name):
+    stem = os.path.splitext(os.path.basename(file_name))[0]
+    return os.path.splitext(stem)[0]
+
+
+def _normalize_json_apps(raw_apps):
+    normalized = {}
+    for index, (name, materials) in enumerate((raw_apps or {}).items()):
+        key = str(name)
+        suffix = str(index)
+        if suffix and key.endswith(suffix):
+            key = key[:-len(suffix)]
+        normalized[key] = list(materials or ())
+    return normalized
+
+
+def _material_metadata(material_data):
+    if "BaseMaterial" not in material_data:
+        return None
+    data = material_data.get("Data", {})
+    return {
+        "Name": material_data.get("Name", ""),
+        "BaseMaterial": material_data["BaseMaterial"],
+        "GlobalNormal": data.get("GlobalNormal", "None"),
+        "MultilayerMask": data.get("MultilayerMask", "None"),
+        "DiffuseMap": data.get(
+            "DiffuseMap",
+            data.get("BaseColor", data.get("DiffuseTexture", "None")),
+        ),
+    }
+
+
+def _decoded_material_names(direct_result, mats):
+    names = {
+        str(name)
+        for submesh in direct_result["mesh_data"].submeshes
+        for name in submesh.material_names
+        if name
+    }
+    if names:
+        return names
+    return {str(item.get("Name")) for item in mats or () if item.get("Name")}
+
+
+def _source_material_names_by_submesh(direct_result):
+    return tuple(
+        str(submesh.material_names[0])
+        if submesh.material_names and submesh.material_names[0]
+        else ""
+        for submesh in direct_result["mesh_data"].submeshes
+    )
+
+
+def _submesh_index_from_name(name, fallback_index=None):
+    match = _SUBMESH_NAME_PATTERN.search(str(name or ""))
+    if match:
+        return int(match.group(1))
+    return fallback_index
+
+
+def _submesh_indices_by_import_order(direct_result):
+    return tuple(
+        _submesh_index_from_name(submesh.name, fallback_index)
+        for fallback_index, submesh in enumerate(
+            direct_result["mesh_data"].submeshes
+        )
+    )
+
+
+def _requested_submesh_material_plan(direct_result, json_apps, appearances):
+    return requested_material_names_by_submesh(
+        json_apps,
+        appearances,
+        _source_material_names_by_submesh(direct_result),
+        _submesh_indices_by_import_order(direct_result),
+    )
+
+
+def _material_records(mats, valid_names):
+    records = {}
+    for index, material_data in enumerate(mats or ()):
+        name = material_data.get("Name")
+        if not name or name not in valid_names:
+            continue
+        metadata = _material_metadata(material_data)
+        if metadata is not None:
+            records[name] = (index, metadata)
+    return records
+
+
+def _apply_material_metadata(material, metadata):
+    material["m"] = metadata
+    material["BaseMaterial"] = metadata["BaseMaterial"]
+    material["GlobalNormal"] = metadata["GlobalNormal"]
+    material["MultilayerMask"] = metadata["MultilayerMask"]
+    material["DiffuseMap"] = metadata["DiffuseMap"]
+
+
+def _unique_names(values):
+    return tuple(dict.fromkeys(str(value) for value in values if value))
+
+
+def import_mats(
+    BasePath,
+    DepotPath,
+    exclude_unused_mats,
+    direct_result,
+    image_format,
+    mats,
+    validmatnames,
+    *,
+    material_names_by_submesh=None,
+    is_morphtarget=False,
+):
+    """Build requested materials once and attach only each submesh's candidates."""
+    prefs = bpy.context.preferences.addons[
+        "i_scene_cp77_gltf"
+    ].preferences
+    verbose = not prefs.non_verbose
+    start_time = time.time()
+    failed = []
+    records = _material_records(
+        mats,
+        set(validmatnames or ()),
+    )
+    builder = MaterialBuilder(
+        mats,
+        DepotPath,
+        str(image_format),
+        BasePath,
+    )
+
+    objects = direct_result["objects"]
+    submeshes = direct_result["mesh_data"].submeshes
+    if len(objects) != len(submeshes):
+        raise RuntimeError(
+            f"Direct mesh result mismatch: {len(objects)} objects "
+            f"for {len(submeshes)} submeshes."
+        )
+
+    all_record_names = _unique_names(records)
+    raw_plan = material_names_by_submesh
+    if raw_plan is None:
+        raw_plan = tuple(
+            _unique_names(submesh.material_names)
+            for submesh in submeshes
+        )
+    else:
+        raw_plan = tuple(_unique_names(names) for names in raw_plan)
+    if len(raw_plan) != len(submeshes):
+        raise RuntimeError(
+            f"Material plan mismatch: {len(raw_plan)} submesh plans "
+            f"for {len(submeshes)} submeshes."
+        )
+
+    material_names_by_submesh = []
+    required_names = []
+    required_name_set = set()
+    for raw_names, submesh in zip(raw_plan, submeshes):
+        if is_morphtarget and not raw_names and not submesh.material_names:
+            raw_names = all_record_names
+        material_names = tuple(
+            name
+            for name in raw_names
+            if name in records
+        )
+        material_names_by_submesh.append(material_names)
+        for name in material_names:
+            if name not in required_name_set:
+                required_name_set.add(name)
+                required_names.append(name)
+
+    if not exclude_unused_mats:
+        for name in records:
+            if name not in required_name_set:
+                required_name_set.add(name)
+                required_names.append(name)
+
+    built = {}
+    for name in required_names:
+        index, metadata = records[name]
+        try:
+            material = builder.create(mats, index)
+            if material is None:
+                continue
+            _apply_material_metadata(material, metadata)
+            built[name] = material
+        except Exception:
+            traceback.print_exc()
+            failed.append(name)
+
+    submesh_indices = _submesh_indices_by_import_order(direct_result)
+    unprepared = []
+    for obj, submesh_index, raw_names, material_names in zip(
+        objects,
+        submesh_indices,
+        raw_plan,
+        material_names_by_submesh,
+    ):
+        mesh = obj.data
+        mesh.materials.clear()
+        attached = []
+        for name in material_names:
+            material = built.get(name)
+            if material is None:
+                continue
+            mesh.materials.append(material)
+            attached.append(name)
+            if material.get("no_shadows"):
+                obj.visible_shadow = False
+        obj["cp77_submesh_index"] = int(submesh_index)
+        obj["cp77_requested_material_candidates"] = json.dumps(
+            list(raw_names),
+            separators=(",", ":"),
+        )
+        obj["cp77_material_candidates"] = json.dumps(
+            attached,
+            separators=(",", ":"),
+        )
+        attached_folded = {name.casefold() for name in attached if name}
+        for name in raw_names:
+            if name.casefold() not in attached_folded:
+                unprepared.append((int(submesh_index), name))
+
+    direct_result["collection"][
+        "cp77_material_preparation_version"
+    ] = MATERIAL_PREPARATION_VERSION
+    direct_result["collection"][
+        "cp77_material_submesh_indices"
+    ] = json.dumps(list(submesh_indices), separators=(",", ":"))
+    direct_result["collection"][
+        "cp77_material_submesh_plan"
+    ] = json.dumps(
+        [list(names) for names in raw_plan],
+        separators=(",", ":"),
+    )
+
+    if verbose:
+        elapsed = time.time() - start_time
+        if failed:
+            print(
+                "Material setup failed on:\n    "
+                + "\n    ".join(dict.fromkeys(failed))
+            )
+            print(
+                f"Attempted setup for {elapsed:.3f} seconds"
+            )
+        else:
+            print(
+                f"Shader setup completed successfully in "
+                f"{elapsed:.3f} seconds"
+            )
+    return {
+        "failures": tuple(dict.fromkeys(failed)),
+        "unprepared": tuple(dict.fromkeys(unprepared)),
+        "submeshIndices": submesh_indices,
+    }
+
+
+def _load_material_json(base_path, error_messages):
+    material_path = base_path + ".Material.json"
+    if not os.path.exists(material_path):
+        return None, {}, [], False
+    depot_path, raw_apps, mats = JSONTool.jsonload(material_path, error_messages)
+    return depot_path, _normalize_json_apps(dict(raw_apps or {})), list(mats or ()), True
+
+
+def _resolved_depot_path(depot_path, prefs, remap_depot, verbose):
+    if remap_depot and os.path.exists(prefs.depotfolder_path):
+        depot_path = prefs.depotfolder_path
+        if verbose:
+            print(f"Using depot path: {depot_path}")
+    if depot_path is None:
+        return None
+    return str(depot_path).replace("\\", os.sep)
+
+
+_SUBMESH_NAME_PATTERN = re.compile(r"submesh_(\d+)", re.IGNORECASE)
+
+
+def _coverage_tokens(appearances):
+    tokens = {
+        str(value).casefold()
+        for value in (appearances or ())
+        if str(value)
+    }
+    if not tokens or "all" in tokens:
+        return {"all"}
+    return tokens
+
+
+def _material_json_key(filepath):
+    material_stem = _material_asset_stem(os.path.basename(filepath))
+    base_path = os.path.join(os.path.dirname(filepath), material_stem)
+    return absolute_path_key(base_path + ".Material.json")
+
+
+def _coverage_values_satisfy(stored, requested):
+    stored_values = {
+        str(value).casefold()
+        for value in (stored or ())
+        if str(value)
+    }
+    if "all" in requested:
+        return "all" in stored_values
+    return requested.issubset(stored_values) or "all" in stored_values
+
+
+def _existing_collection_coverage_satisfies(
+        collection,
+        filepath,
+        appearances,
+        ):
+    try:
+        version = int(
+            collection.get("cp77_material_preparation_version", 0) or 0
+        )
+        raw = collection.get("cp77_material_coverage_sources", "")
+    except (AttributeError, ReferenceError, TypeError, ValueError):
+        return False
+    if version < MATERIAL_PREPARATION_VERSION or not raw:
+        return False
+    try:
+        sources = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return False
+    if not isinstance(sources, dict):
+        return False
+    stored = sources.get(_material_json_key(filepath), ())
+    return _coverage_values_satisfy(stored, _coverage_tokens(appearances))
+
+
+def _record_collection_material_coverage(collection, filepath, appearances):
+    try:
+        raw = collection.get("cp77_material_coverage_sources", "")
+        sources = json.loads(raw) if raw else {}
+    except (
+        AttributeError,
+        ReferenceError,
+        TypeError,
+        ValueError,
+        json.JSONDecodeError,
+    ):
+        sources = {}
+    if not isinstance(sources, dict):
+        sources = {}
+    key = _material_json_key(filepath)
+    existing = {
+        str(value).casefold()
+        for value in sources.get(key, ())
+        if str(value)
+    }
+    requested = _coverage_tokens(appearances)
+    if "all" in existing or "all" in requested:
+        sources[key] = ["all"]
+    else:
+        sources[key] = sorted(existing | requested)
+    collection["cp77_material_coverage_sources"] = json.dumps(
+        sources,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+def _existing_submesh_index(obj):
+    try:
+        explicit_index = int(obj.get("cp77_submesh_index", -1))
+    except (AttributeError, ReferenceError, TypeError, ValueError):
+        explicit_index = -1
+    if explicit_index >= 0:
+        return explicit_index
+    match = _SUBMESH_NAME_PATTERN.search(str(getattr(obj, "name", "") or ""))
+    if match:
+        return int(match.group(1))
+    return None
+
+
+def _existing_material_name(material):
+    if material is None:
+        return ""
+    try:
+        metadata = material.get("m")
+    except (AttributeError, ReferenceError, TypeError):
+        metadata = None
+    if metadata is not None:
+        try:
+            name = metadata.get("Name")
+        except (AttributeError, TypeError):
+            name = None
+        if name:
+            return str(name)
+    return str(getattr(material, "name", "") or "")
+
+
+
+def _existing_material_signature(material):
+    if material is None:
+        return ""
+    try:
+        return str(material.get("_cp77_material_signature", "") or "")
+    except (AttributeError, ReferenceError, TypeError):
+        return ""
+
+
+def _attach_source_local_material(obj, name, material):
+    """Attach one source-local material without creating a name ambiguity."""
+    expected_name = str(name).casefold()
+    expected_signature = _existing_material_signature(material)
+    same_name_index = None
+    for index, existing in enumerate(obj.data.materials):
+        if existing is None:
+            continue
+        if existing is material:
+            return False
+        existing_signature = _existing_material_signature(existing)
+        if (
+            expected_signature
+            and existing_signature == expected_signature
+        ):
+            return False
+        if _existing_material_name(existing).casefold() == expected_name:
+            if same_name_index is None:
+                same_name_index = index
+            else:
+                # Preserve the existing list for diagnostics rather than
+                # silently selecting between multiple same-name candidates.
+                same_name_index = -1
+    if same_name_index is not None and same_name_index >= 0:
+        obj.data.materials[same_name_index] = material
+        return True
+    obj.data.materials.append(material)
     return True
+
+def ensure_collection_material_coverage(
+        collection,
+        filepath,
+        appearances,
+        *,
+        remap_depot=False,
+        image_format="png",
+        ):
+    """Append missing requested-appearance materials to a reused mesh master."""
+    if collection is None or _existing_collection_coverage_satisfies(
+            collection,
+            filepath,
+            appearances,
+            ):
+        return {"updated": False, "reason": "covered"}
+
+    mesh_objects = {}
+    for obj in tuple(getattr(collection, "all_objects", ()) or ()):
+        if getattr(obj, "type", None) != "MESH" or not getattr(obj, "data", None):
+            continue
+        index = _existing_submesh_index(obj)
+        if index is not None:
+            mesh_objects[index] = obj
+    if not mesh_objects:
+        return {"updated": False, "reason": "no_submeshes"}
+
+    material_stem = _material_asset_stem(os.path.basename(filepath))
+    base_path = os.path.join(os.path.dirname(filepath), material_stem)
+    error_messages = []
+    depot_path, json_apps, mats, has_material_json = _load_material_json(
+        base_path,
+        error_messages,
+    )
+    if not has_material_json:
+        return {"updated": False, "reason": "no_material_json"}
+
+    prefs = bpy.context.preferences.addons["i_scene_cp77_gltf"].preferences
+    depot_path = _resolved_depot_path(
+        depot_path,
+        prefs,
+        remap_depot,
+        not prefs.non_verbose,
+    )
+    if depot_path is None:
+        return {"updated": False, "reason": "no_depot"}
+
+    warm_material_cache_index()
+    mesh_entries = sorted(mesh_objects.items())
+    source_names = []
+    authored_indices = []
+    for index, obj in mesh_entries:
+        try:
+            source_name = str(obj.get("cp77_material_name", "") or "")
+        except (AttributeError, ReferenceError, TypeError):
+            source_name = ""
+        if not source_name and len(obj.data.materials):
+            source_name = _existing_material_name(obj.data.materials[0])
+        source_names.append(source_name)
+        authored_indices.append(index)
+
+    plan, resolved, unresolved = requested_material_names_by_submesh(
+        json_apps,
+        appearances,
+        source_names,
+        authored_indices,
+    )
+    valid_names = {name for names in plan for name in names if name}
+    records = _material_records(mats, valid_names)
+    builder = MaterialBuilder(
+        mats,
+        depot_path,
+        str(image_format),
+        base_path,
+    )
+    built = {}
+    failures = []
+    for name in _unique_names(
+            name for names in plan for name in names if name in records
+            ):
+        record_index, metadata = records[name]
+        try:
+            material = builder.create(mats, record_index)
+            if material is None:
+                failures.append(name)
+                continue
+            _apply_material_metadata(material, metadata)
+            built[name] = material
+        except Exception:
+            traceback.print_exc()
+            failures.append(name)
+
+    appended = 0
+    unprepared = []
+    for plan_index, (index, obj) in enumerate(mesh_entries):
+        requested_names = (
+            plan[plan_index] if plan_index < len(plan) else ()
+        )
+        for name in requested_names:
+            material = built.get(name)
+            if material is None:
+                continue
+            if _attach_source_local_material(obj, name, material):
+                appended += 1
+        attached_names = [
+            _existing_material_name(material)
+            for material in obj.data.materials
+            if material is not None
+        ]
+        attached_folded = {name.casefold() for name in attached_names if name}
+        for name in requested_names:
+            if name.casefold() not in attached_folded:
+                unprepared.append((int(index), name))
+        obj["cp77_submesh_index"] = int(index)
+        obj["cp77_requested_material_candidates"] = json.dumps(
+            list(requested_names),
+            separators=(",", ":"),
+        )
+        obj["cp77_material_candidates"] = json.dumps(
+            attached_names,
+            separators=(",", ":"),
+        )
+
+    stored_requests = []
+    try:
+        raw_stored = collection.get("cp77_material_requested_appearances", "")
+        if raw_stored:
+            stored_requests = list(json.loads(raw_stored))
+    except (AttributeError, ReferenceError, TypeError, ValueError, json.JSONDecodeError):
+        stored_requests = []
+    for appearance in appearances or ():
+        value = str(appearance)
+        if value and value not in stored_requests:
+            stored_requests.append(value)
+    if not appearances and "ALL" not in stored_requests:
+        stored_requests.append("ALL")
+
+    collection["json_apps"] = json.dumps(json_apps)
+    collection["cp77_material_preparation_version"] = (
+        MATERIAL_PREPARATION_VERSION
+    )
+    collection["cp77_material_submesh_indices"] = json.dumps(
+        authored_indices,
+        separators=(",", ":"),
+    )
+    collection["cp77_material_requested_appearances"] = json.dumps(
+        stored_requests,
+        separators=(",", ":"),
+    )
+    collection["cp77_material_resolved_appearances"] = json.dumps(
+        resolved,
+        separators=(",", ":"),
+    )
+    collection["cp77_material_unresolved_appearances"] = json.dumps(
+        list(unresolved),
+        separators=(",", ":"),
+    )
+    collection["cp77_material_submesh_plan"] = json.dumps(
+        [list(names) for names in plan],
+        separators=(",", ":"),
+    )
+    if error_messages:
+        show_message("\n".join(error_messages))
+    if not failures and not unprepared:
+        _record_collection_material_coverage(
+            collection,
+            filepath,
+            appearances,
+        )
+    return {
+        "updated": bool(appended),
+        "appended": appended,
+        "failures": tuple(dict.fromkeys(failures)),
+        "unprepared": tuple(dict.fromkeys(unprepared)),
+        "resolved": resolved,
+        "unresolved": unresolved,
+    }
 
 
 def CP77GLBimport(
-        with_materials=False, remap_depot=False, exclude_unused_mats=True, image_format='png', filepath='',
-        hide_armatures=True, import_garmentsupport=False, files=None, directory='', appearances=None, scripting=False,
-        import_tracks=False, generate_overrides=False, animation_target=None,
-        ):
-    cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
-    verbose = not cp77_addon_prefs.non_verbose
+    with_materials=False,
+    remap_depot=False,
+    exclude_unused_mats=True,
+    image_format="png",
+    filepath="",
+    hide_armatures=True,
+    import_garmentsupport=False,
+    files=None,
+    directory="",
+    appearances=None,
+    scripting=False,
+    import_tracks=False,
+    generate_overrides=False,
+    animation_target=None,
+):
+    prefs = bpy.context.preferences.addons["i_scene_cp77_gltf"].preferences
+    verbose = not prefs.non_verbose
     context = bpy.context
-    files = files or []
     appearances = appearances or []
-    oldanims = {action.name for action in bpy.data.actions}
-    ## switch to pose mode if it's not already
-    if context.mode != 'OBJECT':
-        bpy.ops.object.mode_set(mode='OBJECT')
+    files = files or []
 
-    # obj = None
-    start_time = time.time()
-    if not scripting:
-        loadfiles = files
-    else:
-        f = {}
-        f['name'] = os.path.basename(filepath)
-        loadfiles = (f,)
-    glbname = os.path.basename(filepath)
-    DepotPath = cp77_addon_prefs
+    if context.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
 
-    if ".anims.glb" in filepath.lower():
-        bpy.context.scene.render.fps = 30
-    if verbose:
-        if ".anims.glb" in filepath.lower():
-            print('\n-------------------- Beginning Cyberpunk Animation Import --------------------')
-            print(f"Importing Animations From: {glbname}")
-
-        else:
-            print('\n-------------------- Beginning Cyberpunk Model Import --------------------')
-            if with_materials == True:
-                print(f"Importing: {glbname} with materials")
-                print(f"Appearances to Import: ", appearances)
-            else:
-                print(f"Importing: {glbname}")
-    # prevent crash if no directory supplied when using filepath
-    if len(directory) == 0 or scripting:
+    if not directory or scripting:
         directory = os.path.dirname(filepath)
+    loadfiles = _load_file_entries(filepath, directory, files, scripting)
+    start_time = time.time()
+    error_messages = []
+    imported_results = []
+    if with_materials:
+        warm_material_cache_index()
+    cache_before = material_cache_stats()
+    owns_json_cache = acquire_json_cache(JSONTool)
 
-    file_names = []
-    file_paths = []
-    for f in loadfiles:
-        file_names.append(f['name'])
-        file_paths.append(os.path.join(directory, f['name']))
-
-    # check materials
-    heuristic = 'BLENDER'
-    if cp77_addon_prefs.enable_temperance:
-        heuristic = 'TEMPERANCE'
-    octos = False
-    if cp77_addon_prefs.enable_octo:
-        octos = True
-
-    # mana: error messages - display one popup, not 500k
-    errorMessages = []
-    meshinitiated_cache = False
-    if not JSONTool._use_cache:
-        clear_material_cache()
-        JSONTool.start_caching()
-        meshinitiated_cache = True
-
-    # Kwek: Gate this--do the block iff corresponding Material.json exist
-    # Kwek: was tempted to do a try-catch, but that is just La-Z
-    # Kwek: Added another gate for materials
     try:
-        for f in loadfiles:
-            filename = os.path.splitext(os.path.splitext(f['name'])[0])[0]
-            filepath = os.path.join(directory, f['name'])
-            if filepath.lower().endswith('.anims.glb'):
+        for entry in loadfiles:
+            file_name = _entry_name(entry)
+            file_path = os.path.join(directory, file_name)
+            lower_path = file_path.lower()
+
+            if lower_path.endswith(".anims.glb"):
                 bpy.context.scene.render.fps = 30
-                _try_direct_animation_import(
-                        filepath,
-                        context,
-                        animation_target,
-                        import_tracks,
-                        verbose,
-                        )
-                continue
-            gltf_importer = glTFImporter(
-                filepath, {
-                        "files": None,
-                        "loglevel": 0,
-                        "import_pack_images": True,
-                        "import_unused_materials": False,
-                        "merge_vertices": False,
-                        "import_shading": 'NORMALS',
-                        "bone_heuristic": heuristic,
-                        "guess_original_bind_pose": False,
-                        "import_user_extensions": "",
-                        "disable_bone_shape": octos,
-                        "bone_shape_scale_factor": 1.0,
-                        "import_scene_as_collection": True,
-                        "import_scene_extras": True,
-                        "import_select_created_objects": True,
-                        "import_merge_material_slots": False,
-                        }
-                )
-            gltf_importer.read()
-            gltf_importer.checks()
-
-            existingMeshes = {mesh.name for mesh in bpy.data.meshes}
-
-            current_file_base_path = os.path.join(os.path.dirname(filepath), filename)
-            has_material_json = os.path.exists(current_file_base_path + ".Material.json")
-
-            existingMaterials = {mat.name for mat in bpy.data.materials}
-            BlenderGlTF.create(gltf_importer)
-            exclusion_cache.clear_cache()
-            imported = tuple(context.selected_objects)  # the new stuff should be selected
-
-            # if we're not importing a Cyberpunk mesh, not all submesh names will start with submesh_00, and they will be nested weirdly.
-            # we want to clean this up.
-            imported_meshes = []
-            has_imported_empty = False
-            all_imported_are_meshes = True
-            for obj in imported:
-                obj_type = obj.type
-                if obj_type == 'MESH':
-                    imported_meshes.append(obj)
-                else:
-                    all_imported_are_meshes = False
-                    if obj_type == 'EMPTY':
-                        has_imported_empty = True
-
-            isExternalImport = (
-                    has_imported_empty
-                    or sum(1 for mesh in imported_meshes if mesh.name.startswith("submesh")) != len(imported_meshes)
-            )
-
-            multimesh = any(
-                    obj.name and obj.name[0].isdigit() and '_' in obj.name
-                    for obj in imported_meshes
-                    )
-            exclude_unused_mats = exclude_unused_mats and all_imported_are_meshes
-
-            if multimesh:
-                isExternalImport = False
-
-            if isExternalImport:
-                CP77_cleanup_external_export(imported)
-
-            imported = context.selected_objects  # the new stuff should be selected
-            if f['name'][:7] == 'terrain':
-                UV_by_bounds(imported)
-
-            # create a collection by file name
-            collection = bpy.data.collections.new(filename)
-            bpy.context.scene.collection.children.link(collection)
-            for o in imported:
-                import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filename, oldanims, import_tracks)
-
-            collection['orig_filepath'] = filepath
-            mesh_count, armature_count = _collection_type_counts(collection)
-            collection['numMeshChildren'] = mesh_count
-            collection['numArmatureChildren'] = armature_count
-
-            disable_collection_by_name("glTF_not_exported")
-
-            # for sketchfab exports, we want to keep our materials
-            if not isExternalImport:
-                for mat in list(bpy.data.materials):
-                    if mat.name not in existingMaterials:
-                        bpy.data.materials.remove(mat, do_unlink=True, do_id_user=True, do_ui_user=True)
-
-            # Kwek: Gate this--do the block if corresponding Material.json exist
-            # Kwek: was tempted to do a try-catch, but that is just La-Z
-            # Kwek: Added another gate for materials
-            DepotPath = None
-
-            blender_4_scale_armature_bones(imported)
-
-            if with_materials == True:
-                json_apps = {}  # always initialize this
-
-                if has_material_json:
-                    matjsonpath = current_file_base_path + ".Material.json"
-                    DepotPath, loaded_json_apps, mats = JSONTool.jsonload(matjsonpath, errorMessages)
-                    json_apps = dict(loaded_json_apps)
-
-                if DepotPath == None:
-                    print(f"Failed to read DepotPath, skipping material import (hasMaterialJson: {has_material_json})")
-                    continue
-
-            # DepotPath = str(obj["MaterialRepo"])  + "\\"
-            context = bpy.context  # TODO: Do we need this here?
-            if remap_depot and os.path.exists(cp77_addon_prefs.depotfolder_path):
-                DepotPath = cp77_addon_prefs.depotfolder_path
                 if verbose:
-                    print(f"Using depot path: {DepotPath}")
-            if DepotPath != None:
-                DepotPath = DepotPath.replace('\\', os.sep)
-
-            if import_garmentsupport:
-                manage_garment_support(existingMeshes, gltf_importer)
-
-            # the rest of the function deals with material import and validation
-            if with_materials != True:
+                    print("\n-------------------- Beginning Cyberpunk Animation Import --------------------")
+                    print(f"Importing Animations From: {file_name}")
+                _try_direct_animation_import(
+                    file_path,
+                    context,
+                    animation_target,
+                    import_tracks,
+                    verbose,
+                )
                 continue
 
-            # validate materials, and don't import duplicates. Have this outside the loop/conditional so that it's valid but empty.
-            validmats = {}
-            # fix the app names as for some reason they have their index added on the end.
-            if len(json_apps) > 0:
+            if verbose:
+                print("\n-------------------- Beginning Cyberpunk Model Import --------------------")
+                suffix = " with materials" if with_materials else ""
+                print(f"Importing: {file_name}{suffix}")
+                if with_materials:
+                    print(f"Appearances to Import: {appearances}")
 
-                appkeys = list(json_apps)
-                for i, k in enumerate(appkeys):
-                    json_apps[k[:-1 * len(str(i))]] = json_apps.pop(k)
+            result = import_mesh_glb(
+                file_path,
+                import_garment_support=import_garmentsupport,
+                hide_armature=hide_armatures,
+            )
+            exclusion_cache.clear_cache()
 
-                # save the json_apps to the collection so that we can use it later
-                collection['json_apps'] = json.dumps(json_apps)
+            if file_name.startswith("terrain"):
+                UV_by_bounds(result["objects"])
 
-                # appearances = ({'name':'short_hair'},{'name':'02_ca_limestone'},{'name':'ml_plastic_doll'},{'name':'03_ca_senna'})
-                # if appearances defined populate valid mats with the mats for them, otherwise populate with everything used.
-                if len(appearances) > 0 and 'ALL' not in appearances:
-                    if 'Default' in appearances:
-                        first_key = next(iter(json_apps))
-                        for m in json_apps[first_key]:
-                            validmats[m] = True
+            materials_imported = False
+            if with_materials:
+                material_stem = _material_asset_stem(file_name)
+                current_file_base_path = os.path.join(directory, material_stem)
+                depot_path, json_apps, mats, has_material_json = _load_material_json(
+                    current_file_base_path,
+                    error_messages,
+                )
+                if not has_material_json:
+                    print(
+                        "Material.json not found; imported geometry without materials: "
+                        f"{current_file_base_path}.Material.json"
+                    )
+                else:
+                    result["collection"]["json_apps"] = json.dumps(json_apps)
+                    (
+                        material_names_by_submesh,
+                        resolved_appearances,
+                        unresolved_appearances,
+                    ) = _requested_submesh_material_plan(
+                        result,
+                        json_apps,
+                        appearances,
+                    )
+                    valid_names = {
+                        name
+                        for names in material_names_by_submesh
+                        for name in names
+                        if name
+                    }
+                    if not valid_names:
+                        valid_names = _decoded_material_names(result, mats)
+                    result["collection"][
+                        "cp77_material_requested_appearances"
+                    ] = json.dumps(list(appearances), separators=(",", ":"))
+                    result["collection"][
+                        "cp77_material_resolved_appearances"
+                    ] = json.dumps(
+                        resolved_appearances,
+                        separators=(",", ":"),
+                    )
+                    result["collection"][
+                        "cp77_material_unresolved_appearances"
+                    ] = json.dumps(
+                        list(unresolved_appearances),
+                        separators=(",", ":"),
+                    )
+                    depot_path = _resolved_depot_path(
+                        depot_path,
+                        prefs,
+                        remap_depot,
+                        verbose,
+                    )
+                    if depot_path is None:
+                        print("Failed to resolve DepotPath; imported geometry without materials")
                     else:
-                        for key in json_apps:
-                            if key in appearances:
-                                for m in json_apps[key]:
-                                    validmats[m] = True
-                # there isnt always a default, so if none were listed, or ALL was used, or an invalid one add everything.
-                if len(validmats) == 0:
-                    for key in json_apps:
-                        for m in json_apps[key]:
-                            validmats[m] = True
-
-                try:
-                    import_mats(
-                        current_file_base_path, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer,
-                        image_format, mats, validmats, multimesh
+                        material_result = import_mats(
+                            current_file_base_path,
+                            depot_path,
+                            exclude_unused_mats,
+                            result,
+                            image_format,
+                            mats,
+                            valid_names,
+                            material_names_by_submesh=(
+                                material_names_by_submesh
+                            ),
+                            is_morphtarget=".morphtarget" in file_name.lower(),
                         )
+                        if (
+                            not material_result.get("failures")
+                            and not material_result.get("unprepared")
+                        ):
+                            _record_collection_material_coverage(
+                                result["collection"],
+                                file_path,
+                                appearances,
+                            )
+                        materials_imported = True
 
-                except Exception as e:
-                    print("Exception when trying to import mats: " + str(e))
-                    raise e
+            if generate_overrides and materials_imported:
+                from ..exporters.mlsetup_export import cp77_mlsetup_generateoverrides
 
-                if generate_overrides:
-                    try:
-                        from ..exporters.mlsetup_export import cp77_mlsetup_generateoverrides
-                        cp77_mlsetup_generateoverrides(None, bpy.context)
-                    except Exception as e:
-                        print("Exception when trying to generate multilayer overrides: " + str(e))
-                        raise e
-        if len(errorMessages) > 0:
-            show_message("\n".join(errorMessages))
+                cp77_mlsetup_generateoverrides(None, bpy.context)
 
+            reset_shape_key_values(result["objects"])
+            imported_results.append(result)
+
+        if error_messages:
+            show_message("\n".join(error_messages))
         if verbose:
-            print(f"GLB Import Time: {(time.time() - start_time)} Seconds")
-            print('-------------------- Finished importing Cyberpunk 2077 Model --------------------\n')
+            cache_after = material_cache_stats()
+            exact_hits = (
+                cache_after["exact_hits"]
+                - cache_before["exact_hits"]
+            )
+            prototype_hits = (
+                cache_after["prototype_hits"]
+                - cache_before["prototype_hits"]
+            )
+            cache_misses = (
+                cache_after["misses"]
+                - cache_before["misses"]
+            )
+            cache_builds = (
+                cache_after["builds"]
+                - cache_before["builds"]
+            )
+            cache_clones = (
+                cache_after["clones"]
+                - cache_before["clones"]
+            )
+            print(
+                "Material Cache: "
+                f"{exact_hits} exact hits, "
+                f"{prototype_hits} prototype hits, "
+                f"{cache_misses} shader misses, "
+                f"{cache_builds} shader builds, "
+                f"{cache_clones} material clones, "
+                f"{cache_after['entries']} live exact entries"
+            )
+            print(f"GLB Import Time: {time.time() - start_time:.3f} Seconds")
+            print("-------------------- Finished importing Cyberpunk 2077 Model --------------------\n")
     finally:
-        if meshinitiated_cache:
-            JSONTool.stop_caching()
-            clear_material_cache()
+        release_json_cache(JSONTool, owns_json_cache)
+
+    return tuple(imported_results)
 
 
 def reload_mats(self, context):
     active_obj = bpy.context.active_object
     active_material = active_obj.active_material
     if active_material is None:
-        self.report({'ERROR'}, "No active material selected")
-        return {'CANCELLED'}
+        self.report({"ERROR"}, "No active material selected")
+        return {"CANCELLED"}
 
     orig_mat_name = active_material.name
-    if 'm' in active_material:
-        orig_mat_name = str(active_material['m']['Name'])
+    if "m" in active_material:
+        orig_mat_name = str(active_material["m"]["Name"])
 
-    BasePath = active_material.get('MeshPath')
-    DepotPath = active_material.get('DepotPath')
-    ProjPath = active_material.get('ProjPath')
+    base_path = active_material.get("MeshPath")
+    depot_path = active_material.get("DepotPath")
+    project_path = active_material.get("ProjPath")
 
-    if BasePath is None:
+    if base_path is None:
         for collection in bpy.data.collections:
-            if active_obj.name in collection.objects:
-                MeshPath = collection.get('mesh')
-                if MeshPath and ProjPath:
-                    MeshPathNoSuffix = MeshPath[:MeshPath.rfind('.')]
-                    BasePath = os.path.join(ProjPath, MeshPathNoSuffix)
-                break
-
-    if BasePath is None:
-        self.report({'ERROR'}, "Could not resolve material base path")
-        return {'CANCELLED'}
-
-    errorMessages = []
-    matjsonpath = BasePath + ".Material.json"
-
-    if not os.path.exists(matjsonpath):
-        self.report({'ERROR'}, ('Material.json not found: ' + matjsonpath))
-        return {'CANCELLED'}
-
-    image_format = 'png'
-    initiated_cache = False
-    if not JSONTool._use_cache:
-        JSONTool.start_caching()
-        initiated_cache = True
-
-    try:
-        somejunk, otherjunk, mats = JSONTool.jsonload(matjsonpath, errorMessages)
-        Builder = MaterialBuilder(mats, DepotPath, str(image_format), BasePath)
-    finally:
-        if initiated_cache:
-            JSONTool.stop_caching()
-
-    if len(errorMessages) > 0:
-        show_message("\n".join(errorMessages))
-
-    newmat = None
-    old_base_name = orig_mat_name.split('.')[0]
-    for index, rawmat in enumerate(mats):
-        if rawmat.get("Name") == old_base_name:
-            newmat = Builder.create(mats, index)
+            if collection.objects.get(active_obj.name) is None:
+                continue
+            mesh_path = collection.get("mesh")
+            if mesh_path and project_path:
+                mesh_path_no_suffix = mesh_path[:mesh_path.rfind(".")]
+                base_path = os.path.join(project_path, mesh_path_no_suffix)
             break
 
-    if newmat is None:
-        self.report({'ERROR'}, "New material not created")
-        return {'CANCELLED'}
+    if base_path is None:
+        self.report({"ERROR"}, "Could not resolve material base path")
+        return {"CANCELLED"}
 
-    for k in active_material.keys():
-        if k in ('BaseMaterial', 'DiffuseMap', 'GlobalNormal', 'MultilayerMask'):
-            newmat[k] = active_material[k]
+    error_messages = []
+    material_path = base_path + ".Material.json"
+    if not os.path.exists(material_path):
+        self.report({"ERROR"}, "Material.json not found: " + material_path)
+        return {"CANCELLED"}
+
+    owns_json_cache = acquire_json_cache(JSONTool)
+
+    try:
+        _, _, mats = JSONTool.jsonload(material_path, error_messages)
+        builder = MaterialBuilder(mats, depot_path, "png", base_path)
+    finally:
+        release_json_cache(JSONTool, owns_json_cache)
+
+    if error_messages:
+        show_message("\n".join(error_messages))
+
+    new_material = None
+    old_base_name = orig_mat_name.split(".")[0]
+    for index, raw_material in enumerate(mats):
+        if raw_material.get("Name") == old_base_name:
+            new_material = builder.create(mats, index, force_rebuild=True)
+            break
+
+    if new_material is None:
+        self.report({"ERROR"}, "New material not created")
+        return {"CANCELLED"}
+
+    for key in active_material.keys():
+        if key in ("BaseMaterial", "DiffuseMap", "GlobalNormal", "MultilayerMask"):
+            new_material[key] = active_material[key]
 
     old_material = active_material
-    active_obj.material_slots[active_obj.active_material_index].material = newmat
+    active_obj.material_slots[active_obj.active_material_index].material = new_material
     if old_material.users == 0:
-        bpy.data.materials.remove(old_material, do_unlink=True, do_id_user=True, do_ui_user=True)
-
-    return newmat
-
-
-def import_mats(
-        BasePath, DepotPath, exclude_unused_mats, existingMeshes, gltf_importer, image_format, mats, validmatnames,
-        multimesh=False, generate_overrides=False,
-        ):
-    excluded_objects = exclusion_cache.get_excluded_objects()
-    failedon = []
-    cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
-    verbose = not cp77_addon_prefs.non_verbose
-    start_time = time.time()
-    validmats = {}
-    mat_index_by_name = {}
-    for index, material_data in enumerate(mats):  # obj['Materials']
-        mat = material_data.get('Name')
-        if mat is None:
-            continue
-        mat_index_by_name[mat] = index
-        if mat not in validmatnames:
-            continue
-        if 'BaseMaterial' in material_data:
-            data = material_data.get('Data', {})
-            global_normal = data.get('GlobalNormal', 'None')
-            multilayer_mask = data.get('MultilayerMask', 'None')
-            diffuse_map = data.get('DiffuseMap', data.get('BaseColor', data.get('DiffuseTexture', 'None')))
-
-            validmats[mat] = {
-                'Name': mat,
-                'BaseMaterial': material_data['BaseMaterial'],
-                'GlobalNormal': global_normal,
-                'MultilayerMask': multilayer_mask,
-                'DiffuseMap': diffuse_map,
-                }
-        else:
-            print(material_data.keys())
-
-    MatImportList = set(validmats)
-    Builder = MaterialBuilder(mats, DepotPath, str(image_format), BasePath)
-    counter = 0
-    excluded_mesh_names = {
-        obj.data.name for obj in excluded_objects
-        if getattr(obj, "type", "") == 'MESH' and obj.data
-        }
-    existing_mesh_names = existingMeshes if isinstance(existingMeshes, set) else set(existingMeshes)
-    names = [
-        mesh.name for mesh in bpy.data.meshes
-        if mesh.name not in existing_mesh_names and mesh.name not in excluded_mesh_names
-        ]
-    if multimesh:
-        names = sorted(names, key=lambda x: int(x.split('_', 1)[0]) if x.split('_', 1)[0].isdigit() else 0)
-
-    bpy_meshes = bpy.data.meshes
-    gltf_meshes = gltf_importer.data.meshes
-    for name in names:
-        mesh = bpy_meshes.get(name)
-        if mesh is None:
-            continue
-
-        mesh.materials.clear()
-        # we're not getting the materials from the json, but from the glTF importer data
-        extras = gltf_meshes[counter].extras
-
-        # morphtargets don't have material names. Just use all of them.
-        materialNames = None
-        if extras is None or ("materialNames" not in extras or extras["materialNames"] is None):
-            if BasePath.endswith(".morphtarget"):
-                materialNames = validmats.keys()
-            else:
-                counter = counter + 1
-                continue
-        else:
-            materialNames = extras["materialNames"]
-
-        # remove duplicate material names (why does "extras" end up with 10k "decals" entries when I import the maimai?)
-        # Sim - because of a bug in wkit I'd assume mana
-        materialNames = tuple(dict.fromkeys(materialNames))
-
-        # Kwek: I also found that other material hiccups will cause the Collection to fail
-        for matname in materialNames:
-
-            if matname not in validmats:
-                continue
-
-            # print('matname: ',matname, validmats[matname])
-            m = validmats[matname]
-            index = mat_index_by_name.get(matname)
-            if index is None:
-                continue
-            try:
-                bpymat = Builder.create(mats, index)
-                if bpymat:
-                    bpymat['m'] = m
-                    bpymat['BaseMaterial'] = m['BaseMaterial']
-                    bpymat['GlobalNormal'] = m['GlobalNormal']
-                    bpymat['MultilayerMask'] = m['MultilayerMask']
-                    if 'DiffuseMap' in m:
-                        bpymat['DiffuseMap'] = m['DiffuseMap']
-                    if 'DiffuseTexture' in m:
-                        bpymat['DiffuseTexture'] = m['DiffuseTexture']
-                    mesh.materials.append(bpymat)
-                    if bpymat.get('no_shadows'):
-                        shadow_obj = bpy.data.objects.get(name)
-                        if shadow_obj is not None:
-                            shadow_obj.visible_shadow = False
-            except:
-                # Kwek -- finally, even if the Builder couldn't find the materials, keep calm and carry on
-                print(traceback.format_exc())
-                failedon.append(matname)
-
-        counter = counter + 1
-    if verbose:
-        if len(failedon) == 0:
-            print(f'Shader Setup Completed Succesfully in {(time.time() - start_time)} Seconds')
-        else:
-            line_separator = '\n    '
-            print(f'Material Setup Failed on: {line_separator}{line_separator.join(failedon)}')
-            print(f'Attempted Setup for {(time.time() - start_time)} seconds')
-
-    if exclude_unused_mats:
-        return
-
-    for name, index in mat_index_by_name.items():
-        if MatImportList and name not in MatImportList:
-            continue
-        Builder.create(mats, index)
-
-
-def blender_4_scale_armature_bones(imported_objects):
-    for armature in (obj for obj in imported_objects if obj.type == 'ARMATURE'):
-        for pose_bone in armature.pose.bones:
-            pose_bone.custom_shape_scale_xyz = (.0175, .0175, .0175)
-            pose_bone.use_custom_shape_bone_size = True
-
-
-def import_meshes_and_anims(collection, gltf_importer, hide_armatures, o, filename, oldanims, import_tracks):
-    # TODO: check if this is a Cyberpunk import or something else entirely
-    cp77_addon_prefs = bpy.context.preferences.addons['i_scene_cp77_gltf'].preferences
-    verbose = not cp77_addon_prefs.non_verbose
-
-    for parent in o.users_collection:
-        parent.objects.unlink(o)
-    collection.objects.link(o)
-
-    # We should probably break the base import out into a separate function, have it check the gltf file and then send the info either to anim import or import with materials, but this works too
-    animations = gltf_importer.data.animations
-    meshes = gltf_importer.data.meshes
-
-    if o.type == 'ARMATURE' and hasattr(gltf_importer.data, 'skins') and gltf_importer.data.skins:
-        for skin in gltf_importer.data.skins:
-            try:
-                add_skin_props(skin, o)
-                if verbose:
-                    print(f"Skin properties added to armature: {o.name}")
-                break  # typically one skin per armature
-            except Exception as e:
-                if verbose:
-                    print(f"could not add skin properties to '{o.name}': {e}")
-
-    # if animations exist, don't hide the armature and get the extras properties
-    if animations:
-        get_anim_info(
-                animations, oldanims, import_tracks,
-                armature=o if o.type == 'ARMATURE' else None,
-                )
-
-    # if no meshes exist, don't hide the armature
-    elif meshes and o.type == 'ARMATURE':
-        o.hide_set(hide_armatures)
-        o.name = "Armature__" + filename
+        bpy.data.materials.remove(
+            old_material,
+            do_unlink=True,
+            do_id_user=True,
+            do_ui_user=True,
+        )
+    return new_material

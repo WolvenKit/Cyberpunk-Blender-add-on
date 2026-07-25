@@ -2,7 +2,7 @@ from ..main.common import *
 
 from .mat_common import add_group_node, create_param_value_nodes, get_or_build_node_group, set_scene_fps_driver
 
-from .scalar_params import scalar_parameter_data, scalar_value
+from .scalar_params import component_value, scalar_parameter_data, scalar_value
 
 
 def _create_scroll_group(layer):
@@ -297,11 +297,11 @@ class ParallaxScreenTransparent:
             )
         component_nodes = {}
         for key, default, components in component_specs:
-            values = Data.get(key) or {}
+            values = Data.get(key)
             for component, x, y in components:
                 component_nodes[(key, component)] = CreateShaderNodeValue(
                         CurMat,
-                        scalar_value(values.get(component), default, component),
+                        component_value(values, component, default),
                         x,
                         y,
                         f'{key}.{component.lower()}',

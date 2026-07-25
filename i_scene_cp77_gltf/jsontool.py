@@ -1,6 +1,8 @@
+import copy
 import json
 import os
 import re
+from collections import OrderedDict
 from functools import lru_cache
 from pathlib import Path
 
@@ -8,6 +10,15 @@ import bpy
 
 from .main.common import load_zip, show_message
 from .main.datashards import ParsedApp, ParsedEntity
+from .importers.common.entity_data import (
+    build_chunk_handle_lookup as _build_chunk_lookup,
+    build_component_lookup as _build_component_lookup,
+    cname_value as _cname_value,
+    component_name as _component_name,
+    ent_appearance_name,
+    resolve_ent_appearance_alias,
+    resolve_requested_appearance_name,
+)
 
 # Error messages for different file types
 invalid_json_error = (
@@ -22,28 +33,6 @@ invalid_phys_error = "Import may continue, but .phys colliders will not be impor
 
 MIN_WOLVENKIT_VERSION = (8, 17)
 MIN_MATERIAL_JSON_VERSION = (1, 0)
-
-
-def _cname_value(value, default=''):
-    if type(value) is dict:
-        return value.get('$value', default)
-    return value if value is not None else default
-
-
-def _component_name(component, default=''):
-    if type(component) is not dict:
-        return default
-    return _cname_value(component.get('name'), default)
-
-
-def _build_component_lookup(components):
-    lookup = {}
-    for component in components or ():
-        name = _component_name(component)
-        if name:
-            # Preserve the first component registered under each name.
-            lookup.setdefault(name, component)
-    return lookup
 
 
 def _build_app_lookup(appearances):
@@ -62,17 +51,6 @@ def _build_app_lookup(appearances):
         if name:
             by_name.setdefault(name, index)
     return appearance_names, by_appearance, by_name
-
-
-def _build_chunk_lookup(chunks, target_key, handle_key='HandleId'):
-    lookup = {}
-    for chunk in chunks or ():
-        if type(chunk) is not dict:
-            continue
-        target = chunk.get(target_key)
-        if type(target) is dict and handle_key in target:
-            lookup[target[handle_key]] = target
-    return lookup
 
 
 def _build_slot_lookup(slots):
@@ -97,52 +75,6 @@ def _build_slot_component_lookups(components):
         if name and type(slots) is list:
             lookups.setdefault(name, _build_slot_lookup(slots))
     return lookups
-
-
-def ent_appearance_name(ent_app, default=''):
-    return _cname_value(ent_app.get('appearanceName'), default) if type(ent_app) is dict else default
-
-
-def _ent_template_appearance_name(ent_app, default=''):
-    return _cname_value(ent_app.get('name'), default) if type(ent_app) is dict else default
-
-
-def _appearance_lookup_index(lookup, key):
-    if not key or not lookup:
-        return -1
-    try:
-        return int(lookup.get(key, -1))
-    except (TypeError, ValueError):
-        return -1
-
-
-def resolve_ent_appearance_alias(app_name, ent_apps, by_appearance=None, by_name=None):
-    if not app_name or app_name == 'None':
-        return -1, ''
-
-    for lookup in (by_appearance, by_name):
-        ent_app_idx = _appearance_lookup_index(lookup, app_name)
-        if 0 <= ent_app_idx < len(ent_apps):
-            return ent_app_idx, ent_appearance_name(ent_apps[ent_app_idx], app_name)
-
-    for ent_app_idx, ent_app in enumerate(ent_apps or []):
-        appearance_name = ent_appearance_name(ent_app)
-        template_name = _ent_template_appearance_name(ent_app)
-        if app_name == appearance_name or app_name == template_name:
-            return ent_app_idx, appearance_name or app_name
-
-    return -1, ''
-
-
-def resolve_requested_appearance_name(app_name, ent_default, ent_apps, by_appearance, by_name):
-    if app_name == 'default':
-        if not ent_default:
-            return 'default'
-        _, resolved_name = resolve_ent_appearance_alias(ent_default, ent_apps, by_appearance, by_name)
-        return resolved_name or ent_default
-
-    _, resolved_name = resolve_ent_appearance_alias(app_name, ent_apps, by_appearance, by_name)
-    return resolved_name or app_name
 
 
 def _components_by_type(components, type_name):
@@ -171,6 +103,42 @@ class JSONTool:
     _entity_cache = {}
     _app_cache = {}
     _use_cache = False
+    _persistent_cache_limits = {
+        '.Material.json': 512,
+        '.mlsetup.json': 512,
+        '.mltemplate.json': 512,
+        '.mt.json': 256,
+        '.mi.json': 256,
+        '.dtex.json': 128,
+    }
+    _persistent_json_caches = {
+        '.Material.json': OrderedDict(),
+        '.mlsetup.json': OrderedDict(),
+        '.mltemplate.json': OrderedDict(),
+        '.mt.json': OrderedDict(),
+        '.mi.json': OrderedDict(),
+        '.dtex.json': OrderedDict(),
+    }
+    _persistent_app_cache = OrderedDict()
+    _persistent_app_cache_limit = 128
+    _cache_stats = {
+        "transient_hits": 0,
+        "persistent_hits": 0,
+        "misses": 0,
+        "persistent_stores": 0,
+        "persistent_evictions": 0,
+        "parsed_app_hits": 0,
+        "parsed_app_stores": 0,
+        "parsed_app_evictions": 0,
+    }
+    _persistent_family_stats = {
+        '.Material.json': {"hits": 0, "stores": 0, "evictions": 0},
+        '.mlsetup.json': {"hits": 0, "stores": 0, "evictions": 0},
+        '.mltemplate.json': {"hits": 0, "stores": 0, "evictions": 0},
+        '.mt.json': {"hits": 0, "stores": 0, "evictions": 0},
+        '.mi.json': {"hits": 0, "stores": 0, "evictions": 0},
+        '.dtex.json': {"hits": 0, "stores": 0, "evictions": 0},
+    }
 
     cachable_types = {
         '.ent.json',
@@ -188,7 +156,11 @@ class JSONTool:
         '.mltemplate.json',
         '.mt.json',
         '.mi.json',
+        '.dtex.json',
+        '.Material.json',
         }
+
+    persistent_cachable_types = frozenset(_persistent_cache_limits)
 
     passthrough_errors = {
         '.ent.json': invalid_json_error,
@@ -206,6 +178,7 @@ class JSONTool:
         '.mltemplate.json': invalid_material_error,
         '.mt.json': invalid_material_error,
         '.mi.json': invalid_material_error,
+        '.dtex.json': invalid_material_error,
         }
 
     @staticmethod
@@ -214,14 +187,13 @@ class JSONTool:
         if not reference:
             return ""
 
-        from .datakrash import DEFAULT_ASSET_EXTENSIONS, DepotAssetIndex
+        from .datakrash import DEFAULT_ASSET_EXTENSIONS, asset_index_for_root
 
         expanded = bpy.path.abspath(str(reference))
         requested = tuple(extensions) or DEFAULT_ASSET_EXTENSIONS
-        for root in roots:
-            if not root:
-                continue
-            index = DepotAssetIndex.cached(
+        supplied_roots = tuple(root for root in roots if root)
+        for root in supplied_roots:
+            index = asset_index_for_root(
                 bpy.path.abspath(str(root)),
                 extensions=requested,
                 warn_missing=warn_missing,
@@ -230,10 +202,15 @@ class JSONTool:
             if resolved:
                 return resolved
 
+        # A caller supplying roots has declared the complete resolution boundary.
+        # Do not create one-off indexes for arbitrary parent folders on a miss.
+        if supplied_roots:
+            return ""
+
         parent = os.path.dirname(expanded)
         if not parent:
             return ""
-        index = DepotAssetIndex.cached(
+        index = asset_index_for_root(
             parent, extensions=requested, warn_missing=warn_missing
         )
         return index.resolve_any(expanded, requested, warn=warn_missing) or ""
@@ -321,13 +298,38 @@ class JSONTool:
         return found_version
 
     @staticmethod
+    def _file_signature(file_path, length=16):
+        try:
+            with open(file_path, 'rb') as handle:
+                return handle.read(length)
+        except OSError:
+            return b''
+
+    @staticmethod
     def load_json(file_path):
         if not os.path.isfile(file_path):
             print(f"File not found: {file_path}")
             return None
 
-        with open(file_path, 'r', encoding='utf-8') as file:
-            return JSONTool.normalize_paths(json.load(file))
+        # utf-8-sig strips a leading BOM when present and is a no-op otherwise.
+        # Several Windows editors and PowerShell redirects emit BOM-prefixed
+        # JSON, which the plain utf-8 codec surfaces as a column-0 decode error.
+        with open(file_path, 'r', encoding='utf-8-sig') as file:
+            try:
+                return JSONTool.normalize_paths(json.load(file))
+            except json.JSONDecodeError as error:
+                signature = JSONTool._file_signature(file_path)
+                if not signature:
+                    detail = "file is empty"
+                elif signature[:4] == b'PK\x03\x04':
+                    detail = "file is a zip archive, not JSON"
+                else:
+                    detail = f"starts with {signature!r}"
+                raise json.JSONDecodeError(
+                    f"{error.msg} in {os.path.abspath(file_path)} "
+                    f"({os.path.getsize(file_path)} bytes, {detail})",
+                    error.doc, error.pos,
+                ) from None
 
     @staticmethod
     def start_caching():
@@ -339,6 +341,90 @@ class JSONTool:
         JSONTool._json_cache.clear()
         JSONTool._entity_cache.clear()
         JSONTool._app_cache.clear()
+
+    @staticmethod
+    def clear_persistent_cache():
+        for cache in JSONTool._persistent_json_caches.values():
+            cache.clear()
+        JSONTool._persistent_app_cache.clear()
+        for key in JSONTool._cache_stats:
+            JSONTool._cache_stats[key] = 0
+        for family in JSONTool._persistent_family_stats.values():
+            for key in family:
+                family[key] = 0
+
+    @staticmethod
+    def cache_stats():
+        families = {
+            extension: {
+                **JSONTool._persistent_family_stats[extension],
+                "entries": len(JSONTool._persistent_json_caches[extension]),
+                "limit": JSONTool._persistent_cache_limits[extension],
+            }
+            for extension in JSONTool._persistent_cache_limits
+        }
+        return {
+            **JSONTool._cache_stats,
+            "transient_entries": len(JSONTool._json_cache),
+            "entity_entries": len(JSONTool._entity_cache),
+            "app_entries": len(JSONTool._app_cache),
+            "persistent_entries": sum(
+                len(cache) for cache in JSONTool._persistent_json_caches.values()
+            ),
+            "persistent_families": families,
+            "parsed_app_entries": len(JSONTool._persistent_app_cache),
+            "parsed_app_limit": JSONTool._persistent_app_cache_limit,
+        }
+
+    @staticmethod
+    def _persistent_cache_get(file_extension, cache_key):
+        cache = JSONTool._persistent_json_caches.get(file_extension)
+        if cache is None:
+            return None
+        cached = cache.get(cache_key)
+        if cached is None:
+            return None
+        cache.move_to_end(cache_key)
+        JSONTool._cache_stats["persistent_hits"] += 1
+        JSONTool._persistent_family_stats[file_extension]["hits"] += 1
+        return copy.deepcopy(cached)
+
+    @staticmethod
+    def _persistent_cache_store(file_extension, cache_key, data):
+        cache = JSONTool._persistent_json_caches.get(file_extension)
+        if cache is None:
+            return
+        cache[cache_key] = copy.deepcopy(data)
+        cache.move_to_end(cache_key)
+        JSONTool._cache_stats["persistent_stores"] += 1
+        JSONTool._persistent_family_stats[file_extension]["stores"] += 1
+        limit = JSONTool._persistent_cache_limits[file_extension]
+        while len(cache) > limit:
+            cache.popitem(last=False)
+            JSONTool._cache_stats["persistent_evictions"] += 1
+            JSONTool._persistent_family_stats[file_extension]["evictions"] += 1
+
+    @staticmethod
+    def _persistent_app_get(cache_key):
+        cached = JSONTool._persistent_app_cache.get(cache_key)
+        if cached is None:
+            return None
+        JSONTool._persistent_app_cache.move_to_end(cache_key)
+        JSONTool._cache_stats["parsed_app_hits"] += 1
+        # ParsedApp is an immutable pipeline view. Returning it directly avoids cloning
+        # the complete appearance graph on every top-level entity import.
+        return cached
+
+    @staticmethod
+    def _persistent_app_store(cache_key, parsed):
+        cache = JSONTool._persistent_app_cache
+        # Do not also persist the raw APP document; the parsed view is the durable form.
+        cache[cache_key] = parsed
+        cache.move_to_end(cache_key)
+        JSONTool._cache_stats["parsed_app_stores"] += 1
+        while len(cache) > JSONTool._persistent_app_cache_limit:
+            cache.popitem(last=False)
+            JSONTool._cache_stats["parsed_app_evictions"] += 1
 
     @staticmethod
     def create_error(suppress_verbose, base_name, file_extension, specific_error, error_Messages=None):
@@ -356,9 +442,23 @@ class JSONTool:
             JSONTool.create_error(suppress_verbose, base_name, file_extension, specific_error, errorMessages)
 
     @staticmethod
-    def _load_streaming_sector_data(data):
-        root = data['Data']['RootChunk']
-        return root['nodeData']['Data'], root['nodes']
+    def _parse_streaming_sector_data(data, filepath=''):
+        from .importers.sector.parser import parse_sector_document
+        return parse_sector_document(data, source_path=filepath)
+
+    @staticmethod
+    def _load_streaming_sector_data(data, filepath=''):
+        return JSONTool._parse_streaming_sector_data(
+            data,
+            filepath,
+        ).legacy_jsonload()
+
+    @staticmethod
+    def load_sector(filepath, errorMessages=None):
+        data = JSONTool._load_raw_json(filepath, errorMessages)
+        if data is None:
+            return None
+        return JSONTool._parse_streaming_sector_data(data, filepath)
 
     @staticmethod
     def _load_material_data(data, suppress_verbose):
@@ -381,6 +481,11 @@ class JSONTool:
             )
 
     @staticmethod
+    def resource_cache_key(filepath):
+        """Return the canonical path/version key used by JSONTool caches."""
+        return JSONTool._parsed_cache_key(filepath)
+
+    @staticmethod
     def _parsed_cache_key(filepath):
         abs_path = os.path.abspath(filepath)
         try:
@@ -391,7 +496,7 @@ class JSONTool:
         mtime_ns = getattr(stat_result, 'st_mtime_ns', None)
         if mtime_ns is None:
             mtime_ns = int(stat_result.st_mtime * 1_000_000_000)
-        return abs_path, mtime_ns
+        return abs_path, mtime_ns, int(stat_result.st_size)
 
     @staticmethod
     def _load_raw_json(filepath, errorMessages=None):
@@ -412,15 +517,22 @@ class JSONTool:
         is_refitter = base_name.endswith('.refitter.zip')
         is_cacheable = file_extension in JSONTool.cachable_types
         is_cached = is_cacheable and JSONTool._use_cache and cache_key in JSONTool._json_cache
+        persistent_cacheable = file_extension in JSONTool.persistent_cachable_types
 
         if is_cached:
+            JSONTool._cache_stats["transient_hits"] += 1
             data = JSONTool._json_cache[cache_key]
         else:
-            if not suppress_verbose:
-                print(f"  Parsing json file {base_name}")
-            data = JSONTool.jsonloads(load_zip(filepath)) if is_refitter else JSONTool.load_json(filepath)
-            if data is None:
-                return None
+            data = JSONTool._persistent_cache_get(file_extension, cache_key) if persistent_cacheable else None
+            if data is not None:
+                is_cached = True
+            else:
+                JSONTool._cache_stats["misses"] += 1
+                if not suppress_verbose:
+                    print(f"  Parsing json file {base_name}")
+                data = JSONTool.jsonloads(load_zip(filepath)) if is_refitter else JSONTool.load_json(filepath)
+                if data is None:
+                    return None
             if is_cacheable and JSONTool._use_cache:
                 JSONTool._json_cache[cache_key] = data
 
@@ -429,6 +541,8 @@ class JSONTool:
         JSONTool._create_error_if_needed(
             has_error, suppress_verbose, base_name, file_extension, specific_error, errorMessages
             )
+        if persistent_cacheable and not is_cached and not has_error:
+            JSONTool._persistent_cache_store(file_extension, cache_key, data)
         return data
 
     @staticmethod
@@ -500,6 +614,12 @@ class JSONTool:
         if JSONTool._use_cache and cache_key in JSONTool._app_cache:
             return JSONTool._app_cache[cache_key]
 
+        persistent = JSONTool._persistent_app_get(cache_key)
+        if persistent is not None:
+            if JSONTool._use_cache:
+                JSONTool._app_cache[cache_key] = persistent
+            return persistent
+
         data = JSONTool._load_raw_json(filepath, errorMessages)
         if data is None:
             return None
@@ -546,6 +666,7 @@ class JSONTool:
                 light_channels_by_appearance_name=light_by_name,
                 )
 
+        JSONTool._persistent_app_store(cache_key, parsed)
         if JSONTool._use_cache:
             JSONTool._app_cache[cache_key] = parsed
         return parsed
@@ -569,7 +690,7 @@ class JSONTool:
         suppress_verbose = cp77_addon_prefs.non_verbose
         match file_extension:
             case '.streamingsector.json':
-                return JSONTool._load_streaming_sector_data(data)
+                return JSONTool._load_streaming_sector_data(data, filepath)
 
             case '.Material.json':
                 return JSONTool._load_material_data(data, suppress_verbose)

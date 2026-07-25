@@ -1510,33 +1510,19 @@ def _load_json_document(filepath):
     except RecursionError:
         return _loads_iterative(text)
 
-def import_chains(filepath, addon_state):
-    if not os.path.exists(filepath):
-        raise FileNotFoundError(f"File not found: {filepath}")
-    data = _load_json_document(filepath)
-
+def import_chains_data(data, addon_state):
     is_wolvenkit = (
         isinstance(data, dict)
         and isinstance(data.get("Header"), dict)
         and "WolvenKitVersion" in data["Header"]
     )
-    is_editor = (
-        isinstance(data, dict)
-        and (
-            data.get("format") == EDITOR_FORMAT
-            or ("dangleNodes" in data and "version" in data)
-        )
-    )
-    if not is_wolvenkit and not is_editor:
-        raise ValueError("Unsupported JSON format")
+    if not is_wolvenkit:
+        raise ValueError("Expected a WolvenKit animgraph JSON export")
 
     backup = _serialize_editor_state(addon_state)
     _clear_addon_state(addon_state)
     try:
-        if is_wolvenkit:
-            count = _parse_wolvenkit_animgraph(data, addon_state)
-        else:
-            count = _parse_editor_state(data, addon_state)
+        count = _parse_wolvenkit_animgraph(data, addon_state)
 
         arm_obj = getattr(addon_state, "id_data", None)
         space_errors = spaces.armature_space_errors(arm_obj)
@@ -1564,7 +1550,7 @@ def import_chains(filepath, addon_state):
         raise
 
 
-def export_chains(filepath, addon_state):
-    with open(filepath, "w", encoding="utf-8") as file:
-        json.dump(_serialize_editor_state(addon_state), file, indent=2)
-
+def import_chains(filepath, addon_state):
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(f"File not found: {filepath}")
+    return import_chains_data(_load_json_document(filepath), addon_state)

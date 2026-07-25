@@ -1,16 +1,3 @@
-"""
-Dangle Physics Viewport Overlay — draws constraints, capsules, cones, velocity.
-
-Key fixes vs. original:
-  * Cone visualization uses coneTransformLS from authored data
-  * Cone axis is derived from attachment bone × coneTransformLS → X-axis
-  * Links draw correct direction (bone1 → bone2)
-  * Global visibility toggles AND-ed with per-chain toggles
-  * Body collision shapes use full shape rotation (transformLS.Rotation)
-    for correct capsule axis orientation — matches engine line 239:
-    shapeTransformMS = boneTransformMS × shapeLocationLS
-"""
-
 import math
 
 import bpy

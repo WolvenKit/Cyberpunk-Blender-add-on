@@ -2,7 +2,7 @@ from ..main.common import *
 
 from .mat_common import add_group_node, create_param_value_nodes, get_or_build_node_group
 
-from .scalar_params import scalar_parameter_data, scalar_value
+from .scalar_params import component_value, scalar_parameter_data, scalar_value
 
 _VALUE_PARAM_SPECS = (
     ("BlinkingSpeed", "blinkingSpeed", 450, "BlinkingSpeed", 0.0),
@@ -278,13 +278,13 @@ class ParallaxScreen:
         if "HSV_Mod" in Data:
             hsv_mod = Data["HSV_Mod"]
             HSV_Mod_w = CreateShaderNodeValue(
-                CurMat, scalar_value(hsv_mod.get("W"), 0.0, "W"), -2000, 150, "HSV_Mod.w"
+                CurMat, component_value(hsv_mod, "W", 0.0), -2000, 150, "HSV_Mod.w"
                 )
             HSV_Mod_x = CreateShaderNodeValue(
-                CurMat, scalar_value(hsv_mod.get("X"), 0.0, "X"), -2000, -950, "HSV_Mod.x"
+                CurMat, component_value(hsv_mod, "X", 0.0), -2000, -950, "HSV_Mod.x"
                 )
             HSV_Mod_y = CreateShaderNodeValue(
-                CurMat, scalar_value(hsv_mod.get("Y"), 0.0, "Y"), -2000, -900, "HSV_Mod.y"
+                CurMat, component_value(hsv_mod, "Y", 0.0), -2000, -900, "HSV_Mod.y"
                 )
 
         if "ScanlinesDensity" in Data:
@@ -312,15 +312,15 @@ class ParallaxScreen:
         else:
             scanlinesDensity = CreateShaderNodeValue(CurMat, 1.0, -2000, 50, "ScanlinesDensity")
 
-        intensity = Data.get("IntensityPerLayer") or {}
+        intensity = Data.get("IntensityPerLayer")
         intensityPerLayer_x = CreateShaderNodeValue(
-            CurMat, scalar_value(intensity.get("X"), 1.0, "X"), -2000, -50, "IntensityPerLayer.x"
+            CurMat, component_value(intensity, "X", 1.0), -2000, -50, "IntensityPerLayer.x"
             )
         intensityPerLayer_y = CreateShaderNodeValue(
-            CurMat, scalar_value(intensity.get("Y"), 1.0, "Y"), -2000, -100, "IntensityPerLayer.y"
+            CurMat, component_value(intensity, "Y", 1.0), -2000, -100, "IntensityPerLayer.y"
             )
         intensityPerLayer_z = CreateShaderNodeValue(
-            CurMat, scalar_value(intensity.get("Z"), 1.0, "Z"), -2000, -150, "IntensityPerLayer.z"
+            CurMat, component_value(intensity, "Z", 1.0), -2000, -150, "IntensityPerLayer.z"
             )
 
         emissiveColor = None

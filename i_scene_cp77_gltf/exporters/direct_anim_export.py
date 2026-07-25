@@ -20,7 +20,9 @@ from ..main.animation_glb import (
     ANIMATION_EXTRAS_SNAPSHOT_KEY,
     FPS,
     RIG_SPACE_CONTRACT,
+    SKIN_EXTRAS_SNAPSHOT_KEY,
     SOURCE_REST_SPACE_CONTRACT,
+    SOURCE_REST_SNAPSHOT_KEY,
     blender_relative_to_gltf as _blender_relative_to_gltf,
     compose_trs_batch,
     decompose_trs_batch as _decompose_trs_batch,
@@ -226,8 +228,14 @@ def _ordered_track_names(armature, skin: dict | None = None) -> list[str]:
         return [str(name) for name in track_names]
     return rig_track_names(armature)
 
-def _source_rest_relative_snapshot(armature, source_names: tuple[str, ...]):
-    snapshot = active_animation_source_rest(armature)
+def _source_rest_relative_snapshot(
+    armature,
+    source_names: tuple[str, ...],
+    action=None,
+):
+    snapshot = _json_snapshot(action, SOURCE_REST_SNAPSHOT_KEY)
+    if not snapshot:
+        snapshot = active_animation_source_rest(armature)
     if not snapshot or snapshot.get("space") != SOURCE_REST_SPACE_CONTRACT:
         return None
     names = tuple(str(name) for name in snapshot.get("boneNames", ()))
@@ -286,7 +294,7 @@ def _derive_parent_indices(target_bones: tuple[Any, ...]) -> tuple[int, ...]:
     return tuple(parents)
 
 
-def build_skeleton_export_binding(armature) -> SkeletonExportBinding:
+def build_skeleton_export_binding(armature, action=None) -> SkeletonExportBinding:
     if armature is None or getattr(armature, "type", None) != "ARMATURE":
         raise DirectAnimationExportError("Animation export requires one armature object.")
     contract = rig_space_contract(armature)
@@ -295,7 +303,9 @@ def build_skeleton_export_binding(armature) -> SkeletonExportBinding:
             "The selected armature was not imported with the supported read_rig coordinate contract."
         )
 
-    snapshot = active_animation_skin(armature)
+    snapshot = _json_snapshot(action, SKIN_EXTRAS_SNAPSHOT_KEY)
+    if not snapshot:
+        snapshot = active_animation_skin(armature)
     source_names_value = _sequence_plain(snapshot.get("boneNames"))
     if not source_names_value:
         raise DirectAnimationExportError(
@@ -359,7 +369,11 @@ def build_skeleton_export_binding(armature) -> SkeletonExportBinding:
         parent_indices = _derive_parent_indices(target_bones)
     _validate_parent_indices(source_names, parent_indices)
 
-    rest_relative_blender = _source_rest_relative_snapshot(armature, source_names)
+    rest_relative_blender = _source_rest_relative_snapshot(
+        armature,
+        source_names,
+        action=action,
+    )
     uses_source_rest_snapshot = rest_relative_blender is not None
     if rest_relative_blender is None:
         model_matrices = np.asarray(
@@ -584,20 +598,78 @@ def _gltf_times_from_frames(frames, action_start: float) -> np.ndarray:
             "Animation contains keys before its frame range start."
         )
     frame_offsets = np.maximum(frame_offsets, 0.0)
-    encoded = np.asarray(frame_offsets / FPS, dtype=np.float32)
-    overshoot = encoded.astype(np.float64) * FPS > frame_offsets + 1e-12
-    if np.any(overshoot):
-        encoded[overshoot] = np.nextafter(
-            encoded[overshoot],
-            np.float32(-np.inf),
-            dtype=np.float32,
+    # glTF stores animation input accessors as float32 seconds. Encode by normal
+    # round-to-nearest float32 conversion; forcing every value downward changes a
+    # large fraction of untouched WolvenKit key times by one ULP and can shift the
+    # final sample relative to track/event timing.
+    return np.asarray(frame_offsets / FPS, dtype=np.float32).astype(np.float64)
+
+
+def _source_track_curve(entries):
+    if not entries:
+        return None
+    frames = np.asarray(
+        [float(entry.get("time", 0.0)) * FPS for entry in entries],
+        dtype=np.float64,
+    )
+    values = np.asarray(
+        [float(entry.get("value", 0.0)) for entry in entries],
+        dtype=np.float64,
+    )
+    order = np.argsort(frames, kind="stable")
+    frames = frames[order]
+    values = values[order]
+    if len(frames) > 1:
+        _, reverse_indices = np.unique(frames[::-1], return_index=True)
+        keep = np.sort(len(frames) - 1 - reverse_indices)
+        frames = frames[keep]
+        values = values[keep]
+    lower = np.floor(frames)
+    upper = np.ceil(frames)
+    aligned_frames = np.unique(
+        np.where((upper - frames) < (frames - lower), upper, lower)
+    )
+    aligned_values = np.interp(aligned_frames, frames, values)
+    if len(aligned_values) > 1 and np.all(
+        np.abs(aligned_values - aligned_values[0]) <= 1e-10
+    ):
+        aligned_frames = aligned_frames[:1]
+        aligned_values = aligned_values[:1]
+    return aligned_frames, aligned_values
+
+
+def _track_curve_matches_source(
+    frames,
+    values,
+    source_dynamic,
+    source_const,
+):
+    expected = _source_track_curve(source_dynamic)
+    if expected is None and source_const is not None:
+        expected = (
+            np.asarray((0.0,), dtype=np.float64),
+            np.asarray((float(source_const.get("value", 0.0)),), dtype=np.float64),
         )
-    return encoded.astype(np.float64)
+    if expected is None:
+        return False
+    expected_frames, expected_values = expected
+    return (
+        frames.shape == expected_frames.shape
+        and values.shape == expected_values.shape
+        and np.allclose(frames, expected_frames, rtol=0.0, atol=1e-5)
+        and np.allclose(values, expected_values, rtol=0.0, atol=1e-6)
+    )
 
 
-def _track_payload_from_fcurves(action, armature):
-    """Serialize live track FCurves using skin.extras.trackNames as the index map."""
-    track_names = _ordered_track_names(armature)
+def _track_payload_from_fcurves(
+    action,
+    armature,
+    source_track_keys=None,
+    source_const_track_keys=None,
+    skin_extras=None,
+):
+    """Serialize live track FCurves using this action's source track-name map."""
+    track_names = _ordered_track_names(armature, skin=skin_extras)
     if len(set(track_names)) != len(track_names):
         raise DirectAnimationExportError(
             "The animation skin extras contain duplicate trackNames."
@@ -626,6 +698,24 @@ def _track_payload_from_fcurves(action, armature):
     action_start = float(action.frame_range[0])
     track_keys = []
     const_track_keys = []
+    source_track_keys = [
+        copy.deepcopy(entry)
+        for entry in (source_track_keys or ())
+        if isinstance(entry, dict)
+    ]
+    source_const_track_keys = [
+        copy.deepcopy(entry)
+        for entry in (source_const_track_keys or ())
+        if isinstance(entry, dict)
+    ]
+    source_dynamic_by_index = {}
+    for entry in source_track_keys:
+        source_dynamic_by_index.setdefault(int(entry.get("trackIndex", -1)), []).append(entry)
+    source_const_by_index = {
+        int(entry.get("trackIndex", -1)): entry
+        for entry in source_const_track_keys
+    }
+    emitted_indices = set()
     for track_index, curve in indexed_curves:
         points = curve.keyframe_points
         if not len(points):
@@ -637,18 +727,36 @@ def _track_payload_from_fcurves(action, armature):
         order = np.argsort(frames, kind="stable")
         frames = frames[order]
         values = values[order]
+        relative_frames = frames - action_start
+        source_entries = source_dynamic_by_index.get(track_index, ())
+        source_const = source_const_by_index.get(track_index)
+        if _track_curve_matches_source(
+            relative_frames,
+            values,
+            source_entries,
+            source_const,
+        ):
+            if source_entries:
+                track_keys.extend(copy.deepcopy(source_entries))
+            elif source_const is not None:
+                const_track_keys.append(copy.deepcopy(source_const))
+            emitted_indices.add(track_index)
+            continue
 
         if np.all(np.abs(values - values[0]) <= 1e-9):
             const_track_keys.append(
                 {
                     "trackIndex": int(track_index),
-                    "time": 0.0,
+                    "time": float(source_const.get("time", 0.0))
+                    if source_const is not None
+                    else 0.0,
                     "value": float(values[0]),
                 }
             )
+            emitted_indices.add(track_index)
             continue
 
-        for frame, value in zip(frames, values):
+        for key_index, (frame, value) in enumerate(zip(frames, values)):
             relative_frame = float(frame) - action_start
             if relative_frame < -1e-7:
                 raise DirectAnimationExportError(
@@ -656,13 +764,25 @@ def _track_payload_from_fcurves(action, armature):
                     f"{track_names[track_index]!r} contains a key before its "
                     "frame range start."
                 )
+            time_value = max(0.0, relative_frame) / FPS
+            if key_index < len(source_entries):
+                source_time = float(source_entries[key_index].get("time", time_value))
+                if abs(source_time * FPS - relative_frame) <= 1e-3:
+                    time_value = source_time
             track_keys.append(
                 {
                     "trackIndex": int(track_index),
-                    "time": max(0.0, relative_frame) / FPS,
+                    "time": time_value,
                     "value": float(value),
                 }
             )
+        emitted_indices.add(track_index)
+    for entry in source_const_track_keys:
+        if int(entry.get("trackIndex", -1)) not in emitted_indices:
+            const_track_keys.append(entry)
+    for entry in source_track_keys:
+        if int(entry.get("trackIndex", -1)) not in emitted_indices:
+            track_keys.append(entry)
     return track_keys, const_track_keys
 
 
@@ -733,6 +853,7 @@ def _direct_integer_array(value, action_name: str, key: str) -> list[int]:
 
 def _animation_extras(action, armature, export_tracks: bool = True) -> dict:
     """Prepare and serialize the individual Action properties used by CP77."""
+    source_extras = _json_snapshot(action, ANIMATION_EXTRAS_SNAPSHOT_KEY)
     # Preserve the legacy pre-export contract. Defaults are written to the
     # Action itself because every property is part of the editable round trip.
     schema = action.get("schema") if "schema" in action else None
@@ -771,16 +892,46 @@ def _animation_extras(action, armature, export_tracks: bool = True) -> dict:
             f"{action.name!r}: {error}"
         )
 
-    if "animEvents" not in action:
-        action["animEvents"] = []
-
     # The direct writer controls its extras explicitly, so internal properties
     # cannot leak into the GLB and do not need to be deleted from the Action.
-    track_keys, const_track_keys = _track_payload_from_fcurves(action, armature)
+    action_skin_extras = _json_snapshot(action, SKIN_EXTRAS_SNAPSHOT_KEY)
+    if not action_skin_extras:
+        action_skin_extras = active_animation_skin(armature)
+    if export_tracks:
+        track_keys, const_track_keys = _track_payload_from_fcurves(
+            action,
+            armature,
+            source_track_keys=source_extras.get(
+                "trackKeys", action.get("trackKeys", ())
+            ),
+            source_const_track_keys=source_extras.get(
+                "constTrackKeys",
+                action.get("constTrackKeys", ()),
+            ),
+            skin_extras=action_skin_extras,
+        )
+    else:
+        # Keep the imported payload intact but do not rebuild it from live float
+        # FCurves. This makes the option non-destructive for untouched clips.
+        track_keys = copy.deepcopy(
+            source_extras.get("trackKeys", action.get("trackKeys", ())) or []
+        )
+        const_track_keys = copy.deepcopy(
+            source_extras.get(
+                "constTrackKeys", action.get("constTrackKeys", ())
+            ) or []
+        )
     action["trackKeys"] = track_keys
     action["constTrackKeys"] = const_track_keys
+    if "animEvents" in action:
+        event_payload = _direct_event_array(action["animEvents"], action.name)
+        if source_extras.get("animEvents") is None and not event_payload:
+            event_payload = None
+    else:
+        event_payload = copy.deepcopy(source_extras.get("animEvents", []))
 
-    extras = {
+    extras = copy.deepcopy(source_extras)
+    extras.update({
         "schema": _idprop_plain(action["schema"]),
         "animationType": str(action["animationType"]),
         "rootMotionType": str(action["rootMotionType"]),
@@ -797,8 +948,8 @@ def _animation_extras(action, armature, export_tracks: bool = True) -> dict:
             "fallbackFrameIndices",
         ),
         "optimizationHints": _idprop_plain(action["optimizationHints"]),
-        "animEvents": _direct_event_array(action["animEvents"], action.name),
-    }
+        "animEvents": event_payload,
+    })
 
     if not isinstance(extras["schema"], dict):
         raise DirectAnimationExportError(
@@ -809,10 +960,6 @@ def _animation_extras(action, armature, export_tracks: bool = True) -> dict:
             f"Action {action.name!r} property 'optimizationHints' is not an object."
         )
 
-    # Remove only the abandoned duplicate snapshot. Individual Action
-    # properties above remain authoritative and untouched.
-    if ANIMATION_EXTRAS_SNAPSHOT_KEY in action:
-        del action[ANIMATION_EXTRAS_SNAPSHOT_KEY]
     return extras
 
 
@@ -826,73 +973,143 @@ def _action_has_cp77_payload(action, target_paths: set[str], armature=None) -> b
             return True
     if any(key in action for key in _ANIMATION_DEFAULTS):
         return True
-    # Recovery only: actions from the abandoned build are admitted once so
-    # _animation_extras can restore the individual properties and delete it.
     return bool(action.get(ANIMATION_EXTRAS_SNAPSHOT_KEY))
 
 
-
-
-
-def _actions_for_export(
-    armature,
-    binding,
-    active_action_only=False,
-    selected_action_names=None,
-):
-    animation_data = getattr(armature, "animation_data", None)
-    if active_action_only:
-        action = getattr(animation_data, "action", None)
-        if action is None:
-            raise DirectAnimationExportError("The selected armature has no active action.")
-        return [action]
-
-    target_paths = set()
+def _binding_target_paths(armature, binding) -> set[str]:
+    paths = set()
     for target_name in binding.target_names:
         pose_bone = armature.pose.bones.get(target_name)
         if pose_bone is None:
             continue
-        target_paths.update(
+        paths.update(
             {
                 pose_bone.path_from_id("location"),
                 pose_bone.path_from_id("rotation_quaternion"),
                 pose_bone.path_from_id("scale"),
             }
         )
-    actions = [
-        action for action in bpy.data.actions
-        if _action_has_cp77_payload(action, target_paths, armature)
-    ]
-    if not actions:
+    return paths
+
+
+def _bindings_match(left, right) -> bool:
+    if left.source_names != right.source_names:
+        return False
+    if left.parent_indices != right.parent_indices:
+        return False
+    if _idprop_plain(left.skin_extras) != _idprop_plain(right.skin_extras):
+        return False
+    return bool(
+        np.allclose(
+            left.rest_relative_blender,
+            right.rest_relative_blender,
+            rtol=0.0,
+            atol=1e-7,
+        )
+    )
+
+
+def _binding_for_action(armature, action):
+    binding = build_skeleton_export_binding(armature, action=action)
+    target_paths = _binding_target_paths(armature, binding)
+    if not _action_has_cp77_payload(action, target_paths, armature):
+        raise DirectAnimationExportError(
+            f"Action {action.name!r} has no CP77 animation payload for this armature."
+        )
+    return binding
+
+
+def _actions_for_export(
+    armature,
+    active_action_only=False,
+    selected_action_names=None,
+):
+    animation_data = getattr(armature, "animation_data", None)
+    active_action = getattr(animation_data, "action", None)
+
+    if active_action_only:
+        if active_action is None:
+            raise DirectAnimationExportError("The selected armature has no active action.")
+        _binding_for_action(armature, active_action)
+        return [active_action]
+
+    if selected_action_names is not None:
+        requested_names = list(
+            dict.fromkeys(str(name) for name in selected_action_names if name)
+        )
+        if not requested_names:
+            raise DirectAnimationExportError("No actions were selected for export.")
+        actions = []
+        missing = []
+        incompatible = []
+        for name in requested_names:
+            action = bpy.data.actions.get(name)
+            if action is None:
+                missing.append(name)
+                continue
+            try:
+                _binding_for_action(armature, action)
+            except DirectAnimationExportError:
+                incompatible.append(name)
+                continue
+            actions.append(action)
+        if missing or incompatible:
+            details = []
+            if missing:
+                details.append("missing: " + ", ".join(missing))
+            if incompatible:
+                details.append("incompatible: " + ", ".join(incompatible))
+            raise DirectAnimationExportError(
+                "Selected actions could not be exported (" + "; ".join(details) + ")."
+            )
+        return actions
+
+    compatible = []
+    for action in bpy.data.actions:
+        try:
+            binding = _binding_for_action(armature, action)
+        except DirectAnimationExportError:
+            continue
+        compatible.append((action, binding))
+    if not compatible:
         raise DirectAnimationExportError(
             "No compatible CP77 actions were found for the selected armature."
         )
 
-    if selected_action_names is not None:
-        requested_names = list(dict.fromkeys(str(name) for name in selected_action_names if name))
-        if not requested_names:
-            raise DirectAnimationExportError("No actions were selected for export.")
-        by_name = {action.name: action for action in actions}
-        missing = [name for name in requested_names if name not in by_name]
-        if missing:
-            raise DirectAnimationExportError(
-                "Selected actions are no longer compatible or no longer exist: "
-                + ", ".join(missing)
-            )
-        actions = [by_name[name] for name in requested_names]
-
-    return actions
+    anchor_index = 0
+    if active_action is not None:
+        for index, (action, _) in enumerate(compatible):
+            if action is active_action:
+                anchor_index = index
+                break
+    anchor_binding = compatible[anchor_index][1]
+    # One glTF skin is shared by every animation in a .anims.glb. Only return
+    # actions from the active action's source binding so importing a facial set
+    # after a locomotion set does not make the default export mix both rigs.
+    return [
+        action
+        for action, binding in compatible
+        if _bindings_match(anchor_binding, binding)
+    ]
 
 
 def compatible_actions_for_export(armature):
-    """Return the actions accepted by the direct exporter for one armature."""
+    """Return the active source-binding group accepted by the direct exporter."""
     if bpy is None:
         raise RuntimeError("Blender is required for action discovery.")
-    binding = build_skeleton_export_binding(armature)
-    return tuple(_actions_for_export(armature, binding))
+    return tuple(_actions_for_export(armature))
 
 
 def _animation_duration_frames(action, extras: dict, action_start: float) -> float:
+    imported_duration_seconds = action.get("cp77_direct_anim_duration_seconds")
+    try:
+        # Pose sampler duration and float-track timing are independent in WolvenKit
+        # GLBs. Some untouched clips deliberately contain trackKeys later than the
+        # final pose key, so the imported sampler duration must remain authoritative.
+        return max(0.0, float(imported_duration_seconds) * FPS)
+    except (TypeError, ValueError):
+        pass
+
     try:
         frame_end = float(action.frame_range[1])
     except (AttributeError, TypeError, ValueError):
@@ -905,6 +1122,8 @@ def _animation_duration_frames(action, extras: dict, action_start: float) -> flo
     except (TypeError, ValueError):
         pass
 
+    # Legacy/manually-created actions have no exact source sampler duration. Keep
+    # their historical behavior by ensuring float-track keys are still representable.
     for entry in extras.get("trackKeys", ()) or ():
         if not isinstance(entry, dict):
             continue
@@ -1079,15 +1298,23 @@ def build_direct_animation_glb(
 ):
     if bpy is None:
         raise RuntimeError("Blender is required for direct animation export.")
-    binding = build_skeleton_export_binding(armature)
-    builder = GLBBuilder()
-    nodes, skin = build_gltf_skeleton(binding, builder)
     actions = _actions_for_export(
         armature,
-        binding,
         active_action_only=active_action_only,
         selected_action_names=selected_action_names,
     )
+    binding = build_skeleton_export_binding(armature, action=actions[0])
+    for action in actions[1:]:
+        action_binding = build_skeleton_export_binding(armature, action=action)
+        if not _bindings_match(binding, action_binding):
+            raise DirectAnimationExportError(
+                "The selected actions originate from different animation skins or "
+                "source rest poses. A .anims.glb has one shared skin; export each "
+                "source action set separately."
+            )
+
+    builder = GLBBuilder()
+    nodes, skin = build_gltf_skeleton(binding, builder)
     animations = [
         build_animation_document(action, armature, binding, builder, export_tracks)
         for action in actions

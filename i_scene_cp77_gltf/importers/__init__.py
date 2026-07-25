@@ -2,7 +2,7 @@ from bpy.props import (BoolProperty, CollectionProperty, EnumProperty, IntProper
 from bpy.types import (Operator, OperatorFileListElement, TOPBAR_MT_file_import)
 from bpy_extras.io_utils import ImportHelper
 
-from .entity_import import *
+from .entity_import import EntityImportRequest, import_entity
 from .import_with_materials import *
 from .npz_import import (
     CP77CharacterShapeProps, CP77_OT_LoadBaseCharacter, CP77_OT_NpzImportMesh, CP77_OT_NpzImportShapeKeys,
@@ -191,6 +191,21 @@ class CP77EntityImport(Operator, ImportHelper):
         name="Include Collision Components", default=False,
         description="Use this option to import entColliderComponent and entSimpleColliderComponent"
         )
+    import_occluders: BoolProperty(
+        name="Include Static Occluders", default=False,
+        description="Import entStaticOccluderMeshComponent geometry"
+        )
+    import_proxies: BoolProperty(
+        name="Include Appearance Proxies", default=False,
+        description="Import entAppearanceProxyMeshComponent geometry"
+        )
+    include_lights: BoolProperty(
+        name="Import Lights",
+        default=False,
+        description=(
+            "Import entity light components and light-channel components"
+        ),
+        )
     inColl: StringProperty(
         name="Collector to put the imported entity in",
         description="Collector to put the imported entity in",
@@ -338,6 +353,7 @@ class CP77EntityImport(Operator, ImportHelper):
                         break
 
         box = layout.box()
+        box.label(text="Entity Import")
         col = box.column()
         col.prop(props, "with_materials")
         if cp77_addon_prefs.experimental_features:
@@ -350,7 +366,6 @@ class CP77EntityImport(Operator, ImportHelper):
         if props.use_cycles:
             col.prop(props, 'update_gi')
 
-        row = layout.row(align=True)
         if not self.include_collisions:
             self.include_phys = False
             self.include_entCollider = False
@@ -361,13 +376,21 @@ class CP77EntityImport(Operator, ImportHelper):
                 self.include_entCollider = True
                 self._collisions_initialized = True
 
-        row.prop(self, "include_collisions")
-
-        if self.include_collisions:
-            row = layout.row(align=True)
-            row.prop(self, "include_phys")
-            row = layout.row(align=True)
-            row.prop(self, "include_entCollider")
+        header, panel = layout.panel(
+            "cp77_entity_optional_imports",
+            default_closed=True,
+            )
+        header.label(text="Optional Imports")
+        if panel:
+            col = panel.column()
+            col.prop(self, "import_occluders")
+            col.prop(self, "import_proxies")
+            col.prop(self, "include_lights")
+            col.prop(self, "include_collisions")
+            if self.include_collisions:
+                nested = col.column(align=True)
+                nested.prop(self, "include_phys")
+                nested.prop(self, "include_entCollider")
 
     def execute(self, context):
         props = context.scene.cp77_panel_props
@@ -402,15 +425,24 @@ class CP77EntityImport(Operator, ImportHelper):
             apps = selected
 
         print('apps - ', apps)
-        excluded = ""
         bob = self.filepath
         inColl = self.inColl
         # print('Bob - ',bob)
-        importEnt(
-            props.with_materials, bob, apps, excluded, self.include_collisions, self.include_phys,
-            self.include_entCollider, inColl, props.remap_depot,
-            meshes=None, mesh_jsons=None, escaped_path=None, app_path=None, anim_files=None, rigjsons=None
+        import_entity(
+            EntityImportRequest(
+                with_materials=props.with_materials,
+                filepath=bob,
+                appearances=tuple(apps),
+                excluded_meshes=(),
+                include_collisions=self.include_collisions,
+                include_phys=self.include_phys,
+                include_entity_colliders=self.include_entCollider,
+                include_occluders=self.import_occluders,
+                include_proxies=self.import_proxies,
+                include_lights=self.include_lights,
+                parent_collection_name=inColl,
             )
+        )
 
         return {'FINISHED'}
 
@@ -440,11 +472,28 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
         )
     with_lights: BoolProperty(
         name="Import Lights", default=True,
-        description="Import and setup Lights based on worldLightNodes"
+        description=(
+            "Import sector lights and light-related components in nested entities"
+        )
+        )
+    import_foliage: BoolProperty(
+        name="Import Foliage",
+        default=False,
+        description=(
+            "Import foliage populations; foliage-destruction metadata also "
+            "requires Import Collisions"
+        ),
+        )
+    import_effects: BoolProperty(
+        name="Import Effects",
+        default=False,
+        description="Import particle and effect nodes",
         )
     import_proxies: BoolProperty(
         name="Import Proxy Meshes", default=False,
-        description="Import proxy mesh nodes"
+        description=(
+            "Import all proxy mesh nodes, including global water-patch proxies"
+        )
         )
     import_acoustics: BoolProperty(
         name="Import Acoustic Data", default=False,
@@ -462,6 +511,13 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
         name="Import Environment Probes", default=False,
         description="Import reflection probe volumes and resolve environment probe resources"
         )
+    import_world_metadata: BoolProperty(
+        name="Import World Metadata", default=False,
+        description=(
+            "Import ambient and interior areas, light-channel volumes and shapes, "
+            "interior maps, static fog volumes, static sound emitters, and world boundaries"
+            )
+        )
     import_gi: BoolProperty(
         name="Import GI Data", default=False,
         description="Import global illumination nodes, spaces, and GI resources"
@@ -478,17 +534,24 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
         col.prop(self, "am_modding")
         col.prop(props, "with_materials")
 
-        box = layout.box()
-        box.label(text="Optional Sector Data")
-        col = box.column()
-        col.prop(self, "want_collisions")
-        col.prop(self, "with_lights")
-        col.prop(self, "import_proxies")
-        col.prop(self, "import_acoustics")
-        col.prop(self, "import_minimap")
-        col.prop(self, "import_occluders")
-        col.prop(self, "import_environment_probes")
-        col.prop(self, "import_gi")
+        header, panel = layout.panel(
+            "cp77_sector_optional_imports",
+            default_closed=True,
+            )
+        header.label(text="Optional Imports")
+        if panel:
+            col = panel.column()
+            col.prop(self, "want_collisions")
+            col.prop(self, "with_lights")
+            col.prop(self, "import_foliage")
+            col.prop(self, "import_effects")
+            col.prop(self, "import_proxies")
+            col.prop(self, "import_acoustics")
+            col.prop(self, "import_minimap")
+            col.prop(self, "import_occluders")
+            col.prop(self, "import_environment_probes")
+            col.prop(self, "import_world_metadata")
+            col.prop(self, "import_gi")
 
         if cp77_addon_prefs.experimental_features:
             box = layout.box()
@@ -506,11 +569,14 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
             want_collisions=self.want_collisions,
             am_modding=self.am_modding,
             with_lights=self.with_lights,
+            import_foliage=self.import_foliage,
+            import_effects=self.import_effects,
             import_proxies=self.import_proxies,
             import_acoustics=self.import_acoustics,
             import_occluders=self.import_occluders,
             import_minimap=self.import_minimap,
             import_environment_probes=self.import_environment_probes,
+            import_world_metadata=self.import_world_metadata,
             import_gi=self.import_gi,
             )
         return {'FINISHED'}

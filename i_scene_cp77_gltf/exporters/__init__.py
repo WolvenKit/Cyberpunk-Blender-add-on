@@ -244,9 +244,9 @@ class CP77CollectionExport(Operator, ExportHelper):
             description="Applies the modifiers of the objects. Disable this if you have shapekeys."
             )
     export_tracks: BoolProperty(  # pyright: ignore[reportInvalidTypeForm]
-            name="Export Float Tracks",
+            name="Synchronize Float Tracks",
             default=True,
-            description="Transfer Float F-Curves Back to Custom Props for Wolvenkit Import"
+            description="Update imported trackKeys from live Float F-Curves; disable to preserve the source payload unchanged"
             )
 
     def draw(self, context):
@@ -258,7 +258,8 @@ class CP77CollectionExport(Operator, ExportHelper):
         row = box.row(align=True)
         row.prop(self, "export_poses")
         if self.export_poses:
-            row.label(text="Float tracks are included for every exported action.", icon='FCURVE')
+            row = box.row(align=True)
+            row.prop(self, "export_tracks")
             return
 
         row = box.row(align=True)
@@ -304,7 +305,7 @@ class CP77CollectionExport(Operator, ExportHelper):
                 try_fix=self.try_fix,
                 apply_transform=self.apply_transform,
                 apply_modifiers=self.apply_modifiers,
-                export_tracks=True,
+                export_tracks=bool(self.export_tracks),
                 only_visible=self.only_visible,
                 mesh_validation_options=_mesh_validation_options(self),
                 )
@@ -447,9 +448,9 @@ class CP77GLBExport(Operator, ExportHelper):
             description="Applies the modifiers of the objects. Disable this if you have shapekeys."
             )
     export_tracks: BoolProperty(
-            name="Export Float Tracks",
+            name="Synchronize Float Tracks",
             default=True,
-            description="Transfer Float F-Curves Back to Custom Props for Wolvenkit Import"
+            description="Update imported trackKeys from live Float F-Curves; disable to preserve the source payload unchanged"
             )
     action_items: CollectionProperty(type=CP77ActionExportItem)
     action_index: IntProperty(default=0, options={'SKIP_SAVE'})
@@ -497,6 +498,7 @@ class CP77GLBExport(Operator, ExportHelper):
             row.prop(self, "apply_modifiers")
         else:
             direct = box.box()
+            direct.prop(self, "export_tracks")
             direct.label(text="Actions to Export", icon='EXPORT')
             action_box = direct.box()
             selected_count = sum(1 for item in self.action_items if item.export)
@@ -547,12 +549,17 @@ class CP77GLBExport(Operator, ExportHelper):
                 summary = export_anims_glb_direct(
                     self.filepath,
                     armatures[0],
-                    export_tracks=True,
+                    export_tracks=bool(self.export_tracks),
                     selected_action_names=selected_action_names,
                 )
                 self.report(
                     {'INFO'},
-                    f"Directly exported {summary['animation_count']} CP77 actions with float tracks.",
+                    f"Directly exported {summary['animation_count']} CP77 actions"
+                    + (
+                        " with synchronized float tracks."
+                        if self.export_tracks
+                        else " while preserving imported float-track payloads."
+                    ),
                 )
                 return {'FINISHED'}
 

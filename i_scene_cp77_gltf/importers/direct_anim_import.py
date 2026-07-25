@@ -19,15 +19,18 @@ except ImportError:
     Matrix = None
 
 from ..main.animation_glb import (
+    ANIMATION_EXTRAS_SNAPSHOT_KEY,
     BLENDER_BONE_RIGHT_TO_GLTF as _BLENDER_BONE_RIGHT_TO_GLTF,
     FPS,
     GLTF_TO_BLENDER_BONE_RIGHT as _GLTF_TO_BLENDER_BONE_RIGHT,
     GLTF_TO_RED as _GLTF_TO_RED,
+    RED_TO_GLTF as _RED_TO_GLTF,
     RIG_SPACE_CONTRACT,
     SKIN_EXTRAS_SNAPSHOT_KEY,
     SOURCE_REST_SNAPSHOT_KEY,
     SOURCE_REST_SPACE_CONTRACT,
     compose_trs_batch,
+    decompose_trs_batch as _decompose_trs_batch,
     quaternions_wxyz_from_matrices as _quaternions_wxyz_from_matrices,
 )
 from ..main.rig_utils import merged_rig_bone_name
@@ -54,6 +57,13 @@ _COMPONENT_DTYPES = {
     5126: np.dtype("<f4"),
 }
 _SUPPORTED_GLTF_INTERPOLATIONS = frozenset({"LINEAR", "STEP"})
+
+# glTF sampler inputs are stored as float32 seconds. True integer-frame keys pick
+# up only a few millionths of a frame when multiplied by 30, while WolvenKit also
+# emits deliberate near-frame and fractional-frame keys (including offsets around
+# 2.6e-4 frames in unmodified game clips). Keep the tolerance below those authored
+# offsets so import/export does not silently retime the animation.
+_FRAME_SNAP_TOLERANCE = 1e-5
 
 _TYPE_WIDTHS = {
     "SCALAR": 1,
@@ -103,6 +113,7 @@ class SampledAnimation:
     model_matrices: np.ndarray | None
     relative_matrices: np.ndarray
     extras: dict
+    duration_seconds: float = 0.0
     has_scale_channels: bool = False
 
 
@@ -132,6 +143,7 @@ class SparseAnimation:
     extras: dict
     frame_count: int
     source_keypoints: int
+    duration_seconds: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -413,13 +425,10 @@ def build_sampling_context(document: dict, binding: SkeletonBinding) -> Sampling
 def _node_default_trs(node: dict):
     if "matrix" in node:
         matrix = np.asarray(node["matrix"], dtype=np.float64).reshape(4, 4).T
-        translation = matrix[:3, 3].copy()
-        columns = matrix[:3, :3]
-        scale = np.linalg.norm(columns, axis=0)
-        rotation_matrix = columns / np.maximum(scale[np.newaxis, :], 1e-15)
-        rotation_wxyz = _quaternions_wxyz_from_matrices(rotation_matrix)[0]
-        rotation_xyzw = rotation_wxyz[[1, 2, 3, 0]]
-        return translation, rotation_xyzw, scale
+        translation, rotation_xyzw, scale = _decompose_trs_batch(
+            matrix.reshape(1, 4, 4)
+        )
+        return translation[0], rotation_xyzw[0], scale[0]
     return (
         np.asarray(node.get("translation", (0.0, 0.0, 0.0)), dtype=np.float64),
         np.asarray(node.get("rotation", (0.0, 0.0, 0.0, 1.0)), dtype=np.float64),
@@ -693,6 +702,26 @@ def _parse_gltf_channel(
             sampler_index=sampler_index,
         )
 
+def _snap_frames_to_grid(frames):
+    """Snap float32 time-quantization noise onto the integer frame grid."""
+    frames = np.asarray(frames, dtype=np.float64)
+    nearest = np.round(frames)
+    snap = np.abs(frames - nearest) <= _FRAME_SNAP_TOLERANCE
+    if snap.any():
+        frames = frames.copy()
+        frames[snap] = nearest[snap]
+    return frames
+
+
+def _clip_end_frame(maximum_time, fps: float = FPS) -> int:
+    """Resolve the last frame index for a clip, absorbing float32 time error."""
+    scaled = float(maximum_time) * fps
+    nearest = round(scaled)
+    if abs(scaled - nearest) <= _FRAME_SNAP_TOLERANCE:
+        return max(0, int(nearest))
+    return max(0, int(math.ceil(scaled)))
+
+
 def sample_animation(
     glb: GLBData,
     binding: SkeletonBinding,
@@ -722,7 +751,7 @@ def sample_animation(
     has_scale_channels = any(
         channel.path == "scale" for channel in channel_records
     )
-    end_frame = max(0, int(math.ceil(maximum_time * fps - 1e-7)))
+    end_frame = _clip_end_frame(maximum_time, fps)
     frames = np.arange(end_frame + 1, dtype=np.float64)
     sample_times = frames / fps
     frame_count = len(frames)
@@ -809,6 +838,7 @@ def sample_animation(
         model_matrices=model_blender,
         relative_matrices=relative_blender,
         extras=animation.get("extras") or {},
+        duration_seconds=float(maximum_time),
         has_scale_channels=has_scale_channels,
     )
 
@@ -992,7 +1022,7 @@ def sparse_animation(
                 ):
                     continue
             location_channels[joint_index] = _constant_property_channel(
-                times * fps, transformed, interpolation
+                _snap_frames_to_grid(times * fps), transformed, interpolation
             )
         else:
             alignment_value = (
@@ -1011,7 +1041,7 @@ def sparse_animation(
                 ):
                     continue
             rotation_channels[joint_index] = _constant_property_channel(
-                times * fps, transformed, interpolation
+                _snap_frames_to_grid(times * fps), transformed, interpolation
             )
 
     if pose_base is not None or include_defaults:
@@ -1072,8 +1102,9 @@ def sparse_animation(
         location_channels=tuple(location_channels),
         rotation_channels=tuple(rotation_channels),
         extras=animation.get("extras") or {},
-        frame_count=max(1, int(math.ceil(maximum_time * fps - 1e-7)) + 1),
+        frame_count=max(1, _clip_end_frame(maximum_time, fps) + 1),
         source_keypoints=source_keypoints,
+        duration_seconds=float(maximum_time),
     )
 
 def build_sparse_pose_base(
@@ -1114,16 +1145,12 @@ def build_sparse_pose_base(
     )
 
 
-def _meta_bone_name(name: str) -> str:
-    return merged_rig_bone_name(name)
-
-
 def _resolve_target_bone_names(armature, binding: SkeletonBinding) -> tuple[str, ...]:
     pose_bones = armature.pose.bones
     resolved = []
     used = set()
     for source_name in binding.bone_names:
-        target_name = source_name if pose_bones.get(source_name) is not None else _meta_bone_name(source_name)
+        target_name = source_name if pose_bones.get(source_name) is not None else merged_rig_bone_name(source_name)
         if pose_bones.get(target_name) is None:
             raise UnsupportedDirectAnimation(
                 f"Target armature is missing required bone {source_name!r} "
@@ -1571,6 +1598,11 @@ def _write_sparse_pose_action(
         ) + (time.perf_counter() - pose_started)
 
         metadata_started = time.perf_counter()
+        _store_json_snapshot(
+            action,
+            ANIMATION_EXTRAS_SNAPSHOT_KEY,
+            sparse.extras,
+        )
         add_anim_props(SimpleNamespace(extras=sparse.extras), action)
         timing_totals["metadata"] = timing_totals.get(
             "metadata", 0.0
@@ -1667,6 +1699,11 @@ def _write_pose_action(
         ) + (time.perf_counter() - pose_started)
 
         metadata_started = time.perf_counter()
+        _store_json_snapshot(
+            action,
+            ANIMATION_EXTRAS_SNAPSHOT_KEY,
+            sampled.extras,
+        )
         add_anim_props(SimpleNamespace(extras=sampled.extras), action)
         timing_totals["metadata"] = timing_totals.get(
             "metadata", 0.0
@@ -1705,9 +1742,117 @@ def _write_pose_action(
         raise
 
 
+def _rest_local_trs_red(binding: SkeletonBinding, context: SamplingContext):
+    """Per-joint parent-relative rest as REDengine-space TRS dicts for read_rig.
+
+    The joint's parent-relative glTF rest (accumulating through any intermediate
+    non-joint nodes) is converted to the RED frame with a pure-rotation change of
+    basis. read_rig accumulates these local transforms and applies its bone-local
+    convention, yielding a rest numerically identical to _source_rest_relative_matrices.
+    """
+    relative_gltf = np.stack(
+        [
+            context.joint_default_prefixes[joint_index]
+            @ context.default_local_matrices[node_index]
+            for joint_index, node_index in enumerate(binding.joint_nodes)
+        ]
+    )
+    red_local = _GLTF_TO_RED @ relative_gltf @ _RED_TO_GLTF
+    translations, rotations_xyzw, scales = _decompose_trs_batch(red_local)
+    transforms = [
+        {
+            "Translation": {
+                "X": float(translations[index, 0]),
+                "Y": float(translations[index, 1]),
+                "Z": float(translations[index, 2]),
+            },
+            "Rotation": {
+                "i": float(rotations_xyzw[index, 0]),
+                "j": float(rotations_xyzw[index, 1]),
+                "k": float(rotations_xyzw[index, 2]),
+                "r": float(rotations_xyzw[index, 3]),
+            },
+            "Scale": {
+                "X": float(scales[index, 0]),
+                "Y": float(scales[index, 1]),
+                "Z": float(scales[index, 2]),
+            },
+        }
+        for index in range(len(binding.bone_names))
+    ]
+    return transforms, translations, rotations_xyzw, scales
+
+
+def build_rest_armature_from_binding(
+    binding: SkeletonBinding,
+    context: SamplingContext,
+    *,
+    source_label: str = "",
+    name: str | None = None,
+    assign_shapes: bool = True,
+    model_space_matrices=None,
+):
+    """Construct a read_rig-compatible armature from an anims GLB rest pose.
+
+    Used when an .anims.glb is imported with no target armature selected. The rest is
+    handed to read_rig.create_armature_from_rig_data so the bone-local basis, rig-space
+    contract, and track metadata match a JSON-imported rig. Interactive animation imports
+    retain bone shapes; hidden mesh-source rest armatures may disable them.
+    """
+    if bpy is None or Matrix is None:
+        raise RuntimeError("Blender is required to construct a rest armature.")
+    # read_rig and datashards resolve as siblings under the addon root; adjust the
+    # read_rig import if it lives in a different subpackage than this module.
+    from ..main.datashards import RigData
+    from .read_rig import create_armature_from_rig_data
+
+    skin_extras = binding.skin_extras or {}
+    bone_transforms, translations, rotations_xyzw, scales = _rest_local_trs_red(
+        binding, context
+    )
+    rig_path = str(skin_extras.get("rigPath", "") or "")
+    rig_name = name or (
+        os.path.splitext(os.path.basename(rig_path))[0]
+        if rig_path
+        else "Armature__rest"
+    )
+
+    rig_data = RigData(
+        num_bones=len(binding.bone_names),
+        parent_indices=np.asarray(binding.source_parent_indices, dtype=np.int16),
+        bone_names=list(binding.bone_names),
+        track_names=[str(value) for value in (skin_extras.get("trackNames") or ())],
+        ls_q=np.ascontiguousarray(rotations_xyzw[:, (3, 0, 1, 2)], dtype=np.float32),
+        ls_t=np.ascontiguousarray(translations, dtype=np.float32),
+        ls_s=np.ascontiguousarray(scales, dtype=np.float32),
+        rig_name=rig_name,
+        disable_connect=True,
+        apose_ms=[],
+        apose_ls=[],
+        bone_transforms=bone_transforms,
+        parts=[],
+        rig_extra_tracks=[],
+        reference_tracks=[],
+        cooking_platform="",
+        distance_category_to_lod_map=[],
+        ik_setups=[],
+        level_of_detail_start_indices=[],
+        ragdoll_desc=[],
+        ragdoll_names=[],
+    )
+    return create_armature_from_rig_data(
+        rig_data,
+        "T-Pose",
+        source_rig_file=source_label or rig_path,
+        source_document=None,
+        assign_shapes=assign_shapes,
+        model_space_matrices=model_space_matrices,
+    )
+
+
 def import_anims_glb_to_armature(
     filepath: str,
-    armature,
+    armature=None,
     *,
     import_tracks: bool = True,
     verbose: bool = False,
@@ -1720,13 +1865,19 @@ def import_anims_glb_to_armature(
     parse_seconds = time.perf_counter() - started_at
     setup_started = time.perf_counter()
     binding = build_skeleton_binding(glb.document)
+    reader = AccessorReader(glb)
+    sampling_context = build_sampling_context(glb.document, binding)
+    if armature is None:
+        armature = build_rest_armature_from_binding(
+            binding,
+            sampling_context,
+            source_label=os.path.abspath(filepath),
+        )
     target_names = validate_target_armature(armature, binding)
     animations = glb.document.get("animations", ())
     if not animations:
         raise UnsupportedDirectAnimation("The GLB contains no animations.")
 
-    reader = AccessorReader(glb)
-    sampling_context = build_sampling_context(glb.document, binding)
     target_binding = build_target_binding(
         armature, binding, sampling_context, target_names
     )
@@ -1808,11 +1959,12 @@ def import_anims_glb_to_armature(
 
     try:
         skin_extras = binding.skin_extras
+        source_rest_snapshot = _source_rest_snapshot(binding, target_binding)
         _store_json_snapshot(armature, SKIN_EXTRAS_SNAPSHOT_KEY, skin_extras)
         _store_json_snapshot(
             armature,
             SOURCE_REST_SNAPSHOT_KEY,
-            _source_rest_snapshot(binding, target_binding),
+            source_rest_snapshot,
         )
         if not target_binding.merged_target:
             from ..cyber_props import add_skin_props
@@ -1903,6 +2055,22 @@ def import_anims_glb_to_armature(
             total_track_curves += action_stats["track_curves"]
             total_track_keypoints += action_stats["track_keypoints"]
             total_omitted_zero_tracks += action_stats["omitted_zero_tracks"]
+            # Persist the authoritative clip length so re-export preserves a static
+            # tail even when the trailing keyframes hold a constant pose.
+            action["cp77_direct_anim_frame_count"] = int(clip_frame_count)
+            action["cp77_direct_anim_duration_seconds"] = float(
+                sparse.duration_seconds if sparse is not None else sampled.duration_seconds
+            )
+            # Skin/rest provenance belongs to the Action, not only the armature. A
+            # MetaRig can host clips imported from several .anims.glb files; keeping
+            # these snapshots per action prevents a later import from changing the
+            # skeleton used when an earlier action is exported.
+            _store_json_snapshot(action, SKIN_EXTRAS_SNAPSHOT_KEY, skin_extras)
+            _store_json_snapshot(
+                action,
+                SOURCE_REST_SNAPSHOT_KEY,
+                source_rest_snapshot,
+            )
             created_actions.append(action)
             if verbose and (
                 animation_index == 0

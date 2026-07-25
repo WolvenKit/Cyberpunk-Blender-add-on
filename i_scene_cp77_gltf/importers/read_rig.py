@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import base64
 import copy
 import json
@@ -28,6 +30,9 @@ _SHAPE_SCALE_ROOT = (0.075, 0.075, 0.075)
 _SHAPE_SCALE_WEAPON = (0.0125, 0.0125, 0.0125)
 _SHAPE_SCALE_SMALL = (0.05, 0.05, 0.05)
 _SHAPE_SCALE_LARGE = (0.1, 0.1, 0.1)
+_ROOT_SHAPE_BONES = frozenset(("Root", "Hips", "Trajectory"))
+_WEAPON_SHAPE_BONES = frozenset(("WeaponLeft", "WeaponRight"))
+_SHAPE_BONE_SUFFIXES = ("JNT", "GRP", "IK")
 
 _RIG_SPACE_CONTRACT = "CP77_RE_MODEL_BL_BONE_X_NEGZ_Y_Y_Z_X_V1"
 _RIG_EXPORT_TEMPLATE_KEY = "cp77_rig_export_template_zlib_b64"
@@ -36,10 +41,18 @@ _RIG_IMPORT_MATRIX_KEY = "cp77_rig_import_matrix"
 _RIG_IMPORT_SOURCE_MODEL_KEY = "cp77_rig_import_source_model_matrix"
 _RIG_IMPORT_MATRIX_VERSION = 2
 _SOURCE_DOCUMENT_CACHE = {}
+_RIG_BUILD_SERIAL = 0
+
+
+def _emit_rig_build_phase(
+        phase: str, seconds: float, rig_name: str = '', assign_shapes: bool = True,
+        ):
+    """No-op hook patched by the detachable entity importer audit."""
+    return None
 
 
 def _matrix_to_flat_list(matrix: Matrix) -> list[float]:
-    return [float(matrix[row][column]) for row in range(4) for column in range(4)]
+    return [component for row in matrix for component in row]
 
 
 def _cache_source_document(filepath: str, signature, document: dict) -> None:
@@ -48,6 +61,10 @@ def _cache_source_document(filepath: str, signature, document: dict) -> None:
 
 
 def _source_document_for_filepath(filepath: str) -> dict | None:
+    # GLB-created rest armatures use a binary source path only as provenance.
+    # An export template must come from an actual serialized JSON document.
+    if not filepath or not str(filepath).casefold().endswith((".json", ".zip")):
+        return None
     normalized, signature = _rig_file_signature(filepath)
     cached = _SOURCE_DOCUMENT_CACHE.get(normalized)
     if cached is not None and cached[0] == signature:
@@ -115,7 +132,7 @@ def _attach_rig_export_metadata(arm_obj, source_document: dict | None) -> None:
     source_path = str(arm_data.get('source_rig_file', ''))
     if source_document is None and source_path and ';' not in source_path and os.path.isfile(source_path):
         source_document = _source_document_for_filepath(source_path)
-    document = copy.deepcopy(source_document) if source_document else _minimal_rig_document(source_path)
+    document = source_document if source_document else _minimal_rig_document(source_path)
     try:
         arm_data[_RIG_EXPORT_TEMPLATE_KEY] = _encode_rig_export_template(document)
         arm_data['cp77_rig_export_template_version'] = _RIG_EXPORT_TEMPLATE_VERSION
@@ -126,13 +143,16 @@ def _attach_rig_export_metadata(arm_obj, source_document: dict | None) -> None:
 
 
 def _attach_imported_bone_matrices(arm_obj, source_model_matrices) -> None:
-    for source_index, source_name in enumerate(arm_obj.data.get('boneNames', [])):
-        bone = arm_obj.data.bones.get(str(source_name))
+    arm_data = arm_obj.data
+    bones = arm_data.bones
+    matrix_count = len(source_model_matrices)
+    for source_index, source_name in enumerate(arm_data.get('boneNames', [])):
+        bone = bones.get(str(source_name))
         if bone is None:
             continue
         bone[_RIG_IMPORT_MATRIX_KEY] = _matrix_to_flat_list(bone.matrix_local)
         bone['cp77_rig_import_matrix_version'] = _RIG_IMPORT_MATRIX_VERSION
-        if source_index < len(source_model_matrices):
+        if source_index < matrix_count:
             source_matrix = source_model_matrices[source_index]
             if source_matrix is not None:
                 bone[_RIG_IMPORT_SOURCE_MODEL_KEY] = _matrix_to_flat_list(source_matrix)
@@ -389,10 +409,6 @@ def scale_matrix(s: Vector | tuple | list) -> Matrix:
     return m
 
 
-def meta_bone_name(name: str) -> str:
-    return merged_rig_bone_name(name)
-
-
 def compute_global_transform(
         index: int, transforms: list[dict], parents: np.ndarray, cache: dict[int, Matrix],
         ) -> Matrix:
@@ -602,7 +618,7 @@ def _precise_meta_pose_ls(rig_datas, meta_bone_names: list[str]):
         for source_index, raw_name in enumerate(rig_data.bone_names):
             if source_index >= source_count:
                 break
-            name = meta_bone_name(raw_name)
+            name = merged_rig_bone_name(raw_name)
             if not name or name in seen_in_rig:
                 continue
             seen_in_rig.add(name)
@@ -631,7 +647,7 @@ def _merge_rig_data_into_state(
     """Merge one rig's bones and tracks into the shared state."""
     source_ls = _rig_apose_ls(rig_data)
     source_names = rig_data.bone_names
-    source_meta_names = [meta_bone_name(name) for name in source_names]
+    source_meta_names = [merged_rig_bone_name(name) for name in source_names]
     parent_indices = rig_data.parent_indices.tolist() if hasattr(rig_data.parent_indices, 'tolist') else list(
         rig_data.parent_indices
         )
@@ -827,6 +843,195 @@ def _matrix_is_identity(mat: Matrix, eps: float = 1e-6) -> bool:
     )
 
 
+
+def _coerce_model_space_matrices(values, bone_count: int):
+    if values is None:
+        return None
+    try:
+        sequence = list(values)
+    except TypeError as error:
+        raise ValueError("model_space_matrices must be an iterable of 4x4 matrices") from error
+    if len(sequence) != bone_count:
+        raise ValueError(
+            f"model_space_matrices contains {len(sequence)} entries for {bone_count} bones"
+        )
+    matrices = []
+    for index, value in enumerate(sequence):
+        if isinstance(value, Matrix):
+            matrix = value.copy()
+        else:
+            array = np.asarray(value, dtype=np.float64)
+            if array.shape != (4, 4):
+                raise ValueError(
+                    f"model_space_matrices[{index}] has shape {array.shape}, expected (4, 4)"
+                )
+            matrix = Matrix(tuple(tuple(float(component) for component in row) for row in array))
+        matrices.append(matrix)
+    return tuple(matrices)
+
+
+# Blender edit bones store head, tail and roll in float32. matrix_local's Y axis is
+# recovered as (tail - head) / length, so the perpendicular component of the endpoint
+# rounding error scales as ulp(|head|) / length: a short bone far from the origin cannot
+# represent its own rest orientation. direct_mesh_import compares matrix_local against
+# the authoritative inverse-bind rest within _BIND_MATRIX_TOLERANCE, and a bone below the
+# length this implies makes that comparison unsatisfiable no matter how it is assigned.
+_BIND_PRECISION_TARGET = 1.0e-5
+
+
+def _precision_safe_bone_length(head, requested, target: float = _BIND_PRECISION_TARGET) -> float:
+    """Raise a bone length until float32 head/tail can carry its orientation."""
+    magnitude = max(
+        abs(float(head[0])), abs(float(head[1])), abs(float(head[2])), 1.0e-6
+    )
+    ulp = float(np.spacing(np.float32(magnitude)))
+    return max(float(requested), 2.0 * ulp / target)
+
+
+def _set_edit_bone_model_matrices(
+        edit_bones_by_index,
+        model_matrices,
+        parent_indices,
+        *,
+        default_length: float = 0.01,
+        ) -> None:
+    children = _children_by_parent(parent_indices)
+    heads = tuple(matrix.to_translation() for matrix in model_matrices)
+    for bone_index, matrix in enumerate(model_matrices):
+        distances = []
+        for child_index in children[bone_index]:
+            if child_index >= len(heads):
+                continue
+            distance = (heads[child_index] - heads[bone_index]).length
+            if distance > 1e-6:
+                distances.append(distance)
+        length = max(
+            sum(distances) / len(distances) if distances else default_length,
+            default_length,
+        )
+        length = _precision_safe_bone_length(heads[bone_index], length)
+        edit_bone = edit_bones_by_index[bone_index]
+        edit_bone.matrix = matrix
+        edit_bone.length = length
+
+
+@contextmanager
+def _isolated_armature_edit_session(arm_obj):
+    """Edit one armature in a temporary one-object scene.
+
+    Blender mode transitions evaluate the active view layer. Keeping the build object in
+    an isolated scene prevents edit-mode entry and exit from traversing a populated import
+    scene while leaving the resulting armature datablock and object fully reusable there.
+    """
+    global _RIG_BUILD_SERIAL
+
+    context = bpy.context
+    _RIG_BUILD_SERIAL += 1
+    build_scene = bpy.data.scenes.new(
+        f"__CP77_RIG_BUILD_{_RIG_BUILD_SERIAL:06d}__"
+    )
+    build_view_layer = build_scene.view_layers[0]
+    build_scene.collection.objects.link(arm_obj)
+    arm_obj.hide_viewport = False
+    arm_obj.hide_select = False
+    arm_obj.select_set(True, view_layer=build_view_layer)
+    build_view_layer.objects.active = arm_obj
+
+    timings = {"enter": 0.0, "exit": 0.0}
+    override = {
+        "scene": build_scene,
+        "view_layer": build_view_layer,
+        "collection": build_scene.collection,
+        "object": arm_obj,
+        "active_object": arm_obj,
+        "selected_objects": [arm_obj],
+        "selected_editable_objects": [arm_obj],
+    }
+
+    try:
+        with context.temp_override(**override):
+            phase_started = time.perf_counter()
+            if bpy.context.mode != 'OBJECT':
+                bpy.ops.object.mode_set(mode='OBJECT')
+            if not bpy.ops.object.mode_set.poll():
+                raise RuntimeError(
+                    f"Unable to enter isolated Armature Edit Mode for {arm_obj.name!r}."
+                )
+            bpy.ops.object.mode_set(mode='EDIT')
+            timings["enter"] = time.perf_counter() - phase_started
+            try:
+                yield timings
+            finally:
+                phase_started = time.perf_counter()
+                if bpy.context.mode != 'OBJECT':
+                    bpy.ops.object.mode_set(mode='OBJECT')
+                timings["exit"] = time.perf_counter() - phase_started
+    finally:
+        if getattr(arm_obj, 'mode', 'OBJECT') != 'OBJECT':
+            try:
+                with context.temp_override(**override):
+                    bpy.ops.object.mode_set(mode='OBJECT')
+            except Exception:
+                pass
+        try:
+            arm_obj.select_set(False, view_layer=build_view_layer)
+        except (ReferenceError, RuntimeError):
+            pass
+        try:
+            if build_scene.collection.objects.get(arm_obj.name) is arm_obj:
+                build_scene.collection.objects.unlink(arm_obj)
+        except (ReferenceError, RuntimeError):
+            pass
+        if bpy.data.scenes.get(build_scene.name) is build_scene:
+            bpy.data.scenes.remove(build_scene)
+
+
+def _activate_armature_in_current_view_layer(arm_obj) -> None:
+    context = bpy.context
+    for selected in tuple(context.selected_objects):
+        try:
+            selected.select_set(False)
+        except (ReferenceError, RuntimeError):
+            pass
+    arm_obj.hide_viewport = False
+    arm_obj.hide_select = False
+    try:
+        arm_obj.hide_set(False)
+    except RuntimeError:
+        pass
+    arm_obj.select_set(True)
+    context.view_layer.objects.active = arm_obj
+
+
+def set_armature_model_space_matrices(
+        arm_obj,
+        bone_names,
+        model_space_matrices,
+        ):
+    """Apply authoritative armature-space rest matrices in an isolated edit scene."""
+    if arm_obj is None or getattr(arm_obj, 'type', None) != 'ARMATURE':
+        raise ValueError("set_armature_model_space_matrices requires an armature object")
+    names = tuple(str(name) for name in bone_names)
+    matrices = _coerce_model_space_matrices(model_space_matrices, len(names))
+    original_lengths = {
+        bone.name: max(float(bone.length), 1.0e-5)
+        for bone in arm_obj.data.bones
+    }
+
+    with _isolated_armature_edit_session(arm_obj) as timings:
+        edit_bones = arm_obj.data.edit_bones
+        for name, matrix in zip(names, matrices):
+            edit_bone = edit_bones.get(name)
+            if edit_bone is None:
+                raise ValueError(f"Armature {arm_obj.name!r} is missing edit bone {name!r}")
+            edit_bone.matrix = matrix
+            edit_bone.length = _precision_safe_bone_length(
+                matrix.translation, original_lengths.get(name, 0.01)
+            )
+
+    _attach_imported_bone_matrices(arm_obj, matrices)
+    return timings
+
 def create_armature_from_rig_data(
         rig_data,
         bind_pose: str,
@@ -834,97 +1039,178 @@ def create_armature_from_rig_data(
         source_rig_file: str = '',
         source_document: dict | None = None,
         assign_shapes: bool = True,
+        model_space_matrices=None,
         ):
-    start_time = time.time()
-    rig_col = None
+    start_time = time.perf_counter()
+    rig_name = str(rig_data.rig_name)
+    mode_seconds = 0.0
 
-    print(f'Beginning Import of: {rig_data.rig_name} from: {source_rig_file} Bind Pose: {bind_pose}')
+    print(f'Beginning Import of: {rig_name} from: {source_rig_file} Bind Pose: {bind_pose}')
     context = bpy.context
-    safe_mode_switch('OBJECT')
-    coll_scene = context.scene.collection
-    rig_col = bpy.data.collections.get(rig_data.rig_name)
-    if rig_col is None:
-        rig_col = bpy.data.collections.new(rig_data.rig_name)
-        coll_scene.children.link(rig_col)
-    bpy.ops.object.add(type='ARMATURE', enter_editmode=True, location=(0, 0, 0))
-    arm_obj = context.object
-    if rig_col not in arm_obj.users_collection:
-        rig_col.objects.link(arm_obj)
-    for collection in tuple(arm_obj.users_collection):
-        if collection is not rig_col:
-            collection.objects.unlink(arm_obj)
 
-    arm_data = arm_obj.data
-    arm_obj.name = rig_data.rig_name
-    arm_data.name = f"{rig_data.rig_name}_Data"
+    phase_started = time.perf_counter()
+    safe_mode_switch('OBJECT')
+    mode_seconds += time.perf_counter() - phase_started
+
+    phase_started = time.perf_counter()
+    coll_scene = context.scene.collection
+    rig_col = bpy.data.collections.get(rig_name)
+    if rig_col is None:
+        rig_col = bpy.data.collections.new(rig_name)
+        coll_scene.children.link(rig_col)
+
+    arm_data = bpy.data.armatures.new(f"{rig_name}_Data")
+    arm_obj = bpy.data.objects.new(rig_name, arm_data)
+    rig_col.objects.link(arm_obj)
+
     parent_indices_list = rig_data.parent_indices.tolist()
     arm_data['source_rig_file'] = source_rig_file
     arm_data['cp77_rig_space_contract'] = _RIG_SPACE_CONTRACT
     arm_data['cp77_model_space_axes'] = 'REDengine XYZ; Blender armature space is numerically identical'
     arm_data['cp77_bone_local_basis'] = 'Blender X=-RE Z, Y=RE Y, Z=RE X'
-    arm_data['boneNames'] = rig_data.bone_names
+    arm_data['boneNames'] = list(rig_data.bone_names)
     arm_data['boneParentIndexes'] = parent_indices_list
     arm_data['rig_extra_tracks'] = rig_data.rig_extra_tracks
     arm_data['trackNames'] = list(rig_data.track_names)
     arm_data['referenceTracks'] = list(rig_data.reference_tracks)
+    _emit_rig_build_phase(
+        'object_creation', time.perf_counter() - phase_started, rig_name, assign_shapes
+    )
 
-    edit_bones = arm_data.edit_bones
-    bone_index_map: dict[int, bpy.types.EditBone] = {}
+    override_matrices = _coerce_model_space_matrices(
+        model_space_matrices,
+        len(rig_data.bone_names),
+    )
 
-    for i, name in enumerate(rig_data.bone_names):
-        b = edit_bones.new(name)
-        b.head = Vector((0, 0, 0))
-        b.tail = Vector((0, 0.05, 0))
-        bone_index_map[i] = b
-
-    for i, parent_idx in enumerate(parent_indices_list):
-        child_bone = bone_index_map[i]
-        if parent_idx != -1:
-            parent_bone = bone_index_map[parent_idx]
-            child_bone.parent = parent_bone
-
-    mats = build_apose_matrices(
-        rig_data.apose_ms, rig_data.apose_ls, rig_data.bone_names, rig_data.parent_indices
-        ) if bind_pose == 'A-Pose' else None
-    global_transforms = _model_space_matrices_cached(rig_data.bone_transforms, rig_data.parent_indices)
-    imported_model_matrices = mats if mats is not None else global_transforms
-    if mats is None:
-
-        for i in range(len(rig_data.bone_names)):
-            mat = global_transforms[i] if i < len(global_transforms) else None
-            # Skip on the accumulated transform: a bone whose local transform is identity but
-            # whose parent is transformed still needs placing at that parent.
-            if mat is None or _matrix_is_identity(mat):
-                continue
-            apply_bone_from_matrix(i, mat, bone_index_map, rig_data.parent_indices, global_transforms)
-
-    arm_data['T-Pose'] = True
-
-    if bind_pose == 'A-Pose':
-        if not rig_data.apose_ls and not rig_data.apose_ms:
-            print(f"No A-Pose found in {rig_data.rig_name}.json at {source_rig_file}, falling back to T-Pose")
-        if mats is not None:
-            # Tail directions must be derived from the same pose as the heads and rolls.
-            # Using reference-pose child positions here creates a hybrid A/T-pose rest rig.
-            apose_global_transforms = mats
-            for i, m in enumerate(mats):
-                apply_bone_from_matrix(i, m, bone_index_map, rig_data.parent_indices, apose_global_transforms)
-            arm_data['T-Pose'] = False
-        else:
-            print(f"No A-Pose found in {rig_data.rig_name}.json at {source_rig_file}, falling back to T-Pose")
-
-    assign_part_groups(arm_obj, rig_data.parts)
-    if assign_shapes:
-        assign_bone_shapes(arm_obj, rig_data.disable_connect)
-    assign_reference_tracks(arm_obj, rig_data.track_names, rig_data.reference_tracks)
-
-    if create_debug:
-        create_debug_empties(
-            arm_obj, rig_data.bone_names, rig_data.parent_indices, rig_data.bone_transforms, rig_data.apose_ls,
-            rig_data.apose_ms, bind_pose
+    try:
+        with _isolated_armature_edit_session(arm_obj) as isolated_timings:
+            phase_started = time.perf_counter()
+            edit_bones = arm_data.edit_bones
+            bone_index_map: dict[int, bpy.types.EditBone] = {}
+            for i, name in enumerate(rig_data.bone_names):
+                bone = edit_bones.new(name)
+                bone.head = Vector((0, 0, 0))
+                bone.tail = Vector((0, 0.05, 0))
+                bone_index_map[i] = bone
+            for i, parent_idx in enumerate(parent_indices_list):
+                child_bone = bone_index_map[i]
+                if parent_idx != -1:
+                    child_bone.parent = bone_index_map[parent_idx]
+            _emit_rig_build_phase(
+                'edit_bones', time.perf_counter() - phase_started, rig_name, assign_shapes
             )
 
-    safe_mode_switch('OBJECT')
+            phase_started = time.perf_counter()
+            mats = build_apose_matrices(
+                rig_data.apose_ms,
+                rig_data.apose_ls,
+                rig_data.bone_names,
+                rig_data.parent_indices,
+            ) if bind_pose == 'A-Pose' and override_matrices is None else None
+            if override_matrices is not None:
+                imported_model_matrices = override_matrices
+                _set_edit_bone_model_matrices(
+                    bone_index_map,
+                    override_matrices,
+                    rig_data.parent_indices,
+                )
+            else:
+                global_transforms = _model_space_matrices_cached(
+                    rig_data.bone_transforms,
+                    rig_data.parent_indices,
+                )
+                imported_model_matrices = mats if mats is not None else global_transforms
+                if mats is None:
+                    for i in range(len(rig_data.bone_names)):
+                        mat = global_transforms[i] if i < len(global_transforms) else None
+                        if mat is None or _matrix_is_identity(mat):
+                            continue
+                        apply_bone_from_matrix(
+                            i,
+                            mat,
+                            bone_index_map,
+                            rig_data.parent_indices,
+                            global_transforms,
+                        )
+
+            arm_data['T-Pose'] = True
+            if bind_pose == 'A-Pose' and override_matrices is None:
+                if not rig_data.apose_ls and not rig_data.apose_ms:
+                    print(
+                        f"No A-Pose found in {rig_name}.json at {source_rig_file}, "
+                        "falling back to T-Pose"
+                    )
+                if mats is not None:
+                    for i, matrix in enumerate(mats):
+                        apply_bone_from_matrix(
+                            i,
+                            matrix,
+                            bone_index_map,
+                            rig_data.parent_indices,
+                            mats,
+                        )
+                    arm_data['T-Pose'] = False
+                else:
+                    print(
+                        f"No A-Pose found in {rig_name}.json at {source_rig_file}, "
+                        "falling back to T-Pose"
+                    )
+            _emit_rig_build_phase(
+                'rest_matrices', time.perf_counter() - phase_started, rig_name, assign_shapes
+            )
+
+        mode_seconds += isolated_timings['enter'] + isolated_timings['exit']
+
+        phase_started = time.perf_counter()
+        if rig_data.parts:
+            with _isolated_armature_edit_session(arm_obj) as part_timings:
+                assign_part_groups(arm_obj, rig_data.parts)
+            mode_seconds += part_timings['enter'] + part_timings['exit']
+        _emit_rig_build_phase(
+            'part_collections', time.perf_counter() - phase_started, rig_name, assign_shapes
+        )
+    except Exception:
+        if bpy.data.objects.get(arm_obj.name) is arm_obj:
+            bpy.data.objects.remove(arm_obj, do_unlink=True)
+        if bpy.data.armatures.get(arm_data.name) is arm_data and arm_data.users == 0:
+            bpy.data.armatures.remove(arm_data)
+        raise
+
+    _emit_rig_build_phase(
+        'mode_selection_operations', mode_seconds, rig_name, assign_shapes
+    )
+
+    _activate_armature_in_current_view_layer(arm_obj)
+
+    phase_started = time.perf_counter()
+    if assign_shapes:
+        assign_bone_shapes(arm_obj, rig_data.disable_connect)
+    _emit_rig_build_phase(
+        'custom_shapes', time.perf_counter() - phase_started, rig_name, assign_shapes
+    )
+
+    phase_started = time.perf_counter()
+    assign_reference_tracks(arm_obj, rig_data.track_names, rig_data.reference_tracks)
+    _emit_rig_build_phase(
+        'reference_tracks', time.perf_counter() - phase_started, rig_name, assign_shapes
+    )
+
+    if create_debug:
+        phase_started = time.perf_counter()
+        create_debug_empties(
+            arm_obj,
+            rig_data.bone_names,
+            rig_data.parent_indices,
+            rig_data.bone_transforms,
+            rig_data.apose_ls,
+            rig_data.apose_ms,
+            bind_pose,
+        )
+        _emit_rig_build_phase(
+            'debug_empties', time.perf_counter() - phase_started, rig_name, assign_shapes
+        )
+
+    phase_started = time.perf_counter()
     for source_index, source_name in enumerate(rig_data.bone_names):
         bone = arm_data.bones.get(source_name)
         if bone is not None:
@@ -933,7 +1219,11 @@ def create_armature_from_rig_data(
     _attach_rig_export_metadata(arm_obj, source_document)
     _attach_imported_bone_matrices(arm_obj, imported_model_matrices)
     _PARENT_CHILDREN_CACHE.pop(id(rig_data.parent_indices), None)
-    print(f"Successfully imported {rig_data.rig_name} in {time.time() - start_time:.2f} seconds.")
+    _emit_rig_build_phase(
+        'export_metadata', time.perf_counter() - phase_started, rig_name, assign_shapes
+    )
+
+    print(f"Successfully imported {rig_name} in {time.perf_counter() - start_time:.2f} seconds.")
     return arm_obj
 
 
@@ -969,31 +1259,39 @@ def assign_bone_shapes(arm, disable_connect, shape=None):
         shape = create_bone_shape()
 
     bpy.context.view_layer.objects.active = arm
-    bpy.ops.object.mode_set(mode='POSE')
 
     for pb in arm.pose.bones:
         name = pb.name
-        pb.custom_shape = None
 
-        if name in {"Root", "Hips", "Trajectory"}:
-            pb.custom_shape = shape
-            pb.custom_shape_scale_xyz = _SHAPE_SCALE_ROOT
-            pb.use_custom_shape_bone_size = False
-        elif name in {"WeaponLeft", "WeaponRight"}:
-            pb.custom_shape = shape
-            pb.custom_shape_scale_xyz = _SHAPE_SCALE_WEAPON
-            pb.use_custom_shape_bone_size = False
+        if name in _ROOT_SHAPE_BONES:
+            desired_shape = shape
+            scale = _SHAPE_SCALE_ROOT
+            bone_size = False
+        elif name in _WEAPON_SHAPE_BONES:
+            desired_shape = shape
+            scale = _SHAPE_SCALE_WEAPON
+            bone_size = False
+        elif disable_connect:
+            desired_shape = shape
+            scale = _SHAPE_SCALE_SMALL
+            bone_size = True
+        elif name.endswith(_SHAPE_BONE_SUFFIXES):
+            desired_shape = shape
+            scale = _SHAPE_SCALE_LARGE if name not in anim_bones else _SHAPE_SCALE_SMALL
+            bone_size = None
         else:
-            use_shape = (disable_connect or name.endswith("JNT") or name.endswith("GRP") or name.endswith("IK"))
-            if use_shape:
-                pb.custom_shape = shape
-                if disable_connect:
-                    pb.custom_shape_scale_xyz = _SHAPE_SCALE_SMALL
-                    pb.use_custom_shape_bone_size = True
-                elif name not in anim_bones:
-                    pb.custom_shape_scale_xyz = _SHAPE_SCALE_LARGE
-                else:
-                    pb.custom_shape_scale_xyz = _SHAPE_SCALE_SMALL
+            desired_shape = None
+            scale = None
+            bone_size = None
+
+        if pb.custom_shape != desired_shape:
+            pb.custom_shape = desired_shape
+        if desired_shape is not None:
+            pb.custom_shape_scale_xyz = scale
+            # The non-connected suffix path historically left bone-size sizing at its
+            # default; None preserves that instead of forcing a value.
+            if bone_size is not None:
+                pb.use_custom_shape_bone_size = bone_size
 
 
 def assign_part_groups(arm_obj, parts):
@@ -1064,7 +1362,7 @@ def assign_part_groups(arm_obj, parts):
         for bone_entry in part.get("singleBones", []):
             bone_name = bone_entry.get("$value") if isinstance(bone_entry, dict) else None
             if isinstance(bone_name, str):
-                bone = bones.get(bone_name) or bones.get(meta_bone_name(bone_name))
+                bone = bones.get(bone_name) or bones.get(merged_rig_bone_name(bone_name))
                 if bone:
                     collection.assign(bone)
 
@@ -1074,7 +1372,7 @@ def assign_part_groups(arm_obj, parts):
             for root_name in collect_root_bones(tree):
                 if not isinstance(root_name, str):
                     continue
-                resolved_root_name = root_name if bones.get(root_name) else meta_bone_name(root_name)
+                resolved_root_name = root_name if bones.get(root_name) else merged_rig_bone_name(root_name)
                 root_bone = bones.get(resolved_root_name)
                 if root_bone:
                     collection.assign(root_bone)
@@ -1108,7 +1406,7 @@ def assign_part_groups(arm_obj, parts):
         safe_mode_switch("POSE")
         pose_bones = arm_obj.pose.bones
         for bone_name in pose_rotation_bones:
-            pose_bone = pose_bones.get(bone_name) or pose_bones.get(meta_bone_name(bone_name))
+            pose_bone = pose_bones.get(bone_name) or pose_bones.get(merged_rig_bone_name(bone_name))
             if pose_bone:
                 pose_bone["maskRotMS"] = True
     safe_mode_switch('OBJECT')

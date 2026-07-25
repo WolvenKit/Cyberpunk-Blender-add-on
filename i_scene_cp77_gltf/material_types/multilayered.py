@@ -1,16 +1,50 @@
 import hashlib
+from pathlib import Path
 
 import numpy as np
 
-from ..datakrash import DepotAssetIndex
+from ..datakrash import asset_index_for_root
 from ..jsontool import JSONTool
 from ..main.common import *
+from ..main.material_profile import begin_material_phase, end_material_phase
 
 from .mat_common import create_global_normal_rel
 
-_LAYER_NODE_GROUP_CACHE = {}
-_LAYER_NODE_TEMPLATE_CACHE = {}
+_ML_CACHE_VERSION = 1
+_MLSETUP_CACHE = {}
+_MLTEMPLATE_CACHE = {}
+_ML_LAYER_SPEC_CACHE = {}
+_ML_OVERRIDE_CACHE = {}
 _ML_TEMPLATE_GROUP_CACHE = {}
+_LAYER_NODE_TOPOLOGY_CACHE = {}
+_LAYER_NODE_BLUEPRINT_NAME = ''
+_PREPARED_LAYER_CACHE = {}
+_MASK_SET_CACHE = {}
+_MASK_LAYER_PATH_CACHE = {}
+_ASSET_INDEX_CACHE = {}
+_ML_CACHE_STATS = {
+    "mlsetup_hits": 0,
+    "mlsetup_misses": 0,
+    "mltemplate_hits": 0,
+    "mltemplate_misses": 0,
+    "layer_spec_hits": 0,
+    "layer_spec_misses": 0,
+    "override_hits": 0,
+    "override_misses": 0,
+    "template_group_hits": 0,
+    "template_group_builds": 0,
+    "layer_group_hits": 0,
+    "layer_group_builds": 0,
+    "layer_group_clones": 0,
+    "layer_group_clone_failures": 0,
+    "prepared_layer_hits": 0,
+    "prepared_layer_misses": 0,
+    "prepared_layer_stale": 0,
+    "mask_set_hits": 0,
+    "mask_set_misses": 0,
+    "mask_path_hits": 0,
+    "mask_path_misses": 0,
+}
 
 
 def _cached_node_group(cache, key):
@@ -35,6 +69,128 @@ def _datablock_identity(datablock):
 
 def _template_path_key(path):
     return os.path.normcase(os.path.normpath(path.replace('\\', os.sep))) if path else ''
+
+
+def _context_path_key(path):
+    if not path:
+        return ''
+    return os.path.normcase(os.path.abspath(os.path.normpath(str(path))))
+
+
+def _resource_extension(reference):
+    lower = str(reference or '').lower()
+    for extension in ('.mlsetup.json', '.mltemplate.json', '.mt.json', '.mi.json', '.material.json'):
+        if lower.endswith(extension):
+            return extension
+    filename = str(reference or '').replace('\\', '/').rsplit('/', 1)[-1]
+    suffixes = Path(filename).suffixes
+    return ''.join(suffixes) if suffixes else '.json'
+
+
+def _resolved_json_resource(reference, base_path, project_path):
+    extension = _resource_extension(reference)
+    resolved = JSONTool.resolve_asset_path(
+        reference,
+        roots=(project_path, base_path),
+        extensions=(extension,),
+        warn_missing=False,
+    )
+    if resolved:
+        return resolved
+    # Preserve the legacy unresolved-path provenance without performing an
+    # independent existence check. Project overrides are selected by the index.
+    relative = str(reference).replace('\\', os.sep).replace('/', os.sep)
+    return os.path.normpath(os.path.join(base_path, relative))
+
+
+def _cached_resource_root(cache, stats_prefix, reference, base_path, project_path):
+    path = _resolved_json_resource(reference, base_path, project_path)
+    cache_key = JSONTool.resource_cache_key(path)
+    cached = cache.get(cache_key)
+    if cached is not None:
+        _ML_CACHE_STATS[f'{stats_prefix}_hits'] += 1
+        return cached, cache_key
+
+    _ML_CACHE_STATS[f'{stats_prefix}_misses'] += 1
+    started = begin_material_phase()
+    try:
+        data = JSONTool.jsonload(path)
+        root = data['Data']['RootChunk']
+    finally:
+        end_material_phase(
+            started,
+            'material.multilayer_json',
+            label=str(path),
+            metadata={'family': stats_prefix},
+        )
+    cache[cache_key] = root
+    return root, cache_key
+
+
+def clear_multilayer_cache():
+    global _LAYER_NODE_BLUEPRINT_NAME
+    _MLSETUP_CACHE.clear()
+    _MLTEMPLATE_CACHE.clear()
+    _ML_LAYER_SPEC_CACHE.clear()
+    _ML_OVERRIDE_CACHE.clear()
+    _ML_TEMPLATE_GROUP_CACHE.clear()
+    _LAYER_NODE_TOPOLOGY_CACHE.clear()
+    _LAYER_NODE_BLUEPRINT_NAME = ''
+    _PREPARED_LAYER_CACHE.clear()
+    _MASK_SET_CACHE.clear()
+    _MASK_LAYER_PATH_CACHE.clear()
+    _ASSET_INDEX_CACHE.clear()
+    for key in _ML_CACHE_STATS:
+        _ML_CACHE_STATS[key] = 0
+
+
+def multilayer_cache_stats():
+    return {
+        **_ML_CACHE_STATS,
+        'mlsetup_entries': len(_MLSETUP_CACHE),
+        'mltemplate_entries': len(_MLTEMPLATE_CACHE),
+        'layer_spec_entries': len(_ML_LAYER_SPEC_CACHE),
+        'override_entries': len(_ML_OVERRIDE_CACHE),
+        'template_group_entries': len(_ML_TEMPLATE_GROUP_CACHE),
+        'layer_group_entries': len(_LAYER_NODE_TOPOLOGY_CACHE),
+        'prepared_layer_entries': len(_PREPARED_LAYER_CACHE),
+        'mask_set_entries': len(_MASK_SET_CACHE),
+        'mask_path_entries': len(_MASK_LAYER_PATH_CACHE),
+        'asset_index_entries': len(_ASSET_INDEX_CACHE),
+    }
+
+
+def _layer_node_blueprint():
+    global _LAYER_NODE_BLUEPRINT_NAME
+    if _LAYER_NODE_BLUEPRINT_NAME:
+        blueprint = bpy.data.node_groups.get(_LAYER_NODE_BLUEPRINT_NAME)
+        if (
+            blueprint is not None
+            and blueprint.get('mlLayerBlueprintVersion') == _ML_CACHE_VERSION
+        ):
+            return blueprint
+        _LAYER_NODE_BLUEPRINT_NAME = ''
+
+    for group_name in _LAYER_NODE_TOPOLOGY_CACHE.values():
+        candidate = bpy.data.node_groups.get(group_name)
+        if (
+            candidate is not None
+            and candidate.get('mlLayerBlueprintVersion') == _ML_CACHE_VERSION
+        ):
+            _LAYER_NODE_BLUEPRINT_NAME = candidate.name
+            return candidate
+    for candidate in bpy.data.node_groups:
+        if candidate.get('mlLayerBlueprintVersion') == _ML_CACHE_VERSION:
+            _LAYER_NODE_BLUEPRINT_NAME = candidate.name
+            return candidate
+    return None
+
+
+def _layer_role_node(nodes, role):
+    for node in nodes:
+        if node.get('cp77MultilayerRole') == role:
+            return node
+    return None
 
 
 def np_array_from_image(img_name):
@@ -79,6 +235,47 @@ def get_cased_depot_path(data, key, default=None):
         return depot
     resolved = value.get('$value')
     return default if resolved is None else resolved
+
+
+def _layer_values(layer):
+    mat_tile = get_cased(layer, 'matTile')
+    mb_tile = get_cased(layer, 'mbTile')
+    return {
+        'opacity': get_cased(layer, 'opacity'),
+        'MatTile': mat_tile,
+        'MbScale': float_or_default(mb_tile if mb_tile is not None else mat_tile, 1),
+        'MicroblendContrast': get_cased(layer, 'microblendContrast', 1),
+        'microblendNormalStrength': get_cased(layer, 'microblendNormalStrength'),
+        'MicroblendOffsetU': get_cased(layer, 'microblendOffsetU'),
+        'MicroblendOffsetV': get_cased(layer, 'microblendOffsetV'),
+        'OffsetU': get_cased(layer, 'offsetU'),
+        'OffsetV': get_cased(layer, 'offsetV'),
+        'colorScale': get_cased_value(layer, 'colorScale'),
+        'normalStrength': get_cased_value(layer, 'normalStrength'),
+        'roughLevelsIn': get_cased_value(layer, 'roughLevelsIn'),
+        'roughLevelsOut': get_cased_value(layer, 'roughLevelsOut'),
+        'metalLevelsIn': get_cased_value(layer, 'metalLevelsIn'),
+        'metalLevelsOut': get_cased_value(layer, 'metalLevelsOut'),
+    }
+
+
+def _layer_specs(cache_key, layers):
+    cached = _ML_LAYER_SPEC_CACHE.get(cache_key)
+    if cached is not None:
+        _ML_CACHE_STATS['layer_spec_hits'] += 1
+        return cached
+
+    _ML_CACHE_STATS['layer_spec_misses'] += 1
+    specs = tuple(
+        (
+            get_cased_depot_path(layer, 'material'),
+            get_cased_depot_path(layer, 'microblend'),
+            _layer_values(layer),
+        )
+        for layer in layers
+    )
+    _ML_LAYER_SPEC_CACHE[cache_key] = specs
+    return specs
 
 
 def input_socket(inputs, socket_name):
@@ -140,9 +337,26 @@ def apply_override(inputs, socket_name, key_val, override_dict, default_val):
     return False
 
 
-def safe_layer_group_name(prefix, version_major, material_path, microblend_path):
-    source = f'{version_major}|{material_path}|{microblend_path}'
+def safe_template_group_name(material_path, context_key, resource_key):
+    source = f'{_ML_CACHE_VERSION}|{context_key}|{resource_key}|{material_path}'
     digest = hashlib.blake2s(source.encode('utf-8', 'ignore'), digest_size=8).hexdigest()
+    prefix = os.path.basename(material_path.replace('\\', os.sep)).split('.')[0]
+    return f'{prefix}_MLTemplate_{digest}'
+
+
+def safe_layer_group_name(
+    version_major,
+    material_path,
+    microblend_path,
+    context_key,
+    base_template_name,
+):
+    source = (
+        f'{_ML_CACHE_VERSION}|{version_major}|{context_key}|{base_template_name}|'
+        f'{material_path}|{microblend_path}'
+    )
+    digest = hashlib.blake2s(source.encode('utf-8', 'ignore'), digest_size=8).hexdigest()
+    prefix = os.path.basename(material_path.replace('\\', os.sep)).split('.')[0]
     return f'{prefix}_LayerTemplate_{version_major}_{digest}'
 
 
@@ -503,19 +717,33 @@ class Multilayered:
         self.BasePath = str(BasePath)
         self.image_format = image_format
         self.ProjPath = str(ProjPath)
-        self._asset_index_cache = {}
+        self._context_key = (
+            _context_path_key(self.BasePath),
+            _context_path_key(self.ProjPath),
+            str(self.image_format).lower(),
+            tuple(bpy.app.version),
+        )
 
-    def createMLTemplateGroup(self, matTemplateObj, mltemplate):
-        template_key = _template_path_key(mltemplate)
+    def createMLTemplateGroup(self, matTemplateObj, mltemplate, resource_key):
+        template_path_key = _template_path_key(mltemplate)
+        template_key = (self._context_key, template_path_key, resource_key)
         cached = _cached_node_group(_ML_TEMPLATE_GROUP_CACHE, template_key)
         if cached is not None:
+            _ML_CACHE_STATS['template_group_hits'] += 1
             return cached
 
-        name = os.path.basename(mltemplate.replace('\\', os.sep))
-        existing = bpy.data.node_groups.get(name.split('.')[0])
-        if existing is not None:
+        group_name = safe_template_group_name(
+            mltemplate,
+            self._context_key,
+            resource_key,
+        )
+        existing = bpy.data.node_groups.get(group_name)
+        if existing is not None and existing.get('mlTemplate') == mltemplate:
             _ML_TEMPLATE_GROUP_CACHE[template_key] = existing.name
+            _ML_CACHE_STATS['template_group_hits'] += 1
             return existing
+
+        _ML_CACHE_STATS['template_group_builds'] += 1
 
         CT = imageFromRelPath(
                 matTemplateObj["colorTexture"]["DepotPath"]["$value"], self.image_format, DepotPath=self.BasePath,
@@ -538,8 +766,11 @@ class Multilayered:
         colorMaskIn = matTemplateObj["colorMaskLevelsIn"]["Elements"]
         colorMaskOut = matTemplateObj["colorMaskLevelsOut"]["Elements"]
 
-        NG = bpy.data.node_groups.new(name.split('.')[0], "ShaderNodeTree")
+        NG = bpy.data.node_groups.new(group_name, "ShaderNodeTree")
         NG['mlTemplate'] = mltemplate
+        NG['mlCacheVersion'] = _ML_CACHE_VERSION
+        NG['mlContextKey'] = repr(self._context_key)
+        NG['mlResourceKey'] = repr(resource_key)
         Color = NG.interface.new_socket(name="ColorScale", socket_type='NodeSocketColor', in_out='INPUT')
         TMI = NG.interface.new_socket(name="MatTile", socket_type='NodeSocketFloat', in_out='INPUT')
         OffU = NG.interface.new_socket(name="OffsetU", socket_type='NodeSocketFloat', in_out='INPUT')
@@ -642,12 +873,11 @@ class Multilayered:
         if not root:
             return None
         root = os.path.abspath(os.path.normpath(root))
-        cache_key = (root, extension)
-        cached = self._asset_index_cache.get(cache_key)
+        cached = _ASSET_INDEX_CACHE.get(root)
         if cached is not None:
             return cached
-        cached = DepotAssetIndex.cached(root, (extension,), warn_missing=False)
-        self._asset_index_cache[cache_key] = cached
+        cached = asset_index_for_root(root, warn_missing=False)
+        _ASSET_INDEX_CACHE[root] = cached
         return cached
 
     def _indexed_asset_path(self, root, filepath):
@@ -660,14 +890,135 @@ class Multilayered:
         return index.resolve_expected(filepath, extension, warn=False) if index is not None else None
 
     def _resolve_mask_layer_path(self, mlmaskpath, layer_index):
+        cache_key = (self._context_key, _template_path_key(mlmaskpath), int(layer_index))
+        if cache_key in _MASK_LAYER_PATH_CACHE:
+            _ML_CACHE_STATS['mask_path_hits'] += 1
+            return _MASK_LAYER_PATH_CACHE[cache_key]
+
+        _ML_CACHE_STATS['mask_path_misses'] += 1
         mask_stem = os.path.split(mlmaskpath)[-1:][0][:-7]
         mask_filename = f'{mask_stem}_{layer_index}.png'
+        resolved_path = None
         for root in (self.ProjPath, self.BasePath):
             mask_dir = os.path.splitext(os.path.join(root, mlmaskpath))[0] + '_layers'
-            resolved = self._indexed_asset_path(root, os.path.join(mask_dir, mask_filename))
-            if resolved:
-                return resolved
-        return None
+            resolved_path = self._indexed_asset_path(root, os.path.join(mask_dir, mask_filename))
+            if resolved_path:
+                break
+        _MASK_LAYER_PATH_CACHE[cache_key] = resolved_path
+        return resolved_path
+
+    def _load_mlsetup(self, setup_path):
+        reference = setup_path if setup_path.endswith('.json') else setup_path + '.json'
+        root, resource_key = _cached_resource_root(
+            _MLSETUP_CACHE,
+            'mlsetup',
+            reference,
+            self.BasePath,
+            self.ProjPath,
+        )
+        layers = root.get('layers')
+        if layers is None:
+            layers = root.get('Layers')
+        return _layer_specs(resource_key, layers)
+
+    def _load_mltemplate(self, material_path):
+        reference = material_path if material_path.endswith('.json') else material_path + '.json'
+        root, resource_key = _cached_resource_root(
+            _MLTEMPLATE_CACHE,
+            'mltemplate',
+            reference,
+            self.BasePath,
+            self.ProjPath,
+        )
+        override_table = _ML_OVERRIDE_CACHE.get(resource_key)
+        if override_table is None:
+            _ML_CACHE_STATS['override_misses'] += 1
+            override_table = createOverrideTable(root)
+            _ML_OVERRIDE_CACHE[resource_key] = override_table
+        else:
+            _ML_CACHE_STATS['override_hits'] += 1
+        return root, override_table, resource_key
+
+    def _prepare_layer_runtime(
+        self,
+        Mat,
+        version_major,
+        material,
+        microblend_path,
+    ):
+        material_norm = material.replace('\\', os.sep)
+        cache_key = (
+            self._context_key,
+            int(version_major),
+            _template_path_key(material_norm),
+            _template_path_key(microblend_path),
+        )
+        cached = _PREPARED_LAYER_CACHE.get(cache_key)
+        if cached is not None:
+            group_name, override_table = cached
+            node_group = bpy.data.node_groups.get(group_name)
+            if node_group is not None:
+                _ML_CACHE_STATS['prepared_layer_hits'] += 1
+                return node_group, override_table
+            _PREPARED_LAYER_CACHE.pop(cache_key, None)
+            _ML_CACHE_STATS['prepared_layer_stale'] += 1
+
+        _ML_CACHE_STATS['prepared_layer_misses'] += 1
+        microblend_image = None
+        if microblend_path:
+            microblend_image = imageFromRelPath(
+                microblend_path,
+                self.image_format,
+                isNormal=True,
+                DepotPath=self.BasePath,
+                ProjPath=self.ProjPath,
+            )
+
+        mltemplate, override_table, template_resource_key = self._load_mltemplate(
+            material
+        )
+        base_material = self.createMLTemplateGroup(
+            mltemplate,
+            material_norm,
+            template_resource_key,
+        )
+        group_name = safe_layer_group_name(
+            version_major,
+            material_norm,
+            microblend_path,
+            self._context_key,
+            base_material.name,
+        )
+        node_group = self._get_or_create_layer_node_tree(
+            Mat,
+            group_name,
+            base_material,
+            microblend_image,
+        )
+        _PREPARED_LAYER_CACHE[cache_key] = (
+            node_group.name,
+            override_table,
+        )
+        return node_group, override_table
+
+    def _mask_layer_paths(self, mlmaskpath, layer_count):
+        cache_key = (
+            self._context_key,
+            _template_path_key(mlmaskpath),
+            int(layer_count),
+        )
+        cached = _MASK_SET_CACHE.get(cache_key)
+        if cached is not None:
+            _ML_CACHE_STATS['mask_set_hits'] += 1
+            return cached
+
+        _ML_CACHE_STATS['mask_set_misses'] += 1
+        paths = tuple(
+            self._resolve_mask_layer_path(mlmaskpath, layer_index + 1)
+            for layer_index in range(layer_count)
+        )
+        _MASK_SET_CACHE[cache_key] = paths
+        return paths
 
     def _configure_layer_tree_sockets(self, inputs):
         set_socket_range(inputs, 'NormalStrength', 0, 10)
@@ -698,25 +1049,102 @@ class Multilayered:
         apply_override(inputs, 'RoughLevelsIn', values['roughLevelsIn'], override_table['RoughLevelsIn'], (1, 0))
         apply_override(inputs, 'RoughLevelsOut', values['roughLevelsOut'], override_table['RoughLevelsOut'], (1, 0))
 
+    def _patch_layer_base_material_links(self, node_tree, BaseMat):
+        nodes = node_tree.nodes
+        group_input = _layer_role_node(nodes, 'group_input')
+        base_node = _layer_role_node(nodes, 'base_material')
+        color_reroute = _layer_role_node(nodes, 'color')
+        metal_levels = _layer_role_node(nodes, 'metal_levels_in')
+        rough_levels = _layer_role_node(nodes, 'rough_levels_in')
+        normal_reroute = _layer_role_node(nodes, 'normal')
+        required_nodes = (
+            group_input,
+            base_node,
+            color_reroute,
+            metal_levels,
+            rough_levels,
+            normal_reroute,
+        )
+        if any(node is None for node in required_nodes):
+            raise RuntimeError('Multilayer blueprint is missing required nodes')
+
+        base_node.node_tree = BaseMat
+        if len(base_node.inputs) < 5 or len(base_node.outputs) < 4:
+            raise RuntimeError('Multilayer base template has an incompatible interface')
+
+        for link in tuple(node_tree.links):
+            if link.from_node is base_node or link.to_node is base_node:
+                node_tree.links.remove(link)
+
+        node_tree.links.new(group_input.outputs['ColorScale'], base_node.inputs[0])
+        node_tree.links.new(group_input.outputs['NormalStrength'], base_node.inputs[4])
+        node_tree.links.new(group_input.outputs['MatTile'], base_node.inputs[1])
+        node_tree.links.new(group_input.outputs['OffsetU'], base_node.inputs[2])
+        node_tree.links.new(group_input.outputs['OffsetV'], base_node.inputs[3])
+        node_tree.links.new(base_node.outputs[0], color_reroute.inputs[0])
+        node_tree.links.new(base_node.outputs[1], metal_levels.inputs[0])
+        node_tree.links.new(base_node.outputs[2], rough_levels.inputs[0])
+        node_tree.links.new(base_node.outputs[3], normal_reroute.inputs[0])
+
+    def _clone_layer_node_tree(self, group_name, BaseMat, MBI):
+        blueprint = _layer_node_blueprint()
+        if blueprint is None:
+            return None
+
+        clone = None
+        try:
+            clone = blueprint.copy()
+            clone.name = group_name
+            clone['mlLayerCacheVersion'] = _ML_CACHE_VERSION
+            clone['mlLayerBlueprintVersion'] = _ML_CACHE_VERSION
+            clone['mlBaseTemplate'] = getattr(BaseMat, 'name', '')
+            clone['mlMicroblend'] = (
+                getattr(MBI, 'filepath', '') if MBI is not None else ''
+            )
+            self._patch_layer_base_material_links(clone, BaseMat)
+            microblend_node = _layer_role_node(
+                clone.nodes,
+                'microblend',
+            )
+            if microblend_node is None:
+                raise RuntimeError(
+                    'Multilayer blueprint is missing its microblend node'
+                )
+            microblend_node.image = MBI
+            _ML_CACHE_STATS['layer_group_clones'] += 1
+            return clone
+        except Exception:
+            _ML_CACHE_STATS['layer_group_clone_failures'] += 1
+            if clone is not None:
+                try:
+                    bpy.data.node_groups.remove(clone)
+                except (ReferenceError, RuntimeError, TypeError):
+                    pass
+            return None
+
     def _get_or_create_layer_node_tree(self, Mat, group_name, BaseMat, MBI):
-        cached = _cached_node_group(_LAYER_NODE_GROUP_CACHE, group_name)
+        cached = _cached_node_group(_LAYER_NODE_TOPOLOGY_CACHE, group_name)
         if cached is not None:
+            _ML_CACHE_STATS['layer_group_hits'] += 1
             return cached
 
         existing = bpy.data.node_groups.get(group_name)
-        if existing:
-            _LAYER_NODE_GROUP_CACHE[group_name] = existing.name
+        if existing is not None and existing.get('mlLayerCacheVersion') == _ML_CACHE_VERSION:
+            _LAYER_NODE_TOPOLOGY_CACHE[group_name] = existing.name
+            _ML_CACHE_STATS['layer_group_hits'] += 1
             return existing
 
-        template_key = (_datablock_identity(BaseMat), _datablock_identity(MBI))
-        template = _cached_node_group(_LAYER_NODE_TEMPLATE_CACHE, template_key)
-        if template is not None:
-            NG = template.copy()
-            NG.name = group_name
-            _LAYER_NODE_GROUP_CACHE[group_name] = NG.name
-            return NG
+        cloned = self._clone_layer_node_tree(group_name, BaseMat, MBI)
+        if cloned is not None:
+            _LAYER_NODE_TOPOLOGY_CACHE[group_name] = cloned.name
+            return cloned
 
+        _ML_CACHE_STATS['layer_group_builds'] += 1
         NG = bpy.data.node_groups.new(group_name, "ShaderNodeTree")
+        NG['mlLayerCacheVersion'] = _ML_CACHE_VERSION
+        NG['mlLayerBlueprintVersion'] = _ML_CACHE_VERSION
+        NG['mlBaseTemplate'] = getattr(BaseMat, 'name', '')
+        NG['mlMicroblend'] = getattr(MBI, 'filepath', '') if MBI is not None else ''
         ioPanel = NG.interface.new_panel(name='Input/Output')
         ioPanel.default_closed = True
         overridesPanel = NG.interface.new_panel(name='Overrides')
@@ -773,19 +1201,23 @@ class Multilayered:
         self._configure_layer_tree_sockets(NG_inputs)
 
         GroupInN = create_node(NG.nodes, "NodeGroupInput", (-2600, 100))
+        GroupInN['cp77MultilayerRole'] = 'group_input'
         GroupInN.hide = False
         GroupOutN = create_node(NG.nodes, "NodeGroupOutput", (0, 100))
         GroupOutN.hide = False
 
         BMN = create_node(NG.nodes, "ShaderNodeGroup", (-1800, -150))
+        BMN['cp77MultilayerRole'] = 'base_material'
         BMN.width = 300
         BMN.hide = False
         BMN.node_tree = BaseMat
 
         colorReroute = NG.nodes.new("NodeReroute")
+        colorReroute['cp77MultilayerRole'] = 'color'
         colorReroute.location = (-1100, 25)
 
         MBN = create_node(NG.nodes, "ShaderNodeTexImage", (-2300, -600), image=MBI, label="Microblend")
+        MBN['cp77MultilayerRole'] = 'microblend'
         MBN.hide = False
         MBMapping = create_node(NG.nodes, "ShaderNodeMapping", (-2300, -550))
         MBUVCombine = create_node(NG.nodes, "ShaderNodeCombineXYZ", (-2300, -500))
@@ -793,6 +1225,7 @@ class Multilayered:
 
         shared_levels_ng = levels_node_group(Mat)
         rLevelsInGroup = NG.nodes.new("ShaderNodeGroup")
+        rLevelsInGroup['cp77MultilayerRole'] = 'rough_levels_in'
         rLevelsInGroup.node_tree = shared_levels_ng
         rLevelsInGroup.location = (-1100, -150)
         rLevelsInGroup.label = "R Levels In"
@@ -805,6 +1238,7 @@ class Multilayered:
         rLevelsOutGroup.inputs[1].default_value = (1, 0)
 
         mLevelsInGroup = NG.nodes.new("ShaderNodeGroup")
+        mLevelsInGroup['cp77MultilayerRole'] = 'metal_levels_in'
         mLevelsInGroup.node_tree = shared_levels_ng
         mLevelsInGroup.location = (-1100, 0)
         mLevelsInGroup.label = "M Levels In"
@@ -841,6 +1275,7 @@ class Multilayered:
         rLevelsOutReroute = NG.nodes.new("NodeReroute")
         rLevelsOutReroute.location = (-1350, -85)
         normalReroute = NG.nodes.new("NodeReroute")
+        normalReroute['cp77MultilayerRole'] = 'normal'
         normalReroute.location = (-700, -350)
         microblendReroute = NG.nodes.new("NodeReroute")
         microblendReroute.location = (-700, -425)
@@ -897,11 +1332,22 @@ class Multilayered:
         NG.links.new(rLevelsInGroup.outputs[0], rLevelsOutGroup.inputs[0])
         NG.links.new(MBN.outputs[0], mask_mixergroup.inputs['Microblend'])
         NG.links.new(MBN.outputs[1], mask_mixergroup.inputs['Microblend Alpha'])
-        _LAYER_NODE_GROUP_CACHE[group_name] = NG.name
-        _LAYER_NODE_TEMPLATE_CACHE[template_key] = NG.name
+        _LAYER_NODE_TOPOLOGY_CACHE[group_name] = NG.name
+        global _LAYER_NODE_BLUEPRINT_NAME
+        _LAYER_NODE_BLUEPRINT_NAME = NG.name
         return NG
 
-    def setupMaterial(self, Mat, LayerName, LayerCount, mlmaskpath, normalimgpath):
+    def setupMaterial(
+        self,
+        Mat,
+        LayerName,
+        LayerCount,
+        mlmaskpath,
+        normalimgpath,
+        *,
+        mask_paths=None,
+        mask_images=None,
+    ):
         CurMat = Mat.node_tree
         node_lookup = {n.name: n for n in CurMat.nodes}
 
@@ -917,9 +1363,17 @@ class Multilayered:
         mlShaderNG.show_options = False
         CurMat.links.new(mlShaderNG.outputs['BSDF'], node_lookup['Material Output'].inputs[0])
 
+        if mask_paths is None:
+            mask_paths = self._mask_layer_paths(mlmaskpath, LayerCount)
+        if mask_images is None:
+            mask_images = tuple(
+                imageFromPath(path, self.image_format, isNormal=True)
+                if path
+                else None
+                for path in mask_paths
+            )
         for x in range(LayerCount):
-            mask_path = self._resolve_mask_layer_path(mlmaskpath, x + 1)
-            MaskTexture = imageFromPath(mask_path, self.image_format, isNormal=True) if mask_path else None
+            MaskTexture = mask_images[x]
             MaskN = None
             if MaskTexture:
                 MaskN = create_node(
@@ -930,12 +1384,10 @@ class Multilayered:
             if x <= 19:
                 CurMat.links.new(node_lookup["Mat_Mod_Layer_" + str(x)].outputs['Layer'], mlShaderNG.inputs[x + 1])
 
-            if MaskN:
-                try:
-                    CurMat.links.new(MaskN.outputs[0], node_lookup["Mat_Mod_Layer_" + str(x + 1)].inputs['Mask'])
-                except Exception:
-                    pass
-
+            if MaskN and x + 1 < LayerCount:
+                next_layer = node_lookup.get("Mat_Mod_Layer_" + str(x + 1))
+                if next_layer is not None:
+                    CurMat.links.new(MaskN.outputs[0], next_layer.inputs['Mask'])
 
         if normalimgpath:
             GNMap = create_global_normal_rel(
@@ -944,84 +1396,72 @@ class Multilayered:
             CurMat.links.new(GNMap.outputs[0], mlShaderNG.inputs[0])
 
     def create(self, Data, Mat):
-        Mat['MLSetup'] = Data["MultilayerSetup"]
-        mlsetup = JSONTool.openJSON(
-            Data["MultilayerSetup"] + ".json", mode='r', DepotPath=self.BasePath, ProjPath=self.ProjPath
-            )
-        mlsetup = mlsetup["Data"]["RootChunk"]
-        xllay = mlsetup.get("layers")
-        if xllay is None:
-            xllay = mlsetup.get("Layers")
-        LayerCount = len(xllay)
-        LayerIndex = 0
+        setup_path = Data["MultilayerSetup"]
+        Mat['MLSetup'] = setup_path
+        layer_specs = self._load_mlsetup(setup_path)
+        layer_count = len(layer_specs)
         CurMat = Mat.node_tree
-        vers = bpy.app.version
-        template_cache = {}
-        file_name = os.path.basename(Data["MultilayerSetup"].replace('\\', os.sep))[:-8]
+        version_major = bpy.app.version[0]
+        file_name = os.path.basename(setup_path.replace('\\', os.sep))[:-8]
+        prepared_layers = []
 
-        for idx, x in enumerate(xllay):
-            MatTile = get_cased(x, "matTile")
-            MbTile = get_cased(x, "mbTile")
-            MbScale = float_or_default(MbTile if MbTile is not None else MatTile, 1)
-            Microblend = get_cased_depot_path(x, "microblend")
-            material = get_cased_depot_path(x, "material")
-            values = {
-                'opacity': get_cased(x, "opacity"),
-                'MatTile': MatTile,
-                'MbScale': MbScale,
-                'MicroblendContrast': get_cased(x, "microblendContrast", 1),
-                'microblendNormalStrength': get_cased(x, "microblendNormalStrength"),
-                'MicroblendOffsetU': get_cased(x, "microblendOffsetU"),
-                'MicroblendOffsetV': get_cased(x, "microblendOffsetV"),
-                'OffsetU': get_cased(x, "offsetU"),
-                'OffsetV': get_cased(x, "offsetV"),
-                'colorScale': get_cased_value(x, "colorScale"),
-                'normalStrength': get_cased_value(x, "normalStrength"),
-                'roughLevelsIn': get_cased_value(x, "roughLevelsIn"),
-                'roughLevelsOut': get_cased_value(x, "roughLevelsOut"),
-                'metalLevelsIn': get_cased_value(x, "metalLevelsIn"),
-                'metalLevelsOut': get_cased_value(x, "metalLevelsOut"),
-                }
+        for layer_index, (material, microblend, values) in enumerate(layer_specs):
+            microblend_path = '' if not microblend or microblend == "null" else microblend
+            node_group, override_table = self._prepare_layer_runtime(
+                Mat,
+                version_major,
+                material,
+                microblend_path,
+            )
+            prepared_layers.append(
+                (
+                    material,
+                    values,
+                    node_group,
+                    override_table,
+                )
+            )
 
-            MBI = None
-            if Microblend and Microblend != "null":
-                MBI = imageFromRelPath(
-                        Microblend, self.image_format, isNormal=True, DepotPath=self.BasePath, ProjPath=self.ProjPath
-                        )
-
-            cached_template = template_cache.get(material)
-            if cached_template is None:
-                mltemplate = JSONTool.openJSON(
-                    material + ".json", mode='r', DepotPath=self.BasePath, ProjPath=self.ProjPath
-                    )
-                mltemplate = mltemplate["Data"]["RootChunk"]
-                OverrideTable = createOverrideTable(mltemplate)
-                template_cache[material] = (mltemplate, OverrideTable)
-            else:
-                mltemplate, OverrideTable = cached_template
-
-            material_norm = material.replace('\\', os.sep)
-            template_key = _template_path_key(material_norm)
-            BaseMat = _cached_node_group(_ML_TEMPLATE_GROUP_CACHE, template_key)
-            if BaseMat is None:
-                base_mat_name = os.path.basename(material_norm).split('.')[0]
-                BaseMat = bpy.data.node_groups.get(base_mat_name)
-                if BaseMat is None:
-                    BaseMat = self.createMLTemplateGroup(mltemplate, material_norm)
-                else:
-                    _ML_TEMPLATE_GROUP_CACHE[template_key] = BaseMat.name
-
-            group_name = safe_layer_group_name(file_name, vers[0], material_norm, Microblend or '')
-            NG = self._get_or_create_layer_node_tree(Mat, group_name, BaseMat, MBI)
-
-            LayerGroupN = create_node(CurMat.nodes, "ShaderNodeGroup", (-800, 450 - 400 * idx), False)
+        layer_normal = Data.get("BakedNormal", Data.get("GlobalNormal"))
+        mask_paths = self._mask_layer_paths(
+            Data["MultilayerMask"],
+            layer_count,
+        )
+        mask_images = tuple(
+            imageFromPath(path, self.image_format, isNormal=True)
+            if path
+            else None
+            for path in mask_paths
+        )
+        for layer_index, (
+            material,
+            values,
+            node_group,
+            override_table,
+        ) in enumerate(prepared_layers):
+            LayerGroupN = create_node(
+                CurMat.nodes,
+                "ShaderNodeGroup",
+                (-800, 450 - 400 * layer_index),
+                False,
+            )
             LayerGroupN.width = 400
-            LayerGroupN.node_tree = NG
-            LayerGroupN.name = "Mat_Mod_Layer_" + str(LayerIndex)
+            LayerGroupN.node_tree = node_group
+            LayerGroupN.name = "Mat_Mod_Layer_" + str(layer_index)
             LayerGroupN['mlTemplate'] = material
-            self._configure_layer_group_inputs(LayerGroupN, LayerIndex, values, OverrideTable)
-            LayerIndex += 1
+            self._configure_layer_group_inputs(
+                LayerGroupN,
+                layer_index,
+                values,
+                override_table,
+            )
 
-        LayerNormal = Data.get("BakedNormal", Data.get("GlobalNormal"))
-
-        self.setupMaterial(Mat, file_name + "_Layer_", LayerCount, Data["MultilayerMask"], LayerNormal)
+        self.setupMaterial(
+            Mat,
+            file_name + "_Layer_",
+            layer_count,
+            Data["MultilayerMask"],
+            layer_normal,
+            mask_paths=mask_paths,
+            mask_images=mask_images,
+        )

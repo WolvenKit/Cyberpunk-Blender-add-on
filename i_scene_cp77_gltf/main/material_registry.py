@@ -39,6 +39,7 @@ class MaterialRule:
     factory: Callable[[object, dict], object]
     no_shadows: bool = False
     preserve_render_method: bool = False
+    mesh_path_sensitive: bool = False
 
 
 class MaterialRegistry:
@@ -230,6 +231,7 @@ REGISTRY.register([
     factory=_factory_bipm(GlobalWaterPatch),
     no_shadows=True,
     preserve_render_method=True,
+    mesh_path_sensitive=True,
 ))
 
 

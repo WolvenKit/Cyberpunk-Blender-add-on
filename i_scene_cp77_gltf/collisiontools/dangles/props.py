@@ -388,6 +388,21 @@ class DANGLE_AddonState(bpy.types.PropertyGroup):
     is_dangle_rig: BoolProperty(name="Is Dangle Rig", default=False)
     is_playing: BoolProperty(name="Preview Playing", default=False)
 
+    animgraph_source_text: StringProperty(
+        name="AnimGraph Source Text",
+        description="Hidden Text datablock containing the complete imported WolvenKit document",
+    )
+    animgraph_source_path: StringProperty(
+        name="AnimGraph Source Path", subtype='FILE_PATH',
+    )
+    animgraph_tree_name: StringProperty(
+        name="Full AnimGraph Tree",
+        description="REDengine AnimGraph node tree synchronized with this specialist editor",
+    )
+    animgraph_last_export_path: StringProperty(
+        name="Last AnimGraph Export", subtype='FILE_PATH',
+    )
+
     external_force_ws: FloatVectorProperty(
         name="External Force (WS)", size=3, default=(0.0, 0.0, 0.0),
     )

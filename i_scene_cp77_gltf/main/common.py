@@ -1,6 +1,7 @@
 import inspect
 import json
 import math
+import ntpath
 import os
 import zipfile
 from functools import lru_cache
@@ -9,6 +10,8 @@ import bmesh
 import bpy
 import numpy as np
 from mathutils import Color, Vector
+
+from .material_profile import begin_material_phase, end_material_phase
 
 scale_factor = 1.0
 from typing import Literal, get_args
@@ -112,8 +115,37 @@ def _with_image_extension(path, image_format):
     return f'{path[:-4]}{ext}' if path.lower().endswith('.xbm') else f'{path[:-3]}{image_format}'
 
 
+def _strip_windows_extended_prefix(path):
+    if not path:
+        return path
+    normalized = str(path).replace('/', '\\')
+    lowered = normalized.lower()
+    if lowered.startswith('\\\\?\\unc\\'):
+        return '\\\\' + normalized[8:]
+    if lowered.startswith('\\\\?\\'):
+        return normalized[4:]
+    return normalized
+
+
+def _looks_like_windows_path(path):
+    if not path:
+        return False
+    path = str(path)
+    drive, tail = ntpath.splitdrive(path)
+    return bool(drive) or path.startswith('\\\\')
+
+
+def _join_root_reference(root, reference):
+    if _looks_like_windows_path(root):
+        return ntpath.join(str(root), str(reference).replace('/', '\\'))
+    return os.path.join(root, reference)
+
+
 @lru_cache(maxsize=32768)
 def _cached_filepath_key(path):
+    path = _strip_windows_extended_prefix(path)
+    if _looks_like_windows_path(path):
+        return ntpath.normcase(ntpath.normpath(path))
     try:
         path = bpy.path.abspath(path)
     except Exception:
@@ -133,7 +165,6 @@ def _filepath_key(path):
             path = bpy.path.abspath(path)
         except Exception:
             pass
-        return os.path.normcase(os.path.abspath(os.path.normpath(path)))
     return _cached_filepath_key(path)
 
 
@@ -163,69 +194,112 @@ def _rebuild_image_lookup_cache():
 
 def _find_loaded_image(filepath, is_normal=False):
     global _image_lookup_complete
-    filepath_key = _filepath_key(filepath)
-    if not filepath_key:
-        return None
+    started = begin_material_phase()
+    result = None
+    try:
+        filepath_key = _filepath_key(filepath)
+        if not filepath_key:
+            return None
 
-    if not _image_lookup_complete or _image_lookup_count != len(bpy.data.images):
+        if not _image_lookup_complete or _image_lookup_count != len(bpy.data.images):
+            _rebuild_image_lookup_cache()
+
+        key = (filepath_key, bool(is_normal))
+        cached_name = _image_lookup_cache.get(key)
+        if not cached_name:
+            return None
+
+        image = bpy.data.images.get(cached_name)
+        if image and _filepath_key(image.filepath) == filepath_key and _matches_colorspace(image, is_normal):
+            result = image
+            return result
+
         _rebuild_image_lookup_cache()
-
-    key = (filepath_key, bool(is_normal))
-    cached_name = _image_lookup_cache.get(key)
-    if not cached_name:
-        return None
-
-    image = bpy.data.images.get(cached_name)
-    if image and _filepath_key(image.filepath) == filepath_key and _matches_colorspace(image, is_normal):
-        return image
-
-    _rebuild_image_lookup_cache()
-    cached_name = _image_lookup_cache.get(key)
-    image = bpy.data.images.get(cached_name) if cached_name else None
-    return image if image and _matches_colorspace(image, is_normal) else None
+        cached_name = _image_lookup_cache.get(key)
+        image = bpy.data.images.get(cached_name) if cached_name else None
+        result = image if image and _matches_colorspace(image, is_normal) else None
+        return result
+    finally:
+        if started is not None:
+            end_material_phase(
+                started,
+                "material.image_lookup",
+                label=str(filepath or ""),
+                metadata={"hit": result is not None, "nonColor": bool(is_normal)},
+            )
 
 
 def _resolve_indexed_image(reference, root, image_format):
-    if not reference or not root:
-        return None
+    started = begin_material_phase()
+    resolved = None
+    original_root = root
     try:
-        from ..datakrash import DepotAssetIndex
-    except Exception:
-        return None
-
-    ext = _image_format_extension(image_format)
-    if not ext:
-        return None
-
-    root = os.path.abspath(os.path.normpath(root.replace('\\', os.sep)))
-    cache_key = (root, ext.lower())
-    index = _asset_index_cache.get(cache_key)
-    if index is None:
+        if not reference or not root:
+            return None
         try:
-            index = DepotAssetIndex.cached(root, extensions=(ext,), warn_missing=False)
+            from ..datakrash import asset_index_for_root
         except Exception:
             return None
-        _asset_index_cache[cache_key] = index
 
-    local_reference = reference.replace('\\', os.sep).replace('/', os.sep)
-    indexed_reference = _with_image_extension(local_reference, image_format)
-    try:
-        return index.resolve_expected(indexed_reference, ext, warn=False)
-    except Exception:
-        return None
+        ext = _image_format_extension(image_format)
+        if not ext:
+            return None
+
+        root = os.path.abspath(os.path.normpath(root.replace('\\', os.sep)))
+        cache_key = root
+        index = _asset_index_cache.get(cache_key)
+        if index is None:
+            try:
+                index = asset_index_for_root(root, warn_missing=False)
+            except Exception:
+                return None
+            _asset_index_cache[cache_key] = index
+
+        local_reference = reference.replace('\\', os.sep).replace('/', os.sep)
+        indexed_reference = _with_image_extension(local_reference, image_format)
+        try:
+            resolved = index.resolve_expected(indexed_reference, ext, warn=False)
+        except Exception:
+            resolved = None
+        return resolved
+    finally:
+        if started is not None:
+            end_material_phase(
+                started,
+                "material.image_resolve",
+                label=str(reference or ""),
+                metadata={
+                    "resolved": bool(resolved),
+                    "root": str(root or original_root or ""),
+                },
+            )
 
 
 def _new_file_image(name, filepath, is_normal=False):
     global _image_lookup_count
-    image = bpy.data.images.new(name, 1, 1)
-    image.source = 'FILE'
-    image.alpha_mode = 'CHANNEL_PACKED'
-    image.filepath = filepath
-    if is_normal:
-        image.colorspace_settings.name = 'Non-Color'
-    _image_lookup_cache[(_filepath_key(filepath), bool(is_normal))] = image.name
-    _image_lookup_count = len(bpy.data.images)
-    return image
+    started = begin_material_phase()
+    image = None
+    try:
+        image = bpy.data.images.new(name, 1, 1)
+        image.source = 'FILE'
+        image.alpha_mode = 'CHANNEL_PACKED'
+        image.filepath = filepath
+        if is_normal:
+            image.colorspace_settings.name = 'Non-Color'
+        _image_lookup_cache[(_filepath_key(filepath), bool(is_normal))] = image.name
+        _image_lookup_count = len(bpy.data.images)
+        return image
+    finally:
+        if started is not None:
+            end_material_phase(
+                started,
+                "material.image_create",
+                label=str(filepath or ""),
+                metadata={
+                    "nonColor": bool(is_normal),
+                    "image": getattr(image, "name", ""),
+                },
+            )
 
 
 def clear_image_lookup_cache():
@@ -354,6 +428,16 @@ def imageFromPath(Img, image_format, isNormal=False):
     return _new_file_image(os.path.basename(Img)[:-4], filepath, isNormal)
 
 
+def resolve_relative_image_path(ImgPath, image_format='png', DepotPath='', ProjPath=''):
+    """Resolve a relative image through project/depot ``DepotAssetIndex`` instances."""
+    if isinstance(ImgPath, float) or isinstance(ProjPath, float):
+        return None
+    return (
+        _resolve_indexed_image(ImgPath, ProjPath, image_format)
+        or _resolve_indexed_image(ImgPath, DepotPath, image_format)
+    )
+
+
 def imageFromRelPath(ImgPath, image_format='png', isNormal=False, DepotPath='', ProjPath=''):
     DepotPath = DepotPath.replace('\\', os.sep)
     ProjPath = ProjPath.replace('\\', os.sep)
@@ -364,18 +448,28 @@ def imageFromRelPath(ImgPath, image_format='png', isNormal=False, DepotPath='', 
         print(f"refusing to process unresolved project path {ProjPath}")
         return
 
-    inProj = _with_image_extension(os.path.join(ProjPath, ImgPath), image_format)
-    inDepot = _with_image_extension(os.path.join(DepotPath, ImgPath), image_format)
+    inProj = _with_image_extension(_join_root_reference(ProjPath, ImgPath), image_format)
+    inDepot = _with_image_extension(_join_root_reference(DepotPath, ImgPath), image_format)
 
     image = _find_loaded_image(inProj, isNormal) or _find_loaded_image(inDepot, isNormal)
     if image:
         return image
 
-    resolved = _resolve_indexed_image(ImgPath, ProjPath, image_format) or _resolve_indexed_image(
-        ImgPath, DepotPath, image_format
-        )
-    if not resolved:
-        resolved = inProj if os.path.exists(inProj) else inDepot
+    resolved = resolve_relative_image_path(
+        ImgPath,
+        image_format=image_format,
+        DepotPath=DepotPath,
+        ProjPath=ProjPath,
+    )
+    if resolved:
+        image = _find_loaded_image(resolved, isNormal)
+        if image:
+            return image
+    else:
+        # Preserve the legacy unresolved-file placeholder without performing an
+        # independent filesystem probe. Project overrides are selected by the
+        # index; an unresolved reference retains the depot candidate as provenance.
+        resolved = inDepot or inProj
 
     return _new_file_image(os.path.basename(ImgPath)[:-4], resolved, isNormal)
 
@@ -701,18 +795,29 @@ def crop_image(orig_img, outname, cropped_min_x, cropped_max_x, cropped_min_y, c
 
 
 def create_node(NG, type, loc, hide=True, operation=None, image=None, label=None, blend_type=None):
-    Node = NG.new(type)
-    Node.hide = hide
-    Node.location = loc
-    if operation:
-        Node.operation = operation
-    if image:
-        Node.image = image
-    if label:
-        Node.label = label
-    if blend_type:
-        Node.blend_type = blend_type
-    return Node
+    started = begin_material_phase()
+    Node = None
+    try:
+        Node = NG.new(type)
+        Node.hide = hide
+        Node.location = loc
+        if operation:
+            Node.operation = operation
+        if image:
+            Node.image = image
+        if label:
+            Node.label = label
+        if blend_type:
+            Node.blend_type = blend_type
+        return Node
+    finally:
+        if started is not None:
+            end_material_phase(
+                started,
+                "material.node_create",
+                label=str(label or type or ""),
+                metadata={"nodeType": str(type or "")},
+            )
 
 
 def createOverrideTable(matTemplateObj):

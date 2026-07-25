@@ -2,6 +2,9 @@ import bpy
 
 if __name__ != "__main__":
     from ..main.common import *
+    from .mat_common import decal_values, depot_texture_exists
+else:
+    from mat_common import decal_values, depot_texture_exists
 
 
 class DecalGradientmapRecolor:
@@ -11,11 +14,14 @@ class DecalGradientmapRecolor:
         self.image_format = image_format
 
     def found(self, tex):
-        result = os.path.exists(os.path.join(self.BasePath, tex)[:-3] + self.image_format)
+        result = depot_texture_exists(
+            tex,
+            self.image_format,
+            self.BasePath,
+            self.ProjPath,
+        )
         if not result:
-            result = os.path.exists(os.path.join(self.ProjPath, tex)[:-3] + self.image_format)
-            if not result:
-                print(f"Texture not found: {tex}")
+            print(f"Texture not found: {tex}")
         return result
 
     def create(self, Data, Mat):
@@ -27,14 +33,13 @@ class DecalGradientmapRecolor:
             if Data['enableMask'] == True:
                 diffAsMask = 0
 
-        for i in range(len(Data["values"])):
-            for value in Data["values"][i]:
-                if value == "DiffuseTexture":
-                    difftex = Data["values"][i]["DiffuseTexture"]["DepotPath"]['$value']
-                if value == "GradientMap":
-                    gradmap = Data["values"][i]["GradientMap"]["DepotPath"]['$value']
-                if value == "MaskTexture":
-                    masktex = Data["values"][i]["MaskTexture"]["DepotPath"]['$value']
+        values = decal_values(Data)
+        diffuse = values.get("DiffuseTexture", {})
+        gradient = values.get("GradientMap", {})
+        mask = values.get("MaskTexture", {})
+        difftex = diffuse.get("DepotPath", {}).get("$value", "")
+        gradmap = gradient.get("DepotPath", {}).get("$value", "")
+        masktex = mask.get("DepotPath", {}).get("$value", "")
 
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes[loc('Principled BSDF')]

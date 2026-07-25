@@ -8,10 +8,18 @@ resolution and loaded-image dedupe.
 """
 
 import math
+from collections import OrderedDict
 
 import bpy
 
-from ..main.common import CreateRebildNormalGroup, CreateShaderNodeValue, create_node, imageFromRelPath
+from ..main.common import (
+    CreateRebildNormalGroup,
+    CreateShaderNodeValue,
+    create_node,
+    imageFromRelPath,
+    resolve_relative_image_path,
+)
+from ..main.material_profile import begin_material_phase, end_material_phase
 
 
 def create_param_value_nodes(tree, data, specs, x=-2000):
@@ -44,17 +52,21 @@ def create_param_value_nodes(tree, data, specs, x=-2000):
 
 def set_scene_fps_driver(driver):
     """Drive a Value output with scene time in seconds, honouring fps_base."""
-    driver.expression = "frame / (fps / fps_base)"
-    fps = driver.variables.new()
-    fps.name = "fps"
-    fps.targets[0].id_type = 'SCENE'
-    fps.targets[0].id = bpy.context.scene
-    fps.targets[0].data_path = "render.fps"
-    fps_base = driver.variables.new()
-    fps_base.name = "fps_base"
-    fps_base.targets[0].id_type = 'SCENE'
-    fps_base.targets[0].id = bpy.context.scene
-    fps_base.targets[0].data_path = "render.fps_base"
+    started = begin_material_phase()
+    try:
+        driver.expression = "frame / (fps / fps_base)"
+        fps = driver.variables.new()
+        fps.name = "fps"
+        fps.targets[0].id_type = 'SCENE'
+        fps.targets[0].id = bpy.context.scene
+        fps.targets[0].data_path = "render.fps"
+        fps_base = driver.variables.new()
+        fps_base.name = "fps_base"
+        fps_base.targets[0].id_type = 'SCENE'
+        fps_base.targets[0].id = bpy.context.scene
+        fps_base.targets[0].data_path = "render.fps_base"
+    finally:
+        end_material_phase(started, "material.driver_create", label="scene_time")
 
 
 def create_scene_time_value(tree, x, y, label="Time"):
@@ -96,6 +108,115 @@ def populate_color_ramp(ramp_node, entries, alpha=1.0):
             float(colr["Blue"]) / 255,
             float(alpha),
             )
+
+
+# Decal resource helpers ------------------------------------------------------
+
+_DECAL_VALUES_CACHE = OrderedDict()
+_DECAL_VALUES_CACHE_LIMIT = 2048
+_TEXTURE_RESOLUTION_CACHE = OrderedDict()
+_TEXTURE_RESOLUTION_CACHE_LIMIT = 4096
+_DECAL_HELPER_STATS = {
+    "value_hits": 0,
+    "value_misses": 0,
+    "path_hits": 0,
+    "path_misses": 0,
+}
+
+
+def _bounded_identity_cache(cache, key, source, value, limit):
+    cache[key] = (source, value)
+    cache.move_to_end(key)
+    while len(cache) > limit:
+        cache.popitem(last=False)
+    return value
+
+
+def decal_values(data, priority=()):
+    """Flatten WolvenKit decal value records once per shared values list."""
+    values = data.get("values") if isinstance(data, dict) else None
+    if not isinstance(values, list):
+        return {}
+
+    priority = tuple(priority)
+    cache_key = (id(values), priority)
+    cached = _DECAL_VALUES_CACHE.get(cache_key)
+    if cached is not None and cached[0] is values:
+        _DECAL_VALUES_CACHE.move_to_end(cache_key)
+        _DECAL_HELPER_STATS["value_hits"] += 1
+        return cached[1]
+
+    _DECAL_HELPER_STATS["value_misses"] += 1
+    result = {}
+    for entry in values:
+        if not isinstance(entry, dict):
+            continue
+        if priority:
+            for key in priority:
+                if key in entry:
+                    result[key] = entry[key]
+                    break
+        else:
+            result.update(entry)
+
+    return _bounded_identity_cache(
+        _DECAL_VALUES_CACHE,
+        cache_key,
+        values,
+        result,
+        _DECAL_VALUES_CACHE_LIMIT,
+    )
+
+
+def resolve_depot_texture(texture_path, image_format, depot_path, proj_path=""):
+    """Resolve a decal texture through the canonical indexed image boundary."""
+    if not texture_path:
+        return None
+    key = (
+        str(texture_path),
+        str(image_format).lower(),
+        str(depot_path),
+        str(proj_path),
+    )
+    if key in _TEXTURE_RESOLUTION_CACHE:
+        cached = _TEXTURE_RESOLUTION_CACHE[key]
+        _TEXTURE_RESOLUTION_CACHE.move_to_end(key)
+        _DECAL_HELPER_STATS["path_hits"] += 1
+        return cached
+
+    _DECAL_HELPER_STATS["path_misses"] += 1
+    resolved = resolve_relative_image_path(
+        texture_path,
+        image_format=image_format,
+        DepotPath=depot_path,
+        ProjPath=proj_path,
+    )
+    _TEXTURE_RESOLUTION_CACHE[key] = resolved
+    _TEXTURE_RESOLUTION_CACHE.move_to_end(key)
+    while len(_TEXTURE_RESOLUTION_CACHE) > _TEXTURE_RESOLUTION_CACHE_LIMIT:
+        _TEXTURE_RESOLUTION_CACHE.popitem(last=False)
+    return resolved
+
+
+def depot_texture_exists(texture_path, image_format, depot_path, proj_path=""):
+    return resolve_depot_texture(
+        texture_path, image_format, depot_path, proj_path
+    ) is not None
+
+
+def decal_helper_cache_stats():
+    return {
+        **_DECAL_HELPER_STATS,
+        "value_entries": len(_DECAL_VALUES_CACHE),
+        "path_entries": len(_TEXTURE_RESOLUTION_CACHE),
+    }
+
+
+def clear_decal_helper_caches():
+    _DECAL_VALUES_CACHE.clear()
+    _TEXTURE_RESOLUTION_CACHE.clear()
+    for key in _DECAL_HELPER_STATS:
+        _DECAL_HELPER_STATS[key] = 0
 
 
 # JSON parameter extraction ---------------------------------------------------

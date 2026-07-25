@@ -4,7 +4,7 @@ import bpy
 from bpy.props import IntProperty, StringProperty
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 
-from . import draw, io
+from . import animgraph_bridge, draw, io
 from .sim import core, solvers, spaces
 from .ui import get_active_chain, get_active_dangle_node, get_active_rig
 
@@ -363,9 +363,9 @@ class DANGLE_OT_bake_to_keyframes(bpy.types.Operator):
 
 class DANGLE_OT_import_json(bpy.types.Operator, ImportHelper):
     bl_idname = "dangle.import_json"
-    bl_label = "Import Dangle JSON"
-    filename_ext = ".json"
-    filter_glob: StringProperty(default="*.json", options={'HIDDEN'})
+    bl_label = "Import WolvenKit AnimGraph JSON"
+    filename_ext = "animgraph.json"
+    filter_glob: StringProperty(default="*animgraph.json", options={'HIDDEN'})
 
     def execute(self, context):
         rig = get_active_rig(context)
@@ -376,31 +376,221 @@ class DANGLE_OT_import_json(bpy.types.Operator, ImportHelper):
             self.report({'ERROR'}, "Stop Dangle preview before importing.")
             return {'CANCELLED'}
         try:
-            count = io.import_chains(self.filepath, rig.dangle_state)
-            self.report({'INFO'}, f"Imported {count} dangle node(s).")
+            count, tree, editor_error = animgraph_bridge.import_into_both_editors(
+                self.filepath, rig, context
+            )
+            if tree is None:
+                self.report(
+                    {'WARNING'},
+                    f"Imported {count} dangle node(s), but the Graph View "
+                    f"could not be built: {editor_error}"
+                )
+            else:
+                self.report(
+                    {'INFO'},
+                    f"Imported {count} dangle node(s) and created AnimGraph tree {tree.name}."
+                )
         except Exception as e:
             self.report({'ERROR'}, f"Failed to import: {str(e)}")
             return {'CANCELLED'}
         return {'FINISHED'}
 
-class DANGLE_OT_export_json(bpy.types.Operator, ExportHelper):
-    bl_idname = "dangle.export_json"
-    bl_label = "Export Editor JSON"
-    filename_ext = ".json"
-    filter_glob: StringProperty(default="*.json", options={'HIDDEN'})
+
+def _animgraph_export_path(filepath):
+    path = str(filepath or '')
+    lower = path.lower()
+    while lower.endswith('.json'):
+        path = path[:-5]
+        lower = path.lower()
+    while lower.endswith('.animgraph'):
+        path = path[:-10]
+        lower = path.lower()
+    return path + '.animgraph.json'
+
+
+class DANGLE_OT_export_animgraph(bpy.types.Operator, ExportHelper):
+    bl_idname = "dangle.export_animgraph"
+    bl_label = "Export WolvenKit AnimGraph JSON"
+    bl_options = {'REGISTER'}
+
+    filename_ext = ".animgraph.json"
+    filter_glob: StringProperty(default="*.animgraph.json", options={'HIDDEN'})
+
+    def invoke(self, context, event):
+        rig = get_active_rig(context)
+        if rig is None:
+            self.report({'ERROR'}, "No active Dangle Rig selected.")
+            return {'CANCELLED'}
+        previous = str(rig.dangle_state.animgraph_last_export_path or '')
+        source = str(rig.dangle_state.animgraph_source_path or '')
+        self.filepath = _animgraph_export_path(previous or source or f"{rig.name}_dangle")
+        return ExportHelper.invoke(self, context, event)
+
+    def check(self, context):
+        normalized = _animgraph_export_path(self.filepath)
+        if normalized != self.filepath:
+            self.filepath = normalized
+            return True
+        return False
 
     def execute(self, context):
         rig = get_active_rig(context)
-        if not rig:
+        if rig is None:
             self.report({'ERROR'}, "No active Dangle Rig selected.")
             return {'CANCELLED'}
-        try:
-            io.export_chains(self.filepath, rig.dangle_state)
-            self.report({'INFO'}, "Exported successfully.")
-        except Exception as e:
-            self.report({'ERROR'}, f"Failed to export: {str(e)}")
+        if rig.dangle_state.is_playing:
+            self.report({'ERROR'}, "Stop Dangle preview before exporting.")
             return {'CANCELLED'}
+        try:
+            report = animgraph_bridge.export_from_specialist_editor(
+                _animgraph_export_path(self.filepath), rig, context
+            )
+        except Exception as exc:
+            self.report({'ERROR'}, f"Failed to export AnimGraph: {exc}")
+            return {'CANCELLED'}
+        self.filepath = _animgraph_export_path(self.filepath)
+        refresh_error = report.get('editorRefreshError')
+        if refresh_error:
+            self.report(
+                {'WARNING'},
+                f"AnimGraph exported, but the Graph View refresh failed: {refresh_error}"
+            )
+        else:
+            self.report(
+                {'INFO'},
+                f"Exported WolvenKit AnimGraph: {report.get('dangleNodes', 0)} Dangle, "
+                f"{report.get('dragNodes', 0)} Drag, {report.get('handles', 0)} handles."
+            )
         return {'FINISHED'}
+
+
+class DANGLE_OT_validate_animgraph(bpy.types.Operator):
+    bl_idname = "dangle.validate_animgraph"
+    bl_label = "Validate AnimGraph"
+
+    def execute(self, context):
+        rig = get_active_rig(context)
+        if rig is None:
+            return {'CANCELLED'}
+        try:
+            report = animgraph_bridge.validate_imported_document(rig)
+        except Exception as exc:
+            self.report({'ERROR'}, str(exc))
+            return {'CANCELLED'}
+        if not report.get('ready'):
+            errors = report.get('errors', ())
+            self.report({'ERROR'}, errors[0] if errors else "AnimGraph validation failed")
+            return {'CANCELLED'}
+        self.report(
+            {'INFO'},
+            f"AnimGraph valid: {report.get('dangleNodes', 0)} Dangle, "
+            f"{report.get('dragNodes', 0)} Drag, {report.get('handles', 0)} handles."
+        )
+        return {'FINISHED'}
+
+
+class DANGLE_OT_switch_to_graph(bpy.types.Operator):
+    bl_idname = "dangle.switch_to_graph"
+    bl_label = "Switch to Graph View"
+
+    def execute(self, context):
+        rig = get_active_rig(context)
+        if rig is None:
+            return {'CANCELLED'}
+        try:
+            tree = animgraph_bridge.switch_to_graph_view(context, rig)
+        except Exception as exc:
+            self.report({'ERROR'}, str(exc))
+            return {'CANCELLED'}
+        self.report({'INFO'}, f"Opened Graph View for {tree.name}.")
+        return {'FINISHED'}
+
+
+class DANGLE_OT_switch_to_editor(bpy.types.Operator):
+    bl_idname = "dangle.switch_to_editor"
+    bl_label = "Switch to Dangle Editor View"
+
+    @classmethod
+    def poll(cls, context):
+        return animgraph_bridge.can_return_to_editor(context)
+
+    def execute(self, context):
+        try:
+            rig = animgraph_bridge.switch_to_editor_view(context)
+        except Exception as exc:
+            self.report({'ERROR'}, str(exc))
+            return {'CANCELLED'}
+        self.report({'INFO'}, f"Returned to the Dangle editor for {rig.name}.")
+        return {'FINISHED'}
+
+
+def _editor_to_graph(operator, context):
+    rig = get_active_rig(context) or animgraph_bridge.rig_for_context(context)
+    if rig is None:
+        return {'CANCELLED'}
+    if rig.dangle_state.is_playing:
+        operator.report({'ERROR'}, "Stop Dangle preview before synchronizing.")
+        return {'CANCELLED'}
+    try:
+        tree = animgraph_bridge.sync_editor_to_graph(rig, context)
+    except Exception as exc:
+        operator.report({'ERROR'}, str(exc))
+        return {'CANCELLED'}
+    operator.report({'INFO'}, f"Synchronized Dangle editor changes to graph {tree.name}.")
+    return {'FINISHED'}
+
+
+def _graph_to_editor(operator, context):
+    rig = animgraph_bridge.rig_for_context(context) or get_active_rig(context)
+    if rig is None:
+        return {'CANCELLED'}
+    if rig.dangle_state.is_playing:
+        operator.report({'ERROR'}, "Stop Dangle preview before synchronizing.")
+        return {'CANCELLED'}
+    try:
+        count, report = animgraph_bridge.sync_graph_to_editor(rig)
+    except Exception as exc:
+        operator.report({'ERROR'}, str(exc))
+        return {'CANCELLED'}
+    operator.report(
+        {'INFO'},
+        f"Synchronized graph changes to the Dangle editor: {count} Dangle node(s), "
+        f"{report.get('dragNodes', 0)} Drag node(s)."
+    )
+    return {'FINISHED'}
+
+
+class DANGLE_OT_push_to_graph(bpy.types.Operator):
+    bl_idname = "dangle.push_to_graph"
+    bl_label = "Push Dangle Editor Changes to Graph"
+
+    def execute(self, context):
+        return _editor_to_graph(self, context)
+
+
+class DANGLE_OT_pull_from_graph(bpy.types.Operator):
+    bl_idname = "dangle.pull_from_graph"
+    bl_label = "Pull Graph Changes into Dangle Editor"
+
+    def execute(self, context):
+        return _graph_to_editor(self, context)
+
+
+class DANGLE_OT_push_to_editor(bpy.types.Operator):
+    bl_idname = "dangle.push_to_editor"
+    bl_label = "Push Graph Changes to Dangle Editor"
+
+    def execute(self, context):
+        return _graph_to_editor(self, context)
+
+
+class DANGLE_OT_pull_from_editor(bpy.types.Operator):
+    bl_idname = "dangle.pull_from_editor"
+    bl_label = "Pull Dangle Editor Changes into Graph"
+
+    def execute(self, context):
+        return _editor_to_graph(self, context)
+
 
 class DANGLE_OT_add_dangle_node(bpy.types.Operator):
     bl_idname = "dangle.add_node"
@@ -748,7 +938,14 @@ classes = (
     DANGLE_OT_preview_stop,
     DANGLE_OT_bake_to_keyframes,
     DANGLE_OT_import_json,
-    DANGLE_OT_export_json,
+    DANGLE_OT_export_animgraph,
+    DANGLE_OT_validate_animgraph,
+    DANGLE_OT_switch_to_graph,
+    DANGLE_OT_switch_to_editor,
+    DANGLE_OT_push_to_graph,
+    DANGLE_OT_pull_from_graph,
+    DANGLE_OT_push_to_editor,
+    DANGLE_OT_pull_from_editor,
     DANGLE_OT_add_dangle_node,
     DANGLE_OT_remove_dangle_node,
     DANGLE_OT_add_chain,
@@ -773,5 +970,6 @@ def unregister():
     for session in list(_ACTIVE_PREVIEW_SESSIONS.values()):
         session._finish(bpy.context, restore_pose=True)
     _ACTIVE_PREVIEW_SESSIONS.clear()
+    animgraph_bridge.clear_view_return_states()
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
