@@ -1,0 +1,35 @@
+schema_version = "1.0.0"
+
+id = "i_scene_cp77_gltf"
+version = "2.1.0"
+name = "Cyberpunk 2077 IO Suite"
+tagline = "Import and export Cyberpunk 2077 assets with WolvenKit"
+maintainer = "WolvenKit contributors"
+type = "add-on"
+
+website = "https://github.com/WolvenKit/Cyberpunk-Blender-add-on"
+tags = ["Import-Export", "Material", "Animation", "Mesh"]
+
+blender_version_min = "5.0.0"
+blender_version_max = "5.3.0"
+platforms = ["windows-x64"]
+license = ["SPDX:GPL-3.0-or-later"]
+
+[permissions]
+files = "Import and export Cyberpunk 2077 project and asset files"
+clipboard = "Copy AnimGraph JSON and editor data"
+network = "Install optional JALI lip-sync dependencies when requested"
+
+[build]
+paths_exclude_pattern = [
+  "__pycache__/",
+  "*.py[cod]",
+  ".git/",
+  ".github/",
+  ".idea/",
+  ".vscode/",
+  "*.zip",
+  "*.bak",
+  "*.orig",
+  "*.rej",
+]

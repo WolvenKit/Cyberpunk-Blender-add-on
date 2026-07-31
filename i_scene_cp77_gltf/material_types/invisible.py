@@ -1,14 +1,6 @@
-import bpy
-import os
-from ..main.common import *
+from .mat_common import MaterialTypeBase
 
-
-class Invisible:
-    def __init__(self, BasePath, image_format, ProjPath):
-        self.BasePath = BasePath
-        self.ProjPath = ProjPath
-        self.image_format = image_format
-
+class Invisible(MaterialTypeBase):
     def create(self, Data, Mat):
         mat_tree = Mat.node_tree
         # Clear existing nodes
@@ -24,15 +16,6 @@ class Invisible:
 
         mat_tree.links.new(transparent.outputs[0], output.inputs[0])
 
-        # Ensure fully transparent rendering in viewport
-        Mat.blend_method = 'HASHED'
-
-        # Enable backface culling like the game does
+        # Render method is applied by setup._set_hashed_render_method after
+        # create(); only backface culling is shader-specific, matching the game.
         Mat.use_backface_culling = True
-        
-        try:
-            Mat.shadow_method = 'HASHED'
-        except Exception:
-            pass
-
-

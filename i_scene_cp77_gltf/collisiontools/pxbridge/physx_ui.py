@@ -1,5 +1,5 @@
 import bpy
-from mathutils import Vector, Matrix
+from mathutils import Matrix, Vector
 
 
 class PhysXToolsGizmoGroup(bpy.types.GizmoGroup):
@@ -46,7 +46,7 @@ class PhysXToolsGizmoGroup(bpy.types.GizmoGroup):
             try:
                 pos = Vector(px_s.manipulator_pos)
                 self.grab_gizmo.matrix_basis = Matrix.Translation(pos).to_4x4()
-            except:
+            except Exception:
                 pass
         else:
             self.grab_gizmo.hide = True

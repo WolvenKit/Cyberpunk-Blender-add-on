@@ -1,32 +1,64 @@
-import bpy
 import os
-from ..main.common import *
-from .interior_mapping_nodegroups import *
+from ..materials.blender.images import imageFromRelPath
+from ..materials.blender.nodes import CreateShaderNodeValue, create_node, loc
+from .interior_mapping_nodegroups import andrew_willmotts_plane_interior_mapping_node_group, flipbook_function_node_group
 import re
 
-class windowParallaxIntProx:
-    def __init__(self, BasePath,image_format, ProjPath):
-        self.BasePath = BasePath
-        self.ProjPath = ProjPath
-        self.image_format = image_format
+from .mat_common import MaterialTypeBase
+
+def _positive_float(value):
+    if isinstance(value, dict):
+        value = value.get("$value", value.get("value"))
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0.0 else None
+
+
+def _room_atlas_aspect_ratio(data, atlas_path):
+    if isinstance(atlas_path, str):
+        filename = os.path.splitext(os.path.basename(atlas_path.replace("\\", "/")))[0]
+        pattern = r"(?:^|[_-])(\d+(?:\.\d+)?)\s*[xX]\s*(\d+(?:\.\d+)?)(?=$|[_-])"
+        match = re.search(pattern, filename)
+        if match:
+            width = _positive_float(match.group(1))
+            height = _positive_float(match.group(2))
+            if width is not None and height is not None:
+                return width / height
+
+    width = _positive_float(data.get("roomWidth"))
+    height = _positive_float(data.get("roomHeight"))
+    if width is not None and height is not None:
+        return width / height
+
+    return 1.0
+
+class windowParallaxIntProx(MaterialTypeBase):
     def create(self,Data,Mat):
         CurMat = Mat.node_tree
         pBSDF=CurMat.nodes[loc('Principled BSDF')]
         CurMat.nodes.remove(pBSDF)
-        AspectRatio=1
-        # Aspect ratios is in the filename
-        if "RoomAtlas" in Data:
-            pattern = r'_[0-9]x[0-9]_'
-            matches = re.findall(pattern, Data["RoomAtlas"])[0]
-            AspectRatio = int(matches[1])/int(matches[3])
-            AspectRatioVal = CreateShaderNodeValue(CurMat,AspectRatio,-1300, 400,"AspectRatio")
-            
+        room_atlas = Data.get("RoomAtlas")
+        AspectRatio = _room_atlas_aspect_ratio(Data, room_atlas)
+        AspectRatioVal = CreateShaderNodeValue(CurMat, AspectRatio, -1300, 400, "AspectRatio")
 
-        # RoomAtlas
-        if "RoomAtlas" in Data:
-            bcolImg=imageFromRelPath(Data["RoomAtlas"],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)
-            bColNode = create_node(CurMat.nodes,"ShaderNodeTexImage",  (-600,450), label="RoomAtlas", image=bcolImg)
-            
+        bcolImg = None
+        bColNode = None
+        if room_atlas:
+            bcolImg = imageFromRelPath(
+                room_atlas,
+                self.image_format,
+                DepotPath=self.BasePath,
+                ProjPath=self.ProjPath,
+            )
+            bColNode = create_node(
+                CurMat.nodes,
+                "ShaderNodeTexImage",
+                (-600, 450),
+                label="RoomAtlas",
+                image=bcolImg,
+            )
        
         # AtlasGridUvRatio
         # roomWidth
@@ -39,7 +71,6 @@ class windowParallaxIntProx:
         if 'roomDepth' in Data:
             roomDepth = CreateShaderNodeValue(CurMat,Data["roomDepth"],-1200, 200,"roomDepth")
 
-        par=createParallaxGroup() 
         AW_Int_Map = andrew_willmotts_plane_interior_mapping_node_group()
         InteriorMapping = create_node(CurMat.nodes,"ShaderNodeGroup", (-1130,620),hide=False)
         InteriorMapping.node_tree = AW_Int_Map
@@ -58,8 +89,11 @@ class windowParallaxIntProx:
         flipbook.node_tree = flip
         flipbook.name = "RoomAtlas"
         
-        noCols=bcolImg.size[0]/(bcolImg.size[1]*AspectRatio)
-        noColsVal = CreateShaderNodeValue(CurMat,noCols,-1100, 250,"NoImages")        
+        image_width = bcolImg.size[0] if bcolImg and len(bcolImg.size) > 1 else 0
+        image_height = bcolImg.size[1] if bcolImg and len(bcolImg.size) > 1 else 0
+        noCols = image_width / (image_height * AspectRatio) if image_width and image_height else 1.0
+        noCols = max(1.0, noCols)
+        noColsVal = CreateShaderNodeValue(CurMat, noCols, -1100, 250, "NoImages")        
         CurMat.links.new(noColsVal.outputs[0],flipbook.inputs[3])    
         CurMat.links.new(noColsVal.outputs[0],flipbook.inputs[4])
 
@@ -68,8 +102,9 @@ class windowParallaxIntProx:
         CurMat.links.new(UV.outputs[0],Vec_Frac.inputs[0])
         CurMat.links.new(Vec_Frac.outputs[0],InteriorMapping.inputs[0])
         CurMat.links.new(InteriorMapping.outputs[0],flipbook.inputs[0])
-        CurMat.links.new(flipbook.outputs[0],bColNode.inputs[0])
-        CurMat.links.new(bColNode.outputs[0],CurMat.nodes['Material Output'].inputs[0])
+        if bColNode is not None:
+            CurMat.links.new(flipbook.outputs[0], bColNode.inputs[0])
+            CurMat.links.new(bColNode.outputs[0], CurMat.nodes['Material Output'].inputs[0])
 
         #Randomise Rooms
         WhiteNoiseTexture = create_node(CurMat.nodes,"ShaderNodeTexWhiteNoise",(-1077.558349609375, 946.2904052734375), label="White Noise Texture")

@@ -1,12 +1,15 @@
 import bpy
 
+
 def get_coll():
     # Get the active collection in the outliner
     return bpy.context.collection
 
+
 def format_i(index):
     # Format the index as "00, 01, 02"
     return f"{index:02d}"
+
 
 def rename_meshes(collection):
     if collection:
@@ -18,6 +21,7 @@ def rename_meshes(collection):
             new_name = f"submesh_{formatted_index}_LOD_1"
             mesh.name = new_name
             print(f"Renamed {mesh.name}")
+
 
 # Get the currently selected collection
 coll = get_coll()

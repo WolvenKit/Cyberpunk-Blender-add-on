@@ -1,6 +1,7 @@
 import bpy
 import idprop.types
 
+
 def convert_idproperty(prop):
     """Convert Blender IDProperty to a standard Python data structure."""
     if isinstance(prop, idprop.types.IDPropertyArray):
@@ -12,6 +13,7 @@ def convert_idproperty(prop):
     else:
         return prop
 
+
 def extract_track_keys(track_keys):
     """Extract and print the actual data from the trackKeys property."""
     if isinstance(track_keys, (list, tuple)):
@@ -21,6 +23,7 @@ def extract_track_keys(track_keys):
     else:
         return track_keys
 
+
 def add_to_track_keys(track_keys, new_data):
     """Add new data to the trackKeys property."""
     # Convert IDPropertyArray to a regular Python list
@@ -28,15 +31,16 @@ def add_to_track_keys(track_keys, new_data):
         track_keys = list(track_keys)
     elif isinstance(track_keys, list):
         track_keys = track_keys
-    
+
     # Add the new data as a dictionary directly, not as a list
     track_keys.append(new_data)
 
     return track_keys
 
+
 def modify_track_keys():
     for action in bpy.data.actions:
-        if "constTrackKeys" in action.keys(): ## works for constTrackKeys or trackKeys
+        if "constTrackKeys" in action.keys():  ## works for constTrackKeys or trackKeys
             track_keys = action["constTrackKeys"]
 
             # Convert to standard Python structure for manipulation
@@ -53,6 +57,7 @@ def modify_track_keys():
             # Print the updated trackKeys
             updated_track_keys = convert_idproperty(action["constTrackKeys"])
             print(f"Updated trackKeys: {updated_track_keys}")
+
 
 # Call the function to modify the trackKeys property
 modify_track_keys()

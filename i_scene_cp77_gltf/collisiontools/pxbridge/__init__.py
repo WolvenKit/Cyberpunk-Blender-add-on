@@ -1,75 +1,114 @@
 import bpy
-import os
-import ctypes
-from . import physx_utils, viz, physx_props, physx_ops, io_phys, physx_ui
 
-
-
-def get_physx_dir():
-    current_dir = os.path.dirname(os.path.realpath(__file__))
-    return os.path.join(current_dir, "physx")
-def load_physx_lib(name):
-    physx_dir = get_physx_dir()
-    path = os.path.join(physx_dir, name)
-    if os.path.exists(path):
-        try:
-            ctypes.CDLL(path)
-        except OSError:
-            print(f"Failed to load {name} from {path}")
-            print(f"physx will not work")
-
-
-load_physx_lib("PxFoundation_x64.dll")
-load_physx_lib("PhysX3Common_x64.dll")
-load_physx_lib("PhysX3_x64.dll")
-load_physx_lib("PhysX3Cooking_x64.dll")
+from ...registration import RegistrationLedger
+from .capability import shutdown_physx_capability
+from .io_phys import (
+    PHYSX_OT_confirm_import,
+    PHYSX_OT_export_phys,
+    PHYSX_OT_export_scene,
+    PHYSX_OT_import_phys,
+    PHYSX_OT_import_scene,
+    PHYSX_OT_load_cooked,
+    PHYSX_OT_save_cooked,
+)
+from .physx_ops import (
+    PHYSX_OT_apply_force,
+    PHYSX_OT_build_scene,
+    PHYSX_OT_calc_dynamics,
+    PHYSX_OT_cook_mesh,
+    PHYSX_OT_fit_bounds_shape,
+    PHYSX_OT_init_scene,
+    PHYSX_OT_list_action,
+    PHYSX_OT_reset_session,
+    PHYSX_OT_run_steps,
+    PHYSX_OT_shape_action,
+    PHYSX_OT_sim_step,
+    PHYSX_OT_stop_sim,
+    PHYSX_OT_update_gravity,
+    PHYSX_OT_validate_scene,
+)
+from .physx_props import (
+    PhysXActorItem,
+    PhysXObjectProperties,
+    PhysXSceneProperties,
+    PhysXShapeItem,
+)
+from .physx_ui import PhysXToolsGizmoGroup, PHYSX_UL_actor_list, PHYSX_UL_shape_list
+from .viz import invalidate_visualization_cache, register_viz, unregister_viz
 
 
 classes = (
-    physx_props.PhysXShapeItem, physx_props.PhysXActorItem, physx_props.PhysXObjectProperties,
-    physx_props.PhysXSceneProperties,
-    physx_ops.PHYSX_OT_init_scene, physx_ops.PHYSX_OT_validate_scene, physx_ops.PHYSX_OT_sim_step,
-    physx_ops.PHYSX_OT_stop_sim, physx_ops.PHYSX_OT_apply_force, physx_ops.PHYSX_OT_update_gravity,
-    physx_ops.PHYSX_OT_run_steps, physx_ops.PHYSX_OT_shape_action, physx_ops.PHYSX_OT_list_action,
-    physx_ops.PHYSX_OT_fit_bounds_shape, physx_ops.PHYSX_OT_cook_mesh, physx_ops.PHYSX_OT_calc_dynamics,
-    physx_ops.PHYSX_OT_build_scene, physx_ops.PHYSX_OT_reset_session,
-    io_phys.PHYSX_OT_save_cooked, io_phys.PHYSX_OT_load_cooked, io_phys.PHYSX_OT_export_phys,
-    io_phys.PHYSX_OT_import_phys, io_phys.PHYSX_OT_confirm_import, io_phys.PHYSX_OT_export_scene,
-    io_phys.PHYSX_OT_import_scene,
-    physx_ui.PHYSX_UL_actor_list, physx_ui.PHYSX_UL_shape_list,
-    physx_ui.PhysXToolsGizmoGroup
+    PhysXShapeItem,
+    PhysXActorItem,
+    PhysXObjectProperties,
+    PhysXSceneProperties,
+    PHYSX_OT_init_scene,
+    PHYSX_OT_validate_scene,
+    PHYSX_OT_sim_step,
+    PHYSX_OT_stop_sim,
+    PHYSX_OT_apply_force,
+    PHYSX_OT_update_gravity,
+    PHYSX_OT_run_steps,
+    PHYSX_OT_shape_action,
+    PHYSX_OT_list_action,
+    PHYSX_OT_fit_bounds_shape,
+    PHYSX_OT_cook_mesh,
+    PHYSX_OT_calc_dynamics,
+    PHYSX_OT_build_scene,
+    PHYSX_OT_reset_session,
+    PHYSX_OT_save_cooked,
+    PHYSX_OT_load_cooked,
+    PHYSX_OT_export_phys,
+    PHYSX_OT_import_phys,
+    PHYSX_OT_confirm_import,
+    PHYSX_OT_export_scene,
+    PHYSX_OT_import_scene,
+    PHYSX_UL_actor_list,
+    PHYSX_UL_shape_list,
+    PhysXToolsGizmoGroup,
 )
+
+_LEDGER = RegistrationLedger("pxbridge")
 
 
 @bpy.app.handlers.persistent
 def depsgraph_update_handler(scene, depsgraph):
-    """Refresh the lines whenever an object moves in the scene."""
-    viz.invalidate_visualization_cache()
+    invalidate_visualization_cache()
 
 
 def register():
-    for cls in classes:
-        bpy.utils.register_class(cls)
-    bpy.types.Object.physx = bpy.props.PointerProperty(type=physx_props.PhysXObjectProperties)
-    bpy.types.Scene.physx = bpy.props.PointerProperty(type=physx_props.PhysXSceneProperties)
+    if _LEDGER.active:
+        return
+    try:
+        _LEDGER.register_classes(classes)
+        _LEDGER.add_property(
+            bpy.types.Object,
+            "physx",
+            bpy.props.PointerProperty(type=PhysXObjectProperties),
+        )
+        _LEDGER.add_property(
+            bpy.types.Scene,
+            "physx",
+            bpy.props.PointerProperty(type=PhysXSceneProperties),
+        )
+        register_viz()
+        _LEDGER.add_cleanup("physx visualization", unregister_viz)
+        _LEDGER.add_handler(
+            bpy.app.handlers.depsgraph_update_post,
+            depsgraph_update_handler,
+        )
+    except Exception:
+        _LEDGER.cleanup()
+        raise
 
-    viz.register_viz()
-
-    # Add handler to update visualization when objects move
-    if depsgraph_update_handler not in bpy.app.handlers.depsgraph_update_post:
-        bpy.app.handlers.depsgraph_update_post.append(depsgraph_update_handler)
 
 def unregister():
-    viz.unregister_viz()
-
-    if depsgraph_update_handler in bpy.app.handlers.depsgraph_update_post:
-        bpy.app.handlers.depsgraph_update_post.remove(depsgraph_update_handler)
-
-    for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
-    del bpy.types.Object.physx
-    del bpy.types.Scene.physx
-
-
-if __name__ == "__main__":
-    register()
+    failures = list(_LEDGER.cleanup())
+    try:
+        shutdown_physx_capability()
+    except Exception as error:
+        failures.append(("native capability", error))
+    if failures:
+        raise RuntimeError("; ".join(
+            f"{label}: {error}" for label, error in failures
+        ))

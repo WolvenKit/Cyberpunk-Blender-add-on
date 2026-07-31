@@ -3,25 +3,23 @@ import bpy
 c = bpy.context
 bops = bpy.ops
 
-
 ## make a cube
 bops.mesh.primitive_cube_add(size=2, enter_editmode=False, align='WORLD', location=(0, 0, 0))
 cube = c.object
 
-#trianghulate the faces of the cube so it'll impport 
+# trianghulate the faces of the cube so it'll impport
 
 bops.object.mode_set(mode='EDIT')
 bops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
 bops.object.mode_set(mode='OBJECT')
 
-#add a single bone named root so that export works
+# add a single bone named root so that export works
 bops.object.armature_add(enter_editmode=False, align='WORLD', location=(0, 0, 0))
 armature = c.object
 armature.data.bones[0].name = "Root"
 
-
 ## put the names of all the bones in all of the rigs you are trying to export from wkit here
-vertex_group_names =[
+vertex_group_names = [
     "Root",
     "Hips",
     "Spine",

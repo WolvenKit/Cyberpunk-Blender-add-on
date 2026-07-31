@@ -1,8 +1,10 @@
-import math
-import numpy as np
 import bpy
-from mathutils import Vector, Matrix, Quaternion
-from . import constraints, collision
+import numpy as np
+from mathutils import Matrix, Vector
+
+from ....animation.blender_pose import interpolate_matrix_trs
+from ....bartmoss.dynamics import clamp_damping_vectors
+from . import collision, constraints, pendulum, solvers, spaces, spring
 from .drag import DragPostProcessor
 
 DAMPING_ACCEL_LIMIT = 50.0
@@ -11,10 +13,57 @@ MAX_TIME_DILATION   = 1.0
 MAX_PHYSICS_STEPS   = 3.0
 LP_FILTER_RC        = 1.0
 
+CONSTRAINT_LINK = 0
+CONSTRAINT_ELLIPSOID = 1
+CONSTRAINT_CONE = 2
+
 TELEPORT_KEEP_SQ  = 1.0
 TELEPORT_RESET_SQ = 25.0
 
 class DyngSimulator:
+    def _register_bone_aliases(self, authored_name, actual_name, index):
+        for alias in spaces.bone_name_candidates(authored_name):
+            self.bone_idx_map.setdefault(alias, index)
+        for alias in spaces.bone_name_candidates(actual_name):
+            self.bone_idx_map.setdefault(alias, index)
+
+    def _append_extra_bone(self, authored_name, required=True):
+        authored_name = str(authored_name or "")
+        if not authored_name:
+            return -1
+        actual_name = spaces.resolve_bone_name(self.arm_obj, authored_name)
+        if not actual_name:
+            if required:
+                self._missing_bone_references.add(authored_name)
+            return -1
+        existing = self._actual_bone_idx.get(actual_name)
+        if existing is not None:
+            self._register_bone_aliases(authored_name, actual_name, existing)
+            return existing
+        index = len(self.bone_names)
+        self._actual_bone_idx[actual_name] = index
+        self.bone_names.append(actual_name)
+        self._extra_bone_names.append(actual_name)
+        self._register_bone_aliases(authored_name, actual_name, index)
+        return index
+
+    def resolve_bone_index(self, bone_name, particle_index=None, node_index=None):
+        if node_index is None and particle_index is not None:
+            if 0 <= int(particle_index) < len(self._particle_node_idx):
+                node_index = int(self._particle_node_idx[int(particle_index)])
+        if node_index is not None and 0 <= int(node_index) < len(self._node_bone_maps):
+            node_map = self._node_bone_maps[int(node_index)]
+            for alias in spaces.bone_name_candidates(bone_name):
+                index = node_map.get(alias)
+                if index is not None:
+                    return index
+        for alias in spaces.bone_name_candidates(bone_name):
+            index = self.bone_idx_map.get(alias)
+            if index is not None:
+                return index
+        actual_name = spaces.resolve_bone_name(self.arm_obj, bone_name)
+        return self.bone_idx_map.get(actual_name) if actual_name else None
+
     def __init__(self, rig_obj):
         self.arm_obj = rig_obj
         self.state = rig_obj.dangle_state
@@ -23,6 +72,7 @@ class DyngSimulator:
         self.particle_dnode_map = []
         self._node_ranges = []
         self._node_iters = []
+        self._node_solver_types = []
 
         offset = 0
         for dnode in self.state.dangle_nodes:
@@ -34,48 +84,126 @@ class DyngSimulator:
                     offset += 1
             self._node_ranges.append((start, offset))
             self._node_iters.append(dnode.solver_iterations)
+            self._node_solver_types.append(
+                dnode.chains[0].solver if dnode.chains else 'DYNG'
+            )
 
         self.num_particles = len(self.particles)
-        if self.num_particles == 0:
-            return
+        (
+            self._executable_dangle_indices,
+            self._executable_drag_indices,
+        ) = spaces.executable_node_indices(self.state)
+        self._particle_node_idx = np.zeros(self.num_particles, dtype=np.int32)
+        for node_index, (start, end) in enumerate(self._node_ranges):
+            self._particle_node_idx[start:end] = node_index
 
-        self.bone_names = [p.bone_name for p in self.particles]
+        self.authored_bone_names = [str(p.bone_name or "") for p in self.particles]
+        self.bone_names = []
+        self.bone_idx_map = {}
+        self._actual_bone_idx = {}
+        self._missing_bone_references = set()
+        self._extra_bone_names = []
+
+        for particle_index, authored_name in enumerate(self.authored_bone_names):
+            node_index = int(self._particle_node_idx[particle_index])
+            required = node_index in self._executable_dangle_indices
+            actual_name = spaces.resolve_bone_name(self.arm_obj, authored_name)
+            if not actual_name:
+                if required:
+                    self._missing_bone_references.add(
+                        authored_name or "<unnamed particle>"
+                    )
+                actual_name = authored_name
+            self._actual_bone_idx.setdefault(actual_name, particle_index)
+            self.bone_names.append(actual_name)
+            self._register_bone_aliases(authored_name, actual_name, particle_index)
 
         self._node_bone_maps = []
-        for ni in range(len(self._node_ranges)):
-            start, end = self._node_ranges[ni]
-            nmap = {}
-            for pi in range(start, end):
-                bn = self.particles[pi].bone_name
-                if bn not in nmap:
-                    nmap[bn] = pi
-            self._node_bone_maps.append(nmap)
+        for node_index, (start, end) in enumerate(self._node_ranges):
+            node_map = {}
+            for particle_index in range(start, end):
+                authored_name = self.authored_bone_names[particle_index]
+                actual_name = self.bone_names[particle_index]
+                for alias in spaces.bone_name_candidates(authored_name):
+                    node_map.setdefault(alias, particle_index)
+                for alias in spaces.bone_name_candidates(actual_name):
+                    node_map.setdefault(alias, particle_index)
+            self._node_bone_maps.append(node_map)
 
-        self._particle_node_idx = np.zeros(self.num_particles, dtype=np.int32)
-        for ni, (start, end) in enumerate(self._node_ranges):
-            self._particle_node_idx[start:end] = ni
-
-        self.bone_idx_map = {name: i for i, name in enumerate(self.bone_names)}
-
-        self._extra_bone_names = []
+        global_shapes_required = bool(self._executable_dangle_indices)
         for shape in self.state.collision_shapes:
-            bn = shape.bone_name
-            if bn and bn not in self.bone_idx_map:
-                idx = self.num_particles + len(self._extra_bone_names)
-                self.bone_idx_map[bn] = idx
-                self._extra_bone_names.append(bn)
-                self.bone_names.append(bn)
-
-        for dnode in self.state.dangle_nodes:
+            self._append_extra_bone(
+                shape.bone_name, required=global_shapes_required
+            )
+        for node_index, dnode in enumerate(self.state.dangle_nodes):
+            required = node_index in self._executable_dangle_indices
             for shape in dnode.collision_shapes:
-                bn = shape.bone_name
-                if bn and bn not in self.bone_idx_map:
-                    idx = self.num_particles + len(self._extra_bone_names)
-                    self.bone_idx_map[bn] = idx
-                    self._extra_bone_names.append(bn)
-                    self.bone_names.append(bn)
+                self._append_extra_bone(shape.bone_name, required=required)
 
-        total_tracked = self.num_particles + len(self._extra_bone_names)
+        for node_index, (start, end) in enumerate(self._node_ranges):
+            required = node_index in self._executable_dangle_indices
+            for particle_index in range(start, end):
+                particle = self.particles[particle_index]
+                if particle.direction_reference_bone:
+                    self._append_extra_bone(
+                        particle.direction_reference_bone, required=required
+                    )
+                for link in particle.link_constraints:
+                    self._append_extra_bone(
+                        link.target_bone, required=required
+                    )
+                for ellipsoid in particle.ellipsoid_constraints:
+                    self._append_extra_bone(
+                        ellipsoid.target_bone, required=required
+                    )
+                for pendulum_constraint in particle.pendulum_constraints:
+                    self._append_extra_bone(
+                        pendulum_constraint.target_bone, required=required
+                    )
+
+        for node_index, solver_type in enumerate(self._node_solver_types):
+            if solver_type not in {'PBD', 'SPRING', 'PENDULUM'}:
+                continue
+            start, end = self._node_ranges[node_index]
+            if start >= end:
+                continue
+            particle = self.particles[start]
+            pose_bone = spaces.resolve_pose_bone(self.arm_obj, particle.bone_name)
+            required = node_index in self._executable_dangle_indices
+            if solver_type == 'PBD' and particle.direction_reference_bone:
+                self._append_extra_bone(
+                    particle.direction_reference_bone, required=required
+                )
+            if pose_bone is not None and pose_bone.parent is not None:
+                self._append_extra_bone(
+                    pose_bone.parent.name, required=required
+                )
+
+        for drag_index, drag_node in enumerate(self.state.drag_nodes):
+            required = drag_index in self._executable_drag_indices
+            source_name = drag_node.source_bone_name or drag_node.bone_name
+            self._append_extra_bone(source_name, required=required)
+            self._append_extra_bone(drag_node.bone_name, required=required)
+
+        if self._missing_bone_references:
+            missing = ", ".join(sorted(self._missing_bone_references)[:12])
+            extra = len(self._missing_bone_references) - 12
+            suffix = f" (+{extra} more)" if extra > 0 else ""
+            raise ValueError(
+                f"The selected MetaRig is missing required Dangle bones: {missing}{suffix}"
+            )
+
+        total_tracked = len(self.bone_names)
+        self._pose_bones = [
+            self.arm_obj.pose.bones.get(name) for name in self.bone_names
+        ]
+        self._node_slices = [
+            slice(start, end) for start, end in self._node_ranges
+        ]
+        self._node_indices = [
+            np.arange(start, end, dtype=np.int32)
+            for start, end in self._node_ranges
+        ]
 
         self.pos_ms = np.zeros((total_tracked, 3), dtype=np.float32)
         self.vel_ms = np.zeros((total_tracked, 3), dtype=np.float32)
@@ -96,28 +224,132 @@ class DyngSimulator:
         self.col_height = np.zeros(total_tracked, dtype=np.float32)
         self.col_axis_ls = np.zeros((total_tracked, 3), dtype=np.float32)
         self.proj_type = np.zeros(total_tracked, dtype=np.int32)
+        self._constraint_vector = np.zeros(3, dtype=np.float32)
 
-        self.prev_ext_force_ms = np.zeros(3, dtype=np.float32)
-        self.cur_ext_force_ms = np.zeros(3, dtype=np.float32)
-        self.prev_grav_ms = np.zeros(3, dtype=np.float32)
-        self.cur_grav_ms = np.zeros(3, dtype=np.float32)
+        node_count = len(self.state.dangle_nodes)
+        self._node_prev_ext_force_ms = np.zeros((node_count, 3), dtype=np.float32)
+        self._node_cur_ext_force_ms = np.zeros((node_count, 3), dtype=np.float32)
+        self._node_prev_grav_ms = np.zeros((node_count, 3), dtype=np.float32)
+        self._node_cur_grav_ms = np.zeros((node_count, 3), dtype=np.float32)
+        self._node_time_remainder = np.zeros(node_count, dtype=np.float64)
+        self._node_damped_physics_steps = np.ones(node_count, dtype=np.float32)
+        self._node_simulation_needs_initialization = np.array(
+            [solver_type == 'DYNG' for solver_type in self._node_solver_types],
+            dtype=bool,
+        )
 
-        self._interp_bone_xform = [Matrix.Identity(4)] * total_tracked
+        self._prev_bone_xform = [Matrix.Identity(4) for _ in range(total_tracked)]
+        self._cur_bone_xform = [Matrix.Identity(4) for _ in range(total_tracked)]
+        self._interp_bone_xform = [Matrix.Identity(4) for _ in range(total_tracked)]
+        self._input_bone_xform = [Matrix.Identity(4) for _ in range(total_tracked)]
+        self._last_output_bone_xform = [None for _ in range(total_tracked)]
+        self._input_bone_basis = {}
+        self._last_output_bone_basis = {}
+        self._feedback_bone_names = set()
 
-        self.time_remainder = 0.0
-        self.damped_physics_steps = 1.0
         self.prev_matrix_world = rig_obj.matrix_world.copy()
 
         self._init_state()
+        self._compile_node_workspaces()
+        self._initialize_node_forces()
         constraints.compile_constraints(self)
         collision.compile_collision_shapes(self)
         self._build_node_constraint_sets()
+        self._build_authored_constraint_order()
+        self._compile_position_projection_nodes()
+        spring.compile_spring_nodes(self)
+        pendulum.compile_pendulum_nodes(self)
+        solvers.compile_output_topology(self)
 
         self.drag_post = DragPostProcessor(self)
+        self.execution_plan = self._build_execution_plan()
+        self._initialize_node_input_history()
+        self._build_feedback_bone_set()
+
+    def _build_execution_plan(self):
+        plan = []
+        operations = getattr(self.state, 'evaluation_order', ())
+        config_to_runtime = getattr(
+            self.drag_post, 'config_to_runtime', {}
+        )
+        for operation in operations:
+            if not spaces.operation_uses_default_branch(operation):
+                continue
+            node_type = getattr(operation, 'node_type', '')
+            node_index = int(getattr(operation, 'node_index', -1))
+            if node_type == 'DANGLE':
+                if 0 <= node_index < len(self._node_ranges):
+                    plan.append(('DANGLE', node_index))
+            elif node_type == 'DRAG':
+                runtime_index = config_to_runtime.get(node_index)
+                if runtime_index is not None:
+                    plan.append(('DRAG', int(runtime_index)))
+
+        if not operations:
+            plan.extend(
+                ('DANGLE', node_index)
+                for node_index in range(len(self._node_ranges))
+            )
+            plan.extend(
+                ('DRAG', runtime_index)
+                for runtime_index in range(self.drag_post.num_drags)
+            )
+        return plan
+
+    def _capture_tracked_pose(self):
+        return [
+            pose_bone.matrix.copy()
+            if pose_bone is not None else Matrix.Identity(4)
+            for pose_bone in self._pose_bones
+        ]
+
+    def _initialize_node_input_history(self):
+        initial = self._capture_tracked_pose()
+        node_count = len(self._node_ranges)
+        self._node_input_previous = [
+            [matrix.copy() for matrix in initial]
+            for _ in range(node_count)
+        ]
+        self._node_input_current = [
+            [matrix.copy() for matrix in initial]
+            for _ in range(node_count)
+        ]
+
+    def _sample_base_input_pose(self):
+        for index, pose_bone in enumerate(self._pose_bones):
+            if pose_bone is None or not self.active_mask[index]:
+                continue
+            matrix = pose_bone.matrix.copy()
+            self._input_bone_xform[index] = matrix.copy()
+            self.cur_bone_ms[index] = matrix.translation
+            self._cur_bone_xform[index] = matrix
+
+    def _sample_node_input(self, node_index):
+        previous = self._node_input_current[node_index]
+        current = self._capture_tracked_pose()
+        self._node_input_previous[node_index] = [
+            matrix.copy() for matrix in previous
+        ]
+        self._node_input_current[node_index] = [
+            matrix.copy() for matrix in current
+        ]
+
+        for index in range(len(self.bone_names)):
+            previous_matrix = previous[index]
+            current_matrix = current[index]
+            self._prev_bone_xform[index] = previous_matrix.copy()
+            self._cur_bone_xform[index] = current_matrix.copy()
+            self.prev_bone_ms[index] = np.asarray(
+                previous_matrix.translation, dtype=np.float32
+            )
+            self.cur_bone_ms[index] = np.asarray(
+                current_matrix.translation, dtype=np.float32
+            )
+            self._input_bone_xform[index] = current_matrix.copy()
 
     def _init_state(self):
         for i, p_cfg in enumerate(self.particles):
-            pb = self.arm_obj.pose.bones.get(p_cfg.bone_name)
+            pb = self._pose_bones[i]
             if pb:
                 ms_head = np.array(pb.matrix.translation, dtype=np.float32)
                 self.pos_ms[i] = ms_head
@@ -129,148 +361,519 @@ class DyngSimulator:
             self.inv_mass[i] = 0.0 if p_cfg.is_pinned else (1.0 / self.mass[i])
             self.damping[i] = p_cfg.damping
             self.pull_force[i] = p_cfg.pull_force
-            self.col_radius[i] = p_cfg.capsule_radius
-            self.col_height[i] = p_cfg.capsule_height
-            self.col_axis_ls[i] = p_cfg.capsule_axis_ls
+            node_solver = self._node_solver_types[
+                int(self._particle_node_idx[i])
+            ]
+            if node_solver == 'SPRING':
+                self.col_radius[i] = p_cfg.spring_collision_radius
+                self.col_height[i] = 0.0
+                axis_bl = spaces.re_axis_to_blender_bone(
+                    (1.0, 0.0, 0.0), self.arm_obj
+                )
+                projection_type = p_cfg.spring_projection_type
+            else:
+                self.col_radius[i] = p_cfg.capsule_radius
+                self.col_height[i] = p_cfg.capsule_height
+                axis_bl = spaces.re_axis_to_blender_bone(
+                    p_cfg.capsule_axis_ls, self.arm_obj
+                )
+                projection_type = (
+                    p_cfg.pos_projection_type
+                    if node_solver == 'PBD'
+                    else p_cfg.dyng_projection_type
+                )
+            self.col_axis_ls[i] = np.array(axis_bl, dtype=np.float32)
             self.proj_type[i] = (
-                1 if p_cfg.dyng_projection_type == 'SHORTEST_PATH'
-                else (2 if p_cfg.dyng_projection_type == 'DIRECTED' else 0)
+                1 if projection_type == 'SHORTEST_PATH'
+                else (
+                    2 if projection_type in {'DIRECTED', 'DIRECTIONAL'}
+                    else 0
+                )
             )
 
-        for j, bn in enumerate(self._extra_bone_names):
-            idx = self.num_particles + j
-            pb = self.arm_obj.pose.bones.get(bn)
-            if pb:
-                ms_head = np.array(pb.matrix.translation, dtype=np.float32)
-                self.prev_bone_ms[idx] = ms_head
-                self.cur_bone_ms[idx] = ms_head
-
-    def _build_node_constraint_sets(self):
-        n_nodes = len(self.state.dangle_nodes)
-        self._node_link_sel = [None] * n_nodes
-        self._node_ell_sel = [None] * n_nodes
-        self._node_cone_sel = [None] * n_nodes
-
-        for ni in range(n_nodes):
-            start, end = self._node_ranges[ni]
-            pset = np.arange(start, end, dtype=np.int32)
-
-            if getattr(self, 'link_idx_a', None) is not None:
-                mask = np.isin(self.link_idx_a, pset)
-                sel = np.where(mask)[0]
-                if len(sel) > 0:
-                    self._node_link_sel[ni] = sel
-
-            if getattr(self, 'ell_idx', None) is not None:
-                mask = np.isin(self.ell_idx, pset)
-                sel = np.where(mask)[0]
-                if len(sel) > 0:
-                    self._node_ell_sel[ni] = sel
-
-            if getattr(self, 'cone_idx', None) is not None:
-                mask = np.isin(self.cone_idx, pset)
-                sel = np.where(mask)[0]
-                if len(sel) > 0:
-                    self._node_cone_sel[ni] = sel
-
-    def _save_constraint_arrays(self):
-        saved = {}
-        if getattr(self, 'link_idx_a', None) is not None:
-            saved['link'] = (
-                self.link_idx_a, self.link_idx_b, self.link_types,
-                self.link_lower, self.link_upper, self.link_rest,
-                self.link_look_axes,
-            )
-        if getattr(self, 'ell_idx', None) is not None:
-            saved['ell'] = (
-                self.ell_idx, self.ell_centers, self.ell_radii,
-                self.ell_s1, self.ell_s2, self.ell_xform_ls,
-            )
-        if getattr(self, 'cone_idx', None) is not None:
-            saved['cone'] = (
-                self.cone_idx, self.cone_attach, self.cone_type,
-                self.cone_cos, self.cone_sin_hh, self.cone_cos_hh,
-                self.cone_xform_ls,
-                self.cone_proj_type, self.cone_col_radius,
-                self.cone_col_height,
-            )
-        return saved
-
-    def _swap_node_constraints(self, node_idx):
-        sel = self._node_link_sel[node_idx]
-        if sel is not None and getattr(self, 'link_idx_a', None) is not None:
-            self.link_idx_a = self._saved_constraints['link'][0][sel]
-            self.link_idx_b = self._saved_constraints['link'][1][sel]
-            self.link_types = self._saved_constraints['link'][2][sel]
-            self.link_lower = self._saved_constraints['link'][3][sel]
-            self.link_upper = self._saved_constraints['link'][4][sel]
-            self.link_rest = self._saved_constraints['link'][5][sel]
-            self.link_look_axes = self._saved_constraints['link'][6][sel]
-        elif getattr(self, '_saved_link_was_set', False):
-            self.link_idx_a = None
-
-        sel = self._node_ell_sel[node_idx]
-        if sel is not None and 'ell' in self._saved_constraints:
-            self.ell_idx = self._saved_constraints['ell'][0][sel]
-            self.ell_centers = self._saved_constraints['ell'][1][sel]
-            self.ell_radii = self._saved_constraints['ell'][2][sel]
-            self.ell_s1 = self._saved_constraints['ell'][3][sel]
-            self.ell_s2 = self._saved_constraints['ell'][4][sel]
-            self.ell_xform_ls = [
-                self._saved_constraints['ell'][5][j] for j in sel
-            ]
-        elif getattr(self, '_saved_ell_was_set', False):
-            self.ell_idx = None
-
-        sel = self._node_cone_sel[node_idx]
-        if sel is not None and 'cone' in self._saved_constraints:
-            self.cone_idx = self._saved_constraints['cone'][0][sel]
-            self.cone_attach = self._saved_constraints['cone'][1][sel]
-            self.cone_type = self._saved_constraints['cone'][2][sel]
-            self.cone_cos = self._saved_constraints['cone'][3][sel]
-            self.cone_sin_hh = self._saved_constraints['cone'][4][sel]
-            self.cone_cos_hh = self._saved_constraints['cone'][5][sel]
-            self.cone_xform_ls = [
-                self._saved_constraints['cone'][6][j] for j in sel
-            ]
-            self.cone_proj_type = self._saved_constraints['cone'][7][sel]
-            self.cone_col_radius = self._saved_constraints['cone'][8][sel]
-            self.cone_col_height = self._saved_constraints['cone'][9][sel]
-        elif getattr(self, '_saved_cone_was_set', False):
-            self.cone_idx = None
-
-    def _restore_constraints(self):
-        saved = self._saved_constraints
-        if 'link' in saved:
-            (self.link_idx_a, self.link_idx_b, self.link_types,
-             self.link_lower, self.link_upper, self.link_rest,
-             self.link_look_axes) = saved['link']
-        if 'ell' in saved:
-            (self.ell_idx, self.ell_centers, self.ell_radii,
-             self.ell_s1, self.ell_s2, self.ell_xform_ls) = saved['ell']
-        if 'cone' in saved:
-            (self.cone_idx, self.cone_attach, self.cone_type,
-             self.cone_cos, self.cone_sin_hh, self.cone_cos_hh,
-             self.cone_xform_ls,
-             self.cone_proj_type, self.cone_col_radius,
-             self.cone_col_height) = saved['cone']
-
-    def _update_kinematic_state(self):
-        for i, bname in enumerate(self.bone_names):
-            pb = self.arm_obj.pose.bones.get(bname)
+        for i, bn in enumerate(self.bone_names):
+            pb = self._pose_bones[i]
             if pb is None:
                 self.active_mask[i] = False
-            else:
-                hidden = pb.bone.hide or getattr(pb.bone, 'hide_viewport', False)
-                self.active_mask[i] = not hidden
+                continue
+            matrix = pb.matrix.copy()
+            ms_head = np.array(matrix.translation, dtype=np.float32)
+            self.prev_bone_ms[i] = ms_head
+            self.cur_bone_ms[i] = ms_head
+            self.interp_bone_ms[i] = ms_head
+            self._prev_bone_xform[i] = matrix.copy()
+            self._cur_bone_xform[i] = matrix.copy()
+            self._interp_bone_xform[i] = matrix.copy()
+            self._input_bone_xform[i] = matrix.copy()
+            if i >= self.num_particles:
+                self.pos_ms[i] = ms_head
 
-    def _update_bone_xforms(self):
-        for i, bname in enumerate(self.bone_names):
+    def _compile_position_projection_nodes(self):
+        self._position_projection_nodes = {}
+        for node_index, solver_type in enumerate(self._node_solver_types):
+            if solver_type != 'PBD':
+                continue
+            start, end = self._node_ranges[node_index]
+            if end - start != 1:
+                continue
+            particle = self.particles[start]
+            pose_bone = self.arm_obj.pose.bones.get(self.bone_names[start])
+            parent_index = -1
+            if pose_bone is not None and pose_bone.parent is not None:
+                parent_index = self.resolve_bone_index(pose_bone.parent.name)
+                if parent_index is None:
+                    parent_index = -1
+            reference_index = self.resolve_bone_index(
+                particle.direction_reference_bone, node_index=node_index
+            )
+            if reference_index is None:
+                reference_index = -1
+            self._position_projection_nodes[node_index] = {
+                'particle_index': start,
+                'parent_index': parent_index,
+                'reference_index': reference_index,
+            }
+
+    def _position_projection_node_is_valid(self, node_index):
+        runtime = self._position_projection_nodes.get(node_index)
+        if runtime is None:
+            return False
+        particle_index = runtime['particle_index']
+        if not self.active_mask[particle_index]:
+            return False
+        if runtime['parent_index'] < 0 or not self.active_mask[runtime['parent_index']]:
+            return False
+        for shape in self._node_col_shapes[node_index]:
+            shape_index = int(shape.get('bone_index', -1))
+            if shape_index < 0 or not self.active_mask[shape_index]:
+                return False
+        return True
+
+    def _step_position_projection_node(self, node_index):
+        if not self._position_projection_node_is_valid(node_index):
+            return
+
+        runtime = self._position_projection_nodes[node_index]
+        particle_index = runtime['particle_index']
+        particle = self.particles[particle_index]
+        node_shapes = self._node_col_shapes[node_index]
+
+        collision.update_collision_transforms_begin(self, node_shapes)
+        collision.update_collision_transforms(self, 1.0, node_shapes)
+
+        desired_position = self.cur_bone_ms[particle_index].copy()
+        projection_type = particle.pos_projection_type
+        if projection_type == 'SHORTEST_PATH':
+            for shape in node_shapes:
+                desired_position = collision.project_shortest_path_position(
+                    shape, desired_position, particle.capsule_radius
+                )
+        elif projection_type == 'DIRECTIONAL':
+            reference_index = runtime['reference_index']
+            if reference_index >= 0 and self.active_mask[reference_index]:
+                axis_ms = (
+                    self.cur_bone_ms[reference_index]
+                    - self.cur_bone_ms[particle_index]
+                )
+            else:
+                axis_ls = Vector(self.col_axis_ls[particle_index])
+                if axis_ls.length_squared < 1e-8:
+                    axis_ls = spaces.re_axis_to_blender_bone(
+                        (1.0, 0.0, 0.0), self.arm_obj
+                    )
+                axis_ms = np.array(
+                    self._cur_bone_xform[particle_index].to_quaternion()
+                    @ axis_ls.normalized(),
+                    dtype=np.float32,
+                )
+            axis_length = float(np.linalg.norm(axis_ms))
+            if axis_length > 1e-8:
+                axis_ms = axis_ms / axis_length
+                for shape in node_shapes:
+                    desired_position = collision.project_directional_capsule_position(
+                        shape,
+                        desired_position,
+                        axis_ms,
+                        particle.capsule_height,
+                        particle.capsule_radius,
+                    )
+
+        self.prev_pos_ms[particle_index] = self.pos_ms[particle_index]
+        self.pos_ms[particle_index] = desired_position
+        self.vel_ms[particle_index] = 0.0
+
+    def _build_node_constraint_sets(self):
+        node_count = len(self.state.dangle_nodes)
+        self._node_link_sel = [None] * node_count
+        self._node_ell_sel = [None] * node_count
+        self._node_cone_sel = [None] * node_count
+
+        for node_index, (start, end) in enumerate(self._node_ranges):
+            if self.link_idx_a is not None:
+                selection = np.flatnonzero(
+                    (self.link_idx_a >= start) & (self.link_idx_a < end)
+                ).astype(np.int32, copy=False)
+                if selection.size:
+                    self._node_link_sel[node_index] = selection
+            if self.ell_idx is not None:
+                selection = np.flatnonzero(
+                    (self.ell_idx >= start) & (self.ell_idx < end)
+                ).astype(np.int32, copy=False)
+                if selection.size:
+                    self._node_ell_sel[node_index] = selection
+            if self.cone_idx is not None:
+                selection = np.flatnonzero(
+                    (self.cone_idx >= start) & (self.cone_idx < end)
+                ).astype(np.int32, copy=False)
+                if selection.size:
+                    self._node_cone_sel[node_index] = selection
+
+    def _build_authored_constraint_order(self):
+        self._node_constraint_order = []
+        for node_index, dnode in enumerate(self.state.dangle_nodes):
+            selections = {
+                CONSTRAINT_LINK: self._node_link_sel[node_index],
+                CONSTRAINT_ELLIPSOID: self._node_ell_sel[node_index],
+                CONSTRAINT_CONE: self._node_cone_sel[node_index],
+            }
+            maps = {
+                CONSTRAINT_LINK: {},
+                CONSTRAINT_ELLIPSOID: {},
+                CONSTRAINT_CONE: {},
+            }
+            offsets = {
+                CONSTRAINT_LINK: 0,
+                CONSTRAINT_ELLIPSOID: 0,
+                CONSTRAINT_CONE: 0,
+            }
+            for chain in dnode.chains:
+                for particle in chain.particles:
+                    groups = (
+                        (CONSTRAINT_LINK, particle.link_constraints),
+                        (CONSTRAINT_ELLIPSOID, particle.ellipsoid_constraints),
+                        (CONSTRAINT_CONE, particle.pendulum_constraints),
+                    )
+                    for kind, constraints_group in groups:
+                        selection = selections[kind]
+                        for local_index, _constraint in enumerate(constraints_group):
+                            compiled_offset = offsets[kind]
+                            if selection is not None and compiled_offset < len(selection):
+                                maps[kind][
+                                    (particle.bone_name, local_index)
+                                ] = int(selection[compiled_offset])
+                            offsets[kind] += 1
+
+            order = []
+            for entry in getattr(dnode, 'constraint_order', ()):
+                kind = {
+                    'LINK': CONSTRAINT_LINK,
+                    'ELLIPSOID': CONSTRAINT_ELLIPSOID,
+                    'CONE': CONSTRAINT_CONE,
+                }.get(entry.constraint_type)
+                index = maps.get(kind, {}).get((
+                    entry.particle_bone,
+                    int(entry.constraint_index),
+                ))
+                if index is not None:
+                    order.append((kind, index))
+            if not order:
+                for kind in (
+                    CONSTRAINT_LINK, CONSTRAINT_ELLIPSOID, CONSTRAINT_CONE
+                ):
+                    selection = selections[kind]
+                    if selection is not None:
+                        order.extend((kind, int(index)) for index in selection)
+            self._node_constraint_order.append(tuple(order))
+
+    def _satisfy_constraints_in_authored_order(self, node_index):
+        for kind, constraint_index in self._node_constraint_order[node_index]:
+            if kind == CONSTRAINT_LINK:
+                constraints.satisfy_dyng_link_at(self, constraint_index)
+            elif kind == CONSTRAINT_ELLIPSOID:
+                constraints.satisfy_dyng_ellipsoid_at(self, constraint_index)
+            elif kind == CONSTRAINT_CONE:
+                constraints.satisfy_pendulum_at(self, constraint_index)
+
+    def _respond_constraint_collisions_in_authored_order(
+        self, node_index, node_shapes
+    ):
+        if self.cone_idx is None:
+            return
+        for kind, constraint_index in self._node_constraint_order[node_index]:
+            if kind == CONSTRAINT_CONE:
+                collision.respond_to_cone_collision_at(
+                    self, constraint_index, node_shapes
+                )
+
+    def _update_kinematic_state(self):
+        for index, pose_bone in enumerate(self._pose_bones):
+            self.active_mask[index] = pose_bone is not None
+
+    def _descendant_names(pose_bone):
+        names = []
+        stack = list(pose_bone.children)
+        while stack:
+            child = stack.pop()
+            names.append(child.name)
+            stack.extend(child.children)
+        return names
+
+    def _build_feedback_bone_set(self):
+        names = {
+            self.bone_names[index]
+            for index in range(self.num_particles)
+            if self.bone_names[index]
+        }
+
+        if getattr(self, 'link_idx_a', None) is not None:
+            names.update(
+                self.bone_names[int(index)]
+                for index in self.link_idx_a
+                if 0 <= int(index) < len(self.bone_names)
+            )
+
+        for runtime in getattr(self, '_position_projection_nodes', {}).values():
+            parent_index = int(runtime.get('parent_index', -1))
+            if 0 <= parent_index < len(self.bone_names):
+                names.add(self.bone_names[parent_index])
+        for runtime in getattr(self, '_spring_nodes', {}).values():
+            parent_index = int(runtime.get('parent_index', -1))
+            if 0 <= parent_index < len(self.bone_names):
+                names.add(self.bone_names[parent_index])
+        for runtime in getattr(self, '_pendulum_nodes', {}).values():
+            parent_index = int(runtime.get('parent_index', -1))
+            if 0 <= parent_index < len(self.bone_names):
+                names.add(self.bone_names[parent_index])
+
+        drag_post = getattr(self, 'drag_post', None)
+        drag_indices = getattr(drag_post, 'drag_indices', ())
+        names.update(
+            self.bone_names[int(index)]
+            for index in drag_indices
+            if 0 <= int(index) < len(self.bone_names)
+        )
+        for index in drag_indices:
+            index = int(index)
+            if not 0 <= index < len(self.bone_names):
+                continue
+            pose_bone = self.arm_obj.pose.bones.get(self.bone_names[index])
+            if pose_bone is not None:
+                names.update(self._descendant_names(pose_bone))
+
+        # Clear descendant overrides before sampling the next input pose.
+        for particle_index in range(self.num_particles):
+            pose_bone = self.arm_obj.pose.bones.get(
+                self.bone_names[particle_index]
+            )
+            if pose_bone is not None:
+                names.update(self._descendant_names(pose_bone))
+
+        lookat_sources = set()
+        if getattr(self, 'link_idx_a', None) is not None:
+            lookat_sources.update(int(index) for index in self.link_idx_a)
+        for runtime in getattr(self, '_position_projection_nodes', {}).values():
+            parent_index = int(runtime.get('parent_index', -1))
+            if parent_index >= 0:
+                lookat_sources.add(parent_index)
+        for runtime in getattr(self, '_spring_nodes', {}).values():
+            parent_index = int(runtime.get('parent_index', -1))
+            if parent_index >= 0:
+                lookat_sources.add(parent_index)
+        for runtime in getattr(self, '_pendulum_nodes', {}).values():
+            parent_index = int(runtime.get('parent_index', -1))
+            if parent_index >= 0:
+                lookat_sources.add(parent_index)
+
+        for source_index in lookat_sources:
+            if not 0 <= source_index < len(self.bone_names):
+                continue
+            source_bone = self.arm_obj.pose.bones.get(
+                self.bone_names[source_index]
+            )
+            if source_bone is not None:
+                names.update(self._descendant_names(source_bone))
+
+        self._feedback_bone_names = {
+            name for name in names
+            if self.arm_obj.pose.bones.get(name) is not None
+        }
+        self._input_bone_basis = {
+            name: self.arm_obj.pose.bones[name].matrix_basis.copy()
+            for name in self._feedback_bone_names
+        }
+        self._last_output_bone_basis = {
+            name: None for name in self._feedback_bone_names
+        }
+
+    def _restore_upstream_pose(self):
+        changed = False
+        for bone_name in self._feedback_bone_names:
+            pose_bone = self.arm_obj.pose.bones.get(bone_name)
+            if pose_bone is None:
+                continue
+
+            displayed_basis = pose_bone.matrix_basis.copy()
+            last_output = self._last_output_bone_basis.get(bone_name)
+            if not self._matrix_near(displayed_basis, last_output):
+                self._input_bone_basis[bone_name] = displayed_basis.copy()
+
+            input_basis = self._input_bone_basis.get(bone_name)
+            if input_basis is None:
+                continue
+            if not self._matrix_near(displayed_basis, input_basis):
+                pose_bone.matrix_basis = input_basis.copy()
+                changed = True
+
+        if changed:
+            self.arm_obj.update_tag(refresh={'OBJECT'})
+            bpy.context.view_layer.update()
+
+    def _compile_node_workspaces(self):
+        self._node_workspaces = []
+        for node_index, node_slice in enumerate(self._node_slices):
+            start, end = self._node_ranges[node_index]
+            count = end - start
+            configured_free = self.is_free[node_slice] & self.active_mask[node_slice]
+            free_local = np.flatnonzero(configured_free).astype(
+                np.int32, copy=False
+            )
+            fixed_local = np.flatnonzero(~configured_free).astype(
+                np.int32, copy=False
+            )
+            node_indices = self._node_indices[node_index]
+            collision_shortest = node_indices[
+                configured_free & (self.proj_type[node_slice] == 1)
+            ]
+            collision_directed = node_indices[
+                configured_free & (self.proj_type[node_slice] == 2)
+            ]
+            self._node_workspaces.append({
+                'slice': node_slice,
+                'indices': node_indices,
+                'free_local': free_local,
+                'fixed_local': fixed_local,
+                'all_free': free_local.size == count,
+                'collision_shortest_indices': collision_shortest,
+                'collision_directed_indices': collision_directed,
+                'damping_factor': (
+                    -self.damping[node_slice] * self.inv_mass[node_slice]
+                ).astype(np.float32, copy=True),
+                'pull_factor': (
+                    self.pull_force[node_slice] * self.inv_mass[node_slice]
+                ).astype(np.float32, copy=True),
+                'inverse_mass': self.inv_mass[node_slice].copy(),
+                'acceleration': np.zeros((count, 3), dtype=np.float32),
+                'external_acceleration': np.zeros((count, 3), dtype=np.float32),
+                'damping_acceleration': np.zeros((count, 3), dtype=np.float32),
+                'pull_acceleration': np.zeros((count, 3), dtype=np.float32),
+                'half_velocity': np.zeros((count, 3), dtype=np.float32),
+                'predicted_position': np.zeros((count, 3), dtype=np.float32),
+                'corrected_velocity': np.zeros((count, 3), dtype=np.float32),
+                'damping_norm': np.zeros(count, dtype=np.float32),
+                'damping_safe_norm': np.ones(count, dtype=np.float32),
+                'clamped_damping': np.zeros((count, 3), dtype=np.float32),
+                'damping_limit_mask': np.zeros(count, dtype=bool),
+                'interpolated_external': np.zeros(3, dtype=np.float32),
+                'interpolated_gravity': np.zeros(3, dtype=np.float32),
+            })
+
+    def _initialize_node_forces(self):
+        for node_index, dnode in enumerate(self.state.dangle_nodes):
+            external_ms = spaces.world_direction_to_model(
+                self.arm_obj, dnode.external_force_ws
+            )
+            gravity_ms = spaces.world_direction_to_model(
+                self.arm_obj, (0.0, 0.0, -dnode.gravity_ws)
+            )
+            self._node_prev_ext_force_ms[node_index] = external_ms
+            self._node_cur_ext_force_ms[node_index] = external_ms
+            self._node_prev_grav_ms[node_index] = gravity_ms
+            self._node_cur_grav_ms[node_index] = gravity_ms
+
+    @staticmethod
+    def _matrix_near(left, right, epsilon=1e-5):
+        if right is None:
+            return False
+        return all(
+            abs(left[row][column] - right[row][column]) <= epsilon
+            for row in range(4)
+            for column in range(4)
+        )
+
+    def _begin_bone_frame(self):
+        self._restore_upstream_pose()
+
+        for i, bone_name in enumerate(self.bone_names):
             if not self.active_mask[i]:
                 continue
-            pb = self.arm_obj.pose.bones.get(bname)
-            if pb:
-                self._interp_bone_xform[i] = pb.matrix.copy()
+            pose_bone = self.arm_obj.pose.bones.get(bone_name)
+            if pose_bone is None:
+                continue
+
+            input_matrix = pose_bone.matrix.copy()
+            self._input_bone_xform[i] = input_matrix.copy()
+            self.prev_bone_ms[i] = self.cur_bone_ms[i]
+            self.cur_bone_ms[i] = np.array(
+                input_matrix.translation, dtype=np.float32
+            )
+            self._prev_bone_xform[i] = self._cur_bone_xform[i].copy()
+            self._cur_bone_xform[i] = input_matrix.copy()
+
+    def restore_upstream_pose(self):
+        changed = False
+        for bone_name in self._feedback_bone_names:
+            pose_bone = self.arm_obj.pose.bones.get(bone_name)
+            input_basis = self._input_bone_basis.get(bone_name)
+            if pose_bone is None or input_basis is None:
+                continue
+            if not self._matrix_near(pose_bone.matrix_basis, input_basis):
+                pose_bone.matrix_basis = input_basis.copy()
+                changed = True
+
+        if changed:
+            self.arm_obj.update_tag(refresh={'OBJECT'})
+            bpy.context.view_layer.update()
+
+        self._last_output_bone_xform = [
+            None for _ in self._last_output_bone_xform
+        ]
+        for bone_name in self._feedback_bone_names:
+            self._last_output_bone_basis[bone_name] = None
+
+    def capture_output_pose(self):
+        for i, bone_name in enumerate(self.bone_names):
+            if not self.active_mask[i]:
+                self._last_output_bone_xform[i] = None
+                continue
+            pose_bone = self.arm_obj.pose.bones.get(bone_name)
+            self._last_output_bone_xform[i] = (
+                pose_bone.matrix.copy() if pose_bone is not None else None
+            )
+
+        for bone_name in self._feedback_bone_names:
+            pose_bone = self.arm_obj.pose.bones.get(bone_name)
+            self._last_output_bone_basis[bone_name] = (
+                pose_bone.matrix_basis.copy()
+                if pose_bone is not None else None
+            )
+
+    def _interpolate_bones(self, frame_progress):
+        np.subtract(
+            self.cur_bone_ms, self.prev_bone_ms, out=self.interp_bone_ms
+        )
+        self.interp_bone_ms *= frame_progress
+        self.interp_bone_ms += self.prev_bone_ms
+        if len(self.bone_names) > self.num_particles:
+            self.pos_ms[self.num_particles:] = self.interp_bone_ms[self.num_particles:]
+
+        for i in range(len(self.bone_names)):
+            if not self.active_mask[i]:
+                continue
+            previous = self._prev_bone_xform[i]
+            current = self._cur_bone_xform[i]
+            self._interp_bone_xform[i] = interpolate_matrix_trs(
+                previous, current, frame_progress
+            )
 
     def _resolve_teleportation(self):
         cur_mw = self.arm_obj.matrix_world
@@ -286,7 +889,9 @@ class DyngSimulator:
             self.vel_ms.fill(0.0)
             skip_physics = True
         elif diff_sq > TELEPORT_KEEP_SQ:
-            diff_transform = self.prev_matrix_world.inverted() @ cur_mw
+            diff_transform = spaces.previous_model_to_current_model(
+                self.prev_matrix_world, cur_mw
+            )
             diff_rot_mat = np.array(
                 diff_transform.to_quaternion().to_matrix(), dtype=np.float32
             )
@@ -302,157 +907,256 @@ class DyngSimulator:
         self.prev_matrix_world = cur_mw.copy()
         return skip_physics
 
-    def _compute_accelerations(self, grav_ms, ext_ms):
-        n = self.num_particles
-        ext_accel = ext_ms * self.inv_mass[:n, np.newaxis]
-        damp_accel = (
-            self.vel_ms[:n]
-            * (-self.damping[:n, np.newaxis] * self.inv_mass[:n, np.newaxis])
-        )
-        damp_norm = np.linalg.norm(damp_accel, axis=1, keepdims=True)
-        safe_norm = np.where(damp_norm < 1e-6, 1.0, damp_norm)
-        exceeds = damp_norm > DAMPING_ACCEL_LIMIT
-        damp_accel = np.where(
-            exceeds, (damp_accel / safe_norm) * DAMPING_ACCEL_LIMIT, damp_accel
-        )
-        pull_accel = (
-            (self.interp_bone_ms[:n] - self.pos_ms[:n])
-            * (self.pull_force[:n, np.newaxis] * self.inv_mass[:n, np.newaxis])
-        )
-        accel = grav_ms + damp_accel + ext_accel + pull_accel
-        valid_mask = self.is_free[:n] & self.active_mask[:n]
-        return np.where(valid_mask[:, np.newaxis], accel, 0.0)
+    def _compute_accelerations(self, runtime, grav_ms, ext_ms):
+        node_slice = runtime['slice']
+        acceleration = runtime['acceleration']
+        external = runtime['external_acceleration']
+        damping = runtime['damping_acceleration']
+        pull = runtime['pull_acceleration']
+        damping_norm = runtime['damping_norm']
+        safe_norm = runtime['damping_safe_norm']
+        clamped_damping = runtime['clamped_damping']
+        limit_mask = runtime['damping_limit_mask']
 
-    def step_simulation(self, raw_dt, time_dilation=1.0):
-        if self.num_particles == 0:
+        acceleration[:] = grav_ms
+        clamp_damping_vectors(
+            self.vel_ms[node_slice],
+            runtime['damping_factor'],
+            DAMPING_ACCEL_LIMIT,
+            out=damping,
+            norm_buffer=damping_norm,
+            safe_buffer=safe_norm,
+            clamped_buffer=clamped_damping,
+            mask_buffer=limit_mask,
+        )
+        acceleration += damping
+        np.multiply(
+            runtime['inverse_mass'][:, None], ext_ms,
+            out=external,
+        )
+        acceleration += external
+        np.subtract(
+            self.interp_bone_ms[node_slice],
+            self.pos_ms[node_slice],
+            out=pull,
+        )
+        pull *= runtime['pull_factor'][:, None]
+        acceleration += pull
+        fixed_local = runtime['fixed_local']
+        if fixed_local.size:
+            acceleration[fixed_local] = 0.0
+        return acceleration
+
+    def _update_node_forces(self):
+        for node_index, dnode in enumerate(self.state.dangle_nodes):
+            self._node_prev_ext_force_ms[node_index] = (
+                self._node_cur_ext_force_ms[node_index]
+            )
+            self._node_cur_ext_force_ms[node_index] = (
+                spaces.world_direction_to_model(
+                    self.arm_obj, dnode.external_force_ws
+                )
+            )
+            self._node_prev_grav_ms[node_index] = (
+                self._node_cur_grav_ms[node_index]
+            )
+            self._node_cur_grav_ms[node_index] = (
+                spaces.world_direction_to_model(
+                    self.arm_obj, (0.0, 0.0, -dnode.gravity_ws)
+                )
+            )
+
+    def _initialize_dyng_node_state(
+        self, node_index, runtime, node_shapes, reset_positions,
+    ):
+        node_slice = runtime['slice']
+        if reset_positions:
+            self.pos_ms[node_slice] = self.cur_bone_ms[node_slice]
+            self.prev_pos_ms[node_slice] = self.cur_bone_ms[node_slice]
+
+        self.vel_ms[node_slice] = 0.0
+        self.prev_bone_ms[node_slice] = self.cur_bone_ms[node_slice]
+        start, end = self._node_ranges[node_index]
+        for index in range(start, end):
+            self._prev_bone_xform[index] = self._cur_bone_xform[index].copy()
+            self._interp_bone_xform[index] = self._cur_bone_xform[index].copy()
+
+        self._node_prev_ext_force_ms[node_index] = (
+            self._node_cur_ext_force_ms[node_index]
+        )
+        self._node_prev_grav_ms[node_index] = (
+            self._node_cur_grav_ms[node_index]
+        )
+        collision.initialize_collision_transforms(self, node_shapes)
+
+    def _step_node(self, node_index, raw_dt, time_dilation, skip_physics):
+        solver_type = self._node_solver_types[node_index]
+        if solver_type == 'PBD':
+            self._step_position_projection_node(node_index)
+            return
+        if solver_type == 'SPRING':
+            spring.step_spring_node(
+                self, node_index, raw_dt, time_dilation, skip_physics
+            )
+            return
+        if solver_type == 'PENDULUM':
+            pendulum.step_pendulum_node(
+                self, node_index, raw_dt, time_dilation, skip_physics
+            )
+            return
+        if solver_type != 'DYNG':
             return
 
-        n = self.num_particles
-        self._update_kinematic_state()
-        skip_physics = self._resolve_teleportation()
-
-        substep_time = max(0.001, self.state.substep_time)
-
-        self.time_remainder += raw_dt
-        raw_physics_steps = int(self.time_remainder / substep_time)
-        self.time_remainder -= raw_physics_steps * substep_time
-
-        lp_alpha = raw_dt / (LP_FILTER_RC + raw_dt)
-        self.damped_physics_steps += lp_alpha * (
-            raw_physics_steps - self.damped_physics_steps
+        start, end = self._node_ranges[node_index]
+        if start >= end:
+            return
+        runtime = self._node_workspaces[node_index]
+        node_slice = runtime['slice']
+        dnode = self.state.dangle_nodes[node_index]
+        substep_time = max(0.001, float(dnode.substep_time))
+        needs_initialization = bool(
+            self._node_simulation_needs_initialization[node_index]
         )
-        physics_steps = int(round(self.damped_physics_steps))
-        physics_steps = max(1, min(physics_steps, int(MAX_PHYSICS_STEPS)))
+        skip_node_physics = bool(skip_physics or needs_initialization)
+        node_shapes = self._node_col_shapes[node_index]
+
+        if skip_node_physics:
+            self._initialize_dyng_node_state(
+                node_index, runtime, node_shapes, reset_positions=True
+            )
+            self._node_simulation_needs_initialization[node_index] = False
 
         if time_dilation < MIN_TIME_DILATION:
+            if skip_node_physics:
+                self._initialize_dyng_node_state(
+                    node_index, runtime, node_shapes, reset_positions=False
+                )
             return
 
-        substep_time_dilated = (
-            min(MAX_TIME_DILATION, time_dilation) * substep_time
+        self._node_time_remainder[node_index] += raw_dt
+        raw_steps = int(self._node_time_remainder[node_index] / substep_time)
+        self._node_time_remainder[node_index] -= raw_steps * substep_time
+        lp_alpha = raw_dt / (LP_FILTER_RC + raw_dt)
+        self._node_damped_physics_steps[node_index] += lp_alpha * (
+            raw_steps - self._node_damped_physics_steps[node_index]
         )
+        physics_steps = int(round(self._node_damped_physics_steps[node_index]))
+        physics_steps = max(1, min(physics_steps, int(MAX_PHYSICS_STEPS)))
+        dt = min(MAX_TIME_DILATION, time_dilation) * substep_time
 
-        mw_inv_rot = self.arm_obj.matrix_world.to_quaternion().inverted()
-        self.prev_ext_force_ms[:] = self.cur_ext_force_ms
-        self.cur_ext_force_ms[:] = (
-            mw_inv_rot @ Vector(self.state.external_force_ws)
-        )
-        self.prev_grav_ms[:] = self.cur_grav_ms
-        physx_grav = bpy.context.scene.physx.gravity if bpy.context else Vector((0, 0, -9.81))
-        self.cur_grav_ms[:] = (
-            mw_inv_rot @ Vector(physx_grav)
-        )
+        collision.update_collision_transforms_begin(self, node_shapes)
+        iterations = max(1, int(dnode.solver_iterations))
+        position = self.pos_ms[node_slice]
+        previous_position = self.prev_pos_ms[node_slice]
+        velocity = self.vel_ms[node_slice]
+        interpolated_bone = self.interp_bone_ms[node_slice]
+        free_local = runtime['free_local']
+        fixed_local = runtime['fixed_local']
 
-        total_tracked = len(self.bone_names)
-        for i in range(total_tracked):
-            if not self.active_mask[i]:
-                continue
-            pb = self.arm_obj.pose.bones.get(self.bone_names[i])
-            if pb:
-                self.prev_bone_ms[i] = self.cur_bone_ms[i]
-                self.cur_bone_ms[i] = np.array(
-                    pb.matrix.translation, dtype=np.float32
+        for step_index in range(physics_steps):
+            frame_progress = (step_index + 1.0) / physics_steps
+            self._interpolate_bones(frame_progress)
+            collision.update_collision_transforms(
+                self, frame_progress, node_shapes
+            )
+            interpolated_external = runtime['interpolated_external']
+            np.subtract(
+                self._node_cur_ext_force_ms[node_index],
+                self._node_prev_ext_force_ms[node_index],
+                out=interpolated_external,
+            )
+            interpolated_external *= frame_progress
+            interpolated_external += self._node_prev_ext_force_ms[node_index]
+            interpolated_gravity = runtime['interpolated_gravity']
+            np.subtract(
+                self._node_cur_grav_ms[node_index],
+                self._node_prev_grav_ms[node_index],
+                out=interpolated_gravity,
+            )
+            interpolated_gravity *= frame_progress
+            interpolated_gravity += self._node_prev_grav_ms[node_index]
+            previous_position[:] = position
+
+            if skip_node_physics:
+                if fixed_local.size:
+                    position[fixed_local] = interpolated_bone[fixed_local]
+            else:
+                acceleration = self._compute_accelerations(
+                    runtime, interpolated_gravity, interpolated_external
+                )
+                half_velocity = runtime['half_velocity']
+                predicted_position = runtime['predicted_position']
+                np.multiply(acceleration, dt * 0.5, out=half_velocity)
+                half_velocity += velocity
+                np.multiply(half_velocity, dt, out=predicted_position)
+                predicted_position += position
+                if runtime['all_free']:
+                    position[:] = predicted_position
+                else:
+                    if free_local.size:
+                        position[free_local] = predicted_position[free_local]
+                    if fixed_local.size:
+                        position[fixed_local] = interpolated_bone[fixed_local]
+
+            for _iteration in range(iterations):
+                self._satisfy_constraints_in_authored_order(node_index)
+                collision.respond_to_collisions_vectorized(
+                    self, shapes=node_shapes, runtime=runtime
+                )
+                self._respond_constraint_collisions_in_authored_order(
+                    node_index, node_shapes
                 )
 
-        valid_mask = self.is_free[:n] & self.active_mask[:n]
-
-        max_solver_iters = max(self._node_iters) if self._node_iters else 1
-        if skip_physics:
-            max_solver_iters = max(max_solver_iters, 1)
-
-        self._saved_constraints = self._save_constraint_arrays()
-        self._saved_link_was_set = getattr(self, 'link_idx_a', None) is not None
-        self._saved_ell_was_set = getattr(self, 'ell_idx', None) is not None
-        self._saved_cone_was_set = getattr(self, 'cone_idx', None) is not None
-
-        collision.update_collision_transforms_begin(self)
-        self._update_bone_xforms()
-
-        num_nodes = len(self.state.dangle_nodes)
-
-        for step in range(physics_steps):
-            frame_progress = (step + 1.0) / physics_steps
-
-            interp_ext = (
-                self.prev_ext_force_ms
-                + (self.cur_ext_force_ms - self.prev_ext_force_ms)
-                * frame_progress
-            )
-            interp_grav = (
-                self.prev_grav_ms
-                + (self.cur_grav_ms - self.prev_grav_ms) * frame_progress
-            )
-            self.interp_bone_ms = (
-                self.prev_bone_ms
-                + (self.cur_bone_ms - self.prev_bone_ms) * frame_progress
-            )
-            self.prev_pos_ms[:n] = self.pos_ms[:n]
-
-            if not skip_physics:
-                accel = self._compute_accelerations(interp_grav, interp_ext)
-                vel_half = (
-                    self.vel_ms[:n] + accel * (substep_time_dilated * 0.5)
+            if not skip_node_physics and dt > 0.0:
+                acceleration = self._compute_accelerations(
+                    runtime, interpolated_gravity, interpolated_external
                 )
-                pred_pos = self.pos_ms[:n] + vel_half * substep_time_dilated
-                self.pos_ms[:n] = np.where(
-                    valid_mask[:, np.newaxis],
-                    pred_pos,
-                    self.interp_bone_ms[:n],
+                corrected_velocity = runtime['corrected_velocity']
+                np.subtract(
+                    position, previous_position, out=corrected_velocity
+                )
+                corrected_velocity *= 1.0 / dt
+                half_velocity = runtime['half_velocity']
+                np.multiply(acceleration, dt * 0.5, out=half_velocity)
+                corrected_velocity += half_velocity
+                if runtime['all_free']:
+                    velocity[:] = corrected_velocity
+                else:
+                    velocity.fill(0.0)
+                    if free_local.size:
+                        velocity[free_local] = corrected_velocity[free_local]
+
+        if skip_node_physics:
+            self._initialize_dyng_node_state(
+                node_index, runtime, node_shapes, reset_positions=False
+            )
+
+    def step_simulation(
+        self, raw_dt, time_dilation=1.0, operation_callback=None
+    ):
+        if not self.execution_plan:
+            return
+
+        self._update_kinematic_state()
+        self._restore_upstream_pose()
+        self._sample_base_input_pose()
+        skip_physics = self._resolve_teleportation()
+        self._update_node_forces()
+
+        for operation_type, operation_index in self.execution_plan:
+            if operation_type == 'DANGLE':
+                self._sample_node_input(operation_index)
+                self._step_node(
+                    operation_index, raw_dt, time_dilation, skip_physics
                 )
             else:
-                self.pos_ms[:n] = np.where(
-                    valid_mask[:, np.newaxis],
-                    self.pos_ms[:n],
-                    self.interp_bone_ms[:n],
-                )
+                self.drag_post.step_runtime(operation_index, raw_dt)
 
-            for iteration in range(max_solver_iters):
-                for ni in range(num_nodes):
-                    if iteration >= self._node_iters[ni]:
-                        continue
-                    self._swap_node_constraints(ni)
-                    constraints.satisfy_dyng_links_vectorized(self)
-                    constraints.satisfy_dyng_ellipsoids_vectorized(self)
-                    constraints.satisfy_pendulums_vectorized(self)
-                self._restore_constraints()
-
-                collision.respond_to_collisions_vectorized(self, frame_progress)
-                collision.respond_to_cone_collisions(self, frame_progress)
-
-            if not skip_physics and substep_time_dilated > 0.0:
-                accel = self._compute_accelerations(interp_grav, interp_ext)
-                derived_vel = (
-                    (self.pos_ms[:n] - self.prev_pos_ms[:n])
-                    / substep_time_dilated
-                    + accel * (0.5 * substep_time_dilated)
-                )
-                self.vel_ms[:n] = np.where(
-                    valid_mask[:, np.newaxis], derived_vel, 0.0
+            if operation_callback is not None:
+                operation_callback(
+                    self, operation_type, operation_index
                 )
 
         if skip_physics:
-            self.vel_ms.fill(0.0)
+            self.vel_ms[:self.num_particles].fill(0.0)
 
-        self._saved_constraints = {}
-
-        if self.drag_post.num_drags > 0:
-            self.drag_post.step(raw_dt)

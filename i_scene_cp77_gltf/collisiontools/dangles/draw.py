@@ -1,27 +1,15 @@
-"""
-Dangle Physics Viewport Overlay — draws constraints, capsules, cones, velocity.
-
-Key fixes vs. original:
-  * Cone visualization uses coneTransformLS from authored data
-  * Cone axis is derived from attachment bone × coneTransformLS → X-axis
-  * Links draw correct direction (bone1 → bone2)
-  * Global visibility toggles AND-ed with per-chain toggles
-  * Body collision shapes use full shape rotation (transformLS.Rotation)
-    for correct capsule axis orientation — matches engine line 239:
-    shapeTransformMS = boneTransformMS × shapeLocationLS
-"""
+import math
 
 import bpy
 import gpu
-import math
 import numpy as np
-from mathutils import Vector, Matrix, Quaternion
 from gpu_extras.batch import batch_for_shader
-from .sim.constraints import RE_BONE_CONV
+from mathutils import Matrix, Quaternion, Vector
+
+from .sim import spaces
 
 _GLOBAL_HANDLER = None
 _DRAW_CACHES = {}
-conv_3x3 = RE_BONE_CONV.to_3x3()
 
 
 # Geometry generators
@@ -63,34 +51,126 @@ def _get_capsule_geometry(rad: float, half_h: float):
     return verts, lines
 
 
+def _get_box_geometry(extents, radius=0.0):
+    x, y, z = (max(0.0, float(value)) + radius for value in extents)
+    verts = [
+        (-x, -y, -z), (x, -y, -z), (x, y, -z), (-x, y, -z),
+        (-x, -y, z), (x, -y, z), (x, y, z), (-x, y, z),
+    ]
+    lines = [
+        (0, 1), (1, 2), (2, 3), (3, 0),
+        (4, 5), (5, 6), (6, 7), (7, 4),
+        (0, 4), (1, 5), (2, 6), (3, 7),
+    ]
+    return verts, lines
+
+
+def _get_two_sided_ellipsoid_geometry(radius, scale1, scale2):
+    radius = max(0.0, float(radius))
+    scale1 = max(0.01, float(scale1))
+    scale2 = max(0.01, float(scale2))
+    segments = 16
+    rings = 8
+    verts, lines = [], []
+
+    for ring in range(rings + 1):
+        theta = math.pi * ring / rings
+        radial = math.sin(theta) * radius
+        z_unit = math.cos(theta)
+        z_scale = scale2 if z_unit >= 0.0 else scale1
+        z = z_unit * radius * z_scale
+        ring_start = len(verts)
+        for segment in range(segments):
+            phi = 2.0 * math.pi * segment / segments
+            verts.append((
+                math.cos(phi) * radial,
+                math.sin(phi) * radial,
+                z,
+            ))
+            lines.append((
+                ring_start + segment,
+                ring_start + ((segment + 1) % segments),
+            ))
+            if ring > 0:
+                lines.append((
+                    ring_start + segment,
+                    ring_start - segments + segment,
+                ))
+    return verts, lines
+
+
+def _iter_authored_shapes(state):
+    seen = set()
+    any_node_shapes = any(node.collision_shapes for node in state.dangle_nodes)
+    collections = (
+        (node.collision_shapes for node in state.dangle_nodes)
+        if any_node_shapes
+        else (state.collision_shapes,)
+    )
+    for collection in collections:
+        for shape in collection:
+            key = (
+                shape.bone_name, shape.shape_type, round(shape.radius, 7),
+                round(shape.x_box_extent, 7), round(shape.y_box_extent, 7),
+                round(shape.height_extent, 7),
+                *(round(value, 7) for value in shape.offset_ls),
+                *(round(value, 7) for value in shape.rotation_ls_quat),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            yield shape
+
+
 def _get_cone_geometry(origin, axis_ms, angle_rad, length=0.1):
-    """Generate wireframe cone from origin along axis_ms."""
+    """Generate a bounded wire cone using ray length, not tan(angle)."""
     verts, lines = [], []
     segments = 16
 
-    axis_ms = axis_ms.normalized()
-    if abs(axis_ms.z) < 0.99:
-        up = Vector((0, 0, 1))
+    axis_ms = Vector(axis_ms)
+    if axis_ms.length_squared <= 1e-12:
+        axis_ms = Vector((1.0, 0.0, 0.0))
     else:
-        up = Vector((1, 0, 0))
+        axis_ms.normalize()
 
-    tangent = axis_ms.cross(up).normalized()
+    angle_rad = min(math.pi, max(0.0, float(angle_rad)))
+    ray_length = max(0.001, abs(float(length)))
+
+    if abs(axis_ms.z) < 0.99:
+        up = Vector((0.0, 0.0, 1.0))
+    else:
+        up = Vector((1.0, 0.0, 0.0))
+
+    tangent = axis_ms.cross(up)
+    if tangent.length_squared <= 1e-12:
+        tangent = axis_ms.cross(Vector((0.0, 1.0, 0.0)))
+    tangent.normalize()
     bitangent = axis_ms.cross(tangent).normalized()
 
-    radius = math.tan(angle_rad) * length
-    center = origin + axis_ms * length
+    # Parameterize the boundary by ray length. Unlike tan(angle), this is
+    # finite at 90 degrees and remains valid for inverted cones above 90.
+    axial_distance = math.cos(angle_rad) * ray_length
+    radius = abs(math.sin(angle_rad) * ray_length)
+    center = Vector(origin) + axis_ms * axial_distance
 
-    start_idx = len(verts)
-    for s in range(segments):
-        theta = s * 2.0 * math.pi / segments
-        pt = center + (tangent * math.cos(theta) + bitangent * math.sin(theta)) * radius
-        verts.append(tuple(pt))
-        lines.append((start_idx + s, start_idx + ((s + 1) % segments)))
+    for segment in range(segments):
+        theta = segment * 2.0 * math.pi / segments
+        radial = tangent * math.cos(theta) + bitangent * math.sin(theta)
+        point = center + radial * radius
+        if not all(math.isfinite(value) for value in point):
+            return [], []
+        verts.append(tuple(point))
+
+    for segment in range(segments):
+        lines.append((segment, (segment + 1) % segments))
 
     apex_idx = len(verts)
-    verts.append(tuple(origin))
-    for s in range(0, segments, 4):
-        lines.append((apex_idx, start_idx + s))
+    apex = Vector(origin)
+    if not all(math.isfinite(value) for value in apex):
+        return [], []
+    verts.append(tuple(apex))
+    for segment in range(0, segments, 4):
+        lines.append((apex_idx, segment))
 
     return verts, lines
 
@@ -108,6 +188,7 @@ class DangleDrawCache:
             'body_shapes': (1.0, 0.5, 0.1, 1.0),
             'velocity': (0.9, 0.8, 0.2, 1.0),
             'cones': (0.1, 0.8, 0.5, 0.7),
+            'springs': (0.9, 0.3, 0.7, 0.8),
         }
 
     def update(self, sim):
@@ -160,8 +241,7 @@ class DangleDrawCache:
                 pb = sim.arm_obj.pose.bones.get(sim.bone_names[i])
                 if not pb:
                     continue
-                mw = sim.arm_obj.matrix_world
-                mat_ms = mw.inverted() @ (mw @ pb.matrix)
+                mat_ms = pb.matrix
                 rot_to_axis = Vector((0, 0, 1)).rotation_difference(
                     Vector(sim.col_axis_ls[i]).normalized()
                 ).to_matrix().to_4x4()
@@ -182,26 +262,31 @@ class DangleDrawCache:
                 )
 
         #  Body collision shapes 
-        if show_body_shapes and getattr(sim.state, 'collision_shapes', None):
+        if show_body_shapes and sim.col_shapes:
             from .sim import collision
             collision.update_collision_transforms(sim, 1.0)
             b_verts, b_indices, b_offset = [], [], 0
             for shape in sim.col_shapes:
-                v_loc, i_loc = _get_capsule_geometry(
-                    float(shape['radius']), float(shape['height'])
-                )
-                # axis_ms valid — computed from bone × RE_BONE_CONV × shape rotation
-                axis_ms = Vector(shape['axis_ms']).normalized()
-                rot_to_axis = (
-                    Vector((0, 0, 1))
-                    .rotation_difference(axis_ms)
-                    .to_matrix()
-                    .to_4x4()
-                )
-                final_mat = (
-                    Matrix.Translation(Vector(shape['pos_ms']))
-                    @ rot_to_axis
-                )
+                if shape['shape_type'] == 'ROUNDED_BOX':
+                    v_loc, i_loc = _get_box_geometry(
+                        shape['extents'], float(shape['radius'])
+                    )
+                    final_mat = (
+                        Matrix.Translation(Vector(shape['pos_ms']))
+                        @ shape['rot_ms'].to_matrix().to_4x4()
+                    )
+                else:
+                    v_loc, i_loc = _get_capsule_geometry(
+                        float(shape['radius']), float(shape['height'])
+                    )
+                    axis_ms = Vector(shape['axis_ms']).normalized()
+                    axis_rotation = Vector((0, 0, 1)).rotation_difference(
+                        axis_ms
+                    )
+                    final_mat = (
+                        Matrix.Translation(Vector(shape['pos_ms']))
+                        @ axis_rotation.to_matrix().to_4x4()
+                    )
                 for v in v_loc:
                     b_verts.append(tuple(final_mat @ Vector(v)))
                 for l in i_loc:
@@ -210,6 +295,49 @@ class DangleDrawCache:
             if b_verts:
                 self.batches['body_shapes'] = batch_for_shader(
                     self.shader, 'LINES', {"pos": b_verts}, indices=b_indices
+                )
+
+        #  Standalone Spring constraints
+        if show_constraints and getattr(sim, '_spring_nodes', None):
+            from .sim import spring
+            s_verts, s_indices, s_offset = [], [], 0
+            for node_index, runtime in sim._spring_nodes.items():
+                particle_index = int(runtime['particle_index'])
+                parent_index = int(runtime['parent_index'])
+                if parent_index < 0 or not sim.active_mask[particle_index]:
+                    continue
+                particle = sim.particles[particle_index]
+                parent_xform = runtime['previous_parent_xform']
+                ellipsoid_xform = spring.constraint_ellipsoid_transform(
+                    sim, particle, parent_xform
+                )
+                v_loc, i_loc = _get_two_sided_ellipsoid_geometry(
+                    particle.spring_constraint_radius,
+                    particle.spring_constraint_scale1,
+                    particle.spring_constraint_scale2,
+                )
+                for vertex in v_loc:
+                    s_verts.append(tuple(ellipsoid_xform @ Vector(vertex)))
+                for line in i_loc:
+                    s_indices.append((
+                        line[0] + s_offset,
+                        line[1] + s_offset,
+                    ))
+                s_offset += len(v_loc)
+
+                pull_origin = spring.pull_force_origin_ms(
+                    sim, particle, parent_xform
+                )
+                start = len(s_verts)
+                s_verts.extend((
+                    tuple(pull_origin),
+                    tuple(sim.pos_ms[particle_index]),
+                ))
+                s_indices.append((start, start + 1))
+
+            if s_verts:
+                self.batches['springs'] = batch_for_shader(
+                    self.shader, 'LINES', {"pos": s_verts}, indices=s_indices
                 )
 
         #  Cone constraints (dynamic: uses compiled sim arrays) 
@@ -235,7 +363,7 @@ class DangleDrawCache:
                 p_cfg = sim.particles[p_idx]
                 half_angle = 45.0
                 for pen in p_cfg.pendulum_constraints:
-                    tgt_idx = sim.bone_idx_map.get(pen.target_bone)
+                    tgt_idx = sim.resolve_bone_index(pen.target_bone, particle_index=p_idx)
                     if tgt_idx == a_idx:
                         half_angle = pen.half_aperture_angle
                         break
@@ -290,15 +418,12 @@ def _draw_static_rig(arm, st):
     #  Body collision shapes 
     if show_body_shapes:
         b_verts, b_indices, offset = [], [], 0
-        for s in st.collision_shapes:
-            pb = arm.pose.bones.get(s.bone_name)
+        for s in _iter_authored_shapes(st):
+            pb = spaces.resolve_pose_bone(arm, s.bone_name)
             if not pb:
                 continue
-            v_loc, i_loc = _get_capsule_geometry(s.radius, s.height_extent)
-
-            # Build shape_mat_ms = bone_mat_ms × RE_BONE_CONV × shape_mat_ls
-            # Same convention as cones/ellipsoids: RE_BONE_CONV bridges
-            # engine bone space (X-forward) to Blender bone space (Y-forward).
+            # Convert the authored REDengine local transform into the
+            # generated Blender bone-local basis before composing it.
             q = s.rotation_ls_quat
             if q is not None and len(q) == 4:
                 shape_rot = Quaternion(q)  # already wxyz
@@ -306,21 +431,34 @@ def _draw_static_rig(arm, st):
                 shape_rot = Quaternion()
             shape_mat_ls = shape_rot.to_matrix().to_4x4()
             shape_mat_ls.translation = Vector(s.offset_ls)
-            shape_mat_ms = pb.matrix @ RE_BONE_CONV @ shape_mat_ls
-
-            pos_ms = shape_mat_ms.translation
-            axis_ms = (
-                shape_mat_ms.to_quaternion() @ Vector((0, 0, 1))
-            ).normalized()
-
-            rot_to_axis = (
-                Vector((0, 0, 1))
-                .rotation_difference(axis_ms)
-                .to_matrix()
-                .to_4x4()
+            shape_mat_ms = pb.matrix @ spaces.re_local_transform_to_blender_bone(
+                shape_mat_ls, arm
             )
 
-            final_mat = mw @ Matrix.Translation(pos_ms) @ rot_to_axis
+            pos_ms = shape_mat_ms.translation
+            extents = (s.x_box_extent, s.y_box_extent, s.height_extent)
+            if s.shape_type == 'ROUNDED_BOX':
+                v_loc, i_loc = _get_box_geometry(extents, s.radius)
+                final_mat = mw @ shape_mat_ms
+            else:
+                axis_index = max(
+                    range(3), key=lambda index: abs(extents[index])
+                ) if s.shape_type == 'CAPSULE' else 2
+                local_axis = Vector((
+                    1.0 if axis_index == 0 else 0.0,
+                    1.0 if axis_index == 1 else 0.0,
+                    1.0 if axis_index == 2 else 0.0,
+                ))
+                axis_ms = (shape_mat_ms.to_quaternion() @ local_axis).normalized()
+                v_loc, i_loc = _get_capsule_geometry(
+                    s.radius, max(abs(value) for value in extents)
+                )
+                rot_to_axis = (
+                    Vector((0, 0, 1))
+                    .rotation_difference(axis_ms)
+                    .to_matrix().to_4x4()
+                )
+                final_mat = mw @ Matrix.Translation(pos_ms) @ rot_to_axis
             for v in v_loc:
                 b_verts.append(tuple(final_mat @ Vector(v)))
             for l in i_loc:
@@ -341,28 +479,40 @@ def _draw_static_rig(arm, st):
         for dnode in st.dangle_nodes:
           for ch in dnode.chains:
             for p in ch.particles:
-                if (
-                    p.dyng_projection_type == 'DISABLED'
-                    and p.pos_projection_type == 'DISABLED'
-                ):
-                    continue
-                pb = arm.pose.bones.get(p.bone_name)
+                if ch.solver == 'SPRING':
+                    if p.spring_projection_type == 'DISABLED':
+                        continue
+                    collision_radius = p.spring_collision_radius
+                    collision_height = 0.0
+                    authored_axis = (1.0, 0.0, 0.0)
+                else:
+                    if (
+                        p.dyng_projection_type == 'DISABLED'
+                        and p.pos_projection_type == 'DISABLED'
+                    ):
+                        continue
+                    collision_radius = p.capsule_radius
+                    collision_height = p.capsule_height
+                    authored_axis = p.capsule_axis_ls
+                pb = spaces.resolve_pose_bone(arm, p.bone_name)
                 if not pb:
                     continue
 
                 v_loc, i_loc = _get_capsule_geometry(
-                    p.capsule_radius, p.capsule_height
+                    collision_radius, collision_height
                 )
-                mat_ws = mw @ pb.matrix
-                bl_axis = (conv_3x3 @ Vector(p.capsule_axis_ls)).normalized()
+                bl_axis = spaces.re_axis_to_blender_bone(
+                    authored_axis, arm
+                ).normalized()
                 rot_to_axis = (
                     Vector((0, 0, 1))
                     .rotation_difference(bl_axis)
                     .to_matrix().to_4x4()
                 )
                 final_mat = (
-                    Matrix.Translation(mat_ws.translation)
-                    @ mat_ws.to_quaternion().to_matrix().to_4x4()
+                    mw
+                    @ Matrix.Translation(pb.matrix.translation)
+                    @ pb.matrix.to_quaternion().to_matrix().to_4x4()
                     @ rot_to_axis
                 )
                 for v in v_loc:
@@ -385,11 +535,11 @@ def _draw_static_rig(arm, st):
         for dnode in st.dangle_nodes:
           for ch in dnode.chains:
             for p in ch.particles:
-                pb1 = arm.pose.bones.get(p.bone_name)
+                pb1 = spaces.resolve_pose_bone(arm, p.bone_name)
                 if not pb1:
                     continue
                 for lnk in p.link_constraints:
-                    pb2 = arm.pose.bones.get(lnk.target_bone)
+                    pb2 = spaces.resolve_pose_bone(arm, lnk.target_bone)
                     if not pb2:
                         continue
                     l_verts.extend([
@@ -402,24 +552,76 @@ def _draw_static_rig(arm, st):
             shader.uniform_float("color", (0.8, 0.2, 0.8, 1.0))
             batch.draw(shader)
 
+    #  Standalone Spring constraints
+    if show_constraints:
+        from .sim import spring
+        s_verts, s_indices, s_offset = [], [], 0
+        for dnode in st.dangle_nodes:
+            for ch in dnode.chains:
+                if ch.solver != 'SPRING' or len(ch.particles) != 1:
+                    continue
+                particle = ch.particles[0]
+                pose_bone = spaces.resolve_pose_bone(arm, particle.bone_name)
+                if pose_bone is None or pose_bone.parent is None:
+                    continue
+                fake_sim = type('_SpringDrawContext', (), {'arm_obj': arm})()
+                parent_xform = pose_bone.parent.matrix.copy()
+                ellipsoid_xform = spring.constraint_ellipsoid_transform(
+                    fake_sim, particle, parent_xform
+                )
+                final_xform = mw @ ellipsoid_xform
+                v_loc, i_loc = _get_two_sided_ellipsoid_geometry(
+                    particle.spring_constraint_radius,
+                    particle.spring_constraint_scale1,
+                    particle.spring_constraint_scale2,
+                )
+                for vertex in v_loc:
+                    s_verts.append(tuple(final_xform @ Vector(vertex)))
+                for line in i_loc:
+                    s_indices.append((
+                        line[0] + s_offset,
+                        line[1] + s_offset,
+                    ))
+                s_offset += len(v_loc)
+
+                pull_origin = mw @ spring.pull_force_origin_ms(
+                    fake_sim, particle, parent_xform
+                )
+                dangle_position = mw @ pose_bone.matrix.translation
+                start = len(s_verts)
+                s_verts.extend((tuple(pull_origin), tuple(dangle_position)))
+                s_indices.append((start, start + 1))
+
+        if s_verts:
+            batch = batch_for_shader(
+                shader, 'LINES', {"pos": s_verts}, indices=s_indices
+            )
+            shader.bind()
+            shader.uniform_float("color", (0.9, 0.3, 0.7, 0.8))
+            batch.draw(shader)
+
     #  Cone constraints 
     if show_cones:
         c_verts, c_indices, offset = [], [], 0
-        mw_inv = mw.inverted()
         for dnode in st.dangle_nodes:
           for ch in dnode.chains:
             for p in ch.particles:
                 for pen in p.pendulum_constraints:
-                    pb_attach = arm.pose.bones.get(pen.target_bone)
-                    pb_constrained = arm.pose.bones.get(p.bone_name)
+                    pb_attach = spaces.resolve_pose_bone(arm, pen.target_bone)
+                    pb_constrained = spaces.resolve_pose_bone(arm, p.bone_name)
                     if not pb_attach or not pb_constrained:
                         continue
 
-                    attach_mat_ms = mw_inv @ (mw @ pb_attach.matrix)
+                    attach_mat_ms = pb_attach.matrix.copy()
                     xf = pen.cone_transform_ls_quat
                     cone_q = Quaternion(xf)  # already wxyz
                     cone_xform_ls = cone_q.to_matrix().to_4x4()
-                    cone_xform_ms = attach_mat_ms @ RE_BONE_CONV @ cone_xform_ls
+                    cone_xform_ls.translation = Vector(
+                        pen.cone_transform_ls_offset
+                    )
+                    cone_xform_ms = attach_mat_ms @ spaces.re_local_transform_to_blender_bone(
+                        cone_xform_ls, arm
+                    )
 
                     cone_origin = cone_xform_ms.translation
                     cone_rot = cone_xform_ms.to_quaternion()
@@ -427,24 +629,17 @@ def _draw_static_rig(arm, st):
                         cone_rot @ Vector((1, 0, 0))
                     ).normalized()
 
-                    constrained_pos_ms = (
-                        mw_inv @ (mw @ pb_constrained.head)
-                    )
+                    constrained_pos_ms = pb_constrained.matrix.translation
                     length = (constrained_pos_ms - cone_origin).length
                     if length < 0.001:
                         length = 0.1
 
-                    cone_origin_ws = mw @ cone_origin
-                    cone_axis_ws = (
-                        mw.to_quaternion() @ cone_axis
-                    ).normalized()
-
                     v_loc, i_loc = _get_cone_geometry(
-                        cone_origin_ws, cone_axis_ws,
+                        cone_origin, cone_axis,
                         math.radians(pen.half_aperture_angle), length,
                     )
                     for v in v_loc:
-                        c_verts.append(v)
+                        c_verts.append(tuple(mw @ Vector(v)))
                     for l in i_loc:
                         c_indices.append((l[0] + offset, l[1] + offset))
                     offset += len(v_loc)
@@ -472,7 +667,7 @@ def _master_draw_callback():
         cache.draw()
     arm = bpy.context.object
     if arm and arm.type == 'ARMATURE' and arm.dangle_state.is_dangle_rig:
-        if not arm.dangle_state.is_playing:
+        if not arm.dangle_state.is_playing and not spaces.armature_space_errors(arm):
             _draw_static_rig(arm, arm.dangle_state)
 
 
