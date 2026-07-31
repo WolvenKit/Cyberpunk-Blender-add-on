@@ -1,7 +1,7 @@
 import math
 
 import numpy as np
-from mathutils import Matrix, Quaternion, Vector
+from mathutils import Quaternion, Vector
 
 from . import spaces
 
@@ -9,22 +9,18 @@ RE_BONE_CONV = spaces.RE_TO_BLENDER_BONE_LOCAL_CURRENT
 
 
 def _resolve_bone(sim, particle_idx, bone_name):
-    """Resolve authored source-rig names against the merged MetaRig."""
+    """Resolve a source bone name against the active rig."""
     resolver = getattr(sim, "resolve_bone_index", None)
     if resolver is not None:
         return resolver(bone_name, particle_index=particle_idx)
     return sim.bone_idx_map.get(bone_name)
 
 
-# Compilation — build flat numpy arrays from the authored property groups.
-
 def compile_constraints(sim):
     _compile_links(sim)
     _compile_ellipsoids(sim)
     _compile_cones(sim)
 
-
-#  Links 
 def _compile_links(sim):
     idx_a, idx_b, l_types, lower, upper, rest, look_axes = (
         [], [], [], [], [], [], []
@@ -78,11 +74,9 @@ def _compile_links(sim):
     else:
         sim.link_idx_a = None
 
-
-#  Ellipsoids 
 def _compile_ellipsoids(sim):
     ell_idx, ell_centers, ell_radii, ell_s1, ell_s2 = [], [], [], [], []
-    ell_xform_ls = []  # REDengine LS converted to the generated Blender bone basis
+    ell_xform_ls = []
 
     for i, p_cfg in enumerate(sim.particles):
         for c in p_cfg.ellipsoid_constraints:
@@ -94,10 +88,9 @@ def _compile_ellipsoids(sim):
                 ell_s1.append(c.scale1)
                 ell_s2.append(c.scale2)
 
-                # Build local-space transform from authored quat + offset
                 xf = getattr(c, 'ellipsoid_transform_ls_quat',
                              (1.0, 0.0, 0.0, 0.0))
-                q = Quaternion(xf)  # already wxyz
+                q = Quaternion(xf)
                 off = Vector(getattr(c, 'ellipsoid_transform_ls_offset',
                                      (0.0, 0.0, 0.0)))
                 ls_mat = q.to_matrix().to_4x4()
@@ -120,18 +113,14 @@ def _compile_ellipsoids(sim):
         sim.ell_xform_ls = []
 
 
-#  Cones (Pendulums) 
 def _compile_cones(sim):
-    """
-    Compile Cone Constraints.
-    """
     c_idx, c_attach, c_type, c_cos, c_sin_hh, c_cos_hh = (
         [], [], [], [], [], []
     )
-    c_cone_xform_adjusted = []  # list of 4x4 Matrices (already converted)
-    c_proj_type = []   # pendulum projection type (0=disabled)
-    c_col_radius = []  # cone collision capsule radius
-    c_col_height = []  # cone collision capsule height extent
+    c_cone_xform_adjusted = []
+    c_proj_type = []
+    c_col_radius = []
+    c_col_height = []
 
     for i, p_cfg in enumerate(sim.particles):
         for c in p_cfg.pendulum_constraints:
@@ -152,7 +141,6 @@ def _compile_cones(sim):
             c_sin_hh.append(math.sin(half_angle_rad * 0.5))
             c_cos_hh.append(math.cos(half_angle_rad * 0.5))
 
-            # Cone collision capsule fields (for respond_to_cone_collisions)
             proj_val = {
                 'DISABLED': 0,
                 'SHORTEST_PATH_ROTATIONAL': 1,
@@ -162,9 +150,8 @@ def _compile_cones(sim):
             c_col_radius.append(getattr(c, 'cone_collision_radius', 0.0))
             c_col_height.append(getattr(c, 'cone_collision_height', 0.0))
 
-            # Parse coneTransformLS from authored quaternion (wxyz order)
             xf = getattr(c, 'cone_transform_ls_quat', (1.0, 0.0, 0.0, 0.0))
-            q = Quaternion(xf)  # already wxyz
+            q = Quaternion(xf)
             raw_ls = q.to_matrix().to_4x4()
             raw_ls.translation = Vector(
                 getattr(c, 'cone_transform_ls_offset', (0.0, 0.0, 0.0))
@@ -192,165 +179,127 @@ def _compile_cones(sim):
         sim.cone_col_radius = None
         sim.cone_col_height = None
 
-    # Legacy aliases
     sim.pen_idx = sim.cone_idx if hasattr(sim, 'cone_idx') else None
 
 
-# Link Solver
-
-def satisfy_dyng_links_vectorized(sim):
-    """Satisfy Distance Links"""
+def satisfy_dyng_link_at(sim, constraint_index):
     if sim.link_idx_a is None:
         return
 
-    p1 = sim.pos_ms[sim.link_idx_a]
-    p2 = sim.pos_ms[sim.link_idx_b]
-    diff = p2 - p1
-
-    cur_len = np.linalg.norm(diff, axis=1)
-    zero_mask = cur_len < 1e-6
-    safe_len = np.where(zero_mask, 1.0, cur_len)
-    norm_diff = diff / safe_len[:, np.newaxis]
-    norm_diff[zero_mask] = np.array([1.0, 0.0, 0.0], dtype=np.float32)
-    desired_len = np.copy(sim.link_rest)
-
-    # KeepFixedDistance: target = lower_ratio * rest
-    fixed_mask = sim.link_types == 0
-    desired_len[fixed_mask] = (
-        sim.link_lower[fixed_mask] * sim.link_rest[fixed_mask]
+    ci = int(constraint_index)
+    p1_index = int(sim.link_idx_a[ci])
+    p2_index = int(sim.link_idx_b[ci])
+    difference = sim._constraint_vector
+    np.subtract(
+        sim.pos_ms[p2_index], sim.pos_ms[p1_index], out=difference
     )
+    current_length = np.linalg.norm(difference)
+    if current_length < np.float32(1e-6):
+        nx = np.float32(1.0)
+        ny = np.float32(0.0)
+        nz = np.float32(0.0)
+    else:
+        inverse_length = np.float32(1.0) / current_length
+        nx = difference[0] * inverse_length
+        ny = difference[1] * inverse_length
+        nz = difference[2] * inverse_length
 
-    # KeepVariableDistance: clamp current length to [lower*rest, upper*rest]
-    var_mask = sim.link_types == 1
-    desired_len[var_mask] = np.clip(
-        cur_len[var_mask],
-        sim.link_lower[var_mask] * sim.link_rest[var_mask],
-        sim.link_upper[var_mask] * sim.link_rest[var_mask],
-    )
+    rest_length = sim.link_rest[ci]
+    lower_length = sim.link_lower[ci] * rest_length
+    upper_length = sim.link_upper[ci] * rest_length
+    link_type = int(sim.link_types[ci])
+    if link_type == 0:
+        desired_length = lower_length
+    elif link_type == 1:
+        desired_length = np.clip(
+            current_length, lower_length, upper_length
+        )
+    elif link_type == 2:
+        desired_length = np.maximum(current_length, lower_length)
+    else:
+        desired_length = np.minimum(current_length, upper_length)
 
-    # Greater: enforce minimum
-    grt_mask = sim.link_types == 2
-    desired_len[grt_mask] = np.maximum(
-        cur_len[grt_mask],
-        sim.link_lower[grt_mask] * sim.link_rest[grt_mask],
-    )
-
-    # Closer: enforce maximum
-    cls_mask = sim.link_types == 3
-    desired_len[cls_mask] = np.minimum(
-        cur_len[cls_mask],
-        sim.link_upper[cls_mask] * sim.link_rest[cls_mask],
-    )
-
-    error = cur_len - desired_len
-    active_mask = np.abs(error) > 1e-7
-    if not np.any(active_mask):
+    error = current_length - desired_length
+    if np.abs(error) <= np.float32(1e-7):
         return
 
-    # Mass-weighted bilateral correction
-    m1 = sim.mass[sim.link_idx_a]
-    m2 = sim.mass[sim.link_idx_b]
-    free1 = sim.is_free[sim.link_idx_a] & sim.active_mask[sim.link_idx_a]
-    free2 = sim.is_free[sim.link_idx_b] & sim.active_mask[sim.link_idx_b]
+    free1 = bool(sim.is_free[p1_index] and sim.active_mask[p1_index])
+    free2 = bool(sim.is_free[p2_index] and sim.active_mask[p2_index])
+    if not free1 and not free2:
+        return
+    if free1 and free2:
+        mass1 = sim.mass[p1_index]
+        mass2 = sim.mass[p2_index]
+        total_mass = mass1 + mass2
+        factor1 = np.float32(1.0) - mass1 / total_mass
+        factor2 = np.float32(1.0) - mass2 / total_mass
+    else:
+        factor1 = np.float32(1.0 if free1 else 0.0)
+        factor2 = np.float32(1.0 if free2 else 0.0)
 
-    m_total = m1 + m2
-    f1 = np.where(
-        free1 & free2, 1.0 - (m1 / m_total), np.where(free1, 1.0, 0.0)
-    )
-    f2 = np.where(
-        free1 & free2, 1.0 - (m2 / m_total), np.where(free2, 1.0, 0.0)
-    )
-
-    active_error = error * active_mask
-    corr_1 = (active_error * f1)[:, np.newaxis]
-    corr_2 = (active_error * f2)[:, np.newaxis]
-
-    np.add.at(sim.pos_ms, sim.link_idx_a,  norm_diff * corr_1)
-    np.add.at(sim.pos_ms, sim.link_idx_b, -norm_diff * corr_2)
+    correction1 = error * factor1
+    correction2 = error * factor2
+    if correction1 != 0.0:
+        sim.pos_ms[p1_index, 0] += nx * correction1
+        sim.pos_ms[p1_index, 1] += ny * correction1
+        sim.pos_ms[p1_index, 2] += nz * correction1
+    if correction2 != 0.0:
+        sim.pos_ms[p2_index, 0] -= nx * correction2
+        sim.pos_ms[p2_index, 1] -= ny * correction2
+        sim.pos_ms[p2_index, 2] -= nz * correction2
 
 
-# Ellipsoid Solver
+def satisfy_dyng_links_vectorized(sim):
+    if sim.link_idx_a is None:
+        return
+    for constraint_index in range(len(sim.link_idx_a)):
+        satisfy_dyng_link_at(sim, constraint_index)
 
-def satisfy_dyng_ellipsoids_vectorized(sim):
-    """Satisfy Ellipsoid Constraints"""
+
+def satisfy_dyng_ellipsoid_at(sim, constraint_index):
     if sim.ell_idx is None:
         return
 
-    active_free = sim.is_free[sim.ell_idx] & sim.active_mask[sim.ell_idx]
-    if not np.any(active_free):
+    ci = int(constraint_index)
+    particle_index = int(sim.ell_idx[ci])
+    if not (sim.is_free[particle_index] and sim.active_mask[particle_index]):
         return
 
-    #  Compute per-ellipsoid model-space center + Z-axis 
-    n_active = int(np.sum(active_free))
-    af_indices = np.where(active_free)[0]
-    center_ms_all = np.zeros((n_active, 3), dtype=np.float32)
-    z_axis_all = np.zeros((n_active, 3), dtype=np.float32)
+    center_index = int(sim.ell_centers[ci])
+    if ci < len(sim.ell_xform_ls):
+        ellipsoid_ms = sim._interp_bone_xform[center_index] @ sim.ell_xform_ls[ci]
+        center = ellipsoid_ms.translation
+        z_axis = ellipsoid_ms.to_quaternion() @ Vector((0.0, 0.0, 1.0))
+    else:
+        center = Vector(sim.interp_bone_ms[center_index])
+        z_axis = Vector((0.0, 0.0, 1.0))
 
-    has_xforms = hasattr(sim, 'ell_xform_ls') and len(sim.ell_xform_ls) > 0
-
-    for li, ai in enumerate(af_indices):
-        ci = sim.ell_centers[ai]
-        if has_xforms and ai < len(sim.ell_xform_ls):
-            bone_xf = sim._interp_bone_xform[ci]
-            ell_ms = bone_xf @ sim.ell_xform_ls[ai]
-            center_ms_all[li] = np.array(ell_ms.translation, dtype=np.float32)
-            z_axis_all[li] = np.array(
-                ell_ms.to_quaternion() @ Vector((0, 0, 1)), dtype=np.float32
-            )
-        else:
-            center_ms_all[li] = sim.interp_bone_ms[ci]
-            z_axis_all[li] = np.array([0, 0, 1], dtype=np.float32)
-
-    idx   = sim.ell_idx[active_free]
-    pos   = sim.pos_ms[idx]
-    radii = sim.ell_radii[active_free]
-    s1    = sim.ell_s1[active_free]
-    s2    = sim.ell_s2[active_free]
-
-    center_to_p = pos - center_ms_all
-    dist = np.linalg.norm(center_to_p, axis=1)
-
-    valid = dist > 1e-4
-    if not np.any(valid):
+    offset = Vector(sim.pos_ms[particle_index]) - center
+    distance = offset.length
+    if distance <= 1e-4:
+        return
+    direction = offset / distance
+    z_component = direction.dot(z_axis)
+    z_scale = float(sim.ell_s1[ci] if z_component < 0.0 else sim.ell_s2[ci])
+    radius = float(sim.ell_radii[ci])
+    if radius <= 0.0 or abs(z_scale) <= 1e-12:
         return
 
-    idx         = idx[valid]
-    center_ms   = center_ms_all[valid]
-    z_axis      = z_axis_all[valid]
-    center_to_p = center_to_p[valid]
-    dist        = dist[valid]
-    radii       = radii[valid]
-    s1          = s1[valid]
-    s2          = s2[valid]
-
-    direction = center_to_p / dist[:, np.newaxis]
-
-    # Z component in ellipsoid frame = dot(direction, z_axis)
-    z_comp = np.sum(direction * z_axis, axis=1)
-    z_scale = np.where(z_comp < 0, s1, s2)
-
-    # XY distance in ellipsoid frame = |direction - z_comp * z_axis|
-    z_proj = z_comp[:, np.newaxis] * z_axis
-    xy_vec = direction - z_proj
-    xy_len = np.linalg.norm(xy_vec, axis=1)
-
-    # Scaled ellipsoid test:  (xy/r)^2 + (z/(r*z_scale))^2
-    scaled_xy = xy_len / radii
-    scaled_z  = z_comp / (radii * z_scale)
-    scaled_len = np.sqrt(scaled_xy * scaled_xy + scaled_z * scaled_z)
-
-    # Effective maximum distance from center along this direction
-    max_dist = np.where(scaled_len > 1e-8, 1.0 / scaled_len, 1e8)
-
-    outside = dist > max_dist
-    if np.any(outside):
-        sim.pos_ms[idx[outside]] = (
-            center_ms[outside]
-            + direction[outside] * max_dist[outside][:, np.newaxis]
-        )
+    xy_vector = direction - z_axis * z_component
+    scaled_xy = xy_vector.length / radius
+    scaled_z = z_component / (radius * z_scale)
+    scaled_length = math.sqrt(scaled_xy * scaled_xy + scaled_z * scaled_z)
+    maximum_distance = 1.0 / scaled_length if scaled_length > 1e-8 else 1e8
+    if distance > maximum_distance:
+        sim.pos_ms[particle_index] = center + direction * maximum_distance
 
 
-# Cone (Pendulum) Solver
+def satisfy_dyng_ellipsoids_vectorized(sim):
+    if sim.ell_idx is None:
+        return
+    for constraint_index in range(len(sim.ell_idx)):
+        satisfy_dyng_ellipsoid_at(sim, constraint_index)
+
 
 def _distance_preserving_ray_position(
     line_start, line_direction, sphere_center, sphere_radius, previous_position,
@@ -393,79 +342,69 @@ def _distance_preserving_ray_position(
     return (line_start + direction * alpha).astype(np.float32)
 
 
-def satisfy_pendulums_vectorized(sim):
-    """Satisfy Cone (Pendulum) Constraints"""
+def satisfy_pendulum_at(sim, constraint_index):
     if sim.cone_idx is None:
         return
 
-    for ci in range(len(sim.cone_idx)):
-        p_idx     = sim.cone_idx[ci]
-        a_idx     = sim.cone_attach[ci]
-        c_type    = sim.cone_type[ci]
-        cos_half  = sim.cone_cos[ci]
-        sin_hh    = sim.cone_sin_hh[ci]
-        cos_hh    = sim.cone_cos_hh[ci]
-        xform_ls  = sim.cone_xform_ls[ci]
+    ci = int(constraint_index)
+    particle_index = int(sim.cone_idx[ci])
+    attachment_index = int(sim.cone_attach[ci])
+    if not (sim.is_free[particle_index] and sim.active_mask[particle_index]):
+        return
 
-        if not (sim.is_free[p_idx] and sim.active_mask[p_idx]):
-            continue
+    cone_transform = (
+        sim._interp_bone_xform[attachment_index] @ sim.cone_xform_ls[ci]
+    )
+    cone_origin = cone_transform.translation
+    cone_rotation = cone_transform.to_quaternion()
+    initial_axis = cone_rotation @ Vector((1.0, 0.0, 0.0))
+    if initial_axis.length_squared <= 1e-12:
+        return
+    initial_axis.normalize()
 
-        # coneTransformMS = attachment bone matrix @ converted REDengine LS transform
-        attach_xform = sim._interp_bone_xform[a_idx]
-        cone_xform_ms = attach_xform @ xform_ls
+    constrained_position = Vector(sim.pos_ms[particle_index])
+    attachment_position = Vector(sim.pos_ms[attachment_index])
+    cone_to_particle = constrained_position - cone_origin
+    constraint_type = int(sim.cone_type[ci])
+    if constraint_type != 0:
+        orthogonal_axis = cone_rotation @ Vector((0.0, 0.0, 1.0))
+        if orthogonal_axis.length_squared > 1e-12:
+            orthogonal_axis.normalize()
+            orthogonal_component = cone_to_particle.dot(orthogonal_axis)
+            if constraint_type == 1 or orthogonal_component > 0.0:
+                cone_to_particle -= orthogonal_axis * orthogonal_component
 
-        cone_origin_ms = Vector(cone_xform_ms.translation)
-        cone_rot       = cone_xform_ms.to_quaternion()
+    if cone_to_particle.length_squared < 1e-12:
+        return
+    cone_to_particle.normalize()
+    if initial_axis.dot(cone_to_particle) < float(sim.cone_cos[ci]):
+        perpendicular = initial_axis.cross(cone_to_particle)
+        if perpendicular.length > 1e-6:
+            perpendicular.normalize()
+            rotation = Quaternion((
+                float(sim.cone_cos_hh[ci]),
+                perpendicular.x * float(sim.cone_sin_hh[ci]),
+                perpendicular.y * float(sim.cone_sin_hh[ci]),
+                perpendicular.z * float(sim.cone_sin_hh[ci]),
+            ))
+            cone_to_particle = rotation @ initial_axis
+            cone_to_particle.normalize()
 
-        # Cone axis = X-axis of coneTransformMS (now correctly along bone chain)
-        initial_axis = Vector(cone_rot @ Vector((1, 0, 0)))
-        initial_axis.normalize()
+    original_distance = (attachment_position - constrained_position).length
+    if original_distance < 1e-6:
+        return
+    sim.pos_ms[particle_index] = _distance_preserving_ray_position(
+        cone_origin,
+        cone_to_particle,
+        attachment_position,
+        original_distance,
+        constrained_position,
+    )
 
-        constrained_pos = Vector(sim.pos_ms[p_idx])
-        attachment_pos  = Vector(sim.pos_ms[a_idx])
 
-        cone_to_particle = constrained_pos - cone_origin_ms
+def satisfy_pendulums_vectorized(sim):
+    if sim.cone_idx is None:
+        return
+    for constraint_index in range(len(sim.cone_idx)):
+        satisfy_pendulum_at(sim, constraint_index)
 
-        #  HingePlane / HalfCone: project out the Z-axis component 
-        if c_type != 0:  # not pure Cone
-            ortho_axis = Vector(cone_rot @ Vector((0, 0, 1)))
-            ortho_axis.normalize()
-
-            if c_type == 1:  # HingePlane: remove all Z-component
-                dot_z = cone_to_particle.dot(ortho_axis)
-                cone_to_particle -= ortho_axis * dot_z
-            elif c_type == 2:  # HalfCone: remove positive Z only
-                dot_z = cone_to_particle.dot(ortho_axis)
-                if dot_z > 0:
-                    cone_to_particle -= ortho_axis * dot_z
-
-        if cone_to_particle.length_squared < 1e-12:
-            continue
-
-        cone_to_particle.normalize()
-
-        #  Check if outside cone aperture 
-        dot_val = initial_axis.dot(cone_to_particle)
-        if dot_val < cos_half:
-            # Rotate initial_axis to the cone boundary using Rodrigues
-            perp = initial_axis.cross(cone_to_particle)
-            perp_len = perp.length
-            if perp_len > 1e-6:
-                perp.normalize()
-                q_rot = Quaternion(
-                    (cos_hh, perp.x * sin_hh, perp.y * sin_hh, perp.z * sin_hh)
-                )
-                cone_to_particle = q_rot @ initial_axis
-                cone_to_particle.normalize()
-
-        original_dist = (attachment_pos - constrained_pos).length
-        if original_dist < 1e-6:
-            continue
-
-        sim.pos_ms[p_idx] = _distance_preserving_ray_position(
-            cone_origin_ms,
-            cone_to_particle,
-            attachment_pos,
-            original_dist,
-            constrained_pos,
-        )

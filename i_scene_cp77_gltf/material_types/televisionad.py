@@ -1,6 +1,9 @@
-from ..main.common import *
+import bpy
+from ..blender.transactions import new_tracked_datablock
+from ..materials.blender.images import imageFromRelPath
+from ..materials.blender.nodes import bsdf_socket_names, createHash12Group, createLerpGroup, createVecLerpGroup, create_node, loc
 
-from .mat_common import create_param_value_nodes, create_scene_time_value
+from .mat_common import MaterialTypeBase, create_param_value_nodes, create_scene_time_value
 
 _PARAM_SPECS = (
     ("TilesWidth", "TilesWidth", 400, "TilesWidth", 1.0),
@@ -33,7 +36,7 @@ def get_or_create_n_group():
     ngroup = bpy.data.node_groups.get('n')
 
     if ngroup is None:
-        ngroup = bpy.data.node_groups.new("n", "ShaderNodeTree")
+        ngroup = new_tracked_datablock("node_groups", "n", "ShaderNodeTree")
         ngroup.interface.new_socket(name="TilesWidth", socket_type='NodeSocketFloat', in_out='INPUT')
         ngroup.interface.new_socket(name="TilesHeight", socket_type='NodeSocketFloat', in_out='INPUT')
         ngroup.interface.new_socket(name="PlaySpeed", socket_type='NodeSocketFloat', in_out='INPUT')
@@ -70,7 +73,7 @@ def get_or_create_frame_add_group():
     frameGroup = bpy.data.node_groups.get('frameAdd')
 
     if frameGroup is None:
-        frameGroup = bpy.data.node_groups.new("frameAdd", "ShaderNodeTree")
+        frameGroup = new_tracked_datablock("node_groups", "frameAdd", "ShaderNodeTree")
         frameGroup.interface.new_socket(name="PixelsHeight", socket_type='NodeSocketFloat', in_out='INPUT')
         frameGroup.interface.new_socket(name="InterlaceLines", socket_type='NodeSocketFloat', in_out='INPUT')
         frameGroup.interface.new_socket(name="UV", socket_type='NodeSocketVector', in_out='INPUT')
@@ -122,7 +125,7 @@ def get_or_create_sub_uv_group():
     subUVGroup = bpy.data.node_groups.get('subUV')
 
     if subUVGroup is None:
-        subUVGroup = bpy.data.node_groups.new("subUV", "ShaderNodeTree")
+        subUVGroup = new_tracked_datablock("node_groups", "subUV", "ShaderNodeTree")
         subUVGroup.interface.new_socket(name="TilesWidth", socket_type='NodeSocketFloat', in_out='INPUT')
         subUVGroup.interface.new_socket(name="TilesHeight", socket_type='NodeSocketFloat', in_out='INPUT')
         subUVGroup.interface.new_socket(name="n", socket_type='NodeSocketFloat', in_out='INPUT')
@@ -192,7 +195,7 @@ def get_or_create_broken_uv_group():
     brokenUVGroup = bpy.data.node_groups.get('brokenUV')
 
     if brokenUVGroup is None:
-        brokenUVGroup = bpy.data.node_groups.new("brokenUV", "ShaderNodeTree")
+        brokenUVGroup = new_tracked_datablock("node_groups", "brokenUV", "ShaderNodeTree")
         brokenUVGroup.interface.new_socket(name="rndBlocks", socket_type='NodeSocketFloat', in_out='INPUT')
         brokenUVGroup.interface.new_socket(name="Time", socket_type='NodeSocketFloat', in_out='INPUT')
         brokenUVGroup.interface.new_socket(name="UV", socket_type='NodeSocketVector', in_out='INPUT')
@@ -259,7 +262,7 @@ def get_or_create_rnd_color_index_group():
     rndColorIGroup = bpy.data.node_groups.get('rndColorIndex')
 
     if rndColorIGroup is None:
-        rndColorIGroup = bpy.data.node_groups.new("rndColorIndex", "ShaderNodeTree")
+        rndColorIGroup = new_tracked_datablock("node_groups", "rndColorIndex", "ShaderNodeTree")
         rndColorIGroup.interface.new_socket(name="rndBlocks", socket_type='NodeSocketFloat', in_out='INPUT')
         rndColorIGroup.interface.new_socket(name="Time", socket_type='NodeSocketFloat', in_out='INPUT')
         rndColorIGroup.interface.new_socket(name="UV", socket_type='NodeSocketVector', in_out='INPUT')
@@ -307,7 +310,7 @@ def get_or_create_rnd_color_group():
     rndColorGroup = bpy.data.node_groups.get('rndColor')
 
     if rndColorGroup is None:
-        rndColorGroup = bpy.data.node_groups.new("rndColor", "ShaderNodeTree")
+        rndColorGroup = new_tracked_datablock("node_groups", "rndColor", "ShaderNodeTree")
         rndColorGroup.interface.new_socket(name="rndColorIndex", socket_type='NodeSocketFloat', in_out='INPUT')
         rndColorGroup.interface.new_socket(name="rndColor", socket_type='NodeSocketColor', in_out='OUTPUT')
         rndColorGroupI = create_node(rndColorGroup.nodes, "NodeGroupInput", (-1400, 0))
@@ -375,7 +378,7 @@ def get_or_create_black_dots_group():
     blackDotsGroup = bpy.data.node_groups.get('blackDots')
 
     if blackDotsGroup is None:
-        blackDotsGroup = bpy.data.node_groups.new("blackDots", "ShaderNodeTree")
+        blackDotsGroup = new_tracked_datablock("node_groups", "blackDots", "ShaderNodeTree")
         blackDotsGroup.interface.new_socket(name="UV", socket_type='NodeSocketVector', in_out='INPUT')
         blackDotsGroup.interface.new_socket(name="PixelsHeight", socket_type='NodeSocketFloat', in_out='INPUT')
         blackDotsGroup.interface.new_socket(name="BlackLinesRatio", socket_type='NodeSocketFloat', in_out='INPUT')
@@ -469,12 +472,7 @@ def get_or_create_black_dots_group():
     return blackDotsGroup
 
 
-class TelevisionAd:
-    def __init__(self, BasePath, image_format, ProjPath):
-        self.BasePath = BasePath
-        self.ProjPath = ProjPath
-        self.image_format = image_format
-
+class TelevisionAd(MaterialTypeBase):
     def create(self, Data, Mat):
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes[loc('Principled BSDF')]

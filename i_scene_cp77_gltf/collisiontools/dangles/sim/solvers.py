@@ -1,6 +1,7 @@
 import bpy
 from mathutils import Matrix, Vector
 
+from ....animation.blender_pose import blend_matrix_trs, model_matrix_to_basis
 from . import spaces
 
 
@@ -20,7 +21,7 @@ def _apply_graph_operation(sim, operation_type, operation_index):
         _apply_drag_runtime(sim, operation_index)
 
 
-def _build_lookat_map(sim, node_index):
+def _compile_lookat_map(sim, node_index):
     lookat_map = {}
     seen = set()
 
@@ -78,110 +79,147 @@ def _build_lookat_map(sim, node_index):
     return lookat_map
 
 
-def _node_particle_indices(sim, node_index):
-    start, end = sim._node_ranges[node_index]
-    selected = {}
-    for particle_index in range(start, end):
-        selected[sim.particles[particle_index].bone_name] = particle_index
-    return sorted(
-        selected.values(),
-        key=lambda index: sim.arm_obj.data.bones.find(sim.bone_names[index]),
-    )
-
-
-def _matrix_lerp_qs(current, target, alpha):
-    if alpha <= 0.0:
-        return current.copy()
-    if alpha >= 1.0:
-        return target.copy()
-    location = current.translation.lerp(target.translation, alpha)
-    rotation = current.to_quaternion().slerp(
-        target.to_quaternion(), alpha
-    )
-    scale = current.to_scale().lerp(target.to_scale(), alpha)
-    return Matrix.LocRotScale(location, rotation, scale)
-
-
-def _pose_matrix_map(arm, bone_names):
-    matrices = {}
-    for name in bone_names:
-        pose_bone = arm.pose.bones.get(name)
-        if pose_bone is not None:
-            matrices[name] = pose_bone.matrix.copy()
-    return matrices
-
-
-def _add_subtree_names(pose_bone, names):
+def _subtree_names(pose_bone):
+    names = []
     stack = [pose_bone]
     while stack:
         current = stack.pop()
-        if current.name in names:
-            continue
-        names.add(current.name)
-        stack.extend(current.children)
+        names.append(current.name)
+        stack.extend(reversed(current.children))
+    return tuple(names)
+
+
+def compile_output_topology(sim):
+    sim._node_particle_order = []
+    sim._node_lookat_maps = []
+    sim._node_output_topology = []
+    arm = sim.arm_obj
+
+    for node_index in range(len(sim._node_ranges)):
+        start, end = sim._node_ranges[node_index]
+        selected = {}
+        for particle_index in range(start, end):
+            selected[sim.particles[particle_index].bone_name] = particle_index
+        particle_order = tuple(sorted(
+            selected.values(),
+            key=lambda index: arm.data.bones.find(sim.bone_names[index]),
+        ))
+        sim._node_particle_order.append(particle_order)
+        lookat_map = _compile_lookat_map(sim, node_index)
+        sim._node_lookat_maps.append(lookat_map)
+
+        relevant_names = set()
+        subtree_by_name = {}
+        for particle_index in particle_order:
+            names = [sim.bone_names[particle_index]]
+            names.extend(
+                sim.bone_names[source_index]
+                for source_index, _axis, _obligatory
+                in lookat_map.get(particle_index, ())
+                if 0 <= source_index < len(sim.bone_names)
+            )
+            for name in names:
+                pose_bone = arm.pose.bones.get(name)
+                if pose_bone is None:
+                    continue
+                subtree = subtree_by_name.setdefault(
+                    name, _subtree_names(pose_bone)
+                )
+                relevant_names.update(subtree)
+
+        pose_bones = {}
+        for name in relevant_names:
+            pose_bone = arm.pose.bones.get(name)
+            if pose_bone is not None:
+                pose_bones[name] = pose_bone
+                subtree_by_name.setdefault(name, _subtree_names(pose_bone))
+
+        correction_groups = {}
+        for particle_index in particle_order:
+            target_name = sim.bone_names[particle_index]
+            target_bone = pose_bones.get(target_name)
+            if target_bone is not None:
+                correction_groups[('CHILDREN', target_name)] = tuple(
+                    name for name in subtree_by_name[target_name]
+                    if name != target_name
+                )
+            for source_index, _axis, _obligatory in lookat_map.get(
+                particle_index, ()
+            ):
+                source_name = sim.bone_names[source_index]
+                source_bone = pose_bones.get(source_name)
+                if source_bone is None:
+                    continue
+                dangle_children = []
+                other_children = []
+                for child in source_bone.children:
+                    subtree = subtree_by_name.setdefault(
+                        child.name, _subtree_names(child)
+                    )
+                    if child.name == target_name:
+                        dangle_children.extend(subtree)
+                    else:
+                        other_children.extend(subtree)
+                correction_groups[
+                    ('DANGLE', source_name, target_name)
+                ] = tuple(dangle_children)
+                correction_groups[
+                    ('OTHER', source_name, target_name)
+                ] = tuple(other_children)
+
+        apply_order = tuple(sorted(
+            pose_bones,
+            key=lambda name: (
+                _bone_depth(pose_bones[name]),
+                arm.data.bones.find(name),
+            ),
+        ))
+        sim._node_output_topology.append({
+            'particle_order': particle_order,
+            'lookat_map': lookat_map,
+            'pose_bones': pose_bones,
+            'subtrees': subtree_by_name,
+            'correction_groups': correction_groups,
+            'apply_order': apply_order,
+        })
 
 
 def _correct_children_matrices(
-    matrices, parent_bone, correction, alpha, apply_names,
-    filter_bone_name=None, filter_mode=False,
+    matrices, child_names, correction, alpha, apply_names,
 ):
-    for child in parent_bone.children:
-        selected = (
-            child.name == filter_bone_name
-            if filter_mode
-            else child.name != filter_bone_name
-        )
-        if not selected:
-            continue
-
-        current = matrices.get(child.name)
+    for child_name in child_names:
+        current = matrices.get(child_name)
         if current is None:
             continue
         target = correction @ current
-        matrices[child.name] = _matrix_lerp_qs(current, target, alpha)
-        apply_names.add(child.name)
-        _correct_children_matrices(
-            matrices,
-            child,
-            correction,
-            alpha,
-            apply_names,
-            filter_bone_name=None,
-            filter_mode=False,
+        matrices[child_name] = blend_matrix_trs(
+            current, target, alpha
         )
+        apply_names.add(child_name)
 
 
 def _compose_dangle_node_matrices(sim, node_index):
-    arm = sim.arm_obj
     dnode = sim.state.dangle_nodes[node_index]
-    lookat_map = _build_lookat_map(sim, node_index)
-
-    matrix_names = set()
-    for particle_index in _node_particle_indices(sim, node_index):
-        target_bone = arm.pose.bones.get(sim.bone_names[particle_index])
-        if target_bone is not None:
-            _add_subtree_names(target_bone, matrix_names)
-        for source_index, _axis, _obligatory in lookat_map.get(
-            particle_index, ()
-        ):
-            if 0 <= source_index < len(sim.bone_names):
-                source_bone = arm.pose.bones.get(sim.bone_names[source_index])
-                if source_bone is not None:
-                    _add_subtree_names(source_bone, matrix_names)
-
-    matrices = _pose_matrix_map(arm, matrix_names)
+    topology = sim._node_output_topology[node_index]
+    lookat_map = topology['lookat_map']
+    pose_bones = topology['pose_bones']
+    subtrees = topology['subtrees']
+    correction_groups = topology['correction_groups']
+    matrices = {
+        name: pose_bone.matrix.copy()
+        for name, pose_bone in pose_bones.items()
+    }
     apply_names = set()
     alpha = max(0.0, min(1.0, float(getattr(dnode, 'alpha', 1.0))))
 
-    for particle_index in _node_particle_indices(sim, node_index):
+    for particle_index in topology['particle_order']:
         if not sim.active_mask[particle_index]:
             continue
 
         target_name = sim.bone_names[particle_index]
-        target_bone = arm.pose.bones.get(target_name)
+        target_bone = pose_bones.get(target_name)
         if target_bone is None or target_name not in matrices:
             continue
-
         target_position = Vector(sim.pos_ms[particle_index])
 
         for source_index, look_axis, obligatory in lookat_map.get(
@@ -190,14 +228,9 @@ def _compose_dangle_node_matrices(sim, node_index):
             if not 0 <= source_index < len(sim.bone_names):
                 continue
             source_name = sim.bone_names[source_index]
-            source_bone = arm.pose.bones.get(source_name)
             parent_matrix = matrices.get(source_name)
             reference_target = matrices.get(target_name)
-            if (
-                source_bone is None
-                or parent_matrix is None
-                or reference_target is None
-            ):
+            if parent_matrix is None or reference_target is None:
                 continue
 
             result_parent = parent_matrix.copy()
@@ -221,11 +254,10 @@ def _compose_dangle_node_matrices(sim, node_index):
                         )
                         if simulated_direction.length_squared > 1e-8:
                             simulated_direction.normalize()
-                            shortest_rotation = current_look.rotation_difference(
-                                simulated_direction
-                            )
                             result_rotation = (
-                                shortest_rotation @ parent_rotation
+                                current_look.rotation_difference(
+                                    simulated_direction
+                                ) @ parent_rotation
                             )
                             result_parent = Matrix.LocRotScale(
                                 parent_matrix.translation,
@@ -233,55 +265,52 @@ def _compose_dangle_node_matrices(sim, node_index):
                                 parent_matrix.to_scale(),
                             )
 
-            matrices[source_name] = _matrix_lerp_qs(
+            matrices[source_name] = blend_matrix_trs(
                 parent_matrix, result_parent, alpha
             )
-            _add_subtree_names(source_bone, apply_names)
-
+            apply_names.update(subtrees.get(source_name, (source_name,)))
             correction = result_parent @ parent_matrix.inverted_safe()
             if getattr(
                 dnode, 'parent_rotation_alters_dangle_children', False
             ):
                 _correct_children_matrices(
                     matrices,
-                    source_bone,
+                    correction_groups.get(
+                        ('DANGLE', source_name, target_name), ()
+                    ),
                     correction,
                     alpha,
                     apply_names,
-                    filter_bone_name=target_name,
-                    filter_mode=True,
                 )
             if getattr(
                 dnode, 'parent_rotation_alters_non_dangle_children', False
             ):
                 _correct_children_matrices(
                     matrices,
-                    source_bone,
+                    correction_groups.get(
+                        ('OTHER', source_name, target_name), ()
+                    ),
                     correction,
                     alpha,
                     apply_names,
-                    filter_bone_name=target_name,
-                    filter_mode=False,
                 )
 
         current_dangle = matrices[target_name]
         result_dangle = current_dangle.copy()
         result_dangle.translation = target_position
-        matrices[target_name] = _matrix_lerp_qs(
+        matrices[target_name] = blend_matrix_trs(
             current_dangle, result_dangle, alpha
         )
-        _add_subtree_names(target_bone, apply_names)
+        apply_names.update(subtrees.get(target_name, (target_name,)))
 
         if getattr(dnode, 'dangle_alters_children', False):
             correction = result_dangle @ current_dangle.inverted_safe()
             _correct_children_matrices(
                 matrices,
-                target_bone,
+                correction_groups.get(('CHILDREN', target_name), ()),
                 correction,
                 alpha,
                 apply_names,
-                filter_bone_name=None,
-                filter_mode=False,
             )
 
     return matrices, apply_names
@@ -296,42 +325,26 @@ def _bone_depth(pose_bone):
     return depth
 
 
-def _model_matrix_to_basis(pose_bone, desired_matrix, parent_matrix):
-    bone = getattr(pose_bone, 'bone', None)
-    if bone is None or not hasattr(bone, 'convert_local_to_pose'):
-        return None
-    if pose_bone.parent is None:
-        return bone.convert_local_to_pose(
-            desired_matrix,
-            bone.matrix_local,
-            invert=True,
-        )
-    return bone.convert_local_to_pose(
-        desired_matrix,
-        bone.matrix_local,
-        parent_matrix=parent_matrix,
-        parent_matrix_local=pose_bone.parent.bone.matrix_local,
-        invert=True,
-    )
-
-
-def _apply_model_space_matrices(arm, matrices, apply_names):
-    pose_bones = []
-    for name in apply_names:
-        pose_bone = arm.pose.bones.get(name)
-        if pose_bone is not None and name in matrices:
-            pose_bones.append(pose_bone)
-    pose_bones.sort(key=_bone_depth)
-
+def _apply_model_space_matrices(
+    matrices, apply_names, topology
+):
+    pose_bones = [
+        topology['pose_bones'][name]
+        for name in topology['apply_order']
+        if name in apply_names and name in matrices
+    ]
     basis_by_name = {}
     for pose_bone in pose_bones:
         parent = pose_bone.parent
         parent_matrix = (
             matrices[parent.name]
             if parent is not None and parent.name in matrices
-            else (parent.matrix.copy() if parent is not None else Matrix.Identity(4))
+            else (
+                parent.matrix.copy()
+                if parent is not None else Matrix.Identity(4)
+            )
         )
-        basis_by_name[pose_bone.name] = _model_matrix_to_basis(
+        basis_by_name[pose_bone.name] = model_matrix_to_basis(
             pose_bone,
             matrices[pose_bone.name],
             parent_matrix,
@@ -354,7 +367,9 @@ def _apply_dangle_node(sim, node_index):
     if not apply_names:
         return
 
-    _apply_model_space_matrices(arm, matrices, apply_names)
+    _apply_model_space_matrices(
+        matrices, apply_names, sim._node_output_topology[node_index]
+    )
     arm.update_tag(refresh={'OBJECT'})
     bpy.context.view_layer.update()
 

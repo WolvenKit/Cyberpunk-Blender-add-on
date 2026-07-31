@@ -66,16 +66,16 @@ class SectorPlacementRecord:
 class SectorExecutionContext:
     session: Any
     planned_sector: PlannedSector
-    sector_entry: dict
     sector_collection: Any
     masters_collection: Any
-    mesh_source_paths: Mapping[str, str]
     world_transform_buffers: Mapping[str, tuple]
     cooked_transform_buffers: Mapping[str, tuple]
     operations: SectorPlacementOperations
     placement_records: dict[int, SectorPlacementRecord] = field(
         default_factory=dict
     )
+    matrix_objects: list[Any] = field(default_factory=list)
+    collision_actor_objects: dict[str, Any] = field(default_factory=dict)
 
     @property
     def sector_name(self):
@@ -96,6 +96,10 @@ class SectorExecutionContext:
             error=str(error or ""),
         )
 
+    def track_matrix_object(self, obj):
+        if obj is not None:
+            self.matrix_objects.append(obj)
+
     def validation_issues(self):
         issues = []
         for node_index, record in sorted(self.placement_records.items()):
@@ -113,13 +117,21 @@ class SectorExecutionContext:
         return tuple(issues)
 
     def summary(self):
-        records = tuple(self.placement_records.values())
+        expected = 0
+        actual = 0
+        failed = 0
+        mismatched = 0
+        for record in self.placement_records.values():
+            expected += record.expected
+            actual += record.actual
+            failed += int(bool(record.error))
+            mismatched += int(not record.valid)
         return {
-            "handlerNodes": len(records),
-            "expectedPlacements": sum(item.expected for item in records),
-            "actualPlacements": sum(item.actual for item in records),
-            "failedNodes": sum(bool(item.error) for item in records),
-            "mismatchedNodes": sum(not item.valid for item in records),
+            "handlerNodes": len(self.placement_records),
+            "expectedPlacements": expected,
+            "actualPlacements": actual,
+            "failedNodes": failed,
+            "mismatchedNodes": mismatched,
         }
 
 
@@ -171,10 +183,6 @@ class SectorNodeContext:
     @property
     def operations(self):
         return self.execution.operations
-
-    @property
-    def mesh_source_paths(self):
-        return self.execution.mesh_source_paths
 
     @property
     def world_transform_buffers(self):

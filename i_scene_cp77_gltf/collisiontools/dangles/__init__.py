@@ -8,47 +8,75 @@ bl_info = {
     "category": "Animation",
 }
 
-if "bpy" in locals():
-    import importlib
-    from . import animgraph_bridge, animgraph_codec, draw, io, ops, props, selection_sync, ui
-    importlib.reload(animgraph_codec)
-    importlib.reload(animgraph_bridge)
-    importlib.reload(selection_sync)
-    importlib.reload(props)
-    importlib.reload(draw)
-    importlib.reload(io)
-    importlib.reload(ops)
-    importlib.reload(ui)
-    from .sim import spaces, collision, constraints, frame_time, spring, pendulum, core, drag, solvers
-    importlib.reload(spaces)
-    importlib.reload(collision)
-    importlib.reload(constraints)
-    importlib.reload(frame_time)
-    importlib.reload(drag)
-    importlib.reload(spring)
-    importlib.reload(pendulum)
-    importlib.reload(core)
-    importlib.reload(solvers)
-else:
-    from . import animgraph_codec
-    from . import animgraph_bridge
-    from . import selection_sync
-    from . import props
-    from .sim import spaces, collision, constraints, frame_time, spring, pendulum, core, drag, solvers
-    from . import draw
-    from . import ops
-    from . import ui
+from ...registration import RegistrationLedger
+from ...blender.animgraph import presenters as animgraph_presenters
+from .animgraph_projection import project_imported_dangle_node
+from .animgraph_ui import draw_dangle_node
+from .draw import register_global_handler, unregister_all as unregister_draw
+from .ops import register as register_ops, unregister as unregister_ops
+from .props import register as register_props, unregister as unregister_props
+from .selection_sync import register as register_selection_sync
+from .selection_sync import unregister as unregister_selection_sync
+from .ui import register as register_ui, unregister as unregister_ui
+
+_LEDGER = RegistrationLedger("dangles")
+
 
 def register():
-    props.register()
-    ui.register()
-    ops.register()
-    draw.register_global_handler()
-    selection_sync.register()
+    if _LEDGER.active:
+        return
+    steps = (
+        (register_props, unregister_props, "dangle properties"),
+        (register_ui, unregister_ui, "dangle UI"),
+        (register_ops, unregister_ops, "dangle operators"),
+        (register_global_handler, unregister_draw, "dangle draw handlers"),
+        (register_selection_sync, unregister_selection_sync, "dangle selection timer"),
+        (
+            lambda: animgraph_presenters.register_post_import_hook(
+                animgraph_presenters.PRESENTER_DANGLE_RUNTIME,
+                project_imported_dangle_node,
+            ),
+            lambda: animgraph_presenters.unregister_post_import_hook(
+                animgraph_presenters.PRESENTER_DANGLE_RUNTIME,
+                project_imported_dangle_node,
+            ),
+            "AnimGraph dangle projection hook",
+        ),
+        (
+            lambda: animgraph_presenters.register_node_draw_hook(
+                animgraph_presenters.PRESENTER_DANGLE_PARTICLE,
+                draw_dangle_node,
+            ),
+            lambda: animgraph_presenters.unregister_node_draw_hook(
+                animgraph_presenters.PRESENTER_DANGLE_PARTICLE,
+                draw_dangle_node,
+            ),
+            "AnimGraph dangle particle draw hook",
+        ),
+        (
+            lambda: animgraph_presenters.register_node_draw_hook(
+                animgraph_presenters.PRESENTER_DANGLE_CONE,
+                draw_dangle_node,
+            ),
+            lambda: animgraph_presenters.unregister_node_draw_hook(
+                animgraph_presenters.PRESENTER_DANGLE_CONE,
+                draw_dangle_node,
+            ),
+            "AnimGraph dangle cone draw hook",
+        ),
+    )
+    try:
+        for register_step, unregister_step, label in steps:
+            register_step()
+            _LEDGER.add_cleanup(label, unregister_step)
+    except Exception:
+        _LEDGER.cleanup()
+        raise
+
 
 def unregister():
-    selection_sync.unregister()
-    draw.unregister_all()
-    ops.unregister()
-    ui.unregister()
-    props.unregister()
+    failures = _LEDGER.cleanup()
+    if failures:
+        raise RuntimeError("; ".join(
+            f"{label}: {error}" for label, error in failures
+        ))

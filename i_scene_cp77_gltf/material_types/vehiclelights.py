@@ -1,6 +1,7 @@
-from ..main.common import *
+from ..materials.blender.images import imageFromRelPath
+from ..materials.blender.nodes import CreateShaderNodeRGB, CreateShaderNodeValue, bsdf_socket_names, create_node, loc
 
-from .mat_common import create_normal_map_rel
+from .mat_common import MaterialTypeBase, create_normal_map_rel
 
 
 # Params from mt are as follows:
@@ -26,12 +27,7 @@ from .mat_common import create_normal_map_rel
 # EmissionTiling
 # EmissionParallax
 
-class VehicleLights:
-    def __init__(self, BasePath, image_format, ProjPath):
-        self.BasePath = BasePath
-        self.ProjPath = ProjPath
-        self.image_format = image_format
-
+class VehicleLights(MaterialTypeBase):
     def create(self, Data, Mat):
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes[loc('Principled BSDF')]
@@ -84,19 +80,3 @@ class VehicleLights:
 
 # The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
 
-if __name__ == "__main__":
-    import os
-    import json
-
-    filepath = "F:\\CPmod\\colby\\source\\raw\\base\\vehicles\\standard\\v_standard25_thorton_colby_pickup_nomad\\entities\\meshes\\v_standard25_thorton_colby_pickup_nomad__int01_stwheel_01.glb"
-    fileBasePath = os.path.splitext(filepath)[0]
-    file = open(fileBasePath + ".Material.json", mode='r')
-    obj = json.loads(file.read())
-    BasePath = str(obj["MaterialRepo"]) + "\\"
-
-    bpyMat = bpy.data.materials.new("TestMat")
-    bpyMat.use_nodes = True
-    bpyMat.blend_method = 'HASHED'
-    rawMat = obj['Materials'][4]
-    vehicleLights = VehicleLights(BasePath, "png")
-    vehicleLights.create(rawMat["Data"], bpyMat)

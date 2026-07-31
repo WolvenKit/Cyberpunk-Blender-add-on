@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Tuple
+
+from ...redSpace.qs_transform import encode_qs_transform
+from ...assetio.animgraph_json import dumps as dumps_json
 
 
 LINK_TO_RED = {
@@ -141,21 +143,6 @@ def _vec4(values: Any, *, w: float = 1.0) -> dict:
     }
 
 
-def _quat_wxyz(values: Any) -> dict:
-    seq = list(values or ())
-    if len(seq) < 4:
-        seq = [1.0, 0.0, 0.0, 0.0]
-    else:
-        seq = seq[:4]
-    return {
-        "$type": "Quaternion",
-        "i": _as_float(seq[1]),
-        "j": _as_float(seq[2]),
-        "k": _as_float(seq[3]),
-        "r": _as_float(seq[0], 1.0),
-    }
-
-
 def _cname(name: Any) -> dict:
     return {
         "$type": "CName",
@@ -169,15 +156,14 @@ def _transform_index(name: Any) -> dict:
 
 
 def _qs_transform(offset: Any, rotation_wxyz: Any, *, translation_w: float = 1.0) -> dict:
-    return {
-        "$type": "QsTransform",
-        "Rotation": _quat_wxyz(rotation_wxyz),
-        "Scale": {
-            "$type": "Vector4", "W": 1.0,
-            "X": 1.0, "Y": 1.0, "Z": 1.0,
-        },
-        "Translation": _vec4(offset, w=translation_w),
-    }
+    return encode_qs_transform(
+        rotation_wxyz,
+        offset,
+        (1.0, 1.0, 1.0),
+        translation_w=translation_w,
+        scale_w=1.0,
+        quaternion_order="wxyz",
+    )
 
 
 def _copy_template(template: Any, fallback: dict) -> dict:
@@ -669,30 +655,8 @@ def validate_payload(payload: dict) -> dict:
     }
 
 
-def maximum_json_depth(root: Any) -> int:
-    maximum = 0
-    stack = [(root, 1)]
-    while stack:
-        value, depth = stack.pop()
-        maximum = max(maximum, depth)
-        if isinstance(value, dict):
-            stack.extend((child, depth + 1) for child in value.values())
-        elif isinstance(value, list):
-            stack.extend((child, depth + 1) for child in value)
-    return maximum
-
-
 def dumps_pretty(payload: dict) -> str:
-    depth = maximum_json_depth(payload)
-    old_limit = sys.getrecursionlimit()
-    required = max(old_limit, depth * 4 + 1000)
-    try:
-        if required != old_limit:
-            sys.setrecursionlimit(required)
-        return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
-    finally:
-        if sys.getrecursionlimit() != old_limit:
-            sys.setrecursionlimit(old_limit)
+    return dumps_json(payload, indent=2) + "\n"
 
 
 def write_json(filepath: str, payload: dict) -> None:

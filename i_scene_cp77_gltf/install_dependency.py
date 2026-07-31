@@ -2,27 +2,34 @@ import importlib
 import subprocess
 import sys
 
+import bpy
+
 
 def install_dependency(pip_name: str, import_name: str) -> bool:
-    """
-    Executes a subprocess to install a Python package via pip and 
-    returns a boolean indicating execution success.
-    """
-    if sys.platform != 'win32':
+    """Install an explicitly requested optional dependency into Blender."""
+    if sys.platform != "win32":
+        return False
+    if getattr(bpy.app, "online_access", True) is False:
         return False
 
-    python_executable = sys.executable
-
     try:
-        subprocess.check_call(
-                [python_executable, "-m", "pip", "install", pip_name]
-                )
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                pip_name,
+            ],
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return False
 
-    except subprocess.CalledProcessError:
-        pass
-
+    importlib.invalidate_caches()
     try:
         importlib.import_module(import_name)
-        return True
     except ImportError:
         return False
+    return True

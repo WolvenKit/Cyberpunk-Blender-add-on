@@ -4,7 +4,8 @@ from mathutils import Matrix
 
 from ...common.entity_data import component_name
 from ...common.handles import resolve_handle_data
-from ...common.values import cname_value
+from ....assetio.values import cname_value
+from ....blender.collections import newly_linked_collection_object
 from ....collisiontools.pxbridge.io_phys import import_collider_as_actor
 
 COLLIDER_COMPONENT_TYPES = frozenset({
@@ -32,12 +33,6 @@ def _collider_component_mass(component):
             return value
     return 0.0
 
-
-def _new_collection_object(collection, existing_objects, expected_name):
-    for obj in collection.objects:
-        if obj not in existing_objects:
-            return obj
-    return collection.objects.get(expected_name)
 
 
 class EntityColliderHandler:
@@ -122,7 +117,7 @@ class EntityColliderHandler:
                 continue
 
             if actor_obj is None:
-                actor_obj = _new_collection_object(
+                actor_obj = newly_linked_collection_object(
                     context.target_collection,
                     existing_objects,
                     actor_name,

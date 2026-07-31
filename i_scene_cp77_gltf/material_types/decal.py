@@ -1,10 +1,5 @@
-import bpy
-
-if __name__ != "__main__":
-    from ..main.common import *
-    from .mat_common import decal_values, resolve_depot_texture
-else:
-    from mat_common import decal_values, resolve_depot_texture
+from ..materials.blender.nodes import CreateShaderNodeTexImage, bsdf_socket_names, loc
+from .mat_common import coerce_color, coerce_texture_path, decal_values, resolve_depot_texture, unwrap_param
 
 
 class Decal:
@@ -25,32 +20,15 @@ class Decal:
                 "MetalnessTexture",
             ),
         )
-        diffuse = values.get("DiffuseTexture")
-        difftex = (
-            diffuse.get("DepotPath", {}).get("$value", "")[:-3]
-            + self.image_format
-            if isinstance(diffuse, dict)
-            else None
+        difftex = coerce_texture_path(values.get("DiffuseTexture")) or None
+        DiffuseTextureAsMaskTexture = unwrap_param(
+            values.get("DiffuseTextureAsMaskTexture")
         )
-        DiffuseTextureAsMaskTexture = values.get(
-            "DiffuseTextureAsMaskTexture"
-        )
-        RoughnessTexture = values.get("RoughnessTexture")
-        NormalTexture = values.get("NormalTexture")
+        RoughnessTexture = coerce_texture_path(values.get("RoughnessTexture")) or None
+        NormalTexture = coerce_texture_path(values.get("NormalTexture")) or None
         DiffuseColor = values.get("DiffuseColor")
-        DiffuseAlpha = values.get("DiffuseAlpha")
-        MetalnessTexture = values.get("MetalnessTexture")
-
-        def texture_path(value):
-            if not isinstance(value, dict):
-                return None
-            depot = value.get("DepotPath", {})
-            path = depot.get("$value", "") if isinstance(depot, dict) else ""
-            return path[:-3] + self.image_format if path else None
-
-        RoughnessTexture = texture_path(RoughnessTexture)
-        NormalTexture = texture_path(NormalTexture)
-        MetalnessTexture = texture_path(MetalnessTexture)
+        DiffuseAlpha = unwrap_param(values.get("DiffuseAlpha"))
+        MetalnessTexture = coerce_texture_path(values.get("MetalnessTexture")) or None
 
         resolved_diffuse = resolve_depot_texture(
             difftex, self.image_format, self.BasePath
@@ -77,14 +55,10 @@ class Decal:
                 )
             RGBnode = CurMat.nodes.new("ShaderNodeRGB")
             RGBnode.location = (-700, 500)
-            if DiffuseColor:
-                Red = (DiffuseColor['Red'] / 255)
-                Green = (DiffuseColor['Green'] / 255)
-                Blue = (DiffuseColor['Blue'] / 255)
-                Alpha = (DiffuseColor['Alpha'] / 255)
-                RGBnode.outputs[0].default_value = (Red, Green, Blue, Alpha)
-            else:
-                RGBnode.outputs[0].default_value = (1, 1, 1, 1)
+            RGBnode.outputs[0].default_value = coerce_color(
+                unwrap_param(DiffuseColor),
+                (1.0, 1.0, 1.0, 1.0),
+            )
             mulNode = CurMat.nodes.new("ShaderNodeMixRGB")
             mulNode.blend_type = 'MULTIPLY'
             mulNode.inputs[0].default_value = 1.0
@@ -98,15 +72,15 @@ class Decal:
             mulNode1.label = "CP77 Base Decal Alpha"
             mulNode1.operation = 'MULTIPLY'
             mulNode1.location = (-400, 100)
-            if 'alpha' in Data.keys():
-                DiffuseAlpha = float(Data["alpha"])
+            if "alpha" in Data:
+                DiffuseAlpha = float(unwrap_param(Data["alpha"]))
 
             if DiffuseAlpha:
                 mulNode1.inputs[0].default_value = DiffuseAlpha
             else:
                 mulNode1.inputs[0].default_value = 1.0
 
-            if 'enableMask' in Data.keys():
+            if "enableMask" in Data:
                 if Data["enableMask"] and DiffuseTextureAsMaskTexture is None:
                     DiffuseTextureAsMaskTexture = 0
                 else:
@@ -158,25 +132,3 @@ class Decal:
         # The above is  the code thats for the import plugin below is to allow testing/dev, you can run this file to import something
 
 
-if __name__ == "__main__":
-    import sys
-
-    sys.path.append("F://CPmod//ImportPluginGIT//i_scene_cp77_gltf//material_types")
-    sys.path.append("F://CPmod//ImportPluginGIT//i_scene_cp77_gltf//main")
-    from common import *
-    import os
-    import json
-
-    filepath = "F:\\CPmod\\judysApt\\source\\raw\\base\\surfaces\\textures\\decals\\dirt\\oil_mark_asphalt_a.mi.json"
-    # filepath="F:\\CPmod\\judysApt\\source\\raw\\base\\surfaces\\textures\\decals\\dirt\\glass_shatter_01.mi.json"
-    fileBasePath = os.path.splitext(filepath)[0]
-    file = open(filepath, mode='r')
-    obj = json.loads(file.read())
-    BasePath = "F:\\CPmod\\judysApt\\source\\raw"
-
-    bpyMat = bpy.data.materials.new("TestMat")
-    bpyMat.use_nodes = True
-    bpyMat.blend_method = 'HASHED'
-    rawMat = obj["Data"]["RootChunk"]
-    vehicleLights = Decal(BasePath, "png")
-    vehicleLights.create(rawMat, bpyMat)

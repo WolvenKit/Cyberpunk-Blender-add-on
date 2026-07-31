@@ -1,12 +1,13 @@
 from __future__ import annotations
+from ....blender.transactions import track_created_datablock
 
 import math
 
 import bpy
 
-from ....main.animation_api import assign_action_with_slot, ensure_fcurve
+from ....animation.keyframes import assign_action_with_slot, ensure_fcurve
 from ...common.entity_data import component_name
-from ...common.values import cname_value
+from ....assetio.values import cname_value
 from ..transforms import parent_transform_data
 
 _AXIS_INDEX = {'X': 0, 'Y': 1, 'Z': 2}
@@ -15,7 +16,7 @@ _AXIS_INDEX = {'X': 0, 'Y': 1, 'Z': 2}
 def create_axes(ent_coll, name):
     obj = ent_coll.objects.get(name)
     if obj is None:
-        obj = bpy.data.objects.new(name, None)
+        obj = track_created_datablock("objects", bpy.data.objects.new(name, None))
         ent_coll.objects.link(obj)
         obj.empty_display_size = .5
         obj.empty_display_type = 'PLAIN_AXES'
@@ -25,7 +26,7 @@ def create_axes(ent_coll, name):
 
 def set_rotation_axis_cycles(obj, axis_no, delta_radians, end_frame):
     start_value = obj.rotation_euler[axis_no]
-    action = bpy.data.actions.new(f'{obj.name}_rotation')
+    action = track_created_datablock("actions", bpy.data.actions.new(f'{obj.name}_rotation'))
     assign_action_with_slot(obj, action)
     fcurve = ensure_fcurve(action, obj, 'rotation_euler', axis_no, 'Rotation')
     keyframes = fcurve.keyframe_points

@@ -5,6 +5,11 @@ from json.decoder import scanstring
 
 import bpy
 
+from ...redSpace.qs_transform import (
+    quaternion_ijkr_from_wxyz,
+    quaternion_wxyz_from_ijkr,
+    quaternion_wxyz_from_wkit,
+)
 from .sim import spaces
 
 EDITOR_FORMAT = "DanglePhysicsEditor"
@@ -222,19 +227,6 @@ def _find_nodes_by_types(data, target_types):
 def _find_nodes_by_type(data, target_type):
     return _find_nodes_by_types(data, (target_type,))[target_type]
 
-def _parse_quat(q_dict):
-    if not isinstance(q_dict, dict):
-        return (1.0, 0.0, 0.0, 0.0)
-    return (
-        float(q_dict.get("r", 1.0)),
-        float(q_dict.get("i", 0.0)),
-        float(q_dict.get("j", 0.0)),
-        float(q_dict.get("k", 0.0)),
-    )
-
-def _quat_wxyz_to_ijkr(q):
-    return (q[1], q[2], q[3], q[0])
-
 def _parse_vec3(v_dict, default=(0.0, 0.0, 0.0)):
     if not isinstance(v_dict, dict):
         return default
@@ -243,18 +235,6 @@ def _parse_vec3(v_dict, default=(0.0, 0.0, 0.0)):
         float(v_dict.get("Y", default[1])),
         float(v_dict.get("Z", default[2])),
     )
-
-def _quat_ijkr_to_wxyz(value, default=(1.0, 0.0, 0.0, 0.0)):
-    if isinstance(value, dict):
-        return (
-            float(value.get("r", default[0])),
-            float(value.get("i", default[1])),
-            float(value.get("j", default[2])),
-            float(value.get("k", default[3])),
-        )
-    if isinstance(value, (list, tuple)) and len(value) >= 4:
-        return (float(value[3]), float(value[0]), float(value[1]), float(value[2]))
-    return default
 
 
 def _sequence(value, size, default):
@@ -467,7 +447,7 @@ def _parse_dangle_as_node(dangle_node, sim_data, addon_state, node_map, node_lab
             "radius": float(_get_wk(s_raw, "roundedCornerRadius", 0.05)),
             "extents": (x_ext, y_ext, z_ext),
             "offset": _parse_vec3(_get_wk(t_ls, "Translation", {})),
-            "rotation": _parse_quat(_get_wk(t_ls, "Rotation", {})),
+            "rotation": quaternion_wxyz_from_wkit(_get_wk(t_ls, "Rotation", {})),
         }
         _add_collision_shape(dnode.collision_shapes, values, node_shape_keys)
         _add_collision_shape(addon_state.collision_shapes, values, global_shape_keys)
@@ -691,7 +671,7 @@ def _parse_dangle_as_node(dangle_node, sim_data, addon_state, node_map, node_lab
                     )
                     ct_raw = _get_wk(c_node, "coneTransformLS", {})
                     rot_raw = _get_wk(ct_raw, "Rotation", {})
-                    pen.cone_transform_ls_quat = _parse_quat(rot_raw)
+                    pen.cone_transform_ls_quat = quaternion_wxyz_from_wkit(rot_raw)
                     pen.cone_transform_ls_offset = _parse_vec3(
                         _get_wk(ct_raw, "Translation", {})
                     )
@@ -713,7 +693,7 @@ def _parse_dangle_as_node(dangle_node, sim_data, addon_state, node_map, node_lab
                     exf = _get_wk(c_node, "ellipsoidTransformLS", {})
                     if exf:
                         rot_raw = _get_wk(exf, "Rotation", {})
-                        ell.ellipsoid_transform_ls_quat = _parse_quat(rot_raw)
+                        ell.ellipsoid_transform_ls_quat = quaternion_wxyz_from_wkit(rot_raw)
                         trans_raw = _get_wk(exf, "Translation", {})
                         ell.ellipsoid_transform_ls_offset = _parse_vec3(trans_raw)
                     order = dnode.constraint_order.add()
@@ -880,7 +860,7 @@ def _serialize_shape(shape):
         "yBoxExtent": shape.y_box_extent,
         "zBoxExtent": shape.height_extent,
         "offsetLS": list(shape.offset_ls),
-        "rotationLS": list(_quat_wxyz_to_ijkr(shape.rotation_ls_quat)),
+        "rotationLS": list(quaternion_ijkr_from_wxyz(shape.rotation_ls_quat)),
     }
 
 
@@ -999,7 +979,7 @@ def _serialize_editor_state(addon_state):
                         "radius": ellipsoid.radius,
                         "scale1": ellipsoid.scale1,
                         "scale2": ellipsoid.scale2,
-                        "transformLsQuat": list(_quat_wxyz_to_ijkr(
+                        "transformLsQuat": list(quaternion_ijkr_from_wxyz(
                             ellipsoid.ellipsoid_transform_ls_quat
                         )),
                         "transformLsOffset": list(ellipsoid.ellipsoid_transform_ls_offset),
@@ -1012,7 +992,7 @@ def _serialize_editor_state(addon_state):
                         "projectionType": pendulum.projection_type,
                         "coneCollisionRadius": pendulum.cone_collision_radius,
                         "coneCollisionHeight": pendulum.cone_collision_height,
-                        "coneTransformLsQuat": list(_quat_wxyz_to_ijkr(
+                        "coneTransformLsQuat": list(quaternion_ijkr_from_wxyz(
                             pendulum.cone_transform_ls_quat
                         )),
                         "coneTransformLsOffset": list(
@@ -1056,7 +1036,7 @@ def _parse_editor_shape(raw, collection, existing=None):
         "radius": float(raw.get("radius", 0.05)),
         "extents": extents,
         "offset": _sequence(raw.get("offsetLS"), 3, (0.0, 0.0, 0.0)),
-        "rotation": _quat_ijkr_to_wxyz(raw.get("rotationLS")),
+        "rotation": quaternion_wxyz_from_ijkr(raw.get("rotationLS")),
     }
     return _add_collision_shape(collection, values, existing)
 
@@ -1237,7 +1217,7 @@ def _parse_editor_state(data, addon_state):
                     ellipsoid.radius = float(raw_ellipsoid.get("radius", 0.1))
                     ellipsoid.scale1 = float(raw_ellipsoid.get("scale1", 1.0))
                     ellipsoid.scale2 = float(raw_ellipsoid.get("scale2", 1.0))
-                    ellipsoid.ellipsoid_transform_ls_quat = _quat_ijkr_to_wxyz(
+                    ellipsoid.ellipsoid_transform_ls_quat = quaternion_wxyz_from_ijkr(
                         raw_ellipsoid.get("transformLsQuat")
                     )
                     ellipsoid.ellipsoid_transform_ls_offset = _sequence(
@@ -1262,7 +1242,7 @@ def _parse_editor_state(data, addon_state):
                     pendulum.cone_collision_height = float(
                         raw_pendulum.get("coneCollisionHeight", 0.0)
                     )
-                    pendulum.cone_transform_ls_quat = _quat_ijkr_to_wxyz(
+                    pendulum.cone_transform_ls_quat = quaternion_wxyz_from_ijkr(
                         raw_pendulum.get("coneTransformLsQuat")
                     )
                     pendulum.cone_transform_ls_offset = _sequence(

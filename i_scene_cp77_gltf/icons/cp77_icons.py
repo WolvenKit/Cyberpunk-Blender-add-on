@@ -3,7 +3,7 @@ import os
 import bpy
 import bpy.utils.previews
 
-from ..main.common import get_icon_dir
+from ..paths import get_icon_dir
 
 custom_icons = None
 

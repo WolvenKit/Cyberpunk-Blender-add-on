@@ -1,42 +1,12 @@
-"""
-Python-side facade for the native dangle solver.
-
-Translates between DyngSimulator's RNA-backed layout (as found in core.py) and
-the topology dict format the C++ Solver expects. This module is the only place
-that knows about both data shapes; once it works, core.py can route through
-NativeSolverBackend opaquely.
-
-The module is import-safe outside Blender: dangle_native is the only mandatory
-import; mathutils and bpy are lazily imported only inside step()-time methods
-that need them, so a parity harness can construct topology dicts from canned
-data without pulling in the full Blender chain.
-
-Field-name mapping (DyngSimulator -> topology dict):
-
-  sim.particles                       -> topology['particles']
-  sim.bone_names                      -> bone-index lookup table
-  sim._particle_node_idx              -> particle.node_idx
-  sim._node_iters / state.dangle_nodes -> topology['nodes']
-  sim.col_shapes (list of dicts from compile_collision_shapes)
-                                      -> topology['collision_shapes']
-  sim.link_idx_a, .link_idx_b, ...    -> topology['links']
-  sim.ell_idx, .ell_radii, ...        -> topology['ellipsoids']
-  sim.cone_idx, .cone_attach, ...     -> topology['cones']
-
-Gravity is read fresh each frame from `bpy.context.scene.physx.gravity`
-and converted to armature/model space through the shared coordinate contract
-before being marshalled to the native solver.
-"""
-
 import numpy as np
 
 try:
     from . import dangle_native as _native
 except ImportError:
-    # Flat-path fallback for sandbox testing outside the addon package.
-    # In Blender this branch should never trigger; if it does, the import
-    # below will raise and the failure will be visible.
-    import dangle_native as _native
+    try:
+        import dangle_native as _native
+    except ImportError:
+        _native = None
 
 
 # Particle-level dyng projection type. Three states.
@@ -115,6 +85,8 @@ class NativeSolverBackend:
     """
 
     def __init__(self):
+        if _native is None:
+            raise RuntimeError("Native dangle solver is not available in this build.")
         self._solver = _native.Solver()
         self._compiled = False
         self._num_tracked_bones = 0

@@ -6,10 +6,10 @@ import math
 
 from mathutils import Matrix, Quaternion, Vector
 
-from ....jsontool import JSONTool
+from ....assetio.catalog import ResourceKind
 from ..context import FoliageResourceError
 from ...common.paths import absolute_path_key
-from ...common.values import axis_value, first_dict_value as _first_dict_value
+from ....assetio.values import axis_value, first_dict_value as _first_dict_value
 
 
 
@@ -212,7 +212,10 @@ class FoliageResourceService:
         key = absolute_path_key(resolved_path)
         resource = self.cache.get(key)
         if resource is None:
-            payload = JSONTool.jsonload(resolved_path)
+            payload = self.session.documents.payload(
+                resolved_path,
+                expected_kind=ResourceKind.FOLIAGE,
+            )
             if not isinstance(payload, dict):
                 raise FoliageResourceError(
                     f"{sector_name}: foliage node {node_index}: failed to "

@@ -1,21 +1,13 @@
-from ..main.common import *
+from ..materials.blender.images import image_has_alpha
+from ..materials.blender.nodes import CreateCalculateVecNormalZ, CreateCullBackfaceGroup, CreateGradMapRamp, CreateShaderNodeRGB, CreateShaderNodeValue, bsdf_socket_names, create_node, loc
 
-from .mat_common import create_global_normal_rel
+from .mat_common import MaterialTypeBase, create_global_normal_rel
 
 
-class MetalBase:
+class MetalBase(MaterialTypeBase):
     def __init__(self, BasePath, image_format, ProjPath, enableMask):
-        self.BasePath = BasePath
-        self.ProjPath = ProjPath
+        super().__init__(BasePath, image_format, ProjPath)
         self.enableMask = enableMask
-        self.image_format = image_format
-
-    def _image_from_rel_path(self, reference, is_normal=False):
-        if not reference:
-            return None
-        return imageFromRelPath(
-                reference, self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath, isNormal=is_normal,
-                )
 
     def _create_layer_tile_mapping(self, CurMat, Data):
         if "LayerTile" not in Data:

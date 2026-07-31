@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ....blender.transactions import track_created_datablock
 
 from dataclasses import dataclass
 import os
@@ -6,7 +7,7 @@ import os
 import bpy
 
 from ...common.paths import depot_path_from_value
-from ...common.values import nested_dict
+from ....assetio.values import nested_dict
 
 
 SEMANTIC_MARKER_CONTRACTS = {
@@ -390,7 +391,7 @@ class SemanticMarkerService:
             )
         )
 
-        obj = bpy.data.objects.new(name, None)
+        obj = track_created_datablock("objects", bpy.data.objects.new(name, None))
         obj.empty_display_type = spec.display_type
         obj.empty_display_size = float(spec.display_size)
         if spec.wire_display:

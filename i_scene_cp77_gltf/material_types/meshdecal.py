@@ -1,4 +1,5 @@
-from ..main.common import *
+from ..materials.blender.images import imageFromRelPath, image_has_alpha
+from ..materials.blender.nodes import CreateCullBackfaceGroup, CreateShaderNodeRGB, CreateShaderNodeValue, bsdf_socket_names, create_node, loc
 
 from .mat_common import create_normal_map_rel, set_uv_transform
 

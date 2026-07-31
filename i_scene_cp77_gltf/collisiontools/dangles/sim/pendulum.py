@@ -3,6 +3,9 @@ import math
 import numpy as np
 from mathutils import Matrix, Quaternion, Vector
 
+from ....animation.blender_pose import interpolate_matrix_trs
+from ....bartmoss.dynamics import damping_force
+from ....bartmoss.geometry import orthogonal_vector
 from . import collision, spaces
 from .frame_time import AverageFrameTimeCalculator
 
@@ -52,16 +55,10 @@ def pendulum_node_is_valid(sim, node_index):
     if not sim.active_mask[pi] or not sim.active_mask[parent]:
         return False
     for shape in sim._node_col_shapes[node_index]:
-        shape_index = sim.resolve_bone_index(shape['bone_name'])
-        if shape_index is None or shape_index < 0:
+        shape_index = int(shape.get('bone_index', -1))
+        if shape_index < 0:
             return False
     return True
-
-
-def _lerp_transform(previous, current, factor):
-    pl, pr, ps = previous.decompose()
-    cl, cr, cs = current.decompose()
-    return Matrix.LocRotScale(pl.lerp(cl, factor), pr.slerp(cr, factor), ps.lerp(cs, factor))
 
 
 def _additional_rotation(parent_rotation, orientation):
@@ -81,13 +78,6 @@ def _parent_red_rotation(parent_xform, arm_obj):
     q = parent_xform.to_quaternion() @ basis
     q.normalize()
     return q
-
-
-def _orthogonal(vector):
-    x, y, z = vector
-    if 0.81 * (x*x + y*y + z*z) - x*x < 0.0:
-        return Vector((-z, 0.0, x))
-    return Vector((0.0, z, -y))
 
 
 def _constrain_direction(direction, initial_axis, orthogonal_axis, constraint_type, half_angle):
@@ -116,13 +106,14 @@ def _constrain_direction(direction, initial_axis, orthogonal_axis, constraint_ty
 def _calculate_acceleration(particle, pull_direction_ms, velocity_ms, gravity_ms, external_force_ms):
     mass = max(0.01, float(particle.mass))
     pull_force = np.asarray(pull_direction_ms, dtype=np.float64) * float(particle.pull_force)
-    damping_force = np.asarray(velocity_ms, dtype=np.float64) * -float(particle.damping)
-    limit = _DAMPING_ACCELERATION_LIMIT * mass
-    length = float(np.linalg.norm(damping_force))
-    if length > limit and length > 0.0:
-        damping_force *= limit / length
+    damping = damping_force(
+        velocity_ms,
+        particle.damping,
+        mass,
+        _DAMPING_ACCELERATION_LIMIT,
+    )
     return (
-        pull_force + damping_force + np.asarray(external_force_ms, dtype=np.float64)
+        pull_force + damping + np.asarray(external_force_ms, dtype=np.float64)
     ) / mass + np.asarray(gravity_ms, dtype=np.float64)
 
 
@@ -186,13 +177,13 @@ def step_pendulum_node(sim, node_index, raw_dt, time_dilation, skip_physics):
         for step_index in range(steps):
             previous_position = sim.pos_ms[pi].copy()
             progress = (step_index + 1.0) / steps
-            parent_lerp = _lerp_transform(previous_parent, parent_xform, progress)
+            parent_lerp = interpolate_matrix_trs(previous_parent, parent_xform, progress)
             parent_red = _parent_red_rotation(parent_lerp, sim.arm_obj)
             additional = _additional_rotation(parent_red, particle.pendulum_constraint_orientation)
             constraint_rotation = additional @ parent_red
             initial_axis = constraint_rotation @ Vector((1.0, 0.0, 0.0))
             initial_axis.normalize()
-            orthogonal_ls = _orthogonal(Vector((1.0, 0.0, 0.0))).normalized()
+            orthogonal_ls = Vector(orthogonal_vector((1.0, 0.0, 0.0))).normalized()
             orthogonal_axis = constraint_rotation @ orthogonal_ls
             orthogonal_axis.normalize()
             pull_ls = Vector(particle.pendulum_pull_force_direction_ls)

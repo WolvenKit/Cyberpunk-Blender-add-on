@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import defaultdict
 
 from .model import PlannedSector, SectorNodePlan
 from .model import NodeCategory
 from .registry import NODE_HANDLERS
-from . import handlers as _handlers
+from .handlers import dependencies as _dependencies
+from .handlers import placement as _placement
+
+_HANDLER_MODULES = (_dependencies, _placement)
 
 
 _PROXY_PHASE = 30
@@ -15,17 +18,9 @@ _STANDARD_PHASE = 20
 def compile_sector_plan(parsed_sector, options, registry=NODE_HANDLERS):
     plans = []
     placement_by_phase = defaultdict(list)
-    skipped = Counter()
-    active = set()
-
     for node in parsed_sector.nodes:
         skip_reason = options.node_skip_reason(node)
         enabled = not skip_reason
-        if enabled:
-            active.add(node.index)
-        else:
-            skipped[skip_reason] += 1
-
         binding = registry.get(node.node_type)
         phase = (
             binding.placement_phase
@@ -61,6 +56,4 @@ def compile_sector_plan(parsed_sector, options, registry=NODE_HANDLERS):
             for phase in sorted(placement_by_phase)
             for plan in placement_by_phase[phase]
         ),
-        active_node_indexes=frozenset(active),
-        skipped_by_reason=dict(skipped),
     )

@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
+from ...assetio.index import IndexPolicy
+
 
 @dataclass(frozen=True, slots=True)
 class EntityImportRequest:
@@ -21,13 +23,18 @@ class EntityImportRequest:
     include_lights: bool = False
     parent_collection_name: str = ""
     mesh_files: Any = None
-    mesh_json_files: Any = None
     app_files: Any = None
     animation_files: Any = None
-    rig_json_files: Any = None
+    include_animations: bool = True
     generate_overrides: bool = False
     parsed_entity: Any = None
     imported_collections_out: Any = None
+    asset_index: Any = None
+    documents: Any = None
+    material_resources: Any = None
+    manage_master_visibility: bool = True
+    transactional: bool = True
+    index_policy: IndexPolicy = IndexPolicy.REFRESH
 
     def __post_init__(self) -> None:
         appearances = self.appearances
@@ -65,5 +72,17 @@ class EntityImportRequest:
         object.__setattr__(self, "include_occluders", bool(self.include_occluders))
         object.__setattr__(self, "include_proxies", bool(self.include_proxies))
         object.__setattr__(self, "include_lights", bool(self.include_lights))
+        object.__setattr__(
+            self,
+            "include_animations",
+            bool(self.include_animations),
+        )
         object.__setattr__(self, "parent_collection_name", str(self.parent_collection_name or ""))
         object.__setattr__(self, "generate_overrides", bool(self.generate_overrides))
+        object.__setattr__(
+            self,
+            "manage_master_visibility",
+            bool(self.manage_master_visibility),
+        )
+        object.__setattr__(self, "transactional", bool(self.transactional))
+        object.__setattr__(self, "index_policy", IndexPolicy(self.index_policy))

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ....blender.transactions import track_created_datablock
 
 from dataclasses import dataclass
 import os
@@ -86,7 +87,7 @@ class EffectResourceService:
         name = context.operations.trim_name(
             f"{context.node_type}_{debug_name}_{instance_index}"
         )
-        obj = bpy.data.objects.new(name, None)
+        obj = track_created_datablock("objects", bpy.data.objects.new(name, None))
         obj.empty_display_type = "SPHERE"
         obj.empty_display_size = 0.5
         context.sector_collection.objects.link(obj)

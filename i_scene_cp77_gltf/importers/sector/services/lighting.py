@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ....blender.transactions import track_created_datablock
 
 from dataclasses import dataclass
 import math
@@ -331,8 +332,8 @@ class StaticLightingService:
         name = context.operations.trim_name(
             f"{context.node_index}_{debug_name}"
         )
-        light = bpy.data.lights.new(name, blender_type)
-        obj = bpy.data.objects.new(name, light)
+        light = track_created_datablock("lights", bpy.data.lights.new(name, blender_type))
+        obj = track_created_datablock("objects", bpy.data.objects.new(name, light))
         context.sector_collection.objects.link(obj)
 
         energy = self.light_energy(data)

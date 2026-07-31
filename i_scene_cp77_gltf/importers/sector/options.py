@@ -4,18 +4,12 @@ from dataclasses import dataclass
 
 from .model import NodeCategory
 from ..common.paths import depot_path_key
-from ..common.resources import MESH_GLB_EXTENSIONS
+from ..entity.resources import ENTITY_INDEX_EXTENSIONS
+from ...materials.repository import MATERIAL_IMAGE_EXTENSIONS
 
-SECTOR_INDEX_EXTENSIONS = (
+SECTOR_INDEX_EXTENSIONS = tuple(dict.fromkeys((
+    *ENTITY_INDEX_EXTENSIONS,
     ".streamingsector.json",
-    ".ent.json",
-    ".app.json",
-    ".mesh.json",
-    ".glb",
-    ".physicalscene.glb",
-    ".w2mesh.glb",
-    ".anims.glb",
-    ".rig.json",
     ".mi.json",
     ".cfoliage.json",
     ".particle.json",
@@ -29,7 +23,7 @@ SECTOR_INDEX_EXTENSIONS = (
     ".actionanimdb.json",
     ".ies.json",
     ".ies",
-)
+)))
 
 OPTIONAL_SECTOR_NODE_TYPES = {
     "lights": frozenset({"worldStaticLightNode"}),
@@ -174,11 +168,14 @@ class SectorImportOptions:
         for option_name, extensions in OPTIONAL_SECTOR_INDEX_EXTENSIONS.items():
             if not self.optional_import_enabled(option_name):
                 excluded.update(extensions)
-        return tuple(
+        extensions = [
             extension
             for extension in SECTOR_INDEX_EXTENSIONS
             if extension not in excluded
-        )
+        ]
+        if self.with_materials:
+            extensions.extend(MATERIAL_IMAGE_EXTENSIONS)
+        return tuple(dict.fromkeys(extensions))
 
     def node_skip_reason(self, node):
         for option_name in _OPTIONS_BY_NODE_TYPE.get(

@@ -1,10 +1,13 @@
 import base64
+import importlib
 import math
 
 import bpy
 import gpu
 from gpu_extras.batch import batch_for_shader
 from mathutils import Matrix, Vector
+
+from .physx_utils import get_bone_world_matrix
 
 _handle = None
 _shader = None
@@ -172,7 +175,7 @@ def _build_visualization_data(context):
                         )
             elif shape.cooked_data:
                 try:
-                    from . import pxveh34 as _bridge
+                    _bridge = importlib.import_module(f"{__package__}.pxveh34")
                     raw = base64.b64decode(shape.cooked_data.encode('ascii'))
                     data = _bridge.get_cooked_geometry(shape.shape_type, raw)
                     vf = data['vertices']
@@ -213,9 +216,8 @@ def _build_visualization_data(context):
                 if hasattr(col, "enabled") and not col.enabled:
                     continue
                 try:
-                    from . import physx_utils
                     if col.collider_type == 'SPHERE' and col.bone in obj.pose.bones:
-                        mat_final = physx_utils.get_bone_world_matrix(obj, col.bone)
+                        mat_final = get_bone_world_matrix(obj, col.bone)
                         local_verts, local_lines = _collect_primitive_lines(
                             'SPHERE', (_avatar_visual_radius(obj, col), 0, 0)
                             )
@@ -227,8 +229,8 @@ def _build_visualization_data(context):
                         idx_offset += len(local_verts)
 
                     elif col.collider_type == 'CAPSULE' and col.bone in obj.pose.bones and col.target_bone in obj.pose.bones:
-                        p1 = physx_utils.get_bone_world_matrix(obj, col.bone).to_translation()
-                        p2 = physx_utils.get_bone_world_matrix(obj, col.target_bone).to_translation()
+                        p1 = get_bone_world_matrix(obj, col.bone).to_translation()
+                        p2 = get_bone_world_matrix(obj, col.target_bone).to_translation()
 
                         dist = (p2 - p1).length
                         if dist < 0.0001:

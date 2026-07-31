@@ -5,12 +5,15 @@ import re
 from pathlib import Path
 
 import bpy
+from ..blender.transactions import new_tracked_datablock
 import numpy as np
 
-from ..jsontool import JSONTool
-from ..main.common import imageFromRelPath
+from ..assetio.documents import file_identity
+from ..materials.resources import load_material_document
+from ..assetio.resolver import resolve_asset_path
 
 from .mat_common import (
+    MaterialTypeBase,
     clamp01,
     find_input,
     find_output,
@@ -21,7 +24,6 @@ from .mat_common import (
     param_texture_path,
     param_vector,
     set_input_value,
-    set_non_color,
     set_scene_fps_driver,
 )
 
@@ -162,8 +164,6 @@ def _safe_resource_parts(resource_path):
 
 def _expanded_resource_roots(roots):
     # MaterialBuilder supplies the exact project raw root and material depot root.
-    # Keep those as the complete resolution boundary so datakrash owns at most
-    # one canonical index for each root.
     expanded = []
     for root in roots:
         if not root:
@@ -186,11 +186,11 @@ def _resolve_json_sidecar(references, roots, extension=None):
         if not reference:
             continue
         target_extension = extension or _json_extension(reference)
-        resolved = JSONTool.resolve_asset_path(
+        resolved = resolve_asset_path(
             reference,
             roots=expanded_roots,
             extensions=(target_extension,),
-            warn_missing=False,
+            warn=False,
         )
         if resolved:
             return resolved
@@ -220,8 +220,8 @@ def _read_dynamic_texture(resource_path, roots, defaults):
     )
     if candidate:
         try:
-            payload = JSONTool.jsonload(candidate)
-            root = payload.get("Data", {}).get("RootChunk", {})
+            resource = load_material_document(candidate)
+            root = resource.root if resource is not None else {}
             generator = root.get("generator", {})
             generator_data = generator.get("Data", {}) if isinstance(generator, dict) else {}
             for key, value in generator_data.items():
@@ -300,7 +300,8 @@ def _read_water_patch_mesh(mesh_path, roots):
     if not candidate:
         return None
     try:
-        payload = JSONTool.jsonload(candidate)
+        resource = load_material_document(candidate)
+        payload = resource.payload if resource is not None else {}
         root, parameter = _water_patch_parameter(payload)
         if not parameter:
             return None
@@ -370,7 +371,7 @@ def _water_patch_image(patch_data):
         return None
 
     sidecar_path = patch_data["sidecarPath"]
-    cache_key = JSONTool.resource_cache_key(sidecar_path)
+    cache_key = file_identity(sidecar_path).key
     cached_name = _WATER_PATCH_IMAGE_CACHE.get(cache_key)
     if cached_name:
         cached = bpy.data.images.get(cached_name)
@@ -408,7 +409,7 @@ def _water_patch_image(patch_data):
     if image is None or tuple(image.size) != (width, height):
         if image is not None:
             bpy.data.images.remove(image)
-        image = bpy.data.images.new(image_name, width=width, height=height, alpha=True, float_buffer=True)
+        image = new_tracked_datablock("images", image_name, width=width, height=height, alpha=True, float_buffer=True)
     image.colorspace_settings.name = "Non-Color"
     image.alpha_mode = "CHANNEL_PACKED"
     image.pixels.foreach_set(np.ascontiguousarray(atlas).reshape(-1))
@@ -570,30 +571,18 @@ def _store_metadata(material, data, scalar_names, color_names, texture_names, ff
                 material[f"cp77_{prefix}_{key}"] = value
 
 
-class GlobalWaterPatch:
+class GlobalWaterPatch(MaterialTypeBase):
     def __init__(self, BasePath, image_format, ProjPath, MeshPath=""):
-        self.BasePath = BasePath
-        self.ProjPath = ProjPath
+        super().__init__(BasePath, image_format, ProjPath)
         self.MeshPath = MeshPath
-        self.image_format = image_format
 
     def _load_image(self, path, *, non_color=False):
-        if not path or path.lower().endswith(".dtex"):
-            return None
-        try:
-            image = imageFromRelPath(
-                path,
-                self.image_format,
-                isNormal=non_color,
-                DepotPath=self.BasePath,
-                ProjPath=self.ProjPath,
-            )
-        except Exception as exc:
-            print(f"Failed to load water texture {path}: {exc}")
-            return None
-        if non_color:
-            set_non_color(image)
-        return image
+        return self._load_relative_image(
+            path,
+            non_color=non_color,
+            reject_suffixes=(".dtex",),
+            error_label="water",
+        )
 
     def create(self, Data, Mat):
         data = Data if isinstance(Data, dict) else {}

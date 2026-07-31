@@ -1,9 +1,6 @@
-class Invisible:
-    def __init__(self, BasePath, image_format, ProjPath):
-        self.BasePath = BasePath
-        self.ProjPath = ProjPath
-        self.image_format = image_format
+from .mat_common import MaterialTypeBase
 
+class Invisible(MaterialTypeBase):
     def create(self, Data, Mat):
         mat_tree = Mat.node_tree
         # Clear existing nodes

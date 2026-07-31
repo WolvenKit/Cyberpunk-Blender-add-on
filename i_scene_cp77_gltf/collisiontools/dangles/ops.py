@@ -1,32 +1,28 @@
+from ...blender.transactions import track_created_datablock
 import time
 
 import bpy
+from ...registration import register_owned_classes, unregister_owned_classes
 from bpy.props import IntProperty, StringProperty
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 
-from . import animgraph_bridge, draw, io
+from .animgraph_bridge import (
+    can_return_to_editor,
+    clear_view_return_states,
+    export_from_specialist_editor,
+    import_into_both_editors,
+    rig_for_context,
+    switch_to_editor_view,
+    switch_to_graph_view,
+    sync_editor_to_graph,
+    sync_graph_to_editor,
+    validate_imported_document,
+)
+from .draw import _DRAW_CACHES, update_draw_cache
 from .sim import core, solvers, spaces
 from .ui import get_active_chain, get_active_dangle_node, get_active_rig
 
-try:
-    from ...main.animation_api import assign_action_with_slot
-except (ImportError, ValueError):
-    def assign_action_with_slot(id_data, action):
-        animation_data = id_data.animation_data_create()
-        animation_data.action = action
-        slots = getattr(action, "slots", None)
-        if slots is None:
-            return animation_data
-        if len(slots):
-            slot = slots[0]
-        else:
-            try:
-                slot = slots.new(id_type=id_data.id_type, name=id_data.name)
-            except TypeError:
-                slot = slots.new(id_type=id_data.id_type)
-        if hasattr(animation_data, "action_slot"):
-            animation_data.action_slot = slot
-        return animation_data
+from ...animation.keyframes import assign_action_with_slot
 
 
 SUPPORTED_PREVIEW_SOLVERS = {'DYNG', 'PBD', 'SPRING', 'PENDULUM'}
@@ -135,8 +131,8 @@ class DANGLE_OT_disable_rig(bpy.types.Operator):
         st = rig.dangle_state
 
         _stop_preview_session(context, rig, restore_pose=True)
-        draw._DRAW_CACHES.pop(f"{rig.as_pointer()}", None)
-        draw._DRAW_CACHES.pop(rig.name, None)
+        _DRAW_CACHES.pop(f"{rig.as_pointer()}", None)
+        _DRAW_CACHES.pop(rig.name, None)
 
         st.dangle_nodes.clear()
         st.collision_shapes.clear()
@@ -180,7 +176,7 @@ class DANGLE_OT_preview_play(bpy.types.Operator):
             self._last_time = current_time
 
             solvers.update_simulation(self._simulator, dt, time_dilation=1.0)
-            draw.update_draw_cache(self._cache_key, self._simulator)
+            update_draw_cache(self._cache_key, self._simulator)
 
             for area in context.screen.areas:
                 if area.type == 'VIEW_3D':
@@ -259,7 +255,7 @@ class DANGLE_OT_preview_play(bpy.types.Operator):
             _ACTIVE_PREVIEW_SESSIONS.pop(key, None)
 
         if self._cache_key is not None:
-            draw._DRAW_CACHES.pop(self._cache_key, None)
+            _DRAW_CACHES.pop(self._cache_key, None)
 
         if self._timer is not None:
             try:
@@ -330,7 +326,7 @@ class DANGLE_OT_bake_to_keyframes(bpy.types.Operator):
             return {'CANCELLED'}
         dt = (1.0 / scene.render.fps) * scene.render.fps_base
 
-        action = bpy.data.actions.new(name=f"{rig.name}_DangleBake")
+        action = track_created_datablock("actions", bpy.data.actions.new(name=f"{rig.name}_DangleBake"))
         assign_action_with_slot(rig, action)
 
         for frame in range(scene.frame_start, scene.frame_end + 1):
@@ -364,8 +360,8 @@ class DANGLE_OT_bake_to_keyframes(bpy.types.Operator):
 class DANGLE_OT_import_json(bpy.types.Operator, ImportHelper):
     bl_idname = "dangle.import_json"
     bl_label = "Import WolvenKit AnimGraph JSON"
-    filename_ext = "animgraph.json"
-    filter_glob: StringProperty(default="*animgraph.json", options={'HIDDEN'})
+    filename_ext = ".animgraph.json"
+    filter_glob: StringProperty(default="*.animgraph.json", options={'HIDDEN'})
 
     def execute(self, context):
         rig = get_active_rig(context)
@@ -376,7 +372,7 @@ class DANGLE_OT_import_json(bpy.types.Operator, ImportHelper):
             self.report({'ERROR'}, "Stop Dangle preview before importing.")
             return {'CANCELLED'}
         try:
-            count, tree, editor_error = animgraph_bridge.import_into_both_editors(
+            count, tree, editor_error = import_into_both_editors(
                 self.filepath, rig, context
             )
             if tree is None:
@@ -442,7 +438,7 @@ class DANGLE_OT_export_animgraph(bpy.types.Operator, ExportHelper):
             self.report({'ERROR'}, "Stop Dangle preview before exporting.")
             return {'CANCELLED'}
         try:
-            report = animgraph_bridge.export_from_specialist_editor(
+            report = export_from_specialist_editor(
                 _animgraph_export_path(self.filepath), rig, context
             )
         except Exception as exc:
@@ -473,7 +469,7 @@ class DANGLE_OT_validate_animgraph(bpy.types.Operator):
         if rig is None:
             return {'CANCELLED'}
         try:
-            report = animgraph_bridge.validate_imported_document(rig)
+            report = validate_imported_document(rig)
         except Exception as exc:
             self.report({'ERROR'}, str(exc))
             return {'CANCELLED'}
@@ -498,7 +494,7 @@ class DANGLE_OT_switch_to_graph(bpy.types.Operator):
         if rig is None:
             return {'CANCELLED'}
         try:
-            tree = animgraph_bridge.switch_to_graph_view(context, rig)
+            tree = switch_to_graph_view(context, rig)
         except Exception as exc:
             self.report({'ERROR'}, str(exc))
             return {'CANCELLED'}
@@ -512,11 +508,11 @@ class DANGLE_OT_switch_to_editor(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return animgraph_bridge.can_return_to_editor(context)
+        return can_return_to_editor(context)
 
     def execute(self, context):
         try:
-            rig = animgraph_bridge.switch_to_editor_view(context)
+            rig = switch_to_editor_view(context)
         except Exception as exc:
             self.report({'ERROR'}, str(exc))
             return {'CANCELLED'}
@@ -525,14 +521,14 @@ class DANGLE_OT_switch_to_editor(bpy.types.Operator):
 
 
 def _editor_to_graph(operator, context):
-    rig = get_active_rig(context) or animgraph_bridge.rig_for_context(context)
+    rig = get_active_rig(context) or rig_for_context(context)
     if rig is None:
         return {'CANCELLED'}
     if rig.dangle_state.is_playing:
         operator.report({'ERROR'}, "Stop Dangle preview before synchronizing.")
         return {'CANCELLED'}
     try:
-        tree = animgraph_bridge.sync_editor_to_graph(rig, context)
+        tree = sync_editor_to_graph(rig, context)
     except Exception as exc:
         operator.report({'ERROR'}, str(exc))
         return {'CANCELLED'}
@@ -541,14 +537,14 @@ def _editor_to_graph(operator, context):
 
 
 def _graph_to_editor(operator, context):
-    rig = animgraph_bridge.rig_for_context(context) or get_active_rig(context)
+    rig = rig_for_context(context) or get_active_rig(context)
     if rig is None:
         return {'CANCELLED'}
     if rig.dangle_state.is_playing:
         operator.report({'ERROR'}, "Stop Dangle preview before synchronizing.")
         return {'CANCELLED'}
     try:
-        count, report = animgraph_bridge.sync_graph_to_editor(rig)
+        count, report = sync_graph_to_editor(rig)
     except Exception as exc:
         operator.report({'ERROR'}, str(exc))
         return {'CANCELLED'}
@@ -962,14 +958,21 @@ classes = (
     DANGLE_OT_remove_pendulum,
 )
 
+_registered_classes = []
+
+
 def register():
-    for cls in classes:
-        bpy.utils.register_class(cls)
+    if not _registered_classes:
+        _registered_classes[:] = register_owned_classes(classes)
+
 
 def unregister():
     for session in list(_ACTIVE_PREVIEW_SESSIONS.values()):
         session._finish(bpy.context, restore_pose=True)
     _ACTIVE_PREVIEW_SESSIONS.clear()
-    animgraph_bridge.clear_view_return_states()
-    for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
+    clear_view_return_states()
+    failures = unregister_owned_classes(reversed(_registered_classes))
+    if not failures:
+        _registered_classes.clear()
+    if failures:
+        raise RuntimeError("; ".join(f"{cls.__name__}: {error}" for cls, error in failures))

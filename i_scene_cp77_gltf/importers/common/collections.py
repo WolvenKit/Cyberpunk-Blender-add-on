@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import bpy
 
 
 def link_collection_once(parent, child):

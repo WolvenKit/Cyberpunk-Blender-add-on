@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from mathutils import Matrix
 
-from ..common.values import cname_value
+from ...assetio.values import cname_value
 from .transforms import (
     _rig_json_bone_matrix_array,
     _rig_json_model_space_matrices,
@@ -12,7 +12,7 @@ from .transforms import (
     rig_bone_index_for,
 )
 from ..common.collections import _preserve_world_parent
-from ...main.rig_utils import merged_rig_bone_name
+from ...animation.rig_binding import merged_bone_name
 
 _UNSET = object()
 _RED_MATRIX_CACHE = {}
@@ -84,7 +84,7 @@ def _mesh_skin_anchor(mesh_j, rig_j):
         saw_named_bone = True
         if mesh_index >= len(raw_matrices):
             continue
-        target_name = merged_rig_bone_name(source_name)
+        target_name = merged_bone_name(source_name)
         target_index = rig_index.get(target_name)
         if target_index is not None:
             return (mesh_index, source_name, target_name, target_index), 'ok'
@@ -144,7 +144,7 @@ def component_skin_attachment_matrix(mesh_j, rig_j):
         child_source_name = cname_value(raw_name)
         if not child_source_name:
             continue
-        child_target_index = rig_index.get(merged_rig_bone_name(child_source_name))
+        child_target_index = rig_index.get(merged_bone_name(child_source_name))
         child_skin_to_rig = _red_matrix_to_array(raw_matrices[child_index])
         if child_target_index is None or child_skin_to_rig is None:
             missing_children.append(child_source_name)
@@ -179,7 +179,7 @@ def _rename_vertex_groups_to_meta(obj, rig):
     rig_bones = cache_armature_bones(rig)
     for group in getattr(obj, 'vertex_groups', ()):
         source_name = group.name
-        target_name = merged_rig_bone_name(source_name)
+        target_name = merged_bone_name(source_name)
         if target_name != source_name and target_name in rig_bones and source_name not in rig_bones:
             group.name = target_name
 

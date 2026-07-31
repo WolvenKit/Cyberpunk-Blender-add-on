@@ -4,7 +4,7 @@ from ..model import ImportDependency
 from ..options import OPTIONAL_SECTOR_NODE_TYPES
 from ..registry import NODE_HANDLERS
 from ...common.paths import depot_path_from_value
-from ...common.values import nested_dict
+from ....assetio.values import nested_dict
 
 
 STANDARD_PHASE = 20

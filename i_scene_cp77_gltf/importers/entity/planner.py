@@ -14,14 +14,12 @@ from .model import (
 )
 from ..common.entity_data import (
     ent_appearance_name,
-    ent_template_appearance_name,
     resolve_ent_appearance_alias,
     resolve_requested_appearance_name,
 )
 from ..common.entity_data import component_name
 from ..common.handles import build_embedded_handle_lookup
-from ..common.paths import depot_path_value, depot_to_local_path
-from ..common.values import cname_value
+from ..common.paths import depot_path_key, depot_path_value, depot_to_local_path
 from .policy import (
     APPEARANCE_PROXY_COMPONENT_TYPES,
     LIGHT_RELATED_COMPONENT_TYPES,
@@ -158,7 +156,7 @@ def normalize_appearance_requests(
 def merge_components_first_wins(
     primary: Iterable[dict] | None,
     secondary: Iterable[dict] | None,
-) -> list[dict]:
+) -> tuple[dict, ...]:
     merged = list(primary or ())
     seen: set[str] = set()
     for component in merged:
@@ -172,7 +170,7 @@ def merge_components_first_wins(
         if name:
             seen.add(name)
         merged.append(component)
-    return merged
+    return tuple(merged)
 
 
 def _resolve_ent_app(
@@ -260,23 +258,24 @@ def compile_entity_import_plan(
         app_resource_path = ""
         parsed_app = None
         parsed_app_name = ""
-        appearance_components: list[dict] = []
-        merged_components: list[dict] = []
-        chunks: list[dict] | None = None
+        appearance_components: tuple[dict, ...] = ()
+        merged_components: tuple[dict, ...] = ()
+        chunks: tuple[dict, ...] | None = None
         used_root_fallback = False
 
         if requested_name == "BASE_COMPONENTS_ONLY":
-            chunks = list(ent_component_data or ()) or None
+            chunks = tuple(ent_component_data or ()) or None
         elif not ent_apps and ent_component_data:
-            chunks = list(ent_component_data)
+            chunks = tuple(ent_component_data)
         elif ent_apps:
             entity_appearance_index, resolved_name, resolve_messages = _resolve_ent_app(
                 resolved_name, ent_apps, by_appearance, by_name, default_appearance
             )
             messages.extend(resolve_messages)
             ent_app = ent_apps[entity_appearance_index]
-            app_resource_depot = cname_value(
-                ent_app.get("appearanceResource", {}).get("DepotPath")
+            app_resource_depot = depot_path_value(
+                ent_app,
+                "appearanceResource",
             )
             app_resource_path = (
                 resource_resolver(app_resource_depot, ".app.json") or ""
@@ -300,7 +299,7 @@ def compile_entity_import_plan(
                     else:
                         parsed_app_name = resolved_name
                         messages.append(f"appearance matched, id =  {app_index}")
-                        appearance_components = list(
+                        appearance_components = tuple(
                             parsed_app.components_by_appearance_name.get(
                                 parsed_app_name, ()
                             )
@@ -312,13 +311,13 @@ def compile_entity_import_plan(
                         app_chunks = parsed_app.chunks_by_appearance_name.get(
                             parsed_app_name
                         )
-                        chunks = list(app_chunks) if app_chunks is not None else None
+                        chunks = tuple(app_chunks) if app_chunks is not None else None
                         if chunks:
                             messages.append("Chunks found")
 
         if not merged_components:
             used_root_fallback = True
-            merged_components = list(ent_components)
+            merged_components = tuple(ent_components)
             messages.append("falling back to rootchunk components...")
 
         plan = EntityAppearancePlan(
@@ -331,8 +330,8 @@ def compile_entity_import_plan(
             parsed_app=parsed_app,
             parsed_app_name=parsed_app_name,
             root_components=tuple(ent_components),
-            appearance_components=tuple(appearance_components),
-            merged_components=tuple(merged_components),
+            appearance_components=appearance_components,
+            merged_components=merged_components,
             chunks=tuple(chunks or ()),
             used_root_fallback=used_root_fallback,
         )
@@ -378,17 +377,19 @@ def compile_entity_import_plan(
             ):
                 continue
             mesh_key = depot_to_local_path(source_root, depot_path)
-            entry = mesh_entries.get(mesh_key)
+            canonical_mesh_key = depot_path_key(depot_path)
+            entry = mesh_entries.get(canonical_mesh_key)
             if entry is None:
-                mesh_entries[mesh_key] = {
+                mesh_entries[canonical_mesh_key] = {
+                    "key": mesh_key,
                     "depot_path": depot_path,
                     "mesh_name": mesh_name,
                     "mesh_path": mesh_path,
                     "appearances": [mesh_appearance],
                 }
-                mesh_appearance_sets[mesh_key] = {mesh_appearance}
+                mesh_appearance_sets[canonical_mesh_key] = {mesh_appearance}
             else:
-                appearance_set = mesh_appearance_sets[mesh_key]
+                appearance_set = mesh_appearance_sets[canonical_mesh_key]
                 if mesh_appearance not in appearance_set:
                     appearance_set.add(mesh_appearance)
                     entry["appearances"].append(mesh_appearance)
@@ -475,7 +476,7 @@ def compile_entity_import_plan(
 
     mesh_requirements = tuple(
         EntityMeshRequirement(
-            key=key,
+            key=entry["key"],
             depot_path=entry["depot_path"],
             mesh_name=entry["mesh_name"],
             mesh_path=entry["mesh_path"],

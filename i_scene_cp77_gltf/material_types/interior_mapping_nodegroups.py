@@ -1,3 +1,5 @@
+import bpy
+from ..blender.transactions import new_tracked_datablock
 # Interior mapping nodegroup using the method described by Andrew Willmott in this talk
 # http://www.andrewwillmott.com/talks/from-aaa-to-indie
 # Converted to Unity by bgolus in this post https://forum.unity.com/threads/interior-mapping.424676/#post-2751518
@@ -5,14 +7,14 @@
 # Converted to Python with NodetoPython https://github.com/BrendanParmer/NodeToPython
 # Nodes to cope with Aspect ratio added by Simarilius
 
-from ..main.common import *
+from ..materials.blender.nodes import create_node, get_inputs
 
 
 def andrew_willmotts_plane_interior_mapping_node_group():
     if 'CP77_AW_Plane_Interior_Mapping' in bpy.data.node_groups.keys():
         return bpy.data.node_groups['CP77_AW_Plane_Interior_Mapping']
     else:
-        andrew_willmotts_interior_mapping = bpy.data.node_groups.new(
+        andrew_willmotts_interior_mapping = new_tracked_datablock("node_groups",
             type='ShaderNodeTree', name="CP77_AW_Plane_Interior_Mapping"
             )
 
@@ -1088,7 +1090,7 @@ def flipbook_function_node_group():
     if 'CP77_Flipbook_Function' in bpy.data.node_groups.keys():
         return bpy.data.node_groups['CP77_Flipbook_Function']
     else:
-        flipbook_function = bpy.data.node_groups.new(type='ShaderNodeTree', name="CP77_Flipbook_Function")
+        flipbook_function = new_tracked_datablock("node_groups", type='ShaderNodeTree', name="CP77_Flipbook_Function")
 
         # initialize flipbook_function nodes
         # node Frame.001

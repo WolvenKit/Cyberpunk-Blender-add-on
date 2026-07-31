@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ....blender.transactions import track_created_datablock
 
 import math
 
@@ -233,9 +234,9 @@ def _store_light_metadata(light_obj, component, filepath):
 
 def create_entity_light(component, filepath):
     name = component_name(component) or component.get('$type', 'Light')
-    light_data = bpy.data.lights.new(name, _blender_light_type(component))
+    light_data = track_created_datablock("lights", bpy.data.lights.new(name, _blender_light_type(component)))
     _configure_light_data(light_data, component)
-    light_obj = bpy.data.objects.new(name, light_data)
+    light_obj = track_created_datablock("objects", bpy.data.objects.new(name, light_data))
     light_obj.rotation_mode = 'QUATERNION'
     light_obj.show_in_front = True
     _store_light_metadata(light_obj, component, filepath)
@@ -247,7 +248,7 @@ def create_light_channel_mesh(component, shape_lookup, filepath):
     if not vertices or not indices:
         return None
     name = component_name(component) or 'LightChannel'
-    mesh_data = bpy.data.meshes.new(name)
+    mesh_data = track_created_datablock("meshes", bpy.data.meshes.new(name))
     verts = [(v.get('X', 0), v.get('Y', 0), v.get('Z', 0)) for v in vertices]
     if isinstance(indices[0], (list, tuple)):
         faces = [list(face[:3]) for face in indices if len(face) >= 3]
@@ -256,7 +257,7 @@ def create_light_channel_mesh(component, shape_lookup, filepath):
     mesh_data.from_pydata(verts, [], faces)
     mesh_data.update()
 
-    obj = bpy.data.objects.new(name, mesh_data)
+    obj = track_created_datablock("objects", bpy.data.objects.new(name, mesh_data))
     obj.display_type = 'WIRE'
     obj.color = (0.005, 0.79105, 1, 1)
     obj.show_wire = True
@@ -275,7 +276,7 @@ class EntityLightHandler:
     def execute(self, component, context):
         light_collection = context.state.get("light_collection")
         if light_collection is None:
-            light_collection = bpy.data.collections.new(context.entity_collection.name + "_lights")
+            light_collection = track_created_datablock("collections", bpy.data.collections.new(context.entity_collection.name + "_lights"))
             light_collection["nodeType"] = ", ".join(sorted(LIGHT_COMPONENT_TYPES))
             light_collection["entAppearance"] = context.appearance_name
             context.entity_collection.children.link(light_collection)
@@ -325,7 +326,7 @@ class EntityLightChannelHandler:
         if mesh_obj is None:
             return None
 
-        lcgroup = bpy.data.collections.new(lcgroupname)
+        lcgroup = track_created_datablock("collections", bpy.data.collections.new(lcgroupname))
         lcgroup.objects.link(mesh_obj)
 
         resolved_matrix, bindname, slotname, binding_type, attach_armature = (

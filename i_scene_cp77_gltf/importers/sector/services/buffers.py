@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from mathutils import Matrix
 
-from ...common.values import axis_value
+from ....assetio.values import axis_value
 
 
 WORLD_TRANSFORM_CONTRACT = "WORLD_TRANSFORM_BUFFER_ABSOLUTE"

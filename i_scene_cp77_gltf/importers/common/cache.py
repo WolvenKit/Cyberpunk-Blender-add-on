@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
-
 
 _MATERIAL_CACHE_LEASE_DEPTH = 0
 _MATERIAL_CACHE_LEASE_STATS = {
@@ -17,7 +14,7 @@ _MATERIAL_CACHE_LEASE_STATS = {
 
 def _clear_transient_material_cache() -> None:
     """Clear lookup indexes while preserving persistent material signatures."""
-    from ...main.setup import clear_material_cache
+    from ...materials.blender.cache import clear_material_cache
 
     clear_material_cache(
         clear_persistent=False,
@@ -70,30 +67,3 @@ def material_cache_lease_stats() -> dict[str, int]:
         **_MATERIAL_CACHE_LEASE_STATS,
         "depth": _MATERIAL_CACHE_LEASE_DEPTH,
     }
-
-
-def acquire_json_cache(
-    json_tool: Any,
-    *,
-    before_start: Callable[[], None] | None = None,
-) -> bool:
-    """Start JSON caching only when the caller becomes the cache owner."""
-    if json_tool._use_cache:
-        return False
-    if before_start is not None:
-        before_start()
-    json_tool.start_caching()
-    return True
-
-
-def release_json_cache(
-    json_tool: Any,
-    owned: bool,
-    *,
-    after_stop: Callable[[], None] | None = None,
-) -> None:
-    if not owned:
-        return
-    json_tool.stop_caching()
-    if after_stop is not None:
-        after_stop()

@@ -7,8 +7,8 @@ from mathutils import Matrix, Quaternion, Vector
 from ..common.entity_data import build_component_lookup, component_name
 from ..common.handles import resolve_handle_reference
 from ..common.paths import depot_path_value
-from ..common.values import cname_value
-from ...main.rig_utils import merged_rig_bone_name
+from ...assetio.values import cname_value
+from ...animation.rig_binding import merged_bone_name
 
 ARMATURE_TYPE = 'ARMATURE'
 FIXED_POINT_DIVISOR = 131072
@@ -259,11 +259,20 @@ def component_uses_skinning(component, skinning_lookup=None):
     return bool(bind_name and bind_name != 'None')
 
 def is_live_armature_object(obj):
-    if getattr(obj, 'type', None) != ARMATURE_TYPE:
+    if obj is None:
         return False
     try:
-        return bpy.data.objects.get(obj.name) is obj
-    except ReferenceError:
+        if obj.type != ARMATURE_TYPE:
+            return False
+        name = obj.name
+    except (AttributeError, ReferenceError, RuntimeError):
+        return False
+    objects = getattr(getattr(bpy, 'data', None), 'objects', None)
+    if objects is None:
+        return False
+    try:
+        return objects.get(name) is obj
+    except (AttributeError, ReferenceError, RuntimeError):
         return False
 
 def cache_armature_bones(armature):
@@ -366,13 +375,13 @@ class EntityTransformResolver:
         return rig_bone_index_for(rig_j)
 
     def _rig_json_has_bone(self, bone_name, rig_j=None):
-        target_name = merged_rig_bone_name(bone_name)
+        target_name = merged_bone_name(bone_name)
         return bool(target_name and target_name in self._rig_json_index(rig_j))
 
     def _armature_for_rig_json(self, rig_json, bone_name, preferred_owner=''):
         if rig_json is None:
             return None
-        target_name = merged_rig_bone_name(bone_name)
+        target_name = merged_bone_name(bone_name)
         owner_names = []
         if preferred_owner and self.rig_json_by_component_name.get(preferred_owner) is rig_json:
             owner_names.append(preferred_owner)
@@ -390,7 +399,7 @@ class EntityTransformResolver:
     def _pose_bone_fallback_armature(self, bone_name, slot_owner=None):
         if not bone_name or bone_name == 'None':
             return None
-        target_name = merged_rig_bone_name(bone_name)
+        target_name = merged_bone_name(bone_name)
         owner_name = self._slot_owner_rig_owner_name(slot_owner)
         owner = self.armature_by_component_name.get(owner_name) if owner_name else None
         if armature_has_bone(owner, target_name):
@@ -400,7 +409,7 @@ class EntityTransformResolver:
         return None
 
     def _bone_source(self, bone_name, slot_owner=None):
-        target_name = merged_rig_bone_name(bone_name)
+        target_name = merged_bone_name(bone_name)
         cache_key = (target_name, slot_owner)
         cached = self.bone_source_cache.get(cache_key, _UNSET)
         if cached is not _UNSET:
@@ -431,7 +440,7 @@ class EntityTransformResolver:
         return armature.matrix_world.copy() if armature is not None else Matrix.Identity(4)
 
     def bone_matrix(self, bone_name, slot_owner=None):
-        target_name = merged_rig_bone_name(bone_name)
+        target_name = merged_bone_name(bone_name)
         cache_key = (target_name, slot_owner)
         cached = self.bone_matrix_cache.get(cache_key)
         if cached is not None:
@@ -461,7 +470,7 @@ class EntityTransformResolver:
             result = (self._owner_component_matrix(slot_owner), slot_owner, slot_name, None)
         else:
             source_bone_name = cname_value(slot.get('boneName'), slot_name)
-            bone_name = merged_rig_bone_name(source_bone_name)
+            bone_name = merged_bone_name(source_bone_name)
             result = (
                 self.bone_matrix(source_bone_name, slot_owner) @ transform_matrix(slot),
                 bone_name,
@@ -501,7 +510,7 @@ class EntityTransformResolver:
             target = 'deformation_rig'
         elif bind_name in ('vehicle_slots', 'slots'):
             target = 'slot'
-        elif self._rig_json_for_bone(bind_name) is not None or armature_has_bone(self.rig, merged_rig_bone_name(bind_name)):
+        elif self._rig_json_for_bone(bind_name) is not None or armature_has_bone(self.rig, merged_bone_name(bind_name)):
             target = 'bone'
         else:
             target = 'unresolved'
@@ -519,7 +528,7 @@ class EntityTransformResolver:
             return matrix, bind_name, slot_name, 'deformation_rig', armature
 
         if target_type == 'bone':
-            target_name = merged_rig_bone_name(bind_name)
+            target_name = merged_bone_name(bind_name)
             return self.bone_matrix(bind_name), target_name, slot_name, 'bone', self._attachment_armature(bind_name)
 
         if target_type == 'slot':

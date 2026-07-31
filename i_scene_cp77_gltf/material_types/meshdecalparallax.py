@@ -1,14 +1,10 @@
-from ..main.common import *
+from ..materials.blender.images import imageFromRelPath
+from ..materials.blender.nodes import CreateShaderNodeRGB, CreateShaderNodeTexImage, CreateShaderNodeValue, bsdf_socket_names, create_node, loc
 
-from .mat_common import create_normal_map_rel, set_uv_transform
+from .mat_common import MaterialTypeBase, create_normal_map_rel, set_uv_transform
 
 
-class MeshDecalParallax:
-    def __init__(self, BasePath, image_format, ProjPath):
-        self.BasePath = BasePath
-        self.ProjPath = ProjPath
-        self.image_format = image_format
-
+class MeshDecalParallax(MaterialTypeBase):
     def create(self, Data, Mat):
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes[loc('Principled BSDF')]

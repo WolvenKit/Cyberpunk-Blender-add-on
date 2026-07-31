@@ -1,25 +1,71 @@
-"""Shared helpers for material_types shader builders.
-
-Consolidates the defaulted value-node parameter tables from televisionad, the
-scene-fps time driver, the decal UV transform block, and the hair
-gradient-entry ramp population. Image loading stays on main.common's
-imageFromRelPath, which already performs project-first DepotAssetIndex
-resolution and loaded-image dedupe.
-"""
-
 import math
 from collections import OrderedDict
 
 import bpy
+from ..blender.transactions import new_tracked_datablock
 
-from ..main.common import (
-    CreateRebildNormalGroup,
-    CreateShaderNodeValue,
-    create_node,
-    imageFromRelPath,
-    resolve_relative_image_path,
-)
-from ..main.material_profile import begin_material_phase, end_material_phase
+from ..materials.blender.images import imageFromRelPath, resolve_relative_image_path
+from ..materials.blender.nodes import CreateRebildNormalGroup, CreateShaderNodeValue, create_node
+from ..materials.blender.profiling import begin_material_phase, end_material_phase
+from ..materials.blender.helper_caches import register_helper_cache
+
+
+class MaterialTypeBase:
+    def __init__(self, BasePath, image_format, ProjPath=""):
+        self.BasePath = BasePath
+        self.ProjPath = ProjPath
+        self.image_format = image_format
+
+    def _image_from_rel_path(self, reference, is_normal=False):
+        if not reference:
+            return None
+        options = {
+            "DepotPath": self.BasePath,
+            "ProjPath": self.ProjPath,
+        }
+        if is_normal:
+            options["isNormal"] = True
+        return imageFromRelPath(
+            reference,
+            self.image_format,
+            **options,
+        )
+
+    def found(self, texture_path):
+        result = depot_texture_exists(
+            texture_path,
+            self.image_format,
+            self.BasePath,
+            self.ProjPath,
+        )
+        if not result:
+            print(f"Texture not found: {texture_path}")
+        return result
+
+    def _load_relative_image(
+        self,
+        path,
+        *,
+        non_color=False,
+        reject_suffixes=(),
+        error_label="material",
+    ):
+        if not path or any(str(path).lower().endswith(suffix) for suffix in reject_suffixes):
+            return None
+        try:
+            image = imageFromRelPath(
+                path,
+                self.image_format,
+                isNormal=non_color,
+                DepotPath=self.BasePath,
+                ProjPath=self.ProjPath,
+            )
+        except Exception as error:
+            print(f"Failed to load {error_label} texture {path}: {error}")
+            return None
+        if non_color:
+            set_non_color(image)
+        return image
 
 
 def create_param_value_nodes(tree, data, specs, x=-2000):
@@ -66,7 +112,8 @@ def set_scene_fps_driver(driver):
         fps_base.targets[0].id = bpy.context.scene
         fps_base.targets[0].data_path = "render.fps_base"
     finally:
-        end_material_phase(started, "material.driver_create", label="scene_time")
+        if started is not None:
+            end_material_phase(started, "material.driver_create", label="scene_time")
 
 
 def create_scene_time_value(tree, x, y, label="Time"):
@@ -220,23 +267,57 @@ def clear_decal_helper_caches():
 
 
 # JSON parameter extraction ---------------------------------------------------
-# Canonical family for WolvenKit material parameter dicts, consolidating the
-# per-module _lookup/_unwrap/_float/_vector/_color/_texture_path copies from
-# device_diode, global_water_patch, and hologram. Semantics follow the most
-# defensive variant (device_diode): cycle-guarded unwrapping, finite-float
-# coercion, and channel normalisation that is behaviourally identical to the
-# global_water_patch variant once clamped.
+
+_PARAM_KEY_CACHE = OrderedDict()
+_PARAM_KEY_CACHE_LIMIT = 4096
+_PARAM_CACHE_STATS = {"hits": 0, "misses": 0}
+
+
+def _normalized_param_keys(data, *, refresh=False):
+    cache_key = id(data)
+    cached = _PARAM_KEY_CACHE.get(cache_key)
+    if (
+        not refresh
+        and cached is not None
+        and cached[0] is data
+        and cached[1] == len(data)
+    ):
+        _PARAM_KEY_CACHE.move_to_end(cache_key)
+        _PARAM_CACHE_STATS["hits"] += 1
+        return cached[2]
+
+    _PARAM_CACHE_STATS["misses"] += 1
+    normalized = {str(candidate).casefold(): candidate for candidate in data}
+    _PARAM_KEY_CACHE[cache_key] = (data, len(data), normalized)
+    _PARAM_KEY_CACHE.move_to_end(cache_key)
+    while len(_PARAM_KEY_CACHE) > _PARAM_KEY_CACHE_LIMIT:
+        _PARAM_KEY_CACHE.popitem(last=False)
+    return normalized
+
+
+def clear_param_key_cache():
+    _PARAM_KEY_CACHE.clear()
+    _PARAM_CACHE_STATS.update(hits=0, misses=0)
+
+
+def param_key_cache_stats():
+    return {**_PARAM_CACHE_STATS, "entries": len(_PARAM_KEY_CACHE)}
+
+
+register_helper_cache("decal", clear=clear_decal_helper_caches, stats=decal_helper_cache_stats)
+register_helper_cache("material_params", clear=clear_param_key_cache, stats=param_key_cache_stats)
+
 
 def lookup_param(data, key, default=None):
     if not isinstance(data, dict):
         return default
     if key in data:
         return data[key]
-    target = key.lower()
-    for candidate, value in data.items():
-        if str(candidate).lower() == target:
-            return value
-    return default
+    normalized_key = str(key).casefold()
+    matched = _normalized_param_keys(data).get(normalized_key)
+    if matched is None or matched not in data:
+        matched = _normalized_param_keys(data, refresh=True).get(normalized_key)
+    return data.get(matched, default) if matched is not None else default
 
 
 def unwrap_param(value):
@@ -386,6 +467,22 @@ def set_non_color(image):
 
 # Node group construction -----------------------------------------------------
 
+_NODE_GROUP_CACHE = {}
+_NODE_GROUP_CACHE_STATS = {"hits": 0, "misses": 0, "stale": 0}
+
+
+def clear_node_group_cache():
+    _NODE_GROUP_CACHE.clear()
+    _NODE_GROUP_CACHE_STATS.update(hits=0, misses=0, stale=0)
+
+
+def node_group_cache_stats():
+    return {**_NODE_GROUP_CACHE_STATS, "entries": len(_NODE_GROUP_CACHE)}
+
+
+register_helper_cache("material_node_groups", clear=clear_node_group_cache, stats=node_group_cache_stats)
+
+
 def add_group_io(group, inputs, outputs):
     for socket_type, name in inputs:
         group.interface.new_socket(name=name, socket_type=socket_type, in_out='INPUT')
@@ -394,13 +491,26 @@ def add_group_io(group, inputs, outputs):
 
 
 def get_or_build_node_group(name, inputs, outputs, build):
-    group = bpy.data.node_groups.get(name)
+    group = _NODE_GROUP_CACHE.get(name)
     if group is not None:
-        return group
+        try:
+            if bpy.data.node_groups.get(name) is group:
+                _NODE_GROUP_CACHE_STATS["hits"] += 1
+                return group
+        except (AttributeError, ReferenceError, RuntimeError):
+            pass
+        _NODE_GROUP_CACHE.pop(name, None)
+        _NODE_GROUP_CACHE_STATS["stale"] += 1
 
-    group = bpy.data.node_groups.new(name, "ShaderNodeTree")
-    add_group_io(group, inputs, outputs)
-    build(group)
+    group = bpy.data.node_groups.get(name)
+    if group is None:
+        _NODE_GROUP_CACHE_STATS["misses"] += 1
+        group = new_tracked_datablock("node_groups", name, "ShaderNodeTree")
+        add_group_io(group, inputs, outputs)
+        build(group)
+    else:
+        _NODE_GROUP_CACHE_STATS["hits"] += 1
+    _NODE_GROUP_CACHE[name] = group
     return group
 
 

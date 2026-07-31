@@ -1,12 +1,10 @@
-from ..main.common import *
+from ..materials.blender.images import imageFromRelPath
+from ..materials.blender.nodes import CreateShaderNodeRGB, CreateShaderNodeValue, bsdf_socket_names, create_node, loc
 
 
-class Signages:
-    def __init__(self, BasePath, image_format, ProjPath):
-        self.BasePath = BasePath
-        self.ProjPath = ProjPath
-        self.image_format = image_format
+from .mat_common import MaterialTypeBase
 
+class Signages(MaterialTypeBase):
     def create(self, Data, Mat):
         CurMat = Mat.node_tree
         pBSDF = CurMat.nodes[loc('Principled BSDF')]

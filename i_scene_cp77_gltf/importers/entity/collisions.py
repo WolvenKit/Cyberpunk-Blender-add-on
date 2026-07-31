@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import Any, Callable
 
 from ..common.entity_data import component_name
+from ..common.paths import depot_path_value
 from ..common.handles import collect_handle_data
 from .context import CollisionExecutionContext, EntityHandlerOperations
 from .handlers.collisions import EntityColliderHandler
 from .transforms import EntityTransformResolver, build_slot_owner_binding_maps, transform_matrix
-from ..phys_import import cp77_phys_import_into_collection
+from ..collision import import_phys_into_collection
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,7 +73,7 @@ class EntityCollisionService:
 
     def _collider_components(self):
         parsed = self.runtime.parsed_entity
-        return list(parsed.collider_components) + list(parsed.simple_collider_components)
+        return parsed.collider_components + parsed.simple_collider_components
 
     def _build_transform_resolver(self):
         runtime = self.runtime
@@ -120,28 +120,30 @@ class EntityCollisionService:
         runtime = self.runtime
         parsed = runtime.parsed_entity
         try:
-            phys_json_paths = runtime.resources.files('.phys.json')
-            if len(phys_json_paths) == 0:
-                print('No phys file JSONs found in path')
-                return
-
             chassis_info = parsed.components_by_name.get('Chassis')
             if not isinstance(chassis_info, dict):
                 print('No valid Chassis component in entity; skipping chassis collision import')
                 return
 
-            chassis_matrix = transform_matrix(chassis_info.get('localTransform', {}))
-            chassis_phys_json = os.path.basename(
-                chassis_info['collisionResource']['DepotPath']['$value']
-            ) + '.json'
-            for phys_json_path in phys_json_paths:
-                if os.path.basename(phys_json_path) == chassis_phys_json:
-                    cp77_phys_import_into_collection(
-                        phys_json_path,
-                        rig=runtime.rig,
-                        target_collection=runtime.target_collection,
-                        actor_matrix=chassis_matrix,
-                        context=runtime.blender_context,
-                    )
+            collision_resource = depot_path_value(
+                chassis_info,
+                'collisionResource',
+            )
+            if not collision_resource:
+                print('No chassis collision resource in entity')
+                return
+
+            resource = runtime.resources.load_physics(collision_resource)
+            if resource is None:
+                print(f'Chassis collision resource not found: {collision_resource}')
+                return
+
+            import_phys_into_collection(
+                resource,
+                rig=runtime.rig,
+                target_collection=runtime.target_collection,
+                actor_matrix=transform_matrix(chassis_info.get('localTransform', {})),
+                context=runtime.blender_context,
+            )
         except Exception as exc:
             print(exc)

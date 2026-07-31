@@ -2,14 +2,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 import os
-from .model import ParsedSector, SectorInstance, SectorNode, SectorResourceRef
+from .model import ParsedSector, SectorNode, SectorResourceRef
 from .options import classify_node_type
 from ..common.paths import depot_path, normalize_depot_path
-from ..common.values import cname_text as cname_value
-
-
-
-
+from ...assetio.values import cname_text as cname_value
 
 
 def resource_depot_paths(*values):
@@ -129,33 +125,23 @@ def parse_sector_document(
         raw_nodes = []
 
     indexed_node_data = []
-    sector_instances = defaultdict(list)
+    instances_by_node = defaultdict(list)
     for node_data_index, item in enumerate(raw_node_data):
         if not isinstance(item, dict):
             continue
         indexed = dict(item)
         indexed["nodeDataIndex"] = node_data_index
         indexed_node_data.append(indexed)
-        node_index = indexed.get("NodeIndex")
-        sector_instances[node_index].append(SectorInstance(
-            node_data_index=node_data_index,
-            node_index=node_index,
-            raw=indexed,
-        ))
+        instances_by_node[indexed.get("NodeIndex")].append(indexed)
 
-    instance_tuples = {
-        key: tuple(value)
-        for key, value in sector_instances.items()
-    }
     raw_instances_by_node = {
-        key: tuple(instance.raw for instance in value)
-        for key, value in instance_tuples.items()
+        key: tuple(value)
+        for key, value in instances_by_node.items()
     }
     world_transform_buffers, cooked_transform_buffers = (
         shared_transform_buffer_lookups(raw_nodes)
     )
     parsed_nodes = []
-    nodes_by_handle = {}
     for node_index, entry in enumerate(raw_nodes):
         entry = entry if isinstance(entry, dict) else {}
         data = entry.get("Data")
@@ -164,18 +150,14 @@ def parse_sector_document(
         mesh_path = depot_path(data, "mesh", "meshRef")
         entity_template_path = depot_path(data, "entityTemplate")
         foliage_resource_path = depot_path(data, "foliageResource")
-        instances = instance_tuples.get(node_index, ())
         raw_handle_id = entry.get("HandleId")
         handle_id = str(raw_handle_id or "")
-        if raw_handle_id is not None:
-            nodes_by_handle[str(raw_handle_id)] = entry
         parsed_nodes.append(SectorNode(
             index=node_index,
             handle_id=handle_id,
             node_type=node_type,
             data=data,
             raw_entry=entry,
-            instances=instances,
             raw_instances=raw_instances_by_node.get(node_index, ()),
             category=classify_node_type(node_type),
             mesh_path=mesh_path,
@@ -207,18 +189,8 @@ def parse_sector_document(
     return ParsedSector(
         source_path=source_path,
         sector_name=sector_name,
-        node_data=tuple(
-            item for item in raw_node_data
-            if isinstance(item, dict)
-        ),
         indexed_node_data=tuple(indexed_node_data),
-        raw_nodes=tuple(
-            item if isinstance(item, dict) else {}
-            for item in raw_nodes
-        ),
         nodes=tuple(parsed_nodes),
-        instances_by_node=raw_instances_by_node,
-        nodes_by_handle=nodes_by_handle,
         world_transform_buffers=world_transform_buffers,
         cooked_transform_buffers=cooked_transform_buffers,
         category=root.get("category", ""),

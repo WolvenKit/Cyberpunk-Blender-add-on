@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ....blender.transactions import track_created_datablock
 
 from dataclasses import dataclass
 
@@ -51,13 +52,13 @@ class AcousticSectorService:
         name = context.operations.trim_name(
             f"{context.node_type}_{context.node_index}_{instance_index}"
         )
-        obj = bpy.data.objects.new(
+        obj = track_created_datablock("objects", bpy.data.objects.new(
             name,
             self.session.primitive_meshes.centered_box(
                 "CP77_AcousticSector_32m",
                 (16.0, 16.0, 16.0),
             ),
-        )
+        ))
         context.sector_collection.objects.link(obj)
         obj.matrix_world = context.operations.instance_matrix(
             instance,

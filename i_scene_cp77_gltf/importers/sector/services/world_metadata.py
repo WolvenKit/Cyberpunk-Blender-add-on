@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ....blender.transactions import track_created_datablock
 
 import base64
 import copy
@@ -7,8 +8,8 @@ import math
 
 import bpy
 
-from ...fog_volume import create_fog_volume_object
-from ...common.values import axis_value
+from .fog import create_fog_volume_object
+from ....assetio.values import axis_value
 
 
 OUTLINE_COLORS = {
@@ -114,10 +115,10 @@ class WorldMetadataService:
         name = context.operations.trim_name(
             f"{context.node_type}_{context.node_index}_{instance_index}"
         )
-        mesh = bpy.data.meshes.new(name)
+        mesh = track_created_datablock("meshes", bpy.data.meshes.new(name))
         mesh.from_pydata(vertices, [], faces)
         mesh.update()
-        obj = bpy.data.objects.new(name, mesh)
+        obj = track_created_datablock("objects", bpy.data.objects.new(name, mesh))
         context.sector_collection.objects.link(obj)
         obj.matrix_world = context.operations.instance_matrix(
             instance,
@@ -193,12 +194,12 @@ class WorldMetadataService:
         )
         image = bpy.data.images.get(image_name)
         if image is None:
-            image = bpy.data.images.new(
+            image = track_created_datablock("images", bpy.data.images.new(
                 image_name,
                 width=width,
                 height=height,
                 alpha=True,
-            )
+            ))
             pixels = [0.0] * (len(raw) * 4)
             for index, value in enumerate(raw):
                 normalized = value / 255.0
@@ -232,7 +233,7 @@ class WorldMetadataService:
             f"{context.operations.cname_value(data.get('debugName'), str(context.node_index))}_"
             f"{instance_index}"
         )
-        obj = bpy.data.objects.new(name, None)
+        obj = track_created_datablock("objects", bpy.data.objects.new(name, None))
         obj.empty_display_type = "CUBE"
         obj.empty_display_size = 1.0
         obj.display_type = "WIRE"
@@ -338,10 +339,10 @@ class WorldMetadataService:
         name = context.operations.trim_name(
             f"LightChannelShape_{context.node_index}_{instance_index}"
         )
-        mesh = bpy.data.meshes.new(name)
+        mesh = track_created_datablock("meshes", bpy.data.meshes.new(name))
         mesh.from_pydata(vertices, [], faces)
         mesh.update()
-        obj = bpy.data.objects.new(name, mesh)
+        obj = track_created_datablock("objects", bpy.data.objects.new(name, mesh))
         context.sector_collection.objects.link(obj)
         obj.matrix_world = context.operations.instance_matrix(
             instance,
@@ -424,7 +425,7 @@ class WorldMetadataService:
             f"{context.operations.cname_value(data.get('debugName'), str(context.node_index))}_"
             f"{instance_index}"
         )
-        obj = bpy.data.objects.new(name, None)
+        obj = track_created_datablock("objects", bpy.data.objects.new(name, None))
         obj.empty_display_type = "SPHERE"
         obj.empty_display_size = max(
             0.1,

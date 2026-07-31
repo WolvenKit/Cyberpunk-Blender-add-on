@@ -2,10 +2,12 @@
 # It retrieves the mesh vertices and indices, and saves them back to the JSON file.
 # Simarilius 13/4/2025
 
-import bpy
 import json
 import os
 from itertools import chain
+
+import bpy
+
 
 def update_mesh_data_from_json():
     # Ensure a single object is selected
@@ -39,16 +41,20 @@ def update_mesh_data_from_json():
         return
 
     # Find the component with the same name as the mesh
-    component = next((comp for comp in compiled_data if 'name' in comp.keys() and comp['name']['$value'] == mesh_object.name), None)
+    component = next(
+            (comp for comp in compiled_data if 'name' in comp.keys() and comp['name']['$value'] == mesh_object.name),
+            None
+            )
     if not component:
         print(f"No component found in the JSON file with the name: {mesh_object.name}")
         return
 
     # Update vertices and indices in the JSON data
     mesh = mesh_object.data
-    vertices = [{'$type': 'Vector3', 'X': vert.co.x, 'Y': vert.co.y, 'Z': vert.co.z} for vert in mesh.vertices]  # Add "$type": "Vector3"
+    vertices = [{'$type': 'Vector3', 'X': vert.co.x, 'Y': vert.co.y, 'Z': vert.co.z} for vert in
+                mesh.vertices]  # Add "$type": "Vector3"
     faces = [list(poly.vertices) for poly in mesh.polygons]
-    indices= list(chain.from_iterable(faces))
+    indices = list(chain.from_iterable(faces))
     shape = component.get('shape', {})
     shape['Data']['vertices'] = vertices
     shape['Data']['indices'] = indices
@@ -58,6 +64,7 @@ def update_mesh_data_from_json():
         json.dump(data, json_file, indent=4)
 
     print(f"Updated JSON file saved at: {json_path}")
+
 
 # Run the function
 update_mesh_data_from_json()

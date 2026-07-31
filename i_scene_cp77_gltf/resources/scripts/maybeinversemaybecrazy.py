@@ -1,13 +1,12 @@
 import json
+
 from mathutils import Matrix
-import bpy
 
 ############ path to your .mesh.json here \\ not \ ##############
 input = "M:\\t0_000_ma_base__full_hql.mesh.json"
 
 ############## path to the new file we're making #########
 output = "M:\\outputmatrices.json"
-
 
 # Load the JSON data
 with open(input, "r") as json_file:
@@ -43,7 +42,7 @@ for index, matrix_data in enumerate(bone_matrices_data):
     input_matrix[3][1] = matrix_data["Z"]["Y"]
     input_matrix[3][2] = matrix_data["Z"]["Z"]
     input_matrix[3][3] = matrix_data["Z"]["W"]
-    
+
     for row_idx, row in enumerate(["W", "X", "Y", "Z"]):
         for col_idx, col in enumerate(["W", "X", "Y", "Z"]):
             input_matrix[row_idx][col_idx] = matrix_data[row][col]
@@ -61,13 +60,13 @@ for index, matrix_data in enumerate(bone_matrices_data):
             "x": [inverse_matrix[1][0], inverse_matrix[1][1], inverse_matrix[1][2], inverse_matrix[1][3]],
             "y": [inverse_matrix[2][0], inverse_matrix[2][1], inverse_matrix[2][2], inverse_matrix[2][3]],
             "z": [inverse_matrix[3][0], inverse_matrix[3][1], inverse_matrix[3][2], inverse_matrix[3][3]]
-        },
+            },
         "Translation Values (XYZ)": {
             "X": translation.x,
             "Y": translation.y,
             "Z": translation.z
+            }
         }
-    }
 
     results.append(result)
 

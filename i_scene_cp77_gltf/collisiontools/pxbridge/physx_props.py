@@ -1,12 +1,15 @@
 import bpy
 
-from . import physx_utils, viz
+from .physx_utils import get_physmat_items, update_collision_bits
+from .presets_lib import get_preset_items
+from .viz import update_shader_visuals
+from .capability import require_bridge
 
 
 def update_gravity_cb(self, context):
     if self.is_initialized:
         try:
-            from . import pxbridge as _bridge
+            _bridge = require_bridge()
             g = self.gravity
             _bridge.set_gravity(g[0], g[1], g[2])
         except ImportError:
@@ -53,24 +56,24 @@ class PhysXShapeItem(bpy.types.PropertyGroup):
                 ],
             default='BOX'
             )
-    dim_x: bpy.props.FloatProperty(name="X", default=1.0, min=0.01, update=viz.update_shader_visuals)
-    dim_y: bpy.props.FloatProperty(name="Y", default=1.0, min=0.01, update=viz.update_shader_visuals)
-    dim_z: bpy.props.FloatProperty(name="Z", default=1.0, min=0.01, update=viz.update_shader_visuals)
+    dim_x: bpy.props.FloatProperty(name="X", default=1.0, min=0.01, update=update_shader_visuals)
+    dim_y: bpy.props.FloatProperty(name="Y", default=1.0, min=0.01, update=update_shader_visuals)
+    dim_z: bpy.props.FloatProperty(name="Z", default=1.0, min=0.01, update=update_shader_visuals)
     hf_resolution: bpy.props.IntProperty(name="Grid Res", default=64, min=2, max=1024)
-    local_pos: bpy.props.FloatVectorProperty(name="Position", subtype='TRANSLATION', update=viz.update_shader_visuals)
+    local_pos: bpy.props.FloatVectorProperty(name="Position", subtype='TRANSLATION', update=update_shader_visuals)
     local_rot: bpy.props.FloatVectorProperty(
             name="Orientation", subtype='QUATERNION', size=4, default=(1.0, 0.0, 0.0, 0.0),
-            update=viz.update_shader_visuals
+            update=update_shader_visuals
             )
-    physics_material: bpy.props.EnumProperty(items=physx_utils.get_physmat_items, name="Material")
+    physics_material: bpy.props.EnumProperty(items=get_physmat_items, name="Material")
     cooked_data: bpy.props.StringProperty()
     is_cooked: bpy.props.BoolProperty(default=False)
     vertex_limit: bpy.props.IntProperty(name="Hull Verts", default=64, min=8, max=256)
 
     collision_preset: bpy.props.EnumProperty(
             name="Collision Preset",
-            items=physx_utils.presets_lib.get_preset_items,
-            update=physx_utils.update_collision_bits,
+            items=get_preset_items,
+            update=update_collision_bits,
             )
 
     filter_group: bpy.props.BoolVectorProperty(size=20, subtype='LAYER_MEMBER')

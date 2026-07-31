@@ -1,10 +1,11 @@
 from __future__ import annotations
+from ....blender.transactions import track_created_datablock
 
 from dataclasses import dataclass
 
 import bpy
 
-from ...common.values import axis_value
+from ....assetio.values import axis_value
 
 
 MINIMAP_PLACEMENT_CONTRACT = "EXACT_LOCAL_BOUNDS_RESOURCE_MARKER"
@@ -112,7 +113,7 @@ class MinimapResourceService:
                 f"{context.node_index} has invalid localBounds"
             )
 
-        obj = bpy.data.objects.new(name, mesh)
+        obj = track_created_datablock("objects", bpy.data.objects.new(name, mesh))
         if mesh is None:
             obj.empty_display_type = "CUBE"
             obj.empty_display_size = 1.0

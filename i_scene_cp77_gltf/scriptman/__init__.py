@@ -1,11 +1,10 @@
-import bpy
 import os
+
 from bpy.types import Panel
-from .scriptman_ops import operators, other_classes
-from ..main.common import get_script_dir 
 
-
-script_dir = get_script_dir()
+from .scriptman_ops import registration_classes
+from ..paths import ensure_user_script_dir
+from ..registration import register_owned_classes, unregister_owned_classes
 
 
 class CP77ScriptManager(Panel):
@@ -20,9 +19,11 @@ class CP77ScriptManager(Panel):
         box = layout.box()
         col = box.column()
         # List available scripts
-        script_files = [f for f in os.listdir(script_dir) if f.endswith(".py")]
+        script_dir = ensure_user_script_dir()
+        script_files = sorted(
+            f for f in os.listdir(script_dir) if f.endswith(".py")
+        )
 
-        
         for script_file in script_files:
             row = col.row(align=True)
             row.operator("script_manager.save_script", text="", icon="APPEND_BLEND").script_file = script_file
@@ -33,18 +34,19 @@ class CP77ScriptManager(Panel):
         row.operator("script_manager.create_script")
 
 
+_registered_classes = []
+
+
 def register_scriptman():
-    for cls in operators:
-        if not hasattr(bpy.types, cls.__name__):
-            bpy.utils.register_class(cls)
-    for cls in other_classes:
-        if not hasattr(bpy.types, cls.__name__):
-            bpy.utils.register_class(cls)
-    bpy.utils.register_class(CP77ScriptManager)
+    if _registered_classes:
+        return
+    ensure_user_script_dir()
+    _registered_classes[:] = register_owned_classes((*registration_classes, CP77ScriptManager))
+
 
 def unregister_scriptman():
-    bpy.utils.unregister_class(CP77ScriptManager)
-    for cls in reversed(other_classes):
-        bpy.utils.unregister_class(cls)
-    for cls in reversed(operators):
-        bpy.utils.unregister_class(cls)
+    failures = unregister_owned_classes(reversed(_registered_classes))
+    if not failures:
+        _registered_classes.clear()
+    if failures:
+        raise RuntimeError("; ".join(f"{cls.__name__}: {error}" for cls, error in failures))

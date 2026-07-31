@@ -35,12 +35,12 @@ def _tag_view3d_redraw():
 def _select_single_pose_bone(rig, bone_name):
     pose = rig.pose
     for pb in pose.bones:
-        if pb.bone.select:
-            pb.bone.select = False
+        if pb.select:
+            pb.select = False
     target_pb = spaces.resolve_pose_bone(rig, bone_name)
     if target_pb is None:
         return
-    target_pb.bone.select = True
+    target_pb.select = True
     target_bone = target_pb.bone if target_pb is not None else None
     if target_bone is not None:
         rig.data.bones.active = target_bone

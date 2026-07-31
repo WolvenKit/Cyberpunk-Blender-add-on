@@ -263,8 +263,8 @@ class CopiedMeshPlacementHandler:
             master_assets=context.session.master_assets,
             meshname=meshname,
             mesh_appearance=context.node.mesh_appearance,
-            resolved_path=context.mesh_source_paths.get(meshname, ""),
             contract=self._contract(context.node_type),
+            scale=context.execution.scale_factor,
             rotating=rotating,
             extra_props=self._extra_properties(context),
         )
@@ -316,8 +316,6 @@ class CopiedMeshPlacementHandler:
 
         context.record_placements(len(placed))
         return len(placed)
-
-
 
 
 class InstancedMeshPlacementHandler:
@@ -751,24 +749,6 @@ class FoliagePlacementHandler:
         return placed
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 class GIPlacementHandler:
     placement_phase = STANDARD_PHASE
     placement_contract = "GLOBAL_ILLUMINATION_RESOURCE_NODE_WORLD"
@@ -1099,6 +1079,8 @@ class StaticDecalPlacementHandler:
                 context.node_index,
                 **properties,
             )
+            context.execution.track_matrix_object(result.projector)
+            context.execution.track_matrix_object(result.plane)
 
             if material_result.status == "MATERIAL_NOT_INDEXED":
                 context.operations.warning(

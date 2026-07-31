@@ -1,16 +1,16 @@
-from .interior_mapping_nodegroups import *
+from ..addon_identity import get_addon_preferences
+from ..materials.blender.images import imageFromRelPath
+from ..materials.blender.nodes import CreateGradMapRamp, CreateShaderNodeRGB, CreateShaderNodeValue, create_node
 
 
-class unknownMaterial:
-    def __init__(self, BasePath, image_format, ProjPath):
-        self.BasePath = BasePath
-        self.ProjPath = ProjPath
-        self.image_format = image_format
+from .mat_common import MaterialTypeBase
 
+class unknownMaterial(MaterialTypeBase):
     def create(self, Data, Mat):
-        VERBOSE = True
+        preferences = get_addon_preferences(required=False)
+        verbose = bool(preferences and not preferences.non_verbose)
 
-        if VERBOSE:
+        if verbose:
             print('Importing parameters for ', Mat['MaterialTemplate'], '\n')
 
         # CMaterialParameterTexture
@@ -34,7 +34,7 @@ class unknownMaterial:
                     CurMat.nodes, "ShaderNodeTexImage", (imgx, imgy), label=param, image=text, hide=False
                     )
 
-                if VERBOSE:
+                if verbose:
                     print(
                         "\t" + param + "Img=imageFromRelPath(Data['" + param + "'],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)"
                         )
@@ -53,7 +53,7 @@ class unknownMaterial:
 
             elif isinstance(Data[param], int) or isinstance(Data[param], float):
                 scalar = CreateShaderNodeValue(CurMat, Data[param], x, y, param)
-                if VERBOSE:
+                if verbose:
                     print(
                         "\t" + param + "Val = CreateShaderNodeValue(CurMat,Data['" + param + "']," + str(x) + ',' + str(
                             y
@@ -63,7 +63,7 @@ class unknownMaterial:
             elif isinstance(Data[param], dict):
                 if 'Red' in Data[param]:
                     ColScale = CreateShaderNodeRGB(CurMat, Data[param], x, y, param, False)
-                    if VERBOSE:
+                    if verbose:
                         print(
                             "\t" + param + "Scale = CreateShaderNodeRGB(CurMat, Data['" + param + "']," + str(
                                 x
@@ -73,7 +73,7 @@ class unknownMaterial:
                             )
                 elif 'Color' in param or 'color' in param:
                     ColScale = CreateShaderNodeRGB(CurMat, Data[param], x, y, param, True)
-                    if VERBOSE:
+                    if verbose:
                         print(
                             "\t" + param + "Scale = CreateShaderNodeRGB(CurMat, Data['" + param + "']," + str(
                                 x
@@ -87,7 +87,7 @@ class unknownMaterial:
                         vector.inputs[3].default_value[0] = Data[param]['X']
                         vector.inputs[3].default_value[1] = Data[param]['Y']
                         vector.inputs[3].default_value[2] = Data[param]['Z']
-                        if VERBOSE:
+                        if verbose:
                             print(
                                 "\tvector=create_node(CurMat.nodes,'ShaderNodeMapping',  (" + str(x) + ',' + str(
                                     y
@@ -101,5 +101,5 @@ class unknownMaterial:
                 y = y - ydelta
             else:
                 print(param, ' of type ', type(Data[param]), ' not captured')
-        if VERBOSE:
+        if verbose:
             print("Done with ", Mat['MaterialTemplate'], '\n')

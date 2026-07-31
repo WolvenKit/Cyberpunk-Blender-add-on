@@ -7,7 +7,7 @@ from typing import Any
 from ..common.entity_data import component_name
 from ..common.handles import resolve_component_handle_data
 from ..common.paths import depot_path_value
-from ..common.values import cname_value
+from ...assetio.values import cname_value
 
 
 def animated_component_control_target(

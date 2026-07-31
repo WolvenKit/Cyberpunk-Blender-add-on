@@ -4,10 +4,11 @@ import math
 import numpy as np
 from mathutils import Matrix, Quaternion, Vector
 
+from ....animation.blender_pose import interpolate_matrix_components
 from . import spaces
 
 
-def _compile_shape(sim, shape):
+def _compile_shape(sim, shape, node_index=None):
     resolved_bone_name = spaces.resolve_bone_name(sim.arm_obj, shape.bone_name)
     ls_quat = Quaternion(shape.rotation_ls_quat)
     ls_mat = ls_quat.to_matrix().to_4x4()
@@ -16,8 +17,14 @@ def _compile_shape(sim, shape):
         ls_mat, sim.arm_obj
     )
 
-    pb = spaces.resolve_pose_bone(sim.arm_obj, shape.bone_name)
-    current_ms = pb.matrix @ adjusted_ls if pb else Matrix.Identity(4)
+    bone_index = sim.resolve_bone_index(shape.bone_name, node_index=node_index)
+    if bone_index is None:
+        bone_index = -1
+    current_ms = (
+        sim._cur_bone_xform[bone_index] @ adjusted_ls
+        if 0 <= bone_index < len(sim._cur_bone_xform)
+        else Matrix.Identity(4)
+    )
     extents = np.array((
         shape.x_box_extent, shape.y_box_extent, shape.height_extent
     ), dtype=np.float32)
@@ -30,6 +37,7 @@ def _compile_shape(sim, shape):
     return {
         'bone_name': resolved_bone_name or shape.bone_name,
         'authored_bone_name': shape.bone_name,
+        'bone_index': int(bone_index),
         'shape_type': shape.shape_type,
         'is_capsule': shape.shape_type == 'CAPSULE',
         'radius': shape.radius,
@@ -41,6 +49,8 @@ def _compile_shape(sim, shape):
         'cur_xform_ms': current_ms.copy(),
         'pos_ms': np.array(current_ms.translation, dtype=np.float32),
         'rot_ms': current_ms.to_quaternion(),
+        'rot_mat': np.array(current_ms.to_3x3(), dtype=np.float32),
+        'inv_rot_mat': np.array(current_ms.to_3x3(), dtype=np.float32).T.copy(),
         'axis_ms': np.array(
             current_ms.to_quaternion() @ Vector(capsule_axis_local),
             dtype=np.float32,
@@ -76,7 +86,7 @@ def compile_collision_shapes(sim):
         )
         node_shapes = []
         for authored_shape in source_shapes:
-            compiled = _compile_shape(sim, authored_shape)
+            compiled = _compile_shape(sim, authored_shape, len(sim._node_col_shapes))
             node_shapes.append(compiled)
             key = _authored_shape_key(authored_shape)
             if key not in draw_keys:
@@ -91,75 +101,57 @@ def compile_collision_shapes(sim):
     sim.col_shapes = draw_shapes
 
 
+def _set_shape_pose(shape, position, rotation):
+    rotation_matrix = np.array(rotation.to_matrix(), dtype=np.float32)
+    shape['pos_ms'][:] = position
+    shape['rot_ms'] = rotation
+    shape['rot_mat'][:] = rotation_matrix
+    shape['inv_rot_mat'][:] = rotation_matrix.T
+    if shape['is_capsule']:
+        shape['axis_ms'][:] = rotation @ Vector(shape['capsule_axis_local'])
+
+
+def _set_shape_transform(shape, transform):
+    _set_shape_pose(shape, transform.translation, transform.to_quaternion())
+
+
 def update_collision_transforms_begin(sim, shapes=None):
     shapes = sim.col_shapes if shapes is None else shapes
     for shape in shapes:
         shape['prev_xform_ms'] = shape['cur_xform_ms'].copy()
-        pb = spaces.resolve_pose_bone(sim.arm_obj, shape['bone_name'])
-        if pb:
-            shape['cur_xform_ms'] = pb.matrix @ shape['ls_mat']
+        bone_index = int(shape.get('bone_index', -1))
+        if 0 <= bone_index < len(sim._cur_bone_xform):
+            shape['cur_xform_ms'] = (
+                sim._cur_bone_xform[bone_index] @ shape['ls_mat']
+            )
 
 
 def initialize_collision_transforms(sim, shapes=None):
     shapes = sim.col_shapes if shapes is None else shapes
     for shape in shapes:
-        pb = spaces.resolve_pose_bone(sim.arm_obj, shape['bone_name'])
+        bone_index = int(shape.get('bone_index', -1))
         current = (
-            pb.matrix @ shape['ls_mat']
-            if pb is not None else shape['cur_xform_ms'].copy()
+            sim._cur_bone_xform[bone_index] @ shape['ls_mat']
+            if 0 <= bone_index < len(sim._cur_bone_xform)
+            else shape['cur_xform_ms'].copy()
         )
         shape['prev_xform_ms'] = current.copy()
         shape['cur_xform_ms'] = current.copy()
-        shape['pos_ms'] = np.array(current.translation, dtype=np.float32)
-        shape['rot_ms'] = current.to_quaternion()
-        if shape['is_capsule']:
-            shape['axis_ms'] = np.array(
-                shape['rot_ms'] @ Vector(shape['capsule_axis_local']),
-                dtype=np.float32,
-            )
+        _set_shape_transform(shape, current)
 
 
 def update_collision_transforms(sim, frame_progress, shapes=None):
     shapes = sim.col_shapes if shapes is None else shapes
     for shape in shapes:
-        prev = shape['prev_xform_ms']
-        cur = shape['cur_xform_ms']
-        shape['pos_ms'] = np.array(
-            prev.translation.lerp(cur.translation, frame_progress),
-            dtype=np.float32,
+        previous = shape['prev_xform_ms']
+        current = shape['cur_xform_ms']
+        position, rotation = interpolate_matrix_components(
+            previous, current, frame_progress
         )
-        shape['rot_ms'] = prev.to_quaternion().slerp(
-            cur.to_quaternion(), frame_progress
-        )
-        if shape['is_capsule']:
-            shape['axis_ms'] = np.array(
-                shape['rot_ms'] @ Vector(shape['capsule_axis_local']),
-                dtype=np.float32,
-            )
-
-def _closest_point_on_segment(p, a, b):
-    """Closest point on segment a→b to each point in p (batched)."""
-    ab = b - a
-    ap = p - a
-    ab_sq = np.sum(ab * ab, axis=-1)
-    ab_sq = np.where(ab_sq < 1e-6, 1.0, ab_sq)
-    t = np.clip(np.sum(ap * ab, axis=-1) / ab_sq, 0.0, 1.0)
-    return a + t[:, np.newaxis] * ab
-
-
-def _closest_point_on_segment_single(p, a, b):
-    """Closest point on segment a→b to single point p (Vector or np)."""
-    ab = b - a
-    ap = p - a
-    ab_sq = np.dot(ab, ab)
-    if ab_sq < 1e-6:
-        return a.copy()
-    t = max(0.0, min(1.0, np.dot(ap, ab) / ab_sq))
-    return a + ab * t
-
+        _set_shape_pose(shape, position, rotation)
 
 def _shape_rotation_matrix(shape):
-    return np.array(shape['rot_ms'].to_matrix(), dtype=np.float32)
+    return shape['rot_mat']
 
 
 def _to_shape_space(shape, points_ms):
@@ -169,7 +161,7 @@ def _to_shape_space(shape, points_ms):
 
 def _from_shape_direction(shape, vectors_ss):
     vectors = np.asarray(vectors_ss, dtype=np.float32)
-    return vectors @ _shape_rotation_matrix(shape).T
+    return vectors @ shape['inv_rot_mat']
 
 
 def _rounded_shape_correction_ss(shape, points_ss, particle_radius):
@@ -466,13 +458,7 @@ def project_directional_capsule_position(
 
 
 def _segment_aabb_distance_squared(start, direction, length, extents):
-    """Squared distance between a finite segment and an axis-aligned box.
-
-    The rounded shape is an AABB Minkowski-summed with a sphere. The capsule
-    overlap test therefore reduces to the segment/AABB distance compared with
-    the combined corner and capsule radii. The one-dimensional objective is
-    convex, so a bounded ternary search is stable for every degenerate box.
-    """
+    """Return squared distance from a finite segment to an AABB."""
     start = np.asarray(start, dtype=np.float64)
     direction = np.asarray(direction, dtype=np.float64)
     extents = np.abs(np.asarray(extents, dtype=np.float64))
@@ -506,12 +492,7 @@ def _segment_aabb_distance_squared(start, direction, length, extents):
 def rounded_shape_overlap_value_ss(
     shape, position_ss, direction_ss, segment_length, capsule_radius,
 ):
-    """Return the REDengine-style signed overlap value for a swept capsule.
-
-    Negative values overlap, zero is tangent, and positive values are clear.
-    ``position_ss`` is the capsule start and the segment extends forward along
-    ``direction_ss`` for ``segment_length``.
-    """
+    """Return signed swept-capsule overlap in shape space."""
     combined_radius = max(
         0.0, float(shape['radius']) + float(capsule_radius)
     )
@@ -590,14 +571,7 @@ def _first_clear_angle(
 def shortest_path_rotational_projection_ss(
     shape, position_ss, direction_ss, segment_length, capsule_radius,
 ):
-    """Project a penetrating swept capsule with the smallest rotation.
-
-    This evaluates the same geometric problem as
-    ``CollisionRoundedShape::ShortestPathRotationalProjection`` for every
-    rounded-shape extent combination. The optimized engine routine enumerates
-    analytic face/edge/corner branches; this implementation minimizes the
-    angular displacement directly against the exact rounded-box overlap test.
-    """
+    """Project a swept capsule with minimum angular displacement."""
     position = np.asarray(position_ss, dtype=np.float64)
     direction = np.asarray(direction_ss, dtype=np.float64)
     segment_length = max(0.0, float(segment_length))
@@ -637,7 +611,7 @@ def shortest_path_rotational_projection_ss(
     if best_angle is None:
         return direction * segment_length
 
-    # Refine the azimuth while resolving the boundary angle each time.
+    # Refine azimuth around the best candidate.
     azimuth_step = math.tau / azimuth_steps
     for _ in range(6):
         candidates = (
@@ -676,11 +650,7 @@ def directed_rotational_projection_ss(
     shape, position_ss, direction_ss, segment_length, capsule_radius,
     rotation_axis_ss,
 ):
-    """Project by rotating only in the authored directed plane.
-
-    The sign of ``rotation_axis_ss`` selects the permitted direction, matching
-    the handed directed axis passed by the Pendulum HingePlane path.
-    """
+    """Project by rotating in the authored directed plane."""
     position = np.asarray(position_ss, dtype=np.float64)
     direction = np.asarray(direction_ss, dtype=np.float64)
     axis = np.asarray(rotation_axis_ss, dtype=np.float64)
@@ -702,8 +672,7 @@ def directed_rotational_projection_ss(
     ) >= -1e-7:
         return direction * segment_length
 
-    # A direction parallel to the rotation axis cannot be changed by the
-    # directed projection.
+    # Rotation cannot change a direction parallel to its axis.
     if float(np.linalg.norm(np.cross(axis, direction))) <= 1e-12:
         return direction * segment_length
 
@@ -733,52 +702,45 @@ def directed_rotational_projection_ss(
     return direction * segment_length
 
 def respond_to_collisions_vectorized(
-    sim, frame_progress, particle_indices=None, shapes=None
+    sim, particle_indices=None, shapes=None, runtime=None
 ):
     shapes = sim.col_shapes if shapes is None else shapes
     if not shapes:
         return
 
-    update_collision_transforms(sim, frame_progress, shapes)
-    if particle_indices is None:
-        particle_indices = np.arange(sim.num_particles, dtype=np.int32)
+    if runtime is not None:
+        shortest_indices = runtime['collision_shortest_indices']
+        directed_indices = runtime['collision_directed_indices']
     else:
-        particle_indices = np.asarray(particle_indices, dtype=np.int32)
-    if particle_indices.size == 0:
-        return
-
-    active = (
-        sim.is_free[particle_indices]
-        & sim.active_mask[particle_indices]
-        & (sim.proj_type[particle_indices] > 0)
-    )
-    indices = particle_indices[active]
-    if indices.size == 0:
-        return
-
-    projection_types = sim.proj_type[indices]
-    particle_radii = sim.col_radius[indices]
+        if particle_indices is None:
+            particle_indices = np.arange(sim.num_particles, dtype=np.int32)
+        else:
+            particle_indices = np.asarray(particle_indices, dtype=np.int32)
+        if particle_indices.size == 0:
+            return
+        active = (
+            sim.is_free[particle_indices]
+            & sim.active_mask[particle_indices]
+            & (sim.proj_type[particle_indices] > 0)
+        )
+        indices = particle_indices[active]
+        shortest_indices = indices[sim.proj_type[indices] == 1]
+        directed_indices = indices[sim.proj_type[indices] == 2]
 
     for shape in shapes:
-        shortest_mask = projection_types == 1
-        if np.any(shortest_mask):
-            shortest_indices = indices[shortest_mask]
+        if shortest_indices.size:
             positions_ss = _to_shape_space(
                 shape, sim.pos_ms[shortest_indices]
             )
             correction_ss = _rounded_shape_correction_ss(
-                shape, positions_ss, particle_radii[shortest_mask]
+                shape, positions_ss, sim.col_radius[shortest_indices]
             )
             sim.pos_ms[shortest_indices] += _from_shape_direction(
                 shape, correction_ss
             )
 
-        directed_mask = projection_types == 2
-        if not np.any(directed_mask):
-            continue
-
-        directed_indices = indices[directed_mask]
         for particle_index in directed_indices:
+            particle_index = int(particle_index)
             xform = sim._interp_bone_xform[particle_index]
             axis_ls = Vector(sim.col_axis_ls[particle_index])
             if axis_ls.length_squared < 1e-8:
@@ -798,74 +760,97 @@ def respond_to_collisions_vectorized(
             )
 
 
-def respond_to_cone_collisions(sim, frame_progress, shapes=None):
-    """Apply REDengine rotational capsule projection to Dyng cone constraints."""
-    if not hasattr(sim, 'cone_idx') or sim.cone_idx is None:
+def respond_to_cone_collision_at(sim, constraint_index, shapes=None):
+    if sim.cone_idx is None:
         return
     shapes = sim.col_shapes if shapes is None else shapes
     if not shapes:
         return
-    update_collision_transforms(sim, frame_progress, shapes)
 
-    for ci in range(len(sim.cone_idx)):
-        constrained_index = int(sim.cone_idx[ci])
-        attachment_index = int(sim.cone_attach[ci])
-        projection_type = int(sim.cone_proj_type[ci])
-        if projection_type == 0 or not sim.is_free[constrained_index]:
-            continue
-        attachment_position = sim.pos_ms[attachment_index].copy()
-        constrained_position = sim.pos_ms[constrained_index].copy()
-        parent_to_bob = constrained_position - attachment_position
-        distance = float(np.linalg.norm(parent_to_bob))
-        if distance <= 1e-8:
-            continue
-        direction_ms = parent_to_bob / distance
-        capsule_length = max(0.0, float(sim.cone_col_height[ci]) * 2.0)
-        capsule_radius = max(0.0, float(sim.cone_col_radius[ci]))
+    ci = int(constraint_index)
+    constrained_index = int(sim.cone_idx[ci])
+    attachment_index = int(sim.cone_attach[ci])
+    projection_type = int(sim.cone_proj_type[ci])
+    if (
+        projection_type == 0
+        or not sim.is_free[constrained_index]
+        or not sim.active_mask[constrained_index]
+    ):
+        return
 
-        for shape in shapes:
-            inverse_rotation = shape['rot_ms'].conjugated()
-            attachment_ss = np.asarray(
-                inverse_rotation @ Vector(attachment_position - shape['pos_ms']),
+    attachment_position = sim.pos_ms[attachment_index].copy()
+    constrained_position = sim.pos_ms[constrained_index].copy()
+    parent_to_bob = constrained_position - attachment_position
+    distance = float(np.linalg.norm(parent_to_bob))
+    if distance <= 1e-8:
+        return
+    direction_ms = parent_to_bob / distance
+    capsule_length = max(0.0, float(sim.cone_col_height[ci]) * 2.0)
+    capsule_radius = max(0.0, float(sim.cone_col_radius[ci]))
+
+    for shape in shapes:
+        attachment_ss = np.asarray(
+            (attachment_position - shape['pos_ms']) @ shape['rot_mat'],
+            dtype=np.float64,
+        )
+        direction_ss = np.asarray(
+            direction_ms @ shape['rot_mat'], dtype=np.float64
+        )
+        if _shape_distance_simplified(
+            shape, attachment_ss, capsule_radius
+        ) < 0.001:
+            continue
+        if rounded_shape_overlap_value_ss(
+            shape, attachment_ss, direction_ss, capsule_length, capsule_radius
+        ) >= -1e-7:
+            continue
+        if projection_type == 1:
+            projected_ss = shortest_path_rotational_projection_ss(
+                shape,
+                attachment_ss,
+                direction_ss,
+                capsule_length,
+                capsule_radius,
+            )
+        elif projection_type == 2 and int(sim.cone_type[ci]) == 1:
+            cone_transform = (
+                sim._interp_bone_xform[attachment_index]
+                @ sim.cone_xform_ls[ci]
+            )
+            orthogonal_ms = (
+                cone_transform.to_quaternion() @ Vector((0.0, 0.0, 1.0))
+            )
+            axis_ss = np.asarray(
+                np.asarray(-orthogonal_ms, dtype=np.float64)
+                @ shape['rot_mat'],
                 dtype=np.float64,
             )
-            direction_ss = np.asarray(
-                inverse_rotation @ Vector(direction_ms), dtype=np.float64
+            projected_ss = directed_rotational_projection_ss(
+                shape,
+                attachment_ss,
+                direction_ss,
+                capsule_length,
+                capsule_radius,
+                axis_ss,
             )
-            if _shape_distance_simplified(shape, attachment_ss, capsule_radius) < 0.001:
-                continue
-            if rounded_shape_overlap_value_ss(
-                shape, attachment_ss, direction_ss, capsule_length, capsule_radius
-            ) >= -1e-7:
-                continue
-            if projection_type == 1:
-                projected_ss = shortest_path_rotational_projection_ss(
-                    shape, attachment_ss, direction_ss, capsule_length, capsule_radius
-                )
-            elif projection_type == 2 and int(sim.cone_type[ci]) == 1:
-                cone_transform = (
-                    sim._interp_bone_xform[attachment_index]
-                    @ sim.cone_xform_ls[ci]
-                )
-                orthogonal_ms = cone_transform.to_quaternion() @ Vector((0.0, 0.0, 1.0))
-                axis_ss = np.asarray(
-                    inverse_rotation @ (-orthogonal_ms), dtype=np.float64
-                )
-                projected_ss = directed_rotational_projection_ss(
-                    shape, attachment_ss, direction_ss, capsule_length,
-                    capsule_radius, axis_ss,
-                )
-            else:
-                continue
-            projected_length = float(np.linalg.norm(projected_ss))
-            if projected_length <= 1e-8:
-                continue
-            direction_ms = np.asarray(
-                shape['rot_ms'] @ Vector(projected_ss / projected_length),
-                dtype=np.float64,
-            )
-            constrained_position = attachment_position + direction_ms * distance
-            sim.pos_ms[constrained_index] = constrained_position
+        else:
+            continue
+        projected_length = float(np.linalg.norm(projected_ss))
+        if projected_length <= 1e-8:
+            continue
+        direction_ms = np.asarray(
+            (projected_ss / projected_length) @ shape['inv_rot_mat'],
+            dtype=np.float64,
+        )
+        constrained_position = attachment_position + direction_ms * distance
+        sim.pos_ms[constrained_index] = constrained_position
+
+
+def respond_to_cone_collisions(sim, shapes=None):
+    if sim.cone_idx is None:
+        return
+    for constraint_index in range(len(sim.cone_idx)):
+        respond_to_cone_collision_at(sim, constraint_index, shapes)
 
 def _shape_distance_simplified(shape, point_ss, particle_radius):
     return _rounded_shape_signed_distance(shape, point_ss, particle_radius)

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ....blender.transactions import track_created_datablock
 
 import bpy
 
@@ -41,7 +42,7 @@ class PrimitiveMeshService:
             if cached is not None:
                 return cached
 
-        mesh = bpy.data.meshes.new(name)
+        mesh = track_created_datablock("meshes", bpy.data.meshes.new(name))
         mesh.from_pydata(
             self._box_vertices(minimum, maximum),
             [],

@@ -1,9 +1,9 @@
-if __name__ != "__main__":
-    from ..main.common import *
-    from .mat_common import coerce_color, coerce_texture_path, unwrap_param
-else:
-    from common import *
-    from mat_common import coerce_color, coerce_texture_path, unwrap_param
+import bpy
+from ..blender.transactions import new_tracked_datablock
+from ..materials.blender.images import imageFromRelPath
+from ..materials.blender.nodes import bsdf_socket_names, create_node
+from .graph import find_socket as _socket, link_tree as _link, set_node_input as _set_input
+from .mat_common import MaterialTypeBase, coerce_color, coerce_texture_path, unwrap_param
 
 HOLOGRAM_GROUP_NAME = "Cyberpunk_Hologram_Base"
 
@@ -16,24 +16,6 @@ def _node(nodes, node_type, location, name=None, **attrs):
         if hasattr(node, attr):
             setattr(node, attr, value)
     return node
-
-
-def _socket(collection, name, fallback=None):
-    socket = collection.get(name) if hasattr(collection, 'get') else None
-    if socket is None and fallback is not None and fallback < len(collection):
-        socket = collection[fallback]
-    return socket
-
-
-def _set_input(node, name, value, fallback=None):
-    socket = _socket(node.inputs, name, fallback)
-    if socket is not None:
-        socket.default_value = value
-
-
-def _link(tree, output_socket, input_socket):
-    if output_socket is not None and input_socket is not None:
-        tree.links.new(output_socket, input_socket)
 
 
 def _hologram_texture_path(data):
@@ -86,7 +68,7 @@ def get_or_create_hologram_group():
     if group:
         return group
 
-    group = bpy.data.node_groups.new(HOLOGRAM_GROUP_NAME, "ShaderNodeTree")
+    group = new_tracked_datablock("node_groups", HOLOGRAM_GROUP_NAME, "ShaderNodeTree")
     group.interface.new_socket(name="Texture Color", socket_type='NodeSocketColor', in_out='INPUT')
     group.interface.new_socket(name="Dots Color", socket_type='NodeSocketColor', in_out='INPUT')
     group.interface.new_socket(name="Shader", socket_type='NodeSocketShader', in_out='OUTPUT')
@@ -216,12 +198,7 @@ def get_or_create_hologram_group():
     return group
 
 
-class Hologram:
-    def __init__(self, BasePath, image_format, ProjPath):
-        self.BasePath = BasePath
-        self.ProjPath = ProjPath
-        self.image_format = image_format
-
+class Hologram(MaterialTypeBase):
     def _image_from_data(self, data):
         path = _hologram_texture_path(data)
         if not path:
@@ -232,7 +209,10 @@ class Hologram:
         Mat.use_nodes = True
         if bpy.app.version[0] == 4 and bpy.app.version[1] <= 2:
             Mat.shadow_method = 'HASHED'
-        Mat.blend_method = 'HASHED'
+        if hasattr(Mat, "surface_render_method"):
+            Mat.surface_render_method = "DITHERED"
+        elif hasattr(Mat, "blend_method"):
+            Mat.blend_method = "HASHED"
 
         tree = Mat.node_tree
         tree.nodes.clear()

@@ -2,7 +2,9 @@ import bpy
 import numpy as np
 from mathutils import Matrix, Vector
 
-from . import collision, constraints, pendulum, spaces, spring
+from ....animation.blender_pose import interpolate_matrix_trs
+from ....bartmoss.dynamics import clamp_damping_vectors
+from . import collision, constraints, pendulum, solvers, spaces, spring
 from .drag import DragPostProcessor
 
 DAMPING_ACCEL_LIMIT = 50.0
@@ -10,6 +12,10 @@ MIN_TIME_DILATION   = 0.05
 MAX_TIME_DILATION   = 1.0
 MAX_PHYSICS_STEPS   = 3.0
 LP_FILTER_RC        = 1.0
+
+CONSTRAINT_LINK = 0
+CONSTRAINT_ELLIPSOID = 1
+CONSTRAINT_CONE = 2
 
 TELEPORT_KEEP_SQ  = 1.0
 TELEPORT_RESET_SQ = 25.0
@@ -188,6 +194,16 @@ class DyngSimulator:
             )
 
         total_tracked = len(self.bone_names)
+        self._pose_bones = [
+            self.arm_obj.pose.bones.get(name) for name in self.bone_names
+        ]
+        self._node_slices = [
+            slice(start, end) for start, end in self._node_ranges
+        ]
+        self._node_indices = [
+            np.arange(start, end, dtype=np.int32)
+            for start, end in self._node_ranges
+        ]
 
         self.pos_ms = np.zeros((total_tracked, 3), dtype=np.float32)
         self.vel_ms = np.zeros((total_tracked, 3), dtype=np.float32)
@@ -208,6 +224,7 @@ class DyngSimulator:
         self.col_height = np.zeros(total_tracked, dtype=np.float32)
         self.col_axis_ls = np.zeros((total_tracked, 3), dtype=np.float32)
         self.proj_type = np.zeros(total_tracked, dtype=np.int32)
+        self._constraint_vector = np.zeros(3, dtype=np.float32)
 
         node_count = len(self.state.dangle_nodes)
         self._node_prev_ext_force_ms = np.zeros((node_count, 3), dtype=np.float32)
@@ -233,6 +250,7 @@ class DyngSimulator:
         self.prev_matrix_world = rig_obj.matrix_world.copy()
 
         self._init_state()
+        self._compile_node_workspaces()
         self._initialize_node_forces()
         constraints.compile_constraints(self)
         collision.compile_collision_shapes(self)
@@ -241,6 +259,7 @@ class DyngSimulator:
         self._compile_position_projection_nodes()
         spring.compile_spring_nodes(self)
         pendulum.compile_pendulum_nodes(self)
+        solvers.compile_output_topology(self)
 
         self.drag_post = DragPostProcessor(self)
         self.execution_plan = self._build_execution_plan()
@@ -278,14 +297,11 @@ class DyngSimulator:
         return plan
 
     def _capture_tracked_pose(self):
-        matrices = []
-        for bone_name in self.bone_names:
-            pose_bone = self.arm_obj.pose.bones.get(bone_name)
-            matrices.append(
-                pose_bone.matrix.copy()
-                if pose_bone is not None else Matrix.Identity(4)
-            )
-        return matrices
+        return [
+            pose_bone.matrix.copy()
+            if pose_bone is not None else Matrix.Identity(4)
+            for pose_bone in self._pose_bones
+        ]
 
     def _initialize_node_input_history(self):
         initial = self._capture_tracked_pose()
@@ -300,17 +316,12 @@ class DyngSimulator:
         ]
 
     def _sample_base_input_pose(self):
-        for index, bone_name in enumerate(self.bone_names):
-            if not self.active_mask[index]:
-                continue
-            pose_bone = self.arm_obj.pose.bones.get(bone_name)
-            if pose_bone is None:
+        for index, pose_bone in enumerate(self._pose_bones):
+            if pose_bone is None or not self.active_mask[index]:
                 continue
             matrix = pose_bone.matrix.copy()
             self._input_bone_xform[index] = matrix.copy()
-            self.cur_bone_ms[index] = np.asarray(
-                matrix.translation, dtype=np.float32
-            )
+            self.cur_bone_ms[index] = matrix.translation
             self._cur_bone_xform[index] = matrix
 
     def _sample_node_input(self, node_index):
@@ -338,7 +349,7 @@ class DyngSimulator:
 
     def _init_state(self):
         for i, p_cfg in enumerate(self.particles):
-            pb = self.arm_obj.pose.bones.get(self.bone_names[i])
+            pb = self._pose_bones[i]
             if pb:
                 ms_head = np.array(pb.matrix.translation, dtype=np.float32)
                 self.pos_ms[i] = ms_head
@@ -381,7 +392,7 @@ class DyngSimulator:
             )
 
         for i, bn in enumerate(self.bone_names):
-            pb = self.arm_obj.pose.bones.get(bn)
+            pb = self._pose_bones[i]
             if pb is None:
                 self.active_mask[i] = False
                 continue
@@ -433,7 +444,7 @@ class DyngSimulator:
         if runtime['parent_index'] < 0 or not self.active_mask[runtime['parent_index']]:
             return False
         for shape in self._node_col_shapes[node_index]:
-            shape_index = self.bone_idx_map.get(shape['bone_name'], -1)
+            shape_index = int(shape.get('bone_index', -1))
             if shape_index < 0 or not self.active_mask[shape_index]:
                 return False
         return True
@@ -492,236 +503,112 @@ class DyngSimulator:
         self.vel_ms[particle_index] = 0.0
 
     def _build_node_constraint_sets(self):
-        n_nodes = len(self.state.dangle_nodes)
-        self._node_link_sel = [None] * n_nodes
-        self._node_ell_sel = [None] * n_nodes
-        self._node_cone_sel = [None] * n_nodes
+        node_count = len(self.state.dangle_nodes)
+        self._node_link_sel = [None] * node_count
+        self._node_ell_sel = [None] * node_count
+        self._node_cone_sel = [None] * node_count
 
-        for ni in range(n_nodes):
-            start, end = self._node_ranges[ni]
-            pset = np.arange(start, end, dtype=np.int32)
-
-            if getattr(self, 'link_idx_a', None) is not None:
-                mask = np.isin(self.link_idx_a, pset)
-                sel = np.where(mask)[0]
-                if len(sel) > 0:
-                    self._node_link_sel[ni] = sel
-
-            if getattr(self, 'ell_idx', None) is not None:
-                mask = np.isin(self.ell_idx, pset)
-                sel = np.where(mask)[0]
-                if len(sel) > 0:
-                    self._node_ell_sel[ni] = sel
-
-            if getattr(self, 'cone_idx', None) is not None:
-                mask = np.isin(self.cone_idx, pset)
-                sel = np.where(mask)[0]
-                if len(sel) > 0:
-                    self._node_cone_sel[ni] = sel
+        for node_index, (start, end) in enumerate(self._node_ranges):
+            if self.link_idx_a is not None:
+                selection = np.flatnonzero(
+                    (self.link_idx_a >= start) & (self.link_idx_a < end)
+                ).astype(np.int32, copy=False)
+                if selection.size:
+                    self._node_link_sel[node_index] = selection
+            if self.ell_idx is not None:
+                selection = np.flatnonzero(
+                    (self.ell_idx >= start) & (self.ell_idx < end)
+                ).astype(np.int32, copy=False)
+                if selection.size:
+                    self._node_ell_sel[node_index] = selection
+            if self.cone_idx is not None:
+                selection = np.flatnonzero(
+                    (self.cone_idx >= start) & (self.cone_idx < end)
+                ).astype(np.int32, copy=False)
+                if selection.size:
+                    self._node_cone_sel[node_index] = selection
 
     def _build_authored_constraint_order(self):
         self._node_constraint_order = []
         for node_index, dnode in enumerate(self.state.dangle_nodes):
-            link_map, ell_map, cone_map = {}, {}, {}
-            link_i = ell_i = cone_i = 0
-            start, _end = self._node_ranges[node_index]
-            particle_offset = start
+            selections = {
+                CONSTRAINT_LINK: self._node_link_sel[node_index],
+                CONSTRAINT_ELLIPSOID: self._node_ell_sel[node_index],
+                CONSTRAINT_CONE: self._node_cone_sel[node_index],
+            }
+            maps = {
+                CONSTRAINT_LINK: {},
+                CONSTRAINT_ELLIPSOID: {},
+                CONSTRAINT_CONE: {},
+            }
+            offsets = {
+                CONSTRAINT_LINK: 0,
+                CONSTRAINT_ELLIPSOID: 0,
+                CONSTRAINT_CONE: 0,
+            }
             for chain in dnode.chains:
                 for particle in chain.particles:
-                    for local_i, _cfg in enumerate(particle.link_constraints):
-                        link_map[(particle.bone_name, local_i)] = link_i
-                        link_i += 1
-                    for local_i, _cfg in enumerate(particle.ellipsoid_constraints):
-                        ell_map[(particle.bone_name, local_i)] = ell_i
-                        ell_i += 1
-                    for local_i, _cfg in enumerate(particle.pendulum_constraints):
-                        cone_map[(particle.bone_name, local_i)] = cone_i
-                        cone_i += 1
-                    particle_offset += 1
+                    groups = (
+                        (CONSTRAINT_LINK, particle.link_constraints),
+                        (CONSTRAINT_ELLIPSOID, particle.ellipsoid_constraints),
+                        (CONSTRAINT_CONE, particle.pendulum_constraints),
+                    )
+                    for kind, constraints_group in groups:
+                        selection = selections[kind]
+                        for local_index, _constraint in enumerate(constraints_group):
+                            compiled_offset = offsets[kind]
+                            if selection is not None and compiled_offset < len(selection):
+                                maps[kind][
+                                    (particle.bone_name, local_index)
+                                ] = int(selection[compiled_offset])
+                            offsets[kind] += 1
 
             order = []
-            for entry in getattr(dnode, 'constraint_order', []):
-                key = (entry.particle_bone, int(entry.constraint_index))
-                index = {
-                    'LINK': link_map,
-                    'ELLIPSOID': ell_map,
-                    'CONE': cone_map,
-                }.get(entry.constraint_type, {}).get(key)
+            for entry in getattr(dnode, 'constraint_order', ()):
+                kind = {
+                    'LINK': CONSTRAINT_LINK,
+                    'ELLIPSOID': CONSTRAINT_ELLIPSOID,
+                    'CONE': CONSTRAINT_CONE,
+                }.get(entry.constraint_type)
+                index = maps.get(kind, {}).get((
+                    entry.particle_bone,
+                    int(entry.constraint_index),
+                ))
                 if index is not None:
-                    order.append((entry.constraint_type, index))
+                    order.append((kind, index))
             if not order:
-                order.extend(('LINK', i) for i in range(link_i))
-                order.extend(('ELLIPSOID', i) for i in range(ell_i))
-                order.extend(('CONE', i) for i in range(cone_i))
-            self._node_constraint_order.append(order)
+                for kind in (
+                    CONSTRAINT_LINK, CONSTRAINT_ELLIPSOID, CONSTRAINT_CONE
+                ):
+                    selection = selections[kind]
+                    if selection is not None:
+                        order.extend((kind, int(index)) for index in selection)
+            self._node_constraint_order.append(tuple(order))
 
     def _satisfy_constraints_in_authored_order(self, node_index):
-        node_saved = self._save_constraint_arrays()
-        try:
-            for kind, index in self._node_constraint_order[node_index]:
-                if kind == 'LINK' and 'link' in node_saved and index < len(node_saved['link'][0]):
-                    self.link_idx_a = node_saved['link'][0][index:index + 1]
-                    self.link_idx_b = node_saved['link'][1][index:index + 1]
-                    self.link_types = node_saved['link'][2][index:index + 1]
-                    self.link_lower = node_saved['link'][3][index:index + 1]
-                    self.link_upper = node_saved['link'][4][index:index + 1]
-                    self.link_rest = node_saved['link'][5][index:index + 1]
-                    self.link_look_axes = node_saved['link'][6][index:index + 1]
-                    constraints.satisfy_dyng_links_vectorized(self)
-                elif kind == 'ELLIPSOID' and 'ell' in node_saved and index < len(node_saved['ell'][0]):
-                    self.ell_idx = node_saved['ell'][0][index:index + 1]
-                    self.ell_centers = node_saved['ell'][1][index:index + 1]
-                    self.ell_radii = node_saved['ell'][2][index:index + 1]
-                    self.ell_s1 = node_saved['ell'][3][index:index + 1]
-                    self.ell_s2 = node_saved['ell'][4][index:index + 1]
-                    self.ell_xform_ls = [node_saved['ell'][5][index]]
-                    constraints.satisfy_dyng_ellipsoids_vectorized(self)
-                elif kind == 'CONE' and 'cone' in node_saved and index < len(node_saved['cone'][0]):
-                    self.cone_idx = node_saved['cone'][0][index:index + 1]
-                    self.cone_attach = node_saved['cone'][1][index:index + 1]
-                    self.cone_type = node_saved['cone'][2][index:index + 1]
-                    self.cone_cos = node_saved['cone'][3][index:index + 1]
-                    self.cone_sin_hh = node_saved['cone'][4][index:index + 1]
-                    self.cone_cos_hh = node_saved['cone'][5][index:index + 1]
-                    self.cone_xform_ls = [node_saved['cone'][6][index]]
-                    self.cone_proj_type = node_saved['cone'][7][index:index + 1]
-                    self.cone_col_radius = node_saved['cone'][8][index:index + 1]
-                    self.cone_col_height = node_saved['cone'][9][index:index + 1]
-                    constraints.satisfy_pendulums_vectorized(self)
-        finally:
-            if 'link' in node_saved:
-                (self.link_idx_a, self.link_idx_b, self.link_types, self.link_lower,
-                 self.link_upper, self.link_rest, self.link_look_axes) = node_saved['link']
-            if 'ell' in node_saved:
-                (self.ell_idx, self.ell_centers, self.ell_radii, self.ell_s1,
-                 self.ell_s2, self.ell_xform_ls) = node_saved['ell']
-            if 'cone' in node_saved:
-                (self.cone_idx, self.cone_attach, self.cone_type, self.cone_cos,
-                 self.cone_sin_hh, self.cone_cos_hh, self.cone_xform_ls,
-                 self.cone_proj_type, self.cone_col_radius,
-                 self.cone_col_height) = node_saved['cone']
+        for kind, constraint_index in self._node_constraint_order[node_index]:
+            if kind == CONSTRAINT_LINK:
+                constraints.satisfy_dyng_link_at(self, constraint_index)
+            elif kind == CONSTRAINT_ELLIPSOID:
+                constraints.satisfy_dyng_ellipsoid_at(self, constraint_index)
+            elif kind == CONSTRAINT_CONE:
+                constraints.satisfy_pendulum_at(self, constraint_index)
 
     def _respond_constraint_collisions_in_authored_order(
-        self, node_index, frame_progress, node_shapes
+        self, node_index, node_shapes
     ):
-        if getattr(self, 'cone_idx', None) is None:
+        if self.cone_idx is None:
             return
-        node_saved = self._save_constraint_arrays()
-        try:
-            for kind, index in self._node_constraint_order[node_index]:
-                if kind != 'CONE' or 'cone' not in node_saved:
-                    continue
-                if index >= len(node_saved['cone'][0]):
-                    continue
-                self.cone_idx = node_saved['cone'][0][index:index + 1]
-                self.cone_attach = node_saved['cone'][1][index:index + 1]
-                self.cone_type = node_saved['cone'][2][index:index + 1]
-                self.cone_cos = node_saved['cone'][3][index:index + 1]
-                self.cone_sin_hh = node_saved['cone'][4][index:index + 1]
-                self.cone_cos_hh = node_saved['cone'][5][index:index + 1]
-                self.cone_xform_ls = [node_saved['cone'][6][index]]
-                self.cone_proj_type = node_saved['cone'][7][index:index + 1]
-                self.cone_col_radius = node_saved['cone'][8][index:index + 1]
-                self.cone_col_height = node_saved['cone'][9][index:index + 1]
-                collision.respond_to_cone_collisions(
-                    self, frame_progress, node_shapes
+        for kind, constraint_index in self._node_constraint_order[node_index]:
+            if kind == CONSTRAINT_CONE:
+                collision.respond_to_cone_collision_at(
+                    self, constraint_index, node_shapes
                 )
-        finally:
-            if 'cone' in node_saved:
-                (self.cone_idx, self.cone_attach, self.cone_type, self.cone_cos,
-                 self.cone_sin_hh, self.cone_cos_hh, self.cone_xform_ls,
-                 self.cone_proj_type, self.cone_col_radius,
-                 self.cone_col_height) = node_saved['cone']
-
-    def _save_constraint_arrays(self):
-        saved = {}
-        if getattr(self, 'link_idx_a', None) is not None:
-            saved['link'] = (
-                self.link_idx_a, self.link_idx_b, self.link_types,
-                self.link_lower, self.link_upper, self.link_rest,
-                self.link_look_axes,
-            )
-        if getattr(self, 'ell_idx', None) is not None:
-            saved['ell'] = (
-                self.ell_idx, self.ell_centers, self.ell_radii,
-                self.ell_s1, self.ell_s2, self.ell_xform_ls,
-            )
-        if getattr(self, 'cone_idx', None) is not None:
-            saved['cone'] = (
-                self.cone_idx, self.cone_attach, self.cone_type,
-                self.cone_cos, self.cone_sin_hh, self.cone_cos_hh,
-                self.cone_xform_ls,
-                self.cone_proj_type, self.cone_col_radius,
-                self.cone_col_height,
-            )
-        return saved
-
-    def _swap_node_constraints(self, node_idx):
-        sel = self._node_link_sel[node_idx]
-        if sel is not None and getattr(self, 'link_idx_a', None) is not None:
-            self.link_idx_a = self._saved_constraints['link'][0][sel]
-            self.link_idx_b = self._saved_constraints['link'][1][sel]
-            self.link_types = self._saved_constraints['link'][2][sel]
-            self.link_lower = self._saved_constraints['link'][3][sel]
-            self.link_upper = self._saved_constraints['link'][4][sel]
-            self.link_rest = self._saved_constraints['link'][5][sel]
-            self.link_look_axes = self._saved_constraints['link'][6][sel]
-        elif getattr(self, '_saved_link_was_set', False):
-            self.link_idx_a = None
-
-        sel = self._node_ell_sel[node_idx]
-        if sel is not None and 'ell' in self._saved_constraints:
-            self.ell_idx = self._saved_constraints['ell'][0][sel]
-            self.ell_centers = self._saved_constraints['ell'][1][sel]
-            self.ell_radii = self._saved_constraints['ell'][2][sel]
-            self.ell_s1 = self._saved_constraints['ell'][3][sel]
-            self.ell_s2 = self._saved_constraints['ell'][4][sel]
-            self.ell_xform_ls = [
-                self._saved_constraints['ell'][5][j] for j in sel
-            ]
-        elif getattr(self, '_saved_ell_was_set', False):
-            self.ell_idx = None
-
-        sel = self._node_cone_sel[node_idx]
-        if sel is not None and 'cone' in self._saved_constraints:
-            self.cone_idx = self._saved_constraints['cone'][0][sel]
-            self.cone_attach = self._saved_constraints['cone'][1][sel]
-            self.cone_type = self._saved_constraints['cone'][2][sel]
-            self.cone_cos = self._saved_constraints['cone'][3][sel]
-            self.cone_sin_hh = self._saved_constraints['cone'][4][sel]
-            self.cone_cos_hh = self._saved_constraints['cone'][5][sel]
-            self.cone_xform_ls = [
-                self._saved_constraints['cone'][6][j] for j in sel
-            ]
-            self.cone_proj_type = self._saved_constraints['cone'][7][sel]
-            self.cone_col_radius = self._saved_constraints['cone'][8][sel]
-            self.cone_col_height = self._saved_constraints['cone'][9][sel]
-        elif getattr(self, '_saved_cone_was_set', False):
-            self.cone_idx = None
-
-    def _restore_constraints(self):
-        saved = self._saved_constraints
-        if 'link' in saved:
-            (self.link_idx_a, self.link_idx_b, self.link_types,
-             self.link_lower, self.link_upper, self.link_rest,
-             self.link_look_axes) = saved['link']
-        if 'ell' in saved:
-            (self.ell_idx, self.ell_centers, self.ell_radii,
-             self.ell_s1, self.ell_s2, self.ell_xform_ls) = saved['ell']
-        if 'cone' in saved:
-            (self.cone_idx, self.cone_attach, self.cone_type,
-             self.cone_cos, self.cone_sin_hh, self.cone_cos_hh,
-             self.cone_xform_ls,
-             self.cone_proj_type, self.cone_col_radius,
-             self.cone_col_height) = saved['cone']
 
     def _update_kinematic_state(self):
-        for i, bone_name in enumerate(self.bone_names):
-            self.active_mask[i] = (
-                self.arm_obj.pose.bones.get(bone_name) is not None
-            )
+        for index, pose_bone in enumerate(self._pose_bones):
+            self.active_mask[index] = pose_bone is not None
 
-    @staticmethod
     def _descendant_names(pose_bone):
         names = []
         stack = list(pose_bone.children)
@@ -773,9 +660,7 @@ class DyngSimulator:
             if pose_bone is not None:
                 names.update(self._descendant_names(pose_bone))
 
-        # Applying a model-space output to a pose bone rewrites local overrides for
-        # every descendant that is restored or corrected afterward. Remove those
-        # overrides before the next input sample as well.
+        # Clear descendant overrides before sampling the next input pose.
         for particle_index in range(self.num_particles):
             pose_bone = self.arm_obj.pose.bones.get(
                 self.bone_names[particle_index]
@@ -842,6 +727,55 @@ class DyngSimulator:
         if changed:
             self.arm_obj.update_tag(refresh={'OBJECT'})
             bpy.context.view_layer.update()
+
+    def _compile_node_workspaces(self):
+        self._node_workspaces = []
+        for node_index, node_slice in enumerate(self._node_slices):
+            start, end = self._node_ranges[node_index]
+            count = end - start
+            configured_free = self.is_free[node_slice] & self.active_mask[node_slice]
+            free_local = np.flatnonzero(configured_free).astype(
+                np.int32, copy=False
+            )
+            fixed_local = np.flatnonzero(~configured_free).astype(
+                np.int32, copy=False
+            )
+            node_indices = self._node_indices[node_index]
+            collision_shortest = node_indices[
+                configured_free & (self.proj_type[node_slice] == 1)
+            ]
+            collision_directed = node_indices[
+                configured_free & (self.proj_type[node_slice] == 2)
+            ]
+            self._node_workspaces.append({
+                'slice': node_slice,
+                'indices': node_indices,
+                'free_local': free_local,
+                'fixed_local': fixed_local,
+                'all_free': free_local.size == count,
+                'collision_shortest_indices': collision_shortest,
+                'collision_directed_indices': collision_directed,
+                'damping_factor': (
+                    -self.damping[node_slice] * self.inv_mass[node_slice]
+                ).astype(np.float32, copy=True),
+                'pull_factor': (
+                    self.pull_force[node_slice] * self.inv_mass[node_slice]
+                ).astype(np.float32, copy=True),
+                'inverse_mass': self.inv_mass[node_slice].copy(),
+                'acceleration': np.zeros((count, 3), dtype=np.float32),
+                'external_acceleration': np.zeros((count, 3), dtype=np.float32),
+                'damping_acceleration': np.zeros((count, 3), dtype=np.float32),
+                'pull_acceleration': np.zeros((count, 3), dtype=np.float32),
+                'half_velocity': np.zeros((count, 3), dtype=np.float32),
+                'predicted_position': np.zeros((count, 3), dtype=np.float32),
+                'corrected_velocity': np.zeros((count, 3), dtype=np.float32),
+                'damping_norm': np.zeros(count, dtype=np.float32),
+                'damping_safe_norm': np.ones(count, dtype=np.float32),
+                'clamped_damping': np.zeros((count, 3), dtype=np.float32),
+                'damping_limit_mask': np.zeros(count, dtype=bool),
+                'interpolated_external': np.zeros(3, dtype=np.float32),
+                'interpolated_gravity': np.zeros(3, dtype=np.float32),
+            })
 
     def _initialize_node_forces(self):
         for node_index, dnode in enumerate(self.state.dangle_nodes):
@@ -924,10 +858,11 @@ class DyngSimulator:
             )
 
     def _interpolate_bones(self, frame_progress):
-        self.interp_bone_ms[:] = (
-            self.prev_bone_ms
-            + (self.cur_bone_ms - self.prev_bone_ms) * frame_progress
+        np.subtract(
+            self.cur_bone_ms, self.prev_bone_ms, out=self.interp_bone_ms
         )
+        self.interp_bone_ms *= frame_progress
+        self.interp_bone_ms += self.prev_bone_ms
         if len(self.bone_names) > self.num_particles:
             self.pos_ms[self.num_particles:] = self.interp_bone_ms[self.num_particles:]
 
@@ -936,12 +871,8 @@ class DyngSimulator:
                 continue
             previous = self._prev_bone_xform[i]
             current = self._cur_bone_xform[i]
-            prev_loc, prev_rot, prev_scale = previous.decompose()
-            cur_loc, cur_rot, cur_scale = current.decompose()
-            self._interp_bone_xform[i] = Matrix.LocRotScale(
-                prev_loc.lerp(cur_loc, frame_progress),
-                prev_rot.slerp(cur_rot, frame_progress),
-                prev_scale.lerp(cur_scale, frame_progress),
+            self._interp_bone_xform[i] = interpolate_matrix_trs(
+                previous, current, frame_progress
             )
 
     def _resolve_teleportation(self):
@@ -976,30 +907,45 @@ class DyngSimulator:
         self.prev_matrix_world = cur_mw.copy()
         return skip_physics
 
-    def _compute_accelerations(self, indices, grav_ms, ext_ms):
-        indices = np.asarray(indices, dtype=np.int32)
-        ext_accel = ext_ms * self.inv_mass[indices, np.newaxis]
-        damp_accel = (
-            self.vel_ms[indices]
-            * (-self.damping[indices, np.newaxis] * self.inv_mass[indices, np.newaxis])
+    def _compute_accelerations(self, runtime, grav_ms, ext_ms):
+        node_slice = runtime['slice']
+        acceleration = runtime['acceleration']
+        external = runtime['external_acceleration']
+        damping = runtime['damping_acceleration']
+        pull = runtime['pull_acceleration']
+        damping_norm = runtime['damping_norm']
+        safe_norm = runtime['damping_safe_norm']
+        clamped_damping = runtime['clamped_damping']
+        limit_mask = runtime['damping_limit_mask']
+
+        acceleration[:] = grav_ms
+        clamp_damping_vectors(
+            self.vel_ms[node_slice],
+            runtime['damping_factor'],
+            DAMPING_ACCEL_LIMIT,
+            out=damping,
+            norm_buffer=damping_norm,
+            safe_buffer=safe_norm,
+            clamped_buffer=clamped_damping,
+            mask_buffer=limit_mask,
         )
-        damp_norm = np.linalg.norm(damp_accel, axis=1, keepdims=True)
-        safe_norm = np.where(damp_norm < 1e-6, 1.0, damp_norm)
-        damp_accel = np.where(
-            damp_norm > DAMPING_ACCEL_LIMIT,
-            (damp_accel / safe_norm) * DAMPING_ACCEL_LIMIT,
-            damp_accel,
+        acceleration += damping
+        np.multiply(
+            runtime['inverse_mass'][:, None], ext_ms,
+            out=external,
         )
-        pull_accel = (
-            (self.interp_bone_ms[indices] - self.pos_ms[indices])
-            * (
-                self.pull_force[indices, np.newaxis]
-                * self.inv_mass[indices, np.newaxis]
-            )
+        acceleration += external
+        np.subtract(
+            self.interp_bone_ms[node_slice],
+            self.pos_ms[node_slice],
+            out=pull,
         )
-        acceleration = grav_ms + damp_accel + ext_accel + pull_accel
-        valid = self.is_free[indices] & self.active_mask[indices]
-        return np.where(valid[:, np.newaxis], acceleration, 0.0)
+        pull *= runtime['pull_factor'][:, None]
+        acceleration += pull
+        fixed_local = runtime['fixed_local']
+        if fixed_local.size:
+            acceleration[fixed_local] = 0.0
+        return acceleration
 
     def _update_node_forces(self):
         for node_index, dnode in enumerate(self.state.dangle_nodes):
@@ -1021,16 +967,17 @@ class DyngSimulator:
             )
 
     def _initialize_dyng_node_state(
-        self, node_index, indices, node_shapes, reset_positions,
+        self, node_index, runtime, node_shapes, reset_positions,
     ):
+        node_slice = runtime['slice']
         if reset_positions:
-            self.pos_ms[indices] = self.cur_bone_ms[indices]
-            self.prev_pos_ms[indices] = self.cur_bone_ms[indices]
+            self.pos_ms[node_slice] = self.cur_bone_ms[node_slice]
+            self.prev_pos_ms[node_slice] = self.cur_bone_ms[node_slice]
 
-        self.vel_ms[indices] = 0.0
-        self.prev_bone_ms[indices] = self.cur_bone_ms[indices]
-        for raw_index in indices:
-            index = int(raw_index)
+        self.vel_ms[node_slice] = 0.0
+        self.prev_bone_ms[node_slice] = self.cur_bone_ms[node_slice]
+        start, end = self._node_ranges[node_index]
+        for index in range(start, end):
             self._prev_bone_xform[index] = self._cur_bone_xform[index].copy()
             self._interp_bone_xform[index] = self._cur_bone_xform[index].copy()
 
@@ -1040,7 +987,6 @@ class DyngSimulator:
         self._node_prev_grav_ms[node_index] = (
             self._node_cur_grav_ms[node_index]
         )
-
         collision.initialize_collision_transforms(self, node_shapes)
 
     def _step_node(self, node_index, raw_dt, time_dilation, skip_physics):
@@ -1064,7 +1010,8 @@ class DyngSimulator:
         start, end = self._node_ranges[node_index]
         if start >= end:
             return
-        indices = np.arange(start, end, dtype=np.int32)
+        runtime = self._node_workspaces[node_index]
+        node_slice = runtime['slice']
         dnode = self.state.dangle_nodes[node_index]
         substep_time = max(0.001, float(dnode.substep_time))
         needs_initialization = bool(
@@ -1075,21 +1022,20 @@ class DyngSimulator:
 
         if skip_node_physics:
             self._initialize_dyng_node_state(
-                node_index, indices, node_shapes, reset_positions=True
+                node_index, runtime, node_shapes, reset_positions=True
             )
             self._node_simulation_needs_initialization[node_index] = False
 
         if time_dilation < MIN_TIME_DILATION:
             if skip_node_physics:
                 self._initialize_dyng_node_state(
-                    node_index, indices, node_shapes, reset_positions=False
+                    node_index, runtime, node_shapes, reset_positions=False
                 )
             return
 
         self._node_time_remainder[node_index] += raw_dt
         raw_steps = int(self._node_time_remainder[node_index] / substep_time)
         self._node_time_remainder[node_index] -= raw_steps * substep_time
-
         lp_alpha = raw_dt / (LP_FILTER_RC + raw_dt)
         self._node_damped_physics_steps[node_index] += lp_alpha * (
             raw_steps - self._node_damped_physics_steps[node_index]
@@ -1099,76 +1045,90 @@ class DyngSimulator:
         dt = min(MAX_TIME_DILATION, time_dilation) * substep_time
 
         collision.update_collision_transforms_begin(self, node_shapes)
-        self._swap_node_constraints(node_index)
-        try:
-            iterations = max(1, int(dnode.solver_iterations))
-            valid = self.is_free[indices] & self.active_mask[indices]
+        iterations = max(1, int(dnode.solver_iterations))
+        position = self.pos_ms[node_slice]
+        previous_position = self.prev_pos_ms[node_slice]
+        velocity = self.vel_ms[node_slice]
+        interpolated_bone = self.interp_bone_ms[node_slice]
+        free_local = runtime['free_local']
+        fixed_local = runtime['fixed_local']
 
-            for step_index in range(physics_steps):
-                frame_progress = (step_index + 1.0) / physics_steps
-                self._interpolate_bones(frame_progress)
-                interpolated_external = (
-                    self._node_prev_ext_force_ms[node_index]
-                    + (
-                        self._node_cur_ext_force_ms[node_index]
-                        - self._node_prev_ext_force_ms[node_index]
-                    ) * frame_progress
-                )
-                interpolated_gravity = (
-                    self._node_prev_grav_ms[node_index]
-                    + (
-                        self._node_cur_grav_ms[node_index]
-                        - self._node_prev_grav_ms[node_index]
-                    ) * frame_progress
-                )
-                self.prev_pos_ms[indices] = self.pos_ms[indices]
+        for step_index in range(physics_steps):
+            frame_progress = (step_index + 1.0) / physics_steps
+            self._interpolate_bones(frame_progress)
+            collision.update_collision_transforms(
+                self, frame_progress, node_shapes
+            )
+            interpolated_external = runtime['interpolated_external']
+            np.subtract(
+                self._node_cur_ext_force_ms[node_index],
+                self._node_prev_ext_force_ms[node_index],
+                out=interpolated_external,
+            )
+            interpolated_external *= frame_progress
+            interpolated_external += self._node_prev_ext_force_ms[node_index]
+            interpolated_gravity = runtime['interpolated_gravity']
+            np.subtract(
+                self._node_cur_grav_ms[node_index],
+                self._node_prev_grav_ms[node_index],
+                out=interpolated_gravity,
+            )
+            interpolated_gravity *= frame_progress
+            interpolated_gravity += self._node_prev_grav_ms[node_index]
+            previous_position[:] = position
 
-                if skip_node_physics:
-                    self.pos_ms[indices] = np.where(
-                        valid[:, np.newaxis],
-                        self.pos_ms[indices],
-                        self.interp_bone_ms[indices],
-                    )
+            if skip_node_physics:
+                if fixed_local.size:
+                    position[fixed_local] = interpolated_bone[fixed_local]
+            else:
+                acceleration = self._compute_accelerations(
+                    runtime, interpolated_gravity, interpolated_external
+                )
+                half_velocity = runtime['half_velocity']
+                predicted_position = runtime['predicted_position']
+                np.multiply(acceleration, dt * 0.5, out=half_velocity)
+                half_velocity += velocity
+                np.multiply(half_velocity, dt, out=predicted_position)
+                predicted_position += position
+                if runtime['all_free']:
+                    position[:] = predicted_position
                 else:
-                    acceleration = self._compute_accelerations(
-                        indices, interpolated_gravity, interpolated_external
-                    )
-                    half_velocity = (
-                        self.vel_ms[indices] + acceleration * (dt * 0.5)
-                    )
-                    predicted = self.pos_ms[indices] + half_velocity * dt
-                    self.pos_ms[indices] = np.where(
-                        valid[:, np.newaxis],
-                        predicted,
-                        self.interp_bone_ms[indices],
-                    )
+                    if free_local.size:
+                        position[free_local] = predicted_position[free_local]
+                    if fixed_local.size:
+                        position[fixed_local] = interpolated_bone[fixed_local]
 
-                for _ in range(iterations):
-                    self._satisfy_constraints_in_authored_order(node_index)
-                    collision.respond_to_collisions_vectorized(
-                        self, frame_progress, indices, node_shapes
-                    )
-                    self._respond_constraint_collisions_in_authored_order(
-                        node_index, frame_progress, node_shapes
-                    )
+            for _iteration in range(iterations):
+                self._satisfy_constraints_in_authored_order(node_index)
+                collision.respond_to_collisions_vectorized(
+                    self, shapes=node_shapes, runtime=runtime
+                )
+                self._respond_constraint_collisions_in_authored_order(
+                    node_index, node_shapes
+                )
 
-                if not skip_node_physics and dt > 0.0:
-                    acceleration = self._compute_accelerations(
-                        indices, interpolated_gravity, interpolated_external
-                    )
-                    corrected_velocity = (
-                        (self.pos_ms[indices] - self.prev_pos_ms[indices]) / dt
-                        + acceleration * (dt * 0.5)
-                    )
-                    self.vel_ms[indices] = np.where(
-                        valid[:, np.newaxis], corrected_velocity, 0.0
-                    )
-        finally:
-            self._restore_constraints()
+            if not skip_node_physics and dt > 0.0:
+                acceleration = self._compute_accelerations(
+                    runtime, interpolated_gravity, interpolated_external
+                )
+                corrected_velocity = runtime['corrected_velocity']
+                np.subtract(
+                    position, previous_position, out=corrected_velocity
+                )
+                corrected_velocity *= 1.0 / dt
+                half_velocity = runtime['half_velocity']
+                np.multiply(acceleration, dt * 0.5, out=half_velocity)
+                corrected_velocity += half_velocity
+                if runtime['all_free']:
+                    velocity[:] = corrected_velocity
+                else:
+                    velocity.fill(0.0)
+                    if free_local.size:
+                        velocity[free_local] = corrected_velocity[free_local]
 
         if skip_node_physics:
             self._initialize_dyng_node_state(
-                node_index, indices, node_shapes, reset_positions=False
+                node_index, runtime, node_shapes, reset_positions=False
             )
 
     def step_simulation(
@@ -1183,28 +1143,19 @@ class DyngSimulator:
         skip_physics = self._resolve_teleportation()
         self._update_node_forces()
 
-        self._saved_constraints = self._save_constraint_arrays()
-        self._saved_link_was_set = getattr(self, 'link_idx_a', None) is not None
-        self._saved_ell_was_set = getattr(self, 'ell_idx', None) is not None
-        self._saved_cone_was_set = getattr(self, 'cone_idx', None) is not None
+        for operation_type, operation_index in self.execution_plan:
+            if operation_type == 'DANGLE':
+                self._sample_node_input(operation_index)
+                self._step_node(
+                    operation_index, raw_dt, time_dilation, skip_physics
+                )
+            else:
+                self.drag_post.step_runtime(operation_index, raw_dt)
 
-        try:
-            for operation_type, operation_index in self.execution_plan:
-                if operation_type == 'DANGLE':
-                    self._sample_node_input(operation_index)
-                    self._step_node(
-                        operation_index, raw_dt, time_dilation, skip_physics
-                    )
-                else:
-                    self.drag_post.step_runtime(operation_index, raw_dt)
-
-                if operation_callback is not None:
-                    operation_callback(
-                        self, operation_type, operation_index
-                    )
-        finally:
-            self._restore_constraints()
-            self._saved_constraints = {}
+            if operation_callback is not None:
+                operation_callback(
+                    self, operation_type, operation_index
+                )
 
         if skip_physics:
             self.vel_ms[:self.num_particles].fill(0.0)

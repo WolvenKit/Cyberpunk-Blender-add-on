@@ -34,7 +34,9 @@
       "nodes": [],
       "persistentNodeIndex": 0,
       "persistentNodes": null,
-      "variantIndices": [0],
+      "variantIndices": [
+        0
+      ],
       "variantNodes": [],
       "version": 62
     },

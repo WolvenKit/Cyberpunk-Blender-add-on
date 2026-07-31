@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-from .values import cname_value
+from ...assetio.values import cname_value
 
 
 def component_name(component: Any, default: str = "") -> str:

@@ -5,6 +5,31 @@ from typing import Any, Mapping
 
 
 @dataclass(frozen=True, slots=True)
+class ParsedEntity:
+    appearances: tuple
+    appearance_names: tuple
+    appearance_index_by_name: object
+    appearances_by_appearance: object
+    appearances_by_name: object
+    default_appearance: str
+    component_dicts: tuple
+    component_data: tuple
+    components_by_name: object
+    components_by_id: object
+    component_ids: frozenset
+    component_data_ids: frozenset
+    parent_transform_lookup: object
+    skinning_lookup: object
+    shape_lookup: object
+    slot_component_lookups: object
+    collider_components: tuple
+    simple_collider_components: tuple
+    light_channel_components: tuple
+    resolved_dependencies: tuple
+    vehicle_slot_component: dict | None
+
+
+@dataclass(frozen=True, slots=True)
 class AppearanceRequestResolution:
     appearances: tuple[str, ...]
     default_appearance: str

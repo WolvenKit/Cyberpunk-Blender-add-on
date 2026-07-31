@@ -1,37 +1,16 @@
-﻿import math
+from ...blender.transactions import track_created_datablock
+import math
 
 import bmesh
 import bpy
 from mathutils import Matrix, Quaternion, Vector
 
-from ...main.common import exclusion_cache
+from ...gltf.exclusions import collect_excluded_objects
+from .presets_lib import COLLISION_PRESETS, get_layer_bit
 
-# fallback incase the preset lib doesn't load
-try:
-    from . import presets_lib
-except ImportError:
-    print("PxBridge Warning: presets_lib.py not found.")
+from .presets_lib import COLLISION_PRESETS, get_layer_bit
 
-
-    class presets_lib:
-        COLLISION_PRESETS = {}
-        COLLISION_LAYERS = []
-        QUERY_LAYERS = []
-        _OVERRIDES = {}
-        _RAW_PRESETS = {}
-
-        @staticmethod
-        def get_layer_bit(n, q): return -1
-
-        @staticmethod
-        def get_preset_items(s, c): return [("None", "None", "")]
-
-# fallback for mats
-try:
-    from .physmat_lib import physmat_list
-except ImportError:
-    def physmat_list():
-        return [{"Name": "Default", "Density": 1000}]
+from ...physics.materials import get_physics_material, physics_material_enum_items
 
 
 def bits_to_int(bool_vector):
@@ -43,30 +22,20 @@ def bits_to_int(bool_vector):
 
 
 def get_physmat_items(self, context):
-    items = [("Default", "Default", "")]
-    for mat in physmat_list():
-        name = mat.get("Name", "Unknown")
-        if name != "Default":
-            items.append((name, name, ""))
-    return items
+    return physics_material_enum_items()
 
 
 def get_mat_data(name):
-    for mat in physmat_list():
-        if mat.get("Name") == name:
-            return [
-                float(mat.get("staticFriction", 0.5)),
-                float(mat.get("dynamicFriction", 0.5)),
-                float(mat.get("restitution", 0.5))
-                ]
-    return [0.5, 0.5, 0.5]
+    material = get_physics_material(name)
+    return [
+        float(material["staticFriction"]),
+        float(material["dynamicFriction"]),
+        float(material["restitution"]),
+        ]
 
 
 def get_mat_density(name):
-    for mat in physmat_list():
-        if mat.get("Name") == name:
-            return float(mat.get("Density", 1000.0))
-    return 1000.0
+    return float(get_physics_material(name)["Density"])
 
 
 def update_collision_bits(self, context):
@@ -74,11 +43,11 @@ def update_collision_bits(self, context):
     Called whenever the user changes the 'collision_preset' Enum.
     It reads the string name, looks up layers in presets_lib, and sets vectors.
     """
-    if self.collision_preset not in presets_lib.COLLISION_PRESETS:
+    if self.collision_preset not in COLLISION_PRESETS:
         return
 
     # tuple: ([MyLayers], [CollidesWith], [QueryableBy])
-    data = presets_lib.COLLISION_PRESETS[self.collision_preset]
+    data = COLLISION_PRESETS[self.collision_preset]
     my_layers = data[0]
     collides_with = data[1]
     query_layers = data[2]
@@ -88,17 +57,17 @@ def update_collision_bits(self, context):
     new_query = [False] * 20
 
     for name in my_layers:
-        idx = presets_lib.get_layer_bit(name, is_query=False)
+        idx = get_layer_bit(name, is_query=False)
         if 0 <= idx < 20:
             new_group[idx] = True
 
     for name in collides_with:
-        idx = presets_lib.get_layer_bit(name, is_query=False)
+        idx = get_layer_bit(name, is_query=False)
         if 0 <= idx < 20:
             new_mask[idx] = True
 
     for name in query_layers:
-        idx = presets_lib.get_layer_bit(name, is_query=True)
+        idx = get_layer_bit(name, is_query=True)
         if 0 <= idx < 20:
             new_query[idx] = True
 
@@ -204,12 +173,11 @@ def add_ground_plane(
     Calculates the scene's global minimum Z bounding coordinate to position the 
     instantiated plane at a precise vertical offset beneath all existing geometry.
     """
-    exclusion_cache.clear_cache()
     if (existing := bpy.data.objects.get(name)):
         bpy.data.objects.remove(existing, do_unlink=True)
         if existing.data:
             bpy.data.meshes.remove(existing.data, do_unlink=True)
-    excluded_objects = exclusion_cache.get_excluded_objects()
+    excluded_objects = collect_excluded_objects()
     objs = [o for o in bpy.context.scene.objects if o.type == 'MESH' and o not in excluded_objects]
 
     if not objs:
@@ -240,11 +208,11 @@ def add_ground_plane(
         (2, 3, 7, 6), (3, 0, 4, 7)
         ]
 
-    mesh = bpy.data.meshes.new(name)
+    mesh = track_created_datablock("meshes", bpy.data.meshes.new(name))
     mesh.from_pydata(verts, [], faces)
     mesh.update()
 
-    obj = bpy.data.objects.new(name, mesh)
+    obj = track_created_datablock("objects", bpy.data.objects.new(name, mesh))
     obj.location = (center_x, center_y, center_z)
 
     bpy.context.collection.objects.link(obj)

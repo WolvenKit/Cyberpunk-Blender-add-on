@@ -1,11 +1,12 @@
 from __future__ import annotations
+from ....blender.transactions import track_created_datablock
 
 from dataclasses import dataclass
 
 import bpy
 from mathutils import Vector
 
-from ...common.values import axis_value
+from ....assetio.values import axis_value
 
 
 SPLINE_PLACEMENT_CONTRACTS = {
@@ -183,12 +184,12 @@ class SplineService:
             f"{context.node_type}_{context.node_index}_"
             f"{instance_index}"
         )
-        curve = bpy.data.curves.new(name, "CURVE")
+        curve = track_created_datablock("curves", bpy.data.curves.new(name, "CURVE"))
         curve.dimensions = "3D"
         curve.twist_mode = "Z_UP"
         curve.resolution_u = 24
 
-        curve_object = bpy.data.objects.new(name, curve)
+        curve_object = track_created_datablock("objects", bpy.data.objects.new(name, curve))
         context.sector_collection.objects.link(curve_object)
         curve_object.matrix_world = context.operations.instance_matrix(
             instance,

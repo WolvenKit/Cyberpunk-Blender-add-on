@@ -1,10 +1,13 @@
-import bpy 
 import os
-from ..main.common import get_script_dir
+
+import bpy
+
+from ..paths import get_script_dir
 
 script_dir = get_script_dir()
 
-def newScript(self,context):
+
+def newScript(self, context):
     base_name = "new_script"
     script_name = base_name + ".py"
 
@@ -20,11 +23,12 @@ def newScript(self,context):
         f.write("# New Script")
 
     return {'FINISHED'}
-        
 
-def loadScript(self,context):
+
+def loadScript(self, context):
+    script_name = self.script_file
     if self.new_name:
-    # Rename the script
+        # Rename the script
         name = (self.new_name + ".py")
         script_path = os.path.join(script_dir, self.script_file)
         new_script_path = os.path.join(script_dir, name)
@@ -40,7 +44,7 @@ def loadScript(self,context):
         script_text = bpy.data.texts.get(script_name)
         # Switch to the loaded script if present
         if script_text is not None:
-            context.space_data.text = script_text  
+            context.space_data.text = script_text
         else:
             # If the script is not loaded, load it
             script_path = os.path.join(script_dir, script_name)
@@ -50,7 +54,7 @@ def loadScript(self,context):
                     text_data = bpy.data.texts.new(name=script_name)
                     text_data.from_string(f.read())
                     # Set the loaded script as active
-                    context.space_data.text = text_data  
+                    context.space_data.text = text_data
 
 
 def saveScript(self, context):

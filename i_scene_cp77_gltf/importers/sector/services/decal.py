@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ....blender.transactions import track_created_datablock
 
 from dataclasses import dataclass
 import hashlib
@@ -6,10 +7,10 @@ import math
 import os
 
 import bpy
+import numpy as np
 from mathutils import Matrix
 
-from ....jsontool import JSONTool
-from ....main.setup import MaterialBuilder
+from ....materials.blender.builder import MaterialBuilder
 from ...common.paths import path_key
 
 
@@ -89,10 +90,11 @@ class DecalService:
 
     @classmethod
     def material_signature(cls, material_path, data):
-        color = cls.color(data)
+        color_scale = cls.color_scale(data)
         return (
             path_key(material_path),
-            *(round(value, 6) for value in color),
+            *(round(value, 6) for value in color_scale),
+            round(float(data.get("alpha", 1.0)), 6),
             round(float(data.get("roughnessScale", 1.0)), 6),
             bool(data.get("horizontalFlip", 0)),
             bool(data.get("verticalFlip", 0)),
@@ -107,22 +109,35 @@ class DecalService:
         horizontal_flip=False,
         vertical_flip=False,
     ):
+        mesh.update()
+        loop_count = len(mesh.loops)
+        if loop_count == 0:
+            return
+
         uv_layer = (
             mesh.uv_layers.get("UVMap")
             or mesh.uv_layers.new(name="UVMap")
         )
-        for polygon in mesh.polygons:
-            for loop_index in polygon.loop_indices:
-                vertex = mesh.vertices[
-                    mesh.loops[loop_index].vertex_index
-                ].co
-                u = float(vertex.x) + 0.5
-                v = float(vertex.y) + 0.5
-                if horizontal_flip:
-                    u = 1.0 - u
-                if vertical_flip:
-                    v = 1.0 - v
-                uv_layer.data[loop_index].uv = (u, v)
+        loop_vertices = np.empty(loop_count, dtype=np.int32)
+        mesh.loops.foreach_get("vertex_index", loop_vertices)
+
+        vertex_coordinates = np.empty(
+            len(mesh.vertices) * 3,
+            dtype=np.float32,
+        )
+        mesh.vertices.foreach_get("co", vertex_coordinates)
+        vertex_coordinates.shape = (-1, 3)
+
+        loop_uv = np.empty((loop_count, 2), dtype=np.float32)
+        loop_uv[:] = vertex_coordinates[loop_vertices, :2]
+        loop_uv += 0.5
+        if horizontal_flip:
+            np.subtract(1.0, loop_uv[:, 0], out=loop_uv[:, 0])
+        if vertical_flip:
+            np.subtract(1.0, loop_uv[:, 1], out=loop_uv[:, 1])
+
+        uv_layer.uv.foreach_set("vector", loop_uv.reshape(-1))
+        mesh.update()
 
     @staticmethod
     def configure_render_state(material):
@@ -338,13 +353,10 @@ class DecalService:
 
         self.stats["descriptor_misses"] += 1
         self.stats["documents_loaded"] += 1
-        document = JSONTool.jsonload(resolved_path)
+        resource = self.session.material_resources.load(resolved_path)
+        document = resource.payload if resource is not None else None
         data_block = document.get("Data") if isinstance(document, dict) else None
-        root_chunk = (
-            data_block.get("RootChunk")
-            if isinstance(data_block, dict)
-            else None
-        )
+        root_chunk = resource.root if resource is not None else None
         if not isinstance(root_chunk, dict):
             descriptor = _DecalResourceDescriptor(
                 document=None,
@@ -432,7 +444,7 @@ class DecalService:
             material = built_material
             self.stats["materials_claimed"] += 1
         else:
-            material = built_material.copy()
+            material = track_created_datablock("materials", built_material.copy())
             self.stats["materials_cloned"] += 1
         self._owned_material_ids.add(id(material))
         return material
@@ -445,7 +457,14 @@ class DecalService:
             "mesh_entries": len(self.mesh_cache),
         }
 
-    def plane_mesh(self, signature, material_result):
+    def plane_mesh(
+        self,
+        signature,
+        material_result,
+        *,
+        horizontal_flip=False,
+        vertical_flip=False,
+    ):
         cached = self.mesh_cache.get(signature)
         if cached is not None:
             if (
@@ -458,7 +477,7 @@ class DecalService:
         suffix = hashlib.sha1(
             repr(signature).encode("utf-8")
         ).hexdigest()[:12]
-        mesh = bpy.data.meshes.new(f"CP77_DecalPlane_{suffix}")
+        mesh = track_created_datablock("meshes", bpy.data.meshes.new(f"CP77_DecalPlane_{suffix}"))
         mesh.from_pydata(
             (
                 (-0.5, -0.5, 0.0),
@@ -471,8 +490,8 @@ class DecalService:
         )
         self.set_uvs(
             mesh,
-            horizontal_flip=bool(signature[-4]),
-            vertical_flip=bool(signature[-3]),
+            horizontal_flip=horizontal_flip,
+            vertical_flip=vertical_flip,
         )
         if material_result.material is not None:
             mesh.materials.append(material_result.material)
@@ -623,11 +642,13 @@ class DecalService:
         mesh = self.plane_mesh(
             material_result.signature,
             material_result,
+            horizontal_flip=bool(data.get("horizontalFlip", 0)),
+            vertical_flip=bool(data.get("verticalFlip", 0)),
         )
-        plane = bpy.data.objects.new(
+        plane = track_created_datablock("objects", bpy.data.objects.new(
             f"DecalPlane_{context.node_index}_{instance_index}",
             mesh,
-        )
+        ))
         context.sector_collection.objects.link(plane)
         plane.parent = projector
         plane.matrix_parent_inverse = Matrix.Identity(4)

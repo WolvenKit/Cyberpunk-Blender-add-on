@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ....blender.transactions import track_created_datablock
 
 from dataclasses import dataclass
 import math
@@ -6,8 +7,10 @@ import math
 import bpy
 from mathutils import Matrix, Vector
 
+from ....animation.blender_pose import interpolate_matrix_trs_components
+
 from ..context import DeformationDataError
-from ...common.values import axis_value
+from ....assetio.values import axis_value
 
 
 DEFORMATION_CONTRACT = "FRAME_MATRIX_VERTEX_BAKE"
@@ -360,16 +363,10 @@ class DeformationService:
             len(frames) - 2,
         )
         blend = position - frame_index
-        location_a, rotation_a, scale_a = (
-            frames[frame_index].decompose()
-        )
-        location_b, rotation_b, scale_b = (
-            frames[frame_index + 1].decompose()
-        )
-        return (
-            location_a.lerp(location_b, blend),
-            rotation_a.slerp(rotation_b, blend),
-            scale_a.lerp(scale_b, blend),
+        return interpolate_matrix_trs_components(
+            frames[frame_index],
+            frames[frame_index + 1],
+            blend,
         )
 
     def deform_content_point(self, point, analysis):
@@ -437,10 +434,10 @@ class DeformationService:
         cable_radius=0.0,
         render_geometry=False,
     ):
-        curve = bpy.data.curves.new(
+        curve = track_created_datablock("curves", bpy.data.curves.new(
             trim_name(f"{name}_Path"),
             "CURVE",
-        )
+        ))
         curve.dimensions = "3D"
         curve.twist_mode = "MINIMUM"
         curve.resolution_u = 1
@@ -456,7 +453,7 @@ class DeformationService:
             curve.resolution_u = 2
             curve.fill_mode = "FULL"
 
-        path_object = bpy.data.objects.new(curve.name, curve)
+        path_object = track_created_datablock("objects", bpy.data.objects.new(curve.name, curve))
         target_collection.objects.link(path_object)
         path_object.parent = placement_root
         path_object.matrix_parent_inverse = Matrix.Identity(4)
@@ -498,7 +495,7 @@ class DeformationService:
                     new_object.type == "MESH"
                     and new_object.data is not None
                 ):
-                    new_object.data = old_object.data.copy()
+                    new_object.data = track_created_datablock("meshes", old_object.data.copy())
                 copy_map[old_object] = new_object
                 destination.objects.link(new_object)
 

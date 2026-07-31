@@ -1,12 +1,23 @@
+import bpy
+from ..blender.transactions import new_tracked_datablock, track_created_datablock
+import os
 import hashlib
+from contextlib import contextmanager
+from contextvars import ContextVar
+import uuid
 from pathlib import Path
 
 import numpy as np
 
-from ..datakrash import asset_index_for_root
-from ..jsontool import JSONTool
-from ..main.common import *
-from ..main.material_profile import begin_material_phase, end_material_phase
+from ..assetio.index import IndexPolicy, build_asset_index
+from ..assetio.documents import file_identity
+from ..materials.resources import load_material_document
+from ..assetio.resolver import resolve_asset_path
+from ..materials.blender.images import imageFromPath, imageFromRelPath
+from ..materials.blender.nodes import CreateCalculateVecNormalZ, createOverrideTable, create_node, get_inputs
+from ..materials.pathing import context_path_key
+from ..materials.blender.helper_caches import register_helper_cache
+from ..materials.blender.profiling import begin_material_phase, end_material_phase
 
 from .mat_common import create_global_normal_rel
 
@@ -22,6 +33,30 @@ _PREPARED_LAYER_CACHE = {}
 _MASK_SET_CACHE = {}
 _MASK_LAYER_PATH_CACHE = {}
 _ASSET_INDEX_CACHE = {}
+_FRESH_RUNTIME_TOKEN = ContextVar("cp77_fresh_multilayer_runtime", default="")
+
+
+@contextmanager
+def fresh_multilayer_runtime(token=None):
+    token = str(token or uuid.uuid4().hex)
+    reset_token = _FRESH_RUNTIME_TOKEN.set(token)
+    try:
+        yield token
+    finally:
+        _FRESH_RUNTIME_TOKEN.reset(reset_token)
+
+
+def _fresh_runtime_token():
+    return _FRESH_RUNTIME_TOKEN.get()
+
+
+def _fresh_group_name(base_name, token, purpose):
+    digest = hashlib.blake2s(
+        f"{purpose}|{token}|{base_name}".encode("utf-8", "ignore"),
+        digest_size=6,
+    ).hexdigest()
+    return f"{base_name}__fresh_{digest}"
+
 _ML_CACHE_STATS = {
     "mlsetup_hits": 0,
     "mlsetup_misses": 0,
@@ -71,12 +106,6 @@ def _template_path_key(path):
     return os.path.normcase(os.path.normpath(path.replace('\\', os.sep))) if path else ''
 
 
-def _context_path_key(path):
-    if not path:
-        return ''
-    return os.path.normcase(os.path.abspath(os.path.normpath(str(path))))
-
-
 def _resource_extension(reference):
     lower = str(reference or '').lower()
     for extension in ('.mlsetup.json', '.mltemplate.json', '.mt.json', '.mi.json', '.material.json'):
@@ -89,11 +118,11 @@ def _resource_extension(reference):
 
 def _resolved_json_resource(reference, base_path, project_path):
     extension = _resource_extension(reference)
-    resolved = JSONTool.resolve_asset_path(
+    resolved = resolve_asset_path(
         reference,
         roots=(project_path, base_path),
         extensions=(extension,),
-        warn_missing=False,
+        warn=False,
     )
     if resolved:
         return resolved
@@ -105,25 +134,28 @@ def _resolved_json_resource(reference, base_path, project_path):
 
 def _cached_resource_root(cache, stats_prefix, reference, base_path, project_path):
     path = _resolved_json_resource(reference, base_path, project_path)
-    cache_key = JSONTool.resource_cache_key(path)
-    cached = cache.get(cache_key)
-    if cached is not None:
-        _ML_CACHE_STATS[f'{stats_prefix}_hits'] += 1
-        return cached, cache_key
+    cache_key = file_identity(path).key
+    fresh_runtime = bool(_fresh_runtime_token())
+    if not fresh_runtime:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            _ML_CACHE_STATS[f'{stats_prefix}_hits'] += 1
+            return cached, cache_key
 
     _ML_CACHE_STATS[f'{stats_prefix}_misses'] += 1
     started = begin_material_phase()
     try:
-        data = JSONTool.jsonload(path)
-        root = data['Data']['RootChunk']
+        root = load_material_document(path).root
     finally:
-        end_material_phase(
-            started,
-            'material.multilayer_json',
-            label=str(path),
-            metadata={'family': stats_prefix},
-        )
-    cache[cache_key] = root
+        if started is not None:
+            end_material_phase(
+                started,
+                'material.multilayer_json',
+                label=str(path),
+                metadata={'family': stats_prefix, 'fresh': fresh_runtime},
+            )
+    if not fresh_runtime:
+        cache[cache_key] = root
     return root, cache_key
 
 
@@ -260,10 +292,12 @@ def _layer_values(layer):
 
 
 def _layer_specs(cache_key, layers):
-    cached = _ML_LAYER_SPEC_CACHE.get(cache_key)
-    if cached is not None:
-        _ML_CACHE_STATS['layer_spec_hits'] += 1
-        return cached
+    fresh_runtime = bool(_fresh_runtime_token())
+    if not fresh_runtime:
+        cached = _ML_LAYER_SPEC_CACHE.get(cache_key)
+        if cached is not None:
+            _ML_CACHE_STATS['layer_spec_hits'] += 1
+            return cached
 
     _ML_CACHE_STATS['layer_spec_misses'] += 1
     specs = tuple(
@@ -272,9 +306,10 @@ def _layer_specs(cache_key, layers):
             get_cased_depot_path(layer, 'microblend'),
             _layer_values(layer),
         )
-        for layer in layers
+        for layer in layers or ()
     )
-    _ML_LAYER_SPEC_CACHE[cache_key] = specs
+    if not fresh_runtime:
+        _ML_LAYER_SPEC_CACHE[cache_key] = specs
     return specs
 
 
@@ -366,7 +401,7 @@ def mask_mixer_node_group(Mat):
     existing = bpy.data.node_groups.get("Mask Mixer 1.6.7")
     if existing:
         return existing
-    mask_mixer = bpy.data.node_groups.new(type='ShaderNodeTree', name="Mask Mixer 1.6.7")
+    mask_mixer = new_tracked_datablock("node_groups", type='ShaderNodeTree', name="Mask Mixer 1.6.7")
     mask_mixer['AddonVersion'] = Mat.get('AddonVersion')
 
     # sockets
@@ -486,7 +521,7 @@ def levels_node_group(Mat):
     existing = bpy.data.node_groups.get("Levels 2077 1.6.7")
     if existing:
         return existing
-    levels = bpy.data.node_groups.new(type='ShaderNodeTree', name="Levels 2077 1.6.7")
+    levels = new_tracked_datablock("node_groups", type='ShaderNodeTree', name="Levels 2077 1.6.7")
     # Write addonversion from material where group is created
     levels['AddonVersion'] = Mat.get('AddonVersion')
 
@@ -525,7 +560,7 @@ def _getOrCreateLayerBlend5(Mat):
     if existing:
         return existing
 
-    NG = bpy.data.node_groups.new(ng_name, "ShaderNodeTree")
+    NG = new_tracked_datablock("node_groups", ng_name, "ShaderNodeTree")
     # Write addonversion from material where group is created
     NG['AddonVersion'] = Mat.get('AddonVersion')
 
@@ -615,7 +650,7 @@ def ml_pbsdf_node_group(Mat):
     existing = bpy.data.node_groups.get(ng_name)
     if existing:
         return existing
-    ml_bsdf = bpy.data.node_groups.new(type='ShaderNodeTree', name=ng_name)
+    ml_bsdf = new_tracked_datablock("node_groups", type='ShaderNodeTree', name=ng_name)
     # Write addonversion from material where group is created
     ml_bsdf['AddonVersion'] = Mat.get('AddonVersion')
 
@@ -712,14 +747,16 @@ def ml_pbsdf_node_group(Mat):
     return ml_bsdf
 
 
+register_helper_cache("multilayer", clear=clear_multilayer_cache, stats=multilayer_cache_stats)
+
 class Multilayered:
     def __init__(self, BasePath, image_format, ProjPath):
         self.BasePath = str(BasePath)
         self.image_format = image_format
         self.ProjPath = str(ProjPath)
         self._context_key = (
-            _context_path_key(self.BasePath),
-            _context_path_key(self.ProjPath),
+            context_path_key(self.BasePath),
+            context_path_key(self.ProjPath),
             str(self.image_format).lower(),
             tuple(bpy.app.version),
         )
@@ -727,21 +764,26 @@ class Multilayered:
     def createMLTemplateGroup(self, matTemplateObj, mltemplate, resource_key):
         template_path_key = _template_path_key(mltemplate)
         template_key = (self._context_key, template_path_key, resource_key)
-        cached = _cached_node_group(_ML_TEMPLATE_GROUP_CACHE, template_key)
-        if cached is not None:
-            _ML_CACHE_STATS['template_group_hits'] += 1
-            return cached
+        fresh_token = _fresh_runtime_token()
+        if not fresh_token:
+            cached = _cached_node_group(_ML_TEMPLATE_GROUP_CACHE, template_key)
+            if cached is not None:
+                _ML_CACHE_STATS['template_group_hits'] += 1
+                return cached
 
         group_name = safe_template_group_name(
             mltemplate,
             self._context_key,
             resource_key,
         )
-        existing = bpy.data.node_groups.get(group_name)
-        if existing is not None and existing.get('mlTemplate') == mltemplate:
-            _ML_TEMPLATE_GROUP_CACHE[template_key] = existing.name
-            _ML_CACHE_STATS['template_group_hits'] += 1
-            return existing
+        if fresh_token:
+            group_name = _fresh_group_name(group_name, fresh_token, "template")
+        else:
+            existing = bpy.data.node_groups.get(group_name)
+            if existing is not None and existing.get('mlTemplate') == mltemplate:
+                _ML_TEMPLATE_GROUP_CACHE[template_key] = existing.name
+                _ML_CACHE_STATS['template_group_hits'] += 1
+                return existing
 
         _ML_CACHE_STATS['template_group_builds'] += 1
 
@@ -766,7 +808,7 @@ class Multilayered:
         colorMaskIn = matTemplateObj["colorMaskLevelsIn"]["Elements"]
         colorMaskOut = matTemplateObj["colorMaskLevelsOut"]["Elements"]
 
-        NG = bpy.data.node_groups.new(group_name, "ShaderNodeTree")
+        NG = new_tracked_datablock("node_groups", group_name, "ShaderNodeTree")
         NG['mlTemplate'] = mltemplate
         NG['mlCacheVersion'] = _ML_CACHE_VERSION
         NG['mlContextKey'] = repr(self._context_key)
@@ -864,7 +906,8 @@ class Multilayered:
         NG.links.new(combineOffUV.outputs[0], MapN.inputs[1])
         NG.links.new(ColorRampOut.outputs[0], colorScaleMix.inputs[0])
 
-        _ML_TEMPLATE_GROUP_CACHE[template_key] = NG.name
+        if not fresh_token:
+            _ML_TEMPLATE_GROUP_CACHE[template_key] = NG.name
         # Returning NG lets callers use the freshly built group directly
         # instead of re-scanning bpy.data.node_groups for it right after creation.
         return NG
@@ -873,11 +916,16 @@ class Multilayered:
         if not root:
             return None
         root = os.path.abspath(os.path.normpath(root))
-        cached = _ASSET_INDEX_CACHE.get(root)
+        cache_key = (root, extension.lower())
+        cached = _ASSET_INDEX_CACHE.get(cache_key)
         if cached is not None:
             return cached
-        cached = asset_index_for_root(root, warn_missing=False)
-        _ASSET_INDEX_CACHE[root] = cached
+        cached = build_asset_index(
+            root,
+            (extension,),
+            policy=IndexPolicy.REUSE,
+        )
+        _ASSET_INDEX_CACHE[cache_key] = cached
         return cached
 
     def _indexed_asset_path(self, root, filepath):
@@ -930,11 +978,13 @@ class Multilayered:
             self.BasePath,
             self.ProjPath,
         )
-        override_table = _ML_OVERRIDE_CACHE.get(resource_key)
+        fresh_runtime = bool(_fresh_runtime_token())
+        override_table = None if fresh_runtime else _ML_OVERRIDE_CACHE.get(resource_key)
         if override_table is None:
             _ML_CACHE_STATS['override_misses'] += 1
             override_table = createOverrideTable(root)
-            _ML_OVERRIDE_CACHE[resource_key] = override_table
+            if not fresh_runtime:
+                _ML_OVERRIDE_CACHE[resource_key] = override_table
         else:
             _ML_CACHE_STATS['override_hits'] += 1
         return root, override_table, resource_key
@@ -953,15 +1003,17 @@ class Multilayered:
             _template_path_key(material_norm),
             _template_path_key(microblend_path),
         )
-        cached = _PREPARED_LAYER_CACHE.get(cache_key)
-        if cached is not None:
-            group_name, override_table = cached
-            node_group = bpy.data.node_groups.get(group_name)
-            if node_group is not None:
-                _ML_CACHE_STATS['prepared_layer_hits'] += 1
-                return node_group, override_table
-            _PREPARED_LAYER_CACHE.pop(cache_key, None)
-            _ML_CACHE_STATS['prepared_layer_stale'] += 1
+        fresh_token = _fresh_runtime_token()
+        if not fresh_token:
+            cached = _PREPARED_LAYER_CACHE.get(cache_key)
+            if cached is not None:
+                group_name, override_table = cached
+                node_group = bpy.data.node_groups.get(group_name)
+                if node_group is not None:
+                    _ML_CACHE_STATS['prepared_layer_hits'] += 1
+                    return node_group, override_table
+                _PREPARED_LAYER_CACHE.pop(cache_key, None)
+                _ML_CACHE_STATS['prepared_layer_stale'] += 1
 
         _ML_CACHE_STATS['prepared_layer_misses'] += 1
         microblend_image = None
@@ -989,16 +1041,19 @@ class Multilayered:
             self._context_key,
             base_material.name,
         )
+        if fresh_token:
+            group_name = _fresh_group_name(group_name, fresh_token, "layer")
         node_group = self._get_or_create_layer_node_tree(
             Mat,
             group_name,
             base_material,
             microblend_image,
         )
-        _PREPARED_LAYER_CACHE[cache_key] = (
-            node_group.name,
-            override_table,
-        )
+        if not fresh_token:
+            _PREPARED_LAYER_CACHE[cache_key] = (
+                node_group.name,
+                override_table,
+            )
         return node_group, override_table
 
     def _mask_layer_paths(self, mlmaskpath, layer_count):
@@ -1093,7 +1148,7 @@ class Multilayered:
 
         clone = None
         try:
-            clone = blueprint.copy()
+            clone = track_created_datablock("node_groups", blueprint.copy())
             clone.name = group_name
             clone['mlLayerCacheVersion'] = _ML_CACHE_VERSION
             clone['mlLayerBlueprintVersion'] = _ML_CACHE_VERSION
@@ -1123,24 +1178,26 @@ class Multilayered:
             return None
 
     def _get_or_create_layer_node_tree(self, Mat, group_name, BaseMat, MBI):
-        cached = _cached_node_group(_LAYER_NODE_TOPOLOGY_CACHE, group_name)
-        if cached is not None:
-            _ML_CACHE_STATS['layer_group_hits'] += 1
-            return cached
+        fresh_token = _fresh_runtime_token()
+        if not fresh_token:
+            cached = _cached_node_group(_LAYER_NODE_TOPOLOGY_CACHE, group_name)
+            if cached is not None:
+                _ML_CACHE_STATS['layer_group_hits'] += 1
+                return cached
 
-        existing = bpy.data.node_groups.get(group_name)
-        if existing is not None and existing.get('mlLayerCacheVersion') == _ML_CACHE_VERSION:
-            _LAYER_NODE_TOPOLOGY_CACHE[group_name] = existing.name
-            _ML_CACHE_STATS['layer_group_hits'] += 1
-            return existing
+            existing = bpy.data.node_groups.get(group_name)
+            if existing is not None and existing.get('mlLayerCacheVersion') == _ML_CACHE_VERSION:
+                _LAYER_NODE_TOPOLOGY_CACHE[group_name] = existing.name
+                _ML_CACHE_STATS['layer_group_hits'] += 1
+                return existing
 
-        cloned = self._clone_layer_node_tree(group_name, BaseMat, MBI)
-        if cloned is not None:
-            _LAYER_NODE_TOPOLOGY_CACHE[group_name] = cloned.name
-            return cloned
+            cloned = self._clone_layer_node_tree(group_name, BaseMat, MBI)
+            if cloned is not None:
+                _LAYER_NODE_TOPOLOGY_CACHE[group_name] = cloned.name
+                return cloned
 
         _ML_CACHE_STATS['layer_group_builds'] += 1
-        NG = bpy.data.node_groups.new(group_name, "ShaderNodeTree")
+        NG = new_tracked_datablock("node_groups", group_name, "ShaderNodeTree")
         NG['mlLayerCacheVersion'] = _ML_CACHE_VERSION
         NG['mlLayerBlueprintVersion'] = _ML_CACHE_VERSION
         NG['mlBaseTemplate'] = getattr(BaseMat, 'name', '')
@@ -1332,9 +1389,10 @@ class Multilayered:
         NG.links.new(rLevelsInGroup.outputs[0], rLevelsOutGroup.inputs[0])
         NG.links.new(MBN.outputs[0], mask_mixergroup.inputs['Microblend'])
         NG.links.new(MBN.outputs[1], mask_mixergroup.inputs['Microblend Alpha'])
-        _LAYER_NODE_TOPOLOGY_CACHE[group_name] = NG.name
-        global _LAYER_NODE_BLUEPRINT_NAME
-        _LAYER_NODE_BLUEPRINT_NAME = NG.name
+        if not fresh_token:
+            _LAYER_NODE_TOPOLOGY_CACHE[group_name] = NG.name
+            global _LAYER_NODE_BLUEPRINT_NAME
+            _LAYER_NODE_BLUEPRINT_NAME = NG.name
         return NG
 
     def setupMaterial(
@@ -1358,6 +1416,7 @@ class Multilayered:
         ml_main_ng.color_tag = 'SHADER'
         mlShaderNG = CurMat.nodes.new("ShaderNodeGroup")
         mlShaderNG.name = "Multilayered 1.8.0"
+        mlShaderNG["cp77MaterialToolsRole"] = "multilayer_root"
         mlShaderNG.location = (-50, 100)
         mlShaderNG.node_tree = ml_main_ng
         mlShaderNG.show_options = False
@@ -1448,6 +1507,8 @@ class Multilayered:
             LayerGroupN.width = 400
             LayerGroupN.node_tree = node_group
             LayerGroupN.name = "Mat_Mod_Layer_" + str(layer_index)
+            LayerGroupN["cp77MaterialToolsRole"] = "multilayer_layer"
+            LayerGroupN["cp77MaterialToolsLayer"] = layer_index + 1
             LayerGroupN['mlTemplate'] = material
             self._configure_layer_group_inputs(
                 LayerGroupN,

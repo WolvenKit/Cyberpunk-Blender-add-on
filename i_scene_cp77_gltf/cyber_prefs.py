@@ -1,10 +1,12 @@
-import bpy
-from bpy.props import (BoolProperty, CollectionProperty, EnumProperty, StringProperty)
+from .registration import register_owned_classes, unregister_owned_classes
+
+from .addon_identity import ADDON_PACKAGE
+from bpy.props import BoolProperty, StringProperty
 from bpy.types import AddonPreferences
 
 
 class CP77IOSuitePreferences(AddonPreferences):
-    bl_idname = __name__.split('.')[0]
+    bl_idname = ADDON_PACKAGE
 
     experimental_features: BoolProperty(
             name="Enable Experimental Features",
@@ -62,11 +64,6 @@ class CP77IOSuitePreferences(AddonPreferences):
             default=True,
             )
 
-    show_modtools: BoolProperty(
-            name="Show Mod Tools",
-            description="Show the Mod tools Tab in the 3d viewport",
-            default=True,
-            )
     non_verbose: BoolProperty(
             name="Turn off Verbose Logging",
             description="Turns off useful print statements to avoid clutter in the console",
@@ -111,9 +108,17 @@ class CP77IOSuitePreferences(AddonPreferences):
             col.prop(self, "show_animtools")
 
 
+_registered_classes = []
+
+
 def register_prefs():
-    bpy.utils.register_class(CP77IOSuitePreferences)
+    if not _registered_classes:
+        _registered_classes[:] = register_owned_classes((CP77IOSuitePreferences,))
 
 
 def unregister_prefs():
-    bpy.utils.unregister_class(CP77IOSuitePreferences)
+    failures = unregister_owned_classes(reversed(_registered_classes))
+    if not failures:
+        _registered_classes.clear()
+    if failures:
+        raise RuntimeError("; ".join(f"{cls.__name__}: {error}" for cls, error in failures))

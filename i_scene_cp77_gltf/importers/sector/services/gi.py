@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ....blender.transactions import track_created_datablock
 
 from dataclasses import dataclass
 
@@ -55,7 +56,7 @@ class GIResourceService:
             f"{context.node_type}_{debug_name}_{instance_index}"
         )
 
-        obj = bpy.data.objects.new(name, None)
+        obj = track_created_datablock("objects", bpy.data.objects.new(name, None))
         obj.empty_display_type = "CUBE"
         obj.empty_display_size = 0.75
         obj.display_type = "WIRE"

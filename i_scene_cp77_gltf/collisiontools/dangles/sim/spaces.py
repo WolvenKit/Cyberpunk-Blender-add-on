@@ -1,79 +1,25 @@
 from mathutils import Matrix, Vector
 
-
-RIG_SPACE_CONTRACT_CURRENT = "CP77_RE_MODEL_BL_BONE_X_NEGZ_Y_Y_Z_X_V1"
-RIG_SPACE_CONTRACT_DIRECT = "CP77_RE_MODEL_BL_BONE_DIRECT_V1"
-EDITOR_SPACE_CONTRACT = "CP77_REDENGINE_WORLD_MODEL_BONE_LOCAL_V1"
-_SUPPORTED_RIG_CONTRACTS = {
+from ....animation.rig_binding import (
+    is_read_rig_armature,
+    resolve_bone_name,
+    rig_space_contract,
+)
+from ....redSpace.contracts import (
+    BLENDER_BONE_LOCAL_TO_RED_CURRENT,
+    RED_LOCAL_TO_BLENDER_BONE_CURRENT,
     RIG_SPACE_CONTRACT_CURRENT,
     RIG_SPACE_CONTRACT_DIRECT,
-}
+)
 
-# read_rig.apply_bone_from_matrix builds the Blender edit-bone basis as:
-#   Blender X = -REDengine Z
-#   Blender Y =  REDengine Y
-#   Blender Z =  REDengine X
-# Model/armature-space positions are unchanged. Authored axes and local
-# transforms remain REDengine values until they cross this boundary.
-RE_TO_BLENDER_BONE_LOCAL_CURRENT = Matrix((
-    (0.0, 0.0, -1.0, 0.0),
-    (0.0, 1.0,  0.0, 0.0),
-    (1.0, 0.0,  0.0, 0.0),
-    (0.0, 0.0,  0.0, 1.0),
-))
-BLENDER_BONE_LOCAL_TO_RE_CURRENT = RE_TO_BLENDER_BONE_LOCAL_CURRENT.transposed()
+from ....redSpace.transforms import (
+    current_bone_local_transform_to_red,
+    red_local_transform_to_current_bone,
+)
 
-
-def merged_bone_name(name: str) -> str:
-    """Apply read_rig's MetaRig ``*_plug`` to ``*_slot`` name rule."""
-    value = str(name or "")
-    return f"{value[:-5]}_slot" if value.endswith("_plug") else value
-
-
-def source_bone_name(name: str) -> str:
-    """Return the legacy source-rig alias for a merged ``*_slot`` name."""
-    value = str(name or "")
-    return f"{value[:-5]}_plug" if value.endswith("_slot") else value
-
-
-def bone_name_candidates(name: str):
-    """Yield exact and MetaRig aliases in deterministic priority order."""
-    value = str(name or "")
-    if not value:
-        return
-    yield value
-    merged = merged_bone_name(value)
-    if merged != value:
-        yield merged
-    source = source_bone_name(value)
-    if source != value and source != merged:
-        yield source
-
-
-def is_read_rig_armature(arm_obj) -> bool:
-    if arm_obj is None or getattr(arm_obj, "type", None) != "ARMATURE":
-        return False
-    data = getattr(arm_obj, "data", None)
-    if data is None:
-        return False
-    return (
-        data.get("boneNames") is not None
-        and data.get("boneParentIndexes") is not None
-        and data.get("source_rig_file") is not None
-    )
-
-
-def rig_space_contract(arm_obj):
-    data = getattr(arm_obj, "data", None)
-    if data is not None:
-        stored = data.get("cp77_rig_space_contract")
-        if stored in _SUPPORTED_RIG_CONTRACTS:
-            return stored
-        if is_read_rig_armature(arm_obj):
-            return RIG_SPACE_CONTRACT_CURRENT
-    # Existing Dangle rigs were authored against read_rig's basis before the
-    # contract marker existed, so current-basis remains the compatibility default.
-    return RIG_SPACE_CONTRACT_CURRENT
+RE_TO_BLENDER_BONE_LOCAL_CURRENT = Matrix(RED_LOCAL_TO_BLENDER_BONE_CURRENT)
+BLENDER_BONE_LOCAL_TO_RE_CURRENT = Matrix(BLENDER_BONE_LOCAL_TO_RED_CURRENT)
+_SUPPORTED_RIG_CONTRACTS = {RIG_SPACE_CONTRACT_CURRENT, RIG_SPACE_CONTRACT_DIRECT}
 
 
 def re_to_blender_bone_local_matrix(arm_obj=None):
@@ -97,54 +43,15 @@ def blender_bone_axis_to_re(axis, arm_obj=None):
 
 
 def re_local_transform_to_blender_bone(matrix, arm_obj=None):
-    """Map an authored RED local transform into the generated bone basis.
-
-    This is intentionally a left multiplication, not a similarity transform:
-    the transform's input coordinates are still authored RED shape/constraint
-    coordinates, while its output must be Blender bone-local coordinates.
-    """
-    return re_to_blender_bone_local_matrix(arm_obj) @ matrix
+    if rig_space_contract(arm_obj) == RIG_SPACE_CONTRACT_DIRECT:
+        return matrix.copy()
+    return Matrix(red_local_transform_to_current_bone(matrix))
 
 
 def blender_bone_local_transform_to_re(matrix, arm_obj=None):
-    return blender_bone_local_to_re_matrix(arm_obj) @ matrix
-
-
-def resolve_pose_bone(arm_obj, bone_name):
-    pose = getattr(arm_obj, "pose", None)
-    if pose is None:
-        return None
-    for candidate in bone_name_candidates(bone_name):
-        bone = pose.bones.get(candidate)
-        if bone is not None:
-            return bone
-    return None
-
-
-def resolve_data_bone(arm_obj, bone_name):
-    data = getattr(arm_obj, "data", None)
-    bones = getattr(data, "bones", None) if data is not None else None
-    if bones is None:
-        return None
-    for candidate in bone_name_candidates(bone_name):
-        bone = bones.get(candidate)
-        if bone is not None:
-            return bone
-    return None
-
-
-def resolve_bone_name(arm_obj, bone_name) -> str:
-    bone = resolve_pose_bone(arm_obj, bone_name)
-    if bone is not None:
-        return bone.name
-    bone = resolve_data_bone(arm_obj, bone_name)
-    return bone.name if bone is not None else ""
-
-
-def bone_names_equivalent(arm_obj, left, right) -> bool:
-    left_name = resolve_bone_name(arm_obj, left)
-    right_name = resolve_bone_name(arm_obj, right)
-    return bool(left_name and right_name and left_name == right_name)
+    if rig_space_contract(arm_obj) == RIG_SPACE_CONTRACT_DIRECT:
+        return matrix.copy()
+    return Matrix(current_bone_local_transform_to_red(matrix))
 
 
 def operation_uses_default_branch(operation) -> bool:

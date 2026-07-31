@@ -1,4 +1,5 @@
 import bpy
+from ...registration import register_owned_classes, unregister_owned_classes
 from bpy.props import (
     BoolProperty, CollectionProperty, EnumProperty, FloatProperty, FloatVectorProperty, IntProperty, PointerProperty,
     StringProperty,
@@ -49,13 +50,13 @@ ENUM_PENDULUM_PROJECTION_TYPE = [
 ]
 
 def _active_chain_update(self, context):
-    from . import selection_sync
-    selection_sync.on_active_chain_update(self, context)
+    from .selection_sync import on_active_chain_update
+    on_active_chain_update(self, context)
 
 
 def _active_particle_update(self, context):
-    from . import selection_sync
-    selection_sync.on_active_particle_update(self, context)
+    from .selection_sync import on_active_particle_update
+    on_active_particle_update(self, context)
 
 
 ENUM_COLLISION_SHAPE_TYPE = [
@@ -469,14 +470,41 @@ classes = (
     DANGLE_AddonState,
 )
 
+_registered_classes = []
+_owned_properties = []
+
+
 def register():
-    for cls in classes:
-        bpy.utils.register_class(cls)
-    bpy.types.Object.dangle_state = PointerProperty(type=DANGLE_AddonState)
-    bpy.types.Scene.dangle_active_rig_index = IntProperty(default=0)
+    if _registered_classes:
+        return
+    try:
+        _registered_classes[:] = register_owned_classes(classes)
+        if hasattr(bpy.types.Object, "dangle_state"):
+            raise RuntimeError("RNA property already exists: Object.dangle_state")
+        bpy.types.Object.dangle_state = PointerProperty(type=DANGLE_AddonState)
+        _owned_properties.append((bpy.types.Object, "dangle_state"))
+        if hasattr(bpy.types.Scene, "dangle_active_rig_index"):
+            raise RuntimeError("RNA property already exists: Scene.dangle_active_rig_index")
+        bpy.types.Scene.dangle_active_rig_index = IntProperty(default=0)
+        _owned_properties.append((bpy.types.Scene, "dangle_active_rig_index"))
+    except Exception:
+        unregister()
+        raise
+
 
 def unregister():
-    del bpy.types.Scene.dangle_active_rig_index
-    del bpy.types.Object.dangle_state
-    for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
+    failures = []
+    for owner, name in reversed(_owned_properties):
+        try:
+            if hasattr(owner, name):
+                delattr(owner, name)
+        except Exception as error:
+            failures.append((name, error))
+    if not failures:
+        _owned_properties.clear()
+    class_failures = unregister_owned_classes(reversed(_registered_classes))
+    if not class_failures:
+        _registered_classes.clear()
+    failures.extend((cls.__name__, error) for cls, error in class_failures)
+    if failures:
+        raise RuntimeError("; ".join(f"{name}: {error}" for name, error in failures))

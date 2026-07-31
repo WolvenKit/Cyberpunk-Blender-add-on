@@ -4,12 +4,13 @@ from dataclasses import dataclass
 import hashlib
 import os
 import random
-from ...entity_import import EntityImportRequest, import_entity
+from ...entity import EntityImportRequest, import_entity
 from ...common.mesh_assets import get_group, meshes_from_mesheswapps
-from ....jsontool import JSONTool, resolve_requested_appearance_name
+from ...common.entity_data import (
+    resolve_ent_appearance_alias,
+    resolve_requested_appearance_name,
+)
 from ..context import SectorContentError
-from ..options import MESH_GLB_EXTENSIONS
-from ...common.resources import resolve_mesh_export
 from ...common.paths import (
     absolute_path_key,
     depot_path_key,
@@ -17,13 +18,11 @@ from ...common.paths import (
     path_key,
     trim_name as _trim_name,
 )
-from ...common.values import appearance_name as _appearance_name
+from ....assetio.values import appearance_name as _appearance_name
 
 
-_ENTITY_MASTER_CACHE_VERSION = 3
+_ENTITY_MASTER_CACHE_VERSION = 4
 _UNSET = object()
-
-
 
 
 def _select_entity_appearance(
@@ -55,9 +54,31 @@ def _select_entity_appearance(
             return appearance_names[0]
         return "default"
 
-    return resolved or requested
+    index, appearance_name = resolve_ent_appearance_alias(
+        requested,
+        parsed_entity.appearances,
+        parsed_entity.appearances_by_appearance,
+        parsed_entity.appearances_by_name,
+    )
+    if index >= 0:
+        return appearance_name or resolved or requested
 
-
+    default_name = resolve_requested_appearance_name(
+        "default",
+        parsed_entity.default_appearance,
+        parsed_entity.appearances,
+        parsed_entity.appearances_by_appearance,
+        parsed_entity.appearances_by_name,
+    )
+    default_index, default_resolved = resolve_ent_appearance_alias(
+        default_name,
+        parsed_entity.appearances,
+        parsed_entity.appearances_by_appearance,
+        parsed_entity.appearances_by_name,
+    )
+    if default_index >= 0:
+        return default_resolved or default_name
+    return appearance_names[0] if appearance_names else "default"
 
 
 def _entity_collection_name(entpath, appearance_name):
@@ -88,13 +109,17 @@ def _entity_master_signature(
     *,
     with_materials,
     include_lights,
+    include_occluders,
+    include_proxies,
 ):
     payload = (
         f"{_ENTITY_MASTER_CACHE_VERSION}|"
         f"{absolute_path_key(entpath)}|"
         f"{appearance}|"
         f"materials={int(bool(with_materials))}|"
-        f"lights={int(bool(include_lights))}"
+        f"lights={int(bool(include_lights))}|"
+        f"occluders={int(bool(include_occluders))}|"
+        f"proxies={int(bool(include_proxies))}"
     )
     return hashlib.sha1(
         payload.encode("utf-8")
@@ -229,11 +254,8 @@ class _MeshDependencyService:
         key = depot_path_key(depot_path)
         if key in self.cache:
             return self.cache[key] or None
-        resolved = resolve_mesh_export(
-            self.session.asset_index,
-            depot_path,
-            warn=False,
-        )
+        asset = self.session.meshes.resolve(depot_path)
+        resolved = asset.local_path if asset is not None else ""
         self.cache[key] = resolved or ""
         return resolved
 
@@ -252,7 +274,6 @@ class EntityMasterService:
     def __init__(self, session):
         self.session = session
         self.cache = session.caches.entity_masters
-        self.documents = session.caches.entity_documents
         self.resolutions = session.caches.entity_resolutions
         self.stats = {
             "document_hits": 0,
@@ -276,16 +297,11 @@ class EntityMasterService:
         )
 
     def _parsed_entity(self, entpath):
-        path_id = absolute_path_key(entpath)
-        parsed = self.documents.get(path_id)
-        if parsed is not None:
-            self.stats["document_hits"] += 1
-            return parsed
-
-        self.stats["document_misses"] += 1
-        parsed = JSONTool.load_entity(entpath)
-        if parsed is not None:
-            self.documents[path_id] = parsed
+        before = self.session.entities.stats
+        parsed = self.session.entities.load(entpath)
+        after = self.session.entities.stats
+        self.stats["document_hits"] += after["hits"] - before["hits"]
+        self.stats["document_misses"] += after["misses"] - before["misses"]
         return parsed
 
     def _selected_appearance(
@@ -364,11 +380,15 @@ class EntityMasterService:
         )
         with_materials = bool(self.session.options.with_materials)
         include_lights = bool(self.session.options.with_lights)
+        include_occluders = bool(self.session.options.import_occluders)
+        include_proxies = bool(self.session.options.import_proxies)
         signature = _entity_master_signature(
             entpath,
             selected_appearance,
             with_materials=with_materials,
             include_lights=include_lights,
+            include_occluders=include_occluders,
+            include_proxies=include_proxies,
         )
         path_id = absolute_path_key(entpath)
         cache_key = (
@@ -376,6 +396,8 @@ class EntityMasterService:
             selected_appearance,
             with_materials,
             include_lights,
+            include_occluders,
+            include_proxies,
         )
 
         collection = self.cache.get(cache_key)
@@ -387,12 +409,6 @@ class EntityMasterService:
                 collection.get("sectorEntityMasterSignature", "")
             )
             if stored_signature != signature:
-                self.cache.pop(cache_key, None)
-                collection = None
-            elif (
-                with_materials
-                and not _collection_has_materials(collection)
-            ):
                 self.cache.pop(cache_key, None)
                 collection = None
 
@@ -427,15 +443,26 @@ class EntityMasterService:
                     appearances=(selected_appearance,),
                     parent_collection_name="MasterInstances",
                     mesh_files=files.mesh_glbs,
-                    mesh_json_files=files.mesh_jsons,
                     app_files=files.appearance_jsons,
-                    animation_files=files.animation_glbs,
-                    rig_json_files=files.rig_jsons,
+                    animation_files=(),
                     parsed_entity=parsed_entity,
                     include_lights=include_lights,
+                    include_occluders=include_occluders,
+                    include_proxies=include_proxies,
+                    include_animations=False,
                     imported_collections_out=imported_collections,
+                    asset_index=self.session.asset_index,
+                    documents=self.session.documents,
+                    material_resources=self.session.material_resources,
+                    manage_master_visibility=False,
+                    transactional=False,
                 )
-                import_entity(request)
+                import_result = import_entity(request)
+                if not import_result.ok:
+                    raise MasterAssetError(
+                        "Entity import reported required-content failures: "
+                        + "; ".join(import_result.failures)
+                    )
                 collection = self._collection_from_import_output(
                     imported_collections,
                     selected_appearance,
@@ -472,6 +499,8 @@ class EntityMasterService:
         collection["sectorEntityAppearance"] = selected_appearance
         collection["sectorEntityRequestedAppearance"] = requested
         collection["sectorEntityImportLights"] = include_lights
+        collection["sectorEntityImportOccluders"] = include_occluders
+        collection["sectorEntityImportProxies"] = include_proxies
         collection["sectorEntityWithMaterials"] = with_materials
         collection["sectorEntityMasterSignature"] = signature
         identity = signature[:8]
@@ -497,9 +526,8 @@ class MasterAssetServices:
     def prepare_meshes(self, planned_sectors, masters):
         standard_count = 0
         proxy_count = 0
-        standard_paths = set()
-        meshes = {}
-        appearance_keys = {}
+        entries_by_key = {}
+
         for planned in planned_sectors:
             for plan in planned.plans:
                 if not plan.enabled:
@@ -512,65 +540,79 @@ class MasterAssetServices:
                         proxy_count += 1
                     else:
                         standard_count += 1
-                        standard_paths.add(dependency.depot_path)
-                    entry = meshes.setdefault(
-                        dependency.depot_path,
-                        {
-                            "appearances": [],
-                            "sector": dependency.source_sector,
-                        },
-                    )
-                    appearance_key = _appearance_name(
-                        dependency.appearance
-                    )
-                    seen = appearance_keys.setdefault(
-                        dependency.depot_path,
-                        set(),
-                    )
-                    if appearance_key not in seen:
-                        seen.add(appearance_key)
-                        entry["appearances"].append(
-                            dependency.appearance
-                        )
 
+                    canonical_key = depot_path_key(dependency.depot_path)
+                    entry = entries_by_key.get(canonical_key)
+                    if entry is None:
+                        entry = {
+                            "depot_path": dependency.depot_path,
+                            "aliases": [],
+                            "appearances": [],
+                            "appearance_keys": set(),
+                            "sector": dependency.source_sector,
+                            "standard": not is_proxy,
+                        }
+                        entries_by_key[canonical_key] = entry
+                    elif not is_proxy:
+                        entry["standard"] = True
+
+                    if dependency.depot_path not in entry["aliases"]:
+                        entry["aliases"].append(dependency.depot_path)
+                    appearance_key = _appearance_name(dependency.appearance)
+                    if appearance_key not in entry["appearance_keys"]:
+                        entry["appearance_keys"].add(appearance_key)
+                        entry["appearances"].append(dependency.appearance)
+
+        meshes = {}
         source_paths = {}
         meshes_with_appearances = {}
-        for meshname, mesh_data in meshes.items():
-            service = (
-                self.meshes
-                if meshname in standard_paths
-                else self.proxies
-            )
+        for entry in entries_by_key.values():
+            meshname = entry["depot_path"]
+            service = self.meshes if entry["standard"] else self.proxies
             meshpath = service.resolve(meshname)
+            mesh_data = {
+                "appearances": list(entry["appearances"]),
+                "sector": entry["sector"],
+            }
             if meshpath:
                 mesh_data["meshpath"] = meshpath
-                source_paths[meshname] = meshpath
+                for alias in entry["aliases"]:
+                    source_paths[alias] = meshpath
             else:
                 print(f"Mesh export not indexed: {meshname}")
+
             request = {
-                "apps": [list(mesh_data["appearances"])],
-                "sectors": (
-                    [mesh_data["sector"]]
-                    if mesh_data.get("sector")
-                    else []
-                ),
+                "apps": [list(entry["appearances"])],
+                "sectors": [entry["sector"]] if entry["sector"] else [],
             }
-            if mesh_data.get("meshpath"):
-                request["meshpath"] = mesh_data["meshpath"]
+            if meshpath:
+                request["meshpath"] = meshpath
+            meshes[meshname] = mesh_data
             meshes_with_appearances[meshname] = request
 
-        meshes_from_mesheswapps(
+        existing_master_children = {
+            id(child) for child in masters.children
+        }
+        mesh_failures = meshes_from_mesheswapps(
             meshes_with_appearances,
             asset_index=self.session.asset_index,
             from_mesh_no=0,
             to_mesh_no=100000,
             with_mats=self.session.options.with_materials,
             Masters=masters,
+            mesh_repository=self.session.meshes,
+            document_session=self.session.documents,
+            material_resources=self.session.material_resources,
         )
+        for message in mesh_failures:
+            print(f"Sector import warning: {message}")
 
         empty = [
-            child for child in masters.children
-            if len(child.objects) < 1
+            child
+            for child in masters.children
+            if id(child) not in existing_master_children
+            and len(child.objects) == 0
+            and len(child.children) == 0
         ]
         for collection in empty:
             masters.children.unlink(collection)
