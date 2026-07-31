@@ -4,7 +4,7 @@ id = "i_scene_cp77_gltf"
 version = "2.1.0"
 name = "Cyberpunk 2077 IO Suite"
 tagline = "Import and export Cyberpunk 2077 assets with WolvenKit"
-maintainer = "WolvenKit contributors"
+maintainer = "RedModding Organization"
 type = "add-on"
 
 website = "https://github.com/WolvenKit/Cyberpunk-Blender-add-on"
