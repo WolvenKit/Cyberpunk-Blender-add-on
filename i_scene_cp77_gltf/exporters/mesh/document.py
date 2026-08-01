@@ -18,6 +18,7 @@ from ...redSpace.contracts import (
 )
 from ...redSpace.transforms import red_matrix_to_gltf
 from ...gltf.provenance import DIRECT_MESH_GENERATOR
+from ..common.atomic import atomic_replace_staged
 from ..common.glb import GLBBuilder, encode_glb
 from ...blender.mesh_validation import VERT_LIMIT, _loop_vertex_indices, _quantize
 
@@ -63,8 +64,6 @@ _SOURCE_SKIN_BINDING_KEY = "cp77_direct_mesh_skin_binding"
 _MESH_SOURCE_REST_SNAPSHOT_KEY = "cp77_direct_mesh_source_rest_json"
 _SOURCE_MATERIAL_INDEX_KEY = "cp77_direct_material_index"
 
-# Object custom properties written by the import path; they carry no meaning for
-# WolvenKit and are stripped from the exported node extras.
 _INTERNAL_OBJECT_KEYS = frozenset(
     {
         "cp77_lod",
