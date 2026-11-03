@@ -1,15 +1,8 @@
 from __future__ import annotations
-<<<<<<< Updated upstream
 from ....blender.transactions import track_created_datablock
 
 import bpy
 
-=======
-
-import bpy
-
-from ....blender.transactions import track_created_datablock
->>>>>>> Stashed changes
 
 _BOX_FACES = (
     (0, 3, 2, 1),
@@ -68,7 +61,6 @@ class PrimitiveMeshService:
             extents,
             shared=shared,
         )
-<<<<<<< Updated upstream
 
     def unit_box(self, name, half_extent=1.0, *, shared=True):
         extent = float(half_extent)
@@ -77,5 +69,3 @@ class PrimitiveMeshService:
             (extent, extent, extent),
             shared=shared,
         )
-=======
->>>>>>> Stashed changes

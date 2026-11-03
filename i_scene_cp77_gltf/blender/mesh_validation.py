@@ -4,18 +4,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
-<<<<<<< Updated upstream
 
 VERT_LIMIT = 65535
 WEIGHT_EPSILON = 1e-5
 _QUANTIZE_SCALE = 1_000_000
-=======
-from ..bartmoss.arrays import float32_bit_keys, stable_unique_integer_rows
-from ..gltf.mesh_contract import MAX_SKIN_INFLUENCES, SKIN_WEIGHT_EPSILON
-
-VERT_LIMIT = 65535
-WEIGHT_EPSILON = 1e-5
->>>>>>> Stashed changes
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,17 +27,9 @@ class MeshValidationOptions:
     fix_dissolve_degenerate_uvs: bool = False
     fix_assign_unweighted_vertices: bool = False
     fix_remove_unused_bones: bool = False
-<<<<<<< Updated upstream
 
     geometry_epsilon: float = 1e-10
     uv_epsilon: float = 1e-17
-=======
-    fix_limit_influences: bool = False
-
-    geometry_epsilon: float = 1e-10
-    uv_epsilon: float = 1e-17
-    check_vertex_limit: bool = True
->>>>>>> Stashed changes
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,7 +73,6 @@ def _loop_vertex_indices(mesh):
     return values
 
 
-<<<<<<< Updated upstream
 def _quantize(values):
     return np.round(values * _QUANTIZE_SCALE).astype(np.int64, copy=False)
 
@@ -107,20 +90,12 @@ def predicted_export_vertex_count(mesh):
     vertex_count = len(mesh.vertices)
     if not mesh.loop_triangles or not mesh.loops:
         return vertex_count
-=======
-def predicted_export_vertex_count(mesh):
-    """Estimate splits from stored corners"""
-    mesh.calc_loop_triangles()
-    if not mesh.loop_triangles or not mesh.loops:
-        return 0
->>>>>>> Stashed changes
 
     loop_vertices = _loop_vertex_indices(mesh).astype(np.int64, copy=False)
     columns = []
 
     for layer in getattr(mesh, "uv_layers", ()):
         values = np.empty(len(mesh.loops) * 2, dtype=np.float32)
-<<<<<<< Updated upstream
         layer.data.foreach_get("uv", values)
         values = _quantize(values.reshape(-1, 2))
         columns.extend((values[:, 0], values[:, 1]))
@@ -132,44 +107,18 @@ def predicted_export_vertex_count(mesh):
         values = np.empty(len(mesh.loops) * 3, dtype=np.float32)
         mesh.loops.foreach_get("normal", values)
         values = _quantize(values.reshape(-1, 3))
-=======
-        layer.uv.foreach_get("vector", values)
-        values = float32_bit_keys(values.reshape(-1, 2))
-        columns.extend((values[:, 0], values[:, 1]))
-
-    has_split_normals = getattr(mesh, "normals_domain", "CORNER") != "POINT"
-    if has_split_normals and len(mesh.corner_normals) == len(mesh.loops):
-        values = np.empty(len(mesh.loops) * 3, dtype=np.float32)
-        mesh.corner_normals.foreach_get("vector", values)
-        values = float32_bit_keys(values.reshape(-1, 3))
->>>>>>> Stashed changes
         columns.extend((values[:, 0], values[:, 1], values[:, 2]))
 
     for attribute in getattr(mesh, "color_attributes", ()):
         if attribute.domain != "CORNER":
             continue
         values = np.empty(len(mesh.loops) * 4, dtype=np.float32)
-<<<<<<< Updated upstream
         attribute.data.foreach_get("color", values)
         values = _quantize(values.reshape(-1, 4)[:, :3])
         columns.extend((values[:, 0], values[:, 1], values[:, 2]))
 
     counts = _count_unique_corner_signatures(loop_vertices, columns, vertex_count)
     return int(counts.sum())
-=======
-        attribute.data.foreach_get(
-            "color_srgb" if attribute.data_type == "BYTE_COLOR" else "color", values
-        )
-        values = float32_bit_keys(values.reshape(-1, 4))
-        columns.extend((values[:, 0], values[:, 1], values[:, 2], values[:, 3]))
-
-    triangle_loops = np.empty(len(mesh.loop_triangles) * 3, dtype=np.int32)
-    mesh.loop_triangles.foreach_get("loops", triangle_loops)
-    representatives, _ = stable_unique_integer_rows(
-        [loop_vertices[triangle_loops]] + [column[triangle_loops] for column in columns]
-    )
-    return len(representatives)
->>>>>>> Stashed changes
 
 
 def find_degenerate_faces(mesh, epsilon=1e-10):
@@ -210,11 +159,7 @@ def find_degenerate_uv_faces(mesh, epsilon=1e-17):
         return np.empty(0, dtype=np.int32)
 
     coordinates = np.empty(len(mesh.loops) * 2, dtype=np.float64)
-<<<<<<< Updated upstream
     layer.data.foreach_get("uv", coordinates)
-=======
-    layer.uv.foreach_get("vector", coordinates)
->>>>>>> Stashed changes
     coordinates = coordinates.reshape(-1, 2)
 
     triangle_loops = np.empty(len(mesh.loop_triangles) * 3, dtype=np.int32)
@@ -240,31 +185,6 @@ def find_degenerate_uv_faces(mesh, epsilon=1e-17):
     return np.flatnonzero(counts > 0)
 
 
-<<<<<<< Updated upstream
-=======
-def deform_group_indices(mesh_object, armature):
-    """The indices of the object's vertex groups that bind to deform bones, the only ones the skin exports"""
-    deform = {bone.name for bone in armature.data.bones if bone.use_deform}
-    return {group.index for group in mesh_object.vertex_groups if group.name in deform}
-
-
-def crowded_vertex_indices(mesh, groups, limit=MAX_SKIN_INFLUENCES):
-    """The vertices weighted to more than limit of the vertex groups groups, and the most any vertex has"""
-    crowded = []
-    most = 0
-    for vertex in mesh.vertices:
-        count = sum(
-            1
-            for element in vertex.groups
-            if element.group in groups and element.weight > SKIN_WEIGHT_EPSILON
-        )
-        if count > limit:
-            crowded.append(vertex.index)
-            most = max(most, count)
-    return tuple(crowded), most
-
-
->>>>>>> Stashed changes
 def unweighted_vertex_indices(mesh):
     return tuple(
         vertex.index
@@ -273,19 +193,9 @@ def unweighted_vertex_indices(mesh):
     )
 
 
-<<<<<<< Updated upstream
 def _mandatory_mesh_issues(mesh_object, is_skinned):
     issues = []
     export_count = predicted_export_vertex_count(mesh_object.data)
-=======
-def _mandatory_mesh_issues(mesh_object, is_skinned, options):
-    issues = []
-    export_count = (
-        predicted_export_vertex_count(mesh_object.data)
-        if options.check_vertex_limit
-        else 0
-    )
->>>>>>> Stashed changes
     if export_count > VERT_LIMIT:
         issues.append(
             ValidationIssue(
@@ -313,12 +223,6 @@ def _mandatory_mesh_issues(mesh_object, is_skinned, options):
         return issues
 
     modifier = armature_modifier(mesh_object)
-<<<<<<< Updated upstream
-=======
-    if modifier is None and not mesh_object.vertex_groups:
-        # A submesh with no weights at all is a static part of the skinned mesh and exports without a skin.
-        return issues
->>>>>>> Stashed changes
     if modifier is None:
         issues.append(
             ValidationIssue(
@@ -331,15 +235,7 @@ def _mandatory_mesh_issues(mesh_object, is_skinned, options):
 
     bone_names = {bone.name for bone in modifier.object.data.bones}
     unmatched_groups = tuple(
-<<<<<<< Updated upstream
         sorted(group.name for group in mesh_object.vertex_groups if group.name not in bone_names)
-=======
-        sorted(
-            group.name
-            for group in mesh_object.vertex_groups
-            if group.name not in bone_names
-        )
->>>>>>> Stashed changes
     )
     if unmatched_groups:
         issues.append(
@@ -351,23 +247,6 @@ def _mandatory_mesh_issues(mesh_object, is_skinned, options):
                 details=unmatched_groups,
             )
         )
-<<<<<<< Updated upstream
-=======
-
-    crowded, most = crowded_vertex_indices(
-        mesh_object.data, deform_group_indices(mesh_object, modifier.object)
-    )
-    if crowded:
-        issues.append(
-            ValidationIssue(
-                "influence_limit",
-                f"'{mesh_object.name}' has {len(crowded)} vertices with more than {MAX_SKIN_INFLUENCES} bone "
-                f"influences (the most is {most}); the export supports {MAX_SKIN_INFLUENCES}.",
-                mesh_object.name,
-                details=crowded,
-            )
-        )
->>>>>>> Stashed changes
     return issues
 
 
@@ -389,14 +268,7 @@ def _optional_mesh_issues(mesh_object, is_skinned, options):
         )
 
     if options.check_degenerate_faces:
-<<<<<<< Updated upstream
         indices = tuple(int(value) for value in find_degenerate_faces(mesh, options.geometry_epsilon))
-=======
-        indices = tuple(
-            int(value)
-            for value in find_degenerate_faces(mesh, options.geometry_epsilon)
-        )
->>>>>>> Stashed changes
         if indices:
             issues.append(
                 ValidationIssue(
@@ -407,18 +279,8 @@ def _optional_mesh_issues(mesh_object, is_skinned, options):
                 )
             )
 
-<<<<<<< Updated upstream
     if options.check_degenerate_uvs and getattr(mesh.uv_layers, "active", None) is not None:
         indices = tuple(int(value) for value in find_degenerate_uv_faces(mesh, options.uv_epsilon))
-=======
-    if (
-        options.check_degenerate_uvs
-        and getattr(mesh.uv_layers, "active", None) is not None
-    ):
-        indices = tuple(
-            int(value) for value in find_degenerate_uv_faces(mesh, options.uv_epsilon)
-        )
->>>>>>> Stashed changes
         if indices:
             issues.append(
                 ValidationIssue(
@@ -429,15 +291,7 @@ def _optional_mesh_issues(mesh_object, is_skinned, options):
                 )
             )
 
-<<<<<<< Updated upstream
     if is_skinned and options.check_unweighted_vertices and armature_modifier(mesh_object):
-=======
-    if (
-        is_skinned
-        and options.check_unweighted_vertices
-        and armature_modifier(mesh_object)
-    ):
->>>>>>> Stashed changes
         indices = unweighted_vertex_indices(mesh)
         if indices:
             issues.append(
@@ -470,17 +324,7 @@ def _unused_bone_issues(meshes, options):
             for mesh_object in bound_meshes
             for group in mesh_object.vertex_groups
         }
-<<<<<<< Updated upstream
         unused = tuple(sorted(bone.name for bone in armature.data.bones if bone.name not in group_names))
-=======
-        unused = tuple(
-            sorted(
-                bone.name
-                for bone in armature.data.bones
-                if bone.name not in group_names
-            )
-        )
->>>>>>> Stashed changes
         if unused:
             issues.append(
                 ValidationIssue(
@@ -499,11 +343,7 @@ def collect_mesh_validation_issues(meshes, *, is_skinned=False, options=None):
     meshes = tuple(meshes)
     issues = []
     for mesh_object in meshes:
-<<<<<<< Updated upstream
         issues.extend(_mandatory_mesh_issues(mesh_object, is_skinned))
-=======
-        issues.extend(_mandatory_mesh_issues(mesh_object, is_skinned, options))
->>>>>>> Stashed changes
         issues.extend(_optional_mesh_issues(mesh_object, is_skinned, options))
     if is_skinned:
         issues.extend(_unused_bone_issues(meshes, options))
@@ -536,8 +376,4 @@ def issue_fix_enabled(issue, options):
         "degenerate_uvs": options.fix_dissolve_degenerate_uvs,
         "unweighted_vertices": options.fix_assign_unweighted_vertices,
         "unused_bones": options.fix_remove_unused_bones,
-<<<<<<< Updated upstream
-=======
-        "influence_limit": options.fix_limit_influences,
->>>>>>> Stashed changes
     }.get(issue.issue_type, False)

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-<<<<<<< Updated upstream
 from ..model import ImportDependency
 from ..options import OPTIONAL_SECTOR_NODE_TYPES
 from ..registry import NODE_HANDLERS
@@ -10,13 +9,6 @@ from ....assetio.values import nested_dict
 
 STANDARD_PHASE = 20
 PROXY_PHASE = 30
-=======
-from ....assetio.values import nested_dict
-from ...common.paths import depot_path_from_value
-from ..model import PROXY_PHASE, STANDARD_PHASE, ImportDependency
-from ..options import ENTITY_NODE_TYPES, PROXY_NODE_TYPES
-from ..registry import NODE_HANDLERS
->>>>>>> Stashed changes
 
 _DEFAULT_APPEARANCE = {
     "$type": "CName",
@@ -24,7 +16,6 @@ _DEFAULT_APPEARANCE = {
     "$value": "default",
 }
 
-<<<<<<< Updated upstream
 ENTITY_NODE_TYPES = frozenset({
     "worldEntityNode",
     "worldDeviceNode",
@@ -59,41 +50,6 @@ INSTANCED_DESTRUCTIBLE_NODE_TYPES = frozenset({
 })
 
 PROXY_NODE_TYPES = OPTIONAL_SECTOR_NODE_TYPES["proxies"]
-=======
-DIRECT_MESH_NODE_TYPES = frozenset(
-    {
-        "worldInstancedMeshNode",
-    }
-)
-
-STANDARD_MESH_NODE_TYPES = frozenset(
-    {
-        "worldStaticMeshNode",
-        "worldRotatingMeshNode",
-        "worldAdvertisingNode",
-        "worldAdvertisementNode",
-        "worldPhysicalDestructionNode",
-        "worldBakedDestructionNode",
-        "worldTerrainMeshNode",
-        "worldBendedMeshNode",
-        "worldCableMeshNode",
-        "worldClothMeshNode",
-        "worldDynamicMeshNode",
-        "worldMeshNode",
-        "worldStaticOccluderMeshNode",
-        "worldDecorationMeshNode",
-        "worldFoliageNode",
-        "worldWaterPatchNode",
-        "worldInstancedOccluderNode",
-    }
-)
-
-INSTANCED_DESTRUCTIBLE_NODE_TYPES = frozenset(
-    {
-        "worldInstancedDestructibleMeshNode",
-    }
-)
->>>>>>> Stashed changes
 
 
 def _default_appearance():
@@ -106,20 +62,15 @@ def _raw_mesh_appearance(data):
 
 def _has_direct_mesh(data):
     mesh = data.get("mesh") if isinstance(data, dict) else None
-<<<<<<< Updated upstream
     return (
         isinstance(mesh, dict)
         and isinstance(mesh.get("DepotPath"), (dict, str))
     )
-=======
-    return isinstance(mesh, dict) and isinstance(mesh.get("DepotPath"), (dict, str))
->>>>>>> Stashed changes
 
 
 def _mesh_dependency(node, sector_name, appearance, phase):
     if not node.mesh_path:
         return ()
-<<<<<<< Updated upstream
     return (ImportDependency(
         kind="mesh",
         depot_path=node.mesh_path,
@@ -128,25 +79,12 @@ def _mesh_dependency(node, sector_name, appearance, phase):
         source_node_index=node.index,
         placement_phase=phase,
     ),)
-=======
-    return (
-        ImportDependency(
-            kind="mesh",
-            depot_path=node.mesh_path,
-            appearance=appearance,
-            source_sector=sector_name,
-            source_node_index=node.index,
-            placement_phase=phase,
-        ),
-    )
->>>>>>> Stashed changes
 
 
 class EntityDependencyHandler:
     placement_phase = STANDARD_PHASE
 
     def collect_dependencies(self, parsed_sector, node):
-<<<<<<< Updated upstream
         dependencies = list(_mesh_dependency(
             node,
             parsed_sector.sector_name,
@@ -162,27 +100,6 @@ class EntityDependencyHandler:
                 source_node_index=node.index,
                 placement_phase=self.placement_phase,
             ))
-=======
-        dependencies = list(
-            _mesh_dependency(
-                node,
-                parsed_sector.sector_name,
-                _raw_mesh_appearance(node.data),
-                self.placement_phase,
-            )
-        )
-        if node.entity_template_path:
-            dependencies.append(
-                ImportDependency(
-                    kind="entity",
-                    depot_path=node.entity_template_path,
-                    appearance=node.entity_appearance or "default",
-                    source_sector=parsed_sector.sector_name,
-                    source_node_index=node.index,
-                    placement_phase=self.placement_phase,
-                )
-            )
->>>>>>> Stashed changes
         return tuple(dependencies)
 
 
@@ -236,19 +153,14 @@ class ProxyMeshDependencyHandler(StandardMeshDependencyHandler):
 
 
 def _resource_depot_path(data, key):
-<<<<<<< Updated upstream
     return depot_path_from_value(
         data.get(key) if isinstance(data, dict) else None
     )
-=======
-    return depot_path_from_value(data.get(key) if isinstance(data, dict) else None)
->>>>>>> Stashed changes
 
 
 def _resource_dependency(parsed_sector, node, kind, depot_path, phase):
     if not depot_path:
         return ()
-<<<<<<< Updated upstream
     return (ImportDependency(
         kind=kind,
         depot_path=depot_path,
@@ -257,18 +169,6 @@ def _resource_dependency(parsed_sector, node, kind, depot_path, phase):
         source_node_index=node.index,
         placement_phase=phase,
     ),)
-=======
-    return (
-        ImportDependency(
-            kind=kind,
-            depot_path=depot_path,
-            appearance="",
-            source_sector=parsed_sector.sector_name,
-            source_node_index=node.index,
-            placement_phase=phase,
-        ),
-    )
->>>>>>> Stashed changes
 
 
 class SingleResourceDependencyHandler:
@@ -305,7 +205,6 @@ class SemanticResourceDependencyHandler:
                 "resource",
             )
             if workspot:
-<<<<<<< Updated upstream
                 dependencies.append(ImportDependency(
                     kind="workspot",
                     depot_path=workspot,
@@ -314,18 +213,6 @@ class SemanticResourceDependencyHandler:
                     source_node_index=node.index,
                     placement_phase=self.placement_phase,
                 ))
-=======
-                dependencies.append(
-                    ImportDependency(
-                        kind="cp77_workspot",
-                        depot_path=workspot,
-                        appearance="",
-                        source_sector=parsed_sector.sector_name,
-                        source_node_index=node.index,
-                        placement_phase=self.placement_phase,
-                    )
-                )
->>>>>>> Stashed changes
 
         elif node.node_type == "worldCompiledSmartObjectsNode":
             resource = _resource_depot_path(
@@ -333,7 +220,6 @@ class SemanticResourceDependencyHandler:
                 "resource",
             )
             if resource:
-<<<<<<< Updated upstream
                 dependencies.append(ImportDependency(
                     kind="smartobjects",
                     depot_path=resource,
@@ -342,27 +228,11 @@ class SemanticResourceDependencyHandler:
                     source_node_index=node.index,
                     placement_phase=self.placement_phase,
                 ))
-=======
-                dependencies.append(
-                    ImportDependency(
-                        kind="smartobjects",
-                        depot_path=resource,
-                        appearance="",
-                        source_sector=parsed_sector.sector_name,
-                        source_node_index=node.index,
-                        placement_phase=self.placement_phase,
-                    )
-                )
->>>>>>> Stashed changes
 
         elif node.node_type == "worldSmartObjectNode":
             smart_data = nested_dict(data, "object", "Data")
             for kind, key in (
-<<<<<<< Updated upstream
                 ("workspot", "workspotTemplate"),
-=======
-                ("cp77_workspot", "workspotTemplate"),
->>>>>>> Stashed changes
                 ("actionanimdb", "motionActionDatabase"),
             ):
                 depot_path = _resource_depot_path(
@@ -371,7 +241,6 @@ class SemanticResourceDependencyHandler:
                 )
                 if not depot_path:
                     continue
-<<<<<<< Updated upstream
                 dependencies.append(ImportDependency(
                     kind=kind,
                     depot_path=depot_path,
@@ -380,18 +249,6 @@ class SemanticResourceDependencyHandler:
                     source_node_index=node.index,
                     placement_phase=self.placement_phase,
                 ))
-=======
-                dependencies.append(
-                    ImportDependency(
-                        kind=kind,
-                        depot_path=depot_path,
-                        appearance="",
-                        source_sector=parsed_sector.sector_name,
-                        source_node_index=node.index,
-                        placement_phase=self.placement_phase,
-                    )
-                )
->>>>>>> Stashed changes
 
         return tuple(dependencies)
 

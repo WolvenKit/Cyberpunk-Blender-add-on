@@ -1,18 +1,9 @@
 from bpy.types import Operator
 
 from ...blender.mesh_validation import MeshValidationOptions
-<<<<<<< Updated upstream
 from ..model import MeshValidationRequest
 from ..services.mesh_validation_service import fix_selected_meshes, validate_selected_meshes
 from .result import finish_operator
-=======
-from ...blender.operator_results import finish_operator
-from ..model import MeshValidationRequest
-from ..services.mesh_validation_service import (
-    fix_selected_meshes,
-    validate_selected_meshes,
-)
->>>>>>> Stashed changes
 
 
 def _request(context, *, try_fix):
@@ -27,13 +18,7 @@ def _request(context, *, try_fix):
             check_unweighted_vertices=bool(props.check_unweighted_vertices),
             check_unused_bones=bool(props.check_unused_bones),
             try_fix=bool(try_fix),
-<<<<<<< Updated upstream
             fix_remove_unmatched_vertex_groups=bool(props.fix_remove_unmatched_vertex_groups),
-=======
-            fix_remove_unmatched_vertex_groups=bool(
-                props.fix_remove_unmatched_vertex_groups
-            ),
->>>>>>> Stashed changes
             fix_apply_autofitter_shape_keys=bool(props.fix_apply_autofitter_shape_keys),
             fix_add_missing_uv=bool(props.fix_add_missing_uv),
             fix_dissolve_degenerate_faces=bool(props.fix_dissolve_degenerate_faces),
@@ -46,13 +31,8 @@ def _request(context, *, try_fix):
 
 def _store_result(context, result):
     props = context.scene.cp77_mesh_validation
-<<<<<<< Updated upstream
     summary = result.payload
     props.last_status = "PASS" if result.ok and result.severity == "INFO" else result.severity
-=======
-    summary = result.details.get("payload")
-    props.last_status = "PASS" if result.ok and result.level == "INFO" else result.level
->>>>>>> Stashed changes
     props.last_report = getattr(summary, "report", "") or result.message
     props.last_mesh_count = len(getattr(summary, "mesh_names", ()))
     props.last_issue_count = len(getattr(summary, "issues", ()))
@@ -61,15 +41,9 @@ def _store_result(context, result):
 
 
 def _has_selected_mesh(context):
-<<<<<<< Updated upstream
     return any(getattr(obj, "type", None) == "MESH" for obj in context.selected_objects) or (
         getattr(getattr(context, "active_object", None), "type", None) == "MESH"
     )
-=======
-    return any(
-        getattr(obj, "type", None) == "MESH" for obj in context.selected_objects
-    ) or (getattr(getattr(context, "active_object", None), "type", None) == "MESH")
->>>>>>> Stashed changes
 
 
 class CP77_OT_ValidateGLBMeshes(Operator):

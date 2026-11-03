@@ -4,26 +4,6 @@ from collections import OrderedDict
 from dataclasses import dataclass
 
 
-<<<<<<< Updated upstream
-=======
-def store_bounded(cache, key, value, *, limit=64):
-    limit = max(0, int(limit))
-    cache[key] = value
-    while len(cache) > limit:
-        cache.pop(next(iter(cache)))
-    return value
-
-
-def store_bounded_lru(cache, key, value, *, limit=64):
-    limit = max(0, int(limit))
-    cache[key] = value
-    cache.move_to_end(key)
-    while len(cache) > limit:
-        cache.popitem(last=False)
-    return value
-
-
->>>>>>> Stashed changes
 @dataclass(frozen=True, slots=True)
 class CachedDocument:
     payload: object
@@ -54,13 +34,6 @@ class DocumentCache:
                 value.source_format,
             )
 
-<<<<<<< Updated upstream
-=======
-    def contains(self, key):
-        with self._lock:
-            return key in self._entries
-
->>>>>>> Stashed changes
     def store(self, key, value):
         if self.limit <= 0:
             return

@@ -1,19 +1,12 @@
 from bpy.props import FloatVectorProperty, StringProperty
 from bpy.types import Operator
 
-<<<<<<< Updated upstream
-=======
-from ...blender.operator_results import finish_operator
->>>>>>> Stashed changes
 from ..services.preset_service import (
     add_vertex_color_preset,
     apply_vertex_color_preset,
     delete_vertex_color_preset,
 )
-<<<<<<< Updated upstream
 from .result import finish_operator
-=======
->>>>>>> Stashed changes
 
 
 class CP77DeleteVertexcolorPreset(Operator):
@@ -51,13 +44,7 @@ class CP77AddVertexcolorPreset(Operator):
     )
 
     def execute(self, context):
-<<<<<<< Updated upstream
         return finish_operator(self, add_vertex_color_preset(self.preset_name, self.color))
-=======
-        return finish_operator(
-            self, add_vertex_color_preset(self.preset_name, self.color)
-        )
->>>>>>> Stashed changes
 
     def invoke(self, context, event):
         paint = context.tool_settings.vertex_paint

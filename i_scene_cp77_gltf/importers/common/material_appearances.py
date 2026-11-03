@@ -1,21 +1,10 @@
-<<<<<<< Updated upstream
 SOURCE_DEFAULT_APPEARANCE_TOKENS = frozenset(('', 'default', 'none', 'null'))
-=======
-from ...assetio.values import coerce_int
-
-SOURCE_DEFAULT_APPEARANCE_TOKENS = frozenset(("", "default", "none", "null"))
->>>>>>> Stashed changes
 
 
 def wrapped_string(value):
     if isinstance(value, dict):
-<<<<<<< Updated upstream
         value = value.get('$value', value.get('value', ''))
     return str(value or '')
-=======
-        value = value.get("$value", value.get("value", ""))
-    return str(value or "")
->>>>>>> Stashed changes
 
 
 def is_source_default_appearance(value):
@@ -35,14 +24,10 @@ def _requested_appearance_names(appearances):
 
 def _resolved_appearance_mappings(json_apps, appearances):
     requested = _requested_appearance_names(appearances)
-<<<<<<< Updated upstream
     use_all = not requested or any(
         value.casefold() == 'all'
         for value in requested
     )
-=======
-    use_all = not requested or any(value.casefold() == "all" for value in requested)
->>>>>>> Stashed changes
 
     mappings = []
     resolved = {}
@@ -53,11 +38,7 @@ def _resolved_appearance_mappings(json_apps, appearances):
                 (str(name), tuple(materials or ()))
                 for name, materials in json_apps.items()
             )
-<<<<<<< Updated upstream
         resolved['ALL'] = tuple(name for name, _ in mappings)
-=======
-        resolved["ALL"] = tuple(name for name, _ in mappings)
->>>>>>> Stashed changes
     else:
         for appearance in requested:
             resolved_name, materials, status = resolve_appearance_materials(
@@ -72,7 +53,6 @@ def _resolved_appearance_mappings(json_apps, appearances):
     return tuple(mappings), resolved, tuple(unresolved)
 
 
-<<<<<<< Updated upstream
 def resolve_appearance_materials(json_apps, appearance):
     """Resolve one authored appearance without falling back to another entry."""
     requested = wrapped_string(appearance)
@@ -136,48 +116,6 @@ def requested_material_names_by_submesh(
         submesh_indices=None,
         ):
     """Return source-first candidates keyed by authored submesh index."""
-=======
-def _named_appearance(json_apps, requested):
-    """The (name, materials) entry named requested"""
-    if isinstance(json_apps, dict) and requested in json_apps:
-        return requested, tuple(json_apps.get(requested) or ())
-    folded = requested.casefold()
-    matches = [
-        (str(key), tuple(value or ()))
-        for key, value in (json_apps.items() if isinstance(json_apps, dict) else ())
-        if str(key).casefold() == folded
-    ]
-    if len(matches) > 1:
-        return ""
-    return matches[0] if matches else None
-
-
-def resolve_appearance_materials(json_apps, appearance):
-    """Resolve one authored appearance"""
-    requested = wrapped_string(appearance)
-    entry = _named_appearance(json_apps, requested)
-    if entry == "":
-        return "", (), "ambiguous_appearance"
-    if entry is not None:
-        return entry[0], entry[1], "exact" if entry[0] == requested else "casefold"
-    if is_source_default_appearance(requested):
-        return "", (), "source_default"
-    if not isinstance(json_apps, dict) or not json_apps:
-        return "", (), "missing_appearance_data"
-    fallback = _named_appearance(json_apps, "default")
-    if fallback:
-        return fallback[0], fallback[1], "missing_appearance_default"
-    return "", (), "missing_appearance"
-
-
-def requested_material_names_by_submesh(
-    json_apps,
-    appearances,
-    source_material_names,
-    submesh_indices=None,
-):
-    """Return source-first candidates keyed by authored submesh index"""
->>>>>>> Stashed changes
     sources = tuple(wrapped_string(value) for value in source_material_names)
     if submesh_indices is None:
         authored_indices = tuple(range(len(sources)))
@@ -185,7 +123,6 @@ def requested_material_names_by_submesh(
         authored_indices = tuple(submesh_indices)
         if len(authored_indices) != len(sources):
             raise ValueError(
-<<<<<<< Updated upstream
                 "source_material_names and submesh_indices must have "
                 "the same length"
             )
@@ -195,13 +132,6 @@ def requested_material_names_by_submesh(
                 authored_index = int(value)
             except (TypeError, ValueError):
                 authored_index = fallback_index
-=======
-                "source_material_names and submesh_indices must have the same length"
-            )
-        normalized_indices = []
-        for fallback_index, value in enumerate(authored_indices):
-            authored_index = coerce_int(value, fallback_index, unwrap=False)
->>>>>>> Stashed changes
             if authored_index < 0:
                 authored_index = fallback_index
             normalized_indices.append(authored_index)

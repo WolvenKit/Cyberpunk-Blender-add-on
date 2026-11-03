@@ -3,14 +3,7 @@ from __future__ import annotations
 import numpy as np
 from mathutils import Matrix
 
-<<<<<<< Updated upstream
 from ...assetio.values import cname_value
-=======
-from ...animation.domain.rig.naming import merged_bone_name
-from ...assetio.values import cname_value
-from ...materials.blender.skin_runtime import bind_skin_materials_for_object
-from ..common.collections import preserve_world_parent
->>>>>>> Stashed changes
 from .transforms import (
     _rig_json_bone_matrix_array,
     _rig_json_model_space_matrices,
@@ -18,11 +11,8 @@ from .transforms import (
     is_live_armature_object,
     rig_bone_index_for,
 )
-<<<<<<< Updated upstream
 from ..common.collections import _preserve_world_parent
 from ...animation.rig_binding import merged_bone_name
-=======
->>>>>>> Stashed changes
 
 _UNSET = object()
 _RED_MATRIX_CACHE = {}
@@ -31,45 +21,27 @@ _SKIN_ATTACHMENT_CACHE = {}
 
 
 def clear_skinning_caches():
-<<<<<<< Updated upstream
     """Clear import-scoped RED matrix and skin attachment caches."""
-=======
-    """Clear import-scoped RED matrix and skin attachment caches"""
->>>>>>> Stashed changes
     _RED_MATRIX_CACHE.clear()
     _RED_MATRIX_ARRAY_CACHE.clear()
     _SKIN_ATTACHMENT_CACHE.clear()
 
-<<<<<<< Updated upstream
 def _red_matrix_to_blender(value):
     """Convert a serialized RED Matrix to mathutils column-vector form."""
-=======
-
-def _red_matrix_to_blender(value):
-    """Convert a serialized RED Matrix to mathutils column-vector form"""
->>>>>>> Stashed changes
     if not isinstance(value, dict):
         return None
     cache_key = id(value)
     cached = _RED_MATRIX_CACHE.get(cache_key)
     if cached is not None and cached[0] is value:
         return cached[1]
-<<<<<<< Updated upstream
     x = value.get('X')
     y = value.get('Y')
     z = value.get('Z')
     w = value.get('W')
-=======
-    x = value.get("X")
-    y = value.get("Y")
-    z = value.get("Z")
-    w = value.get("W")
->>>>>>> Stashed changes
     matrix = None
     if all(isinstance(column, dict) for column in (x, y, z, w)):
         try:
             matrix = Matrix(
-<<<<<<< Updated upstream
                     (
                         (float(x['X']), float(y['X']), float(z['X']), float(w['X'])),
                         (float(x['Y']), float(y['Y']), float(z['Y']), float(w['Y'])),
@@ -77,24 +49,11 @@ def _red_matrix_to_blender(value):
                         (float(x['W']), float(y['W']), float(z['W']), float(w['W'])),
                         )
                     )
-=======
-                (
-                    (float(x["X"]), float(y["X"]), float(z["X"]), float(w["X"])),
-                    (float(x["Y"]), float(y["Y"]), float(z["Y"]), float(w["Y"])),
-                    (float(x["Z"]), float(y["Z"]), float(z["Z"]), float(w["Z"])),
-                    (float(x["W"]), float(y["W"]), float(z["W"]), float(w["W"])),
-                )
-            )
->>>>>>> Stashed changes
         except (KeyError, TypeError, ValueError):
             matrix = None
     _RED_MATRIX_CACHE[cache_key] = (value, matrix)
     return matrix
 
-<<<<<<< Updated upstream
-=======
-
->>>>>>> Stashed changes
 def _red_matrix_to_array(value):
     if not isinstance(value, dict):
         return None
@@ -107,7 +66,6 @@ def _red_matrix_to_array(value):
     _RED_MATRIX_ARRAY_CACHE[cache_key] = (value, array)
     return array
 
-<<<<<<< Updated upstream
 def _mesh_skin_anchor(mesh_j, rig_j):
     """Return the first mapped bone in authored mesh order."""
     if not isinstance(mesh_j, dict) or not isinstance(rig_j, dict):
@@ -116,17 +74,6 @@ def _mesh_skin_anchor(mesh_j, rig_j):
     raw_matrices = mesh_j.get('boneRigMatrices')
     if not isinstance(raw_names, list) or not isinstance(raw_matrices, list):
         return None, 'missing_skin_data'
-=======
-
-def _mesh_skin_anchor(mesh_j, rig_j):
-    """Return the first mapped bone in authored mesh order"""
-    if not isinstance(mesh_j, dict) or not isinstance(rig_j, dict):
-        return None, "missing_json"
-    raw_names = mesh_j.get("boneNames")
-    raw_matrices = mesh_j.get("boneRigMatrices")
-    if not isinstance(raw_names, list) or not isinstance(raw_matrices, list):
-        return None, "missing_skin_data"
->>>>>>> Stashed changes
 
     rig_index = rig_bone_index_for(rig_j)
     saw_named_bone = False
@@ -140,7 +87,6 @@ def _mesh_skin_anchor(mesh_j, rig_j):
         target_name = merged_bone_name(source_name)
         target_index = rig_index.get(target_name)
         if target_index is not None:
-<<<<<<< Updated upstream
             return (mesh_index, source_name, target_name, target_index), 'ok'
 
     return None, 'missing_mapped_bone' if saw_named_bone else 'missing_bones'
@@ -156,15 +102,6 @@ def _matrices_near(a, b, epsilon=1e-4):
 
 def component_skin_attachment_matrix(mesh_j, rig_j):
     """Return the RED attachment transform for the first mapped bone."""
-=======
-            return (mesh_index, source_name, target_name, target_index), "ok"
-
-    return None, "missing_mapped_bone" if saw_named_bone else "missing_bones"
-
-
-def component_skin_attachment_matrix(mesh_j, rig_j):
-    """Return the RED attachment transform for the first mapped bone"""
->>>>>>> Stashed changes
     cache_key = (id(mesh_j), id(rig_j))
     cached = _SKIN_ATTACHMENT_CACHE.get(cache_key)
     if cached is not None and cached[0] is mesh_j and cached[1] is rig_j:
@@ -172,47 +109,25 @@ def component_skin_attachment_matrix(mesh_j, rig_j):
 
     root, status = _mesh_skin_anchor(mesh_j, rig_j)
     if root is None:
-<<<<<<< Updated upstream
         result = (None, '', status)
-=======
-        result = (None, "", status)
->>>>>>> Stashed changes
         _SKIN_ATTACHMENT_CACHE[cache_key] = (mesh_j, rig_j, result)
         return result
 
     mesh_index, source_name, target_name, target_index = root
-<<<<<<< Updated upstream
     raw_matrices = mesh_j.get('boneRigMatrices') or ()
     if mesh_index >= len(raw_matrices):
         result = (None, source_name, 'missing_anchor_bind_matrix')
-=======
-    raw_matrices = mesh_j.get("boneRigMatrices") or ()
-    if mesh_index >= len(raw_matrices):
-        result = (None, source_name, "missing_anchor_bind_matrix")
->>>>>>> Stashed changes
         _SKIN_ATTACHMENT_CACHE[cache_key] = (mesh_j, rig_j, result)
         return result
 
     skin_to_rig = _red_matrix_to_blender(raw_matrices[mesh_index])
     if skin_to_rig is None:
-<<<<<<< Updated upstream
         result = (None, source_name, 'invalid_anchor_bind_matrix')
-=======
-        result = (None, source_name, "invalid_anchor_bind_matrix")
->>>>>>> Stashed changes
         _SKIN_ATTACHMENT_CACHE[cache_key] = (mesh_j, rig_j, result)
         return result
 
     rig_matrices = _rig_json_model_space_matrices(rig_j)
-<<<<<<< Updated upstream
     rig_model_space = rig_matrices[target_index] if target_index < len(rig_matrices) else Matrix.Identity(4)
-=======
-    rig_model_space = (
-        rig_matrices[target_index]
-        if target_index < len(rig_matrices)
-        else Matrix.Identity(4)
-    )
->>>>>>> Stashed changes
     placement = rig_model_space @ skin_to_rig
 
     # Descendant products diagnose deformation, not root attachment.
@@ -222,11 +137,7 @@ def component_skin_attachment_matrix(mesh_j, rig_j):
     child_names = []
     child_target_indices = []
     child_bind_matrices = []
-<<<<<<< Updated upstream
     raw_names = mesh_j.get('boneNames') or ()
-=======
-    raw_names = mesh_j.get("boneNames") or ()
->>>>>>> Stashed changes
     for child_index, raw_name in enumerate(raw_names):
         if child_index == mesh_index or child_index >= len(raw_matrices):
             continue
@@ -250,7 +161,6 @@ def component_skin_attachment_matrix(mesh_j, rig_j):
         placement_array = np.asarray(placement, dtype=np.float64)
         differences = np.max(np.abs(products - placement_array), axis=(1, 2))
         non_uniform_children = [
-<<<<<<< Updated upstream
             name for name, difference in zip(child_names, differences)
             if difference > 1e-4
             ]
@@ -261,86 +171,39 @@ def component_skin_attachment_matrix(mesh_j, rig_j):
         status = 'anchor_ok_deforming_bones:' + ','.join(non_uniform_children)
     else:
         status = 'ok'
-=======
-            name
-            for name, difference in zip(child_names, differences)
-            if difference > 1e-4
-        ]
-
-    if missing_children:
-        status = "anchor_ok_missing_mappings:" + ",".join(missing_children)
-    elif non_uniform_children:
-        status = "anchor_ok_deforming_bones:" + ",".join(non_uniform_children)
-    else:
-        status = "ok"
->>>>>>> Stashed changes
     result = (placement, source_name, status)
     _SKIN_ATTACHMENT_CACHE[cache_key] = (mesh_j, rig_j, result)
     return result
 
-<<<<<<< Updated upstream
 def _rename_vertex_groups_to_meta(obj, rig):
     rig_bones = cache_armature_bones(rig)
     for group in getattr(obj, 'vertex_groups', ()):
         source_name = group.name
         target_name = merged_bone_name(source_name)
         if target_name != source_name and target_name in rig_bones and source_name not in rig_bones:
-=======
-
-def _rename_vertex_groups_to_meta(obj, rig):
-    rig_bones = cache_armature_bones(rig)
-    for group in getattr(obj, "vertex_groups", ()):
-        source_name = group.name
-        target_name = merged_bone_name(source_name)
-        if (
-            target_name != source_name
-            and target_name in rig_bones
-            and source_name not in rig_bones
-        ):
->>>>>>> Stashed changes
             group.name = target_name
 
 
 def bind_skinned_objects_to_rig(objects, rig):
-<<<<<<< Updated upstream
     """Retarget copied skinned meshes to the completed MetaRig."""
-=======
-    """Retarget copied skinned meshes to the completed MetaRig"""
->>>>>>> Stashed changes
     if rig is None:
         return 0, 0
 
     live_sources = {}
     skinned_meshes = 0
     redirected_modifiers = 0
-<<<<<<< Updated upstream
     reparented_meshes = 0
     for obj in objects:
         if getattr(obj, 'type', None) != 'MESH':
-=======
-    for obj in objects:
-        if getattr(obj, "type", None) != "MESH":
->>>>>>> Stashed changes
             continue
 
         mesh_redirected = False
         source_armatures = set()
-<<<<<<< Updated upstream
         for modifier in getattr(obj, 'modifiers', ()):
             if modifier.type != 'ARMATURE':
                 continue
             source_armature = modifier.object
             if source_armature is rig:
-=======
-        for modifier in getattr(obj, "modifiers", ()):
-            if modifier.type != "ARMATURE":
-                continue
-            source_armature = modifier.object
-            if source_armature is rig:
-                # Already deforming with the rig, as a mesh given the rig directly is: its groups still take the
-                # rig's bone names.
-                _rename_vertex_groups_to_meta(obj, rig)
->>>>>>> Stashed changes
                 mesh_redirected = True
                 continue
             if source_armature is None:
@@ -359,7 +222,6 @@ def bind_skinned_objects_to_rig(objects, rig):
             redirected_modifiers += 1
             mesh_redirected = True
 
-<<<<<<< Updated upstream
         parent = getattr(obj, 'parent', None)
         parent_is_source_armature = (
             parent is not None
@@ -392,23 +254,4 @@ def bind_skinned_objects_to_rig(objects, rig):
         ) + reparented_meshes
     except (AttributeError, ReferenceError, TypeError, ValueError):
         pass
-=======
-        parent = getattr(obj, "parent", None)
-        parent_is_source_armature = (
-            parent is not None
-            and parent is not rig
-            and getattr(parent, "type", None) == "ARMATURE"
-            and (parent in source_armatures or is_live_armature_object(parent))
-        )
-        if parent_is_source_armature:
-            preserve_world_parent(obj, rig)
-            mesh_redirected = True
-        elif mesh_redirected and parent is None:
-            preserve_world_parent(obj, rig)
-
-        if mesh_redirected:
-            bind_skin_materials_for_object(obj, rig)
-            skinned_meshes += 1
-
->>>>>>> Stashed changes
     return skinned_meshes, redirected_modifiers

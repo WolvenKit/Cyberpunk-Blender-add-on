@@ -2,17 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-<<<<<<< Updated upstream
 from ...common.paths import (
     depot_path_key,
     expected_resource_path,
     normalize_depot_path,
 )
-=======
-from ....assetio.paths import depot_path_key, depot_to_local_fragment
-from ....assetio.resolver import resolve_mirrored_export
-from ...common.paths import expected_resource_path
->>>>>>> Stashed changes
 
 
 @dataclass(slots=True, frozen=True)
@@ -37,16 +31,10 @@ class IndexedResourceResolver:
         *,
         append_expected_json=True,
     ):
-<<<<<<< Updated upstream
         normalized = normalize_depot_path(depot_path)
         normalized_candidates = tuple(
             (bool(append_json), str(extension))
             for append_json, extension in candidates
-=======
-        normalized = depot_to_local_fragment(depot_path)
-        normalized_candidates = tuple(
-            (bool(append_json), str(extension)) for append_json, extension in candidates
->>>>>>> Stashed changes
         )
         cache_key = (
             str(kind),
@@ -81,18 +69,6 @@ class IndexedResourceResolver:
                 )
                 or ""
             )
-<<<<<<< Updated upstream
-=======
-            if not resolved_path and self.session.raw_root:
-                resolved_path = (
-                    resolve_mirrored_export(
-                        indexed_path,
-                        self.session.raw_root,
-                        (extension,),
-                    )
-                    or ""
-                )
->>>>>>> Stashed changes
             if resolved_path:
                 break
 

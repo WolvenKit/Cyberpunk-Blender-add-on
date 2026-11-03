@@ -1,4 +1,3 @@
-<<<<<<< Updated upstream
 import json
 import struct
 
@@ -10,28 +9,6 @@ from .document import DirectAnimationExportError
 
 
 _ACCESSOR_WIDTHS = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}
-=======
-import numpy as np
-
-from ...animation.model.clip.metadata import validate_animation_extras
-from ...gltf.accessors import GLTFAccessorReader
-from ...gltf.container import (
-    GLBContainer,
-    GLBContainerError,
-    embedded_glb_binary,
-    read_glb_container,
-)
-from .errors import DirectAnimationExportError
-
-_ACCESSOR_WIDTHS = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}
-_FORBIDDEN_ANIMATION_ASSET_KEYS = (
-    "meshes",
-    "materials",
-    "textures",
-    "images",
-    "samplers",
-)
->>>>>>> Stashed changes
 
 
 def _validate_cp77_animation_extras(extras, animation_name: str) -> None:
@@ -50,44 +27,22 @@ def _validate_cp77_animation_extras(extras, animation_name: str) -> None:
 
 
 def validate_direct_animation_document(document: dict, binary: bytes) -> dict:
-<<<<<<< Updated upstream
     """Validate the complete glTF 2.0 document and CP77 extras before encoding."""
     if not isinstance(document, dict):
         raise DirectAnimationExportError("The GLB JSON document is not an object.")
-=======
-    """Validate the complete glTF 2.0 document and CP77 extras before encoding"""
-    if not isinstance(document, dict):
-        raise DirectAnimationExportError("The GLB JSON document is not an object.")
-    for key in _FORBIDDEN_ANIMATION_ASSET_KEYS:
-        if key in document:
-            raise DirectAnimationExportError(
-                f"The animation GLB must not contain top-level {key!r} data."
-            )
->>>>>>> Stashed changes
     asset = document.get("asset")
     if not isinstance(asset, dict) or str(asset.get("version")) != "2.0":
         raise DirectAnimationExportError("The GLB asset version must be 2.0.")
 
     buffers = document.get("buffers")
     if not isinstance(buffers, list) or len(buffers) != 1:
-<<<<<<< Updated upstream
         raise DirectAnimationExportError("The animation GLB must contain exactly one embedded buffer.")
     if int(buffers[0].get("byteLength", -1)) != len(binary):
         raise DirectAnimationExportError("The GLB buffer byteLength does not match the BIN payload.")
-=======
-        raise DirectAnimationExportError(
-            "The animation GLB must contain exactly one embedded buffer."
-        )
-    if int(buffers[0].get("byteLength", -1)) != len(binary):
-        raise DirectAnimationExportError(
-            "The GLB buffer byteLength does not match the BIN payload."
-        )
->>>>>>> Stashed changes
 
     views = document.get("bufferViews")
     accessors = document.get("accessors")
     if not isinstance(views, list) or not isinstance(accessors, list):
-<<<<<<< Updated upstream
         raise DirectAnimationExportError("The GLB must contain bufferViews and accessors arrays.")
     for index, view in enumerate(views):
         if not isinstance(view, dict) or int(view.get("buffer", -1)) != 0:
@@ -98,66 +53,24 @@ def validate_direct_animation_document(document: dict, binary: bytes) -> dict:
             raise DirectAnimationExportError(f"bufferViews[{index}] exceeds the BIN payload.")
         if offset % 4:
             raise DirectAnimationExportError(f"bufferViews[{index}] is not 4-byte aligned.")
-=======
-        raise DirectAnimationExportError(
-            "The GLB must contain bufferViews and accessors arrays."
-        )
-    for index, view in enumerate(views):
-        if not isinstance(view, dict) or int(view.get("buffer", -1)) != 0:
-            raise DirectAnimationExportError(
-                f"bufferViews[{index}] does not reference buffer 0."
-            )
-        offset = int(view.get("byteOffset", 0))
-        length = int(view.get("byteLength", -1))
-        if offset < 0 or length < 0 or offset + length > len(binary):
-            raise DirectAnimationExportError(
-                f"bufferViews[{index}] exceeds the BIN payload."
-            )
-        if offset % 4:
-            raise DirectAnimationExportError(
-                f"bufferViews[{index}] is not 4-byte aligned."
-            )
->>>>>>> Stashed changes
 
     for index, accessor in enumerate(accessors):
         if not isinstance(accessor, dict):
             raise DirectAnimationExportError(f"accessors[{index}] is not an object.")
         view_index = int(accessor.get("bufferView", -1))
         if not 0 <= view_index < len(views):
-<<<<<<< Updated upstream
             raise DirectAnimationExportError(f"accessors[{index}] has an invalid bufferView.")
         if int(accessor.get("componentType", -1)) != 5126:
             raise DirectAnimationExportError(f"accessors[{index}] must use FLOAT componentType 5126.")
-=======
-            raise DirectAnimationExportError(
-                f"accessors[{index}] has an invalid bufferView."
-            )
-        if int(accessor.get("componentType", -1)) != 5126:
-            raise DirectAnimationExportError(
-                f"accessors[{index}] must use FLOAT componentType 5126."
-            )
->>>>>>> Stashed changes
         accessor_type = str(accessor.get("type", ""))
         width = _ACCESSOR_WIDTHS.get(accessor_type)
         count = int(accessor.get("count", -1))
         if width is None or count < 0:
-<<<<<<< Updated upstream
             raise DirectAnimationExportError(f"accessors[{index}] has invalid type/count metadata.")
         accessor_offset = int(accessor.get("byteOffset", 0))
         required = accessor_offset + count * width * 4
         if accessor_offset < 0 or required > int(views[view_index]["byteLength"]):
             raise DirectAnimationExportError(f"accessors[{index}] exceeds its bufferView.")
-=======
-            raise DirectAnimationExportError(
-                f"accessors[{index}] has invalid type/count metadata."
-            )
-        accessor_offset = int(accessor.get("byteOffset", 0))
-        required = accessor_offset + count * width * 4
-        if accessor_offset < 0 or required > int(views[view_index]["byteLength"]):
-            raise DirectAnimationExportError(
-                f"accessors[{index}] exceeds its bufferView."
-            )
->>>>>>> Stashed changes
 
     nodes = document.get("nodes")
     skins = document.get("skins")
@@ -165,27 +78,11 @@ def validate_direct_animation_document(document: dict, binary: bytes) -> dict:
     if not isinstance(nodes, list) or not nodes:
         raise DirectAnimationExportError("The animation GLB contains no nodes.")
     if not isinstance(skins, list) or len(skins) != 1:
-<<<<<<< Updated upstream
         raise DirectAnimationExportError("The animation GLB must contain exactly one skin.")
     if not isinstance(scenes, list) or not scenes:
         raise DirectAnimationExportError("The animation GLB contains no scene.")
     for node_index, node in enumerate(nodes):
         for child in node.get("children", ()) if isinstance(node, dict) else ():
-=======
-        raise DirectAnimationExportError(
-            "The animation GLB must contain exactly one skin."
-        )
-    if not isinstance(scenes, list) or not scenes:
-        raise DirectAnimationExportError("The animation GLB contains no scene.")
-    for node_index, node in enumerate(nodes):
-        if not isinstance(node, dict):
-            raise DirectAnimationExportError(f"nodes[{node_index}] is not an object.")
-        if "mesh" in node or "weights" in node:
-            raise DirectAnimationExportError(
-                f"nodes[{node_index}] contains mesh payload in an animation-only GLB."
-            )
-        for child in node.get("children", ()):
->>>>>>> Stashed changes
             if not isinstance(child, int) or not 0 <= child < len(nodes):
                 raise DirectAnimationExportError(
                     f"nodes[{node_index}] contains an invalid child index."
@@ -196,47 +93,21 @@ def validate_direct_animation_document(document: dict, binary: bytes) -> dict:
     extras = skin.get("extras")
     if not isinstance(joints, list) or not joints:
         raise DirectAnimationExportError("The skin contains no joints.")
-<<<<<<< Updated upstream
     if any(not isinstance(index, int) or not 0 <= index < len(nodes) for index in joints):
         raise DirectAnimationExportError("The skin contains an invalid joint node index.")
-=======
-    if any(
-        not isinstance(index, int) or not 0 <= index < len(nodes) for index in joints
-    ):
-        raise DirectAnimationExportError(
-            "The skin contains an invalid joint node index."
-        )
->>>>>>> Stashed changes
     if not isinstance(extras, dict):
         raise DirectAnimationExportError("The skin is missing its CP77 extras object.")
     bone_names = extras.get("boneNames")
     parent_indices = extras.get("boneParentIndexes")
     track_names = extras.get("trackNames", [])
     if not isinstance(bone_names, list) or len(bone_names) != len(joints):
-<<<<<<< Updated upstream
         raise DirectAnimationExportError("skin.extras.boneNames does not match the joint count.")
-=======
-        raise DirectAnimationExportError(
-            "skin.extras.boneNames does not match the joint count."
-        )
->>>>>>> Stashed changes
     if not isinstance(parent_indices, list) or len(parent_indices) != len(joints):
         raise DirectAnimationExportError(
             "skin.extras.boneParentIndexes does not match the joint count."
         )
     if not isinstance(track_names, list):
         raise DirectAnimationExportError("skin.extras.trackNames must be a list.")
-<<<<<<< Updated upstream
-=======
-    if len(track_names) > 0xFFFF:
-        raise DirectAnimationExportError(
-            "skin.extras.trackNames exceeds the supported track count."
-        )
-    if len({str(name) for name in track_names}) != len(track_names):
-        raise DirectAnimationExportError(
-            "skin.extras.trackNames contains duplicate names."
-        )
->>>>>>> Stashed changes
     for index, joint_node in enumerate(joints):
         if str(nodes[joint_node].get("name", "")) != str(bone_names[index]):
             raise DirectAnimationExportError(
@@ -253,19 +124,9 @@ def validate_direct_animation_document(document: dict, binary: bytes) -> dict:
             )
     inverse_bind_accessor = int(skin.get("inverseBindMatrices", -1))
     if not 0 <= inverse_bind_accessor < len(accessors):
-<<<<<<< Updated upstream
         raise DirectAnimationExportError("The skin has no valid inverseBindMatrices accessor.")
     inverse_accessor = accessors[inverse_bind_accessor]
     if inverse_accessor.get("type") != "MAT4" or int(inverse_accessor.get("count", -1)) != len(joints):
-=======
-        raise DirectAnimationExportError(
-            "The skin has no valid inverseBindMatrices accessor."
-        )
-    inverse_accessor = accessors[inverse_bind_accessor]
-    if inverse_accessor.get("type") != "MAT4" or int(
-        inverse_accessor.get("count", -1)
-    ) != len(joints):
->>>>>>> Stashed changes
         raise DirectAnimationExportError(
             "The inverseBindMatrices accessor must contain one MAT4 per joint."
         )
@@ -273,44 +134,11 @@ def validate_direct_animation_document(document: dict, binary: bytes) -> dict:
     animations = document.get("animations")
     if not isinstance(animations, list) or not animations:
         raise DirectAnimationExportError("The GLB contains no animations.")
-<<<<<<< Updated upstream
     for animation_index, animation in enumerate(animations):
         if not isinstance(animation, dict):
             raise DirectAnimationExportError(f"animations[{animation_index}] is not an object.")
         name = str(animation.get("name", f"animation_{animation_index}"))
         _validate_cp77_animation_extras(animation.get("extras"), name)
-=======
-    reader = GLTFAccessorReader(GLBContainer(document, binary, "", 0))
-    validated_times = set()
-    animation_names = set()
-    for animation_index, animation in enumerate(animations):
-        if not isinstance(animation, dict):
-            raise DirectAnimationExportError(
-                f"animations[{animation_index}] is not an object."
-            )
-        name = str(animation.get("name", f"animation_{animation_index}"))
-        if name in animation_names:
-            raise DirectAnimationExportError(
-                f"Animation name {name!r} appears more than once."
-            )
-        animation_names.add(name)
-        animation_extras = animation.get("extras")
-        _validate_cp77_animation_extras(animation_extras, name)
-        actual_joints = frozenset(joints)
-        has_track_payload = any(
-            animation_extras.get(key, ()) for key in ("trackKeys", "constTrackKeys")
-        )
-        if has_track_payload and not track_names:
-            raise DirectAnimationExportError(
-                f"Animation {name!r} contains track keys, but the skin exposes no trackNames."
-            )
-        for key in ("trackKeys", "constTrackKeys"):
-            for entry in animation_extras.get(key, ()) or ():
-                if int(entry["trackIndex"]) >= len(track_names):
-                    raise DirectAnimationExportError(
-                        f"Animation {name!r} {key} references a track outside the rig."
-                    )
->>>>>>> Stashed changes
         samplers = animation.get("samplers")
         channels = animation.get("channels")
         if not isinstance(samplers, list) or not isinstance(channels, list):
@@ -320,13 +148,7 @@ def validate_direct_animation_document(document: dict, binary: bytes) -> dict:
         for sampler_index, sampler in enumerate(samplers):
             input_index = int(sampler.get("input", -1))
             output_index = int(sampler.get("output", -1))
-<<<<<<< Updated upstream
             if not 0 <= input_index < len(accessors) or not 0 <= output_index < len(accessors):
-=======
-            if not 0 <= input_index < len(accessors) or not 0 <= output_index < len(
-                accessors
-            ):
->>>>>>> Stashed changes
                 raise DirectAnimationExportError(
                     f"Animation {name!r} sampler {sampler_index} has invalid accessors."
                 )
@@ -338,21 +160,6 @@ def validate_direct_animation_document(document: dict, binary: bytes) -> dict:
                 raise DirectAnimationExportError(
                     f"Animation {name!r} sampler {sampler_index} input must be SCALAR."
                 )
-<<<<<<< Updated upstream
-=======
-            if input_index not in validated_times:
-                times = np.asarray(reader.read(input_index)).reshape(-1)
-                if (
-                    not len(times)
-                    or not np.all(np.isfinite(times))
-                    or times[0] < 0
-                    or np.any(np.diff(times) <= 0)
-                ):
-                    raise DirectAnimationExportError(
-                        f"Animation {name!r} sampler {sampler_index} times must be finite, nonnegative and strictly increasing."
-                    )
-                validated_times.add(input_index)
->>>>>>> Stashed changes
             if int(accessors[input_index].get("count", -1)) != int(
                 accessors[output_index].get("count", -2)
             ):
@@ -368,15 +175,7 @@ def validate_direct_animation_document(document: dict, binary: bytes) -> dict:
                 )
             node_index = int(target.get("node", -1))
             path = target.get("path")
-<<<<<<< Updated upstream
             if node_index not in joints or path not in {"translation", "rotation", "scale"}:
-=======
-            if node_index not in actual_joints or path not in {
-                "translation",
-                "rotation",
-                "scale",
-            }:
->>>>>>> Stashed changes
                 raise DirectAnimationExportError(
                     f"Animation {name!r} channel {channel_index} targets an invalid joint/path."
                 )
@@ -387,10 +186,7 @@ def validate_direct_animation_document(document: dict, binary: bytes) -> dict:
                     f"Animation {name!r} channel {channel_index} output must be {expected_type}."
                 )
 
-<<<<<<< Updated upstream
     json.dumps(document, ensure_ascii=False, separators=(",", ":"))
-=======
->>>>>>> Stashed changes
     return {
         "valid": True,
         "animation_count": len(animations),
@@ -401,7 +197,6 @@ def validate_direct_animation_document(document: dict, binary: bytes) -> dict:
     }
 
 
-<<<<<<< Updated upstream
 def validate_glb_payload(payload: bytes) -> dict:
     """Parse and validate an encoded GLB 2.0 payload, including CP77 extras."""
     if len(payload) < 20:
@@ -463,25 +258,3 @@ def _iter_glb_chunk_headers(payload: bytes):
 def validate_direct_animation_glb_file(filepath: str) -> dict:
     with open(filepath, "rb") as stream:
         return validate_glb_payload(stream.read())
-=======
-def _validate_animation_container(container) -> dict:
-    try:
-        binary = embedded_glb_binary(container)
-    except GLBContainerError as error:
-        raise DirectAnimationExportError(str(error)) from error
-    result = validate_direct_animation_document(container.document, binary)
-    result.update(
-        file_bytes=container.declared_length,
-        json_chunk_bytes=container.json_chunk_bytes,
-        binary_chunk_bytes=container.binary_chunk_bytes,
-    )
-    return result
-
-
-def validate_direct_animation_glb_file(filepath: str) -> dict:
-    try:
-        container = read_glb_container(filepath)
-    except GLBContainerError as error:
-        raise DirectAnimationExportError(str(error)) from error
-    return _validate_animation_container(container)
->>>>>>> Stashed changes

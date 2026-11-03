@@ -3,11 +3,7 @@ import os
 import bpy
 import bpy.utils.previews
 
-<<<<<<< Updated upstream
 from ..paths import get_icon_dir
-=======
-from ..assetio.resources import get_icon_dir
->>>>>>> Stashed changes
 
 custom_icons = None
 
@@ -17,16 +13,16 @@ def load_icons():
     if custom_icons is None:
         icons_dir = get_icon_dir()
         custom_icons = bpy.utils.previews.new()
-        custom_icons.load("WKIT", os.path.join(icons_dir, "wkit.png"), "IMAGE")
-        custom_icons.load("SCULPT", os.path.join(icons_dir, "sculpt.png"), "IMAGE")
-        custom_icons.load("TRAUMA", os.path.join(icons_dir, "trauma.png"), "IMAGE")
-        custom_icons.load("TECH", os.path.join(icons_dir, "tech.png"), "IMAGE")
-        custom_icons.load("REFIT", os.path.join(icons_dir, "refit.png"), "IMAGE")
-        custom_icons.load("MIRROR", os.path.join(icons_dir, "mirror.png"), "IMAGE")
-        custom_icons.load("ARMATURE", os.path.join(icons_dir, "armature.png"), "IMAGE")
-        custom_icons.load("FACE", os.path.join(icons_dir, "face.png"), "IMAGE")
-        custom_icons.load("EYES", os.path.join(icons_dir, "eyes.png"), "IMAGE")
-        custom_icons.load("TONGUE", os.path.join(icons_dir, "tongue.png"), "IMAGE")
+        custom_icons.load("WKIT", os.path.join(icons_dir, "wkit.png"), 'IMAGE')
+        custom_icons.load("SCULPT", os.path.join(icons_dir, "sculpt.png"), 'IMAGE')
+        custom_icons.load("TRAUMA", os.path.join(icons_dir, "trauma.png"), 'IMAGE')
+        custom_icons.load("TECH", os.path.join(icons_dir, "tech.png"), 'IMAGE')
+        custom_icons.load("REFIT", os.path.join(icons_dir, "refit.png"), 'IMAGE')
+        custom_icons.load("MIRROR", os.path.join(icons_dir, "mirror.png"), 'IMAGE')
+        custom_icons.load("ARMATURE", os.path.join(icons_dir, "armature.png"), 'IMAGE')
+        custom_icons.load("FACE", os.path.join(icons_dir, "face.png"), 'IMAGE')
+        custom_icons.load("EYES", os.path.join(icons_dir, "eyes.png"), 'IMAGE')
+        custom_icons.load("TONGUE", os.path.join(icons_dir, "tongue.png"), 'IMAGE')
 
 
 def unload_icons():

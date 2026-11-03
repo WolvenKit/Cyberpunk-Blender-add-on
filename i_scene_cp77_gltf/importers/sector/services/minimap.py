@@ -1,14 +1,10 @@
 from __future__ import annotations
-<<<<<<< Updated upstream
 from ....blender.transactions import track_created_datablock
-=======
->>>>>>> Stashed changes
 
 from dataclasses import dataclass
 
 import bpy
 
-<<<<<<< Updated upstream
 from ....assetio.values import axis_value
 
 
@@ -22,13 +18,6 @@ class MinimapResourceResult:
     resolved_path: str
     expected_path: str
     status: str
-=======
-from ....assetio.transform_values import vector3_from_data
-from ....assetio.values import cname_text
-from ....blender.naming import fit_id_name
-from ....blender.transactions import track_created_datablock
-from ...common.paths import depot_path
->>>>>>> Stashed changes
 
 
 @dataclass(slots=True, frozen=True)
@@ -38,7 +27,6 @@ class MinimapBounds:
     valid: bool
 
 
-<<<<<<< Updated upstream
 @dataclass(slots=True, frozen=True)
 class MinimapPlacement:
     object: object
@@ -46,13 +34,10 @@ class MinimapPlacement:
     bounds: MinimapBounds
 
 
-=======
->>>>>>> Stashed changes
 class MinimapResourceService:
     def __init__(self, session):
         self.session = session
 
-<<<<<<< Updated upstream
     def resolve(self, depot_path):
         resolved = self.session.resource_resolver.resolve_json(
             "minimap",
@@ -66,8 +51,6 @@ class MinimapResourceService:
             status=resolved.status,
         )
 
-=======
->>>>>>> Stashed changes
     @staticmethod
     def bounds(bounds):
         if not isinstance(bounds, dict):
@@ -77,7 +60,6 @@ class MinimapResourceService:
                 valid=False,
             )
 
-<<<<<<< Updated upstream
         minimum_data = bounds.get("Min")
         maximum_data = bounds.get("Max")
         minimum = (
@@ -94,18 +76,12 @@ class MinimapResourceService:
             maximum[index] < minimum[index]
             for index in range(3)
         )
-=======
-        minimum = vector3_from_data(bounds.get("Min"))
-        maximum = vector3_from_data(bounds.get("Max"))
-        valid = not any(maximum[index] < minimum[index] for index in range(3))
->>>>>>> Stashed changes
         return MinimapBounds(
             minimum=minimum,
             maximum=maximum,
             valid=valid,
         )
 
-<<<<<<< Updated upstream
 
     def create(self, context, instance, instance_index):
         data = context.data
@@ -119,15 +95,6 @@ class MinimapResourceService:
         name = context.operations.trim_name(
             "MinimapData_"
             f"{context.operations.cname_value(data.get('debugName'), str(context.node_index))}_"
-=======
-    def create(self, context, instance, instance_index):
-        data = context.data
-        bounds = self.bounds(data.get("localBounds"))
-
-        name = fit_id_name(
-            "MinimapData_"
-            f"{cname_text(data.get('debugName'), str(context.node_index))}_"
->>>>>>> Stashed changes
             f"{instance_index}"
         )
         mesh = (
@@ -150,11 +117,7 @@ class MinimapResourceService:
         if mesh is None:
             obj.empty_display_type = "CUBE"
             obj.empty_display_size = 1.0
-<<<<<<< Updated upstream
         context.sector_collection.objects.link(obj)
-=======
-        context.collection_for_instance(instance).objects.link(obj)
->>>>>>> Stashed changes
         obj.matrix_world = context.operations.instance_matrix(
             instance,
             context.execution.scale_factor,
@@ -165,7 +128,6 @@ class MinimapResourceService:
 
         context.operations.assign_custom_properties(
             obj,
-<<<<<<< Updated upstream
             data,
             context.sector_name,
             context.node_index,
@@ -196,13 +158,4 @@ class MinimapResourceService:
             object=obj,
             resource=resource,
             bounds=bounds,
-=======
-            context.node,
-            context.sector_name,
-            cp77_node_data_index=instance.index,
-            cp77_instance_idx=instance_index,
-            encodedShapesRef=depot_path(data, "encodedShapesRef"),
-            allInteriorShapes=bool(data.get("allInteriorShapes", 0)),
-            streamingDistance=float(data.get("streamingDistance", 0.0) or 0.0),
->>>>>>> Stashed changes
         )

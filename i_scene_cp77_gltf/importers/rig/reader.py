@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-<<<<<<< Updated upstream
 from contextlib import contextmanager
 
 import copy
@@ -40,60 +39,6 @@ from ...redSpace.qs_transform import parse_wkit_trs
 from ...blender.transactions import track_created_datablock
 
 _MERGED_RIG_DATA_CACHE = {}
-=======
-import copy
-import hashlib
-import json
-import os
-
-import bmesh
-import bpy
-import numpy as np
-from mathutils import Matrix, Vector
-
-from ...animation.domain.rig.assembly import merge_rig_datas, plan_bones
-from ...animation.domain.rig.masks import (
-    rig_part_masks_by_bone_name,
-    rig_part_rotation_ms_by_name,
-)
-from ...animation.domain.rig.metadata import (
-    RIG_EXPORT_TEMPLATE_KEY,
-    RIG_IMPORT_MATRIX_KEY,
-    RIG_IMPORT_SOURCE_MODEL_KEY,
-    encode_json_document,
-)
-from ...animation.domain.rig.naming import blender_bone_name, merged_bone_name
-from ...animation.model.clip.bones import ANIMATION_BONE_SET
-from ...animation.services.rig.repository import RigRepository, rig_source_document
-from ...assetio.documents import DocumentSession
-from ...assetio.paths import strip_json_suffix
-from ...assetio.rig_documents import minimal_rig_document
-from ...assetio.values import cname_entry
-from ...bartmoss.matrix import flatten_matrix, transfer_matrix_delta
-from ...blender.armature import (
-    apply_bind_matrices,
-    build_apose_matrices,
-    model_space_matrices_cached,
-    precision_safe_bone_length,
-    set_edit_bone_model_matrices,
-)
-from ...blender.armature_edit import ArmatureEditSession, atomic_armature_update
-from ...blender.context import safe_mode_switch
-from ...blender.rig_metadata import (
-    imported_bone_names,
-    store_rig_part_masks,
-    store_rig_part_rotation_ms,
-)
-from ...blender.tracks import ensure_track_property
-from ...blender.transactions import track_created_datablock
-from ...core.log import get_logger, operation
-from ...core.notifications import import_message
-from ...redSpace.contracts import RIG_SPACE_CONTRACT_CURRENT
-from ...redSpace.transforms import red_model_transform_to_current_bone
-
-_LOG = get_logger(__name__)
-
->>>>>>> Stashed changes
 _SHAPE_SCALE_ROOT = (0.075, 0.075, 0.075)
 _SHAPE_SCALE_WEAPON = (0.0125, 0.0125, 0.0125)
 _SHAPE_SCALE_SMALL = (0.05, 0.05, 0.05)
@@ -102,7 +47,6 @@ _ROOT_SHAPE_BONES = frozenset(("Root", "Hips", "Trajectory"))
 _WEAPON_SHAPE_BONES = frozenset(("WeaponLeft", "WeaponRight"))
 _SHAPE_BONE_SUFFIXES = ("JNT", "GRP", "IK")
 
-<<<<<<< Updated upstream
 _RIG_SPACE_CONTRACT = RIG_SPACE_CONTRACT_CURRENT
 _RIG_BUILD_SERIAL = 0
 
@@ -119,17 +63,12 @@ def _matrix_to_flat_list(matrix: Matrix) -> list[float]:
 
 
 def _load_rig_data(filepath, repository=None):
-=======
-
-def load_rig_data(filepath, repository=None):
->>>>>>> Stashed changes
     if repository is not None:
         return repository.load(filepath, required=True)
     with DocumentSession() as documents:
         return RigRepository(documents).load(filepath, required=True)
 
 
-<<<<<<< Updated upstream
 def _source_document_for_filepath(filepath):
     if not filepath or not str(filepath).casefold().endswith(".rig.json"):
         return None
@@ -184,38 +123,11 @@ def merged_rig_document(filepaths, merged_rig_data, source_label: str = '', rig_
     if source_label:
         archive_path = source_label[:-5] if source_label.lower().endswith('.json') else source_label
         document.setdefault('Header', {})['ArchiveFileName'] = archive_path
-=======
-def merged_rig_document(
-    filepaths, merged_rig_data, source_label: str = "", rig_datas=None
-) -> dict:
-    base_document = (
-        copy.deepcopy(rig_datas[0].source_document)
-        if rig_datas and rig_datas[0].source_document
-        else None
-    )
-    if base_document is None and filepaths:
-        base_document = rig_source_document(filepaths[0])
-    document = base_document or minimal_rig_document(source_label)
-    root = document.setdefault("Data", {}).setdefault("RootChunk", {})
-    root.update(rig_data_to_root_chunk(merged_rig_data))
-    root["$type"] = "animRig"
-    root["boneNames"] = [cname_entry(str(name)) for name in merged_rig_data.bone_names]
-    root["trackNames"] = [
-        cname_entry(str(name)) for name in merged_rig_data.track_names
-    ]
-    root.setdefault("aPoseMS", [])
-    root.setdefault("referencePoseMS", [])
-    if source_label:
-        document.setdefault("Header", {})["ArchiveFileName"] = strip_json_suffix(
-            source_label
-        )
->>>>>>> Stashed changes
     return document
 
 
 def _attach_rig_export_metadata(arm_obj, source_document: dict | None) -> None:
     arm_data = arm_obj.data
-<<<<<<< Updated upstream
     source_path = str(arm_data.get('source_rig_file', ''))
     if source_document is None and source_path and ';' not in source_path and os.path.isfile(source_path):
         source_document = _source_document_for_filepath(source_path)
@@ -227,33 +139,12 @@ def _attach_rig_export_metadata(arm_obj, source_document: dict | None) -> None:
         if RIG_EXPORT_TEMPLATE_KEY in arm_data:
             del arm_data[RIG_EXPORT_TEMPLATE_KEY]
     arm_data['cp77_rig_imported_pose'] = 'T_POSE' if bool(arm_data.get('T-Pose', True)) else 'A_POSE'
-=======
-    source_path = str(arm_data.get("cp77_source_rig_file", ""))
-    if (
-        source_document is None
-        and source_path
-        and ";" not in source_path
-        and os.path.isfile(source_path)
-    ):
-        source_document = rig_source_document(source_path)
-    document = source_document if source_document else minimal_rig_document(source_path)
-    try:
-        arm_data[RIG_EXPORT_TEMPLATE_KEY] = encode_json_document(document)
-    except (TypeError, ValueError, OverflowError):
-        # The source path remains available as a fallback if Blender rejects a large ID string.
-        if RIG_EXPORT_TEMPLATE_KEY in arm_data:
-            del arm_data[RIG_EXPORT_TEMPLATE_KEY]
-    arm_data["cp77_rig_imported_pose"] = (
-        "T_POSE" if bool(arm_data.get("cp77_t_pose", True)) else "A_POSE"
-    )
->>>>>>> Stashed changes
 
 
 def _attach_imported_bone_matrices(arm_obj, source_model_matrices) -> None:
     arm_data = arm_obj.data
     bones = arm_data.bones
     matrix_count = len(source_model_matrices)
-<<<<<<< Updated upstream
     for source_index, source_name in enumerate(arm_data.get('boneNames', [])):
         bone = bones.get(str(source_name))
         if bone is None:
@@ -264,25 +155,11 @@ def _attach_imported_bone_matrices(arm_obj, source_model_matrices) -> None:
             source_matrix = source_model_matrices[source_index]
             if source_matrix is not None:
                 bone[RIG_IMPORT_SOURCE_MODEL_KEY] = _matrix_to_flat_list(source_matrix)
-=======
-    for source_index, source_name in enumerate(arm_data.get("boneNames", [])):
-        bone = bones.get(blender_bone_name(str(source_name)))
-        if bone is None:
-            continue
-        bone[RIG_IMPORT_MATRIX_KEY] = flatten_matrix(bone.matrix_local).tolist()
-        if source_index < matrix_count:
-            source_matrix = source_model_matrices[source_index]
-            if source_matrix is not None:
-                bone[RIG_IMPORT_SOURCE_MODEL_KEY] = flatten_matrix(
-                    source_matrix
-                ).tolist()
->>>>>>> Stashed changes
                 continue
         if RIG_IMPORT_SOURCE_MODEL_KEY in bone:
             del bone[RIG_IMPORT_SOURCE_MODEL_KEY]
 
 
-<<<<<<< Updated upstream
 def _bounded_cache_store(cache, key, value, limit=64):
     cache[key] = value
     if len(cache) > limit:
@@ -752,98 +629,6 @@ def _matrix_is_identity(mat: Matrix, eps: float = 1e-6) -> bool:
         ) <= eps
     )
 
-=======
-def create_armature_from_data(
-    filepath: str,
-    bind_pose: str,
-    assign_shapes: bool = True,
-    rig_repository=None,
-):
-    rig_data = load_rig_data(filepath, rig_repository)
-    if not rig_data:
-        import_message(
-            f"Failed to load rig data from {filepath}", severity="ERROR", logger=_LOG
-        )
-        return None
-    return create_armature_from_rig_data(
-        rig_data,
-        bind_pose,
-        source_rig_file=filepath,
-        source_document=copy.deepcopy(rig_data.source_document),
-        assign_shapes=assign_shapes,
-    )
-
-
-def create_armature_from_rig_files(
-    filepaths,
-    merged_name: str = "",
-    source_label: str = "",
-    assign_shapes: bool = True,
-    rig_repository=None,
-):
-    """Build one JSON-derived armature by merging each later rig into the first"""
-    rig_datas = []
-    for filepath in filepaths:
-        rig_data = load_rig_data(filepath, rig_repository)
-        if rig_data:
-            rig_datas.append(rig_data)
-        else:
-            import_message(
-                f"Failed to load rig data from {filepath}",
-                severity="ERROR",
-                logger=_LOG,
-            )
-    if not rig_datas:
-        return None
-    # A single rig uses the same remapping, pose fallback, parent, and track rules.
-    merged = merge_rig_datas(
-        rig_datas, merged_name or rig_datas[0].rig_name + "_metarig"
-    )
-    merged_source = source_label or ";".join(filepaths)
-    return create_armature_from_rig_data(
-        merged,
-        "A-Pose",
-        source_rig_file=merged_source,
-        source_document=merged_rig_document(filepaths, merged, source_label, rig_datas),
-        assign_shapes=assign_shapes,
-    )
-
-
-def rig_data_to_root_chunk(rig_data) -> dict:
-    """Represent a merged RigData as the RootChunk shape used by entity import"""
-    if rig_data is None:
-        return {}
-    return {
-        "boneNames": [{"$value": name} for name in rig_data.bone_names],
-        "boneParentIndexes": rig_data.parent_indices.tolist(),
-        "boneTransforms": list(rig_data.bone_transforms),
-        "aPoseLS": list(rig_data.apose_ls),
-        "aPoseMS": [],
-        "trackNames": [{"$value": name} for name in rig_data.track_names],
-        "referenceTracks": list(rig_data.reference_tracks),
-        "levelOfDetailStartIndices": list(rig_data.level_of_detail_start_indices),
-        "distanceCategoryToLodMap": list(rig_data.distance_category_to_lod_map),
-        "tags": {
-            "$type": "redTagList",
-            "tags": [
-                {"$type": "CName", "$storage": "string", "$value": tag}
-                for tag in rig_data.tags
-            ],
-        },
-    }
-
-
-def rig_data_definition_hash(rig_data) -> str:
-    """Return a stable digest for the rig topology, rest pose, and tracks"""
-    payload = rig_data_to_root_chunk(rig_data)
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
->>>>>>> Stashed changes
 
 
 def _coerce_model_space_matrices(values, bone_count: int):
@@ -852,13 +637,7 @@ def _coerce_model_space_matrices(values, bone_count: int):
     try:
         sequence = list(values)
     except TypeError as error:
-<<<<<<< Updated upstream
         raise ValueError("model_space_matrices must be an iterable of 4x4 matrices") from error
-=======
-        raise ValueError(
-            "model_space_matrices must be an iterable of 4x4 matrices"
-        ) from error
->>>>>>> Stashed changes
     if len(sequence) != bone_count:
         raise ValueError(
             f"model_space_matrices contains {len(sequence)} entries for {bone_count} bones"
@@ -873,18 +652,11 @@ def _coerce_model_space_matrices(values, bone_count: int):
                 raise ValueError(
                     f"model_space_matrices[{index}] has shape {array.shape}, expected (4, 4)"
                 )
-<<<<<<< Updated upstream
             matrix = Matrix(tuple(tuple(float(component) for component in row) for row in array))
-=======
-            matrix = Matrix(
-                tuple(tuple(float(component) for component in row) for row in array)
-            )
->>>>>>> Stashed changes
         matrices.append(matrix)
     return tuple(matrices)
 
 
-<<<<<<< Updated upstream
 # Blender edit bones store head, tail and roll in float32. matrix_local's Y axis is
 # recovered as (tail - head) / length, so the perpendicular component of the endpoint
 # rounding error scales as ulp(|head|) / length: a short bone far from the origin cannot
@@ -999,39 +771,6 @@ def _isolated_armature_edit_session(arm_obj):
             pass
         if bpy.data.scenes.get(build_scene.name) is build_scene:
             bpy.data.scenes.remove(build_scene)
-=======
-_RIG_COLLECTION_KEY = "cp77_rig_collection"
-
-
-def _collection_visible_in_view_layer(collection, view_layer) -> bool:
-    stack = [view_layer.layer_collection]
-    while stack:
-        layer = stack.pop()
-        if layer.exclude:
-            continue
-        if layer.collection is collection:
-            return True
-        stack.extend(layer.children)
-    return False
-
-
-def rig_collection_for(rig_name: str):
-    """Return a rig collection that is reachable from the active view layer"""
-    context = bpy.context
-    existing = bpy.data.collections.get(rig_name)
-    if (
-        existing is not None
-        and existing.get(_RIG_COLLECTION_KEY)
-        and _collection_visible_in_view_layer(existing, context.view_layer)
-    ):
-        return existing
-    collection = track_created_datablock(
-        "collections", bpy.data.collections.new(rig_name)
-    )
-    collection[_RIG_COLLECTION_KEY] = True
-    context.scene.collection.children.link(collection)
-    return collection
->>>>>>> Stashed changes
 
 
 def _activate_armature_in_current_view_layer(arm_obj) -> None:
@@ -1043,11 +782,6 @@ def _activate_armature_in_current_view_layer(arm_obj) -> None:
             pass
     arm_obj.hide_viewport = False
     arm_obj.hide_select = False
-<<<<<<< Updated upstream
-=======
-    if context.view_layer.objects.get(arm_obj.name) is not arm_obj:
-        return
->>>>>>> Stashed changes
     try:
         arm_obj.hide_set(False)
     except RuntimeError:
@@ -1057,7 +791,6 @@ def _activate_armature_in_current_view_layer(arm_obj) -> None:
 
 
 def set_armature_model_space_matrices(
-<<<<<<< Updated upstream
         arm_obj,
         bone_names,
         model_space_matrices,
@@ -1073,46 +806,19 @@ def set_armature_model_space_matrices(
     }
 
     with _isolated_armature_edit_session(arm_obj) as timings:
-=======
-    arm_obj,
-    bone_names,
-    model_space_matrices,
-):
-    """Apply authoritative armature-space rest matrices in an isolated edit scene"""
-    if arm_obj is None or getattr(arm_obj, "type", None) != "ARMATURE":
-        raise ValueError(
-            "set_armature_model_space_matrices requires an armature object"
-        )
-    names = tuple(str(name) for name in bone_names)
-    matrices = _coerce_model_space_matrices(model_space_matrices, len(names))
-    original_lengths = {
-        bone.name: max(float(bone.length), 1.0e-5) for bone in arm_obj.data.bones
-    }
-
-    with ArmatureEditSession(arm_obj) as timings:
->>>>>>> Stashed changes
         edit_bones = arm_obj.data.edit_bones
         for name, matrix in zip(names, matrices):
             edit_bone = edit_bones.get(name)
             if edit_bone is None:
-<<<<<<< Updated upstream
                 raise ValueError(f"Armature {arm_obj.name!r} is missing edit bone {name!r}")
             edit_bone.matrix = matrix
             edit_bone.length = _precision_safe_bone_length(
-=======
-                raise ValueError(
-                    f"Armature {arm_obj.name!r} is missing edit bone {name!r}"
-                )
-            edit_bone.matrix = matrix
-            edit_bone.length = precision_safe_bone_length(
->>>>>>> Stashed changes
                 matrix.translation, original_lengths.get(name, 0.01)
             )
 
     _attach_imported_bone_matrices(arm_obj, matrices)
     return timings
 
-<<<<<<< Updated upstream
 def create_armature_from_rig_data(
         rig_data,
         bind_pose: str,
@@ -1311,327 +1017,10 @@ def create_armature_from_rig_data(
     )
 
     print(f"Successfully imported {rig_name} in {time.perf_counter() - start_time:.2f} seconds.")
-=======
-
-def _blender_rest_matrix(red_model: Matrix) -> Matrix:
-    """The edit-bone matrix for a REDengine model-space rest transform"""
-    translation, rotation, _scale = red_model.decompose()
-    rigid = Matrix.Translation(translation) @ rotation.normalized().to_matrix().to_4x4()
-    return Matrix(red_model_transform_to_current_bone(rigid).tolist())
-
-
-@atomic_armature_update
-def reconcile_armature_from_rig_data(
-    arm_obj,
-    rig_data,
-    *,
-    source_rig_file: str = "",
-    source_document: dict | None = None,
-    assign_shapes: bool = False,
-):
-    """Reconcile an existing armature object to an ordered merged-rig definition"""
-    if arm_obj is None or getattr(arm_obj, "type", None) != "ARMATURE":
-        raise ValueError("reconcile_armature_from_rig_data requires an armature object")
-    if rig_data is None:
-        raise ValueError("rig_data is required")
-
-    names = tuple(str(name) for name in rig_data.bone_names)
-    parent_indices = tuple(int(value) for value in rig_data.parent_indices)
-    if len(names) != len(parent_indices):
-        raise ValueError("Merged rig bone names and parent indices differ in length")
-
-    matrices = build_apose_matrices(
-        rig_data.apose_ms,
-        rig_data.apose_ls,
-        rig_data.bone_names,
-        rig_data.parent_indices,
-    )
-    if matrices is None:
-        matrices = model_space_matrices_cached(
-            rig_data.bone_transforms,
-            rig_data.parent_indices,
-        )
-    if matrices is None or any(not isinstance(matrix, Matrix) for matrix in matrices):
-        raise ValueError("Rig source does not provide a complete rest pose")
-    matrices = tuple(matrix.copy() for matrix in matrices)
-    if any(
-        not np.isfinite(np.asarray(matrix)).all() or abs(matrix.determinant()) < 1e-12
-        for matrix in matrices
-    ):
-        raise ValueError("Rig rest matrices must be finite and invertible")
-    if len(matrices) != len(names):
-        raise ValueError("Merged rig rest pose does not match its bone count")
-    # The rest pose is REDengine model space; edit bones take Blender bone axes, as a freshly built rig has them.
-    blender_matrices = tuple(_blender_rest_matrix(matrix) for matrix in matrices)
-
-    arm_data = arm_obj.data
-    plan = plan_bones(
-        names, parent_indices, arm_data.bones.keys(), imported_bone_names(arm_obj)
-    )
-    old_names = tuple(str(name) for name in arm_data.get("boneNames", ()))
-    old_parents = tuple(arm_data.get("boneParentIndexes", ()))
-    old_parent_names = {
-        name: old_names[int(parent)] if 0 <= int(parent) < len(old_names) else ""
-        for name, parent in zip(old_names, old_parents)
-    }
-    rest_updates = {}
-    for index, name in enumerate(names):
-        bone = arm_data.bones.get(name)
-        if bone is None:
-            continue
-        previous = bone.get(RIG_IMPORT_SOURCE_MODEL_KEY)
-        baseline = bone.get(RIG_IMPORT_MATRIX_KEY)
-        if previous is None or baseline is None:
-            continue
-        previous = np.asarray(previous, dtype=np.float64).reshape(4, 4)
-        baseline = np.asarray(baseline, dtype=np.float64).reshape(4, 4)
-        if not np.array_equal(previous, np.asarray(matrices[index])):
-            # Carry the user's model-space edit (current against the import baseline) onto the new rest.
-            current = transfer_matrix_delta(
-                bone.matrix_local, baseline, blender_matrices[index]
-            )
-            imported = np.asarray(blender_matrices[index])
-            if not np.isfinite(current).all() or not np.isfinite(imported).all():
-                raise ValueError(f"Invalid rest metadata on bone {name!r}")
-            rest_updates[name] = (Matrix(current.tolist()), imported)
-    with ArmatureEditSession(arm_obj):
-        edit_bones = arm_data.edit_bones
-        # Preserve authored children, including their model-space rest transforms.
-        for bone in tuple(edit_bones):
-            if (
-                bone.name not in plan.removed
-                and bone.parent
-                and bone.parent.name in plan.removed
-            ):
-                parent = bone.parent
-                while parent and parent.name in plan.removed:
-                    parent = parent.parent
-                matrix = bone.matrix.copy()
-                bone.use_connect = False
-                bone.parent = parent
-                bone.matrix = matrix
-        for name in plan.removed:
-            edit_bones.remove(edit_bones[name])
-        for index in plan.order:
-            name = names[index]
-            parent_index = parent_indices[index]
-            parent_name = names[parent_index] if parent_index >= 0 else ""
-            parent = edit_bones.get(parent_name)
-            bone = edit_bones.get(name)
-            if name in plan.added:
-                bone = edit_bones.new(name)
-                bone.head = Vector((0.0, 0.0, 0.0))
-                bone.tail = Vector((0.0, 0.05, 0.0))
-                bone.parent = parent
-                matrix = blender_matrices[index].copy()
-                if parent is not None:
-                    matrix = (
-                        parent.matrix
-                        @ blender_matrices[parent_index].inverted()
-                        @ matrix
-                    )
-                bone.matrix = matrix
-                bone.length = precision_safe_bone_length(matrix.translation, 0.05)
-            elif old_parent_names.get(name, parent_name) != parent_name:
-                current_parent = bone.parent.name if bone.parent else ""
-                if current_parent == old_parent_names.get(name) or current_parent == "":
-                    matrix = bone.matrix.copy()
-                    bone.use_connect = False
-                    bone.parent = parent
-                    bone.matrix = matrix
-            if name in rest_updates:
-                bone.matrix = rest_updates[name][0]
-        # Existing pose channels and authored rest deltas survive replacements.
-
-    arm_data["cp77_source_rig_file"] = source_rig_file
-    arm_data["cp77_rig_space_contract"] = RIG_SPACE_CONTRACT_CURRENT
-    arm_data["boneNames"] = list(names)
-    arm_data["boneParentIndexes"] = list(parent_indices)
-    arm_data["trackNames"] = list(rig_data.track_names)
-    arm_data["referenceTracks"] = list(rig_data.reference_tracks)
-    arm_data["cp77_rig_tags"] = list(getattr(rig_data, "tags", ()) or ())
-
-    for source_index, source_name in enumerate(names):
-        bone = arm_data.bones.get(source_name)
-        if bone is None:
-            continue
-        bone["cp77_rig_index"] = source_index
-        bone["cp77_rig_source_name"] = source_name
-
-    if rig_data.parts:
-        assign_part_groups(arm_obj, rig_data.parts)
-    else:
-        store_rig_part_masks(arm_obj, {})
-    if assign_shapes:
-        assign_bone_shapes(arm_obj, rig_data.disable_connect)
-    assign_reference_tracks(arm_obj, rig_data.track_names, rig_data.reference_tracks)
-    _attach_rig_export_metadata(arm_obj, source_document)
-    for index, name in enumerate(names):
-        bone = arm_data.bones.get(name)
-        if bone is None:
-            raise ValueError(
-                f"Blender could not retain the requested bone name {name!r}"
-            )
-        if name in rest_updates:
-            bone[RIG_IMPORT_MATRIX_KEY] = flatten_matrix(rest_updates[name][1]).tolist()
-            bone[RIG_IMPORT_SOURCE_MODEL_KEY] = flatten_matrix(matrices[index]).tolist()
-        elif name in plan.added:
-            bone[RIG_IMPORT_MATRIX_KEY] = flatten_matrix(bone.matrix_local).tolist()
-            bone[RIG_IMPORT_SOURCE_MODEL_KEY] = flatten_matrix(matrices[index]).tolist()
-    return arm_obj
-
-
-def reconcile_armature_overlay_from_rig_data(
-    arm_obj, base_rig_data, merged_rig_data, *, source_rig_file="", source_document=None
-):
-    """Appearance changes use the same source-owned delta as manual part edits"""
-    reconcile_armature_from_rig_data(
-        arm_obj,
-        merged_rig_data,
-        source_rig_file=source_rig_file,
-        source_document=source_document,
-        assign_shapes=False,
-    )
-    base_names = set(getattr(base_rig_data, "bone_names", ()))
-    return tuple(name for name in merged_rig_data.bone_names if name not in base_names)
-
-
-def create_armature_from_rig_data(
-    rig_data,
-    bind_pose: str,
-    source_rig_file: str = "",
-    source_document: dict | None = None,
-    assign_shapes: bool = True,
-    model_space_matrices=None,
-    collection=None,
-):
-    rig_name = str(rig_data.rig_name)
-    with operation(
-        _LOG, f"rig import {rig_name}", source=source_rig_file, bind_pose=bind_pose
-    ):
-        safe_mode_switch("OBJECT")
-
-        rig_col = collection if collection is not None else rig_collection_for(rig_name)
-
-        arm_data = track_created_datablock(
-            "armatures", bpy.data.armatures.new(f"{rig_name}_Data")
-        )
-        # Relationship lines join each bone head to its parent's head, the joint hierarchy the rig defines.
-        arm_data.relation_line_position = "HEAD"
-        arm_obj = track_created_datablock(
-            "objects", bpy.data.objects.new(rig_name, arm_data)
-        )
-        rig_col.objects.link(arm_obj)
-
-        parent_indices_list = rig_data.parent_indices.tolist()
-        arm_data["cp77_source_rig_file"] = source_rig_file
-        arm_data["cp77_rig_space_contract"] = RIG_SPACE_CONTRACT_CURRENT
-        arm_data["boneNames"] = list(rig_data.bone_names)
-        arm_data["boneParentIndexes"] = parent_indices_list
-        arm_data["trackNames"] = list(rig_data.track_names)
-        arm_data["referenceTracks"] = list(rig_data.reference_tracks)
-        arm_data["cp77_rig_tags"] = list(getattr(rig_data, "tags", ()) or ())
-
-        override_matrices = _coerce_model_space_matrices(
-            model_space_matrices,
-            len(rig_data.bone_names),
-        )
-
-        try:
-            with ArmatureEditSession(arm_obj):
-                edit_bones = arm_data.edit_bones
-                bone_index_map: dict[int, bpy.types.EditBone] = {}
-                for i, name in enumerate(rig_data.bone_names):
-                    bone = edit_bones.new(name)
-                    bone.head = Vector((0, 0, 0))
-                    bone.tail = Vector((0, 0.05, 0))
-                    bone_index_map[i] = bone
-                for i, parent_idx in enumerate(parent_indices_list):
-                    child_bone = bone_index_map[i]
-                    if parent_idx != -1:
-                        child_bone.parent = bone_index_map[parent_idx]
-
-                mats = (
-                    build_apose_matrices(
-                        rig_data.apose_ms,
-                        rig_data.apose_ls,
-                        rig_data.bone_names,
-                        rig_data.parent_indices,
-                    )
-                    if bind_pose == "A-Pose" and override_matrices is None
-                    else None
-                )
-                if override_matrices is not None:
-                    imported_model_matrices = override_matrices
-                    set_edit_bone_model_matrices(
-                        bone_index_map,
-                        override_matrices,
-                        rig_data.parent_indices,
-                    )
-                else:
-                    global_transforms = model_space_matrices_cached(
-                        rig_data.bone_transforms,
-                        rig_data.parent_indices,
-                    )
-                    imported_model_matrices = (
-                        mats if mats is not None else global_transforms
-                    )
-                    if mats is None:
-                        apply_bind_matrices(
-                            bone_index_map,
-                            global_transforms[: len(rig_data.bone_names)],
-                            rig_data.parent_indices,
-                            skip_identity=True,
-                        )
-
-                arm_data["cp77_t_pose"] = True
-                if bind_pose == "A-Pose" and override_matrices is None:
-                    if mats is not None:
-                        apply_bind_matrices(
-                            bone_index_map, mats, rig_data.parent_indices
-                        )
-                        arm_data["cp77_t_pose"] = False
-                    else:
-                        _LOG.warning(
-                            "A-Pose unavailable for %s; using T-Pose fallback from %s",
-                            rig_name,
-                            source_rig_file,
-                        )
-
-            if rig_data.parts:
-                assign_part_groups(arm_obj, rig_data.parts)
-        except Exception:
-            if bpy.data.objects.get(arm_obj.name) is arm_obj:
-                bpy.data.objects.remove(arm_obj, do_unlink=True)
-            if (
-                bpy.data.armatures.get(arm_data.name) is arm_data
-                and arm_data.users == 0
-            ):
-                bpy.data.armatures.remove(arm_data)
-            raise
-
-        _activate_armature_in_current_view_layer(arm_obj)
-
-        if assign_shapes:
-            assign_bone_shapes(arm_obj, rig_data.disable_connect)
-
-        assign_reference_tracks(
-            arm_obj, rig_data.track_names, rig_data.reference_tracks
-        )
-
-        for source_index, source_name in enumerate(rig_data.bone_names):
-            bone = arm_data.bones.get(blender_bone_name(source_name))
-            if bone is not None:
-                bone["cp77_rig_index"] = source_index
-                bone["cp77_rig_source_name"] = source_name
-        _attach_rig_export_metadata(arm_obj, source_document)
-        _attach_imported_bone_matrices(arm_obj, imported_model_matrices)
->>>>>>> Stashed changes
     return arm_obj
 
 
 def create_bone_shape():
-<<<<<<< Updated upstream
     shape = bpy.data.objects.get("BoneCustomShape")
     if shape is None:
         current_mode = get_safe_mode()
@@ -1654,25 +1043,6 @@ def create_bone_shape():
         print(f"[create_bone_shape] Warning: Could not hide object: {e}")
 
     shape.select_set(False)
-=======
-    """Return the shared bone display shape"""
-    shape = bpy.data.objects.get("BoneCustomShape")
-    if shape is None:
-        mesh = track_created_datablock("meshes", bpy.data.meshes.new("BoneCustomShape"))
-        geometry = bmesh.new()
-        try:
-            bmesh.ops.create_icosphere(geometry, subdivisions=2, radius=1.0)
-            geometry.to_mesh(mesh)
-        finally:
-            geometry.free()
-        mesh.shade_smooth()
-        shape = track_created_datablock(
-            "objects",
-            bpy.data.objects.new("BoneCustomShape", mesh),
-        )
-    shape.hide_viewport = True
-    shape.hide_render = True
->>>>>>> Stashed changes
     return shape
 
 
@@ -1681,11 +1051,8 @@ def assign_bone_shapes(arm, disable_connect, shape=None):
     if shape is None or not isinstance(shape, bpy.types.Object):
         shape = create_bone_shape()
 
-<<<<<<< Updated upstream
     bpy.context.view_layer.objects.active = arm
 
-=======
->>>>>>> Stashed changes
     for pb in arm.pose.bones:
         name = pb.name
 
@@ -1725,7 +1092,6 @@ def assign_part_groups(arm_obj, parts):
         return
 
     arm_data = arm_obj.data
-<<<<<<< Updated upstream
     arm_obj.hide_set(False)
     arm_obj.hide_viewport = False
     arm_obj.hide_render = False
@@ -1733,8 +1099,6 @@ def assign_part_groups(arm_obj, parts):
     bpy.context.view_layer.objects.active = arm_obj
     safe_mode_switch("EDIT")
 
-=======
->>>>>>> Stashed changes
     bones = arm_data.bones
     children_by_name = {}
     for bone in bones:
@@ -1777,20 +1141,8 @@ def assign_part_groups(arm_obj, parts):
     pose_rotation_bones = []
     pose_rotation_seen = set()
     final_bones_with_rot_ms = []
-<<<<<<< Updated upstream
     final_mask_entries = {}
     final_mask_rot_ms = []
-=======
-    final_mask_rot_ms = []
-    source_bone_names = tuple(str(name) for name in arm_data.get("boneNames", ()))
-    source_parents = tuple(arm_data.get("boneParentIndexes", ()) or ())
-    part_masks = rig_part_masks_by_bone_name(
-        parts,
-        source_bone_names,
-        source_parents if len(source_parents) == len(source_bone_names) else None,
-    )
-    part_rotation_ms = rig_part_rotation_ms_by_name(parts, source_bone_names)
->>>>>>> Stashed changes
     has_part_metadata = False
     for part in parts:
         if not isinstance(part, dict):
@@ -1799,19 +1151,9 @@ def assign_part_groups(arm_obj, parts):
         if not isinstance(part_name, str):
             continue
 
-<<<<<<< Updated upstream
         collection = arm_data.collections.get(part_name) or arm_data.collections.new(name=part_name)
         for bone_entry in part.get("singleBones", []):
             bone_name = bone_entry.get("$value") if isinstance(bone_entry, dict) else None
-=======
-        collection = arm_data.collections.get(part_name) or arm_data.collections.new(
-            name=part_name
-        )
-        for bone_entry in part.get("singleBones", []):
-            bone_name = (
-                bone_entry.get("$value") if isinstance(bone_entry, dict) else None
-            )
->>>>>>> Stashed changes
             if isinstance(bone_name, str):
                 bone = bones.get(bone_name) or bones.get(merged_bone_name(bone_name))
                 if bone:
@@ -1823,13 +1165,7 @@ def assign_part_groups(arm_obj, parts):
             for root_name in collect_root_bones(tree):
                 if not isinstance(root_name, str):
                     continue
-<<<<<<< Updated upstream
                 resolved_root_name = root_name if bones.get(root_name) else merged_bone_name(root_name)
-=======
-                resolved_root_name = (
-                    root_name if bones.get(root_name) else merged_bone_name(root_name)
-                )
->>>>>>> Stashed changes
                 root_bone = bones.get(resolved_root_name)
                 if root_bone:
                     collection.assign(root_bone)
@@ -1838,27 +1174,16 @@ def assign_part_groups(arm_obj, parts):
                     if child_bone:
                         collection.assign(child_bone)
 
-<<<<<<< Updated upstream
         bones_with_rot_ms = [entry.get("$value") for entry in part.get("bonesWithRotationInModelSpace", []) if
                              isinstance(entry, dict) and "$value" in entry]
         mask_entries = {str(entry["index"]): entry["weight"] for entry in part.get("mask", []) if
                         isinstance(entry, dict) and "index" in entry and "weight" in entry}
-=======
-        bones_with_rot_ms = [
-            entry.get("$value")
-            for entry in part.get("bonesWithRotationInModelSpace", [])
-            if isinstance(entry, dict) and "$value" in entry
-        ]
->>>>>>> Stashed changes
         mask_rot_ms = part.get("maskRotMS", [])
         has_part_metadata = True
         for bone_name in bones_with_rot_ms:
             if bone_name not in final_bones_with_rot_ms:
                 final_bones_with_rot_ms.append(bone_name)
-<<<<<<< Updated upstream
         final_mask_entries.update(mask_entries)
-=======
->>>>>>> Stashed changes
         final_mask_rot_ms.extend(mask_rot_ms)
         for name in bones_with_rot_ms:
             if isinstance(name, str) and name not in pose_rotation_seen:
@@ -1867,7 +1192,6 @@ def assign_part_groups(arm_obj, parts):
 
     if has_part_metadata:
         arm_obj["bonesWithRotationInModelSpace"] = final_bones_with_rot_ms
-<<<<<<< Updated upstream
         arm_obj["mask"] = json.dumps(final_mask_entries)
         arm_obj["maskRotMS"] = final_mask_rot_ms
 
@@ -1879,29 +1203,11 @@ def assign_part_groups(arm_obj, parts):
             if pose_bone:
                 pose_bone["maskRotMS"] = True
     safe_mode_switch('OBJECT')
-=======
-        arm_obj["maskRotMS"] = final_mask_rot_ms
-        store_rig_part_masks(arm_obj, part_masks)
-        store_rig_part_rotation_ms(arm_obj, part_rotation_ms)
-
-    if pose_rotation_bones:
-        pose_bones = arm_obj.pose.bones
-        for bone_name in pose_rotation_bones:
-            pose_bone = pose_bones.get(bone_name) or pose_bones.get(
-                merged_bone_name(bone_name)
-            )
-            if pose_bone:
-                pose_bone["maskRotMS"] = True
->>>>>>> Stashed changes
 
 
 def assign_reference_tracks(arm_obj, track_names, reference_tracks):
     if not track_names:
         return
-<<<<<<< Updated upstream
-=======
-    reference_tracks = reference_tracks or ()
->>>>>>> Stashed changes
     names: list[str] = []
     for t in track_names:
         if isinstance(t, str):
@@ -1909,7 +1215,6 @@ def assign_reference_tracks(arm_obj, track_names, reference_tracks):
         elif isinstance(t, dict) and "$value" in t:
             names.append(str(t["$value"]))
     for i, name in enumerate(names):
-<<<<<<< Updated upstream
         if i < len(reference_tracks):
             ensure_track_property(
                 arm_obj,
@@ -1918,13 +1223,3 @@ def assign_reference_tracks(arm_obj, track_names, reference_tracks):
                 default=float(reference_tracks[i]),
                 overwrite_ui=False,
             )
-=======
-        default = float(reference_tracks[i]) if i < len(reference_tracks) else 0.0
-        ensure_track_property(
-            arm_obj,
-            name,
-            default,
-            default=default,
-            overwrite_ui=False,
-        )
->>>>>>> Stashed changes

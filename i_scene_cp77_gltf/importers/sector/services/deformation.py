@@ -1,19 +1,12 @@
 from __future__ import annotations
-<<<<<<< Updated upstream
 from ....blender.transactions import track_created_datablock
 
 from dataclasses import dataclass
 import math
-=======
-
-import math
-from dataclasses import dataclass
->>>>>>> Stashed changes
 
 import bpy
 from mathutils import Matrix, Vector
 
-<<<<<<< Updated upstream
 from ....animation.blender_pose import interpolate_matrix_trs_components
 
 from ..context import DeformationDataError
@@ -21,16 +14,6 @@ from ....assetio.values import axis_value
 
 
 DEFORMATION_CONTRACT = "FRAME_MATRIX_VERTEX_BAKE"
-=======
-from ....blender.identity import rna_identity
-from ....blender.naming import fit_id_name
-from ....blender.pose import interpolate_matrix_trs_components
-from ....blender.transactions import track_created_datablock
-from ...common.collections import remap_copied_object_references
-from ..context import DeformationDataError
-from ..objects import copy_object, new_collection, new_empty
-from .buffers import column_matrix
->>>>>>> Stashed changes
 
 
 @dataclass(slots=True, frozen=True)
@@ -48,7 +31,6 @@ DEFORMATION_AXIS_CONTRACTS = {
 
 @dataclass(slots=True, frozen=True)
 class DeformationFrameMetrics:
-<<<<<<< Updated upstream
     normalized_homogeneous_frames: int
     dominant_axis_index: int
     dominant_axis_span: float
@@ -57,10 +39,6 @@ class DeformationFrameMetrics:
     contract_axis_max: float
     minimum_frame_step: float
     maximum_frame_step: float
-=======
-    dominant_axis_index: int
-    dominant_axis_span: float
->>>>>>> Stashed changes
     monotonic_contract_axis: bool
 
 
@@ -68,18 +46,12 @@ class DeformationFrameMetrics:
 class DeformationAnalysis:
     node_type: str
     contract: DeformationAxisContract
-<<<<<<< Updated upstream
     records: tuple
     frames: tuple
     metrics: DeformationFrameMetrics
     source_axis_min: float
     source_axis_max: float
     source_vertex_count: int
-=======
-    frames: tuple
-    source_axis_min: float
-    source_axis_max: float
->>>>>>> Stashed changes
     can_deform: bool
 
 
@@ -88,10 +60,7 @@ class DeformationPlacement:
     collection: object
     placement_root: object
     path_object: object | None
-<<<<<<< Updated upstream
     rendered_fallback_curve: bool
-=======
->>>>>>> Stashed changes
 
 
 class DeformationService:
@@ -100,15 +69,11 @@ class DeformationService:
 
     @staticmethod
     def records(data):
-<<<<<<< Updated upstream
         records = (
             data.get("deformationData", [])
             if isinstance(data, dict)
             else []
         )
-=======
-        records = data.get("deformationData", []) if isinstance(data, dict) else []
->>>>>>> Stashed changes
         if isinstance(records, dict):
             for key in ("Data", "Matrices", "Elements", "entries"):
                 candidate = records.get(key)
@@ -132,7 +97,6 @@ class DeformationService:
             if not isinstance(column, dict):
                 column = source.get(column_name.lower())
             if not isinstance(column, dict):
-<<<<<<< Updated upstream
                 raise ValueError(
                     f"deformation frame has no {column_name} column"
                 )
@@ -189,27 +153,14 @@ class DeformationService:
             ):
                 normalized_homogeneous_frames += 1
 
-=======
-                raise ValueError(f"deformation frame has no {column_name} column")
-            columns.append(column)
-
-        return column_matrix(*columns)
-
-    @staticmethod
-    def frame_metrics(frames, axis_index):
->>>>>>> Stashed changes
         translations = [frame.to_translation() for frame in frames]
         spans = [0.0, 0.0, 0.0]
         if translations:
             for component in range(3):
-<<<<<<< Updated upstream
                 values = [
                     float(location[component])
                     for location in translations
                 ]
-=======
-                values = [float(location[component]) for location in translations]
->>>>>>> Stashed changes
                 spans[component] = max(values) - min(values)
 
         dominant_axis = (
@@ -217,19 +168,14 @@ class DeformationService:
             if translations
             else axis_index
         )
-<<<<<<< Updated upstream
         axis_values = [
             float(location[axis_index])
             for location in translations
         ]
-=======
-        axis_values = [float(location[axis_index]) for location in translations]
->>>>>>> Stashed changes
         steps = [
             axis_values[index + 1] - axis_values[index]
             for index in range(len(axis_values) - 1)
         ]
-<<<<<<< Updated upstream
         monotonic = (
             all(step >= -1e-6 for step in steps)
             or all(step <= 1e-6 for step in steps)
@@ -255,14 +201,6 @@ class DeformationService:
                 (abs(step) for step in steps),
                 default=0.0,
             ),
-=======
-        monotonic = all(step >= -1e-6 for step in steps) or all(
-            step <= 1e-6 for step in steps
-        )
-        return DeformationFrameMetrics(
-            dominant_axis_index=dominant_axis,
-            dominant_axis_span=(float(spans[dominant_axis]) if spans else 0.0),
->>>>>>> Stashed changes
             monotonic_contract_axis=monotonic,
         )
 
@@ -275,12 +213,7 @@ class DeformationService:
             except (TypeError, ValueError, KeyError) as error:
                 warning(
                     f"{sector_name}: node {node_index} deformation frame "
-<<<<<<< Updated upstream
                     f"{frame_index} is invalid: {error}"
-=======
-                    f"{frame_index} is invalid: {error}",
-                    exc_info=True,
->>>>>>> Stashed changes
                 )
         if len(frames) < 2:
             warning(
@@ -288,7 +221,6 @@ class DeformationService:
                 f"{len(frames)} usable deformation frames; at least two "
                 "are required"
             )
-<<<<<<< Updated upstream
         return records, tuple(frames)
 
     @staticmethod
@@ -303,12 +235,6 @@ class DeformationService:
 
     def collection_axis_bounds(self, collection, axis_index):
         key = (self._collection_identity(collection), int(axis_index))
-=======
-        return tuple(frames)
-
-    def collection_axis_bounds(self, collection, axis_index):
-        key = (rna_identity(collection), int(axis_index))
->>>>>>> Stashed changes
         cached = self._bounds_cache.get(key)
         if cached is not None:
             return cached
@@ -321,13 +247,9 @@ class DeformationService:
                 continue
             source_matrix = obj.matrix_world
             for vertex in obj.data.vertices:
-<<<<<<< Updated upstream
                 coordinate = float(
                     (source_matrix @ vertex.co)[axis_index]
                 )
-=======
-                coordinate = float((source_matrix @ vertex.co)[axis_index])
->>>>>>> Stashed changes
                 lower = min(lower, coordinate)
                 upper = max(upper, coordinate)
                 vertex_count += 1
@@ -354,21 +276,14 @@ class DeformationService:
                 f"Unsupported deformation node type: {node_type}"
             )
 
-<<<<<<< Updated upstream
         records, frames = self.frames(
-=======
-        frames = self.frames(
->>>>>>> Stashed changes
             data,
             sector_name=sector_name,
             node_index=node_index,
             warning=warning,
         )
         metrics = self.frame_metrics(
-<<<<<<< Updated upstream
             records,
-=======
->>>>>>> Stashed changes
             frames,
             contract.axis_index,
         )
@@ -384,14 +299,10 @@ class DeformationService:
                 f"{'XYZ'[metrics.dominant_axis_index]} but {node_type} "
                 f"expects {contract.axis_name}"
             )
-<<<<<<< Updated upstream
         if (
             len(frames) >= 2
             and not metrics.monotonic_contract_axis
         ):
-=======
-        if len(frames) >= 2 and not metrics.monotonic_contract_axis:
->>>>>>> Stashed changes
             warning(
                 f"{sector_name}: node {node_index} deformation frames are "
                 f"not monotonic along {contract.axis_name}"
@@ -401,7 +312,6 @@ class DeformationService:
         axis_max = 0.0
         vertex_count = 0
         if group is not None:
-<<<<<<< Updated upstream
             axis_min, axis_max, vertex_count = (
                 self.collection_axis_bounds(
                     group,
@@ -412,13 +322,6 @@ class DeformationService:
                 vertex_count == 0
                 or abs(axis_max - axis_min) <= 1e-8
             ):
-=======
-            axis_min, axis_max, vertex_count = self.collection_axis_bounds(
-                group,
-                contract.axis_index,
-            )
-            if vertex_count == 0 or abs(axis_max - axis_min) <= 1e-8:
->>>>>>> Stashed changes
                 warning(
                     f"{sector_name}: node {node_index} source mesh has no "
                     f"usable {contract.axis_name} longitudinal span"
@@ -438,18 +341,12 @@ class DeformationService:
         return DeformationAnalysis(
             node_type=node_type,
             contract=contract,
-<<<<<<< Updated upstream
             records=records,
             frames=frames,
             metrics=metrics,
             source_axis_min=float(axis_min),
             source_axis_max=float(axis_max),
             source_vertex_count=int(vertex_count),
-=======
-            frames=frames,
-            source_axis_min=float(axis_min),
-            source_axis_max=float(axis_max),
->>>>>>> Stashed changes
             can_deform=bool(can_deform),
         )
 
@@ -457,14 +354,10 @@ class DeformationService:
     def interpolate_frame(frames, factor):
         if len(frames) == 1:
             return frames[0].decompose()
-<<<<<<< Updated upstream
         position = (
             max(0.0, min(1.0, float(factor)))
             * (len(frames) - 1)
         )
-=======
-        position = max(0.0, min(1.0, float(factor))) * (len(frames) - 1)
->>>>>>> Stashed changes
         frame_index = min(
             int(math.floor(position)),
             len(frames) - 2,
@@ -496,21 +389,11 @@ class DeformationService:
         )
         cross_section = point.copy()
         cross_section[axis_index] = 0.0
-<<<<<<< Updated upstream
         scaled_cross_section = Vector((
             cross_section.x * scale.x,
             cross_section.y * scale.y,
             cross_section.z * scale.z,
         ))
-=======
-        scaled_cross_section = Vector(
-            (
-                cross_section.x * scale.x,
-                cross_section.y * scale.y,
-                cross_section.z * scale.z,
-            )
-        )
->>>>>>> Stashed changes
         return location + rotation @ scaled_cross_section
 
     def deform_mesh_copy(self, old_obj, new_obj, analysis):
@@ -531,13 +414,9 @@ class DeformationService:
                 for point in key_block.data:
                     point.co = deform_coordinate(point.co)
             basis = shape_keys.key_blocks[0]
-<<<<<<< Updated upstream
             for vertex_index, vertex in enumerate(
                 new_obj.data.vertices
             ):
-=======
-            for vertex_index, vertex in enumerate(new_obj.data.vertices):
->>>>>>> Stashed changes
                 vertex.co = basis.data[vertex_index].co
         else:
             for vertex in new_obj.data.vertices:
@@ -551,7 +430,6 @@ class DeformationService:
         target_collection,
         placement_root,
         *,
-<<<<<<< Updated upstream
         trim_name,
         cable_radius=0.0,
         render_geometry=False,
@@ -560,18 +438,6 @@ class DeformationService:
             trim_name(f"{name}_Path"),
             "CURVE",
         ))
-=======
-        cable_radius=0.0,
-        render_geometry=False,
-    ):
-        curve = track_created_datablock(
-            "curves",
-            bpy.data.curves.new(
-                fit_id_name(f"{name}_Path"),
-                "CURVE",
-            ),
-        )
->>>>>>> Stashed changes
         curve.dimensions = "3D"
         curve.twist_mode = "MINIMUM"
         curve.resolution_u = 1
@@ -587,13 +453,7 @@ class DeformationService:
             curve.resolution_u = 2
             curve.fill_mode = "FULL"
 
-<<<<<<< Updated upstream
         path_object = track_created_datablock("objects", bpy.data.objects.new(curve.name, curve))
-=======
-        path_object = track_created_datablock(
-            "objects", bpy.data.objects.new(curve.name, curve)
-        )
->>>>>>> Stashed changes
         target_collection.objects.link(path_object)
         path_object.parent = placement_root
         path_object.matrix_parent_inverse = Matrix.Identity(4)
@@ -601,10 +461,7 @@ class DeformationService:
         path_object.display_type = "WIRE"
         path_object.hide_render = not render_geometry
         path_object.show_in_front = True
-<<<<<<< Updated upstream
         path_object["deformationFrameCount"] = len(frames)
-=======
->>>>>>> Stashed changes
         return path_object
 
     def copy_deformed_collection(
@@ -613,81 +470,47 @@ class DeformationService:
         name,
         node_matrix,
         analysis,
-<<<<<<< Updated upstream
         operations,
-=======
->>>>>>> Stashed changes
         *,
         color=None,
         hide_armatures=True,
     ):
-<<<<<<< Updated upstream
         destination_root = operations.new_collection(
             operations.trim_name(name)
         )
-=======
-        destination_root = new_collection(fit_id_name(name))
->>>>>>> Stashed changes
         copy_map = {}
 
         def copy_into(source, destination):
             for child in source.children:
-<<<<<<< Updated upstream
                 child_destination = operations.new_collection(child.name)
                 destination.children.link(child_destination)
                 copy_into(child, child_destination)
             for old_object in source.objects:
                 new_object = operations.copy_object(
-=======
-                child_destination = new_collection(child.name)
-                destination.children.link(child_destination)
-                copy_into(child, child_destination)
-            for old_object in source.objects:
-                new_object = copy_object(
->>>>>>> Stashed changes
                     old_object,
                     color=color,
                     hide_armature=hide_armatures,
                 )
-<<<<<<< Updated upstream
                 if (
                     new_object.type == "MESH"
                     and new_object.data is not None
                 ):
                     new_object.data = track_created_datablock("meshes", old_object.data.copy())
-=======
-                if new_object.type == "MESH" and new_object.data is not None:
-                    new_object.data = track_created_datablock(
-                        "meshes", old_object.data.copy()
-                    )
->>>>>>> Stashed changes
                 copy_map[old_object] = new_object
                 destination.objects.link(new_object)
 
         copy_into(source_collection, destination_root)
-<<<<<<< Updated upstream
         operations.remap_copied_object_references(
-=======
-        remap_copied_object_references(
->>>>>>> Stashed changes
             tuple(copy_map.values()),
             copy_map,
         )
 
-<<<<<<< Updated upstream
         placement_root = operations.new_empty(
-=======
-        placement_root = new_empty(
->>>>>>> Stashed changes
             f"{name}_Placement",
             destination_root,
         )
         placement_root.matrix_world = node_matrix
-<<<<<<< Updated upstream
         content_root = operations.new_empty(
-=======
-        content_root = new_empty(
->>>>>>> Stashed changes
             f"{name}_Content",
             destination_root,
         )
@@ -703,14 +526,10 @@ class DeformationService:
             new_object.matrix_basis = old_object.matrix_world.copy()
 
         for old_object, new_object in copy_map.items():
-<<<<<<< Updated upstream
             if (
                 new_object.type == "MESH"
                 and new_object.data is not None
             ):
-=======
-            if new_object.type == "MESH" and new_object.data is not None:
->>>>>>> Stashed changes
                 self.deform_mesh_copy(
                     old_object,
                     new_object,
@@ -724,15 +543,11 @@ class DeformationService:
         instance_name,
         node_matrix,
         analysis,
-<<<<<<< Updated upstream
         operations,
-=======
->>>>>>> Stashed changes
         *,
         cable_radius=0.0,
     ):
         if analysis.can_deform:
-<<<<<<< Updated upstream
             collection, placement_root = (
                 self.copy_deformed_collection(
                     group,
@@ -747,31 +562,14 @@ class DeformationService:
         else:
             collection = operations.new_collection(instance_name)
             placement_root = operations.new_empty(
-=======
-            collection, placement_root = self.copy_deformed_collection(
-                group,
-                instance_name,
-                node_matrix,
-                analysis,
-                color=(0.0380098, 0.595213, 0.600022, 1),
-                hide_armatures=True,
-            )
-        else:
-            collection = new_collection(instance_name)
-            placement_root = new_empty(
->>>>>>> Stashed changes
                 f"{instance_name}_Placement",
                 collection,
             )
             placement_root.matrix_world = node_matrix
 
         render_fallback = (
-<<<<<<< Updated upstream
             analysis.node_type == "worldCableMeshNode"
             and not analysis.can_deform
-=======
-            analysis.node_type == "worldCableMeshNode" and not analysis.can_deform
->>>>>>> Stashed changes
         )
         path_object = None
         if analysis.frames:
@@ -780,10 +578,7 @@ class DeformationService:
                 analysis.frames,
                 collection,
                 placement_root,
-<<<<<<< Updated upstream
                 trim_name=operations.trim_name,
-=======
->>>>>>> Stashed changes
                 cable_radius=cable_radius,
                 render_geometry=render_fallback,
             )
@@ -792,8 +587,5 @@ class DeformationService:
             collection=collection,
             placement_root=placement_root,
             path_object=path_object,
-<<<<<<< Updated upstream
             rendered_fallback_curve=render_fallback,
-=======
->>>>>>> Stashed changes
         )

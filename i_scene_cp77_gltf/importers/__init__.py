@@ -1,4 +1,3 @@
-<<<<<<< Updated upstream
 def register_importers():
     from .operators import register_importers as _register_importers
 
@@ -18,5 +17,3 @@ def menu_func_import(self, context):
 
 
 __all__ = ("menu_func_import", "register_importers", "unregister_importers")
-=======
->>>>>>> Stashed changes

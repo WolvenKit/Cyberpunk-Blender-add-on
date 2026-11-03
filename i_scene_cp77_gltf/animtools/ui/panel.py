@@ -1,18 +1,10 @@
 from bpy.props import StringProperty
 from bpy.types import Panel
 
-<<<<<<< Updated upstream
 from ...addon_identity import get_addon_preferences
 from ...blender.animation_context import active_armature
 from . import facial as facial_ui
 from . import animation as animation_ui
-=======
-from ...blender.animation_context import active_armature
-from ...blender.workspace import is_animation_workspace
-from ...core.addon_identity import get_addon_preferences
-from . import animation as animation_ui
-from . import facial as facial_ui
->>>>>>> Stashed changes
 from . import rig_setup as rig_setup_ui
 
 
@@ -28,21 +20,10 @@ class CP77_PT_AnimsPanel(Panel):
 
     @classmethod
     def poll(cls, context):
-<<<<<<< Updated upstream
         preferences = get_addon_preferences(context, required=False)
         if preferences is None:
             return False
         return active_armature(context) is not None if preferences.context_only else True
-=======
-        if is_animation_workspace(context):
-            return False
-        preferences = get_addon_preferences(context, required=False)
-        if preferences is None:
-            return False
-        return (
-            active_armature(context) is not None if preferences.context_only else True
-        )
->>>>>>> Stashed changes
 
     def draw(self, context):
         layout = self.layout
@@ -58,7 +39,6 @@ class CP77_PT_AnimsPanel(Panel):
 
         layout.separator()
 
-<<<<<<< Updated upstream
         if props.animtab == 'RIGSETUP':
             rig_setup_ui.draw(context, layout, obj)
 
@@ -66,13 +46,4 @@ class CP77_PT_AnimsPanel(Panel):
             animation_ui.draw(context, layout, obj)
 
         elif props.animtab == 'FACIAL':
-=======
-        if props.animtab == "RIGSETUP":
-            rig_setup_ui.draw(context, layout, obj)
-
-        elif props.animtab == "ANIMATION":
-            animation_ui.draw(context, layout, obj)
-
-        elif props.animtab == "FACIAL":
->>>>>>> Stashed changes
             facial_ui.draw(context, layout, obj)

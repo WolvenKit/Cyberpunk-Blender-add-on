@@ -1,33 +1,17 @@
-<<<<<<< Updated upstream
 import logging
 import os
 import threading
-=======
-import os
-import threading
-import time
->>>>>>> Stashed changes
 from collections import OrderedDict
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType
 
-<<<<<<< Updated upstream
 from .catalog import (
     COOKED_RESOURCE_EXPORTS,
     COOKED_RESOURCE_SUFFIXES,
     EXPORTED_RESOURCE_SUFFIXES,
     EXPORT_GROUPS_BY_OUTPUT_EXTENSION,
-=======
-from ..core.log import debug_exception, get_logger
-from .cache import store_bounded_lru
-from .catalog import (
-    COOKED_RESOURCE_EXPORTS,
-    COOKED_RESOURCE_SUFFIXES,
-    EXPORT_GROUPS_BY_OUTPUT_EXTENSION,
-    EXPORTED_RESOURCE_SUFFIXES,
->>>>>>> Stashed changes
     normalize_extension,
     normalize_extensions,
 )
@@ -39,7 +23,6 @@ from .paths import (
     local_path_key,
 )
 
-<<<<<<< Updated upstream
 
 _SKIP_DIRS = frozenset({
     "__pycache__",
@@ -51,22 +34,6 @@ _SKIP_DIRS = frozenset({
     "archive",
     "backup",
 })
-=======
-_LOG = get_logger(__name__)
-
-_SKIP_DIRS = frozenset(
-    {
-        "__pycache__",
-        ".git",
-        ".svn",
-        "node_modules",
-        ".vscode",
-        ".idea",
-        "archive",
-        "backup",
-    }
-)
->>>>>>> Stashed changes
 
 
 class IndexPolicy(str, Enum):
@@ -93,23 +60,15 @@ class AssetIndexSnapshot:
     _depot_lookup: Mapping[str, Mapping[str, str]]
     _ambiguous_local: Mapping[str, frozenset[str]]
     _ambiguous_depot: Mapping[str, frozenset[str]]
-<<<<<<< Updated upstream
-=======
-    directory_mtimes: tuple[tuple[str, int], ...] = ()
-    depth: int | None = None
->>>>>>> Stashed changes
 
     @property
     def extensions(self):
         return frozenset(self.indexed_suffixes)
 
-<<<<<<< Updated upstream
     @property
     def has_collisions(self):
         return bool(self.collisions)
 
-=======
->>>>>>> Stashed changes
     def get_files_by_extension(self, extension):
         suffix = normalize_extension(extension)
         return list(self.files_by_suffix.get(suffix, ()))
@@ -124,7 +83,6 @@ class AssetIndexSnapshot:
         return depot_path_key(path) in self._depot_lookup.get(suffix, {})
 
     def export_candidates(self, reference, export_extensions=None):
-<<<<<<< Updated upstream
         value = os.fspath(reference) if reference else ""
         if not value:
             return []
@@ -164,13 +122,6 @@ class AssetIndexSnapshot:
             candidates.append(candidate)
         return candidates
 
-=======
-        return export_candidates(
-            reference,
-            export_extensions or self.indexed_suffixes,
-        )
-
->>>>>>> Stashed changes
     def resolve_export(self, reference, export_extensions=None, warn=False):
         for candidate in self.export_candidates(reference, export_extensions):
             resolved, ambiguous = self._resolve_candidate(candidate)
@@ -178,22 +129,14 @@ class AssetIndexSnapshot:
                 return resolved
             if ambiguous:
                 if warn:
-<<<<<<< Updated upstream
                     logging.warning(
-=======
-                    _LOG.warning(
->>>>>>> Stashed changes
                         "Asset reference is ambiguous and will be skipped: %s",
                         candidate,
                     )
                 return None
 
         if warn:
-<<<<<<< Updated upstream
             logging.warning(
-=======
-            _LOG.warning(
->>>>>>> Stashed changes
                 "Exported asset reference is not indexed and will be skipped: %s",
                 reference,
             )
@@ -223,7 +166,6 @@ class AssetIndexSnapshot:
         return self._depot_lookup.get(suffix, {}).get(key), ambiguous
 
 
-<<<<<<< Updated upstream
 _cache_lock = threading.RLock()
 _snapshots_by_key = OrderedDict()
 _next_generation = 0
@@ -231,109 +173,10 @@ _MAX_CACHED_INDEXES = 64
 
 
 def build_asset_index(root, extensions, *, policy=IndexPolicy.REUSE):
-=======
-def export_candidates(reference, export_extensions):
-    value = os.fspath(reference) if reference else ""
-    if not value:
-        return []
-
-    requested = normalize_extensions(export_extensions)
-    if not requested:
-        return []
-    key = value.replace("\\", "/").casefold()
-    cooked_suffix = _first_matching_suffix(key, COOKED_RESOURCE_SUFFIXES)
-    exported_suffix = (
-        ""
-        if cooked_suffix
-        else _first_matching_suffix(
-            key,
-            EXPORTED_RESOURCE_SUFFIXES,
-        )
-    )
-
-    if cooked_suffix:
-        base = value[: -len(cooked_suffix)]
-        outputs = COOKED_RESOURCE_EXPORTS[cooked_suffix]
-    elif exported_suffix:
-        base = value[: -len(exported_suffix)]
-        outputs = EXPORT_GROUPS_BY_OUTPUT_EXTENSION[exported_suffix]
-    else:
-        current = _first_matching_suffix(key, requested)
-        if current:
-            return [value]
-        base = value
-        outputs = requested
-
-    candidates = []
-    seen = set()
-    requested_set = set(requested)
-    for output in outputs:
-        if output not in requested_set:
-            continue
-        candidate = f"{base}{output}"
-        candidate_key = candidate.replace("\\", "/").casefold()
-        if candidate_key in seen:
-            continue
-        seen.add(candidate_key)
-        candidates.append(candidate)
-    return candidates
-
-
-_cache_lock = threading.RLock()
-_snapshots_by_key = OrderedDict()
-# Snapshots of a few folder levels are kept apart, so many of them never push a whole tree's snapshot out.
-_shallow_snapshots_by_key = OrderedDict()
-_name_lookups = OrderedDict()
-_next_generation = 0
-_MAX_CACHED_INDEXES = 64
-_MAX_SHALLOW_INDEXES = 512
-# Reused snapshots are revalidated against directory mtimes at most this often,
-# so one import does not repeat the check while a later import sees new exports.
-_VALIDATION_INTERVAL_SECONDS = 2.0
-# Trees beyond this size (a full game depot) are static in practice; they keep
-# session-lifetime reuse and are refreshed explicitly by the user.
-_MAX_VALIDATED_DIRECTORIES = 20000
-_validated_at = {}
-
-
-def _snapshot_is_current(snapshot):
-    mtimes = snapshot.directory_mtimes
-    if not mtimes or len(mtimes) > _MAX_VALIDATED_DIRECTORIES:
-        return True
-    # One stamp per root and suffix set, holding the generation it checked: a rescan replaces it rather than adding one.
-    key = (snapshot.root.key, snapshot.indexed_suffixes, snapshot.depth)
-    now = time.monotonic()
-    checked = _validated_at.get(key)
-    if (
-        checked is not None
-        and checked[0] == snapshot.generation
-        and now - checked[1] < _VALIDATION_INTERVAL_SECONDS
-    ):
-        return True
-    for folder, mtime in mtimes:
-        try:
-            if os.stat(folder).st_mtime_ns != mtime:
-                return False
-        except OSError:
-            debug_exception(
-                _LOG,
-                "Could not read the time of %s; the asset index is rebuilt",
-                folder,
-            )
-            return False
-    with _cache_lock:
-        _validated_at[key] = (snapshot.generation, now)
-    return True
-
-
-def build_asset_index(root, extensions, *, policy=IndexPolicy.REUSE, depth=None):
-    """The files under root with extensions"""
->>>>>>> Stashed changes
     global _next_generation
     root_identity = LocalPath.from_value(root)
     suffixes = normalize_extensions(extensions)
     policy = IndexPolicy(policy)
-<<<<<<< Updated upstream
     cache_key = (root_identity.key, suffixes)
 
     with _cache_lock:
@@ -343,20 +186,6 @@ def build_asset_index(root, extensions, *, policy=IndexPolicy.REUSE, depth=None)
                 snapshot
                 for (root_key, _), snapshot in _snapshots_by_key.items()
                 if root_key == root_identity.key
-=======
-    depth = None if depth is None else max(0, int(depth))
-    cache = _snapshots_by_key if depth is None else _shallow_snapshots_by_key
-    cache_key = (root_identity.key, suffixes, depth)
-
-    selected = None
-    if policy is IndexPolicy.REUSE:
-        with _cache_lock:
-            requested = set(suffixes)
-            compatible = [
-                snapshot
-                for (root_key, _, snapshot_depth), snapshot in cache.items()
-                if root_key == root_identity.key and snapshot_depth == depth
->>>>>>> Stashed changes
                 if requested.issubset(snapshot.extensions)
             ]
             if compatible:
@@ -364,32 +193,14 @@ def build_asset_index(root, extensions, *, policy=IndexPolicy.REUSE, depth=None)
                     compatible,
                     key=lambda snapshot: snapshot.generation,
                 )
-<<<<<<< Updated upstream
                 selected_key = (selected.root.key, selected.indexed_suffixes)
                 if selected_key in _snapshots_by_key:
                     _snapshots_by_key.move_to_end(selected_key)
                 return selected
-=======
-    if selected is not None:
-        if _snapshot_is_current(selected):
-            with _cache_lock:
-                selected_key = (
-                    selected.root.key,
-                    selected.indexed_suffixes,
-                    selected.depth,
-                )
-                if selected_key in cache:
-                    cache.move_to_end(selected_key)
-            return selected
-        _LOG.debug("Asset index for %s is stale; rescanning", root_identity.value)
-
-    with _cache_lock:
->>>>>>> Stashed changes
         _next_generation += 1
         generation = _next_generation
 
     # Filesystem traversal is deliberately outside the global cache lock.
-<<<<<<< Updated upstream
     snapshot = _scan_snapshot(root_identity, suffixes, generation)
 
     with _cache_lock:
@@ -427,20 +238,6 @@ def cached_asset_indexes(root=None):
             snapshot
             for (snapshot_root, _), snapshot in _snapshots_by_key.items()
             if snapshot_root == root_key
-=======
-    snapshot = _scan_snapshot(root_identity, suffixes, generation, depth)
-
-    with _cache_lock:
-        existing = cache.get(cache_key)
-        if existing is not None and existing.generation > snapshot.generation:
-            cache.move_to_end(cache_key)
-            return existing
-        return store_bounded_lru(
-            cache,
-            cache_key,
-            snapshot,
-            limit=_MAX_CACHED_INDEXES if depth is None else _MAX_SHALLOW_INDEXES,
->>>>>>> Stashed changes
         )
 
 
@@ -457,93 +254,31 @@ def indexed_files(asset_index, *extensions):
     return tuple(files)
 
 
-<<<<<<< Updated upstream
 def _scan_snapshot(root, suffixes, generation):
-=======
-def files_by_name(asset_index, extension, *, folder_suffix=""):
-    """The indexed extension files in a folder whose name ends with folder_suffix"""
-    suffix = normalize_extension(extension)
-    folder_suffix = str(folder_suffix or "").casefold()
-    key = (asset_index.generation, suffix, folder_suffix)
-    with _cache_lock:
-        cached = _name_lookups.get(key)
-        if cached is not None:
-            _name_lookups.move_to_end(key)
-            return cached
-    found = {}
-    for path in asset_index.files_by_suffix.get(suffix, ()):
-        if os.path.basename(os.path.dirname(path)).casefold().endswith(folder_suffix):
-            found.setdefault(os.path.basename(path).casefold(), path)
-    with _cache_lock:
-        return store_bounded_lru(
-            _name_lookups, key, MappingProxyType(found), limit=_MAX_SHALLOW_INDEXES
-        )
-
-
-def _scan_snapshot(root, suffixes, generation, depth=None):
->>>>>>> Stashed changes
     files_by_suffix = {suffix: [] for suffix in suffixes}
     local_lookup = {suffix: {} for suffix in suffixes}
     depot_lookup = {suffix: {} for suffix in suffixes}
     local_collision_paths = {suffix: {} for suffix in suffixes}
     depot_collision_paths = {suffix: {} for suffix in suffixes}
 
-<<<<<<< Updated upstream
     if not os.path.isdir(root.value):
         logging.error("Root directory not found: %s", root.value)
     else:
         stack = [(root.value, "")]
         while stack:
             folder, relative_folder = stack.pop()
-=======
-    directory_mtimes = []
-    if not os.path.isdir(root.value):
-        _LOG.warning("Root directory not found: %s", root.value)
-    else:
-        try:
-            directory_mtimes.append((root.value, os.stat(root.value).st_mtime_ns))
-        except OSError:
-            debug_exception(
-                _LOG,
-                "Could not read the time of %s; the snapshot leaves it out",
-                root.value,
-            )
-        stack = [(root.value, "", 0)]
-        while stack:
-            folder, relative_folder, level = stack.pop()
->>>>>>> Stashed changes
             try:
                 with os.scandir(folder) as entries:
                     for entry in entries:
                         try:
                             if entry.is_dir(follow_symlinks=False):
-<<<<<<< Updated upstream
                                 if entry.name.casefold() not in _SKIP_DIRS:
-=======
-                                if entry.name.casefold() not in _SKIP_DIRS and (
-                                    depth is None or level < depth
-                                ):
->>>>>>> Stashed changes
                                     child_relative = (
                                         os.path.join(relative_folder, entry.name)
                                         if relative_folder
                                         else entry.name
                                     )
-<<<<<<< Updated upstream
                                     stack.append((entry.path, child_relative))
-=======
-                                    stack.append(
-                                        (entry.path, child_relative, level + 1)
-                                    )
-                                    directory_mtimes.append(
-                                        (
-                                            entry.path,
-                                            entry.stat(
-                                                follow_symlinks=False
-                                            ).st_mtime_ns,
-                                        )
-                                    )
->>>>>>> Stashed changes
                                 continue
                             if not entry.is_file(follow_symlinks=False):
                                 continue
@@ -574,17 +309,9 @@ def _scan_snapshot(root, suffixes, generation, depth=None):
                                 path,
                             )
                         except (PermissionError, OSError) as error:
-<<<<<<< Updated upstream
                             logging.debug("Could not access %s: %s", entry.path, error)
             except (PermissionError, OSError) as error:
                 logging.warning("Could not scan directory %s: %s", folder, error)
-=======
-                            _LOG.debug("Could not access %s: %s", entry.path, error)
-            except (PermissionError, OSError) as error:
-                _LOG.warning(
-                    "Could not scan directory %s: %s", folder, error, exc_info=True
-                )
->>>>>>> Stashed changes
 
     collisions = []
     ambiguous_local = {}
@@ -612,19 +339,10 @@ def _scan_snapshot(root, suffixes, generation, depth=None):
         _depot_lookup=MappingProxyType(depot_lookup),
         _ambiguous_local=MappingProxyType(ambiguous_local),
         _ambiguous_depot=MappingProxyType(ambiguous_depot),
-<<<<<<< Updated upstream
     )
 
 
 
-=======
-        directory_mtimes=tuple(directory_mtimes),
-        depth=depth,
-    )
-
-
-# Scanned paths need no normalizing: local_path_key and depot_path_key give these keys 4x slower and fill their caches.
->>>>>>> Stashed changes
 def _indexed_local_key(path):
     return os.path.normcase(path).replace("\\", "/")
 
@@ -632,10 +350,6 @@ def _indexed_local_key(path):
 def _indexed_depot_key(path):
     return path.replace("\\", "/").casefold()
 
-<<<<<<< Updated upstream
-=======
-
->>>>>>> Stashed changes
 def _record_lookup(lookup, collision_paths, key, path):
     if key in collision_paths:
         collision_paths[key].append(path)

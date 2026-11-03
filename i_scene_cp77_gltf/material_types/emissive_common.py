@@ -1,1 +1,0 @@
-ABSENT_COLOR_FALLBACK = (1.0, 1.0, 1.0, 1.0)

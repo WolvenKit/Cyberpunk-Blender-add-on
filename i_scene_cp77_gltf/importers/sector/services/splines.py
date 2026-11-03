@@ -1,15 +1,11 @@
 from __future__ import annotations
-<<<<<<< Updated upstream
 from ....blender.transactions import track_created_datablock
-=======
->>>>>>> Stashed changes
 
 from dataclasses import dataclass
 
 import bpy
 from mathutils import Vector
 
-<<<<<<< Updated upstream
 from ....assetio.values import axis_value
 
 
@@ -17,11 +13,6 @@ SPLINE_PLACEMENT_CONTRACTS = {
     "worldSplineNode": "CP77_BEZIER_SPLINE_NODE_WORLD",
     "worldSpeedSplineNode": "CP77_SPEED_BEZIER_SPLINE_NODE_WORLD",
 }
-=======
-from ....assetio.transform_values import vector3_from_data
-from ....blender.naming import fit_id_name
-from ....blender.transactions import track_created_datablock
->>>>>>> Stashed changes
 
 
 @dataclass(slots=True, frozen=True)
@@ -29,18 +20,14 @@ class SplinePointRecord:
     position: tuple
     right_tangent: tuple
     left_tangent: tuple
-<<<<<<< Updated upstream
     rotation: dict
     automatic_tangents: bool
     continuous_tangents: bool
     point_id: int
-=======
->>>>>>> Stashed changes
 
 
 @dataclass(slots=True, frozen=True)
 class SplineAnalysis:
-<<<<<<< Updated upstream
     node_type: str
     points: tuple[SplinePointRecord, ...]
     looped: bool
@@ -62,10 +49,6 @@ def _vector3(data):
         float(axis_value(data, "Y")),
         float(axis_value(data, "Z")),
     )
-=======
-    points: tuple[SplinePointRecord, ...]
-    looped: bool
->>>>>>> Stashed changes
 
 
 def _point_position(point):
@@ -74,11 +57,7 @@ def _point_position(point):
     position = point.get("Position")
     if not isinstance(position, dict):
         position = point.get("position")
-<<<<<<< Updated upstream
     return _vector3(position)
-=======
-    return vector3_from_data(position)
->>>>>>> Stashed changes
 
 
 def _point_tangents(point):
@@ -88,7 +67,6 @@ def _point_tangents(point):
             (0.0, 0.0, 0.0),
         )
     tangents = point.get("tangents", {})
-<<<<<<< Updated upstream
     elements = (
         tangents.get("Elements", [])
         if isinstance(tangents, dict)
@@ -96,20 +74,11 @@ def _point_tangents(point):
     )
     right = (
         _vector3(elements[0])
-=======
-    elements = tangents.get("Elements", []) if isinstance(tangents, dict) else []
-    right = (
-        vector3_from_data(elements[0])
->>>>>>> Stashed changes
         if len(elements) > 0 and isinstance(elements[0], dict)
         else (0.0, 0.0, 0.0)
     )
     left = (
-<<<<<<< Updated upstream
         _vector3(elements[1])
-=======
-        vector3_from_data(elements[1])
->>>>>>> Stashed changes
         if len(elements) > 1 and isinstance(elements[1], dict)
         else (0.0, 0.0, 0.0)
     )
@@ -118,7 +87,6 @@ def _point_tangents(point):
 
 class SplineService:
     @staticmethod
-<<<<<<< Updated upstream
     def contract(node_type):
         try:
             return SPLINE_PLACEMENT_CONTRACTS[node_type]
@@ -138,19 +106,10 @@ class SplineService:
             spline_data.get("points", [])
             if isinstance(spline_data, dict)
             else []
-=======
-    def analyze(data):
-        spline_data = (
-            data.get("splineData", {}).get("Data", {}) if isinstance(data, dict) else {}
-        )
-        source_points = (
-            spline_data.get("points", []) if isinstance(spline_data, dict) else []
->>>>>>> Stashed changes
         )
         points = []
         for point in source_points:
             right_tangent, left_tangent = _point_tangents(point)
-<<<<<<< Updated upstream
             points.append(SplinePointRecord(
                 position=_point_position(point),
                 right_tangent=right_tangent,
@@ -214,26 +173,6 @@ class SplineService:
             context.node_type,
             data,
         )
-=======
-            points.append(
-                SplinePointRecord(
-                    position=_point_position(point),
-                    right_tangent=right_tangent,
-                    left_tangent=left_tangent,
-                )
-            )
-        return SplineAnalysis(
-            points=tuple(points),
-            looped=bool(
-                spline_data.get("looped", 0) if isinstance(spline_data, dict) else 0
-            ),
-        )
-
-    def create(self, context, instance, instance_index):
-        """Place the spline node's curve"""
-        data = context.data
-        analysis = self.analyze(data)
->>>>>>> Stashed changes
         if not analysis.points:
             context.operations.warning(
                 f"{context.sector_name}: spline node "
@@ -241,28 +180,17 @@ class SplineService:
             )
             return None
 
-<<<<<<< Updated upstream
         name = context.operations.trim_name(
             f"{context.node_type}_{context.node_index}_"
             f"{instance_index}"
         )
-=======
-        name = fit_id_name(f"{context.node_type}_{context.node_index}_{instance_index}")
->>>>>>> Stashed changes
         curve = track_created_datablock("curves", bpy.data.curves.new(name, "CURVE"))
         curve.dimensions = "3D"
         curve.twist_mode = "Z_UP"
         curve.resolution_u = 24
 
-<<<<<<< Updated upstream
         curve_object = track_created_datablock("objects", bpy.data.objects.new(name, curve))
         context.sector_collection.objects.link(curve_object)
-=======
-        curve_object = track_created_datablock(
-            "objects", bpy.data.objects.new(name, curve)
-        )
-        context.collection_for_instance(instance).objects.link(curve_object)
->>>>>>> Stashed changes
         curve_object.matrix_world = context.operations.instance_matrix(
             instance,
             context.execution.scale_factor,
@@ -278,7 +206,6 @@ class SplineService:
             bezier.co = position
             bezier.handle_left_type = "FREE"
             bezier.handle_right_type = "FREE"
-<<<<<<< Updated upstream
             bezier.handle_right = (
                 position + Vector(point.right_tangent)
             )
@@ -352,37 +279,3 @@ class SplineService:
             spline=spline,
             analysis=analysis,
         )
-=======
-            bezier.handle_right = position + Vector(point.right_tangent)
-            bezier.handle_left = position + Vector(point.left_tangent)
-
-        context.operations.assign_custom_properties(
-            curve_object,
-            context.node,
-            context.sector_name,
-            cp77_node_data_index=instance.index,
-            cp77_instance_idx=instance_index,
-        )
-
-        if context.node_type == "worldSpeedSplineNode":
-            curve_object["speedChangeSections"] = context.session.safe_json(
-                data.get("speedChangeSections", [])
-            )
-            curve_object["orientationChangeSections"] = context.session.safe_json(
-                data.get("orientationChangeSections", [])
-            )
-            curve_object["roadAdjustmentFactorChangeSections"] = (
-                context.session.safe_json(
-                    data.get(
-                        "roadAdjustmentFactorChangeSections",
-                        [],
-                    )
-                )
-            )
-            curve_object["deprecatedSpeedRestrictions"] = context.session.safe_json(
-                data.get("deprecatedSpeedRestrictions", [])
-            )
-            curve_object["useDeprecated"] = bool(data.get("useDeprecated", 0))
-            curve_object["ignoreTerrain"] = bool(data.get("ignoreTerrain", 0))
-        return curve_object
->>>>>>> Stashed changes

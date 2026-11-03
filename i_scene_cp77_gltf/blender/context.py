@@ -1,4 +1,3 @@
-<<<<<<< Updated upstream
 import bpy
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -32,48 +31,6 @@ _MODE_MAP = {
     'VERTEX_GPENCIL': 'VERTEX_PAINT',
     'VERTEX_GREASE_PENCIL': 'VERTEX_PAINT',
     'PARTICLE': 'PARTICLE_EDIT',
-=======
-from contextlib import contextmanager
-from contextvars import ContextVar
-
-import bpy
-
-from ..core.log import debug_exception, get_logger
-from .identity import rna_is_live
-from .operator_results import require_finished
-
-_LOG = get_logger(__name__)
-
-
-_MODE_MAP = {
-    "OBJECT": "OBJECT",
-    "EDIT_ARMATURE": "EDIT",
-    "POSE": "POSE",
-    "EDIT_MESH": "EDIT",
-    "EDIT_CURVE": "EDIT",
-    "EDIT_CURVES": "EDIT",
-    "EDIT_SURFACE": "EDIT",
-    "EDIT_TEXT": "EDIT",
-    "EDIT_METABALL": "EDIT",
-    "EDIT_LATTICE": "EDIT",
-    "EDIT_GREASE_PENCIL": "EDIT",
-    "EDIT_POINT_CLOUD": "EDIT",
-    "EDIT_GPENCIL": "EDIT",
-    "SCULPT": "SCULPT",
-    "SCULPT_CURVES": "SCULPT",
-    "SCULPT_GPENCIL": "SCULPT",
-    "SCULPT_GREASE_PENCIL": "SCULPT",
-    "PAINT_WEIGHT": "WEIGHT_PAINT",
-    "PAINT_VERTEX": "VERTEX_PAINT",
-    "PAINT_TEXTURE": "TEXTURE_PAINT",
-    "PAINT_GPENCIL": "PAINT_GPENCIL",
-    "PAINT_GREASE_PENCIL": "PAINT_GREASE_PENCIL",
-    "WEIGHT_GPENCIL": "WEIGHT_PAINT",
-    "WEIGHT_GREASE_PENCIL": "WEIGHT_PAINT",
-    "VERTEX_GPENCIL": "VERTEX_PAINT",
-    "VERTEX_GREASE_PENCIL": "VERTEX_PAINT",
-    "PARTICLE": "PARTICLE_EDIT",
->>>>>>> Stashed changes
 }
 
 _stored_contexts = ContextVar("cp77_blender_context_stack", default=())
@@ -111,28 +68,16 @@ class BlenderContextSnapshot:
         for obj in self.selected_objects:
             if obj:
                 self.object_visibility[obj.name] = {
-<<<<<<< Updated upstream
                     'hide_viewport': obj.hide_viewport,
                     'hide_select': obj.hide_select,
                     'hide_get': obj.hide_get(),
-=======
-                    "hide_viewport": obj.hide_viewport,
-                    "hide_select": obj.hide_select,
-                    "hide_get": obj.hide_get(),
->>>>>>> Stashed changes
                 }
 
         if self.active_object and self.active_object.name not in self.object_visibility:
             self.object_visibility[self.active_object.name] = {
-<<<<<<< Updated upstream
                 'hide_viewport': self.active_object.hide_viewport,
                 'hide_select': self.active_object.hide_select,
                 'hide_get': self.active_object.hide_get(),
-=======
-                "hide_viewport": self.active_object.hide_viewport,
-                "hide_select": self.active_object.hide_select,
-                "hide_get": self.active_object.hide_get(),
->>>>>>> Stashed changes
             }
 
         self.cursor_location = tuple(context.scene.cursor.location)
@@ -144,27 +89,16 @@ class BlenderContextSnapshot:
             return
         context = bpy.context
 
-<<<<<<< Updated upstream
         if _MODE_MAP.get(context.mode, context.mode) != 'OBJECT':
             try:
                 bpy.ops.object.mode_set(mode='OBJECT')
             except Exception:
                 pass
-=======
-        if _MODE_MAP.get(context.mode, context.mode) != "OBJECT":
-            try:
-                bpy.ops.object.mode_set(mode="OBJECT")
-            except Exception:
-                debug_exception(
-                    _LOG, "Could not return to Object Mode while restoring the context"
-                )
->>>>>>> Stashed changes
 
         for obj_name, vis_state in self.object_visibility.items():
             if obj_name in bpy.data.objects:
                 obj = bpy.data.objects[obj_name]
                 try:
-<<<<<<< Updated upstream
                     obj.hide_viewport = vis_state['hide_viewport']
                     obj.hide_select = vis_state['hide_select']
                     obj.hide_set(vis_state['hide_get'])
@@ -181,36 +115,6 @@ class BlenderContextSnapshot:
 
         if self.active_object and self.active_object.name in bpy.data.objects:
             context.view_layer.objects.active = self.active_object
-=======
-                    obj.hide_viewport = vis_state["hide_viewport"]
-                    obj.hide_select = vis_state["hide_select"]
-                    obj.hide_set(vis_state["hide_get"])
-                except Exception:
-                    debug_exception(
-                        _LOG,
-                        "Could not restore an object's visibility while restoring the context",
-                    )
-
-        try:
-            bpy.ops.object.select_all(action="DESELECT")
-        except Exception:
-            debug_exception(
-                _LOG, "Could not clear the selection while restoring the context"
-            )
-        # Objects removed since the context was stored (joined into another, say) are left out.
-        for obj in self.selected_objects:
-            if rna_is_live(obj):
-                try:
-                    obj.select_set(True)
-                except RuntimeError:
-                    pass
-
-        if rna_is_live(self.active_object):
-            try:
-                context.view_layer.objects.active = self.active_object
-            except (RuntimeError, ValueError):
-                pass
->>>>>>> Stashed changes
         if self.active_layer_collection is not None:
             try:
                 context.view_layer.active_layer_collection = (
@@ -229,15 +133,7 @@ class BlenderContextSnapshot:
                 try:
                     bpy.ops.object.mode_set(mode=target_mode)
                 except Exception:
-<<<<<<< Updated upstream
                     pass
-=======
-                    debug_exception(
-                        _LOG,
-                        "Could not restore %s mode while restoring the context",
-                        target_mode,
-                    )
->>>>>>> Stashed changes
         self._stored = False
 
 
@@ -256,15 +152,9 @@ def restore_previous_context():
             _stored_contexts.set(stack[:-1])
             snapshot.restore()
         else:
-<<<<<<< Updated upstream
             print("Warning: No saved context to restore")
     except Exception:
         print("Error: Failed to restore context")
-=======
-            _LOG.warning("No saved context to restore")
-    except Exception:
-        _LOG.error("Failed to restore context", exc_info=True)
->>>>>>> Stashed changes
 
 
 @contextmanager
@@ -277,11 +167,7 @@ def preserved_context():
 
 
 def get_safe_mode():
-<<<<<<< Updated upstream
     return _MODE_MAP.get(bpy.context.mode, 'OBJECT')
-=======
-    return _MODE_MAP.get(bpy.context.mode, "OBJECT")
->>>>>>> Stashed changes
 
 
 def safe_mode_switch(target_mode: str):
@@ -297,7 +183,6 @@ def safe_mode_switch(target_mode: str):
         if bpy.context.selected_objects:
             bpy.context.view_layer.objects.active = bpy.context.selected_objects[0]
         else:
-<<<<<<< Updated upstream
             bpy.ops.mesh.primitive_cube_add(size=0.1, location=(0, 0, 0))
             temp = bpy.context.active_object
             temp.name = "TempModeSwitch"
@@ -312,50 +197,3 @@ def safe_mode_switch(target_mode: str):
         bpy.ops.object.mode_set(mode=target_mode)
     except Exception as exc:
         print(f"Failed to switch to mode {target_mode}: {exc}")
-=======
-            mesh = bpy.data.meshes.new("TempModeSwitch")
-            temp = bpy.data.objects.new("TempModeSwitch", mesh)
-            try:
-                bpy.context.scene.collection.objects.link(temp)
-                bpy.context.view_layer.objects.active = temp
-                require_finished(
-                    bpy.ops.object.mode_set(mode=target_mode),
-                    f"The switch to {target_mode} mode",
-                )
-            finally:
-                bpy.data.objects.remove(temp, do_unlink=True)
-                bpy.data.meshes.remove(mesh)
-            return
-
-    try:
-        result = bpy.ops.object.mode_set(mode=target_mode)
-    except Exception as exc:
-        raise RuntimeError(f"Failed to switch to mode {target_mode}: {exc}") from exc
-    require_finished(result, f"The switch to {target_mode} mode")
-
-
-def view3d_areas(context=None):
-    """The 3D viewport areas of every open window"""
-    window_manager = getattr(context or bpy.context, "window_manager", None)
-    for window in getattr(window_manager, "windows", ()):
-        screen = getattr(window, "screen", None)
-        for area in getattr(screen, "areas", ()):
-            if area.type == "VIEW_3D":
-                yield area
-
-
-def tag_view3d_redraw(context=None):
-    """Request a redraw of every open 3D viewport"""
-    for area in view3d_areas(context):
-        area.tag_redraw()
-
-
-def node_editor_tree(context, tree_type, *, edit=False):
-    space = context.space_data
-    if space is None or space.type != "NODE_EDITOR":
-        return None
-    tree = space.edit_tree if edit else space.node_tree
-    if tree is not None and getattr(tree, "bl_idname", "") == tree_type:
-        return tree
-    return None
->>>>>>> Stashed changes

@@ -2,7 +2,6 @@ from bpy.props import EnumProperty
 from bpy.types import Operator
 
 from ...blender.animation_context import active_action
-<<<<<<< Updated upstream
 from ..services import events
 
 
@@ -12,12 +11,6 @@ def _finish(operator, result):
     return result.blender_status
 
 
-=======
-from ...blender.operator_results import execute_operation
-from ..services import events
-
-
->>>>>>> Stashed changes
 class CP77_OT_AnimEventAdd(Operator):
     bl_idname = "cp77.anim_event_add"
     bl_label = "Add Animation Event"
@@ -25,17 +18,7 @@ class CP77_OT_AnimEventAdd(Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-<<<<<<< Updated upstream
         return _finish(self, events.add_event(active_action(context), context.scene.frame_current))
-=======
-        return execute_operation(
-            self,
-            "Animation event edit",
-            events.add_event,
-            active_action(context),
-            context.scene.frame_current,
-        )
->>>>>>> Stashed changes
 
 
 class CP77_OT_AnimEventRemove(Operator):
@@ -45,13 +28,7 @@ class CP77_OT_AnimEventRemove(Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-<<<<<<< Updated upstream
         return _finish(self, events.remove_event(active_action(context)))
-=======
-        return execute_operation(
-            self, "Animation event edit", events.remove_event, active_action(context)
-        )
->>>>>>> Stashed changes
 
 
 class CP77_OT_AnimEventGoto(Operator):
@@ -61,17 +38,7 @@ class CP77_OT_AnimEventGoto(Operator):
     bl_options = {"REGISTER"}
 
     def execute(self, context):
-<<<<<<< Updated upstream
         return _finish(self, events.goto_event(active_action(context), context.scene))
-=======
-        return execute_operation(
-            self,
-            "Animation event edit",
-            events.goto_event,
-            active_action(context),
-            context.scene,
-        )
->>>>>>> Stashed changes
 
 
 class CP77_OT_AnimEventMove(Operator):
@@ -80,25 +47,10 @@ class CP77_OT_AnimEventMove(Operator):
     bl_description = "Reorder event in the list"
     bl_options = {"REGISTER", "UNDO"}
 
-<<<<<<< Updated upstream
     direction: EnumProperty(items=[("UP", "Up", ""), ("DOWN", "Down", "")], default="UP")
 
     def execute(self, context):
         return _finish(self, events.move_event(active_action(context), self.direction))
-=======
-    direction: EnumProperty(
-        items=[("UP", "Up", ""), ("DOWN", "Down", "")], default="UP"
-    )
-
-    def execute(self, context):
-        return execute_operation(
-            self,
-            "Animation event edit",
-            events.move_event,
-            active_action(context),
-            self.direction,
-        )
->>>>>>> Stashed changes
 
 
 class CP77_OT_AnimEventSyncMarkers(Operator):
@@ -108,13 +60,7 @@ class CP77_OT_AnimEventSyncMarkers(Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-<<<<<<< Updated upstream
         return _finish(self, events.sync_markers(active_action(context)))
-=======
-        return execute_operation(
-            self, "Animation event edit", events.sync_markers, active_action(context)
-        )
->>>>>>> Stashed changes
 
 
 class CP77_OT_AnimEventFromMarkers(Operator):
@@ -124,16 +70,7 @@ class CP77_OT_AnimEventFromMarkers(Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-<<<<<<< Updated upstream
         return _finish(self, events.add_events_from_markers(active_action(context)))
-=======
-        return execute_operation(
-            self,
-            "Animation event edit",
-            events.add_events_from_markers,
-            active_action(context),
-        )
->>>>>>> Stashed changes
 
 
 class CP77_OT_AnimEventAddSwitch(Operator):
@@ -142,13 +79,7 @@ class CP77_OT_AnimEventAddSwitch(Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-<<<<<<< Updated upstream
         return _finish(self, events.add_switch(active_action(context)))
-=======
-        return execute_operation(
-            self, "Animation event edit", events.add_switch, active_action(context)
-        )
->>>>>>> Stashed changes
 
 
 class CP77_OT_AnimEventRemoveSwitch(Operator):
@@ -157,13 +88,7 @@ class CP77_OT_AnimEventRemoveSwitch(Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-<<<<<<< Updated upstream
         return _finish(self, events.remove_switch(active_action(context)))
-=======
-        return execute_operation(
-            self, "Animation event edit", events.remove_switch, active_action(context)
-        )
->>>>>>> Stashed changes
 
 
 class CP77_OT_AnimEventAddParam(Operator):
@@ -172,13 +97,7 @@ class CP77_OT_AnimEventAddParam(Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-<<<<<<< Updated upstream
         return _finish(self, events.add_param(active_action(context)))
-=======
-        return execute_operation(
-            self, "Animation event edit", events.add_param, active_action(context)
-        )
->>>>>>> Stashed changes
 
 
 class CP77_OT_AnimEventRemoveParam(Operator):
@@ -187,13 +106,7 @@ class CP77_OT_AnimEventRemoveParam(Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-<<<<<<< Updated upstream
         return _finish(self, events.remove_param(active_action(context)))
-=======
-        return execute_operation(
-            self, "Animation event edit", events.remove_param, active_action(context)
-        )
->>>>>>> Stashed changes
 
 
 class CP77_OT_AnimEventAddWorkspotAction(Operator):
@@ -202,16 +115,7 @@ class CP77_OT_AnimEventAddWorkspotAction(Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-<<<<<<< Updated upstream
         return _finish(self, events.add_workspot_action(active_action(context)))
-=======
-        return execute_operation(
-            self,
-            "Animation event edit",
-            events.add_workspot_action,
-            active_action(context),
-        )
->>>>>>> Stashed changes
 
 
 class CP77_OT_AnimEventRemoveWorkspotAction(Operator):
@@ -220,29 +124,4 @@ class CP77_OT_AnimEventRemoveWorkspotAction(Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-<<<<<<< Updated upstream
         return _finish(self, events.remove_workspot_action(active_action(context)))
-=======
-        return execute_operation(
-            self,
-            "Animation event edit",
-            events.remove_workspot_action,
-            active_action(context),
-        )
-
-
-EVENT_OPERATOR_CLASSES = (
-    CP77_OT_AnimEventAdd,
-    CP77_OT_AnimEventRemove,
-    CP77_OT_AnimEventGoto,
-    CP77_OT_AnimEventMove,
-    CP77_OT_AnimEventSyncMarkers,
-    CP77_OT_AnimEventFromMarkers,
-    CP77_OT_AnimEventAddSwitch,
-    CP77_OT_AnimEventRemoveSwitch,
-    CP77_OT_AnimEventAddParam,
-    CP77_OT_AnimEventRemoveParam,
-    CP77_OT_AnimEventAddWorkspotAction,
-    CP77_OT_AnimEventRemoveWorkspotAction,
-)
->>>>>>> Stashed changes

@@ -1,14 +1,7 @@
-<<<<<<< Updated upstream
 from dataclasses import dataclass
 import os
 
 from ..paths import get_refit_dir
-=======
-import os
-from dataclasses import dataclass
-
-from ..assetio.resources import get_refit_dir
->>>>>>> Stashed changes
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,7 +40,6 @@ _ADDON_REFITTERS = (
 )
 
 
-<<<<<<< Updated upstream
 def base_refitter_options():
     return _BASE_REFITTERS
 
@@ -56,8 +48,6 @@ def addon_refitter_options():
     return _ADDON_REFITTERS
 
 
-=======
->>>>>>> Stashed changes
 def resolve_refitter(name, *, addon=False):
     options = _ADDON_REFITTERS if addon else _BASE_REFITTERS
     for option in options:

@@ -1,4 +1,3 @@
-<<<<<<< Updated upstream
 from ..registration import RegistrationLedger
 from .dangles import register as register_dangles
 from .dangles import unregister as unregister_dangles
@@ -32,5 +31,3 @@ def unregister_collisiontools():
         raise RuntimeError("; ".join(
             f"{label}: {error}" for label, error in failures
         ))
-=======
->>>>>>> Stashed changes

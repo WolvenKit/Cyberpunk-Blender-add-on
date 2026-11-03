@@ -1,6 +1,5 @@
 import bpy
 
-<<<<<<< Updated upstream
 from ....blender.animgraph import builder
 from ....animation.animgraph.schema import rtti
 from ....animation.animgraph_constants import ANIMGRAPH_TREE_ID
@@ -8,22 +7,12 @@ from ....blender.animgraph.categories import (
     BLEND_TYPES, BONE_TYPES, CLIP_TYPES, CONTAINER_TYPES,
     PHYSICS_TYPES, POSESPACE_TYPES, TERMINATOR_TYPES,
 )
-=======
-from ....animation.model.animgraph.constants import ANIMGRAPH_TREE_ID
-from ....blender.context import node_editor_tree
-from ....blender.operator_results import execute_operation
-from ...services.animgraph import editing
->>>>>>> Stashed changes
 
 
 class REDENGINE_OT_add_node(bpy.types.Operator):
     bl_idname = "redengine.add_node"
     bl_label = "Add AnimGraph Node"
-<<<<<<< Updated upstream
     bl_options = {'REGISTER', 'UNDO'}
-=======
-    bl_options = {"REGISTER", "UNDO"}
->>>>>>> Stashed changes
 
     node_type: bpy.props.StringProperty(
         name="Node Type",
@@ -32,7 +21,6 @@ class REDENGINE_OT_add_node(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-<<<<<<< Updated upstream
         space = context.space_data
         return (
             space is not None
@@ -40,16 +28,12 @@ class REDENGINE_OT_add_node(bpy.types.Operator):
             and space.edit_tree is not None
             and space.edit_tree.bl_idname == ANIMGRAPH_TREE_ID
         )
-=======
-        return node_editor_tree(context, ANIMGRAPH_TREE_ID, edit=True) is not None
->>>>>>> Stashed changes
 
     def invoke(self, context, event):
         self._cursor = context.space_data.cursor_location.copy()
         return self.execute(context)
 
     def execute(self, context):
-<<<<<<< Updated upstream
         tree = context.space_data.edit_tree
         location = getattr(self, "_cursor", None)
         if location is None:
@@ -150,16 +134,3 @@ def menu_func_add(self, context):
 
 
 add_classes = (REDENGINE_OT_add_node, *_submenus, REDENGINE_MT_add_root)
-=======
-        location = getattr(self, "_cursor", None)
-        if location is None:
-            location = (0.0, 0.0)
-        return execute_operation(
-            self,
-            "Add AnimGraph node",
-            editing.add_node,
-            context.space_data.edit_tree,
-            self.node_type,
-            location,
-        )
->>>>>>> Stashed changes

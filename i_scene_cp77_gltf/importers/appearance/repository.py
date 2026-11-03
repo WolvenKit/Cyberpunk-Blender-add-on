@@ -2,10 +2,7 @@ from ...assetio.catalog import ResourceKind
 from ...assetio.repository import ResourceRepository
 from .parser import parse_appearance_document
 
-<<<<<<< Updated upstream
 
-=======
->>>>>>> Stashed changes
 APPEARANCE_PARSER_REVISION = 1
 
 

@@ -1,21 +1,10 @@
 from __future__ import annotations
 
 import re
-<<<<<<< Updated upstream
 from typing import Iterable, List, Optional, Tuple
 
 import bpy
 
-=======
-from collections.abc import Iterable
-
-import bpy
-
-from ...core.log import get_logger
-
-_LOG = get_logger(__name__)
-
->>>>>>> Stashed changes
 HELPER_MATERIAL_NAME = ".REDengine AnimGraph Curve Widgets"
 
 
@@ -27,23 +16,12 @@ def _safe_fragment(text: str) -> str:
 
 def helper_name(owner, item) -> str:
     owner_id = _safe_fragment(getattr(owner, "red_handle_id", "owner"))
-<<<<<<< Updated upstream
     key = _safe_fragment(getattr(item, "json_path", "") or getattr(item, "key", "curve"))
     return f"REDcurve_{owner_id}_{key}"
 
 
 def helper_material(*, create: bool = False) -> Optional[bpy.types.Material]:
     """Return the hidden material used to host CurveMapping helper nodes."""
-=======
-    key = _safe_fragment(
-        getattr(item, "json_path", "") or getattr(item, "key", "curve")
-    )
-    return f"REDcurve_{owner_id}_{key}"
-
-
-def helper_material(*, create: bool = False) -> bpy.types.Material | None:
-    """Return the hidden material used to host CurveMapping helper nodes"""
->>>>>>> Stashed changes
     mat = bpy.data.materials.get(HELPER_MATERIAL_NAME)
     if mat is None:
         if not create:
@@ -52,13 +30,8 @@ def helper_material(*, create: bool = False) -> bpy.types.Material | None:
         try:
             mat.use_fake_user = True
         except Exception:
-<<<<<<< Updated upstream
 
             pass
-=======
-            _LOG.debug("AnimGraph curve helper operation failed", exc_info=True)
-
->>>>>>> Stashed changes
     if not getattr(mat, "use_nodes", False):
         if not create:
             return None
@@ -74,11 +47,7 @@ def _curve_node_tree(*, create: bool = False):
 
 
 def get_helper_node(owner, item, *, create: bool = False):
-<<<<<<< Updated upstream
     """Return the helper ShaderNodeFloatCurve for one REDengine curve property."""
-=======
-    """Return the helper ShaderNodeFloatCurve for one REDengine curve property"""
->>>>>>> Stashed changes
     tree = _curve_node_tree(create=create)
     if tree is None:
         return None
@@ -89,10 +58,6 @@ def get_helper_node(owner, item, *, create: bool = False):
         try:
             node = tree.nodes.new("ShaderNodeFloatCurve")
         except Exception:
-<<<<<<< Updated upstream
-=======
-            _LOG.debug("AnimGraph curve helper operation failed", exc_info=True)
->>>>>>> Stashed changes
             return None
         node.name = name
         node.label = f"{getattr(owner, 'label', '')}.{getattr(item, 'key', 'curve')}"
@@ -100,19 +65,12 @@ def get_helper_node(owner, item, *, create: bool = False):
         item.curve_helper_node = node.name
         sync_native_from_property(item, node)
     elif node is not None and create:
-<<<<<<< Updated upstream
 
-=======
->>>>>>> Stashed changes
         item.curve_helper_node = node.name
     return node
 
 
-<<<<<<< Updated upstream
 def _curve_points_from_property(item) -> List[Tuple[float, float]]:
-=======
-def _curve_points_from_property(item) -> list[tuple[float, float]]:
->>>>>>> Stashed changes
     pts = [(float(p.point), float(p.value)) for p in getattr(item, "curve_points", ())]
     pts.sort(key=lambda xy: xy[0])
     if not pts:
@@ -123,11 +81,7 @@ def _curve_points_from_property(item) -> list[tuple[float, float]]:
     return pts
 
 
-<<<<<<< Updated upstream
 def _bounds(points: Iterable[Tuple[float, float]]) -> Tuple[float, float, float, float]:
-=======
-def _bounds(points: Iterable[tuple[float, float]]) -> tuple[float, float, float, float]:
->>>>>>> Stashed changes
     pts = list(points)
     xs = [p[0] for p in pts] or [0.0, 1.0]
     ys = [p[1] for p in pts] or [0.0, 1.0]
@@ -144,11 +98,7 @@ def _bounds(points: Iterable[tuple[float, float]]) -> tuple[float, float, float,
     return min_x - pad_x, max_x + pad_x, min_y - pad_y, max_y + pad_y
 
 
-<<<<<<< Updated upstream
 def _set_curve_points(curve, points: List[Tuple[float, float]]) -> bool:
-=======
-def _set_curve_points(curve, points: list[tuple[float, float]]) -> bool:
->>>>>>> Stashed changes
     pts = curve.points
     target_count = max(2, len(points))
     try:
@@ -156,21 +106,13 @@ def _set_curve_points(curve, points: list[tuple[float, float]]) -> bool:
             x, y = points[min(len(pts), len(points) - 1)]
             pts.new(float(x), float(y))
     except Exception:
-<<<<<<< Updated upstream
         pass
-=======
-        _LOG.debug("AnimGraph curve helper operation failed", exc_info=True)
->>>>>>> Stashed changes
 
     try:
         while len(pts) > target_count:
             pts.remove(pts[-1])
     except Exception:
-<<<<<<< Updated upstream
         pass
-=======
-        _LOG.debug("AnimGraph curve helper operation failed", exc_info=True)
->>>>>>> Stashed changes
 
     count = min(len(pts), target_count)
     for i in range(count):
@@ -178,28 +120,16 @@ def _set_curve_points(curve, points: list[tuple[float, float]]) -> bool:
         try:
             pts[i].location = (float(x), float(y))
         except Exception:
-<<<<<<< Updated upstream
-=======
-            _LOG.debug("AnimGraph curve helper operation failed", exc_info=True)
->>>>>>> Stashed changes
             try:
                 pts[i].location[0] = float(x)
                 pts[i].location[1] = float(y)
             except Exception:
-<<<<<<< Updated upstream
-=======
-                _LOG.debug("AnimGraph curve helper operation failed", exc_info=True)
->>>>>>> Stashed changes
                 return False
     return True
 
 
 def sync_native_from_property(item, node=None) -> bool:
-<<<<<<< Updated upstream
     """Push editable REDengine curve data into the native CurveMapping helper."""
-=======
-    """Push editable REDengine curve data into the native CurveMapping helper"""
->>>>>>> Stashed changes
     if node is None:
         return False
     mapping = getattr(node, "mapping", None)
@@ -208,11 +138,7 @@ def sync_native_from_property(item, node=None) -> bool:
     try:
         mapping.initialize()
     except Exception:
-<<<<<<< Updated upstream
         pass
-=======
-        _LOG.debug("AnimGraph curve helper operation failed", exc_info=True)
->>>>>>> Stashed changes
     points = _curve_points_from_property(item)
     try:
         mapping.use_clip = True
@@ -222,39 +148,23 @@ def sync_native_from_property(item, node=None) -> bool:
         mapping.clip_min_y = min_y
         mapping.clip_max_y = max_y
     except Exception:
-<<<<<<< Updated upstream
         pass
     try:
         curve = mapping.curves[0]
     except Exception:
-=======
-        _LOG.debug("AnimGraph curve helper operation failed", exc_info=True)
-    try:
-        curve = mapping.curves[0]
-    except Exception:
-        _LOG.debug("AnimGraph curve helper operation failed", exc_info=True)
->>>>>>> Stashed changes
         return False
     ok = _set_curve_points(curve, points)
     try:
         mapping.update()
     except Exception:
-<<<<<<< Updated upstream
         pass
-=======
-        _LOG.debug("AnimGraph curve helper operation failed", exc_info=True)
->>>>>>> Stashed changes
     item.curve_widget_initialized = True
     item.curve_widget_dirty = False
     return ok
 
 
 def sync_property_from_native(item, node=None) -> bool:
-<<<<<<< Updated upstream
     """Pull native CurveMapping edits back into REDengine curve data."""
-=======
-    """Pull native CurveMapping edits back into REDengine curve data"""
->>>>>>> Stashed changes
     if node is None:
         return False
     mapping = getattr(node, "mapping", None)
@@ -263,23 +173,13 @@ def sync_property_from_native(item, node=None) -> bool:
     try:
         curve = mapping.curves[0]
     except Exception:
-<<<<<<< Updated upstream
         return False
     values: List[Tuple[float, float]] = []
-=======
-        _LOG.debug("AnimGraph curve helper operation failed", exc_info=True)
-        return False
-    values: list[tuple[float, float]] = []
->>>>>>> Stashed changes
     try:
         for p in curve.points:
             loc = p.location
             values.append((float(loc[0]), float(loc[1])))
     except Exception:
-<<<<<<< Updated upstream
-=======
-        _LOG.debug("AnimGraph curve helper operation failed", exc_info=True)
->>>>>>> Stashed changes
         return False
     values.sort(key=lambda xy: xy[0])
     item.curve_points.clear()
@@ -287,19 +187,12 @@ def sync_property_from_native(item, node=None) -> bool:
         pt = item.curve_points.add()
         pt.point = x
         pt.value = y
-<<<<<<< Updated upstream
     item.curve_points_index = min(max(0, item.curve_points_index), max(0, len(item.curve_points) - 1))
-=======
-    item.curve_points_index = min(
-        max(0, item.curve_points_index), max(0, len(item.curve_points) - 1)
-    )
->>>>>>> Stashed changes
     item.curve_widget_dirty = False
     item.curve_widget_initialized = True
     return True
 
 
-<<<<<<< Updated upstream
 def ensure_native_curve(owner, item):
     """Create or update the native helper curve for one editable property."""
     node = get_helper_node(owner, item, create=True)
@@ -324,44 +217,11 @@ def iter_curve_properties_in_tree(tree: bpy.types.NodeTree):
 
 def initialize_native_curves_for_tree(tree: bpy.types.NodeTree) -> Tuple[int, int]:
     """Create native curve helpers for all editable curve properties in a tree."""
-=======
-def iter_curve_properties_in_tree(tree: bpy.types.NodeTree):
-    if tree is None:
-        return
-    visited = set()
-    stack = [tree]
-    while stack:
-        current = stack.pop()
-        identity = id(current)
-        if identity in visited:
-            continue
-        visited.add(identity)
-        nodes = tuple(getattr(current, "nodes", ()))
-        for node in nodes:
-            for item in getattr(node, "red_properties", ()):
-                if getattr(item, "value_kind", "") == "CURVE_FLOAT":
-                    yield node, item
-        for node in reversed(nodes):
-            sub_tree = getattr(node, "node_tree", None)
-            if sub_tree is not None and sub_tree is not current:
-                stack.append(sub_tree)
-
-
-def initialize_native_curves_for_tree(tree: bpy.types.NodeTree) -> tuple[int, int]:
-    """Create native curve helpers for all editable curve properties in a tree"""
->>>>>>> Stashed changes
     done = set()
     ok = 0
     failed = 0
     for owner, item in iter_curve_properties_in_tree(tree):
-<<<<<<< Updated upstream
         token = (getattr(owner, "name", ""), getattr(item, "json_path", "") or getattr(item, "key", ""))
-=======
-        token = (
-            getattr(owner, "name", ""),
-            getattr(item, "json_path", "") or getattr(item, "key", ""),
-        )
->>>>>>> Stashed changes
         if token in done:
             continue
         done.add(token)
@@ -371,7 +231,6 @@ def initialize_native_curves_for_tree(tree: bpy.types.NodeTree) -> tuple[int, in
         else:
             failed += 1
     return ok, failed
-<<<<<<< Updated upstream
 
 
 def remove_all_helpers() -> int:
@@ -385,5 +244,3 @@ def remove_all_helpers() -> int:
             tree.nodes.remove(node)
             count += 1
     return count
-=======
->>>>>>> Stashed changes

@@ -1,6 +1,5 @@
 import bpy
 
-<<<<<<< Updated upstream
 from ....animation.animgraph_constants import ANIMGRAPH_TREE_ID
 from ...services import animgraph_validation as graph_validator
 from ....blender.animgraph.validation import reporting
@@ -10,32 +9,16 @@ class REDENGINE_PT_graph_validator(bpy.types.Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
     bl_category = "AnimGraph"
-=======
-from ....animation.model.animgraph.constants import ANIMGRAPH_TREE_ID
-from ...runtime import read_models
-
-
-class REDENGINE_PT_graph_validator(bpy.types.Panel):
-    bl_idname = "REDENGINE_PT_graph_validator"
-    bl_space_type = "NODE_EDITOR"
-    bl_region_type = "UI"
-    bl_category = "Graph"
->>>>>>> Stashed changes
     bl_label = "Graph Validator"
 
     @classmethod
     def poll(cls, context):
         space = context.space_data
-<<<<<<< Updated upstream
         if space is None or space.type != 'NODE_EDITOR':
-=======
-        if space is None or space.type != "NODE_EDITOR":
->>>>>>> Stashed changes
             return False
         tree = space.node_tree
         return tree is not None and tree.bl_idname == ANIMGRAPH_TREE_ID
 
-<<<<<<< Updated upstream
     @staticmethod
     def _metric(layout, label: str, value: str, *, icon: str = 'NONE'):
         row = layout.row(align=True)
@@ -77,30 +60,6 @@ class REDENGINE_PT_graph_validator(bpy.types.Panel):
         if blocking:
             err = layout.box()
             err.label(text='Fix before export', icon='ERROR')
-=======
-    def draw(self, context):
-        layout = self.layout
-        tree = context.space_data.node_tree
-        report = read_models.validation_report(tree)
-
-        if not report:
-            return
-
-        ready = bool(report.get("ready", False))
-        blocking = report.get("blocking", []) if isinstance(report, dict) else []
-        warnings = report.get("warnings", []) if isinstance(report, dict) else []
-        summary = report.get("artist_summary", "") or report.get("summary", "")
-
-        if not ready:
-            status = layout.box()
-            status.label(text="Graph needs fixes", icon="ERROR")
-            if summary:
-                status.label(text=str(summary))
-
-        if blocking:
-            err = layout.box()
-            err.label(text="Fix before export", icon="ERROR")
->>>>>>> Stashed changes
             for item in blocking[:10]:
                 err.label(text=str(item))
             if len(blocking) > 10:
@@ -108,16 +67,11 @@ class REDENGINE_PT_graph_validator(bpy.types.Panel):
 
         if warnings:
             warn = layout.box()
-<<<<<<< Updated upstream
             warn.label(text='Warnings', icon='INFO')
-=======
-            warn.label(text="Warnings", icon="INFO")
->>>>>>> Stashed changes
             for item in warnings[:8]:
                 warn.label(text=str(item))
             if len(warnings) > 8:
                 warn.label(text=f"... {len(warnings) - 8} more")
-<<<<<<< Updated upstream
 
         active = context.active_node
         if active is not None:
@@ -126,5 +80,3 @@ class REDENGINE_PT_graph_validator(bpy.types.Panel):
             details.label(text=f"HandleId: {getattr(active, 'red_handle_id', '') or '<none>'}")
             details.label(text=f"Type: {getattr(active, 'red_type', '') or '<none>'}")
             details.label(text=f"Exportable: {bool(getattr(active, 'red_exportable', False))}")
-=======
->>>>>>> Stashed changes

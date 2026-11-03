@@ -33,11 +33,7 @@ class ValidationResult:
         }
         threshold = ranks[IssueSeverity(minimum)]
         return tuple(
-<<<<<<< Updated upstream
             issue.message
             for issue in self.issues
             if ranks[issue.severity] >= threshold
-=======
-            issue.message for issue in self.issues if ranks[issue.severity] >= threshold
->>>>>>> Stashed changes
         )

@@ -1,15 +1,10 @@
 import os
 
-<<<<<<< Updated upstream
 from ..common.paths import norm_path_key
-=======
-from ...assetio.paths import depot_path_key, local_path_key
->>>>>>> Stashed changes
 
 NON_VISUAL_MESH_COMPONENT_TYPES = frozenset({"entVisualControllerComponent"})
 STATIC_OCCLUDER_COMPONENT_TYPES = frozenset({"entStaticOccluderMeshComponent"})
 APPEARANCE_PROXY_COMPONENT_TYPES = frozenset({"entAppearanceProxyMeshComponent"})
-<<<<<<< Updated upstream
 LIGHT_COMPONENT_TYPES = frozenset({
     "entLightComponent",
     "vehicleLightComponent",
@@ -19,32 +14,6 @@ LIGHT_CHANNEL_COMPONENT_TYPES = frozenset({"entLightChannelComponent"})
 LIGHT_RELATED_COMPONENT_TYPES = (
     LIGHT_COMPONENT_TYPES | LIGHT_CHANNEL_COMPONENT_TYPES
 )
-=======
-LIGHT_COMPONENT_TYPES = frozenset(
-    {
-        "entLightComponent",
-        "vehicleLightComponent",
-        "gameLightComponent",
-    }
-)
-LIGHT_CHANNEL_COMPONENT_TYPES = frozenset({"entLightChannelComponent"})
-SHADOW_MESH_SUFFIX = "_shadow.mesh"
-
-
-def light_component_skipped(component_type, *, include_lights, include_light_channels):
-    """Whether a light or light-channel component stays out of the import"""
-    return (
-        component_type in LIGHT_COMPONENT_TYPES
-        and not include_lights
-        or component_type in LIGHT_CHANNEL_COMPONENT_TYPES
-        and not include_light_channels
-    )
-
-
-def is_shadow_mesh(depot_path):
-    return depot_path_key(depot_path or "").endswith(SHADOW_MESH_SUFFIX)
-
->>>>>>> Stashed changes
 
 STATIC_MESH_COMPONENT_TYPES = (
     frozenset({"entMeshComponent", "entPhysicalMeshComponent"})
@@ -104,7 +73,6 @@ def is_excluded_mesh(
 ) -> bool:
     if not excluded_meshes:
         return False
-<<<<<<< Updated upstream
     if mesh_path and norm_path_key(mesh_path) in excluded_meshes:
         return True
     if mesh_name and norm_path_key(mesh_name) in excluded_meshes:
@@ -114,16 +82,5 @@ def is_excluded_mesh(
             return True
         basename = os.path.basename(depot_path.replace("\\", os.sep))
         if norm_path_key(basename) in excluded_meshes:
-=======
-    if mesh_path and local_path_key(mesh_path) in excluded_meshes:
-        return True
-    if mesh_name and local_path_key(mesh_name) in excluded_meshes:
-        return True
-    if depot_path:
-        if local_path_key(depot_path) in excluded_meshes:
-            return True
-        basename = os.path.basename(depot_path.replace("\\", os.sep))
-        if local_path_key(basename) in excluded_meshes:
->>>>>>> Stashed changes
             return True
     return False

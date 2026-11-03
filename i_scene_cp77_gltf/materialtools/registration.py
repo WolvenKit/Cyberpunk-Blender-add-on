@@ -1,20 +1,9 @@
-<<<<<<< Updated upstream
 import sys
 
 import bpy
 
 from ..registration import RegistrationLedger, get_classes
 from .callbacks import (
-=======
-import bpy
-
-from ..core.registration import RegistrationLedger
-from .depot.state import clear_depot_state_cache
-from .multilayer.editor import reset_runtime_state
-from .operators.actions import MATERIAL_OPERATOR_CLASSES
-from .runtime.callbacks import (
-    clear_material_runtime_caches,
->>>>>>> Stashed changes
     clear_msgbus,
     load_post_handler,
     load_pre_handler,
@@ -22,7 +11,6 @@ from .runtime.callbacks import (
     subscribe_all,
     trigger_update_on_undo,
 )
-<<<<<<< Updated upstream
 from .operators import (
     CP77MlSetupCreateMultilayerMaterial,
     CP77MlSetupCreateMultilayerObject,
@@ -51,15 +39,6 @@ _CLASSES = get_classes(
         CP77MlSetupRelocateMesh,
         CP77_PT_MaterialTools,
     ),
-=======
-from .ui.panels import MATERIAL_UI_CLASSES
-from .ui.properties import CP77MlPropertyGroup
-
-_CLASSES = (
-    CP77MlPropertyGroup,
-    *MATERIAL_OPERATOR_CLASSES,
-    *MATERIAL_UI_CLASSES,
->>>>>>> Stashed changes
 )
 _LEDGER = RegistrationLedger("materialtools")
 
@@ -67,11 +46,6 @@ _LEDGER = RegistrationLedger("materialtools")
 def _reset_runtime():
     stop_timers()
     clear_msgbus()
-<<<<<<< Updated upstream
-=======
-    clear_depot_state_cache()
-    clear_material_runtime_caches()
->>>>>>> Stashed changes
     reset_runtime_state()
 
 
@@ -101,12 +75,8 @@ def register_materialtools():
 
 
 def unregister_materialtools():
-<<<<<<< Updated upstream
     failures = _LEDGER.cleanup()
     if failures:
         raise RuntimeError(
             "; ".join(f"{label}: {error}" for label, error in failures)
         )
-=======
-    _LEDGER.cleanup_or_raise()
->>>>>>> Stashed changes
