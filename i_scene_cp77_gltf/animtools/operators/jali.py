@@ -2,17 +2,13 @@ import bpy
 from bpy.types import Operator
 
 from ...blender.animation_context import active_armature
-from ...notifications import show_message
-from ..model import JALIGenerationRequest
+from ...blender.operator_results import execute_operation
+from ..model.requests import (
+    JALI_TARGET_NEW,
+    JALI_TARGET_OVERWRITE,
+    JALIGenerationRequest,
+)
 from ..services import jali
-
-
-def _finish(operator, result):
-    for warning in result.warnings:
-        operator.report({"WARNING"}, warning)
-    if result.message:
-        operator.report({result.level}, result.message)
-    return result.blender_status
 
 
 class CP77_OT_PreviewFacialPose(Operator):
@@ -40,15 +36,24 @@ class CP77_OT_PreviewFacialPose(Operator):
         default="NEUTRAL",
     )
     custom_jaw: bpy.props.FloatProperty(
-        name="Jaw (JA)", default=0.5, min=0.0, max=1.0,
+        name="Jaw (JA)",
+        default=0.5,
+        min=0.0,
+        max=1.0,
         description="Jaw opening (0 = closed, 1 = max open)",
     )
     custom_lip: bpy.props.FloatProperty(
-        name="Lip (LI)", default=0.0, min=-1.0, max=1.0,
+        name="Lip (LI)",
+        default=0.0,
+        min=-1.0,
+        max=1.0,
         description="Lip shaping (-1 = pucker, 0 = neutral, 1 = wide)",
     )
     intensity: bpy.props.FloatProperty(
-        name="Intensity", default=1.0, min=0.0, max=2.0,
+        name="Intensity",
+        default=1.0,
+        min=0.0,
+        max=2.0,
         description="Pose intensity multiplier",
     )
 
@@ -57,15 +62,15 @@ class CP77_OT_PreviewFacialPose(Operator):
         return active_armature(context) is not None
 
     def execute(self, context):
-        return _finish(
+        return execute_operation(
             self,
-            jali.preview_pose(
-                context,
-                pose_type=self.pose_type,
-                custom_jaw=float(self.custom_jaw),
-                custom_lip=float(self.custom_lip),
-                intensity=float(self.intensity),
-            ),
+            "JALI pose preview",
+            jali.preview_pose,
+            context,
+            pose_type=self.pose_type,
+            custom_jaw=float(self.custom_jaw),
+            custom_lip=float(self.custom_lip),
+            intensity=float(self.intensity),
         )
 
     def invoke(self, context, event):
@@ -104,12 +109,35 @@ class CP77_OT_GenerateJALILipSync(Operator):
         description="Use transcript for forced alignment",
     )
     jaw_multiplier: bpy.props.FloatProperty(
-        name="Jaw Multiplier", default=1.0, min=0.0, max=2.0,
+        name="Jaw Multiplier",
+        default=1.0,
+        min=0.0,
+        max=2.0,
         description="Scale jaw opening",
     )
     lip_multiplier: bpy.props.FloatProperty(
-        name="Lip Multiplier", default=1.0, min=0.0, max=2.0,
+        name="Lip Multiplier",
+        default=1.0,
+        min=0.0,
+        max=2.0,
         description="Scale lip shaping",
+    )
+    target_action: bpy.props.EnumProperty(
+        name="Write To",
+        items=(
+            (
+                JALI_TARGET_NEW,
+                "New Action",
+                "Create a new Action for the lipsync; the current Action is kept (with a fake user)",
+            ),
+            (
+                JALI_TARGET_OVERWRITE,
+                "Overwrite Lipsync Tracks",
+                "Replace only the lipsync tracks of the active Action, and only within the generated "
+                "frame range; all other track and bone keys are kept. Without an active Action, a new one is made",
+            ),
+        ),
+        default=JALI_TARGET_NEW,
     )
 
     @classmethod
@@ -123,8 +151,11 @@ class CP77_OT_GenerateJALILipSync(Operator):
             use_transcript=bool(self.use_transcript),
             jaw_multiplier=float(self.jaw_multiplier),
             lip_multiplier=float(self.lip_multiplier),
+            target=str(self.target_action),
         )
-        return _finish(self, jali.generate_lipsync(context, request))
+        return execute_operation(
+            self, "JALI lipsync", jali.generate_lipsync, context, request
+        )
 
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self, width=400)
@@ -144,17 +175,12 @@ class CP77_OT_GenerateJALILipSync(Operator):
         col = layout.column(align=True)
         col.prop(self, "jaw_multiplier", slider=True)
         col.prop(self, "lip_multiplier", slider=True)
+        layout.separator()
+        layout.label(text="Output:", icon="ACTION")
+        layout.prop(self, "target_action", expand=True)
 
 
-class JALI_OT_InstallDependencies(Operator):
-    bl_idname = "cp77_facial.install_jali_deps"
-    bl_label = "Install JALI Dependencies"
-    bl_description = "Install parselmouth and g2p_en via pip"
-    bl_options = {"REGISTER"}
-
-    def execute(self, context):
-        result = jali.install_dependencies()
-        status = _finish(self, result)
-        if result.ok and result.details.get("installed"):
-            show_message(result.message)
-        return status
+JALI_OPERATOR_CLASSES = (
+    CP77_OT_PreviewFacialPose,
+    CP77_OT_GenerateJALILipSync,
+)

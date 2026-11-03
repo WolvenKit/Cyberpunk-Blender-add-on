@@ -3,20 +3,17 @@ def draw_glb_mesh_validation(context, layout):
     meshes = tuple(
         obj for obj in context.selected_objects if getattr(obj, "type", None) == "MESH"
     )
-    if not meshes and getattr(getattr(context, "active_object", None), "type", None) == "MESH":
+    if (
+        not meshes
+        and getattr(getattr(context, "active_object", None), "type", None) == "MESH"
+    ):
         meshes = (context.active_object,)
 
     box = layout.box()
-    box.label(text="GLB Export Validation", icon="CHECKMARK")
+    box.label(text="GLB Export Validation")
     column = box.column(align=True)
-    column.label(
-        text=(
-            f"{len(meshes)} selected mesh{'es' if len(meshes) != 1 else ''}"
-            if meshes
-            else "Select one or more meshes"
-        ),
-        icon="MESH_DATA" if meshes else "INFO",
-    )
+    if not meshes:
+        column.label(text="Select one or more meshes", icon="INFO")
     column.prop(props, "is_skinned")
     column.prop(props, "advanced_validation")
 
@@ -58,21 +55,13 @@ def draw_glb_mesh_validation(context, layout):
                 fixes.prop(props, "fix_assign_unweighted_vertices")
             if props.is_skinned and props.check_unused_bones:
                 fixes.prop(props, "fix_remove_unused_bones")
-        warning = fixes.box()
-        warning.label(text="Apply Fixes edits selected source meshes.", icon="ERROR")
-        warning.label(text="The operation is undoable; export-time fixes still use copies.")
 
-    if props.last_status:
+    if props.last_status and props.last_status != "PASS":
         result = box.box()
-        icon = "CHECKMARK" if props.last_status == "PASS" else (
-            "ERROR" if props.last_status == "ERROR" else "INFO"
+        result.label(
+            text=f"Last result: {props.last_status}",
+            icon="ERROR" if props.last_status == "ERROR" else "INFO",
         )
-        result.label(text=f"Last result: {props.last_status}", icon=icon)
-        counts = result.row(align=True)
-        counts.label(text=f"Meshes: {props.last_mesh_count}")
-        counts.label(text=f"Issues: {props.last_issue_count}")
-        counts.label(text=f"Fixes: {props.last_fix_count}")
-        counts.label(text=f"Remaining: {props.last_remaining_count}")
         lines = tuple(line for line in props.last_report.splitlines() if line.strip())
         for line in lines[:12]:
             result.label(text=line[:180])

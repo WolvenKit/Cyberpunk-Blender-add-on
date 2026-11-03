@@ -3,11 +3,14 @@ from dataclasses import dataclass
 
 from .catalog import ResourceKind, resource_spec_for_path
 from .diagnostics import IssueSeverity, ResourceIssue
+from .paths import LocalPath, is_local_absolute
 
 
 def _cache_key(value):
     if isinstance(value, dict):
-        return tuple(sorted((str(key), _cache_key(item)) for key, item in value.items()))
+        return tuple(
+            sorted((str(key), _cache_key(item)) for key, item in value.items())
+        )
     if isinstance(value, (list, tuple)):
         return tuple(_cache_key(item) for item in value)
     if isinstance(value, set):
@@ -32,7 +35,11 @@ class ResourceLoadError(RuntimeError):
         self.source = str(source or "")
         self.resource_kind = ResourceKind(resource_kind)
         self.issues = tuple(issues)
-        message = self.issues[-1].message if self.issues else f"Failed to load {self.resource_kind.value}: {self.source}"
+        message = (
+            self.issues[-1].message
+            if self.issues
+            else f"Failed to load {self.resource_kind.value}: {self.source}"
+        )
         super().__init__(message)
 
 
@@ -55,9 +62,12 @@ class ResourceRepository:
         self.parser_revision = int(parser_revision)
         self.asset_index = asset_index
         self.export_suffix = str(export_suffix or "")
-        self.accepted_kinds = frozenset((self.resource_kind, *(ResourceKind(kind) for kind in accepted_kinds)))
+        self.accepted_kinds = frozenset(
+            (self.resource_kind, *(ResourceKind(kind) for kind in accepted_kinds))
+        )
         self.parser_receives_document = bool(parser_receives_document)
         self._cache = {}
+        self._resolve_cache = {}
         self._issues = []
         self._hits = 0
         self._misses = 0
@@ -72,6 +82,7 @@ class ResourceRepository:
 
     def clear(self):
         self._cache.clear()
+        self._resolve_cache.clear()
         self._issues.clear()
         self._hits = 0
         self._misses = 0
@@ -80,13 +91,24 @@ class ResourceRepository:
         value = os.fspath(reference) if reference else ""
         if not value:
             return ""
-        if os.path.isfile(value):
-            return os.path.abspath(value)
-        if self.asset_index is None or not self.export_suffix:
-            return ""
-        return self.asset_index.resolve_expected(value, self.export_suffix) or ""
+        cache_key = value.replace("\\", "/").casefold()
+        cached = self._resolve_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        if is_local_absolute(value):
+            resolved = LocalPath.from_value(value).value
+        elif self.asset_index is not None and self.export_suffix:
+            resolved = (
+                self.asset_index.resolve_expected(value, self.export_suffix) or ""
+            )
+        else:
+            resolved = ""
+        self._resolve_cache[cache_key] = resolved
+        return resolved
 
-    def load(self, reference, *, required=False, parser_options=None, parser_kwargs=None):
+    def load(
+        self, reference, *, required=False, parser_options=None, parser_kwargs=None
+    ):
         source = self.resolve(reference)
         if not source:
             issue = ResourceIssue(
@@ -102,7 +124,11 @@ class ResourceRepository:
             return None
 
         spec = resource_spec_for_path(source)
-        actual_kind = spec.kind if spec is not None and spec.kind in self.accepted_kinds else self.resource_kind
+        actual_kind = (
+            spec.kind
+            if spec is not None and spec.kind in self.accepted_kinds
+            else self.resource_kind
+        )
         issue_start = len(self.documents.issues)
         document = self.documents.load(
             source,
@@ -137,7 +163,10 @@ class ResourceRepository:
 
         kwargs = dict(parser_kwargs or {})
         try:
-            parsed = self.parser(document if self.parser_receives_document else document.payload, **kwargs)
+            parsed = self.parser(
+                document if self.parser_receives_document else document.payload,
+                **kwargs,
+            )
         except Exception as error:
             issue = ResourceIssue(
                 IssueSeverity.ERROR,

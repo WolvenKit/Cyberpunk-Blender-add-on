@@ -1,7 +1,7 @@
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 
-from ..paths import get_refit_dir
+from ..assetio.resources import get_refit_dir
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,14 +38,6 @@ _ADDON_REFITTERS = (
     RefitterOption("Hyst_EBBP_Addon", "addon_hyst_ebbp.npz"),
     RefitterOption("Hyst_EBBN_Addon", "addon_hyst_ebbn.npz"),
 )
-
-
-def base_refitter_options():
-    return _BASE_REFITTERS
-
-
-def addon_refitter_options():
-    return _ADDON_REFITTERS
 
 
 def resolve_refitter(name, *, addon=False):

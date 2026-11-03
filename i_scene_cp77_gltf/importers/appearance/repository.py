@@ -2,7 +2,6 @@ from ...assetio.catalog import ResourceKind
 from ...assetio.repository import ResourceRepository
 from .parser import parse_appearance_document
 
-
 APPEARANCE_PARSER_REVISION = 1
 
 

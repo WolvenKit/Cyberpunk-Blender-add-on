@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 
 class EntityComponentHandlerRegistry:
-    """Map exact REDengine component types to execution handlers."""
+    """Map exact REDengine component types to execution handlers"""
 
     def __init__(self) -> None:
         self._handlers: dict[str, Any] = {}

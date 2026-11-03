@@ -8,7 +8,11 @@ from ...blender.mesh_validation import (
     collect_mesh_validation_issues,
     format_validation_issues,
 )
-from ..model import MeshToolResult, MeshValidationSummary
+from ...blender.operator_results import OperationResult
+from ...core.log import get_logger
+from ..model import MeshValidationSummary
+
+_LOG = get_logger(__name__)
 
 
 def selected_meshes(context):
@@ -25,7 +29,7 @@ def selected_meshes(context):
     return ()
 
 
-def _validation_report(meshes, issues, *, heading):
+def _validation_report(issues, *, heading):
     if not issues:
         return f"{heading}\n  No GLB export validation issues found."
     return format_validation_issues(issues, heading=heading)
@@ -34,7 +38,7 @@ def _validation_report(meshes, issues, *, heading):
 def validate_selected_meshes(context, request):
     meshes = selected_meshes(context)
     if not meshes:
-        return MeshToolResult.failure("Select at least one mesh to validate.")
+        return OperationResult.cancelled("Select at least one mesh to validate.")
     try:
         issues = collect_mesh_validation_issues(
             meshes,
@@ -42,10 +46,11 @@ def validate_selected_meshes(context, request):
             options=request.options,
         )
     except Exception as error:
-        return MeshToolResult.failure(f"GLB mesh validation failed: {error}")
+        return OperationResult.cancelled(
+            f"GLB mesh validation failed: {error}", error=error
+        )
 
     report = _validation_report(
-        meshes,
         issues,
         heading="GLB export mesh validation:",
     )
@@ -56,12 +61,13 @@ def validate_selected_meshes(context, request):
         report=report,
     )
     if issues:
-        return MeshToolResult.warning(
+        return OperationResult.finished(
             f"Found {len(issues)} GLB export issue{'s' if len(issues) != 1 else ''} "
             f"across {len(meshes)} mesh{'es' if len(meshes) != 1 else ''}.",
+            level="WARNING",
             payload=summary,
         )
-    return MeshToolResult.success(
+    return OperationResult.finished(
         f"{len(meshes)} selected mesh{'es' if len(meshes) != 1 else ''} passed GLB export validation.",
         payload=summary,
     )
@@ -70,7 +76,7 @@ def validate_selected_meshes(context, request):
 def fix_selected_meshes(context, request):
     meshes = selected_meshes(context)
     if not meshes:
-        return MeshToolResult.failure("Select at least one mesh to repair.")
+        return OperationResult.cancelled("Select at least one mesh to repair.")
 
     prepared = None
     try:
@@ -86,19 +92,23 @@ def fix_selected_meshes(context, request):
                 issues=prepared.issues_found,
                 remaining_issues=prepared.remaining_issues,
                 report=_validation_report(
-                    meshes,
                     prepared.remaining_issues,
                     heading="GLB export mesh repair:",
                 ),
             )
-            cleanup_validation_temporaries(prepared.temp_objects, prepared.temp_armatures)
+            cleanup_validation_temporaries(
+                prepared.temp_objects, prepared.temp_armatures
+            )
             prepared = None
             if summary.remaining_issues:
-                return MeshToolResult.warning(
+                return OperationResult.finished(
                     "Validation found issues, but none of their repair options are enabled.",
+                    level="WARNING",
                     payload=summary,
                 )
-            return MeshToolResult.success("No GLB export mesh repairs were required.", payload=summary)
+            return OperationResult.finished(
+                "No GLB export mesh repairs were required.", payload=summary
+            )
 
         committed = commit_prepared_mesh_repairs(
             prepared,
@@ -133,16 +143,21 @@ def fix_selected_meshes(context, request):
             f"{'s' if summary.fix_count != 1 else ''}."
         )
         if summary.remaining_issues:
-            return MeshToolResult.warning(
+            return OperationResult.finished(
                 f"{message} {summary.remaining_count} issue"
                 f"{'s remain' if summary.remaining_count != 1 else ' remains'}.",
+                level="WARNING",
                 payload=summary,
             )
-        return MeshToolResult.success(message, payload=summary)
+        return OperationResult.finished(message, payload=summary)
     except MeshValidationError as error:
-        return MeshToolResult.failure(str(error))
+        return OperationResult.cancelled(str(error), error=error)
     except Exception as error:
-        return MeshToolResult.failure(f"GLB mesh repair failed: {error}")
+        return OperationResult.cancelled(
+            f"GLB mesh repair failed: {error}", error=error
+        )
     finally:
         if prepared is not None:
-            cleanup_validation_temporaries(prepared.temp_objects, prepared.temp_armatures)
+            cleanup_validation_temporaries(
+                prepared.temp_objects, prepared.temp_armatures
+            )

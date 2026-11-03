@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 _MATERIAL_CACHE_LEASE_DEPTH = 0
 _MATERIAL_CACHE_LEASE_STATS = {
     "acquisitions": 0,
@@ -13,7 +12,7 @@ _MATERIAL_CACHE_LEASE_STATS = {
 
 
 def _clear_transient_material_cache() -> None:
-    """Clear lookup indexes while preserving persistent material signatures."""
+    """Clear lookup indexes while preserving persistent material signatures"""
     from ...materials.blender.cache import clear_material_cache
 
     clear_material_cache(
@@ -24,7 +23,7 @@ def _clear_transient_material_cache() -> None:
 
 
 def acquire_material_cache(enabled: bool = True) -> bool:
-    """Join the active import material-cache lease."""
+    """Join the active import material-cache lease"""
     global _MATERIAL_CACHE_LEASE_DEPTH
     if not enabled:
         return False
@@ -33,6 +32,9 @@ def acquire_material_cache(enabled: bool = True) -> bool:
         _MATERIAL_CACHE_LEASE_STATS["outer_acquisitions"] += 1
         _clear_transient_material_cache()
         _MATERIAL_CACHE_LEASE_STATS["clears"] += 1
+        from ...materials.blender.cache import begin_structure_sharing
+
+        begin_structure_sharing()
     _MATERIAL_CACHE_LEASE_DEPTH += 1
     _MATERIAL_CACHE_LEASE_STATS["max_depth"] = max(
         _MATERIAL_CACHE_LEASE_STATS["max_depth"],
@@ -42,7 +44,7 @@ def acquire_material_cache(enabled: bool = True) -> bool:
 
 
 def release_material_cache(acquired: bool) -> None:
-    """Leave the active import material-cache lease."""
+    """Leave the active import material-cache lease"""
     global _MATERIAL_CACHE_LEASE_DEPTH
     if not acquired:
         return
@@ -52,18 +54,8 @@ def release_material_cache(acquired: bool) -> None:
     _MATERIAL_CACHE_LEASE_DEPTH -= 1
     if _MATERIAL_CACHE_LEASE_DEPTH == 0:
         _MATERIAL_CACHE_LEASE_STATS["outer_releases"] += 1
+        from ...materials.blender.cache import end_structure_sharing
+
+        end_structure_sharing()
         _clear_transient_material_cache()
         _MATERIAL_CACHE_LEASE_STATS["clears"] += 1
-
-
-def material_cache_lease_depth() -> int:
-    """Return the active nested material-cache lease count."""
-    return _MATERIAL_CACHE_LEASE_DEPTH
-
-
-def material_cache_lease_stats() -> dict[str, int]:
-    """Return cumulative import material-cache lease telemetry."""
-    return {
-        **_MATERIAL_CACHE_LEASE_STATS,
-        "depth": _MATERIAL_CACHE_LEASE_DEPTH,
-    }

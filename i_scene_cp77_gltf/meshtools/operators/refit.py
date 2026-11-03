@@ -1,9 +1,9 @@
 from bpy.props import BoolProperty
 from bpy.types import Operator
 
+from ...blender.operator_results import finish_operator
 from ..model import AutofitRequest
 from ..services.refit_service import run_autofit
-from .result import finish_operator
 
 
 class CP77Autofitter(Operator):

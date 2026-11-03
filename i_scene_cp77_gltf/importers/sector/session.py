@@ -1,23 +1,25 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
 import os
+from dataclasses import dataclass, field
 
-from ...animation.rig import RigRepository
+from ...animation.services.rig.repository import RigRepository
 from ...assetio.documents import DocumentSession
 from ...assetio.index import IndexPolicy, build_asset_index, indexed_files
-from ...materials import MaterialResourceRepository
+from ...assetio.paths import absolute_local_path_key
+from ...assetio.resolver import resolution_scope
+from ...blender.physics.world import SectorCollisionService
+from ...core.log import get_logger, log_once
+from ...materials.repository import MaterialResourceRepository
 from ...materials.resources import material_resource_scope
-from ...meshes import MESH_GLB_EXTENSIONS, MeshRepository
+from ...meshes.repository import MeshRepository
 from ..common.cache import acquire_material_cache, release_material_cache
-from ..common.paths import absolute_path_key
 from ..entity.repository import EntityRepository
 from .planner import compile_sector_plan
 from .repository import SectorRepository
 from .services.acoustics import AcousticSectorService
 from .services.buffers import TransformBufferService
-from .services.collision_metadata import CollisionMetadataService
 from .services.decal import DecalService
 from .services.deformation import DeformationService
 from .services.effects import EffectResourceService
@@ -33,9 +35,11 @@ from .services.semantic import SemanticMarkerService
 from .services.splines import SplineService
 from .services.world_metadata import WorldMetadataService
 
+_LOG = get_logger(__name__)
+
 
 class SectorFileSet:
-    __slots__ = ("asset_index", "_cache")
+    __slots__ = ("_cache", "asset_index")
 
     def __init__(self, asset_index):
         self.asset_index = asset_index
@@ -52,30 +56,12 @@ class SectorFileSet:
     def sectors(self):
         return self._files("sectors", ".streamingsector.json")
 
-    @property
-    def mesh_jsons(self):
-        return self._files("mesh_jsons", ".mesh.json")
-
-    @property
-    def animation_glbs(self):
-        return self._files("animation_glbs", ".anims.glb")
-
-    @property
-    def appearance_jsons(self):
-        return self._files("appearance_jsons", ".app.json")
-
-    @property
-    def rig_jsons(self):
-        return self._files("rig_jsons", ".rig.json")
-
-    @property
-    def mesh_glbs(self):
-        return self._files("mesh_glbs", *MESH_GLB_EXTENSIONS)
-
 
 @dataclass(slots=True)
 class SectorImportCaches:
     planned_sectors: dict[str, object] = field(default_factory=dict)
+    sector_paths: tuple[str, ...] | None = None
+    planned_sector_sequence: tuple[object, ...] | None = None
     entity_masters: dict[tuple, object] = field(default_factory=dict)
     entity_resolutions: dict[tuple, str] = field(default_factory=dict)
     mesh_masters: dict[tuple, object] = field(default_factory=dict)
@@ -88,9 +74,6 @@ class SectorImportCaches:
     serialized_json: dict[int, tuple[object, str]] = field(default_factory=dict)
 
 
-_path_key = absolute_path_key
-
-
 _SERVICE_FACTORIES = (
     ("resource_resolver", lambda session: IndexedResourceResolver(session), None),
     ("primitive_meshes", lambda session: PrimitiveMeshService(session), None),
@@ -99,7 +82,7 @@ _SERVICE_FACTORIES = (
     (
         "foliage_assets",
         lambda session: FoliageResourceService(session),
-        "import_foliage",
+        frozenset({"foliage"}),
     ),
     ("deformation_assets", lambda _session: DeformationService(), None),
     (
@@ -111,42 +94,44 @@ _SERVICE_FACTORIES = (
     (
         "lighting_assets",
         lambda session: StaticLightingService(session),
-        "with_lights",
+        frozenset({"sector_lights"}),
     ),
     (
         "probe_assets",
         lambda session: ReflectionProbeService(session),
-        "import_environment_probes",
+        frozenset({"reflection_probes"}),
     ),
     (
         "effect_assets",
         lambda session: EffectResourceService(session),
-        "import_effects",
+        frozenset({"effects"}),
     ),
     (
         "acoustic_assets",
         lambda session: AcousticSectorService(session),
-        "import_acoustics",
+        frozenset({"acoustic_data"}),
     ),
     (
         "minimap_assets",
         lambda session: MinimapResourceService(session),
-        "import_minimap",
+        frozenset({"minimap"}),
     ),
     ("semantic_assets", lambda session: SemanticMarkerService(session), None),
     ("spline_assets", lambda _session: SplineService(), None),
-    ("gi_assets", lambda session: GIResourceService(session), "import_gi"),
+    ("gi_assets", lambda session: GIResourceService(session), frozenset({"gi_data"})),
     (
-        "collision_metadata_assets",
-        lambda session: CollisionMetadataService(session),
-        "import_collisions",
+        "physx_collision_assets",
+        lambda session: SectorCollisionService(session),
+        frozenset({"terrain_heightfields", "foliage_destruction"}),
     ),
 )
-_SERVICE_ATTRIBUTES = tuple(name for name, _factory, _option in _SERVICE_FACTORIES)
+_SERVICE_ATTRIBUTES = tuple(name for name, _factory, _choices in _SERVICE_FACTORIES)
 
 
 class SectorImportSession:
-    def __init__(self, project_filepath, options, *, force_refresh=False):
+    def __init__(
+        self, project_filepath, options, *, force_refresh=False, depot_root=""
+    ):
         self.project_filepath = os.path.abspath(project_filepath)
         self.project_path = os.path.dirname(self.project_filepath)
         self.project_name = os.path.basename(self.project_path)
@@ -154,6 +139,7 @@ class SectorImportSession:
         self.base_path = os.path.join(self.raw_root, "base")
         self.options = options
         self.force_refresh = bool(force_refresh)
+        self.depot_root = os.path.normpath(str(depot_root)) if depot_root else ""
 
         self.asset_index = None
         self.files = None
@@ -165,6 +151,7 @@ class SectorImportSession:
         self.meshes = None
         self.material_resources = None
         self._material_scope = None
+        self._resolution_scope = None
         self.masters = None
         self._material_cache_acquired = False
         self._entered = False
@@ -176,6 +163,8 @@ class SectorImportSession:
             return self
 
         try:
+            self._resolution_scope = resolution_scope()
+            self._resolution_scope.__enter__()
             self._material_cache_acquired = acquire_material_cache(
                 self.options.with_materials,
             )
@@ -183,9 +172,7 @@ class SectorImportSession:
                 self.raw_root,
                 self.options.index_extensions,
                 policy=(
-                    IndexPolicy.REFRESH
-                    if self.force_refresh
-                    else IndexPolicy.REUSE
+                    IndexPolicy.REFRESH if self.force_refresh else IndexPolicy.REUSE
                 ),
             )
             self.sectors = SectorRepository(
@@ -204,15 +191,15 @@ class SectorImportSession:
             self.material_resources = MaterialResourceRepository(
                 self.documents,
                 asset_index=self.asset_index,
+                image_index_policy=(
+                    IndexPolicy.REFRESH if self.force_refresh else IndexPolicy.REUSE
+                ),
             )
             self._material_scope = material_resource_scope(self.material_resources)
             self._material_scope.__enter__()
             self.files = SectorFileSet(self.asset_index)
-            for attribute, factory, option_name in _SERVICE_FACTORIES:
-                enabled = (
-                    option_name is None
-                    or bool(getattr(self.options, option_name))
-                )
+            for attribute, factory, choices in _SERVICE_FACTORIES:
+                enabled = choices is None or bool(choices & self.options.choices)
                 setattr(self, attribute, factory(self) if enabled else None)
         except Exception:
             self._reset_runtime_state()
@@ -229,11 +216,21 @@ class SectorImportSession:
         if self.masters is not None:
             try:
                 self.masters.hide_viewport = True
-            except (AttributeError, ReferenceError, TypeError):
-                pass
+            except (AttributeError, ReferenceError, TypeError) as error:
+                log_once(
+                    _LOG,
+                    "DEBUG",
+                    ("SectorImportSession._reset_runtime_state", type(error).__name__),
+                    "reset runtime state: fell back after %s",
+                    error,
+                    exc_info=True,
+                )
         if self._material_scope is not None:
             self._material_scope.__exit__(None, None, None)
             self._material_scope = None
+        if self._resolution_scope is not None:
+            self._resolution_scope.__exit__(None, None, None)
+            self._resolution_scope = None
         if self.material_resources is not None:
             self.material_resources.clear()
         self.documents.close()
@@ -255,9 +252,7 @@ class SectorImportSession:
 
     def _require_entered(self):
         if not self._entered:
-            raise RuntimeError(
-                "SectorImportSession must be entered before use"
-            )
+            raise RuntimeError("SectorImportSession must be entered before use")
 
     def safe_json(self, value):
         if isinstance(value, (dict, list, tuple)):
@@ -287,21 +282,26 @@ class SectorImportSession:
 
     def sector_paths(self):
         self._require_entered()
+        cached = self.caches.sector_paths
+        if cached is not None:
+            return cached
         project_sector = os.path.join(
             self.base_path,
             self.project_name + ".streamingsector.json",
         )
-        project_key = _path_key(project_sector)
-        return tuple(
+        project_key = absolute_local_path_key(project_sector)
+        cached = tuple(
             path
             for path in sorted(self.files.sectors)
-            if _path_key(path) != project_key
-            and "sim_" not in path.casefold()
+            if absolute_local_path_key(path) != project_key
+            and "sim_" not in os.path.basename(path).casefold()
         )
+        self.caches.sector_paths = cached
+        return cached
 
     def planned_sector(self, filepath):
         self._require_entered()
-        key = _path_key(filepath)
+        key = absolute_local_path_key(filepath)
         planned = self.caches.planned_sectors.get(key)
         if planned is None:
             planned = compile_sector_plan(
@@ -312,7 +312,10 @@ class SectorImportSession:
         return planned
 
     def planned_sectors(self):
-        return tuple(
-            self.planned_sector(path)
-            for path in self.sector_paths()
-        )
+        self._require_entered()
+        cached = self.caches.planned_sector_sequence
+        if cached is not None:
+            return cached
+        cached = tuple(self.planned_sector(path) for path in self.sector_paths())
+        self.caches.planned_sector_sequence = cached
+        return cached

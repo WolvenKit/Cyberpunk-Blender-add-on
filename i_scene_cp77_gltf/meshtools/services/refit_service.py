@@ -1,4 +1,5 @@
 import bpy
+import numpy as np
 
 from ...blender.context import (
     get_safe_mode,
@@ -6,89 +7,113 @@ from ...blender.context import (
     safe_mode_switch,
     store_current_context,
 )
-from ...blender.shapekeys import shape_key_names
-from ..model import AutofitRequest, MeshToolResult
+from ...blender.operator_results import OperationResult
+from ...blender.selection import selected_meshes
+from ...blender.shapekeys import has_shape_keys
+from ...core.log import get_logger
+from ...gltf.garment_support import GARMENT_SUPPORT_MORPH
+from ..model import AutofitRequest
 from ..refit_catalog import resolve_refitter
 from .lattice_service import add_lattice
 from .shapekey_service import (
-    add_key_from_mix,
     apply_modifier_as_shapekey,
-    copy_key_to_basis,
-    ensure_basis,
-    remove_key,
+    key_coordinates,
+    move_with_basis,
+    rest_shape,
 )
+
+_LOG = get_logger(__name__)
 
 
 def apply_refitter(obj):
-    """Apply refitter"""
+    """Bake the Autofitter shape keys into the mesh"""
     prev_mode = obj.mode
-    if prev_mode != 'OBJECT':
-        safe_mode_switch('OBJECT')
+    if prev_mode != "OBJECT":
+        safe_mode_switch("OBJECT")
 
     try:
-        basis = ensure_basis(obj)
+        if not has_shape_keys(obj):
+            return
+        shape_keys = obj.data.shape_keys
+        reference = shape_keys.reference_key
+        base = key_coordinates(reference)
+        others = [key for key in shape_keys.key_blocks if key != reference]
+        autofit = [key for key in others if "Autofitter" in key.name]
+        garment = [
+            key for key in others if "Garment" in key.name and key not in autofit
+        ]
 
-        names = shape_key_names(obj) or []
-        auto_names = [n for n in names if 'Autofitter' in n]
-        garm_names = [n for n in names if 'Garment' in n]
+        refit = np.zeros_like(base)
+        for key in autofit:
+            refit += key_coordinates(key) - base
+        support = None
+        if garment:
+            support = base.copy()
+            for key in garment:
+                support += key_coordinates(key) - base
 
-        temp_mix_key = None
-        if auto_names:
-            auto_values = {n: 1.0 for n in auto_names}
-            temp_mix_key = add_key_from_mix(obj, 'TempAutofitMix', values=auto_values)
-
-        if garm_names:
-            garm_values = {n: 1.0 for n in garm_names}
-            gs_key = add_key_from_mix(obj, 'TempGarmentSupport', values=garm_values)
-            for n in garm_names:
-                remove_key(obj, n)
-            if gs_key and gs_key.name != 'GarmentSupport':
-                gs_key.name = 'GarmentSupport'
-            if gs_key:
-                gs_key.value = 0.0
-
-        if temp_mix_key:
-            copy_key_to_basis(obj, temp_mix_key.name)
-            if basis:
-                remove_key(obj, 'Basis')
-            temp_mix_key.name = 'Basis'
-        for n in auto_names:
-            remove_key(obj, n)
+        for key in (*autofit, *garment[1:]):
+            obj.shape_key_remove(key)
+        if garment:
+            garment[0].data.foreach_set("co", support.reshape(-1))
+            garment[0].name = GARMENT_SUPPORT_MORPH
+            garment[0].value = 0.0
+        move_with_basis(obj, refit)
 
     finally:
-        if prev_mode != 'OBJECT':
+        if prev_mode != "OBJECT":
             try:
                 safe_mode_switch(prev_mode)
-            except Exception:
-                pass
+            except Exception as error:
+                _LOG.warning(
+                    "Failed to restore refit mode: mode=%s error=%s",
+                    prev_mode,
+                    error,
+                    exc_info=True,
+                )
+
+
+def _deform_before_armature(mesh, modifier):
+    """Move a refit modifier ahead of the first Armature modifier"""
+    modifiers = mesh.modifiers
+    armature = next(
+        (index for index, item in enumerate(modifiers) if item.type == "ARMATURE"), None
+    )
+    current = modifiers.find(modifier.name)
+    if armature is not None and current > armature:
+        modifiers.move(current, armature)
 
 
 def resolve_refit_selection(context):
-    """Check for existing refitters."""
+    """Check for existing refitters"""
     refitters, addons = [], []
     for obj in context.scene.objects:
-        if obj.type == 'LATTICE':
+        if obj.type == "LATTICE":
             if "refitter_type" in obj:
                 refitters.append(obj)
             elif "refitter_addon" in obj or "refitter_addon_type" in obj:
                 addons.append(obj)
-    print(f'Refitters: {len(refitters)}, Addons: {len(addons)}')
+    _LOG.debug("Refit selection: refitters=%d addons=%d", len(refitters), len(addons))
     return refitters, addons
 
 
 def run_autofit(context, request: AutofitRequest):
     try:
         target_body_path = resolve_refitter(request.base_choice)
-    except KeyError:
-        return MeshToolResult.failure(f"Base refitter '{request.base_choice}' was not found.")
+    except KeyError as error:
+        return OperationResult.cancelled(
+            f"Base refitter '{request.base_choice}' was not found.", error=error
+        )
 
     addon_path = None
     addon_choice = request.addon_choice
     if request.use_addon:
         try:
             addon_path = resolve_refitter(addon_choice, addon=True)
-        except KeyError:
-            return MeshToolResult.failure(f"Addon refitter '{addon_choice}' was not found.")
+        except KeyError as error:
+            return OperationResult.cancelled(
+                f"Addon refitter '{addon_choice}' was not found.", error=error
+            )
 
     refitters, addons = resolve_refit_selection(context)
     store_current_context()
@@ -123,9 +148,9 @@ def _run_autofit(
 ):
     if get_safe_mode() != "OBJECT":
         safe_mode_switch("OBJECT")
-    selected = [obj for obj in context.selected_objects if obj.type == "MESH"]
+    selected = selected_meshes(context)
     if not selected:
-        return MeshToolResult.failure("No meshes selected.")
+        return OperationResult.cancelled("No meshes selected.")
 
     collection = context.scene.collection.children.get("Refitters")
     if collection is None:
@@ -138,20 +163,22 @@ def _run_autofit(
     )
     if main_lattice is None and target_body_name and target_body_name != "None":
         main_lattice = add_lattice(
-            target_body_path, collection, fbx_rotation, target_body_name
+            context, target_body_path, collection, fbx_rotation, target_body_name
         )
 
     addon_lattice = None
     if use_addon:
         addon_lattice = next(
             (
-                obj for obj in addons
+                obj
+                for obj in addons
                 if obj.get("refitter_addon_type") == addon_target_body_name
             ),
             None,
         )
         if addon_lattice is None and addon_target_body_path:
             addon_lattice = add_lattice(
+                context,
                 addon_target_body_path,
                 collection,
                 fbx_rotation,
@@ -161,7 +188,12 @@ def _run_autofit(
                 addon_lattice["refitter_addon_type"] = addon_target_body_name
 
     modified = 0
+    refitted = set()
     for mesh in selected:
+        if try_auto_apply and mesh.data.as_pointer() in refitted:
+            # Its mesh, shared with an object selected before it, is already refitted.
+            modified += 1
+            continue
         added = []
         if main_lattice and not any(
             mod.type == "LATTICE" and mod.object == main_lattice
@@ -169,6 +201,7 @@ def _run_autofit(
         ):
             modifier = mesh.modifiers.new(main_lattice.name, "LATTICE")
             modifier.object = main_lattice
+            _deform_before_armature(mesh, modifier)
             added.append(modifier.name)
         if addon_lattice and not any(
             mod.type == "LATTICE" and mod.object == addon_lattice
@@ -176,17 +209,20 @@ def _run_autofit(
         ):
             modifier = mesh.modifiers.new(addon_lattice.name, "LATTICE")
             modifier.object = addon_lattice
+            _deform_before_armature(mesh, modifier)
             added.append(modifier.name)
         if not added:
             continue
         modified += 1
         if try_auto_apply:
+            refitted.add(mesh.data.as_pointer())
             for modifier_name in added:
-                apply_modifier_as_shapekey(mesh, modifier_name)
+                with rest_shape(mesh):
+                    apply_modifier_as_shapekey(context, mesh, modifier_name)
             apply_refitter(mesh)
 
     if modified == 0:
-        return MeshToolResult.failure(
+        return OperationResult.cancelled(
             "All selected meshes already have the requested refitter modifiers."
         )
 
@@ -195,4 +231,4 @@ def _run_autofit(
     for obj in selected:
         obj.select_set(True)
     context.view_layer.objects.active = selected[0]
-    return MeshToolResult.success(f"Refitted {modified} mesh(es).", payload=modified)
+    return OperationResult.finished(f"Refitted {modified} mesh(es).", payload=modified)

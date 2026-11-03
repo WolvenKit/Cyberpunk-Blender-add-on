@@ -1,19 +1,15 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Generic, Iterator, TypeVar
-
+from typing import Generic, TypeVar
 
 T = TypeVar("T")
 
 
 @dataclass(frozen=True, slots=True)
 class ImportResult(Generic[T]):
-    """Structured importer result with fatal failures separated from warnings.
-
-    ``failures`` is reserved for conditions that invalidate the complete
-    operation. Recoverable content omissions belong in ``warnings``.
-    """
+    """Structured importer result with fatal failures separated from warnings"""
 
     created_items: tuple[T, ...] = ()
     warnings: tuple[str, ...] = ()
@@ -43,3 +39,34 @@ class ImportResult(Generic[T]):
 
 def unique_messages(values) -> tuple[str, ...]:
     return tuple(dict.fromkeys(str(value) for value in values if str(value)))
+
+
+def summarize_messages(values, *, root: str = "", limit: int = 8) -> str:
+    """Bounded issue summary with paths shown relative to root"""
+    messages = unique_messages(values)
+    if not messages:
+        return ""
+    prefixes = ()
+    if root:
+        normalized = root.replace("\\", "/").rstrip("/") + "/"
+        prefixes = tuple(
+            dict.fromkeys(
+                (
+                    "//?/" + normalized,
+                    "\\\\?\\" + normalized.replace("/", "\\"),
+                    normalized,
+                    normalized.replace("/", "\\"),
+                )
+            )
+        )
+
+    def shorten(message):
+        for prefix in prefixes:
+            message = message.replace(prefix, "")
+        return message
+
+    lines = [f"{len(messages)} issue(s) during import:"]
+    lines.extend(f"  {shorten(message)}" for message in messages[:limit])
+    if len(messages) > limit:
+        lines.append(f"  ... and {len(messages) - limit} more in the IO Suite log")
+    return "\n".join(lines)

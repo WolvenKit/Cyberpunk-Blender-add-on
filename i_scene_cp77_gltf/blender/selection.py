@@ -11,9 +11,18 @@ def _find_layer_collection_by_name(name, collection):
     return None
 
 
+def selected_meshes(context=None):
+    """The selected mesh objects"""
+    return [
+        obj for obj in (context or bpy.context).selected_objects if obj.type == "MESH"
+    ]
+
+
 def set_active_collection(collection, context=None):
     context = context or bpy.context
-    found = _find_layer_collection_by_name(collection.name, context.view_layer.layer_collection)
+    found = _find_layer_collection_by_name(
+        collection.name, context.view_layer.layer_collection
+    )
     if found is None:
         return False
 
@@ -24,7 +33,22 @@ def set_active_collection(collection, context=None):
     return True
 
 
-def select_objects(objects, make_first_active=True, clear=True, reveal=False, context=None):
+def _reveal_object_collection(layer_collection, obj):
+    """Reveal one collection path containing the object in the current view layer"""
+    if obj.name in layer_collection.collection.objects or any(
+        _reveal_object_collection(child, obj) for child in layer_collection.children
+    ):
+        layer_collection.exclude = False
+        layer_collection.hide_viewport = False
+        layer_collection.collection.hide_viewport = False
+        layer_collection.collection.hide_select = False
+        return True
+    return False
+
+
+def select_objects(
+    objects, make_first_active=True, clear=True, reveal=False, context=None
+):
     context = context or bpy.context
     if objects is None:
         objects = []
@@ -46,13 +70,23 @@ def select_objects(objects, make_first_active=True, clear=True, reveal=False, co
             continue
 
         if reveal:
-            try:
-                obj.hide_set(False)
-            except Exception:
-                pass
+            _reveal_object_collection(context.view_layer.layer_collection, obj)
             obj.hide_viewport = False
             obj.hide_select = False
         resolved.append(obj)
+
+    if reveal and resolved:
+        context.view_layer.update()
+    # Objects linked since the view layer last synchronized are not yet among its objects.
+    if any(obj.name not in context.view_layer.objects for obj in resolved):
+        context.view_layer.update()
+    for obj in resolved:
+        if obj.name not in context.view_layer.objects:
+            raise ValueError(
+                f"Object '{obj.name}' is not linked to the active view layer"
+            )
+        if reveal:
+            obj.hide_set(False, view_layer=context.view_layer)
 
     if clear:
         for obj in list(context.selected_objects):

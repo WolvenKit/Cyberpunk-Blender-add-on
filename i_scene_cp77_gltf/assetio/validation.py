@@ -5,7 +5,6 @@ from .catalog import ResourceKind
 from .diagnostics import IssueSeverity, ResourceIssue, ValidationResult
 from .rig_validation import rig_array_errors
 
-
 MIN_WOLVENKIT_VERSION = (8, 17)
 MIN_MATERIAL_JSON_VERSION = (1, 0)
 
@@ -28,22 +27,33 @@ def version_at_least(value, minimum):
     if components is None:
         return False
     width = max(len(components), len(minimum))
-    return components + (0,) * (width - len(components)) >= minimum + (0,) * (width - len(minimum))
+    return components + (0,) * (width - len(components)) >= minimum + (0,) * (
+        width - len(minimum)
+    )
 
 
-def validate_payload(payload, *, path="", kind=None, profile=ValidationProfile.NONE, expected_root_types=()):
+def validate_payload(
+    payload,
+    *,
+    path="",
+    kind=None,
+    profile=ValidationProfile.NONE,
+    expected_root_types=(),
+):
     kind = ResourceKind(kind) if kind is not None else None
     profile = ValidationProfile(profile)
     issues = []
 
     def add(code, message, severity=IssueSeverity.ERROR):
-        issues.append(ResourceIssue(
-            IssueSeverity(severity),
-            code,
-            path,
-            message,
-            kind.value if kind is not None else "",
-        ))
+        issues.append(
+            ResourceIssue(
+                IssueSeverity(severity),
+                code,
+                path,
+                message,
+                kind.value if kind is not None else "",
+            )
+        )
 
     if not isinstance(payload, dict):
         add("json.top_level", f"{path}: expected a JSON object")
@@ -51,7 +61,6 @@ def validate_payload(payload, *, path="", kind=None, profile=ValidationProfile.N
 
     if profile is ValidationProfile.NONE:
         return ValidationResult()
-
 
     header = payload.get("Header")
     if not isinstance(header, dict):
@@ -68,7 +77,9 @@ def validate_payload(payload, *, path="", kind=None, profile=ValidationProfile.N
         if not isinstance(payload.get("MaterialRepo"), str):
             add("material.repo", f"{path}: MaterialRepo must be a string")
         if not isinstance(payload.get("Appearances"), (dict, list)):
-            add("material.appearances", f"{path}: Appearances must be an object or list")
+            add(
+                "material.appearances", f"{path}: Appearances must be an object or list"
+            )
         if not isinstance(payload.get("Materials"), list):
             add("material.materials", f"{path}: Materials must be a list")
         return ValidationResult(tuple(issues))
@@ -121,7 +132,11 @@ def validate_payload(payload, *, path="", kind=None, profile=ValidationProfile.N
             add("physics.bodies", f"{path}: bodies must be a list")
     elif kind in (ResourceKind.STREAMING_SECTOR, ResourceKind.STREAMING_SECTOR_INPLACE):
         nodes = root.get("nodes")
-        node_data = root.get("nodeData", {}).get("Data") if isinstance(root.get("nodeData"), dict) else None
+        node_data = (
+            root.get("nodeData", {}).get("Data")
+            if isinstance(root.get("nodeData"), dict)
+            else None
+        )
         if not isinstance(nodes, list):
             add("sector.nodes", f"{path}: nodes must be a list")
         if not isinstance(node_data, list):

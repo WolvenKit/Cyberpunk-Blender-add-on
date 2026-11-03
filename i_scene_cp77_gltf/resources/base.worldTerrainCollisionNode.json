@@ -1,4 +1,5 @@
 {
+  "HandleId": "0",
   "Data": {
     "$type": "worldTerrainCollisionNode",
     "actorTransform": {
@@ -26,7 +27,7 @@
         }
       }
     },
-    "columnScale": 2,
+    "columnScale": 0.5,
     "debugName": {
       "$type": "CName",
       "$storage": "string",
@@ -35,16 +36,17 @@
     "extents": {
       "$type": "Vector4",
       "W": 0,
-      "X": 128,
-      "Y": 128,
-      "Z": 128
+      "X": 64,
+      "Y": 64,
+      "Z": 64
     },
     "heightfieldGeometry": {
+      "BufferId": "0",
       "Flags": 0,
       "Bytes": ""
     },
-    "heightScale": 0.00230645202,
-    "increaseStreamingDistance": 1,
+    "heightScale": 0.00264317775,
+    "increaseStreamingDistance": 0,
     "isHostOnly": 0,
     "isVisibleInGame": 1,
     "materialIndices": [
@@ -103,8 +105,8 @@
       }
     ],
     "proxyScale": null,
-    "rowScale": 2,
-    "sourcePrefabHash": "2052876290493908449",
+    "rowScale": 0.5,
+    "sourcePrefabHash": "0",
     "streamingDistance": 0,
     "tag": "None",
     "tagExt": "None"
