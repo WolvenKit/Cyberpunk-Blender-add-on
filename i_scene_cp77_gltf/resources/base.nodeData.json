@@ -1,0 +1,73 @@
+{
+  "$type": "worldCompiledNodeInstanceSetupInfo",
+  "dataGroup": "Base",
+  "externalInplaceResourceHash": {
+    "DepotPath": {
+      "$type": "ResourcePath",
+      "$storage": "uint64",
+      "$value": "0"
+    },
+    "Flags": "Default"
+  },
+  "globalNodeId": {
+    "$type": "worldGlobalNodeID",
+    "hash": "0"
+  },
+  "instanceIndex": 4294967295,
+  "nodeFlags": "FLAG_AllowForceStreamIn, FLAG_Building",
+  "nodeIdx": "0",
+  "patchedNode": {
+    "$type": "NodeRef",
+    "$storage": "uint64",
+    "$value": "0"
+  },
+  "preboostStreamingRefPoint": {
+    "$type": "Vector3",
+    "X": 0,
+    "Y": 0,
+    "Z": 0
+  },
+  "proxyMeshId": {
+    "$type": "worldGlobalNodeID",
+    "hash": "0"
+  },
+  "scale": {
+    "$type": "Vector3",
+    "X": 1,
+    "Y": 1,
+    "Z": 1
+  },
+  "secondaryRefPointDistance": 3.40282347e+38,
+  "secondaryRefPointPosition": {
+    "$type": "Vector3",
+    "X": 0,
+    "Y": 0,
+    "Z": 0
+  },
+  "streamingDistance": 443.404999,
+  "streamingPriority": "1",
+  "streamingRefPoint": {
+    "$type": "Vector3",
+    "X": 0,
+    "Y": 0,
+    "Z": 0
+  },
+  "todvisMask": "0",
+  "transform": {
+    "$type": "Transform",
+    "orientation": {
+      "$type": "Quaternion",
+      "i": 0,
+      "j": 0,
+      "k": 0,
+      "r": 1
+    },
+    "position": {
+      "$type": "Vector4",
+      "W": 0,
+      "X": 0,
+      "Y": 0,
+      "Z": 0
+    }
+  }
+}
