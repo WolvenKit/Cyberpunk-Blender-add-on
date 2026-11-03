@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+<<<<<<< Updated upstream
 from dataclasses import dataclass
 import hashlib
 import math
+=======
+import math
+from dataclasses import dataclass
+>>>>>>> Stashed changes
 
 from mathutils import Matrix, Quaternion, Vector
 
 from ....assetio.catalog import ResourceKind
+<<<<<<< Updated upstream
 from ..context import FoliageResourceError
 from ...common.paths import absolute_path_key
 from ....assetio.values import axis_value, first_dict_value as _first_dict_value
@@ -58,6 +64,25 @@ def _scale(data):
         scalar = float(scalar)
     except (TypeError, ValueError):
         scalar = 1.0
+=======
+from ....assetio.paths import absolute_local_path_key
+from ....assetio.transform_values import quaternion_wxyz_from_wkit, vector3_from_data
+from ....assetio.values import coerce_float
+from ..context import FoliageResourceError
+
+
+# A foliage population is a Position (Vector3), a Rotation (Vector4, W first) and a uniform Scale.
+def _position(data):
+    return vector3_from_data(data.get("Position"))
+
+
+def _rotation(data):
+    return quaternion_wxyz_from_wkit(data.get("Rotation"))
+
+
+def _scale(data):
+    scalar = coerce_float(data.get("Scale", 1.0), 1.0, unwrap=False)
+>>>>>>> Stashed changes
     return (scalar, scalar, scalar)
 
 
@@ -96,6 +121,7 @@ class FoliagePopulationSelection:
     resource: FoliageResourceData
     depot_path: str
     active: tuple
+<<<<<<< Updated upstream
     inactive: tuple
     bucket_begin: int
     bucket_count: int
@@ -106,6 +132,9 @@ class FoliagePopulationSelection:
     @property
     def resolved_count(self):
         return len(self.active) + len(self.inactive)
+=======
+    bucket_count: int
+>>>>>>> Stashed changes
 
     @property
     def active_count(self):
@@ -116,6 +145,10 @@ class FoliageResourceService:
     def __init__(self, session):
         self.session = session
         self.cache = session.caches.foliage_resources
+<<<<<<< Updated upstream
+=======
+        self._population_cache = {}
+>>>>>>> Stashed changes
 
     def resolve_path(self, depot_path):
         return self.session.resource_resolver.resolve_json(
@@ -209,7 +242,11 @@ class FoliageResourceService:
                 f"resource not indexed: {depot_path}"
             )
 
+<<<<<<< Updated upstream
         key = absolute_path_key(resolved_path)
+=======
+        key = absolute_local_path_key(resolved_path)
+>>>>>>> Stashed changes
         resource = self.cache.get(key)
         if resource is None:
             payload = self.session.documents.payload(
@@ -235,6 +272,7 @@ class FoliageResourceService:
     def population_is_active(population):
         if not isinstance(population, dict):
             return False
+<<<<<<< Updated upstream
         scale = population.get("Scale", population.get("scale", 1.0))
         if isinstance(scale, dict):
             values = _scale(population)
@@ -244,6 +282,10 @@ class FoliageResourceService:
             )
         try:
             value = float(scale)
+=======
+        try:
+            value = float(population.get("Scale", 1.0))
+>>>>>>> Stashed changes
         except (TypeError, ValueError):
             return False
         return math.isfinite(value) and value > 0.0
@@ -261,6 +303,7 @@ class FoliageResourceService:
             Vector(_scale(population)),
         )
 
+<<<<<<< Updated upstream
     @staticmethod
     def population_scale(population):
         scale = population.get("Scale", population.get("scale", 1.0))
@@ -271,6 +314,29 @@ class FoliageResourceService:
             return float(scale)
         except (TypeError, ValueError):
             return 1.0
+=======
+    def _population_record(self, population):
+        key = id(population)
+        cached = self._population_cache.get(key)
+        if cached is not None and cached[0] is population:
+            return cached
+        cached = [
+            population,
+            self.population_is_active(population),
+            None,
+        ]
+        self._population_cache[key] = cached
+        return cached
+
+    def population_active(self, population):
+        return self._population_record(population)[1]
+
+    def cached_population_matrix(self, population):
+        record = self._population_record(population)
+        if record[2] is None:
+            record[2] = self.population_matrix(population)
+        return record[2]
+>>>>>>> Stashed changes
 
     @staticmethod
     def _indices(span, resource, *, sector_name, node_index, warning):
@@ -361,10 +427,14 @@ class FoliageResourceService:
                 population_end,
                 len(populations),
             )
+<<<<<<< Updated upstream
             if (
                 relative_end > instances_count
                 or population_end > len(populations)
             ):
+=======
+            if relative_end > instances_count or population_end > len(populations):
+>>>>>>> Stashed changes
                 warning(
                     f"{sector_name}: foliage node {node_index} bucket "
                     f"{bucket_index} population range "
@@ -398,9 +468,13 @@ class FoliageResourceService:
                     )
                     continue
                 seen_populations.add(population_index)
+<<<<<<< Updated upstream
                 selected.append(
                     (bucket_index, population_index, relative_index)
                 )
+=======
+                selected.append((bucket_index, population_index, relative_index))
+>>>>>>> Stashed changes
 
         expected_relative = set(range(instances_count))
         missing_relative = expected_relative - seen_relative
@@ -450,6 +524,7 @@ class FoliageResourceService:
             warning=warning,
         )
 
+<<<<<<< Updated upstream
         active = []
         inactive = []
         for item in indices:
@@ -467,10 +542,17 @@ class FoliageResourceService:
             ).hexdigest()
             if inactive
             else ""
+=======
+        active = tuple(
+            item
+            for item in indices
+            if self.population_active(resource.populations[item[1]])
+>>>>>>> Stashed changes
         )
         return FoliagePopulationSelection(
             resource=resource,
             depot_path=depot_path,
+<<<<<<< Updated upstream
             active=tuple(active),
             inactive=tuple(inactive),
             bucket_begin=span_values[0],
@@ -478,4 +560,8 @@ class FoliageResourceService:
             instances_begin=span_values[2],
             instances_count=span_values[3],
             inactive_digest=digest,
+=======
+            active=active,
+            bucket_count=span_values[1],
+>>>>>>> Stashed changes
         )

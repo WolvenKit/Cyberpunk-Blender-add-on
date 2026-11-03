@@ -3,6 +3,7 @@ def draw_glb_mesh_validation(context, layout):
     meshes = tuple(
         obj for obj in context.selected_objects if getattr(obj, "type", None) == "MESH"
     )
+<<<<<<< Updated upstream
     if not meshes and getattr(getattr(context, "active_object", None), "type", None) == "MESH":
         meshes = (context.active_object,)
 
@@ -17,6 +18,19 @@ def draw_glb_mesh_validation(context, layout):
         ),
         icon="MESH_DATA" if meshes else "INFO",
     )
+=======
+    if (
+        not meshes
+        and getattr(getattr(context, "active_object", None), "type", None) == "MESH"
+    ):
+        meshes = (context.active_object,)
+
+    box = layout.box()
+    box.label(text="GLB Export Validation")
+    column = box.column(align=True)
+    if not meshes:
+        column.label(text="Select one or more meshes", icon="INFO")
+>>>>>>> Stashed changes
     column.prop(props, "is_skinned")
     column.prop(props, "advanced_validation")
 
@@ -58,6 +72,7 @@ def draw_glb_mesh_validation(context, layout):
                 fixes.prop(props, "fix_assign_unweighted_vertices")
             if props.is_skinned and props.check_unused_bones:
                 fixes.prop(props, "fix_remove_unused_bones")
+<<<<<<< Updated upstream
         warning = fixes.box()
         warning.label(text="Apply Fixes edits selected source meshes.", icon="ERROR")
         warning.label(text="The operation is undoable; export-time fixes still use copies.")
@@ -73,6 +88,15 @@ def draw_glb_mesh_validation(context, layout):
         counts.label(text=f"Issues: {props.last_issue_count}")
         counts.label(text=f"Fixes: {props.last_fix_count}")
         counts.label(text=f"Remaining: {props.last_remaining_count}")
+=======
+
+    if props.last_status and props.last_status != "PASS":
+        result = box.box()
+        result.label(
+            text=f"Last result: {props.last_status}",
+            icon="ERROR" if props.last_status == "ERROR" else "INFO",
+        )
+>>>>>>> Stashed changes
         lines = tuple(line for line in props.last_report.splitlines() if line.strip())
         for line in lines[:12]:
             result.label(text=line[:180])

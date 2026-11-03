@@ -1,11 +1,11 @@
 {
   "Header": {
-    "WolvenKitVersion": "8.17.2-nightly.2025-11-25",
+    "WolvenKitVersion": "10.0.0-beta.2-nightly.2026-10-25",
     "WKitJsonVersion": "0.0.9",
-    "GameVersion": 2310,
-    "ExportedDateTime": "2025-11-25T15:35:53.1775966Z",
+    "GameVersion": 2500,
+    "ExportedDateTime": "2026-11-01T07:23:05.3665956Z",
     "DataType": "CR2W",
-    "ArchiveFileName": "F:\\dev0\\prjk\\Wolvenkit Projects\\Hitogashima\\source\\archive\\empty.streamingsector"
+    "ArchiveFileName": "empty.streamingsector"
   },
   "Data": {
     "Version": 195,
@@ -25,20 +25,24 @@
       "level": 0,
       "localInplaceResource": [],
       "nodeData": {
-        "Flags": 0,
-        "Type": "WolvenKit.RED4.Archive.Buffer.worldNodeDataBuffer, WolvenKit.RED4, Version=8.17.2.0, Culture=neutral, PublicKeyToken=null",
-        "Data": [
-        ]
+        "BufferId": "0",
+        "Flags": 7471104,
+        "Type": "WolvenKit.RED4.Archive.Buffer.worldNodeDataBuffer, WolvenKit.RED4, Version=10.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "Data": []
       },
       "nodeRefs": [],
       "nodes": [],
       "persistentNodeIndex": 0,
+<<<<<<< Updated upstream
       "persistentNodes": null,
+=======
+      "persistentNodes": [],
+>>>>>>> Stashed changes
       "variantIndices": [
         0
       ],
       "variantNodes": [],
-      "version": 62
+      "version": 68
     },
     "EmbeddedFiles": []
   }

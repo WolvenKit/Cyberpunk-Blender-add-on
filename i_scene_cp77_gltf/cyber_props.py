@@ -1,11 +1,39 @@
+<<<<<<< Updated upstream
+=======
+import math
+>>>>>>> Stashed changes
 import sys
+import time
 
 import bpy
+<<<<<<< Updated upstream
 from bpy.props import (
     BoolProperty, CollectionProperty, EnumProperty, FloatProperty, FloatVectorProperty, IntProperty, PointerProperty,
     StringProperty,
     )
 from bpy.types import (Object, PropertyGroup, Scene)
+=======
+from bpy.props import BoolProperty, EnumProperty, FloatProperty, PointerProperty
+from bpy.types import PropertyGroup, Scene
+
+from .animtools.runtime.read_models import bundled_rig_items
+from .core.registration import RegistrationLedger, get_classes
+from .meshtools.refit_catalog import refitter_enum_items
+from .meshtools.vertex_color_presets import preset_enum_items
+
+_ENUM_CACHE_TTL = 2.0
+_ENUM_CACHE = {
+    "collections": {"expires": 0.0, "signature": None, "items": ()},
+    "armatures": {"expires": 0.0, "signature": None, "items": ()},
+}
+_EXCLUDED_COLLECTION_NAMES = frozenset(
+    {
+        "Collection",
+        "Scene Collection",
+        "glTF_not_exported",
+    }
+)
+>>>>>>> Stashed changes
 
 from .registration import get_classes, RegistrationLedger
 from .vertex_color_presets import get_color_presets, update_presets_items
@@ -13,6 +41,7 @@ from .physics.materials import physics_material_enum_items
 from .meshtools.refit_catalog import refitter_enum_items
 from .animation.rig.catalog import bundled_rig_enum_items
 
+<<<<<<< Updated upstream
 enum_items = physics_material_enum_items()
 
 
@@ -27,38 +56,78 @@ def SetCyclesRenderer(use_cycles=True, set_gi_params=False):
         if set_gi_params:
             cycles = bpy.context.scene.cycles
             cycles.transparent_max_bounces = 40
+=======
+def _cached_enum_items(cache_name, signature, builder):
+    cache = _ENUM_CACHE[cache_name]
+    now = time.monotonic()
+    if cache["signature"] != signature or now >= cache["expires"]:
+        cache["items"] = tuple(builder())
+        cache["signature"] = signature
+        cache["expires"] = now + _ENUM_CACHE_TTL
+    return cache["items"]
+
+
+def SetCyclesRenderer(use_cycles=True, set_gi_params=False, scene=None):
+    """Switch one scene to GPU Cycles and return the changes made"""
+    changes = []
+    if not use_cycles:
+        return changes
+    scene = scene or bpy.context.scene
+    if scene.render.engine != "CYCLES" or scene.cycles.device != "GPU":
+        scene.render.engine = "CYCLES"
+        scene.cycles.device = "GPU"
+        changes.append(f"Scene '{scene.name}' now renders with Cycles on the GPU")
+    if set_gi_params and scene.cycles.transparent_max_bounces != 40:
+        scene.cycles.transparent_max_bounces = 40
+        changes.append(f"Scene '{scene.name}' transparent light paths increased to 40")
+    return changes
+>>>>>>> Stashed changes
 
 
 def SetVulkanBackend(use_vulkan=True):
-    """Enables the Vulkan GPU backend in Blender's system preferences."""
-    if use_vulkan:
-        system_prefs = bpy.context.preferences.system
-        system_prefs.gpu_backend = 'VULKAN'
+    """Select the Vulkan GPU backend in the user preferences and return the changes made"""
+    if not use_vulkan:
+        return []
+    system_prefs = bpy.context.preferences.system
+    if system_prefs.gpu_backend == "VULKAN":
+        return []
+    system_prefs.gpu_backend = "VULKAN"
+    return ["GPU backend preference set to Vulkan; restart Blender to apply it"]
 
 
 def CP77CollectionList(self, context):
-    """Compiles a list of valid mesh-containing collections, filtering out system collections."""
-    items = []
-    excluded_names = ["Collection", "Scene Collection", "glTF_not_exported"]
+    """Return mesh collection enum items without rescanning on every panel draw"""
+    signature = (len(bpy.data.collections), len(bpy.data.objects))
 
-    for collection in bpy.data.collections:
-        if collection.name not in excluded_names:
-            if any(obj.type == 'MESH' for obj in collection.objects):
-                items.append((collection.name, collection.name, ""))
-    return items
+    def build_items():
+        for collection in bpy.data.collections:
+            if collection.name in _EXCLUDED_COLLECTION_NAMES:
+                continue
+            if any(obj.type == "MESH" for obj in collection.objects):
+                yield (collection.name, collection.name, "")
 
+<<<<<<< Updated upstream
+=======
+    return _cached_enum_items("collections", signature, build_items)
+
+>>>>>>> Stashed changes
 
 def CP77ArmatureList(self, context):
-    """Safely retrieves a list of all armature objects currently loaded in the Blender file."""
-    try:
-        arms = [(obj.name, obj.name, "") for obj in bpy.data.objects if obj.type == 'ARMATURE']
-    except AttributeError as e:
-        print(f"Error accessing bpy.data.objects: {e}")
-        arms = []
-    return arms
+    """Return armature enum items without rescanning on every panel draw"""
+    signature = len(bpy.data.objects)
+    return _cached_enum_items(
+        "armatures",
+        signature,
+        lambda: (
+            (obj.name, obj.name, "")
+            for obj in bpy.data.objects
+            if obj.type == "ARMATURE"
+        ),
+    )
 
 
 class CP77_PT_PanelProps(PropertyGroup):
+<<<<<<< Updated upstream
     """Property definitions for the main addon UI panel."""
 
     collision_type: EnumProperty(
@@ -135,24 +204,35 @@ class CP77_PT_PanelProps(PropertyGroup):
             min=1,
             max=400,
             )
+=======
+    """Property definitions for the main addon UI panel"""
+
+    vertex_color_presets: EnumProperty(
+        name="Vertex Color Preset",
+        items=preset_enum_items,
+    )
+>>>>>>> Stashed changes
 
     frameall: BoolProperty(
-            name="All Frames",
-            default=False,
-            description="Insert a keyframe on every frame of the active action"
-            )
+        name="All Frames",
+        default=False,
+        description="Insert a keyframe on every frame of the active action",
+    )
 
+<<<<<<< Updated upstream
     body_list: EnumProperty(
             items=bundled_rig_enum_items,
             name="Rig GLB"
             )
+=======
+    body_list: EnumProperty(items=bundled_rig_items, name="Bundled Rig")
+>>>>>>> Stashed changes
 
     fbx_rot: BoolProperty(
-            name="",
-            default=False,
-            description="Rotate for an fbx orientated mesh"
-            )
+        name="", default=False, description="Rotate for an fbx orientated mesh"
+    )
 
+<<<<<<< Updated upstream
     refit_json: EnumProperty(
             items=refitter_enum_items(),
             name="Body Shape"
@@ -162,88 +242,101 @@ class CP77_PT_PanelProps(PropertyGroup):
             items=refitter_enum_items(addon=True),
             name="Refitter Addon"
             )
+=======
+    refit_json: EnumProperty(items=refitter_enum_items(), name="Body Shape")
 
-    selected_armature: EnumProperty(
-            name="Armatures",
-            items=CP77ArmatureList
-            )
+    refit_addon_json: EnumProperty(
+        items=refitter_enum_items(addon=True), name="Refitter Addon"
+    )
+>>>>>>> Stashed changes
 
-    mesh_source: EnumProperty(
-            items=CP77CollectionList
-            )
+    selected_armature: EnumProperty(name="Armatures", items=CP77ArmatureList)
 
-    mesh_target: EnumProperty(
-            items=CP77CollectionList
-            )
+    mesh_source: EnumProperty(items=CP77CollectionList)
+
+    mesh_target: EnumProperty(items=CP77CollectionList)
 
     merge_distance: FloatProperty(
-            name="Merge Distance",
-            default=0.0001,
-            min=0.0,
-            max=1.0
-            )
+        name="Merge Distance", default=0.0001, min=0.0, max=1.0
+    )
 
     smooth_factor: FloatProperty(
-            name="Smooth Factor",
-            default=0.5,
-            min=0.0,
-            max=1.0
-            )
+        name="Smooth Angle",
+        description="Edges whose faces meet at a sharper angle than this stay sharp",
+        subtype="ANGLE",
+        default=0.5,
+        min=0.0,
+        max=math.pi,
+    )
 
     remap_depot: BoolProperty(
-            name="Remap Depot",
-            default=False,
-            description="replace the json depot path with the one in prefs"
-            )
+        name="Remap Depot",
+        default=False,
+        description="replace the json depot path with the one in prefs",
+    )
 
     use_cycles: BoolProperty(
-            name="Set Render Engine to Cycles",
-            default=False,
-            description="Sets the Render Engine to Cycles. Imported shaders may fail to compile while using EEVEE without the Vulkan backend"
-            )
+        name="Set Render Engine to Cycles",
+        default=False,
+        description="Sets the Render Engine to Cycles. Imported shaders may fail to compile while using EEVEE without the Vulkan backend",
+    )
 
     use_vulkan: BoolProperty(
+<<<<<<< Updated upstream
             name="Set Backend to Vulkan",
             default=False,
             description="(Requires Restart) Sets the Blender graphics backend to Vulkan which can compile shaders that fail using OpenGL."
             )
+=======
+        name="Set Backend to Vulkan",
+        default=False,
+        description="(Requires Restart) Sets the Blender graphics backend to Vulkan which can compile shaders that fail using OpenGL.",
+    )
+>>>>>>> Stashed changes
 
     update_gi: BoolProperty(
-            name="Increase Transparent Light Paths",
-            default=False,
-            description="Increase Cycles maximum bounces for transparent light paths. This improves shading of layered meshes with alpha such as hair."
-            )
+        name="Increase Transparent Light Paths",
+        default=False,
+        description="Increase Cycles maximum bounces for transparent light paths. This improves shading of layered meshes with alpha such as hair.",
+    )
 
     with_materials: BoolProperty(
-            name="With Materials",
-            default=True,
-            description="Import WolvenKit-exported materials"
-            )
+        name="With Materials",
+        default=True,
+        description="Import WolvenKit-exported materials",
+    )
 
     axl_yaml: BoolProperty(
-            name="Use YAML instead of JSON",
-            default=False,
-            description="Use the ArchiveXL YAML format instead of JSON format for generated .xl files"
-            )
+        name="Use YAML instead of JSON",
+        default=False,
+        description="Use the ArchiveXL YAML format instead of JSON format for generated .xl files",
+    )
+
+    include_heightfields: BoolProperty(
+        name="Include Heightfields",
+        default=False,
+        description="Write each new sector's cooked PhysX heightfield shapes into it as terrain collision nodes",
+    )
 
     write_mltemplate: BoolProperty(
-            name="Generate modified MLTEMPLATE",
-            default=False,
-            description="Write a MLTEMPLATE json with additional ColorScale overrides to the WolvenKit project when unique ColorScale values are detected"
-            )
+        name="Generate modified MLTEMPLATE",
+        default=True,
+        description="Write project-local MLTEMPLATE overrides when authored multilayer values do not match an existing named override",
+    )
 
     animtab: EnumProperty(
-            name="Animation Tab",
-            items=[
-                ('RIGSETUP', "Rig Setup", "Rig loading and configuration tools"),
-                ('ANIMATION', "Animation", "Animation playback and keyframing tools"),
-                ('FACIAL', "Facial", "Facial animation setup and baking tools"),
-                ],
-            default='ANIMATION'
-            )
+        name="Animation Tab",
+        items=[
+            ("RIGSETUP", "Rig Setup", "Rig loading and configuration tools"),
+            ("ANIMATION", "Animation", "Animation playback and keyframing tools"),
+            ("FACIAL", "Facial", "Facial animation setup and baking tools"),
+        ],
+        default="ANIMATION",
+    )
 
     def get_meshtab_items(self, context):
         return [
+<<<<<<< Updated upstream
             ('UTILITIES', "Utilities", ""),
             ('MODELLING', "Modelling", ""),
             ('CHARACTERS', "Characters", ""),
@@ -322,36 +415,20 @@ class CP77_FacialProps(PropertyGroup):
             description="Run the Sermo facial solver every frame change",
             default=False,
             )
+=======
+            ("UTILITIES", "Utilities", ""),
+            ("MODELLING", "Modelling", ""),
+            ("CHARACTERS", "Characters", ""),
+            ("CLOTH", "Garment", "Garment setup, pinning, simulation, and bake tools"),
+        ]
+
+    meshtab: EnumProperty(items=get_meshtab_items, name="Mesh Tab")
+>>>>>>> Stashed changes
 
 
-class RootMotionData(PropertyGroup):
-    """Maintains property state bindings for transferring transform configurations to root motion tracks."""
-    hip: StringProperty(
-            name="Hip Bone",
-            description="Bone containing character hip motion",
-            default=""
-            )
-    root: StringProperty(
-            name="Root Bone",
-            description="Root bone for motion transfer",
-            default=""
-            )
-    step: IntProperty(
-            name="Step Size",
-            description="Keyframe interval (1=every frame, higher=faster but less smooth)",
-            default=3, min=1, max=10, soft_max=5
-            )
-    no_rot: BoolProperty(
-            name="Ignore Rotation",
-            description="Transfer position only",
-            default=False
-            )
-    do_vert: BoolProperty(
-            name="Extract Vertical Motion",
-            description="Include Z-axis motion",
-            default=False
-            )
+registration_classes = get_classes(sys.modules[__name__])
 
+<<<<<<< Updated upstream
 
 def update_cloth_collider(self, context):
     try:
@@ -584,6 +661,8 @@ class CP77_ClothMeshProps(PropertyGroup):
 registration_classes = get_classes(sys.modules[__name__])
 
 
+=======
+>>>>>>> Stashed changes
 _LEDGER = RegistrationLedger("cyber_props")
 
 
@@ -593,15 +672,19 @@ def register_props():
     try:
         _LEDGER.register_classes(registration_classes)
         _LEDGER.add_property(
+<<<<<<< Updated upstream
             bpy.types.Scene,
             "cp77_facial",
             bpy.props.PointerProperty(type=CP77_FacialProps),
         )
         _LEDGER.add_property(
+=======
+>>>>>>> Stashed changes
             Scene,
             "cp77_panel_props",
             PointerProperty(type=CP77_PT_PanelProps),
         )
+<<<<<<< Updated upstream
         _LEDGER.add_property(
             Scene,
             "rm_data",
@@ -621,12 +704,18 @@ def register_props():
         for name, value in object_properties.items():
             _LEDGER.add_property(bpy.types.Object, name, value)
         update_presets_items()
+=======
+>>>>>>> Stashed changes
     except Exception:
         _LEDGER.cleanup()
         raise
 
 
 def unregister_props():
+<<<<<<< Updated upstream
     failures = _LEDGER.cleanup()
     if failures:
         raise RuntimeError("; ".join(f"{label}: {error}" for label, error in failures))
+=======
+    _LEDGER.cleanup_or_raise()
+>>>>>>> Stashed changes

@@ -1,12 +1,29 @@
+<<<<<<< Updated upstream
 from ...blender.mesh_repair import PreparedMeshValidation, prepare_mesh_validation_copies
+=======
+from dataclasses import replace
+
+from ...blender.mesh_repair import (
+    PreparedMeshValidation,
+    prepare_mesh_validation_copies,
+)
+>>>>>>> Stashed changes
 from ...blender.mesh_validation import MeshValidationOptions
 
 
 def prepare_meshes_for_export(meshes, *, is_skinned=False, options=None):
+<<<<<<< Updated upstream
     return prepare_mesh_validation_copies(
         meshes,
         is_skinned=is_skinned,
         options=options or MeshValidationOptions(),
+=======
+    # The writer checks the final evaluated split count before staging the output file.
+    return prepare_mesh_validation_copies(
+        meshes,
+        is_skinned=is_skinned,
+        options=replace(options or MeshValidationOptions(), check_vertex_limit=False),
+>>>>>>> Stashed changes
         require_valid=True,
     )
 
@@ -19,6 +36,7 @@ def format_fix_summary(result: PreparedMeshValidation):
         lines.append(f"  {object_name}:")
         lines.extend(f"    - {fix}" for fix in fixes)
     return "\n".join(lines)
+<<<<<<< Updated upstream
 
 
 __all__ = (
@@ -26,3 +44,5 @@ __all__ = (
     "format_fix_summary",
     "prepare_meshes_for_export",
 )
+=======
+>>>>>>> Stashed changes

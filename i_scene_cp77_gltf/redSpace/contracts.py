@@ -4,6 +4,7 @@ import numpy as np
 
 RIG_SPACE_CONTRACT_CURRENT = "CP77_RE_MODEL_BL_BONE_X_NEGZ_Y_Y_Z_X_V1"
 RIG_SPACE_CONTRACT_DIRECT = "CP77_RE_MODEL_BL_BONE_DIRECT_V1"
+<<<<<<< Updated upstream
 EDITOR_SPACE_CONTRACT = "CP77_REDENGINE_WORLD_MODEL_BONE_LOCAL_V1"
 SOURCE_REST_SPACE_CONTRACT = "CP77_GLTF_SOURCE_RELATIVE_BLENDER_V1"
 
@@ -20,7 +21,60 @@ RED_TO_BLENDER_BONE_RIGHT = np.array((
     (-1.0, 0.0, 0.0, 0.0),
     (0.0, 0.0, 0.0, 1.0),
 ), dtype=np.float64)
+=======
+SUPPORTED_RIG_SPACE_CONTRACTS = frozenset(
+    {RIG_SPACE_CONTRACT_CURRENT, RIG_SPACE_CONTRACT_DIRECT}
+)
+EDITOR_SPACE_CONTRACT = "CP77_REDENGINE_WORLD_MODEL_BONE_LOCAL_V1"
+SOURCE_REST_SPACE_CONTRACT = "CP77_GLTF_SOURCE_RELATIVE_BLENDER_V1"
+
+GLTF_TO_RED = np.array(
+    (
+        (1.0, 0.0, 0.0, 0.0),
+        (0.0, 0.0, -1.0, 0.0),
+        (0.0, 1.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0, 1.0),
+    ),
+    dtype=np.float64,
+)
+RED_TO_GLTF = np.linalg.inv(GLTF_TO_RED)
+RED_TO_BLENDER_BONE_RIGHT = np.array(
+    (
+        (0.0, 0.0, 1.0, 0.0),
+        (0.0, 1.0, 0.0, 0.0),
+        (-1.0, 0.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0, 1.0),
+    ),
+    dtype=np.float64,
+)
+>>>>>>> Stashed changes
 RED_LOCAL_TO_BLENDER_BONE_CURRENT = RED_TO_BLENDER_BONE_RIGHT.T.copy()
 BLENDER_BONE_LOCAL_TO_RED_CURRENT = RED_TO_BLENDER_BONE_RIGHT.copy()
 GLTF_TO_BLENDER_BONE_RIGHT = RED_TO_GLTF @ RED_TO_BLENDER_BONE_RIGHT
 BLENDER_BONE_RIGHT_TO_GLTF = np.linalg.inv(GLTF_TO_BLENDER_BONE_RIGHT)
+<<<<<<< Updated upstream
+=======
+# A directional light shines along its local +Y in REDengine and along local -Z in Blender: +90 degrees about X.
+RED_LIGHT_TO_BLENDER_LIGHT = np.array(
+    (
+        (1.0, 0.0, 0.0, 0.0),
+        (0.0, 0.0, -1.0, 0.0),
+        (0.0, 1.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0, 1.0),
+    ),
+    dtype=np.float64,
+)
+MOCAP_SPACE_BVH = "MOCAP_BVH_Y_UP_Z_FORWARD"
+MOCAP_SPACE_ICLONE = "MOCAP_ICLONE_Z_UP_NEG_Y_FORWARD"
+# BVH is Y-up facing +Z and iClone Z-up facing -Y, both with the character's left at +X; the game faces +Y, left at -X.
+BVH_TO_RED = np.array(
+    (
+        (-1.0, 0.0, 0.0, 0.0),
+        (0.0, 0.0, 1.0, 0.0),
+        (0.0, 1.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0, 1.0),
+    ),
+    dtype=np.float64,
+)
+ICLONE_TO_RED = np.diag((-1.0, -1.0, 1.0, 1.0))
+>>>>>>> Stashed changes

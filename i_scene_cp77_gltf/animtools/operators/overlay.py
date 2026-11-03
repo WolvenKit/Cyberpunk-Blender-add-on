@@ -1,6 +1,10 @@
 from bpy.types import Operator
 
 from ...blender.animation_context import active_armature
+<<<<<<< Updated upstream
+=======
+from ...blender.operator_results import execute_operation
+>>>>>>> Stashed changes
 from ..services import overlay
 
 
@@ -14,6 +18,7 @@ class BHLS_OT_Start(Operator):
         return active_armature(context) is not None
 
     def execute(self, context):
+<<<<<<< Updated upstream
         if overlay.is_running():
             self.report({"INFO"}, "Already running")
             return {"CANCELLED"}
@@ -23,6 +28,9 @@ class BHLS_OT_Start(Operator):
         if context.area is not None:
             context.area.tag_redraw()
         return {"FINISHED"}
+=======
+        return execute_operation(self, "Bone lines", overlay.start, context)
+>>>>>>> Stashed changes
 
 
 class BHLS_OT_Stop(Operator):
@@ -31,8 +39,15 @@ class BHLS_OT_Stop(Operator):
     bl_options = {"REGISTER"}
 
     def execute(self, context):
+<<<<<<< Updated upstream
         overlay.stop()
         self.report({"INFO"}, "Bone Lines stopped")
         if context.area is not None:
             context.area.tag_redraw()
         return {"FINISHED"}
+=======
+        return execute_operation(self, "Bone lines", overlay.stop)
+
+
+OVERLAY_OPERATOR_CLASSES = (BHLS_OT_Start, BHLS_OT_Stop)
+>>>>>>> Stashed changes

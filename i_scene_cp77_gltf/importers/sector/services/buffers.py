@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+<<<<<<< Updated upstream
 from dataclasses import dataclass
 
 from mathutils import Matrix
@@ -29,10 +30,49 @@ class TransformBufferSlice:
     @property
     def end(self):
         return self.start + self.declared_count
+=======
+from mathutils import Matrix, Quaternion, Vector
+
+from ....assetio.streaming_sector import destructible_transforms, transform_range
+from ....assetio.transform_values import (
+    quaternion_wxyz_from_wkit,
+    vector3_from_data,
+    world_position_from_data,
+)
+from ....assetio.values import nested_dict
+
+
+def column_matrix(x_axis, y_axis, z_axis, translation):
+    """The affine matrix whose columns are the three axes and the translation"""
+    columns = (
+        vector3_from_data(x_axis, (1.0, 0.0, 0.0)),
+        vector3_from_data(y_axis, (0.0, 1.0, 0.0)),
+        vector3_from_data(z_axis, (0.0, 0.0, 1.0)),
+        vector3_from_data(translation),
+    )
+    return Matrix(
+        (
+            *(tuple(column[row] for column in columns) for row in range(3)),
+            (0.0, 0.0, 0.0, 1.0),
+        )
+    )
+
+
+def _matrix(position, orientation, scale=(1.0, 1.0, 1.0), scale_factor=1.0):
+    scale = Vector(scale)
+    if scale_factor != 1:
+        scale /= scale_factor
+    return Matrix.LocRotScale(
+        Vector(world_position_from_data(position)),
+        Quaternion(quaternion_wxyz_from_wkit(orientation)),
+        scale,
+    )
+>>>>>>> Stashed changes
 
 
 class TransformBufferService:
     @staticmethod
+<<<<<<< Updated upstream
     def _shared_transforms(data, lookup, buffer_key):
         owner = data.get(buffer_key) if isinstance(data, dict) else None
         if not isinstance(owner, dict):
@@ -128,6 +168,37 @@ class TransformBufferService:
             node_index=context.node_index,
             contract=COOKED_TRANSFORM_CONTRACT,
             warning=context.operations.warning,
+=======
+    def instanced_mesh_matrices(node_data, inner_index, scale_factor=1.0):
+        """The world matrices of the transforms one TransformRanges entry covers"""
+        span = transform_range(node_data, inner_index)
+        if span is None:
+            return ()
+        transforms = nested_dict(node_data, "cookedWorldTransformsBuffer", "Data")[
+            "Transforms"
+        ]
+        matrices = []
+        for index in span:
+            record = transforms[index] if isinstance(transforms[index], dict) else {}
+            transform = nested_dict(record, "transform")
+            matrices.append(
+                _matrix(
+                    transform.get("Position"),
+                    transform.get("Orientation"),
+                    vector3_from_data(record.get("scale"), (1.0, 1.0, 1.0)),
+                    scale_factor,
+                )
+            )
+        return tuple(matrices)
+
+    @staticmethod
+    def destructible_matrices(node_data):
+        """(item index, matrix) of each instanceTransforms item that is a transform"""
+        return tuple(
+            (index, _matrix(transform.get("position"), transform.get("orientation")))
+            for index, transform in enumerate(destructible_transforms(node_data))
+            if transform is not None
+>>>>>>> Stashed changes
         )
 
     @staticmethod
@@ -146,6 +217,7 @@ class TransformBufferService:
                 raise ValueError(f"occluder buffer entry has no {key}")
             columns.append(column)
 
+<<<<<<< Updated upstream
         x_axis, y_axis, z_axis, translation = columns
         return Matrix((
             (
@@ -186,3 +258,6 @@ class TransformBufferService:
                 float(axis_value(columns[3], "W", 1.0)) - 1.0
             ) > 1e-8
         )
+=======
+        return column_matrix(*columns)
+>>>>>>> Stashed changes

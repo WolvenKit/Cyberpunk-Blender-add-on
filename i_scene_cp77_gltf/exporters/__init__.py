@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 def register_exporters():
     from .operators import register_exporters as _register_exporters
 
@@ -17,3 +18,5 @@ def menu_func_export(self, context):
 
 
 __all__ = ("menu_func_export", "register_exporters", "unregister_exporters")
+=======
+>>>>>>> Stashed changes

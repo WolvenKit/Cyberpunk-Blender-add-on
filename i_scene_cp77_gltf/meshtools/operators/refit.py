@@ -1,9 +1,15 @@
 from bpy.props import BoolProperty
 from bpy.types import Operator
 
+<<<<<<< Updated upstream
 from ..model import AutofitRequest
 from ..services.refit_service import run_autofit
 from .result import finish_operator
+=======
+from ...blender.operator_results import finish_operator
+from ..model import AutofitRequest
+from ..services.refit_service import run_autofit
+>>>>>>> Stashed changes
 
 
 class CP77Autofitter(Operator):

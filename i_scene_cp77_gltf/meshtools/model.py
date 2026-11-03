@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+<<<<<<< Updated upstream
 from typing import Any
 
 from ..blender.mesh_validation import MeshValidationOptions
@@ -27,6 +28,27 @@ class MeshToolResult:
     @classmethod
     def failure(cls, message="", payload=None):
         return cls(False, message, "ERROR", payload, ())
+=======
+
+from ..blender.identity import real_users
+from ..blender.mesh_validation import MeshValidationOptions
+from ..blender.operator_results import OperationResult
+
+
+def shared_mesh_refusal(objects, action: str) -> OperationResult | None:
+    """The refusal for objects whose mesh other objects share, or None"""
+    shared = [obj.name for obj in objects if real_users(obj.data) > 1]
+    if not shared:
+        return None
+    names = ", ".join(shared[:3]) + (
+        f" and {len(shared) - 3} more" if len(shared) > 3 else ""
+    )
+    return OperationResult.cancelled(
+        f"{names} share their mesh with other objects; make them single user "
+        f"(Object > Relations > Make Single User > Object & Data) to {action} them.",
+        "ERROR_INVALID_CONTEXT",
+    )
+>>>>>>> Stashed changes
 
 
 @dataclass(frozen=True, slots=True)

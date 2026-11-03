@@ -1,5 +1,6 @@
 import bpy
 
+<<<<<<< Updated upstream
 from ....animation.animgraph_constants import ANIMGRAPH_TREE_ID
 
 def _root_animgraph_tree(tree):
@@ -27,14 +28,32 @@ class REDENGINE_PT_dangle_bridge(bpy.types.Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
     bl_category = "AnimGraph"
+=======
+from ....animation.model.animgraph.constants import ANIMGRAPH_TREE_ID
+from ....blender.animgraph.variables import root_tree_for
+from ....collisiontools.services.dangles.view import can_return_to_editor
+
+
+class REDENGINE_PT_dangle_bridge(bpy.types.Panel):
+    bl_idname = "REDENGINE_PT_dangle_bridge"
+    bl_space_type = "NODE_EDITOR"
+    bl_region_type = "UI"
+    bl_category = "Graph"
+>>>>>>> Stashed changes
     bl_label = "Dangle Editor"
 
     @classmethod
     def poll(cls, context):
         space = context.space_data
+<<<<<<< Updated upstream
         if space is None or space.type != 'NODE_EDITOR':
             return False
         tree = _root_animgraph_tree(space.node_tree)
+=======
+        if space is None or space.type != "NODE_EDITOR":
+            return False
+        tree = root_tree_for(space.node_tree)
+>>>>>>> Stashed changes
         return bool(
             tree is not None
             and tree.bl_idname == ANIMGRAPH_TREE_ID
@@ -43,6 +62,7 @@ class REDENGINE_PT_dangle_bridge(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+<<<<<<< Updated upstream
         root = _root_animgraph_tree(context.space_data.node_tree)
         rig_name = str(root.get("cp77_dangle_rig", "") or "") if root else ""
         if rig_name:
@@ -54,3 +74,13 @@ class REDENGINE_PT_dangle_bridge(bpy.types.Panel):
         sync_row = layout.row(align=True)
         sync_row.operator("dangle.push_to_editor", icon='EXPORT', text="Push to Editor")
         sync_row.operator("dangle.pull_from_editor", icon='IMPORT', text="Pull from Editor")
+=======
+        row = layout.row(align=True)
+        if can_return_to_editor(context):
+            row.operator("dangle.switch_to_editor", icon="VIEW3D", text="Editor View")
+
+        sync_row = layout.row(align=True)
+        sync_row.operator(
+            "dangle.push_to_editor", icon="FILE_REFRESH", text="Resync Editor"
+        )
+>>>>>>> Stashed changes

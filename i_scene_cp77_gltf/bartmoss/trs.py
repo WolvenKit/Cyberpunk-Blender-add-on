@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import numpy as np
 
+<<<<<<< Updated upstream
 from .quaternion import matrix_from_xyzw, slerp_xyzw, xyzw_from_matrices
+=======
+from .quaternion import matrix_from_xyzw, slerp_xyzw, xyzw_from_matrices, xyzw_from_wxyz
+>>>>>>> Stashed changes
 from .scalar import lerp
 
 
@@ -13,7 +17,13 @@ def compose_matrix(translation, rotation_xyzw, scale) -> np.ndarray:
     return matrix
 
 
+<<<<<<< Updated upstream
 def compose_matrices(translations, rotations_xyzw, scales, *, normalize_rotations_in_place=False) -> np.ndarray:
+=======
+def compose_matrices(
+    translations, rotations_xyzw, scales, *, normalize_rotations_in_place=False
+) -> np.ndarray:
+>>>>>>> Stashed changes
     translations = np.asarray(translations, dtype=np.float64)
     rotations = np.asarray(rotations_xyzw, dtype=np.float64)
     if not normalize_rotations_in_place or not rotations.flags.writeable:
@@ -45,7 +55,26 @@ def compose_matrices(translations, rotations_xyzw, scales, *, normalize_rotation
     return matrices
 
 
+<<<<<<< Updated upstream
 def decompose_matrices(matrices):
+=======
+def compose_matrices_wxyz(
+    translations,
+    rotations_wxyz,
+    scales,
+    *,
+    normalize_rotations_in_place=False,
+) -> np.ndarray:
+    return compose_matrices(
+        translations,
+        xyzw_from_wxyz(rotations_wxyz),
+        scales,
+        normalize_rotations_in_place=normalize_rotations_in_place,
+    )
+
+
+def decompose_matrices(matrices, *, mirrored_axis="first", continuous_rotation=True):
+>>>>>>> Stashed changes
     matrices = np.asarray(matrices, dtype=np.float64)
     translations = matrices[..., :3, 3].copy()
     axes = matrices[..., :3, :3]
@@ -55,14 +84,35 @@ def decompose_matrices(matrices):
     flat_scales = scales.reshape(-1, 3)
     mirrored = np.linalg.det(flat_rotations) < 0.0
     if np.any(mirrored):
+<<<<<<< Updated upstream
         flat_scales[mirrored, 0] *= -1.0
         flat_rotations[mirrored, :, 0] *= -1.0
     quaternions = xyzw_from_matrices(flat_rotations).reshape(matrices.shape[:-2] + (4,))
+=======
+        mirrored_indices = np.flatnonzero(mirrored)
+        if mirrored_axis == "largest":
+            axes = np.argmax(np.abs(flat_scales[mirrored]), axis=1)
+        elif mirrored_axis == "first":
+            axes = np.zeros(len(mirrored_indices), dtype=np.intp)
+        else:
+            raise ValueError(f"Unsupported mirrored-axis policy: {mirrored_axis}")
+        flat_scales[mirrored_indices, axes] *= -1.0
+        flat_rotations[mirrored_indices, :, axes] *= -1.0
+    quaternions = xyzw_from_matrices(
+        flat_rotations, continuous=continuous_rotation
+    ).reshape(matrices.shape[:-2] + (4,))
+>>>>>>> Stashed changes
     return translations, quaternions, scales
 
 
 def interpolate_matrices(previous, current, weight) -> np.ndarray:
+<<<<<<< Updated upstream
     previous_translation, previous_rotation, previous_scale = decompose_matrices(previous)
+=======
+    previous_translation, previous_rotation, previous_scale = decompose_matrices(
+        previous
+    )
+>>>>>>> Stashed changes
     current_translation, current_rotation, current_scale = decompose_matrices(current)
     translation = lerp(previous_translation, current_translation, weight)
     rotation = slerp_xyzw(previous_rotation, current_rotation, weight)

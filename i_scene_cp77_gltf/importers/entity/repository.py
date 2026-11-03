@@ -2,7 +2,10 @@ from ...assetio.catalog import ResourceKind
 from ...assetio.repository import ResourceRepository
 from .parser import parse_entity_document
 
+<<<<<<< Updated upstream
 
+=======
+>>>>>>> Stashed changes
 ENTITY_PARSER_REVISION = 1
 
 

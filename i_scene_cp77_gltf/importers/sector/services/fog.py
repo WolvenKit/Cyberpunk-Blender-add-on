@@ -1,12 +1,20 @@
 from __future__ import annotations
+<<<<<<< Updated upstream
 from ....blender.transactions import track_created_datablock
 
 import hashlib
 import json
+=======
+
+import hashlib
+import json
+from collections.abc import Mapping
+>>>>>>> Stashed changes
 
 import bpy
 from mathutils import Matrix, Vector
 
+<<<<<<< Updated upstream
 
 FOG_COMPONENT_TYPES = frozenset({"entFogVolumeComponent"})
 _FOG_MATERIAL_CACHE = {}
@@ -51,6 +59,26 @@ def fog_volume_size(data):
         max(abs(_axis_value(size, "Y", 1.0)), 1e-6),
         max(abs(_axis_value(size, "Z", 1.0)), 1e-6),
     ))
+=======
+from ....assetio.values import coerce_float, color_bytes, unwrapped
+from ....blender.fog_volume import build_fog_volume_material
+from ....blender.transactions import track_created_datablock
+
+
+def _float_value(data, key, default=0.0):
+    return coerce_float(
+        data.get(key, default) if isinstance(data, dict) else default,
+        default,
+        finite=False,
+    )
+
+
+def _bool_value(data, key, default=False):
+    value = unwrapped(
+        data.get(key, default) if isinstance(data, dict) else default, ("$value",)
+    )
+    return bool(default if isinstance(value, Mapping) else value)
+>>>>>>> Stashed changes
 
 
 def fog_volume_color(data):
@@ -59,8 +87,12 @@ def fog_volume_color(data):
         return (1.0, 1.0, 0.9, 1.0)
 
     values = tuple(
+<<<<<<< Updated upstream
         max(0.0, min(1.0, _float_value(color, channel, 0.0) / 255.0))
         for channel in ("Red", "Green", "Blue")
+=======
+        max(0.0, min(1.0, channel / 255.0)) for channel in color_bytes(color, 0.0)
+>>>>>>> Stashed changes
     )
     if max(values) <= 1e-8:
         values = (1.0, 1.0, 0.9)
@@ -76,12 +108,20 @@ def fog_volume_parameters(data, source_kind="sector"):
     )
     density_factor = max(_float_value(data, "densityFactor", 100.0), 0.0)
     absolute = _bool_value(data, "absolute", False)
+<<<<<<< Updated upstream
     if source_kind == "sector" and absolute:
         preview_density = density_factor
         density_contract = "ABSOLUTE_DENSITY"
     else:
         preview_density = density_factor * 0.001
         density_contract = "RELATIVE_DENSITY_PERCENT_PREVIEW"
+=======
+    preview_density = (
+        density_factor
+        if source_kind == "sector" and absolute
+        else density_factor * 0.001
+    )
+>>>>>>> Stashed changes
 
     absorption = _float_value(data, "absorption", -1.0)
     absorption_multiplier = 0.25 if absorption < 0.0 else max(absorption, 0.0)
@@ -89,20 +129,32 @@ def fog_volume_parameters(data, source_kind="sector"):
     color = fog_volume_color(data)
 
     return {
+<<<<<<< Updated upstream
         "densityFactor": density_factor,
         "previewDensity": max(preview_density, 0.0),
         "densityContract": density_contract,
         "densityFalloff": max(0.0, min(1.0, density_falloff)),
         "blendFalloff": max(0.0, min(1.0, _float_value(data, "blendFalloff", 0.0))),
         "absorption": absorption,
+=======
+        "previewDensity": max(preview_density, 0.0),
+        "densityFalloff": max(0.0, min(1.0, density_falloff)),
+        "blendFalloff": max(0.0, min(1.0, _float_value(data, "blendFalloff", 0.0))),
+>>>>>>> Stashed changes
         "absorptionMultiplier": absorption_multiplier,
         "ambientScale": ambient_scale,
         "color": color,
         "absolute": absolute,
         "applyHeightFalloff": _bool_value(data, "applyHeightFalloff", True),
+<<<<<<< Updated upstream
         "enabled": _bool_value(data, "isEnabled", _bool_value(data, "isVisibleInGame", True)),
         "priority": int(_float_value(data, "priority", 0.0)),
         "applyGlobalHeightFalloff": _bool_value(data, "applyHeightFalloff", False),
+=======
+        "enabled": _bool_value(
+            data, "isEnabled", _bool_value(data, "isVisibleInGame", True)
+        ),
+>>>>>>> Stashed changes
     }
 
 
@@ -126,6 +178,7 @@ def _material_signature(parameters):
     ).hexdigest()
 
 
+<<<<<<< Updated upstream
 def _new_node(nodes, node_type, name, location):
     node = nodes.new(node_type)
     node.name = name
@@ -509,6 +562,8 @@ def build_fog_volume_material(data, source_kind="sector"):
     return material
 
 
+=======
+>>>>>>> Stashed changes
 def _unit_box_mesh(name):
     vertices = [
         (-1.0, -1.0, -1.0),
@@ -536,6 +591,7 @@ def _unit_box_mesh(name):
 
 def configure_fog_volume_object(obj, data, source_kind="sector"):
     parameters = fog_volume_parameters(data, source_kind)
+<<<<<<< Updated upstream
     obj["fogVolumeRepresentation"] = "CP77_UNIT_BOX_MINUS_ONE_TO_ONE"
     obj["fogVolumeMaterialModel"] = "VOLUME_SCATTER_PLUS_ABSORPTION"
     obj["fogTextureSource"] = "PROCEDURAL_3D_NOISE_PREVIEW"
@@ -553,6 +609,8 @@ def configure_fog_volume_object(obj, data, source_kind="sector"):
     obj["fogSourceKind"] = source_kind
     obj["fogVolumeData"] = json.dumps(data, separators=(",", ":"))
 
+=======
+>>>>>>> Stashed changes
     obj.display_type = "TEXTURED"
     obj.show_wire = True
     obj.color = parameters["color"]
@@ -574,7 +632,12 @@ def create_fog_volume_object(
     obj = track_created_datablock("objects", bpy.data.objects.new(name, mesh))
     collection.objects.link(obj)
 
+<<<<<<< Updated upstream
     material = build_fog_volume_material(data, source_kind)
+=======
+    parameters = fog_volume_parameters(data, source_kind)
+    material = build_fog_volume_material(parameters, _material_signature(parameters))
+>>>>>>> Stashed changes
     mesh.materials.append(material)
 
     final_matrix = matrix.copy() if matrix is not None else Matrix.Identity(4)

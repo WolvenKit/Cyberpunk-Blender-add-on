@@ -4,6 +4,19 @@ import os
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 
+<<<<<<< Updated upstream
+=======
+from ...assetio.paths import depot_path_key
+from ...assetio.values import build_embedded_handle_lookup
+from ..common.entity_data import (
+    component_name,
+    ent_appearance_name,
+    resolve_ent_appearance_alias,
+    resolve_requested_appearance_name,
+)
+from ..common.paths import depot_path, depot_to_local_path
+from .execution_cache import build_component_pass_index
+>>>>>>> Stashed changes
 from .model import (
     AppearanceRequestResolution,
     EntityAppearancePlan,
@@ -12,6 +25,7 @@ from .model import (
     EntityRigComponentPlan,
     EntityRigPlan,
 )
+<<<<<<< Updated upstream
 from ..common.entity_data import (
     ent_appearance_name,
     resolve_ent_appearance_alias,
@@ -26,6 +40,14 @@ from .policy import (
     is_excluded_mesh,
     STATIC_OCCLUDER_COMPONENT_TYPES,
     ZERO_MASK_CULLED_COMPONENT_TYPES,
+=======
+from .policy import (
+    APPEARANCE_PROXY_COMPONENT_TYPES,
+    STATIC_OCCLUDER_COMPONENT_TYPES,
+    ZERO_MASK_CULLED_COMPONENT_TYPES,
+    is_excluded_mesh,
+    light_component_skipped,
+>>>>>>> Stashed changes
 )
 from .rig_planning import (
     animated_component_control_target,
@@ -53,9 +75,15 @@ def appearance_request_is_known(
             )[0]
             >= 0
         )
+<<<<<<< Updated upstream
     return resolve_ent_appearance_alias(
         app_name, ent_apps, by_appearance, by_name
     )[0] >= 0
+=======
+    return (
+        resolve_ent_appearance_alias(app_name, ent_apps, by_appearance, by_name)[0] >= 0
+    )
+>>>>>>> Stashed changes
 
 
 def normalize_appearance_requests(
@@ -64,10 +92,18 @@ def normalize_appearance_requests(
     entity_name: str,
     choose: Callable[[Sequence[str]], str],
 ) -> AppearanceRequestResolution:
+<<<<<<< Updated upstream
     """Normalize authored appearance-request semantics without Blender state."""
     appearances = list(requested_appearances or ("",))
     if not appearances:
         appearances = [""]
+=======
+    """Normalize authored appearance-request semantics without Blender state"""
+    appearances = list(requested_appearances or ("",))
+    if not appearances:
+        appearances = [""]
+    import_all = not appearances[0] or str(appearances[0]).upper() == "ALL"
+>>>>>>> Stashed changes
 
     ent_apps = parsed_entity.appearances
     ent_default = parsed_entity.default_appearance
@@ -82,7 +118,11 @@ def normalize_appearance_requests(
             "Imported objects may be incomplete or missing."
         )
 
+<<<<<<< Updated upstream
     if ent_default == "random":
+=======
+    if ent_default == "random" and not import_all:
+>>>>>>> Stashed changes
         if ent_applist:
             ent_default = choose(ent_applist)
             messages.append(f"Default appearance set to random choice: {ent_default}")
@@ -139,16 +179,31 @@ def normalize_appearance_requests(
                 f"Available appearances: {', '.join(ent_applist)}"
             )
 
+<<<<<<< Updated upstream
     if appearances and (
         len(appearances[0]) == 0 or appearances[0].upper() == "ALL"
     ):
         appearances = list(dict.fromkeys(ent_applist))
     if not appearances:
         appearances.append("default")
+=======
+    if import_all:
+        appearances = [ent_appearance_name(app) for app in ent_apps]
+        appearance_indices = tuple(range(len(ent_apps)))
+    else:
+        appearance_indices = (None,) * len(appearances)
+    if not appearances:
+        appearances.append("default")
+        appearance_indices = (None,)
+>>>>>>> Stashed changes
 
     return AppearanceRequestResolution(
         appearances=tuple(appearances),
         default_appearance=ent_default,
+<<<<<<< Updated upstream
+=======
+        appearance_indices=appearance_indices,
+>>>>>>> Stashed changes
         messages=tuple(messages),
     )
 
@@ -222,6 +277,10 @@ def compile_entity_import_plan(
     *,
     parsed_entity: Any,
     appearances: Sequence[str],
+<<<<<<< Updated upstream
+=======
+    appearance_indices: Sequence[int | None],
+>>>>>>> Stashed changes
     default_appearance: str,
     source_root: str,
     asset_index: Any,
@@ -231,9 +290,17 @@ def compile_entity_import_plan(
     include_occluders: bool = False,
     include_proxies: bool = False,
     include_lights: bool = False,
+<<<<<<< Updated upstream
     resolve_export: Callable[[str, Any], str] | None = None,
 ) -> EntityImportPlan:
     """Compile the appearance, mesh, and rig plan."""
+=======
+    include_light_channels: bool = False,
+    resolve_export: Callable[[str, Any], str] | None = None,
+    mesh_is_excluded: Callable[[str, str, str, Any], bool] = is_excluded_mesh,
+) -> EntityImportPlan:
+    """Compile the appearance, mesh, and rig plan"""
+>>>>>>> Stashed changes
     resource_resolver = resolve_export or asset_index.resolve_export
 
     ent_apps = parsed_entity.appearances
@@ -243,15 +310,39 @@ def compile_entity_import_plan(
     by_name = parsed_entity.appearances_by_name
 
     appearance_plans: list[EntityAppearancePlan] = []
+<<<<<<< Updated upstream
     messages: list[str] = []
+=======
+    root_component_index = build_component_pass_index(ent_components)
+    messages: list[str] = []
+    warnings: list[str] = []
+>>>>>>> Stashed changes
     mesh_entries: dict[str, dict[str, Any]] = {}
     mesh_appearance_sets: dict[str, set[str]] = {}
     seen_mesh_components: set[int] = set()
 
+<<<<<<< Updated upstream
     for requested_name in appearances:
         display_name = resolve_requested_appearance_name(
             requested_name, default_appearance, ent_apps, by_appearance, by_name
         )
+=======
+    for requested_name, exact_index in zip(
+        appearances, appearance_indices, strict=True
+    ):
+        if exact_index is not None and (
+            type(exact_index) is not int or not 0 <= exact_index < len(ent_apps)
+        ):
+            raise ValueError(
+                "Entity appearance index is outside the authored appearance table."
+            )
+        if exact_index is None:
+            display_name = resolve_requested_appearance_name(
+                requested_name, default_appearance, ent_apps, by_appearance, by_name
+            )
+        else:
+            display_name = ent_appearance_name(ent_apps[exact_index], requested_name)
+>>>>>>> Stashed changes
         resolved_name = display_name
         entity_appearance_index: int | None = None
         app_resource_depot = ""
@@ -263,11 +354,16 @@ def compile_entity_import_plan(
         chunks: tuple[dict, ...] | None = None
         used_root_fallback = False
 
+<<<<<<< Updated upstream
         if requested_name == "BASE_COMPONENTS_ONLY":
+=======
+        if exact_index is None and requested_name == "BASE_COMPONENTS_ONLY":
+>>>>>>> Stashed changes
             chunks = tuple(ent_component_data or ()) or None
         elif not ent_apps and ent_component_data:
             chunks = tuple(ent_component_data)
         elif ent_apps:
+<<<<<<< Updated upstream
             entity_appearance_index, resolved_name, resolve_messages = _resolve_ent_app(
                 resolved_name, ent_apps, by_appearance, by_name, default_appearance
             )
@@ -286,16 +382,57 @@ def compile_entity_import_plan(
                     + depot_to_local_path(source_root, app_resource_depot)
                     + ".json"
                 )
+=======
+            if exact_index is None:
+                entity_appearance_index, resolved_name, resolve_messages = (
+                    _resolve_ent_app(
+                        requested_name,
+                        ent_apps,
+                        by_appearance,
+                        by_name,
+                        default_appearance,
+                    )
+                )
+            else:
+                entity_appearance_index = exact_index
+                resolved_name = display_name
+                resolve_messages = ()
+            messages.extend(resolve_messages)
+            ent_app = ent_apps[entity_appearance_index]
+            app_resource_depot = depot_path(
+                ent_app,
+                "appearanceResource",
+                normalize=False,
+            )
+            app_resource_path = resource_resolver(app_resource_depot, ".app.json") or ""
+            if not app_resource_path:
+                message = (
+                    "Appearance resource not found: "
+                    + depot_to_local_path(source_root, app_resource_depot)
+                    + ".json"
+                )
+                messages.append(message)
+                warnings.append(message)
+>>>>>>> Stashed changes
             else:
                 parsed_app = load_app(app_resource_path)
                 if parsed_app is not None:
                     app_index = parsed_app.appearances_by_name.get(resolved_name)
                     if app_index is None:
                         available = ", ".join(parsed_app.appearance_names)
+<<<<<<< Updated upstream
                         messages.append(
                             f"appearance '{resolved_name}' not found in "
                             f"{os.path.basename(app_resource_path)}; available: {available}"
                         )
+=======
+                        message = (
+                            f"appearance '{resolved_name}' not found in "
+                            f"{os.path.basename(app_resource_path)}; available: {available}"
+                        )
+                        messages.append(message)
+                        warnings.append(message)
+>>>>>>> Stashed changes
                     else:
                         parsed_app_name = resolved_name
                         messages.append(f"appearance matched, id =  {app_index}")
@@ -320,6 +457,14 @@ def compile_entity_import_plan(
             merged_components = tuple(ent_components)
             messages.append("falling back to rootchunk components...")
 
+<<<<<<< Updated upstream
+=======
+        component_index = (
+            root_component_index
+            if merged_components is ent_components
+            else build_component_pass_index(merged_components)
+        )
+>>>>>>> Stashed changes
         plan = EntityAppearancePlan(
             requested_name=requested_name,
             display_name=display_name,
@@ -332,12 +477,20 @@ def compile_entity_import_plan(
             root_components=tuple(ent_components),
             appearance_components=appearance_components,
             merged_components=merged_components,
+<<<<<<< Updated upstream
+=======
+            component_index=component_index,
+>>>>>>> Stashed changes
             chunks=tuple(chunks or ()),
             used_root_fallback=used_root_fallback,
         )
         appearance_plans.append(plan)
 
+<<<<<<< Updated upstream
         for component in merged_components:
+=======
+        for component in component_index.mesh_components:
+>>>>>>> Stashed changes
             if type(component) is dict:
                 component_type = component.get("$type")
                 if (
@@ -350,9 +503,16 @@ def compile_entity_import_plan(
                     and not include_proxies
                 ):
                     continue
+<<<<<<< Updated upstream
                 if (
                     component_type in LIGHT_RELATED_COMPONENT_TYPES
                     and not include_lights
+=======
+                if light_component_skipped(
+                    component_type,
+                    include_lights=include_lights,
+                    include_light_channels=include_light_channels,
+>>>>>>> Stashed changes
                 ):
                     continue
             if _is_zero_mask_culled(component):
@@ -361,6 +521,7 @@ def compile_entity_import_plan(
             if component_id in seen_mesh_components:
                 continue
             seen_mesh_components.add(component_id)
+<<<<<<< Updated upstream
             depot_path, mesh_name, mesh_path, mesh_appearance, _enabled = (
                 component_mesh_info(component)
             )
@@ -378,11 +539,33 @@ def compile_entity_import_plan(
                 continue
             mesh_key = depot_to_local_path(source_root, depot_path)
             canonical_mesh_key = depot_path_key(depot_path)
+=======
+            mesh_depot_path, mesh_name, mesh_path, mesh_appearance, _enabled = (
+                component_mesh_info(component)
+            )
+            if mesh_is_excluded(
+                mesh_depot_path,
+                mesh_path,
+                mesh_name,
+                excluded_meshes,
+            ):
+                continue
+            if mesh_depot_path and not mesh_path:
+                warnings.append(f"Mesh resource not found: {mesh_depot_path}")
+            if not mesh_depot_path or not mesh_name or not mesh_path:
+                continue
+            mesh_key = depot_to_local_path(source_root, mesh_depot_path)
+            canonical_mesh_key = depot_path_key(mesh_depot_path)
+>>>>>>> Stashed changes
             entry = mesh_entries.get(canonical_mesh_key)
             if entry is None:
                 mesh_entries[canonical_mesh_key] = {
                     "key": mesh_key,
+<<<<<<< Updated upstream
                     "depot_path": depot_path,
+=======
+                    "depot_path": mesh_depot_path,
+>>>>>>> Stashed changes
                     "mesh_name": mesh_name,
                     "mesh_path": mesh_path,
                     "appearances": [mesh_appearance],
@@ -396,6 +579,7 @@ def compile_entity_import_plan(
                 if mesh_path and not entry.get("mesh_path"):
                     entry["mesh_path"] = mesh_path
 
+<<<<<<< Updated upstream
     ordered_rig_components: list[dict] = []
     seen_rig_components: set[int] = set()
     control_targets: dict[int, str] = {}
@@ -403,16 +587,36 @@ def compile_entity_import_plan(
     def append_rig_components(
         source_components: Iterable[dict],
         control_binding_lookup: Mapping[Any, dict] | None,
+=======
+    def collect_rig_components(
+        source_components: Iterable[dict],
+        control_binding_lookup: Mapping[Any, dict] | None,
+        output: list[dict],
+        seen: set[tuple[str, str]],
+        targets: dict[int, str],
+>>>>>>> Stashed changes
     ) -> None:
         for component in source_components or ():
             if not is_animated_rig_component(component):
                 continue
+<<<<<<< Updated upstream
             component_id = id(component)
             if component_id in seen_rig_components:
                 continue
             seen_rig_components.add(component_id)
             ordered_rig_components.append(component)
             control_targets[component_id] = animated_component_control_target(
+=======
+            key = (
+                component_name(component).casefold(),
+                depot_path_key(depot_path(component, "rig", normalize=False)),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            output.append(component)
+            targets[id(component)] = animated_component_control_target(
+>>>>>>> Stashed changes
                 component, control_binding_lookup
             )
 
@@ -420,6 +624,7 @@ def compile_entity_import_plan(
         ent_component_data,
         "controlBinding",
     )
+<<<<<<< Updated upstream
     append_rig_components(ent_components, root_control_lookup)
     app_control_lookups: dict[tuple[int, str], dict[Any, dict]] = {}
     for appearance_plan in appearance_plans:
@@ -441,17 +646,69 @@ def compile_entity_import_plan(
             appearance_plan.appearance_components,
             control_lookup,
         )
+=======
+    base_rig_components: list[dict] = []
+    active_overlay_components: list[dict] = []
+    ordered_rig_components: list[dict] = []
+    seen_rig_components: set[tuple[str, str]] = set()
+    control_targets: dict[int, str] = {}
+
+    collect_rig_components(
+        root_component_index.rig_components,
+        root_control_lookup,
+        ordered_rig_components,
+        seen_rig_components,
+        control_targets,
+    )
+    base_ids = {id(component) for component in ordered_rig_components}
+
+    active_appearance = appearance_plans[0] if appearance_plans else None
+    if active_appearance is not None and active_appearance.parsed_app is not None:
+        active_chunks = active_appearance.parsed_app.chunks_by_appearance_name.get(
+            active_appearance.parsed_app_name, ()
+        )
+        active_control_lookup = build_embedded_handle_lookup(
+            active_chunks,
+            "controlBinding",
+        )
+        before_ids = {id(component) for component in ordered_rig_components}
+        collect_rig_components(
+            active_appearance.appearance_components,
+            active_control_lookup,
+            ordered_rig_components,
+            seen_rig_components,
+            control_targets,
+        )
+        active_overlay_components = [
+            component
+            for component in ordered_rig_components
+            if id(component) not in before_ids
+        ]
+>>>>>>> Stashed changes
 
     ordered_rig_components, ordering_messages = order_animated_rig_components(
         ordered_rig_components, control_targets
     )
     messages.extend(ordering_messages)
+<<<<<<< Updated upstream
+=======
+    base_rig_components = [
+        component for component in ordered_rig_components if id(component) in base_ids
+    ]
+    overlay_ids = {id(component) for component in active_overlay_components}
+    active_overlay_components = [
+        component
+        for component in ordered_rig_components
+        if id(component) in overlay_ids
+    ]
+>>>>>>> Stashed changes
 
     ordered_by_name = {
         component_name(component): component for component in ordered_rig_components
     }
     deformation_authorities: list[str] = []
     deformation_authority_set: set[str] = set()
+<<<<<<< Updated upstream
     rig_component_plans: list[EntityRigComponentPlan] = []
     for component in ordered_rig_components:
         name = component_name(component)
@@ -473,6 +730,36 @@ def compile_entity_import_plan(
                 is_deformation_rig=deformation,
             )
         )
+=======
+
+    def component_plans(components):
+        plans = []
+        for component in components:
+            name = component_name(component)
+            target = control_targets.get(id(component), "")
+            deformation = is_deformation_rig_component(component)
+            if (
+                deformation
+                and target in ordered_by_name
+                and target not in deformation_authority_set
+            ):
+                deformation_authority_set.add(target)
+                deformation_authorities.append(target)
+            plans.append(
+                EntityRigComponentPlan(
+                    component=component,
+                    component_name=name,
+                    rig_depot_path=depot_path(component, "rig", normalize=False),
+                    control_target=target,
+                    is_deformation_rig=deformation,
+                )
+            )
+        return tuple(plans)
+
+    rig_component_plans = component_plans(ordered_rig_components)
+    base_component_plans = component_plans(base_rig_components)
+    overlay_component_plans = component_plans(active_overlay_components)
+>>>>>>> Stashed changes
 
     mesh_requirements = tuple(
         EntityMeshRequirement(
@@ -493,6 +780,13 @@ def compile_entity_import_plan(
         rig=EntityRigPlan(
             components=tuple(rig_component_plans),
             deformation_authorities=tuple(deformation_authorities),
+<<<<<<< Updated upstream
         ),
+=======
+            base_components=tuple(base_component_plans),
+            overlay_components=tuple(overlay_component_plans),
+        ),
+        warnings=tuple(dict.fromkeys(warnings)),
+>>>>>>> Stashed changes
         messages=tuple(messages),
     )

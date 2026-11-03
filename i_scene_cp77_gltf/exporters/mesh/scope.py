@@ -2,6 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+<<<<<<< Updated upstream
+=======
+from ...blender.identity import rna_identity
+from ...core.log import get_logger, log_once
+
+_LOG = get_logger(__name__)
+
+>>>>>>> Stashed changes
 
 @dataclass(frozen=True, slots=True)
 class MeshExportScope:
@@ -22,6 +30,7 @@ def _view_layer_objects(context):
         return tuple(getattr(context, "scene", ()).objects)
 
 
+<<<<<<< Updated upstream
 def _object_identity(value):
     try:
         return int(value.as_pointer())
@@ -32,6 +41,11 @@ def _object_identity(value):
 def _selected_identities(context):
     return {
         _object_identity(obj)
+=======
+def _selected_identities(context):
+    return {
+        rna_identity(obj)
+>>>>>>> Stashed changes
         for obj in tuple(getattr(context, "selected_objects", ()) or ())
     }
 
@@ -39,10 +53,33 @@ def _selected_identities(context):
 def _is_visible(obj, context):
     try:
         return bool(obj.visible_get(view_layer=context.view_layer))
+<<<<<<< Updated upstream
     except (AttributeError, TypeError):
         try:
             return bool(obj.visible_get())
         except (AttributeError, TypeError):
+=======
+    except (AttributeError, TypeError) as error:
+        log_once(
+            _LOG,
+            "DEBUG",
+            ("_is_visible 1", type(error).__name__),
+            "is visible: fell back after %s",
+            error,
+            exc_info=True,
+        )
+        try:
+            return bool(obj.visible_get())
+        except (AttributeError, TypeError) as error:
+            log_once(
+                _LOG,
+                "DEBUG",
+                ("_is_visible 2", type(error).__name__),
+                "is visible: fell back after %s",
+                error,
+                exc_info=True,
+            )
+>>>>>>> Stashed changes
             return not bool(getattr(obj, "hide_viewport", False))
 
 
@@ -54,16 +91,30 @@ def resolve_mesh_export_scope(
     excluded_objects=(),
 ):
     objects = _view_layer_objects(context)
+<<<<<<< Updated upstream
     excluded = {_object_identity(obj) for obj in tuple(excluded_objects or ())}
     selected = _selected_identities(context) if limit_selected else frozenset()
     source = "selected" if limit_selected else ("visible" if export_visible else "view_layer")
+=======
+    excluded = {rna_identity(obj) for obj in tuple(excluded_objects or ())}
+    selected = _selected_identities(context) if limit_selected else frozenset()
+    source = (
+        "selected"
+        if limit_selected
+        else ("visible" if export_visible else "view_layer")
+    )
+>>>>>>> Stashed changes
     meshes = []
     excluded_count = 0
 
     for obj in objects:
         if getattr(obj, "type", None) != "MESH":
             continue
+<<<<<<< Updated upstream
         identity = _object_identity(obj)
+=======
+        identity = rna_identity(obj)
+>>>>>>> Stashed changes
         if identity in excluded:
             excluded_count += 1
             continue

@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+<<<<<<< Updated upstream
+=======
+from .model import STANDARD_PHASE
+
+>>>>>>> Stashed changes
 
 @dataclass(slots=True)
 class SectorNodeHandlerBinding:
@@ -12,7 +17,11 @@ class SectorNodeHandlerBinding:
     @property
     def placement_phase(self):
         handler = self.placement_handler or self.dependency_handler
+<<<<<<< Updated upstream
         return int(getattr(handler, "placement_phase", 20))
+=======
+        return int(getattr(handler, "placement_phase", STANDARD_PHASE))
+>>>>>>> Stashed changes
 
     @property
     def has_placement(self):
@@ -25,9 +34,13 @@ class SectorNodeHandlerBinding:
 
     def place(self, context):
         if not self.has_placement:
+<<<<<<< Updated upstream
             raise RuntimeError(
                 f"No placement handler registered for {self.node_type}"
             )
+=======
+            raise RuntimeError(f"No placement handler registered for {self.node_type}")
+>>>>>>> Stashed changes
         return self.placement_handler.place(context)
 
     @property
@@ -66,6 +79,7 @@ class SectorNodeHandlerRegistry:
         setattr(binding, role, handler)
 
     def register(self, handler, *node_types):
+<<<<<<< Updated upstream
         has_dependencies = callable(
             getattr(handler, "collect_dependencies", None)
         )
@@ -74,6 +88,12 @@ class SectorNodeHandlerRegistry:
             raise TypeError(
                 f"{type(handler).__name__} is not a sector node handler"
             )
+=======
+        has_dependencies = callable(getattr(handler, "collect_dependencies", None))
+        has_placement = callable(getattr(handler, "place", None))
+        if not has_dependencies and not has_placement:
+            raise TypeError(f"{type(handler).__name__} is not a sector node handler")
+>>>>>>> Stashed changes
 
         for node_type in node_types:
             binding = self._binding(node_type)
@@ -85,9 +105,13 @@ class SectorNodeHandlerRegistry:
 
     def register_dependencies(self, handler, *node_types):
         if not callable(getattr(handler, "collect_dependencies", None)):
+<<<<<<< Updated upstream
             raise TypeError(
                 f"{type(handler).__name__} has no collect_dependencies()"
             )
+=======
+            raise TypeError(f"{type(handler).__name__} has no collect_dependencies()")
+>>>>>>> Stashed changes
         for node_type in node_types:
             self._assign_role(
                 self._binding(node_type),
@@ -119,6 +143,7 @@ class SectorNodeHandlerRegistry:
 
 
 NODE_HANDLERS = SectorNodeHandlerRegistry()
+<<<<<<< Updated upstream
 
 
 def register_node_handler(*node_types):
@@ -140,3 +165,5 @@ def register_placement_handler(*node_types):
         NODE_HANDLERS.register_placement(handler, *node_types)
         return handler
     return decorator
+=======
+>>>>>>> Stashed changes

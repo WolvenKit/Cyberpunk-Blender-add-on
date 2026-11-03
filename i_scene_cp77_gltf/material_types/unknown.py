@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 from ..addon_identity import get_addon_preferences
 from ..materials.blender.images import imageFromRelPath
 from ..materials.blender.nodes import CreateGradMapRamp, CreateShaderNodeRGB, CreateShaderNodeValue, create_node
@@ -17,6 +18,31 @@ class unknownMaterial(MaterialTypeBase):
         # CMaterialParameterScalar
         # CMaterialParameterVector
         # CMaterialParameterColor
+=======
+from ..core.log import get_logger, is_enabled
+from ..materials.blender.bulk import bulk_material_import_active
+from ..materials.blender.images import imageFromRelPath
+from ..materials.blender.nodes import (
+    CreateGradMapRamp,
+    CreateShaderNodeRGB,
+    CreateShaderNodeValue,
+    create_node,
+)
+from .mat_common import MaterialTypeBase
+
+_LOG = get_logger(__name__)
+
+
+class unknownMaterial(MaterialTypeBase):
+    def create(self, Data, Mat):
+        # The equivalent builder code, logged as one record when DEBUG is on.
+        code = (
+            []
+            if is_enabled("DEBUG", _LOG) and not bulk_material_import_active()
+            else None
+        )
+        skipped = []
+>>>>>>> Stashed changes
 
         x = -500
         y = 400
@@ -28,6 +54,7 @@ class unknownMaterial(MaterialTypeBase):
         CurMat = Mat.node_tree
 
         for param in Data:
+<<<<<<< Updated upstream
             if isinstance(Data[param], str) and Data[param][-3:] == 'xbm':
                 text = imageFromRelPath(Data[param], self.image_format, DepotPath=self.BasePath, ProjPath=self.ProjPath)
                 textNode = create_node(
@@ -49,10 +76,42 @@ class unknownMaterial(MaterialTypeBase):
                     color_ramp_node = CreateGradMapRamp(CurMat, textNode)
                     color_ramp_node.location = (imgx + 500, imgy)
                     CurMat.links.new(textNode.outputs[0], color_ramp_node.inputs[0])
+=======
+            if isinstance(Data[param], str) and Data[param][-3:] == "xbm":
+                text = imageFromRelPath(
+                    Data[param],
+                    self.image_format,
+                    DepotPath=self.BasePath,
+                    ProjPath=self.ProjPath,
+                )
+                textNode = create_node(
+                    CurMat.nodes,
+                    "ShaderNodeTexImage",
+                    (imgx, imgy),
+                    label=param,
+                    image=text,
+                    hide=False,
+                )
+
+                if code is not None:
+                    code.append(
+                        f"{param}Img=imageFromRelPath(Data['{param}'],self.image_format,DepotPath=self.BasePath, ProjPath=self.ProjPath)"
+                    )
+                    code.append(
+                        f"{param}ImgNode = create_node(CurMat.nodes,'ShaderNodeTexImage',  ({x},{y}), label='{param}', image={param}Img, hide=False)"
+                    )
+                if param == "GradientMap":
+                    color_ramp_node = CreateGradMapRamp(CurMat, textNode)
+                    color_ramp_node.location = (imgx + 500, imgy)
+                    CurMat.links.new(
+                        textNode.outputs["Color"], color_ramp_node.inputs["Factor"]
+                    )
+>>>>>>> Stashed changes
                 imgy = imgy - imgydelta
 
             elif isinstance(Data[param], int) or isinstance(Data[param], float):
                 scalar = CreateShaderNodeValue(CurMat, Data[param], x, y, param)
+<<<<<<< Updated upstream
                 if verbose:
                     print(
                         "\t" + param + "Val = CreateShaderNodeValue(CurMat,Data['" + param + "']," + str(x) + ',' + str(
@@ -103,3 +162,55 @@ class unknownMaterial(MaterialTypeBase):
                 print(param, ' of type ', type(Data[param]), ' not captured')
         if verbose:
             print("Done with ", Mat['MaterialTemplate'], '\n')
+=======
+                if code is not None:
+                    code.append(
+                        f"{param}Val = CreateShaderNodeValue(CurMat,Data['{param}'],{x},{y},'{param}')"
+                    )
+                y = y - ydelta
+            elif isinstance(Data[param], dict):
+                if "Red" in Data[param]:
+                    ColScale = CreateShaderNodeRGB(
+                        CurMat, Data[param], x, y, param, False
+                    )
+                    if code is not None:
+                        code.append(
+                            f"{param}Scale = CreateShaderNodeRGB(CurMat, Data['{param}'],{x},{y},'{param}',False)"
+                        )
+                elif "Color" in param or "color" in param:
+                    ColScale = CreateShaderNodeRGB(
+                        CurMat, Data[param], x, y, param, True
+                    )
+                    if code is not None:
+                        code.append(
+                            f"{param}Scale = CreateShaderNodeRGB(CurMat, Data['{param}'],{x},{y},'{param}',True)"
+                        )
+                elif "Scale" in param or "scale" in param:
+                    vector = create_node(
+                        CurMat.nodes, "ShaderNodeMapping", (x, y), label=param
+                    )
+                    if Data[param]:
+                        vector.inputs["Scale"].default_value[0] = Data[param]["X"]
+                        vector.inputs["Scale"].default_value[1] = Data[param]["Y"]
+                        vector.inputs["Scale"].default_value[2] = Data[param]["Z"]
+                        if code is not None:
+                            code.append(
+                                f"vector=create_node(CurMat.nodes,'ShaderNodeMapping',  ({x},{y}), label='{param}')"
+                            )
+                            code.extend(
+                                f"vector.inputs['Scale'].default_value[{index}]=Data['{param}']['{axis}']"
+                                for index, axis in enumerate("XYZ")
+                            )
+                else:
+                    skipped.append(f"{param} (dict)")
+                y = y - ydelta
+            else:
+                skipped.append(f"{param} ({type(Data[param]).__name__})")
+        if code is not None:
+            _LOG.debug(
+                "Unknown material %s as builder code:\n\t%s\nParameters not captured: %s",
+                Mat["MaterialTemplate"],
+                "\n\t".join(code),
+                ", ".join(skipped) or "none",
+            )
+>>>>>>> Stashed changes

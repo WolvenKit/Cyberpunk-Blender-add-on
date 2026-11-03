@@ -4,11 +4,17 @@ import os
 from dataclasses import dataclass
 from enum import Enum
 
+<<<<<<< Updated upstream
 from .container import GLBContainerError, read_glb_container
+=======
+from ..assetio.paths import is_morphtarget_path
+from .container import GLBContainerError, read_gltf_container
+>>>>>>> Stashed changes
 
 DIRECT_MESH_GENERATOR = "Cyberpunk 2077 IO Suite direct mesh exporter"
 DIRECT_ANIMATION_GENERATOR = "Cyberpunk 2077 IO Suite direct animation exporter"
 ORIGIN_KEY = "cp77_io_origin"
+<<<<<<< Updated upstream
 ORIGIN_VERSION_KEY = "cp77_io_origin_version"
 SOURCE_GENERATOR_KEY = "cp77_io_source_generator"
 SOURCE_PATH_KEY = "cp77_io_source_path"
@@ -60,6 +66,72 @@ _WOLVENKIT_ANIMATION_KEYS = frozenset({
     "rootMotionType",
     "optimizationHints",
 })
+=======
+SOURCE_PATH_KEY = "sourcePath"
+ORIGIN_PLUGIN = "plugin"
+ORIGIN_EXTERNAL = "external"
+
+_PLUGIN_MESH_KEYS = frozenset(
+    {
+        "cp77_direct_document_metadata",
+        "cp77_direct_mesh_extras",
+        "cp77_direct_node_extras",
+        "cp77_direct_mesh_skin_binding",
+        "cp77_direct_mesh_source_rest_json",
+        "cp77_material_name",
+        "sourcePath",
+    }
+)
+_PLUGIN_COLLECTION_KEYS = frozenset(
+    {
+        "sourcePath",
+        "cp77_direct_document_metadata",
+        "cp77_direct_mesh_skin_binding",
+        "cp77_material_preparation_version",
+        "cp77_json_apps",
+        "mesh",
+    }
+)
+_PLUGIN_ARMATURE_KEYS = frozenset(
+    {
+        "cp77_skin_extras_json",
+        "cp77_animation_source_rest_json",
+        "cp77_source_rig_file",
+        "rigPath",
+        "cp77_rig_merge_order",
+    }
+)
+_PLUGIN_ARMATURE_DATA_KEYS = frozenset(
+    {
+        "cp77_rig_space_contract",
+        "cp77_source_rig_file",
+    }
+)
+_WOLVENKIT_DOCUMENT_KEYS = frozenset(
+    {
+        "experimentalMergedMeshes",
+    }
+)
+_WOLVENKIT_MESH_KEYS = frozenset(
+    {
+        "materialNames",
+    }
+)
+_WOLVENKIT_SKIN_KEYS = frozenset(
+    {
+        "rigPath",
+        "boneNames",
+        "boneParentIndexes",
+    }
+)
+_WOLVENKIT_ANIMATION_KEYS = frozenset(
+    {
+        "animationType",
+        "rootMotionType",
+        "optimizationHints",
+    }
+)
+>>>>>>> Stashed changes
 
 
 class GLBProvenanceError(RuntimeError):
@@ -77,6 +149,10 @@ class GLBContentKind(str, Enum):
     MESH = "mesh"
     ANIMATION = "animation"
     MIXED = "mixed"
+<<<<<<< Updated upstream
+=======
+    RIG = "rig"
+>>>>>>> Stashed changes
     EMPTY = "empty"
 
 
@@ -105,6 +181,11 @@ class GLBInspection:
             return self.content_kind in {
                 GLBContentKind.MESH,
                 GLBContentKind.ANIMATION,
+<<<<<<< Updated upstream
+=======
+                GLBContentKind.MIXED,
+                GLBContentKind.RIG,
+>>>>>>> Stashed changes
             }
         return False
 
@@ -128,7 +209,11 @@ def _mapping_has_keys(value, keys) -> bool:
     return isinstance(value, dict) and keys.issubset(value)
 
 
+<<<<<<< Updated upstream
 def _is_wolvenkit_sharpgltf(document: dict, generator: str) -> bool:
+=======
+def _is_wolvenkit_sharpgltf(document: dict, generator: str, filepath: str) -> bool:
+>>>>>>> Stashed changes
     if not generator.strip().casefold().startswith("sharpgltf"):
         return False
 
@@ -144,6 +229,15 @@ def _is_wolvenkit_sharpgltf(document: dict, generator: str) -> bool:
             key in mesh_extras for key in _WOLVENKIT_MESH_KEYS
         ):
             return True
+<<<<<<< Updated upstream
+=======
+        if (
+            is_morphtarget_path(filepath)
+            and isinstance(mesh_extras, dict)
+            and "targetNames" in mesh_extras
+        ):
+            return True
+>>>>>>> Stashed changes
 
     for skin in document.get("skins", ()) or ():
         skin_extras = skin.get("extras") if isinstance(skin, dict) else None
@@ -159,11 +253,19 @@ def _is_wolvenkit_sharpgltf(document: dict, generator: str) -> bool:
     return False
 
 
+<<<<<<< Updated upstream
 def _source_from_document(document: dict, generator: str) -> GLBSource:
     source = _source_from_generator(generator)
     if source is not GLBSource.EXTERNAL:
         return source
     if _is_wolvenkit_sharpgltf(document, generator):
+=======
+def _source_from_document(document: dict, generator: str, filepath: str) -> GLBSource:
+    source = _source_from_generator(generator)
+    if source is not GLBSource.EXTERNAL:
+        return source
+    if _is_wolvenkit_sharpgltf(document, generator, filepath):
+>>>>>>> Stashed changes
         return GLBSource.WOLVENKIT
     return GLBSource.EXTERNAL
 
@@ -177,15 +279,25 @@ def _content_kind(document: dict) -> GLBContentKind:
         return GLBContentKind.MESH
     if has_animations:
         return GLBContentKind.ANIMATION
+<<<<<<< Updated upstream
+=======
+    if document.get("skins"):
+        return GLBContentKind.RIG
+>>>>>>> Stashed changes
     return GLBContentKind.EMPTY
 
 
 def read_glb_json(filepath: str) -> dict:
     path = os.path.abspath(os.fspath(filepath))
+<<<<<<< Updated upstream
     if not path.casefold().endswith(".glb"):
         raise GLBProvenanceError("Only binary glTF .glb files are supported.")
     try:
         return read_glb_container(path).document
+=======
+    try:
+        return read_gltf_container(path, include_binary=False).document
+>>>>>>> Stashed changes
     except GLBContainerError as error:
         raise GLBProvenanceError(str(error)) from error
 
@@ -197,7 +309,11 @@ def inspect_glb(filepath: str) -> GLBInspection:
     return GLBInspection(
         filepath=os.path.abspath(os.fspath(filepath)),
         generator=generator,
+<<<<<<< Updated upstream
         source=_source_from_document(document, generator),
+=======
+        source=_source_from_document(document, generator, filepath),
+>>>>>>> Stashed changes
         content_kind=_content_kind(document),
         asset_version=str(asset.get("version", "")),
     )
@@ -212,6 +328,7 @@ def _contains_any(owner, keys) -> bool:
         return False
 
 
+<<<<<<< Updated upstream
 def mark_origin(owner, origin: str, *, generator: str = "", source_path: str = "") -> None:
     if owner is None:
         return
@@ -219,6 +336,12 @@ def mark_origin(owner, origin: str, *, generator: str = "", source_path: str = "
     owner[ORIGIN_VERSION_KEY] = ORIGIN_VERSION
     if generator:
         owner[SOURCE_GENERATOR_KEY] = str(generator)
+=======
+def mark_origin(owner, origin: str, *, source_path: str = "") -> None:
+    if owner is None:
+        return
+    owner[ORIGIN_KEY] = str(origin)
+>>>>>>> Stashed changes
     if source_path:
         owner[SOURCE_PATH_KEY] = os.path.abspath(os.fspath(source_path))
 
@@ -245,7 +368,13 @@ def object_origin(obj) -> SelectionOrigin:
         explicit = str(collection.get(ORIGIN_KEY, "") or "").casefold()
         if explicit == ORIGIN_EXTERNAL:
             return SelectionOrigin.EXTERNAL
+<<<<<<< Updated upstream
         if explicit == ORIGIN_PLUGIN or _contains_any(collection, _PLUGIN_COLLECTION_KEYS):
+=======
+        if explicit == ORIGIN_PLUGIN or _contains_any(
+            collection, _PLUGIN_COLLECTION_KEYS
+        ):
+>>>>>>> Stashed changes
             return SelectionOrigin.PLUGIN
     return SelectionOrigin.EXTERNAL
 

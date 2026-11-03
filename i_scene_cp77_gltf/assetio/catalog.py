@@ -43,10 +43,24 @@ class ResourceKind(str, Enum):
     MINIMAP = "minimap"
     GI_DATA = "gi_data"
     SMART_OBJECTS = "smart_objects"
+<<<<<<< Updated upstream
     WORKSPOT = "workspot"
     ACTION_ANIM_DB = "action_anim_db"
     IES = "ies"
     ANIMGRAPH = "animgraph"
+=======
+    WORKSPOT = "cp77_workspot"
+    ACTION_ANIM_DB = "action_anim_db"
+    IES = "ies"
+    ANIMGRAPH = "animgraph"
+    CURVE_SET = "curve_set"
+    INK_WIDGET = "ink_widget"
+    INK_ATLAS = "ink_atlas"
+    INK_STYLE = "ink_style"
+    INK_ANIMATION = "ink_animation"
+    INK_FONT_FAMILY = "ink_font_family"
+    FONT = "font"
+>>>>>>> Stashed changes
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,7 +83,11 @@ class ResourceSpec:
         return tuple(export.suffix for export in self.exports)
 
 
+<<<<<<< Updated upstream
 def _suffix(value):
+=======
+def normalize_extension(value):
+>>>>>>> Stashed changes
     value = str(value or "").strip().lower()
     if not value:
         return ""
@@ -77,6 +95,7 @@ def _suffix(value):
 
 
 def _export(suffix, format):
+<<<<<<< Updated upstream
     return ResourceExport(_suffix(suffix), ResourceFormat(format))
 
 
@@ -84,6 +103,17 @@ def _spec(kind, cooked=(), exports=(), validation="none", cache=CachePolicy.SESS
     return ResourceSpec(
         ResourceKind(kind),
         tuple(_suffix(value) for value in cooked),
+=======
+    return ResourceExport(normalize_extension(suffix), ResourceFormat(format))
+
+
+def _spec(
+    kind, cooked=(), exports=(), validation="none", cache=CachePolicy.SESSION, roots=()
+):
+    return ResourceSpec(
+        ResourceKind(kind),
+        tuple(normalize_extension(value) for value in cooked),
+>>>>>>> Stashed changes
         tuple(_export(suffix, format) for suffix, format in exports),
         str(validation),
         CachePolicy(cache),
@@ -92,6 +122,7 @@ def _spec(kind, cooked=(), exports=(), validation="none", cache=CachePolicy.SESS
 
 
 RESOURCE_SPECS = (
+<<<<<<< Updated upstream
     _spec(ResourceKind.MESH, (".mesh",), ((".glb", ResourceFormat.GLB), (".mesh.json", ResourceFormat.JSON)), "cr2w"),
     _spec(ResourceKind.MESH, (".physicalscene",), ((".physicalscene.glb", ResourceFormat.GLB), (".physicalscene.json", ResourceFormat.JSON)), "cr2w"),
     _spec(ResourceKind.MESH, (".w2mesh",), ((".w2mesh.glb", ResourceFormat.GLB), (".w2mesh.json", ResourceFormat.JSON)), "cr2w"),
@@ -136,6 +167,256 @@ RESOURCE_EXPORTS_BY_SUFFIX = {
     export.suffix: (spec, export)
     for spec in RESOURCE_SPECS
     for export in spec.exports
+=======
+    _spec(
+        ResourceKind.MESH,
+        (".mesh",),
+        ((".glb", ResourceFormat.GLB), (".mesh.json", ResourceFormat.JSON)),
+        "cr2w",
+    ),
+    _spec(
+        ResourceKind.MESH,
+        (".physicalscene",),
+        (
+            (".physicalscene.glb", ResourceFormat.GLB),
+            (".physicalscene.json", ResourceFormat.JSON),
+        ),
+        "cr2w",
+    ),
+    _spec(
+        ResourceKind.MESH,
+        (".w2mesh",),
+        ((".w2mesh.glb", ResourceFormat.GLB), (".w2mesh.json", ResourceFormat.JSON)),
+        "cr2w",
+    ),
+    _spec(
+        ResourceKind.ANIMATION,
+        (".anims",),
+        ((".anims.glb", ResourceFormat.GLB), (".anims.json", ResourceFormat.JSON)),
+        "cr2w",
+    ),
+    _spec(
+        ResourceKind.ANIMGRAPH,
+        (".animgraph",),
+        ((".animgraph.json", ResourceFormat.JSON),),
+        "cr2w",
+        roots=("animAnimGraph",),
+    ),
+    _spec(
+        ResourceKind.CURVE_SET,
+        (".curveset",),
+        ((".curveset.json", ResourceFormat.JSON),),
+        "cr2w",
+    ),
+    _spec(
+        ResourceKind.CURVE_SET,
+        (".vehcurveset",),
+        ((".vehcurveset.json", ResourceFormat.JSON),),
+        "cr2w",
+    ),
+    _spec(
+        ResourceKind.RIG,
+        (".rig",),
+        ((".rig.json", ResourceFormat.JSON),),
+        "cr2w",
+        roots=("animRig",),
+    ),
+    _spec(
+        ResourceKind.FACIAL_SETUP,
+        (".facialsetup",),
+        ((".facialsetup.json", ResourceFormat.JSON),),
+        "cr2w",
+    ),
+    _spec(ResourceKind.TEXTURE, (".xbm",), ((".png", ResourceFormat.IMAGE),)),
+    _spec(
+        ResourceKind.ENTITY, (".ent",), ((".ent.json", ResourceFormat.JSON),), "cr2w"
+    ),
+    _spec(
+        ResourceKind.APPEARANCE,
+        (".app",),
+        ((".app.json", ResourceFormat.JSON),),
+        "cr2w",
+    ),
+    _spec(
+        ResourceKind.STREAMING_SECTOR_INPLACE,
+        (".streamingsector_inplace",),
+        ((".streamingsector_inplace.json", ResourceFormat.JSON),),
+        "cr2w",
+    ),
+    _spec(
+        ResourceKind.STREAMING_SECTOR,
+        (".streamingsector",),
+        ((".streamingsector.json", ResourceFormat.JSON),),
+        "cr2w",
+    ),
+    _spec(
+        ResourceKind.PHYSICS, (".phys",), ((".phys.json", ResourceFormat.JSON),), "cr2w"
+    ),
+    _spec(
+        ResourceKind.DTEX,
+        (".dtex",),
+        ((".dtex.json", ResourceFormat.JSON),),
+        "cr2w",
+        cache=CachePolicy.PROCESS,
+    ),
+    _spec(
+        ResourceKind.MATERIAL,
+        exports=((".material.json", ResourceFormat.JSON),),
+        validation="material_bundle",
+        cache=CachePolicy.PROCESS,
+    ),
+    _spec(
+        ResourceKind.STREAMING_BLOCK,
+        exports=((".streamingblock.json", ResourceFormat.JSON),),
+        validation="cr2w",
+    ),
+    _spec(
+        ResourceKind.GRADIENT,
+        (".gradient",),
+        ((".gradient.json", ResourceFormat.JSON),),
+        validation="cr2w",
+    ),
+    _spec(
+        ResourceKind.FOLIAGE,
+        exports=((".cfoliage.json", ResourceFormat.JSON),),
+        validation="cr2w",
+    ),
+    _spec(
+        ResourceKind.HAIR_PROFILE,
+        (".hp",),
+        ((".hp.json", ResourceFormat.JSON),),
+        validation="cr2w",
+        roots=("CHairProfile",),
+    ),
+    _spec(
+        ResourceKind.MLSETUP,
+        (".mlsetup",),
+        ((".mlsetup.json", ResourceFormat.JSON),),
+        validation="cr2w",
+        cache=CachePolicy.PROCESS,
+        roots=("Multilayer_Setup",),
+    ),
+    _spec(
+        ResourceKind.MLTEMPLATE,
+        (".mltemplate",),
+        ((".mltemplate.json", ResourceFormat.JSON),),
+        validation="cr2w",
+        cache=CachePolicy.PROCESS,
+    ),
+    _spec(
+        ResourceKind.MATERIAL_TEMPLATE,
+        (".mt",),
+        ((".mt.json", ResourceFormat.JSON),),
+        validation="cr2w",
+        cache=CachePolicy.PROCESS,
+    ),
+    _spec(
+        ResourceKind.MATERIAL_INSTANCE,
+        (".mi",),
+        ((".mi.json", ResourceFormat.JSON),),
+        validation="cr2w",
+        cache=CachePolicy.PROCESS,
+        roots=("CMaterialInstance",),
+    ),
+    _spec(
+        ResourceKind.PARTICLE,
+        exports=((".particle.json", ResourceFormat.JSON),),
+        validation="cr2w",
+    ),
+    _spec(
+        ResourceKind.EFFECT,
+        exports=((".effect.json", ResourceFormat.JSON),),
+        validation="cr2w",
+    ),
+    _spec(
+        ResourceKind.ACOUSTIC_DATA,
+        exports=((".acousticdata.json", ResourceFormat.JSON),),
+        validation="cr2w",
+    ),
+    _spec(
+        ResourceKind.ENVIRONMENT_PROBE,
+        exports=((".envprobe.json", ResourceFormat.JSON),),
+        validation="cr2w",
+    ),
+    _spec(
+        ResourceKind.MINIMAP,
+        exports=((".cminimap.json", ResourceFormat.JSON),),
+        validation="cr2w",
+    ),
+    _spec(
+        ResourceKind.GI_DATA,
+        exports=((".gidata.json", ResourceFormat.JSON),),
+        validation="cr2w",
+    ),
+    _spec(
+        ResourceKind.SMART_OBJECTS,
+        exports=((".smartobjects.json", ResourceFormat.JSON),),
+        validation="cr2w",
+    ),
+    _spec(
+        ResourceKind.WORKSPOT,
+        exports=((".workspot.json", ResourceFormat.JSON),),
+        validation="cr2w",
+    ),
+    _spec(
+        ResourceKind.ACTION_ANIM_DB,
+        exports=((".actionanimdb.json", ResourceFormat.JSON),),
+        validation="cr2w",
+    ),
+    _spec(
+        ResourceKind.IES,
+        exports=((".ies.json", ResourceFormat.JSON), (".ies", ResourceFormat.DATA)),
+    ),
+    _spec(
+        ResourceKind.INK_WIDGET,
+        (".inkwidget",),
+        ((".inkwidget.json", ResourceFormat.JSON),),
+        "cr2w",
+        roots=("inkWidgetLibraryResource",),
+    ),
+    _spec(
+        ResourceKind.INK_ATLAS,
+        (".inkatlas",),
+        ((".inkatlas.json", ResourceFormat.JSON),),
+        "cr2w",
+        roots=("inkTextureAtlas",),
+    ),
+    _spec(
+        ResourceKind.INK_STYLE,
+        (".inkstyle",),
+        ((".inkstyle.json", ResourceFormat.JSON),),
+        "cr2w",
+        roots=("inkStyleResource",),
+    ),
+    _spec(
+        ResourceKind.INK_ANIMATION,
+        (".inkanim",),
+        ((".inkanim.json", ResourceFormat.JSON),),
+        "cr2w",
+        roots=("inkanimAnimationLibraryResource",),
+    ),
+    _spec(
+        ResourceKind.INK_FONT_FAMILY,
+        (".inkfontfamily",),
+        ((".inkfontfamily.json", ResourceFormat.JSON),),
+        "cr2w",
+        roots=("inkFontFamilyResource",),
+    ),
+    _spec(
+        ResourceKind.FONT,
+        (".fnt",),
+        ((".fnt.json", ResourceFormat.JSON), (".ttf", ResourceFormat.DATA)),
+        "cr2w",
+        roots=("rendFont",),
+    ),
+)
+
+RESOURCE_SPEC_BY_COOKED_SUFFIX = {
+    cooked: spec for spec in RESOURCE_SPECS for cooked in spec.cooked_suffixes
+}
+RESOURCE_EXPORTS_BY_SUFFIX = {
+    export.suffix: (spec, export) for spec in RESOURCE_SPECS for export in spec.exports
+>>>>>>> Stashed changes
 }
 COOKED_RESOURCE_EXPORTS = {
     cooked: spec.exported_suffixes
@@ -144,11 +425,14 @@ COOKED_RESOURCE_EXPORTS = {
 EXPORTED_RESOURCE_EXTENSIONS = tuple(
     sorted(RESOURCE_EXPORTS_BY_SUFFIX, key=len, reverse=True)
 )
+<<<<<<< Updated upstream
 JSON_RESOURCE_EXTENSIONS = tuple(
     suffix
     for suffix in EXPORTED_RESOURCE_EXTENSIONS
     if RESOURCE_EXPORTS_BY_SUFFIX[suffix][1].format is ResourceFormat.JSON
 )
+=======
+>>>>>>> Stashed changes
 IMAGE_EXTENSIONS = (
     ".png",
     ".jpg",
@@ -160,16 +444,20 @@ IMAGE_EXTENSIONS = (
     ".tif",
     ".tiff",
 )
+<<<<<<< Updated upstream
 DEFAULT_ASSET_EXTENSIONS = tuple(dict.fromkeys((
     *EXPORTED_RESOURCE_EXTENSIONS,
     *IMAGE_EXTENSIONS,
 )))
+=======
+>>>>>>> Stashed changes
 COOKED_RESOURCE_SUFFIXES = tuple(sorted(COOKED_RESOURCE_EXPORTS, key=len, reverse=True))
 EXPORT_GROUPS_BY_OUTPUT_EXTENSION = {
     export_extension: exports
     for exports in COOKED_RESOURCE_EXPORTS.values()
     for export_extension in exports
 }
+<<<<<<< Updated upstream
 EXPORTED_RESOURCE_SUFFIXES = tuple(sorted(EXPORT_GROUPS_BY_OUTPUT_EXTENSION, key=len, reverse=True))
 COOKED_DEPOT_EXTENSIONS = frozenset(COOKED_RESOURCE_EXPORTS)
 
@@ -178,6 +466,14 @@ def normalize_extension(extension):
     return _suffix(extension)
 
 
+=======
+EXPORTED_RESOURCE_SUFFIXES = tuple(
+    sorted(EXPORT_GROUPS_BY_OUTPUT_EXTENSION, key=len, reverse=True)
+)
+COOKED_DEPOT_EXTENSIONS = frozenset(COOKED_RESOURCE_EXPORTS)
+
+
+>>>>>>> Stashed changes
 def normalize_extensions(extensions):
     if isinstance(extensions, str):
         extensions = (extensions,)
@@ -185,7 +481,13 @@ def normalize_extensions(extensions):
         sorted(
             {
                 suffix
+<<<<<<< Updated upstream
                 for suffix in (_suffix(extension) for extension in (extensions or ()))
+=======
+                for suffix in (
+                    normalize_extension(extension) for extension in (extensions or ())
+                )
+>>>>>>> Stashed changes
                 if suffix and suffix not in COOKED_DEPOT_EXTENSIONS
             },
             key=len,
@@ -195,11 +497,19 @@ def normalize_extensions(extensions):
 
 
 def resource_spec_for_cooked_suffix(suffix):
+<<<<<<< Updated upstream
     return RESOURCE_SPEC_BY_COOKED_SUFFIX.get(_suffix(suffix))
 
 
 def resource_export_for_suffix(suffix):
     return RESOURCE_EXPORTS_BY_SUFFIX.get(_suffix(suffix))
+=======
+    return RESOURCE_SPEC_BY_COOKED_SUFFIX.get(normalize_extension(suffix))
+
+
+def resource_export_for_suffix(suffix):
+    return RESOURCE_EXPORTS_BY_SUFFIX.get(normalize_extension(suffix))
+>>>>>>> Stashed changes
 
 
 def resource_spec_for_path(path):

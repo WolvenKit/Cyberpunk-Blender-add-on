@@ -13,6 +13,7 @@ class MaterialBundle:
 @dataclass(frozen=True, slots=True)
 class MaterialDocument:
     source_path: str
+<<<<<<< Updated upstream
     resource_kind: ResourceKind
     payload: dict
     root: dict
@@ -25,3 +26,9 @@ class ResolvedMaterialChain:
     @property
     def leaf(self):
         return self.documents[0] if self.documents else None
+=======
+    source_identity: tuple
+    resource_kind: ResourceKind
+    payload: dict
+    root: dict
+>>>>>>> Stashed changes

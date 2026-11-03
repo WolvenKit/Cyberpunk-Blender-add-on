@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+<<<<<<< Updated upstream
 from ...animation.jali.capability import dependency_status
+=======
+from ...animation.domain.jali.capability import dependency_status
+>>>>>>> Stashed changes
 from ...icons.cp77_icons import get_icon
 
 
@@ -11,6 +15,7 @@ def draw_panel(layout, loaded: bool) -> None:
         return
     status = dependency_status()
     if not status.parselmouth:
+<<<<<<< Updated upstream
         box = panel.box()
         box.label(text="Dependencies required:", icon="ERROR")
         row = box.row()
@@ -22,12 +27,19 @@ def draw_panel(layout, loaded: bool) -> None:
             text="Install Dependencies",
             icon="IMPORT",
         )
+=======
+        panel.label(text="Reinstall the add-on to use lipsync", icon="ERROR")
+>>>>>>> Stashed changes
         return
     if not loaded:
         panel.label(text="Load a facial setup first.", icon="INFO")
         return
     if not status.g2p:
+<<<<<<< Updated upstream
         panel.label(text="g2p_en not installed — transcript mode unavailable", icon="INFO")
+=======
+        panel.label(text="Reinstall the add-on to use transcripts", icon="INFO")
+>>>>>>> Stashed changes
     column = panel.column(align=True)
     column.operator("cp77.generate_jali_lipsync", text="Generate JALI Lipsync")
     column.operator("cp77.preview_facial_pose", text="Preview JALI Pose")

@@ -5,6 +5,7 @@ import typing
 
 import bpy
 
+<<<<<<< Updated upstream
 
 EDGE_SEMANTICS_ITEMS = (
     ('dataflow', 'Dataflow', 'Real REDengine pose/value dependency link'),
@@ -43,6 +44,73 @@ def split_field_path(path: str) -> typing.Tuple[str, int]:
     if match:
         return match.group(1), int(match.group(2))
     return tail.split('[', 1)[0], -1
+=======
+from ...core.log import get_logger, log_once
+
+_LOG = get_logger(__name__)
+
+EDGE_SEMANTICS_ITEMS = (
+    ("dataflow", "Dataflow", "Real REDengine pose/value dependency link"),
+    (
+        "container_boundary",
+        "Container Boundary",
+        "Editor projection across an enterable subgraph boundary",
+    ),
+    ("root_output", "Root Output", "Editor projection of Root.outputNode"),
+    ("state_summary", "State Summary", "Editor-only state aggregation socket"),
+    (
+        "transition_summary",
+        "Transition Summary",
+        "Editor-only state transition aggregation socket",
+    ),
+    (
+        "editor_dangle",
+        "Editor Dangle",
+        "Editor-only dangle particle/constraint relationship",
+    ),
+    (
+        "editor_dangle_constraint",
+        "Editor Dangle Constraint",
+        "Editor-only dangle constraint edge between particles",
+    ),
+    (
+        "editor_collision_shape",
+        "Editor Collision Shape",
+        "Editor-only dangle collision-shape relationship",
+    ),
+    ("layout_only", "Layout Only", "Layout-only relationship; never serialized"),
+    ("unknown", "Unknown", "Unclassified socket binding"),
+)
+
+
+def _safe_setattr(obj, name: str, value: typing.Any) -> None:
+    try:
+        setattr(obj, name, value)
+    except (AttributeError, TypeError, ValueError) as error:
+        log_once(
+            _LOG,
+            "DEBUG",
+            ("_safe_setattr", type(error).__name__),
+            "safe setattr: fell back after %s",
+            error,
+            exc_info=True,
+        )
+        try:
+            obj[name] = value
+        except (KeyError, TypeError, ValueError):
+            pass
+
+
+def split_field_path(path: str) -> tuple[str, int]:
+    """Split a REDengine field path into base name and optional array index"""
+    if not path:
+        return "", -1
+    tail = path.rsplit(".", 1)[-1]
+    match = re.match(r"^([^\[]+)\[(\d+)\]$", tail)
+    if match:
+        return match.group(1), int(match.group(2))
+    return tail.split("[", 1)[0], -1
+>>>>>>> Stashed changes
 
 
 def bind_red_socket(
@@ -55,18 +123,27 @@ def bind_red_socket(
     link_type: str = "",
     array_index: int = -1,
     exportable: bool = True,
+<<<<<<< Updated upstream
     edge_semantics: str = 'dataflow',
+=======
+    edge_semantics: str = "dataflow",
+>>>>>>> Stashed changes
     source_handle: str = "",
     target_handle: str = "",
     ref_style: str = "",
     pseudo: bool = False,
 ) -> bpy.types.NodeSocket:
+<<<<<<< Updated upstream
     """Attach REDengine serialization metadata to a socket."""
+=======
+    """Attach REDengine serialization metadata to a socket"""
+>>>>>>> Stashed changes
     if not field_name and json_path:
         field_name, parsed_index = split_field_path(json_path)
         if array_index < 0:
             array_index = parsed_index
     if edge_semantics not in {item[0] for item in EDGE_SEMANTICS_ITEMS}:
+<<<<<<< Updated upstream
         edge_semantics = 'unknown'
 
     _safe_setattr(socket, 'red_socket_role', role or '')
@@ -81,6 +158,22 @@ def bind_red_socket(
     _safe_setattr(socket, 'red_target_handle', str(target_handle or ''))
     _safe_setattr(socket, 'red_ref_style', str(ref_style or ''))
     _safe_setattr(socket, 'red_pseudo', bool(pseudo))
+=======
+        edge_semantics = "unknown"
+
+    _safe_setattr(socket, "red_socket_role", role or "")
+    _safe_setattr(socket, "red_owner_handle", str(owner_handle or ""))
+    _safe_setattr(socket, "red_field_name", str(field_name or ""))
+    _safe_setattr(socket, "red_json_path", str(json_path or ""))
+    _safe_setattr(socket, "red_link_type", str(link_type or ""))
+    _safe_setattr(socket, "red_array_index", int(array_index))
+    _safe_setattr(socket, "red_exportable", bool(exportable))
+    _safe_setattr(socket, "red_edge_semantics", edge_semantics)
+    _safe_setattr(socket, "red_source_handle", str(source_handle or ""))
+    _safe_setattr(socket, "red_target_handle", str(target_handle or ""))
+    _safe_setattr(socket, "red_ref_style", str(ref_style or ""))
+    _safe_setattr(socket, "red_pseudo", bool(pseudo))
+>>>>>>> Stashed changes
     return socket
 
 
@@ -91,7 +184,11 @@ def bind_input_socket(
     json_path: str,
     link_type: str,
     exportable: bool = True,
+<<<<<<< Updated upstream
     edge_semantics: str = 'dataflow',
+=======
+    edge_semantics: str = "dataflow",
+>>>>>>> Stashed changes
     source_handle: str = "",
     ref_style: str = "",
     pseudo: bool = False,
@@ -99,7 +196,11 @@ def bind_input_socket(
     field_name, array_index = split_field_path(json_path)
     return bind_red_socket(
         socket,
+<<<<<<< Updated upstream
         role='input',
+=======
+        role="input",
+>>>>>>> Stashed changes
         owner_handle=owner_handle,
         field_name=field_name,
         json_path=json_path,
@@ -114,6 +215,7 @@ def bind_input_socket(
     )
 
 
+<<<<<<< Updated upstream
 def bind_output_socket(
     socket: bpy.types.NodeSocket,
     *,
@@ -217,123 +319,297 @@ def _metadata_annotations():
         'red_pseudo': bpy.props.BoolProperty(
             name='Editor Socket',
             description='True for editor-derived sockets that have no direct REDengine field',
+=======
+def _metadata_annotations():
+    return {
+        "red_socket_role": bpy.props.EnumProperty(
+            name="Socket Role",
+            items=(
+                ("input", "Input", ""),
+                ("output", "Output", ""),
+                ("internal", "Internal", ""),
+            ),
+            default="input",
+        ),
+        "red_owner_handle": bpy.props.StringProperty(
+            name="Owner HandleId",
+            description="HandleId of the REDengine node that owns this socket",
+            default="",
+        ),
+        "red_field_name": bpy.props.StringProperty(
+            name="REDengine Field",
+            description="Declared REDengine field represented by this input socket",
+            default="",
+        ),
+        "red_json_path": bpy.props.StringProperty(
+            name="REDengine JSON Path",
+            description="Path from the owning node Data object to the link field",
+            default="",
+        ),
+        "red_link_type": bpy.props.StringProperty(
+            name="REDengine Link Type",
+            description="Serialized anim*Link wrapper type for this socket",
+            default="",
+        ),
+        "red_array_index": bpy.props.IntProperty(
+            name="Array Index",
+            description="Array index for sockets representing array link fields; -1 otherwise",
+            default=-1,
+        ),
+        "red_exportable": bpy.props.BoolProperty(
+            name="Exportable",
+            description="False for editor-only sockets that must not serialize as game dataflow links",
+            default=True,
+        ),
+        "red_edge_semantics": bpy.props.EnumProperty(
+            name="Edge Semantics",
+            items=EDGE_SEMANTICS_ITEMS,
+            default="dataflow",
+        ),
+        "red_source_handle": bpy.props.StringProperty(
+            name="Source HandleId",
+            description="Cached source HandleId for imported/reconstructed dataflow links",
+            default="",
+        ),
+        "red_target_handle": bpy.props.StringProperty(
+            name="Target HandleId",
+            description="Cached target HandleId for imported/reconstructed dataflow links",
+            default="",
+        ),
+        "red_ref_style": bpy.props.StringProperty(
+            name="Reference Style",
+            description="Original reference wrapper style, e.g. HandleRefId or HandleIdInline",
+            default="",
+        ),
+        "red_pseudo": bpy.props.BoolProperty(
+            name="Editor Socket",
+            description="True for editor-derived sockets that have no direct REDengine field",
+>>>>>>> Stashed changes
             default=False,
         ),
     }
 
 
 class REDengine_AnimGraphSocket_Pose(bpy.types.NodeSocket):
+<<<<<<< Updated upstream
     bl_idname = 'REDengine_AnimGraphSocket_Pose'
     bl_label = 'Pose Socket'
+=======
+    bl_idname = "REDengine_AnimGraphSocket_Pose"
+    bl_label = "Pose Socket"
+>>>>>>> Stashed changes
     color = (1.0, 1.0, 1.0, 1.0)
     __annotations__ = _metadata_annotations()
 
     def draw(self, context, layout, node, text):
+<<<<<<< Updated upstream
         _draw_socket_label(self, context, layout, node, text)
+=======
+        layout.label(text=text)
+>>>>>>> Stashed changes
 
     def draw_color(self, context, node):
         return self.color
 
 
 class REDengine_AnimGraphSocket_Float(bpy.types.NodeSocket):
+<<<<<<< Updated upstream
     bl_idname = 'REDengine_AnimGraphSocket_Float'
     bl_label = 'Float Socket'
+=======
+    bl_idname = "REDengine_AnimGraphSocket_Float"
+    bl_label = "Float Socket"
+>>>>>>> Stashed changes
     color = (0.25, 0.85, 0.25, 1.0)
     __annotations__ = _metadata_annotations()
 
     def draw(self, context, layout, node, text):
+<<<<<<< Updated upstream
         _draw_socket_label(self, context, layout, node, text)
+=======
+        layout.label(text=text)
+>>>>>>> Stashed changes
 
     def draw_color(self, context, node):
         return self.color
 
 
 class REDengine_AnimGraphSocket_Vector(bpy.types.NodeSocket):
+<<<<<<< Updated upstream
     bl_idname = 'REDengine_AnimGraphSocket_Vector'
     bl_label = 'Vector Socket'
+=======
+    bl_idname = "REDengine_AnimGraphSocket_Vector"
+    bl_label = "Vector Socket"
+>>>>>>> Stashed changes
     color = (0.2, 0.45, 1.0, 1.0)
     __annotations__ = _metadata_annotations()
 
     def draw(self, context, layout, node, text):
+<<<<<<< Updated upstream
         _draw_socket_label(self, context, layout, node, text)
+=======
+        layout.label(text=text)
+>>>>>>> Stashed changes
 
     def draw_color(self, context, node):
         return self.color
 
 
 class REDengine_AnimGraphSocket_Int(bpy.types.NodeSocket):
+<<<<<<< Updated upstream
     bl_idname = 'REDengine_AnimGraphSocket_Int'
     bl_label = 'Int Socket'
+=======
+    bl_idname = "REDengine_AnimGraphSocket_Int"
+    bl_label = "Int Socket"
+>>>>>>> Stashed changes
     color = (0.1, 0.9, 0.9, 1.0)
     __annotations__ = _metadata_annotations()
 
     def draw(self, context, layout, node, text):
+<<<<<<< Updated upstream
         _draw_socket_label(self, context, layout, node, text)
+=======
+        layout.label(text=text)
+>>>>>>> Stashed changes
 
     def draw_color(self, context, node):
         return self.color
 
 
 class REDengine_AnimGraphSocket_Bool(bpy.types.NodeSocket):
+<<<<<<< Updated upstream
     bl_idname = 'REDengine_AnimGraphSocket_Bool'
     bl_label = 'Bool Socket'
+=======
+    bl_idname = "REDengine_AnimGraphSocket_Bool"
+    bl_label = "Bool Socket"
+>>>>>>> Stashed changes
     color = (0.55, 0.0, 0.0, 1.0)
     __annotations__ = _metadata_annotations()
 
     def draw(self, context, layout, node, text):
+<<<<<<< Updated upstream
         _draw_socket_label(self, context, layout, node, text)
+=======
+        layout.label(text=text)
+>>>>>>> Stashed changes
 
     def draw_color(self, context, node):
         return self.color
 
 
 class REDengine_AnimGraphSocket_Quaternion(bpy.types.NodeSocket):
+<<<<<<< Updated upstream
     bl_idname = 'REDengine_AnimGraphSocket_Quaternion'
     bl_label = 'Quaternion Socket'
+=======
+    bl_idname = "REDengine_AnimGraphSocket_Quaternion"
+    bl_label = "Quaternion Socket"
+>>>>>>> Stashed changes
     color = (0.75, 0.65, 0.0, 1.0)
     __annotations__ = _metadata_annotations()
 
     def draw(self, context, layout, node, text):
+<<<<<<< Updated upstream
         _draw_socket_label(self, context, layout, node, text)
+=======
+        layout.label(text=text)
+>>>>>>> Stashed changes
 
     def draw_color(self, context, node):
         return self.color
 
 
 class REDengine_AnimGraphSocket_Transform(bpy.types.NodeSocket):
+<<<<<<< Updated upstream
     bl_idname = 'REDengine_AnimGraphSocket_Transform'
     bl_label = 'Transform Socket'
+=======
+    bl_idname = "REDengine_AnimGraphSocket_Transform"
+    bl_label = "Transform Socket"
+>>>>>>> Stashed changes
     color = (0.9, 0.1, 0.9, 1.0)
     __annotations__ = _metadata_annotations()
 
     def draw(self, context, layout, node, text):
+<<<<<<< Updated upstream
         _draw_socket_label(self, context, layout, node, text)
+=======
+        layout.label(text=text)
+>>>>>>> Stashed changes
 
     def draw_color(self, context, node):
         return self.color
 
 
 class REDengine_AnimGraphSocket_Editor(bpy.types.NodeSocket):
+<<<<<<< Updated upstream
     bl_idname = 'REDengine_AnimGraphSocket_Editor'
     bl_label = 'Editor Socket'
+=======
+    bl_idname = "REDengine_AnimGraphSocket_Editor"
+    bl_label = "Editor Socket"
+>>>>>>> Stashed changes
     color = (0.55, 0.55, 0.55, 1.0)
     __annotations__ = _metadata_annotations()
 
     def draw(self, context, layout, node, text):
+<<<<<<< Updated upstream
         _draw_socket_label(self, context, layout, node, text)
+=======
+        layout.label(text=text)
+>>>>>>> Stashed changes
 
     def draw_color(self, context, node):
         return self.color
 
 
 class REDengine_AnimGraphSocket_Transition(bpy.types.NodeSocket):
+<<<<<<< Updated upstream
     bl_idname = 'REDengine_AnimGraphSocket_Transition'
     bl_label = 'Transition Socket'
+=======
+    bl_idname = "REDengine_AnimGraphSocket_Transition"
+    bl_label = "Transition Socket"
+>>>>>>> Stashed changes
     color = (0.9, 0.5, 0.1, 1.0)
     __annotations__ = _metadata_annotations()
 
     def draw(self, context, layout, node, text):
+<<<<<<< Updated upstream
         _draw_socket_label(self, context, layout, node, text)
+=======
+        layout.label(text=text)
+
+    def draw_color(self, context, node):
+        return self.color
+
+
+def _transition_out_annotations():
+    annotations = _metadata_annotations()
+    annotations["red_row_index"] = bpy.props.IntProperty(
+        name="Row Index",
+        description="Index of the transition record this row shows; -1 for the new-transition row",
+        default=-1,
+    )
+    return annotations
+
+
+class REDengine_AnimGraphSocket_TransitionOut(bpy.types.NodeSocket):
+    """One transition row of a state-machine node (see sm_sockets)"""
+
+    bl_idname = "REDengine_AnimGraphSocket_TransitionOut"
+    bl_label = "Transition Row"
+    color = (0.9, 0.5, 0.1, 1.0)
+    __annotations__ = _transition_out_annotations()
+
+    def draw(self, context, layout, node, text):
+        from .sm_sockets import draw_row
+
+        draw_row(self, context, layout, node, text)
+>>>>>>> Stashed changes
 
     def draw_color(self, context, node):
         return self.color

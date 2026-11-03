@@ -3,11 +3,21 @@ from dataclasses import dataclass
 
 from .catalog import ResourceKind, resource_spec_for_path
 from .diagnostics import IssueSeverity, ResourceIssue
+<<<<<<< Updated upstream
+=======
+from .paths import LocalPath, is_local_absolute
+>>>>>>> Stashed changes
 
 
 def _cache_key(value):
     if isinstance(value, dict):
+<<<<<<< Updated upstream
         return tuple(sorted((str(key), _cache_key(item)) for key, item in value.items()))
+=======
+        return tuple(
+            sorted((str(key), _cache_key(item)) for key, item in value.items())
+        )
+>>>>>>> Stashed changes
     if isinstance(value, (list, tuple)):
         return tuple(_cache_key(item) for item in value)
     if isinstance(value, set):
@@ -32,7 +42,15 @@ class ResourceLoadError(RuntimeError):
         self.source = str(source or "")
         self.resource_kind = ResourceKind(resource_kind)
         self.issues = tuple(issues)
+<<<<<<< Updated upstream
         message = self.issues[-1].message if self.issues else f"Failed to load {self.resource_kind.value}: {self.source}"
+=======
+        message = (
+            self.issues[-1].message
+            if self.issues
+            else f"Failed to load {self.resource_kind.value}: {self.source}"
+        )
+>>>>>>> Stashed changes
         super().__init__(message)
 
 
@@ -55,9 +73,18 @@ class ResourceRepository:
         self.parser_revision = int(parser_revision)
         self.asset_index = asset_index
         self.export_suffix = str(export_suffix or "")
+<<<<<<< Updated upstream
         self.accepted_kinds = frozenset((self.resource_kind, *(ResourceKind(kind) for kind in accepted_kinds)))
         self.parser_receives_document = bool(parser_receives_document)
         self._cache = {}
+=======
+        self.accepted_kinds = frozenset(
+            (self.resource_kind, *(ResourceKind(kind) for kind in accepted_kinds))
+        )
+        self.parser_receives_document = bool(parser_receives_document)
+        self._cache = {}
+        self._resolve_cache = {}
+>>>>>>> Stashed changes
         self._issues = []
         self._hits = 0
         self._misses = 0
@@ -72,6 +99,10 @@ class ResourceRepository:
 
     def clear(self):
         self._cache.clear()
+<<<<<<< Updated upstream
+=======
+        self._resolve_cache.clear()
+>>>>>>> Stashed changes
         self._issues.clear()
         self._hits = 0
         self._misses = 0
@@ -80,6 +111,7 @@ class ResourceRepository:
         value = os.fspath(reference) if reference else ""
         if not value:
             return ""
+<<<<<<< Updated upstream
         if os.path.isfile(value):
             return os.path.abspath(value)
         if self.asset_index is None or not self.export_suffix:
@@ -87,6 +119,26 @@ class ResourceRepository:
         return self.asset_index.resolve_expected(value, self.export_suffix) or ""
 
     def load(self, reference, *, required=False, parser_options=None, parser_kwargs=None):
+=======
+        cache_key = value.replace("\\", "/").casefold()
+        cached = self._resolve_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        if is_local_absolute(value):
+            resolved = LocalPath.from_value(value).value
+        elif self.asset_index is not None and self.export_suffix:
+            resolved = (
+                self.asset_index.resolve_expected(value, self.export_suffix) or ""
+            )
+        else:
+            resolved = ""
+        self._resolve_cache[cache_key] = resolved
+        return resolved
+
+    def load(
+        self, reference, *, required=False, parser_options=None, parser_kwargs=None
+    ):
+>>>>>>> Stashed changes
         source = self.resolve(reference)
         if not source:
             issue = ResourceIssue(
@@ -102,7 +154,15 @@ class ResourceRepository:
             return None
 
         spec = resource_spec_for_path(source)
+<<<<<<< Updated upstream
         actual_kind = spec.kind if spec is not None and spec.kind in self.accepted_kinds else self.resource_kind
+=======
+        actual_kind = (
+            spec.kind
+            if spec is not None and spec.kind in self.accepted_kinds
+            else self.resource_kind
+        )
+>>>>>>> Stashed changes
         issue_start = len(self.documents.issues)
         document = self.documents.load(
             source,
@@ -137,7 +197,14 @@ class ResourceRepository:
 
         kwargs = dict(parser_kwargs or {})
         try:
+<<<<<<< Updated upstream
             parsed = self.parser(document if self.parser_receives_document else document.payload, **kwargs)
+=======
+            parsed = self.parser(
+                document if self.parser_receives_document else document.payload,
+                **kwargs,
+            )
+>>>>>>> Stashed changes
         except Exception as error:
             issue = ResourceIssue(
                 IssueSeverity.ERROR,

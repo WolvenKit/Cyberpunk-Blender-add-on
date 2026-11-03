@@ -5,10 +5,17 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..common.entity_data import (
+<<<<<<< Updated upstream
     build_chunk_handle_lookup as _build_chunk_lookup,
     component_name,
 )
 from ..common.paths import depot_path_value
+=======
+    build_chunk_handle_lookup,
+    component_name,
+)
+from ..common.paths import depot_path
+>>>>>>> Stashed changes
 from .policy import NON_VISUAL_MESH_COMPONENT_TYPES
 
 
@@ -20,6 +27,10 @@ class ComponentPassIndex:
     slot_components: tuple[dict, ...]
     mesh_components: tuple[dict, ...]
     transform_animator_components: tuple[dict, ...]
+<<<<<<< Updated upstream
+=======
+    widget_components: tuple[dict, ...]
+>>>>>>> Stashed changes
 
 
 def merge_component_groups(*component_groups):
@@ -38,6 +49,7 @@ def merge_component_groups(*component_groups):
 
 
 class EntityExecutionCache:
+<<<<<<< Updated upstream
     """Cache repeated component scans and derived placement decisions."""
 
     __slots__ = (
@@ -49,6 +61,22 @@ class EntityExecutionCache:
         "_component_collections",
         "_hits",
         "_misses",
+=======
+    """Cache repeated component scans and derived placement decisions"""
+
+    __slots__ = (
+        "_chunk_lookups",
+        "_component_collections",
+        "_component_indexes",
+        "_hits",
+        "_local_matrices",
+        "_mesh_exclusions",
+        "_misses",
+        "_skin_attachments",
+        "_skinning_decisions",
+        "_slot_lookups",
+        "_visual_scales",
+>>>>>>> Stashed changes
     )
 
     def __init__(self) -> None:
@@ -57,7 +85,17 @@ class EntityExecutionCache:
         self._slot_lookups: dict[tuple[int, int], tuple[Any, Any]] = {}
         self._skin_attachments: dict[tuple[int, int], tuple[Any, Any, Any]] = {}
         self._skinning_decisions: dict[tuple[int, int], tuple[Any, Any, bool]] = {}
+<<<<<<< Updated upstream
         self._component_collections: dict[tuple[str, tuple[tuple[int, int], ...]], tuple[tuple[Any, ...], Any]] = {}
+=======
+        self._component_collections: dict[
+            tuple[str, tuple[tuple[int, int], ...]],
+            tuple[tuple[Any, ...], Any],
+        ] = {}
+        self._local_matrices: dict[int, tuple[Any, Any]] = {}
+        self._visual_scales: dict[int, tuple[Any, Any]] = {}
+        self._mesh_exclusions: dict[tuple[str, str, str, int], tuple[Any, bool]] = {}
+>>>>>>> Stashed changes
         self._hits = 0
         self._misses = 0
 
@@ -165,6 +203,57 @@ class EntityExecutionCache:
         self._misses += 1
         return value
 
+<<<<<<< Updated upstream
+=======
+    def component_local_matrix(
+        self,
+        component: dict,
+        evaluator: Callable[[dict], Any],
+    ) -> Any:
+        key = id(component)
+        cached = self._local_matrices.get(key)
+        if cached is not None and cached[0] is component:
+            self._hits += 1
+            return cached[1]
+        value = evaluator(component)
+        self._local_matrices[key] = (component, value)
+        self._misses += 1
+        return value
+
+    def component_visual_scale(
+        self,
+        component: dict,
+        evaluator: Callable[[dict], Any],
+    ) -> Any:
+        key = id(component)
+        cached = self._visual_scales.get(key)
+        if cached is not None and cached[0] is component:
+            self._hits += 1
+            return cached[1]
+        value = evaluator(component)
+        self._visual_scales[key] = (component, value)
+        self._misses += 1
+        return value
+
+    def mesh_excluded(
+        self,
+        depot_path: str,
+        mesh_path: str,
+        mesh_name: str,
+        excluded_meshes: Any,
+        evaluator: Callable[[str, str, str, Any], bool],
+    ) -> bool:
+        key = (depot_path, mesh_path, mesh_name, id(excluded_meshes))
+        cached = self._mesh_exclusions.get(key)
+        if cached is not None and cached[0] is excluded_meshes:
+            self._hits += 1
+            return cached[1]
+        value = bool(evaluator(depot_path, mesh_path, mesh_name, excluded_meshes))
+        self._mesh_exclusions[key] = (excluded_meshes, value)
+        self._misses += 1
+        return value
+
+>>>>>>> Stashed changes
     def collect_components(
         self,
         kind: str,
@@ -196,6 +285,12 @@ class EntityExecutionCache:
             "skin_attachments": len(self._skin_attachments),
             "skinning_decisions": len(self._skinning_decisions),
             "component_collections": len(self._component_collections),
+<<<<<<< Updated upstream
+=======
+            "local_matrices": len(self._local_matrices),
+            "visual_scales": len(self._visual_scales),
+            "mesh_exclusions": len(self._mesh_exclusions),
+>>>>>>> Stashed changes
         }
 
     def clear(self) -> None:
@@ -205,14 +300,25 @@ class EntityExecutionCache:
         self._skin_attachments.clear()
         self._skinning_decisions.clear()
         self._component_collections.clear()
+<<<<<<< Updated upstream
+=======
+        self._local_matrices.clear()
+        self._visual_scales.clear()
+        self._mesh_exclusions.clear()
+>>>>>>> Stashed changes
         self._hits = 0
         self._misses = 0
 
 
 def build_chunk_lookup(chunks, target_key, handle_key="HandleId", cache=None):
     if cache is None:
+<<<<<<< Updated upstream
         return _build_chunk_lookup(chunks, target_key, handle_key)
     return cache.chunk_lookup(chunks, target_key, handle_key, _build_chunk_lookup)
+=======
+        return build_chunk_handle_lookup(chunks, target_key, handle_key)
+    return cache.chunk_lookup(chunks, target_key, handle_key, build_chunk_handle_lookup)
+>>>>>>> Stashed changes
 
 
 def _build_component_pass_index(components):
@@ -222,6 +328,10 @@ def _build_component_pass_index(components):
     slot_components = []
     mesh_components = []
     transform_animator_components = []
+<<<<<<< Updated upstream
+=======
+    widget_components = []
+>>>>>>> Stashed changes
     for component in components or ():
         if type(component) is not dict:
             continue
@@ -230,17 +340,33 @@ def _build_component_pass_index(components):
         if name:
             by_name.setdefault(name, component)
         component_type = component.get("$type")
+<<<<<<< Updated upstream
         if depot_path_value(component, "rig"):
+=======
+        if component_type == "entAnimatedComponent" and depot_path(
+            component, "rig", normalize=False
+        ):
+>>>>>>> Stashed changes
             rig_components.append(component)
         if isinstance(component.get("slots"), list):
             slot_components.append(component)
         if (
+<<<<<<< Updated upstream
             ("mesh" in component or "graphicsMesh" in component)
             and component_type not in NON_VISUAL_MESH_COMPONENT_TYPES
         ):
             mesh_components.append(component)
         if component_type == "gameTransformAnimatorComponent":
             transform_animator_components.append(component)
+=======
+            "mesh" in component or "graphicsMesh" in component
+        ) and component_type not in NON_VISUAL_MESH_COMPONENT_TYPES:
+            mesh_components.append(component)
+        if component_type == "gameTransformAnimatorComponent":
+            transform_animator_components.append(component)
+        if component_type == "WorldWidgetComponent":
+            widget_components.append(component)
+>>>>>>> Stashed changes
     return ComponentPassIndex(
         components=tuple(indexed_components),
         by_name=by_name,
@@ -248,6 +374,10 @@ def _build_component_pass_index(components):
         slot_components=tuple(slot_components),
         mesh_components=tuple(mesh_components),
         transform_animator_components=tuple(transform_animator_components),
+<<<<<<< Updated upstream
+=======
+        widget_components=tuple(widget_components),
+>>>>>>> Stashed changes
     )
 
 
@@ -267,7 +397,11 @@ def build_component_pass_index(
 
 
 class ComponentHandleLookup:
+<<<<<<< Updated upstream
     __slots__ = ("default_lookup", "by_component_id")
+=======
+    __slots__ = ("by_component_id", "default_lookup")
+>>>>>>> Stashed changes
 
     def __init__(self, default_lookup=None):
         self.default_lookup = default_lookup or {}

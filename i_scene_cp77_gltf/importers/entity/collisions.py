@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+<<<<<<< Updated upstream
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -10,11 +11,59 @@ from .context import CollisionExecutionContext, EntityHandlerOperations
 from .handlers.collisions import EntityColliderHandler
 from .transforms import EntityTransformResolver, build_slot_owner_binding_maps, transform_matrix
 from ..collision import import_phys_into_collection
+=======
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
+
+from ...assetio.values import collect_handle_data
+from ...blender.physics.entity_colliders import (
+    COLLIDER_COMPONENT_TYPES,
+    EntityColliderImporter,
+    PhysXEntityContext,
+)
+from ...blender.physics.resources import import_phys_resource
+from ...core.log import debug_exception, get_logger
+from ..common.entity_data import component_name
+from ..common.paths import depot_path
+from .context import EntityHandlerOperations
+from .transforms import EntityTransformResolver, build_slot_owner_binding_maps
+
+_LOG = get_logger(__name__)
+
+
+def collect_collider_components(*component_groups):
+    """Collider components by name, keeping the first group's copy of each"""
+    collected = {}
+    for components in component_groups:
+        for component in components or ():
+            if (
+                not isinstance(component, dict)
+                or component.get("$type") not in COLLIDER_COMPONENT_TYPES
+            ):
+                continue
+            key = component_name(component) or str(component.get("id") or id(component))
+            collected.setdefault(key, component)
+    return tuple(collected.values())
+
+
+@dataclass(frozen=True, slots=True)
+class AppearanceColliders:
+    """An appearance's own collider components, its transform resolver and the data its handles live in"""
+
+    components: tuple
+    transform_resolver: Any
+    handle_sources: tuple
+>>>>>>> Stashed changes
 
 
 @dataclass(frozen=True, slots=True)
 class EntityCollisionRuntime:
+<<<<<<< Updated upstream
     """Inputs required to resolve and import entity collision data."""
+=======
+    """Inputs required to resolve and import entity collision data"""
+>>>>>>> Stashed changes
 
     parsed_entity: Any
     resources: Any
@@ -29,6 +78,7 @@ class EntityCollisionRuntime:
     target_collection: Any
     blender_context: Any
     operations: EntityHandlerOperations
+<<<<<<< Updated upstream
     handler_registry: Any
 
 
@@ -40,6 +90,26 @@ class EntityCollisionService:
         self.collider_handler = EntityColliderHandler()
 
     def execute(self, include_collisions, include_phys, include_entity_colliders):
+=======
+    embedded_physics: tuple = ()
+    appearance_colliders: AppearanceColliders | None = None
+
+
+class EntityCollisionService:
+    """Import the entity's chassis .phys, mesh colliders and component colliders"""
+
+    def __init__(self, runtime: EntityCollisionRuntime) -> None:
+        self.runtime = runtime
+        self.collider_handler = EntityColliderImporter()
+
+    def execute(
+        self,
+        include_collisions,
+        include_phys,
+        include_entity_colliders,
+        include_mesh_colliders,
+    ):
+>>>>>>> Stashed changes
         if not include_collisions:
             return 0, 0
 
@@ -48,6 +118,11 @@ class EntityCollisionService:
         if include_entity_colliders and collider_components:
             transform_resolver = self._build_transform_resolver()
 
+<<<<<<< Updated upstream
+=======
+        if include_mesh_colliders:
+            self._import_embedded_mesh_physics()
+>>>>>>> Stashed changes
         if include_phys:
             self._import_chassis_phys()
 
@@ -56,20 +131,50 @@ class EntityCollisionService:
 
         handle_lookup = {}
         parsed = self.runtime.parsed_entity
+<<<<<<< Updated upstream
         collect_handle_data((parsed.component_dicts, parsed.component_data), handle_lookup)
         context = CollisionExecutionContext(
+=======
+        collect_handle_data(
+            (parsed.component_dicts, parsed.component_data), handle_lookup
+        )
+        actor_count, shape_count = self.collider_handler.execute_many(
+            collider_components,
+            self._collider_context(transform_resolver, handle_lookup),
+        )
+        appearance = self.runtime.appearance_colliders
+        if appearance is not None:
+            # The appearance file numbers its handles apart from the entity's.
+            appearance_handle_lookup = {}
+            collect_handle_data(appearance.handle_sources, appearance_handle_lookup)
+            appearance_actors, appearance_shapes = self.collider_handler.execute_many(
+                appearance.components,
+                self._collider_context(
+                    appearance.transform_resolver, appearance_handle_lookup
+                ),
+            )
+            actor_count += appearance_actors
+            shape_count += appearance_shapes
+        return actor_count, shape_count
+
+    def _collider_context(self, transform_resolver, handle_lookup):
+        return PhysXEntityContext(
+>>>>>>> Stashed changes
             transform_resolver=transform_resolver,
             target_collection=self.runtime.target_collection,
             blender_context=self.runtime.blender_context,
             handle_lookup=handle_lookup,
             operations=self.runtime.operations,
         )
+<<<<<<< Updated upstream
         handler = self.collider_handler
         if collider_components and self.runtime.handler_registry is not None:
             registered = self.runtime.handler_registry.handler_for(collider_components[0])
             if registered is not None:
                 handler = registered
         return handler.execute_many(collider_components, context)
+=======
+>>>>>>> Stashed changes
 
     def _collider_components(self):
         parsed = self.runtime.parsed_entity
@@ -78,6 +183,7 @@ class EntityCollisionService:
     def _build_transform_resolver(self):
         runtime = self.runtime
         parsed = runtime.parsed_entity
+<<<<<<< Updated upstream
         collision_components = list(parsed.component_dicts)
         collision_components.extend(parsed.component_data)
         collision_components_by_name = dict(parsed.components_by_name)
@@ -98,6 +204,20 @@ class EntityCollisionService:
             collision_parent_lookup,
             runtime.rig_json_by_component_name,
             set(runtime.rig_json_by_component_name),
+=======
+        collision_components = parsed.all_components
+        collision_components_by_name = parsed.all_components_by_name
+
+        collision_parent_lookup = runtime.lookup_factory(parsed.parent_transform_lookup)
+        collision_skinning_lookup = runtime.lookup_factory(parsed.skinning_lookup)
+        collision_slot_owner_jsons, collision_slot_owner_names = (
+            build_slot_owner_binding_maps(
+                parsed.slot_components,
+                collision_parent_lookup,
+                runtime.rig_json_by_component_name,
+                set(runtime.rig_json_by_component_name),
+            )
+>>>>>>> Stashed changes
         )
         return EntityTransformResolver(
             collision_components,
@@ -120,6 +240,7 @@ class EntityCollisionService:
         runtime = self.runtime
         parsed = runtime.parsed_entity
         try:
+<<<<<<< Updated upstream
             chassis_info = parsed.components_by_name.get('Chassis')
             if not isinstance(chassis_info, dict):
                 print('No valid Chassis component in entity; skipping chassis collision import')
@@ -131,10 +252,40 @@ class EntityCollisionService:
             )
             if not collision_resource:
                 print('No chassis collision resource in entity')
+=======
+            chassis_info = parsed.components_by_name.get("Chassis")
+            if (
+                not isinstance(chassis_info, dict)
+                or chassis_info.get("$type") != "vehicleChassisComponent"
+            ):
+                chassis_info = next(
+                    (
+                        component
+                        for component in parsed.all_components_by_name.values()
+                        if isinstance(component, dict)
+                        and component.get("$type") == "vehicleChassisComponent"
+                    ),
+                    None,
+                )
+            if not isinstance(chassis_info, dict):
+                _LOG.debug(
+                    "Entity has no vehicleChassisComponent; chassis collision import not applicable"
+                )
+                return
+
+            collision_resource = depot_path(
+                chassis_info,
+                "collisionResource",
+                normalize=False,
+            )
+            if not collision_resource:
+                _LOG.debug("No chassis collision resource in entity")
+>>>>>>> Stashed changes
                 return
 
             resource = runtime.resources.load_physics(collision_resource)
             if resource is None:
+<<<<<<< Updated upstream
                 print(f'Chassis collision resource not found: {collision_resource}')
                 return
 
@@ -147,3 +298,50 @@ class EntityCollisionService:
             )
         except Exception as exc:
             print(exc)
+=======
+                _LOG.warning(
+                    "Chassis collision resource not found: %s", collision_resource
+                )
+                return
+
+            before = {
+                item.obj_ref.as_pointer()
+                for item in runtime.blender_context.scene.physx.actors
+                if item.obj_ref is not None
+            }
+            component_matrix = (
+                self._build_transform_resolver().resolve_component_matrix(chassis_info)[
+                    0
+                ]
+            )
+            import_phys_resource(
+                resource,
+                rig=runtime.rig,
+                target_collection=runtime.target_collection,
+                actor_matrix=component_matrix,
+                context=runtime.blender_context,
+            )
+            created = (
+                item.obj_ref
+                for item in runtime.blender_context.scene.physx.actors
+                if item.obj_ref is not None and item.obj_ref.as_pointer() not in before
+            )
+            from ...blender.physics.vehicle_phys import adopt_vehicle_phys_objects
+
+            adopt_vehicle_phys_objects(runtime.rig, created)
+        except Exception:
+            debug_exception(_LOG, "Could not import the chassis physics")
+
+    def _import_embedded_mesh_physics(self):
+        runtime = self.runtime
+        for resource, actor_matrix in runtime.embedded_physics:
+            try:
+                import_phys_resource(
+                    resource,
+                    target_collection=runtime.target_collection,
+                    actor_matrix=actor_matrix,
+                    context=runtime.blender_context,
+                )
+            except Exception as exc:
+                _LOG.warning("Embedded mesh physics skipped: %s", exc, exc_info=True)
+>>>>>>> Stashed changes
