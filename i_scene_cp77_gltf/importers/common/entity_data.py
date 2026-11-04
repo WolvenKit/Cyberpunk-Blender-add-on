@@ -3,11 +3,15 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-from ...assetio.values import cname_value
+from ...assetio.values import cname_value, coerce_int
 
 
 def component_name(component: Any, default: str = "") -> str:
-    return cname_value(component.get("name"), default) if type(component) is dict else default
+    return (
+        cname_value(component.get("name"), default)
+        if type(component) is dict
+        else default
+    )
 
 
 def build_component_lookup(components: Iterable[dict] | None) -> dict[str, dict]:
@@ -35,20 +39,23 @@ def build_chunk_handle_lookup(
 
 
 def ent_appearance_name(ent_app: Any, default: str = "") -> str:
-    return cname_value(ent_app.get("appearanceName"), default) if type(ent_app) is dict else default
+    return (
+        cname_value(ent_app.get("appearanceName"), default)
+        if type(ent_app) is dict
+        else default
+    )
 
 
 def ent_template_appearance_name(ent_app: Any, default: str = "") -> str:
-    return cname_value(ent_app.get("name"), default) if type(ent_app) is dict else default
+    return (
+        cname_value(ent_app.get("name"), default) if type(ent_app) is dict else default
+    )
 
 
 def appearance_lookup_index(lookup: Mapping[str, Any] | None, key: str) -> int:
     if not key or not lookup:
         return -1
-    try:
-        return int(lookup.get(key, -1))
-    except (TypeError, ValueError):
-        return -1
+    return coerce_int(lookup.get(key, -1), -1, unwrap=False)
 
 
 def resolve_ent_appearance_alias(

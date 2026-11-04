@@ -13,15 +13,7 @@ class MaterialBundle:
 @dataclass(frozen=True, slots=True)
 class MaterialDocument:
     source_path: str
+    source_identity: tuple
     resource_kind: ResourceKind
     payload: dict
     root: dict
-
-
-@dataclass(frozen=True, slots=True)
-class ResolvedMaterialChain:
-    documents: tuple[MaterialDocument, ...]
-
-    @property
-    def leaf(self):
-        return self.documents[0] if self.documents else None

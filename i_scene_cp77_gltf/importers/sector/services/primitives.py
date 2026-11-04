@@ -1,8 +1,8 @@
 from __future__ import annotations
-from ....blender.transactions import track_created_datablock
 
 import bpy
 
+from ....blender.transactions import track_created_datablock
 
 _BOX_FACES = (
     (0, 3, 2, 1),
@@ -59,13 +59,5 @@ class PrimitiveMeshService:
             name,
             tuple(-value for value in extents),
             extents,
-            shared=shared,
-        )
-
-    def unit_box(self, name, half_extent=1.0, *, shared=True):
-        extent = float(half_extent)
-        return self.centered_box(
-            name,
-            (extent, extent, extent),
             shared=shared,
         )

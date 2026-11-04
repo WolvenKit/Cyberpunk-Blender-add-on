@@ -1,63 +1,28 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-import hashlib
 import math
+from dataclasses import dataclass
 
 from mathutils import Matrix, Quaternion, Vector
 
 from ....assetio.catalog import ResourceKind
+from ....assetio.paths import absolute_local_path_key
+from ....assetio.transform_values import quaternion_wxyz_from_wkit, vector3_from_data
+from ....assetio.values import coerce_float
 from ..context import FoliageResourceError
-from ...common.paths import absolute_path_key
-from ....assetio.values import axis_value, first_dict_value as _first_dict_value
 
 
-
-
+# A foliage population is a Position (Vector3), a Rotation (Vector4, W first) and a uniform Scale.
 def _position(data):
-    value = _first_dict_value(
-        data,
-        "Position",
-        "position",
-        "Translation",
-        "translation",
-    )
-    return (
-        float(axis_value(value, "X")),
-        float(axis_value(value, "Y")),
-        float(axis_value(value, "Z")),
-    )
+    return vector3_from_data(data.get("Position"))
 
 
 def _rotation(data):
-    value = _first_dict_value(
-        data,
-        "Orientation",
-        "orientation",
-        "Rotation",
-        "rotation",
-    )
-    return (
-        float(axis_value(value, "r", 1.0)),
-        float(axis_value(value, "i")),
-        float(axis_value(value, "j")),
-        float(axis_value(value, "k")),
-    )
+    return quaternion_wxyz_from_wkit(data.get("Rotation"))
 
 
 def _scale(data):
-    value = _first_dict_value(data, "Scale", "scale")
-    if value:
-        return (
-            float(axis_value(value, "X", 1.0)),
-            float(axis_value(value, "Y", 1.0)),
-            float(axis_value(value, "Z", 1.0)),
-        )
-    scalar = data.get("Scale", data.get("scale", 1.0))
-    try:
-        scalar = float(scalar)
-    except (TypeError, ValueError):
-        scalar = 1.0
+    scalar = coerce_float(data.get("Scale", 1.0), 1.0, unwrap=False)
     return (scalar, scalar, scalar)
 
 
@@ -96,16 +61,7 @@ class FoliagePopulationSelection:
     resource: FoliageResourceData
     depot_path: str
     active: tuple
-    inactive: tuple
-    bucket_begin: int
     bucket_count: int
-    instances_begin: int
-    instances_count: int
-    inactive_digest: str
-
-    @property
-    def resolved_count(self):
-        return len(self.active) + len(self.inactive)
 
     @property
     def active_count(self):
@@ -116,6 +72,7 @@ class FoliageResourceService:
     def __init__(self, session):
         self.session = session
         self.cache = session.caches.foliage_resources
+        self._population_cache = {}
 
     def resolve_path(self, depot_path):
         return self.session.resource_resolver.resolve_json(
@@ -209,7 +166,7 @@ class FoliageResourceService:
                 f"resource not indexed: {depot_path}"
             )
 
-        key = absolute_path_key(resolved_path)
+        key = absolute_local_path_key(resolved_path)
         resource = self.cache.get(key)
         if resource is None:
             payload = self.session.documents.payload(
@@ -235,15 +192,8 @@ class FoliageResourceService:
     def population_is_active(population):
         if not isinstance(population, dict):
             return False
-        scale = population.get("Scale", population.get("scale", 1.0))
-        if isinstance(scale, dict):
-            values = _scale(population)
-            return all(
-                math.isfinite(value) and value > 0.0
-                for value in values
-            )
         try:
-            value = float(scale)
+            value = float(population.get("Scale", 1.0))
         except (TypeError, ValueError):
             return False
         return math.isfinite(value) and value > 0.0
@@ -261,16 +211,27 @@ class FoliageResourceService:
             Vector(_scale(population)),
         )
 
-    @staticmethod
-    def population_scale(population):
-        scale = population.get("Scale", population.get("scale", 1.0))
-        if isinstance(scale, dict):
-            values = _scale(population)
-            return float(sum(values) / 3.0)
-        try:
-            return float(scale)
-        except (TypeError, ValueError):
-            return 1.0
+    def _population_record(self, population):
+        key = id(population)
+        cached = self._population_cache.get(key)
+        if cached is not None and cached[0] is population:
+            return cached
+        cached = [
+            population,
+            self.population_is_active(population),
+            None,
+        ]
+        self._population_cache[key] = cached
+        return cached
+
+    def population_active(self, population):
+        return self._population_record(population)[1]
+
+    def cached_population_matrix(self, population):
+        record = self._population_record(population)
+        if record[2] is None:
+            record[2] = self.population_matrix(population)
+        return record[2]
 
     @staticmethod
     def _indices(span, resource, *, sector_name, node_index, warning):
@@ -361,10 +322,7 @@ class FoliageResourceService:
                 population_end,
                 len(populations),
             )
-            if (
-                relative_end > instances_count
-                or population_end > len(populations)
-            ):
+            if relative_end > instances_count or population_end > len(populations):
                 warning(
                     f"{sector_name}: foliage node {node_index} bucket "
                     f"{bucket_index} population range "
@@ -398,9 +356,7 @@ class FoliageResourceService:
                     )
                     continue
                 seen_populations.add(population_index)
-                selected.append(
-                    (bucket_index, population_index, relative_index)
-                )
+                selected.append((bucket_index, population_index, relative_index))
 
         expected_relative = set(range(instances_count))
         missing_relative = expected_relative - seen_relative
@@ -450,32 +406,14 @@ class FoliageResourceService:
             warning=warning,
         )
 
-        active = []
-        inactive = []
-        for item in indices:
-            population = resource.populations[item[1]]
-            target = (
-                active
-                if self.population_is_active(population)
-                else inactive
-            )
-            target.append(item)
-
-        digest = (
-            hashlib.sha1(
-                ",".join(str(item[1]) for item in inactive).encode("utf-8")
-            ).hexdigest()
-            if inactive
-            else ""
+        active = tuple(
+            item
+            for item in indices
+            if self.population_active(resource.populations[item[1]])
         )
         return FoliagePopulationSelection(
             resource=resource,
             depot_path=depot_path,
-            active=tuple(active),
-            inactive=tuple(inactive),
-            bucket_begin=span_values[0],
+            active=active,
             bucket_count=span_values[1],
-            instances_begin=span_values[2],
-            instances_count=span_values[3],
-            inactive_digest=digest,
         )

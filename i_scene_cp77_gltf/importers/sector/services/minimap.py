@@ -1,23 +1,14 @@
 from __future__ import annotations
-from ....blender.transactions import track_created_datablock
 
 from dataclasses import dataclass
 
 import bpy
 
-from ....assetio.values import axis_value
-
-
-MINIMAP_PLACEMENT_CONTRACT = "EXACT_LOCAL_BOUNDS_RESOURCE_MARKER"
-
-
-
-@dataclass(slots=True, frozen=True)
-class MinimapResourceResult:
-    depot_path: str
-    resolved_path: str
-    expected_path: str
-    status: str
+from ....assetio.transform_values import vector3_from_data
+from ....assetio.values import cname_text
+from ....blender.naming import fit_id_name
+from ....blender.transactions import track_created_datablock
+from ...common.paths import depot_path
 
 
 @dataclass(slots=True, frozen=True)
@@ -27,29 +18,9 @@ class MinimapBounds:
     valid: bool
 
 
-@dataclass(slots=True, frozen=True)
-class MinimapPlacement:
-    object: object
-    resource: MinimapResourceResult
-    bounds: MinimapBounds
-
-
 class MinimapResourceService:
     def __init__(self, session):
         self.session = session
-
-    def resolve(self, depot_path):
-        resolved = self.session.resource_resolver.resolve_json(
-            "minimap",
-            depot_path,
-            ".cminimap.json",
-        )
-        return MinimapResourceResult(
-            depot_path=resolved.depot_path,
-            resolved_path=resolved.resolved_path,
-            expected_path=resolved.expected_path,
-            status=resolved.status,
-        )
 
     @staticmethod
     def bounds(bounds):
@@ -60,41 +31,22 @@ class MinimapResourceService:
                 valid=False,
             )
 
-        minimum_data = bounds.get("Min")
-        maximum_data = bounds.get("Max")
-        minimum = (
-            float(axis_value(minimum_data, "X")),
-            float(axis_value(minimum_data, "Y")),
-            float(axis_value(minimum_data, "Z")),
-        )
-        maximum = (
-            float(axis_value(maximum_data, "X")),
-            float(axis_value(maximum_data, "Y")),
-            float(axis_value(maximum_data, "Z")),
-        )
-        valid = not any(
-            maximum[index] < minimum[index]
-            for index in range(3)
-        )
+        minimum = vector3_from_data(bounds.get("Min"))
+        maximum = vector3_from_data(bounds.get("Max"))
+        valid = not any(maximum[index] < minimum[index] for index in range(3))
         return MinimapBounds(
             minimum=minimum,
             maximum=maximum,
             valid=valid,
         )
 
-
     def create(self, context, instance, instance_index):
         data = context.data
-        depot_path = context.operations.depot_path(
-            data,
-            "encodedShapesRef",
-        )
-        resource = self.resolve(depot_path)
         bounds = self.bounds(data.get("localBounds"))
 
-        name = context.operations.trim_name(
+        name = fit_id_name(
             "MinimapData_"
-            f"{context.operations.cname_value(data.get('debugName'), str(context.node_index))}_"
+            f"{cname_text(data.get('debugName'), str(context.node_index))}_"
             f"{instance_index}"
         )
         mesh = (
@@ -117,7 +69,7 @@ class MinimapResourceService:
         if mesh is None:
             obj.empty_display_type = "CUBE"
             obj.empty_display_size = 1.0
-        context.sector_collection.objects.link(obj)
+        context.collection_for_instance(instance).objects.link(obj)
         obj.matrix_world = context.operations.instance_matrix(
             instance,
             context.execution.scale_factor,
@@ -128,34 +80,11 @@ class MinimapResourceService:
 
         context.operations.assign_custom_properties(
             obj,
-            data,
+            context.node,
             context.sector_name,
-            context.node_index,
-            nodeDataIndex=instance["nodeDataIndex"],
-            instance_idx=instance_index,
-            encodedShapesRef=resource.depot_path,
-            resolvedEncodedShapes=resource.resolved_path,
-            expectedEncodedShapes=resource.expected_path,
-            minimapResourceStatus=resource.status,
-            allInteriorShapes=bool(
-                data.get("allInteriorShapes", 0)
-            ),
-            streamingDistance=float(
-                data.get("streamingDistance", 0.0) or 0.0
-            ),
-            minimapRepresentation=MINIMAP_PLACEMENT_CONTRACT,
-        )
-        obj["minimapLocalBounds"] = (
-            context.operations.safe_json(
-                data.get("localBounds", {})
-            )
-        )
-        obj["minimapNodeData"] = (
-            context.operations.safe_json(data)
-        )
-
-        return MinimapPlacement(
-            object=obj,
-            resource=resource,
-            bounds=bounds,
+            cp77_node_data_index=instance.index,
+            cp77_instance_idx=instance_index,
+            encodedShapesRef=depot_path(data, "encodedShapesRef"),
+            allInteriorShapes=bool(data.get("allInteriorShapes", 0)),
+            streamingDistance=float(data.get("streamingDistance", 0.0) or 0.0),
         )

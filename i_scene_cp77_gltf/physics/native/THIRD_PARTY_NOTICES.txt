@@ -1,0 +1,23 @@
+Third-party components of the native PhysX bridge
+
+The binaries in this folder include or link the following third-party software.
+Each license file is distributed with the binaries it covers.
+
+bin/PhysX3_x64.dll
+bin/PhysX3Common_x64.dll
+bin/PhysX3Cooking_x64.dll
+bin/PxFoundation_x64.dll
+bin/PxPvdSDK_x64.dll
+    NVIDIA PhysX SDK 3.4 and PxShared, BSD 3-Clause License.
+    License: bin/LICENSE-PhysX.txt
+    pxbridge.pyd also links the static PhysX3Extensions, PhysX3Vehicle and
+    PxTask libraries of the same SDK under the same license.
+
+bin/NvCloth_x64.dll
+    NVIDIA NvCloth 1.1.5, Nvidia Source Code License (1-Way Commercial).
+    License: bin/LICENSE-NvCloth.txt
+
+blender50/pxbridge.pyd
+blender51_plus/pxbridge.pyd
+    pybind11 3.0.2 (header-only, compiled into the module), BSD-style License.
+    License: LICENSE-pybind11.txt

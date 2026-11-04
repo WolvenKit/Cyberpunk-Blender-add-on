@@ -4,10 +4,11 @@ import heapq
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from ...animation.domain.rig.ordering import promote_rig_base
+from ...assetio.paths import depot_path_key
+from ...assetio.values import cname_value, resolve_component_handle_data
 from ..common.entity_data import component_name
-from ..common.handles import resolve_component_handle_data
-from ..common.paths import depot_path_value
-from ...assetio.values import cname_value
+from ..common.paths import depot_path
 
 
 def animated_component_control_target(
@@ -24,7 +25,7 @@ def is_animated_rig_component(component: Any) -> bool:
     return (
         type(component) is dict
         and component.get("$type") == "entAnimatedComponent"
-        and bool(depot_path_value(component, "rig"))
+        and bool(depot_path(component, "rig", normalize=False))
     )
 
 
@@ -32,7 +33,7 @@ def is_deformation_rig_component(component: Any) -> bool:
     if type(component) is not dict:
         return False
     name = component_name(component).lower()
-    rig_path = depot_path_value(component, "rig").replace("\\", "/").lower()
+    rig_path = depot_path_key(depot_path(component, "rig", normalize=False))
     return (
         "deformation" in name
         or "/deformations_rig/" in rig_path
@@ -117,12 +118,18 @@ def order_animated_rig_components(
     messages: list[str] = []
     if len(result) != count:
         remaining = [
-            component for index, component in enumerate(components) if not emitted[index]
+            component
+            for index, component in enumerate(components)
+            if not emitted[index]
         ]
-        names = ", ".join(component_name(component, "<unnamed>") for component in remaining)
+        names = ", ".join(
+            component_name(component, "<unnamed>") for component in remaining
+        )
         messages.append(
-            "animation control binding cycle detected; preserving source order for: " + names
+            "animation control binding cycle detected; preserving source order for: "
+            + names
         )
         result.extend(remaining)
 
-    return _promote_deformation_control_targets(result, targets), tuple(messages)
+    result = _promote_deformation_control_targets(result, targets)
+    return promote_rig_base(result, component_name), tuple(messages)

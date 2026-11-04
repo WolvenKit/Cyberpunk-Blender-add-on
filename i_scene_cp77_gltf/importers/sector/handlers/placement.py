@@ -1,62 +1,57 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
+import time
 
+import bpy
+
+from ....assetio.values import cname_text, nested_value
+from ....bartmoss.matrix import flatten_matrix
+from ....blender.naming import fit_id_name
+from ....blender.physics.actors import register_actors
+from ....blender.physics.world import import_world_collision_node
+from ....core.log import get_logger
 from ..context import (
     DeformationDataError,
     FoliageResourceError,
     SectorContentError,
 )
-from ..options import OPTIONAL_SECTOR_NODE_TYPES
+from ..model import PROXY_PHASE, STANDARD_PHASE
+from ..objects import (
+    animate_rotation_root,
+    assign_id_properties,
+    collection_instance_object,
+    new_collection,
+)
+from ..options import ENTITY_NODE_TYPES, PROXY_NODE_TYPES
 from ..registry import NODE_HANDLERS
 
+_LOG = get_logger(__name__)
 
-STANDARD_PHASE = 20
-PROXY_PHASE = 30
-OCCLUDER_TRANSFORM_CONTRACT = "EMBEDDED_OCCLUDER_MATRIX_ABSOLUTE"
-
-ENTITY_NODE_TYPES = frozenset({
-    "worldEntityNode",
-    "worldDeviceNode",
-})
-
-STANDARD_COPIED_MESH_NODE_TYPES = frozenset({
-    "worldStaticMeshNode",
-    "worldRotatingMeshNode",
-    "worldPhysicalDestructionNode",
-    "worldBakedDestructionNode",
-    "worldAdvertisingNode",
-    "worldAdvertisementNode",
-    "worldStaticOccluderMeshNode",
-    "worldTerrainMeshNode",
-    "worldClothMeshNode",
-    "worldDecorationMeshNode",
-    "worldDynamicMeshNode",
-    "worldMeshNode",
-    "worldWaterPatchNode",
-})
-
-PROXY_COPIED_MESH_NODE_TYPES = frozenset(
-    OPTIONAL_SECTOR_NODE_TYPES["proxies"]
+STANDARD_COPIED_MESH_NODE_TYPES = frozenset(
+    {
+        "worldStaticMeshNode",
+        "worldRotatingMeshNode",
+        "worldPhysicalDestructionNode",
+        "worldBakedDestructionNode",
+        "worldAdvertisingNode",
+        "worldAdvertisementNode",
+        "worldStaticOccluderMeshNode",
+        "worldTerrainMeshNode",
+        "worldClothMeshNode",
+        "worldDecorationMeshNode",
+        "worldDynamicMeshNode",
+        "worldMeshNode",
+        "worldWaterPatchNode",
+    }
 )
-
-
-def _assign_placement_metadata(context, obj, contract, handler_name):
-    context.operations.assign_id_properties(
-        obj,
-        placementContract=contract,
-        placementHandler=handler_name,
-        placementPhase=context.plan.placement_phase,
-    )
 
 
 class EntityPlacementHandler:
     placement_phase = STANDARD_PHASE
 
     def place(self, context):
-        data = context.data
         requested = context.node.entity_appearance or "default"
         ent_depot = context.node.entity_template_path
         entity_master = context.session.master_assets.entities.require(
@@ -67,20 +62,19 @@ class EntityPlacementHandler:
 
         resolved = entity_master.resolved_appearance
         if resolved != requested:
-            print(
-                f"Entity appearance resolved: {requested} -> {resolved}"
-            )
+            _LOG.debug("Entity appearance resolved: %s -> %s", requested, resolved)
 
         placed = 0
+        colliders = context.session.options.chosen("entity_colliders")
         for instance_index, instance in enumerate(context.instances):
             node_matrix = context.operations.instance_matrix(
                 instance,
                 context.execution.scale_factor,
             )
             instance_name = (
-                f'ENT_{instance["nodeDataIndex"]}_'
-                f'{os.path.basename(ent_depot).split(".")[0]}_'
-                f'{entity_master.identity}'
+                f"ENT_{instance.index}_"
+                f"{os.path.basename(ent_depot).split('.')[0]}_"
+                f"{entity_master.identity}"
             )
             new, placement_root, _ = (
                 context.operations.copy_collection_tree_with_placement_root(
@@ -92,34 +86,31 @@ class EntityPlacementHandler:
                 )
             )
             shared_properties = {
-                "nodeDataIndex": instance["nodeDataIndex"],
-                "instance_idx": instance_index,
+                "cp77_node_data_index": instance.index,
+                "cp77_instance_idx": instance_index,
                 "entityTemplate": ent_depot,
                 "requestedAppearance": requested,
                 "resolvedAppearance": resolved,
-                "placementHandler": type(self).__name__,
-                "placementPhase": context.plan.placement_phase,
             }
             context.operations.assign_custom_properties(
                 new,
-                data,
+                context.node,
                 context.sector_name,
-                context.node_index,
                 HandleId=context.node.handle_id,
-                pivot=instance.get("Pivot", {}),
                 **shared_properties,
             )
             context.operations.assign_custom_properties(
                 placement_root,
-                data,
+                context.node,
                 context.sector_name,
-                context.node_index,
                 **shared_properties,
             )
-            matrix_values = context.operations.matrix_values(node_matrix)
-            new["matrix"] = matrix_values
-            placement_root["matrix"] = matrix_values
-            context.sector_collection.children.link(new)
+            new["cp77_matrix"] = flatten_matrix(node_matrix).tolist()
+            target_collection = context.collection_for_instance(instance)
+            if target_collection.children.get(new.name) is not new:
+                target_collection.children.link(new)
+            if colliders:
+                register_actors(tuple(new.all_objects), bpy.context)
             placed += 1
 
         context.record_placements(placed)
@@ -134,74 +125,35 @@ class CopiedMeshPlacementHandler:
     def _proxy_properties(context, *, road):
         data = context.data
         properties = {
-            "proxySemantic": True,
-            "proxyOwnerResolved": False,
-            "nearAutoHideDistance": float(
-                data.get("nearAutoHideDistance", 0.0) or 0.0
-            ),
+            "nearAutoHideDistance": float(data.get("nearAutoHideDistance", 0.0) or 0.0),
             "forceAutoHideDistance": float(
                 data.get("forceAutoHideDistance", 0.0) or 0.0
             ),
             "lodLevelScales": int(data.get("lodLevelScales", 0) or 0),
             "occluderType": str(data.get("occluderType", "")),
-            "renderSceneLayerMask": str(
-                data.get("renderSceneLayerMask", "")
-            ),
-            "nbNodesUnderProxy": int(
-                data.get("nbNodesUnderProxy", 0) or 0
-            ),
-            "proxyData": context.operations.safe_json(data),
+            "renderSceneLayerMask": str(data.get("renderSceneLayerMask", "")),
+            "nbNodesUnderProxy": int(data.get("nbNodesUnderProxy", 0) or 0),
         }
         if not road:
-            owner_global_id = (
-                context.operations.nested_value(
-                    data,
-                    "ownerGlobalId",
-                    "hash",
-                    default="",
-                )
-                or data.get("ownerHash", "")
+            properties["entityAttachDistance"] = float(
+                data.get("entityAttachDistance", 0.0) or 0.0
             )
-            properties.update({
-                "proxyOwnerGlobalId": str(owner_global_id),
-                "entityAttachDistance": float(
-                    data.get("entityAttachDistance", 0.0) or 0.0
-                ),
-            })
         return properties
-
-    @staticmethod
-    def _contract(node_type):
-        return {
-            "worldRoadProxyMeshNode": "ROAD_PROXY_MESH_NODE_WORLD",
-            "worldStaticMeshNode": "STATIC_MESH_NODE_WORLD",
-            "worldRotatingMeshNode": "ROTATING_MESH_PLACEMENT_ROOT",
-            "worldPhysicalDestructionNode": (
-                "PHYSICAL_DESTRUCTION_NODE_WORLD"
-            ),
-            "worldBakedDestructionNode": (
-                "BAKED_DESTRUCTION_NODE_WORLD"
-            ),
-        }.get(node_type, f"{node_type}_NODE_WORLD")
 
     def _extra_properties(self, context):
         data = context.data
         node_type = context.node_type
-        properties = {
-            "placementHandler": type(self).__name__,
-            "placementPhase": context.plan.placement_phase,
-        }
+        properties = {}
 
         if node_type == "worldPhysicalDestructionNode":
-            properties.update({
-                "destructionSemantic": "physical",
-                "destructionParams": json.dumps(
-                    data.get("destructionParams", {}),
-                    separators=(",", ":"),
-                ),
-            })
-        elif node_type == "worldBakedDestructionNode":
-            properties["destructionSemantic"] = "baked"
+            properties.update(
+                {
+                    "destructionParams": json.dumps(
+                        data.get("destructionParams", {}),
+                        separators=(",", ":"),
+                    ),
+                }
+            )
 
         if (
             node_type in {"worldAdvertisingNode", "worldAdvertisementNode"}
@@ -213,60 +165,57 @@ class CopiedMeshPlacementHandler:
             )
 
         if node_type == "worldWaterPatchNode":
-            properties.update({
-                "waterPatchDepth": float(data.get("depth", 0.0) or 0.0),
-                "waterPatchType": context.operations.cname_value(
-                    context.operations.nested_value(
-                        data,
-                        "type",
-                        "typeName",
-                        default={},
-                    )
-                ),
-                "generateNavmesh": bool(data.get("generateNavmesh", 0)),
-                "waterPatchVersion": int(data.get("version", 0) or 0),
-                "waterPatchData": context.operations.safe_json(data),
-            })
+            properties.update(
+                {
+                    "waterPatchDepth": float(data.get("depth", 0.0) or 0.0),
+                    "waterPatchType": cname_text(
+                        nested_value(
+                            data,
+                            "type",
+                            "typeName",
+                            default={},
+                        )
+                    ),
+                    "generateNavmesh": bool(data.get("generateNavmesh", 0)),
+                    "waterPatchVersion": int(data.get("version", 0) or 0),
+                    "waterPatchData": context.session.safe_json(data),
+                }
+            )
 
-        if context.node_type in PROXY_COPIED_MESH_NODE_TYPES:
-            properties.update(self._proxy_properties(
-                context,
-                road=context.node_type == "worldRoadProxyMeshNode",
-            ))
+        if context.node_type in PROXY_NODE_TYPES:
+            properties.update(
+                self._proxy_properties(
+                    context,
+                    road=context.node_type == "worldRoadProxyMeshNode",
+                )
+            )
 
         if node_type == "worldRotatingMeshNode":
-            properties.update({
-                "rot_axis": data.get("rotationAxis", "Z"),
-                "reverseDirection": bool(data.get("reverseDirection", 0)),
-                "fullRotationTime": float(
-                    data.get("fullRotationTime", 0.0)
-                ),
-            })
+            properties.update(
+                {
+                    "rot_axis": data.get("rotationAxis", "Z"),
+                    "reverseDirection": bool(data.get("reverseDirection", 0)),
+                    "fullRotationTime": float(data.get("fullRotationTime", 0.0)),
+                }
+            )
         return properties
 
     def place(self, context):
         meshname = context.node.mesh_path
         if not meshname:
-            raise SectorContentError(
-                f"{context.node_type} has no mesh resource"
-            )
+            raise SectorContentError(f"{context.node_type} has no mesh resource")
 
         rotating = context.node_type == "worldRotatingMeshNode"
         placed = context.operations.place_copied_mesh_instances(
-            data=context.data,
-            node_entry=context.node_entry,
-            node_index=context.node_index,
-            instances=context.instances,
+            node=context.node,
             sector_name=context.sector_name,
             sector_collection=context.sector_collection,
             masters=context.masters,
             master_assets=context.session.master_assets,
-            meshname=meshname,
-            mesh_appearance=context.node.mesh_appearance,
-            contract=self._contract(context.node_type),
             scale=context.execution.scale_factor,
             rotating=rotating,
             extra_props=self._extra_properties(context),
+            source_collection_for_instance=context.collection_for_instance,
         )
 
         if rotating:
@@ -280,39 +229,30 @@ class CopiedMeshPlacementHandler:
                     continue
                 context.operations.assign_custom_properties(
                     rotation_root,
-                    data,
+                    context.node,
                     context.sector_name,
-                    context.node_index,
-                    nodeDataIndex=instance["nodeDataIndex"],
-                    instance_idx=instance_index,
+                    cp77_node_data_index=instance.index,
+                    cp77_instance_idx=instance_index,
                     rotationAxis=data.get("rotationAxis", "Z"),
-                    reverseDirection=bool(
-                        data.get("reverseDirection", 0)
-                    ),
-                    fullRotationTime=float(
-                        data.get("fullRotationTime", 0.0)
-                    ),
-                    placementHandler=type(self).__name__,
-                    placementPhase=context.plan.placement_phase,
+                    reverseDirection=bool(data.get("reverseDirection", 0)),
+                    fullRotationTime=float(data.get("fullRotationTime", 0.0)),
                 )
-                rotation_root["rotationContract"] = (
-                    "LOCAL_AXIS_UNDER_PLACEMENT_ROOT"
-                )
-                context.operations.animate_rotation_root(
+                animate_rotation_root(
                     rotation_root,
                     data.get("rotationAxis", "Z"),
                     data.get("fullRotationTime", 0.0),
                     data.get("reverseDirection", 0),
                 )
 
-        if context.node_type == "worldClothMeshNode":
-            for new, placement_root, _, instance, _ in placed:
-                if "windImpulseEnabled" not in instance:
-                    continue
-                new["windImpulseEnabled"] = instance["windImpulseEnabled"]
-                placement_root["windImpulseEnabled"] = (
-                    instance["windImpulseEnabled"]
-                )
+        if (
+            context.node_type == "worldClothMeshNode"
+            and "windImpulseEnabled" in context.data
+        ):
+            for new, placement_root, _, _, _ in placed:
+                new["windImpulseEnabled"] = context.data["windImpulseEnabled"]
+                placement_root["windImpulseEnabled"] = context.data[
+                    "windImpulseEnabled"
+                ]
 
         context.record_placements(len(placed))
         return len(placed)
@@ -324,17 +264,7 @@ class InstancedMeshPlacementHandler:
     def place(self, context):
         meshname = context.node.mesh_path
         if not meshname:
-            raise SectorContentError(
-                f"{context.node_type} has no mesh resource"
-            )
-        if len(context.instances) > 1:
-            context.operations.warning(
-                f"{context.sector_name}: node {context.node_index} has "
-                f"{len(context.instances)} nodeData records, but "
-                "worldTransformsBuffer entries are absolute and are emitted "
-                "only once"
-            )
-
+            raise SectorContentError(f"{context.node_type} has no mesh resource")
         group, groupname = context.session.master_assets.get_mesh_master(
             context.masters,
             meshname,
@@ -346,75 +276,44 @@ class InstancedMeshPlacementHandler:
                 f"{context.node_index} - {context.node.handle_id}"
             )
 
-        buffer_slice = context.transform_buffers.world_slice(context)
-        source = context.instances[0] if context.instances else None
-        node_data_index = (
-            source.get("nodeDataIndex")
-            if source is not None
-            else None
+        # The node's transforms are world space: each entry places its range of them where they are.
+        matrices = context.transform_buffers.instanced_mesh_matrices(
+            context.node_entry.get("Data"),
+            context.node.inner_index,
+            context.execution.scale_factor,
         )
-        collection = context.operations.new_collection(
-            context.operations.trim_name(
-                f"NDI{context.node_index}_{groupname}"
-            )
-        )
-        context.sector_collection.children.link(collection)
-
-        properties = {
-            "mesh": meshname,
-            "numElements": buffer_slice.declared_count,
-            "bufferStart": buffer_slice.start,
-            "bufferRef": buffer_slice.reference_id,
-            "placementContract": buffer_slice.contract,
-            "placementHandler": type(self).__name__,
-            "placementPhase": context.plan.placement_phase,
-        }
-        if node_data_index is not None:
-            properties["nodeDataIndex"] = node_data_index
-        context.operations.assign_custom_properties(
-            collection,
-            context.data,
-            context.sector_name,
-            context.node_index,
-            **properties,
-        )
-
         placed = 0
-        for element_index, raw_transform in buffer_slice.entries:
-            matrix = context.operations.instance_matrix(
-                raw_transform,
-                context.execution.scale_factor,
-            )
-            instance = context.operations.collection_instance_object(
-                f"NDI{context.node_index}_{element_index}_{groupname}",
-                group,
-                collection,
-                matrix,
-                color=(0.785188, 0.409408, 0.0430124, 1),
-            )
-            object_properties = {
-                "mesh": meshname,
-                "Element_idx": element_index,
-                "placementContract": buffer_slice.contract,
-                "placementHandler": type(self).__name__,
-                "placementPhase": context.plan.placement_phase,
-            }
-            if node_data_index is not None:
-                object_properties["nodeDataIndex"] = node_data_index
+        for source in context.instances:
+            collection = context.node_owned_collection(source.index)
             context.operations.assign_custom_properties(
-                instance,
-                context.data,
+                collection,
+                context.node,
                 context.sector_name,
-                context.node_index,
-                **object_properties,
+                mesh=meshname,
+                cp77_placed_count=len(matrices),
+                cp77_node_data_index=source.index,
             )
-            if buffer_slice.reference_id:
-                instance["bufferID"] = buffer_slice.reference_id
-            placed += 1
+            for element_index, matrix in enumerate(matrices):
+                instance = collection_instance_object(
+                    f"NDI{source.index}_{element_index}_{groupname}",
+                    group,
+                    collection,
+                    matrix,
+                    color=(0.785188, 0.409408, 0.0430124, 1),
+                )
+                context.operations.assign_custom_properties(
+                    instance,
+                    context.node,
+                    context.sector_name,
+                    mesh=meshname,
+                    cp77_node_data_index=source.index,
+                    cp77_element_idx=element_index,
+                )
+                placed += 1
 
         context.record_placements(
             placed,
-            expected=buffer_slice.actual_count,
+            expected=len(context.instances) * len(matrices),
         )
         return placed
 
@@ -425,9 +324,7 @@ class InstancedOccluderPlacementHandler:
     def place(self, context):
         meshname = context.node.mesh_path
         if not meshname:
-            raise SectorContentError(
-                f"{context.node_type} has no mesh resource"
-            )
+            raise SectorContentError(f"{context.node_type} has no mesh resource")
         if len(context.instances) > 1:
             context.operations.warning(
                 f"{context.sector_name}: instanced occluder node "
@@ -448,33 +345,17 @@ class InstancedOccluderPlacementHandler:
             )
 
         records = context.transform_buffers.occluder_records(context.data)
-        source = context.instances[0] if context.instances else None
-        node_data_index = (
-            source.get("nodeDataIndex")
-            if source is not None
-            else -1
-        )
-        collection = context.operations.new_collection(
-            context.operations.trim_name(
-                f"InstancedOccluder_{context.node_index}_{groupname}"
-            )
-        )
-        context.sector_collection.children.link(collection)
+        node_data_index = context.instances[0].index if context.instances else -1
+        collection = context.node_owned_collection(node_data_index)
         context.operations.assign_custom_properties(
             collection,
-            context.data,
+            context.node,
             context.sector_name,
-            context.node_index,
             mesh=meshname,
-            numElements=len(records),
-            nodeDataIndex=node_data_index,
-            placementContract=OCCLUDER_TRANSFORM_CONTRACT,
-            placementHandler=type(self).__name__,
-            placementPhase=context.plan.placement_phase,
+            cp77_node_data_index=node_data_index,
         )
 
         placed = 0
-        normalized_frames = 0
         for element_index, record in enumerate(records):
             try:
                 matrix = context.transform_buffers.occluder_matrix(record)
@@ -482,17 +363,13 @@ class InstancedOccluderPlacementHandler:
                 context.operations.warning(
                     f"{context.sector_name}: instanced occluder node "
                     f"{context.node_index} element {element_index} is "
-                    f"invalid: {error}"
+                    f"invalid: {error}",
+                    exc_info=True,
                 )
                 continue
-            if context.transform_buffers.has_noncanonical_homogeneous_frame(
-                record
-            ):
-                normalized_frames += 1
 
-            instance = context.operations.collection_instance_object(
-                f"InstancedOccluder_{context.node_index}_"
-                f"{element_index}_{groupname}",
+            instance = collection_instance_object(
+                f"InstancedOccluder_{context.node_index}_{element_index}_{groupname}",
                 group,
                 collection,
                 matrix,
@@ -500,25 +377,20 @@ class InstancedOccluderPlacementHandler:
             )
             context.operations.assign_custom_properties(
                 instance,
-                context.data,
+                context.node,
                 context.sector_name,
-                context.node_index,
                 mesh=meshname,
-                Element_idx=element_index,
-                nodeDataIndex=node_data_index,
+                cp77_element_idx=element_index,
+                cp77_node_data_index=node_data_index,
                 autohideDistanceScale=int(
                     context.data.get("autohideDistanceScale", 0) or 0
                 ),
-                occluderType=str(
-                    context.data.get("occluderType", "")
-                ),
-                placementContract=OCCLUDER_TRANSFORM_CONTRACT,
-                placementHandler=type(self).__name__,
-                placementPhase=context.plan.placement_phase,
+                occluderType=str(context.data.get("occluderType", "")),
             )
             placed += 1
 
-        collection["normalizedHomogeneousFrames"] = normalized_frames
+        # The instances placed, which export holds the scene's against: an invalid record places none.
+        assign_id_properties(collection, cp77_placed_count=placed)
         context.record_placements(placed, expected=len(records))
         return placed
 
@@ -529,9 +401,7 @@ class InstancedDestructiblePlacementHandler:
     def place(self, context):
         meshname = context.node.mesh_path
         if not meshname:
-            raise SectorContentError(
-                f"{context.node_type} has no mesh resource"
-            )
+            raise SectorContentError(f"{context.node_type} has no mesh resource")
         group, groupname = context.session.master_assets.get_mesh_master(
             context.masters,
             meshname,
@@ -543,49 +413,35 @@ class InstancedDestructiblePlacementHandler:
                 f"{context.node_index} - {context.node.handle_id}"
             )
 
-        buffer_slice = context.transform_buffers.cooked_slice(context)
-        appearance_name = context.operations.cname_value(
+        local_matrices = context.transform_buffers.destructible_matrices(context.data)
+        appearance_name = cname_text(
             context.data.get("appearanceName"),
             context.node.mesh_appearance,
         )
 
         placed = 0
-        for top_level_index, source in enumerate(context.instances):
+        for source in context.instances:
             node_matrix = context.operations.instance_matrix(
                 source,
                 context.execution.scale_factor,
             )
-            collection = context.operations.new_collection(
-                context.operations.trim_name(
-                    f'wIDMn{source["nodeDataIndex"]}_{groupname}'
-                )
-            )
-            context.sector_collection.children.link(collection)
+            collection = new_collection(fit_id_name(f"wIDMn{source.index}_{groupname}"))
+            source_collection = context.collection_for_instance(source)
+            source_collection.children.link(collection)
             context.operations.assign_custom_properties(
                 collection,
-                context.data,
+                context.node,
                 context.sector_name,
-                context.node_index,
-                nodeDataIndex=source["nodeDataIndex"],
+                cp77_node_data_index=source.index,
                 mesh=meshname,
-                pivot=source.get("Pivot", {}),
-                numElements=buffer_slice.declared_count,
-                bufferStart=buffer_slice.start,
-                bufferRef=buffer_slice.reference_id,
+                cp77_placed_count=len(local_matrices),
                 appearanceName=appearance_name,
-                placementContract=buffer_slice.contract,
-                placementHandler=type(self).__name__,
-                placementPhase=context.plan.placement_phase,
             )
 
-            for element_index, raw_transform in buffer_slice.entries:
-                local_matrix = context.operations.instance_matrix(
-                    raw_transform
-                )
+            for element_index, local_matrix in local_matrices:
                 final_matrix = node_matrix @ local_matrix
-                instance = context.operations.collection_instance_object(
-                    f'wIDMi{source["nodeDataIndex"]}_'
-                    f"{element_index}_{groupname}",
+                instance = collection_instance_object(
+                    f"wIDMi{source.index}_{element_index}_{groupname}",
                     group,
                     collection,
                     final_matrix,
@@ -593,27 +449,18 @@ class InstancedDestructiblePlacementHandler:
                 )
                 context.operations.assign_custom_properties(
                     instance,
-                    context.data,
+                    context.node,
                     context.sector_name,
-                    context.node_index,
-                    nodeDataIndex=source["nodeDataIndex"],
+                    cp77_node_data_index=source.index,
                     mesh=meshname,
-                    Element_idx=element_index,
-                    tl_instance_idx=top_level_index,
-                    sub_instance_idx=element_index,
+                    cp77_element_idx=element_index,
                     appearanceName=appearance_name,
-                    placementContract=buffer_slice.contract,
-                    placementHandler=type(self).__name__,
-                    placementPhase=context.plan.placement_phase,
                 )
-                instance["pivot"] = source.get("Pivot", {})
-                if buffer_slice.reference_id:
-                    instance["bufferID"] = buffer_slice.reference_id
                 placed += 1
 
         context.record_placements(
             placed,
-            expected=len(context.instances) * buffer_slice.actual_count,
+            expected=len(context.instances) * len(local_matrices),
         )
         return placed
 
@@ -624,14 +471,10 @@ class FoliagePlacementHandler:
     def place(self, context):
         meshname = context.node.mesh_path
         if not meshname:
-            raise SectorContentError(
-                f"{context.node_type} has no mesh resource"
-            )
+            raise SectorContentError(f"{context.node_type} has no mesh resource")
         foliage_resource = context.node.foliage_resource_path
         if not foliage_resource:
-            raise SectorContentError(
-                f"{context.node_type} has no foliage resource"
-            )
+            raise SectorContentError(f"{context.node_type} has no foliage resource")
 
         group, groupname = context.session.master_assets.get_mesh_master(
             context.masters,
@@ -662,58 +505,29 @@ class FoliagePlacementHandler:
                 source,
                 context.execution.scale_factor,
             )
-            collection = context.operations.new_collection(
-                context.operations.trim_name(
-                    f'WFI_{source["nodeDataIndex"]}_{groupname}'
-                )
-            )
-            context.sector_collection.children.link(collection)
+            collection = new_collection(fit_id_name(f"WFI_{source.index}_{groupname}"))
+            source_collection = context.collection_for_instance(source)
+            source_collection.children.link(collection)
             context.operations.assign_custom_properties(
                 collection,
-                context.data,
+                context.node,
                 context.sector_name,
-                context.node_index,
-                nodeDataIndex=source["nodeDataIndex"],
+                cp77_node_data_index=source.index,
                 mesh=meshname,
                 foliageResource=foliage_resource,
-                resolvedFoliagePath=resource.resolved_path,
-                bucketBegin=selection.bucket_begin,
+                cp77_placed_count=selection.active_count,
                 bucketCount=selection.bucket_count,
-                instancesBegin=selection.instances_begin,
-                instancesCount=selection.instances_count,
-                resolvedPopulationCount=selection.resolved_count,
-                emittedPopulationCount=selection.active_count,
-                inactivePopulationCount=len(selection.inactive),
-                inactivePopulationDigest=selection.inactive_digest,
-                resourceBucketCount=len(resource.buckets),
-                resourcePopulationCount=len(resource.populations),
-                resourceDeclaredBucketCount=(
-                    resource.declared_bucket_count
-                ),
-                resourceDeclaredPopulationCount=(
-                    resource.declared_population_count
-                ),
                 resourceVersion=resource.version,
-                placementContract=(
-                    "NODE_WORLD_X_FOLIAGE_POPULATION_LOCAL"
-                ),
-                placementHandler=type(self).__name__,
-                placementPhase=context.plan.placement_phase,
             )
 
-            for (
-                bucket_index,
-                population_index,
-                relative_index,
-            ) in selection.active:
+            for _bucket_index, population_index, _relative_index in selection.active:
                 population = resource.populations[population_index]
-                population_matrix = (
-                    context.foliage_assets.population_matrix(population)
+                population_matrix = context.foliage_assets.cached_population_matrix(
+                    population
                 )
                 final_matrix = node_matrix @ population_matrix
-                instance = context.operations.collection_instance_object(
-                    f'WFI_{source["nodeDataIndex"]}_'
-                    f"{population_index}_{groupname}",
+                instance = collection_instance_object(
+                    f"WFI_{source.index}_{population_index}_{groupname}",
                     group,
                     collection,
                     final_matrix,
@@ -721,24 +535,13 @@ class FoliagePlacementHandler:
                 )
                 context.operations.assign_custom_properties(
                     instance,
-                    context.data,
+                    context.node,
                     context.sector_name,
-                    context.node_index,
-                    nodeDataIndex=source["nodeDataIndex"],
+                    cp77_node_data_index=source.index,
                     mesh=meshname,
-                    Element_idx=population_index,
+                    cp77_element_idx=population_index,
                     populationIndex=population_index,
-                    populationLocalIndex=relative_index,
-                    bucketIndex=bucket_index,
-                    populationScale=(
-                        context.foliage_assets.population_scale(population)
-                    ),
                     foliageResource=foliage_resource,
-                    placementContract=(
-                        "NODE_WORLD_X_FOLIAGE_POPULATION_LOCAL"
-                    ),
-                    placementHandler=type(self).__name__,
-                    placementPhase=context.plan.placement_phase,
                 )
                 placed += 1
 
@@ -751,56 +554,33 @@ class FoliagePlacementHandler:
 
 class GIPlacementHandler:
     placement_phase = STANDARD_PHASE
-    placement_contract = "GLOBAL_ILLUMINATION_RESOURCE_NODE_WORLD"
 
     def place(self, context):
         placed = 0
         for instance_index, instance in enumerate(context.instances):
-            result = context.gi_assets.create(
+            context.gi_assets.create(
                 context,
                 instance,
                 instance_index,
-            )
-            _assign_placement_metadata(
-                context,
-                result.object,
-                self.placement_contract,
-                type(self).__name__,
             )
             placed += 1
         context.record_placements(placed)
         return placed
 
 
-class CollisionMetadataPlacementHandler:
+class PhysXCollisionPlacementHandler:
     placement_phase = STANDARD_PHASE
 
     def place(self, context):
-        options = context.session.options
-        if not options.import_collisions:
+        if context.session.options.missing_choice(context.node_type):
             context.record_placements(0, expected=0)
             return 0
-        if (
-            context.node_type == "worldFoliageDestructionNode"
-            and not options.import_foliage
-        ):
-            context.record_placements(0, expected=0)
-            return 0
-        contract = context.collision_metadata_assets.contract(
-            context.node_type
-        )
         placed = 0
         for instance_index, instance in enumerate(context.instances):
-            result = context.collision_metadata_assets.create(
+            context.physx_collision_assets.create(
                 context,
                 instance,
                 instance_index,
-            )
-            _assign_placement_metadata(
-                context,
-                result.object,
-                contract,
-                type(self).__name__,
             )
             placed += 1
         context.record_placements(placed)
@@ -811,12 +591,10 @@ class WorldCollisionPlacementHandler:
     placement_phase = STANDARD_PHASE
 
     def place(self, context):
-        if not context.session.options.import_collisions:
+        if context.session.options.missing_choice(context.node_type):
             context.record_placements(0, expected=0)
             return 0
-        placed = int(
-            context.operations.place_world_collision_node(context)
-        )
+        placed = int(import_world_collision_node(context))
         context.record_placements(
             placed,
             expected=placed,
@@ -837,9 +615,6 @@ class SplinePlacementHandler:
 
     def place(self, context):
         placed = 0
-        contract = context.spline_assets.contract(
-            context.node_type
-        )
         for instance_index, instance in enumerate(context.instances):
             result = context.spline_assets.create(
                 context,
@@ -848,12 +623,6 @@ class SplinePlacementHandler:
             )
             if result is None:
                 continue
-            _assign_placement_metadata(
-                context,
-                result.object,
-                contract,
-                type(self).__name__,
-            )
             placed += 1
 
         context.record_placements(placed)
@@ -865,22 +634,11 @@ class SemanticMarkerPlacementHandler:
 
     def place(self, context):
         placed = 0
-        contract = (
-            context.semantic_assets.marker_contract(
-                context.node_type
-            )
-        )
         for instance_index, instance in enumerate(context.instances):
-            result = context.semantic_assets.create(
+            context.semantic_assets.create(
                 context,
                 instance,
                 instance_index,
-            )
-            _assign_placement_metadata(
-                context,
-                result.object,
-                contract,
-                type(self).__name__,
             )
             placed += 1
 
@@ -890,21 +648,14 @@ class SemanticMarkerPlacementHandler:
 
 class AcousticSectorPlacementHandler:
     placement_phase = STANDARD_PHASE
-    placement_contract = "ACOUSTIC_SECTOR_GRID_CELL_32M"
 
     def place(self, context):
         placed = 0
         for instance_index, instance in enumerate(context.instances):
-            result = context.acoustic_assets.create(
+            context.acoustic_assets.create(
                 context,
                 instance,
                 instance_index,
-            )
-            _assign_placement_metadata(
-                context,
-                result.object,
-                self.placement_contract,
-                type(self).__name__,
             )
             placed += 1
 
@@ -914,21 +665,14 @@ class AcousticSectorPlacementHandler:
 
 class MinimapPlacementHandler:
     placement_phase = STANDARD_PHASE
-    placement_contract = "EXACT_LOCAL_BOUNDS_RESOURCE_MARKER"
 
     def place(self, context):
         placed = 0
         for instance_index, instance in enumerate(context.instances):
-            result = context.minimap_assets.create(
+            context.minimap_assets.create(
                 context,
                 instance,
                 instance_index,
-            )
-            _assign_placement_metadata(
-                context,
-                result.object,
-                self.placement_contract,
-                type(self).__name__,
             )
             placed += 1
 
@@ -938,28 +682,15 @@ class MinimapPlacementHandler:
 
 class EffectPlacementHandler:
     placement_phase = STANDARD_PHASE
-    placement_contract = "EFFECT_RESOURCE_MARKER_NODE_WORLD"
 
     def place(self, context):
         placed = 0
         for instance_index, instance in enumerate(context.instances):
-            result = context.effect_assets.create(
+            context.effect_assets.create(
                 context,
                 instance,
                 instance_index,
             )
-            _assign_placement_metadata(
-                context,
-                result.object,
-                self.placement_contract,
-                type(self).__name__,
-            )
-            if result.resource.status == "RESOURCE_NOT_INDEXED":
-                context.operations.warning(
-                    f"{context.sector_name}: {context.node_type} node "
-                    f"{context.node_index} resource not indexed: "
-                    f"{result.resource.depot_path}"
-                )
             placed += 1
 
         context.record_placements(placed)
@@ -968,21 +699,14 @@ class EffectPlacementHandler:
 
 class StaticLightPlacementHandler:
     placement_phase = STANDARD_PHASE
-    placement_contract = "CP77_LIGHT_NODE_WORLD"
 
     def place(self, context):
         placed = 0
         for instance_index, instance in enumerate(context.instances):
-            result = context.lighting_assets.create(
+            context.lighting_assets.create(
                 context,
                 instance,
                 instance_index,
-            )
-            _assign_placement_metadata(
-                context,
-                result.object,
-                self.placement_contract,
-                type(self).__name__,
             )
             placed += 1
 
@@ -992,21 +716,14 @@ class StaticLightPlacementHandler:
 
 class ReflectionProbePlacementHandler:
     placement_phase = STANDARD_PHASE
-    placement_contract = "REFLECTION_PROBE_BOX_NODE_WORLD"
 
     def place(self, context):
         placed = 0
         for instance_index, instance in enumerate(context.instances):
-            result = context.probe_assets.create(
+            context.probe_assets.create(
                 context,
                 instance,
                 instance_index,
-            )
-            _assign_placement_metadata(
-                context,
-                result.object,
-                self.placement_contract,
-                type(self).__name__,
             )
             placed += 1
 
@@ -1016,7 +733,6 @@ class ReflectionProbePlacementHandler:
 
 class StaticDecalPlacementHandler:
     placement_phase = STANDARD_PHASE
-    placement_contract = "DECAL_PROJECTOR_LOCAL_Z_UNIT_PLANE"
 
     def place(self, context):
         data = context.data
@@ -1027,60 +743,37 @@ class StaticDecalPlacementHandler:
                 instance,
                 instance_index,
             )
+            metadata_started = time.perf_counter()
             material_result = result.material_result
             properties = {
-                "instance_idx": instance_index,
-                "nodeDataIndex": instance["nodeDataIndex"],
+                "cp77_instance_idx": instance_index,
+                "cp77_node_data_index": instance.index,
                 "decal": material_result.material_path,
-                "resolvedDecalMaterial": (
-                    material_result.resolved_path
-                ),
-                "decalMaterialStatus": material_result.status,
-                "decalMaterialError": material_result.error,
-                "horizontalFlip": bool(
-                    data.get("horizontalFlip", 0)
-                ),
-                "verticalFlip": bool(
-                    data.get("verticalFlip", 0)
-                ),
+                "horizontalFlip": bool(data.get("horizontalFlip", 0)),
+                "verticalFlip": bool(data.get("verticalFlip", 0)),
                 "alpha": float(data.get("alpha", 1.0)),
-                "roughnessScale": float(
-                    data.get("roughnessScale", 1.0)
-                ),
-                "isStretchingEnabled": bool(
-                    data.get("isStretchingEnabled", 0)
-                ),
+                "roughnessScale": float(data.get("roughnessScale", 1.0)),
+                "isStretchingEnabled": bool(data.get("isStretchingEnabled", 0)),
                 "orderNo": int(data.get("orderNo", 0)),
-                "normalThreshold": float(
-                    data.get("normalThreshold", 0.0)
-                ),
-                "enableNormalThreshold": bool(
-                    data.get("enableNormalTreshold", 0)
-                ),
-                "projectionDepth": float(
-                    context.operations.instance_scale(instance)[2]
-                ),
-                "projectionAxisLocal": "Z",
-                "placementContract": self.placement_contract,
-                "placementHandler": type(self).__name__,
-                "placementPhase": context.plan.placement_phase,
+                "normalThreshold": float(data.get("normalThreshold", 0.0)),
+                "enableNormalThreshold": bool(data.get("enableNormalTreshold", 0)),
             }
-            context.operations.assign_custom_properties(
-                result.plane,
-                data,
-                context.sector_name,
-                context.node_index,
-                **properties,
-            )
+            if result.plane is not None:
+                context.operations.assign_custom_properties(
+                    result.plane,
+                    context.node,
+                    context.sector_name,
+                    **properties,
+                )
             context.operations.assign_custom_properties(
                 result.projector,
-                data,
+                context.node,
                 context.sector_name,
-                context.node_index,
                 **properties,
             )
             context.execution.track_matrix_object(result.projector)
-            context.execution.track_matrix_object(result.plane)
+            if result.plane is not None:
+                context.execution.track_matrix_object(result.plane)
 
             if material_result.status == "MATERIAL_NOT_INDEXED":
                 context.operations.warning(
@@ -1099,6 +792,10 @@ class StaticDecalPlacementHandler:
                     f"({material_result.status}): "
                     f"{material_result.error}"
                 )
+            context.decal_assets.record_timing(
+                "placement_metadata",
+                metadata_started,
+            )
             placed += 1
 
         context.record_placements(placed)
@@ -1108,81 +805,31 @@ class StaticDecalPlacementHandler:
 class WorldMetadataPlacementHandler:
     placement_phase = STANDARD_PHASE
 
-    OUTLINE_TYPES = frozenset({
-        "worldTriggerAreaNode",
-        "gameKillTriggerNode",
-        "worldAmbientAreaNode",
-        "worldLightChannelVolumeNode",
-        "gameWorldBoundaryNode",
-        "worldGISpaceNode",
-        "worldInteriorAreaNode",
-    })
-
-    CONTRACTS = {
-        "worldTriggerAreaNode": "TRIGGER_OUTLINE_VOLUME_NODE_WORLD",
-        "gameKillTriggerNode": "KILL_TRIGGER_OUTLINE_VOLUME_NODE_WORLD",
-        "worldAmbientAreaNode": "AMBIENT_OUTLINE_VOLUME_NODE_WORLD",
-        "worldLightChannelVolumeNode": (
-            "LIGHT_CHANNEL_OUTLINE_VOLUME_NODE_WORLD"
-        ),
-        "gameWorldBoundaryNode": (
-            "WORLD_BOUNDARY_OUTLINE_VOLUME_NODE_WORLD"
-        ),
-        "worldGISpaceNode": "GI_SPACE_OUTLINE_VOLUME_NODE_WORLD",
-        "worldInteriorAreaNode": (
-            "INTERIOR_OUTLINE_VOLUME_NODE_WORLD"
-        ),
-        "worldInteriorMapNode": (
-            "INTERIOR_MAP_RASTER_METADATA_NODE_WORLD"
-        ),
-        "worldLightChannelShapeNode": (
-            "LIGHT_CHANNEL_SHAPE_NODE_WORLD"
-        ),
-        "worldStaticFogVolumeNode": (
-            "STATIC_FOG_VOLUME_NODE_WORLD"
-        ),
-        "worldStaticSoundEmitterNode": (
-            "STATIC_SOUND_EMITTER_NODE_WORLD"
-        ),
-    }
+    OUTLINE_TYPES = frozenset(
+        {
+            "worldTriggerAreaNode",
+            "gameKillTriggerNode",
+            "worldAmbientAreaNode",
+            "worldLightChannelVolumeNode",
+            "gameWorldBoundaryNode",
+            "worldGISpaceNode",
+            "worldInteriorAreaNode",
+        }
+    )
 
     def _outline_metadata(self, context, obj):
         data = context.data
         node_type = context.node_type
         if node_type == "worldLightChannelVolumeNode":
-            obj["lightChannels"] = str(data.get("channels", ""))
+            channels = str(data.get("channels", ""))
+            obj["lightChannels"] = channels
+            obj["cp77_light_channel_volume"] = True
+            obj.hide_render = True
             obj["streamingDistanceFactor"] = float(
                 data.get("streamingDistanceFactor", 0.0) or 0.0
             )
         elif node_type == "worldAmbientAreaNode":
-            notifier_settings = (
-                data.get("notifiers", [{}])[0]
-                .get("Data", {})
-                .get("Settings", {})
-                if data.get("notifiers")
-                else {}
-            )
-            events = context.world_metadata_assets.audio_events(
-                notifier_settings,
-                context.operations.cname_value,
-            )
-            obj["audioEvents"] = context.operations.safe_json(events)
-            obj["useCustomColor"] = bool(
-                data.get("useCustomColor", 0)
-            )
-        elif node_type == "worldGISpaceNode":
-            obj["giGroup"] = str(data.get("group", ""))
-            obj["giPriority"] = int(data.get("priority", 0) or 0)
-            obj["giInterior"] = bool(data.get("interior", 0))
-            obj["giRuntime"] = bool(data.get("runtime", 0))
-        elif node_type == "worldInteriorAreaNode":
-            obj["interiorAreaNotifiers"] = (
-                context.operations.safe_json(data.get("notifiers", []))
-            )
-        elif node_type == "gameWorldBoundaryNode":
-            obj["worldBoundaryData"] = (
-                context.operations.safe_json(data)
-            )
+            obj["useCustomColor"] = bool(data.get("useCustomColor", 0))
 
     def _create(self, context, instance, instance_index):
         node_type = context.node_type
@@ -1220,23 +867,14 @@ class WorldMetadataPlacementHandler:
                 instance,
                 instance_index,
             )
-        raise SectorContentError(
-            f"Unsupported world metadata node type: {node_type}"
-        )
+        raise SectorContentError(f"Unsupported world metadata node type: {node_type}")
 
     def place(self, context):
-        contract = self.CONTRACTS[context.node_type]
         placed = 0
         for instance_index, instance in enumerate(context.instances):
             obj = self._create(context, instance, instance_index)
             if obj is None:
                 continue
-            _assign_placement_metadata(
-                context,
-                obj,
-                contract,
-                type(self).__name__,
-            )
             placed += 1
 
         context.record_placements(placed)
@@ -1275,13 +913,6 @@ class DeformedMeshPlacementHandler:
 
         data = context.data
         cable_radius = float(data.get("cableRadius", 0.0) or 0.0)
-        metrics = analysis.metrics
-        deformation_payload = context.operations.safe_json(
-            data.get("deformationData", [])
-        )
-        deformation_digest = hashlib.sha1(
-            deformation_payload.encode("utf-8")
-        ).hexdigest()
 
         placed = 0
         for instance_index, instance in enumerate(context.instances):
@@ -1289,127 +920,63 @@ class DeformedMeshPlacementHandler:
                 instance,
                 context.execution.scale_factor,
             )
-            prefix = (
-                "BEND"
-                if context.node_type == "worldBendedMeshNode"
-                else "CABLE"
-            )
-            instance_name = context.operations.trim_name(
-                f'{prefix}_{instance["nodeDataIndex"]}_'
-                f'{groupname or context.node_index}'
+            prefix = "BEND" if context.node_type == "worldBendedMeshNode" else "CABLE"
+            instance_name = fit_id_name(
+                f"{prefix}_{instance.index}_{groupname or context.node_index}"
             )
             result = context.deformation_assets.instantiate(
                 group,
                 instance_name,
                 node_matrix,
                 analysis,
-                context.operations,
                 cable_radius=cable_radius,
             )
 
             properties = {
-                "nodeDataIndex": instance["nodeDataIndex"],
-                "instance_idx": instance_index,
+                "cp77_node_data_index": instance.index,
+                "cp77_instance_idx": instance_index,
                 "mesh": meshname,
                 "meshAppearance": context.node.mesh_appearance,
-                "deformationAxis": analysis.contract.axis_name,
-                "deformationFrameCount": len(analysis.frames),
-                "deformationSourceVertexCount": (
-                    analysis.source_vertex_count
-                ),
-                "deformationSourceAxisMin": (
-                    analysis.source_axis_min
-                ),
-                "deformationSourceAxisMax": (
-                    analysis.source_axis_max
-                ),
-                "deformationFrameAxisMin": (
-                    metrics.contract_axis_min
-                ),
-                "deformationFrameAxisMax": (
-                    metrics.contract_axis_max
-                ),
-                "deformationMinimumFrameStep": (
-                    metrics.minimum_frame_step
-                ),
-                "deformationMaximumFrameStep": (
-                    metrics.maximum_frame_step
-                ),
-                "deformationFramesMonotonic": (
-                    metrics.monotonic_contract_axis
-                ),
-                "deformationDominantAxis": (
-                    "XYZ"[metrics.dominant_axis_index]
-                ),
-                "deformationNormalizedHomogeneousFrames": (
-                    metrics.normalized_homogeneous_frames
-                ),
                 "isBendedRoad": bool(data.get("isBendedRoad", 0)),
-                "deformedBox": context.operations.safe_json(
-                    data.get("deformedBox", {})
-                ),
-                "placementContract": "FRAME_MATRIX_VERTEX_BAKE",
-                "placementHandler": type(self).__name__,
-                "placementPhase": context.plan.placement_phase,
+                "deformedBox": context.session.safe_json(data.get("deformedBox", {})),
             }
             if context.node_type == "worldCableMeshNode":
-                properties.update({
-                    "cableLength": float(
-                        data.get("cableLength", 0.0) or 0.0
-                    ),
-                    "cableRadius": cable_radius,
-                    "destructionHashes": (
-                        context.operations.safe_json(
-                            data.get("destructionHashes", [])
-                        )
-                    ),
-                })
+                properties.update(
+                    {
+                        "cableLength": float(data.get("cableLength", 0.0) or 0.0),
+                        "cableRadius": cable_radius,
+                        "destructionHashes": (
+                            context.session.safe_json(data.get("destructionHashes", []))
+                        ),
+                    }
+                )
 
             context.operations.assign_custom_properties(
                 result.collection,
-                data,
+                context.node,
                 context.sector_name,
-                context.node_index,
                 **properties,
             )
             context.operations.assign_custom_properties(
                 result.placement_root,
-                data,
+                context.node,
                 context.sector_name,
-                context.node_index,
                 **properties,
             )
             if result.path_object is not None:
                 context.operations.assign_custom_properties(
                     result.path_object,
-                    data,
+                    context.node,
                     context.sector_name,
-                    context.node_index,
                     **properties,
                 )
 
-            result.collection["deformationContract"] = (
-                "FRAME_MATRIX_VERTEX_BAKE"
-            )
-            result.collection["deformationDataDigest"] = (
-                deformation_digest
-            )
-            result.collection["deformationFallbackCurveRendered"] = (
-                result.rendered_fallback_curve
-            )
-            if analysis.frames:
-                result.collection["deformationFirstFrame"] = (
-                    context.operations.matrix_values(
-                        analysis.frames[0]
-                    )
-                )
-                result.collection["deformationLastFrame"] = (
-                    context.operations.matrix_values(
-                        analysis.frames[-1]
-                    )
-                )
-
-            context.sector_collection.children.link(result.collection)
+            source_collection = context.collection_for_instance(instance)
+            if (
+                source_collection.children.get(result.collection.name)
+                is not result.collection
+            ):
+                source_collection.children.link(result.collection)
             placed += 1
 
         context.record_placements(placed)
@@ -1421,9 +988,7 @@ STANDARD_COPIED_MESH_HANDLER = CopiedMeshPlacementHandler(STANDARD_PHASE)
 PROXY_COPIED_MESH_HANDLER = CopiedMeshPlacementHandler(PROXY_PHASE)
 INSTANCED_MESH_PLACEMENT_HANDLER = InstancedMeshPlacementHandler()
 INSTANCED_OCCLUDER_PLACEMENT_HANDLER = InstancedOccluderPlacementHandler()
-INSTANCED_DESTRUCTIBLE_PLACEMENT_HANDLER = (
-    InstancedDestructiblePlacementHandler()
-)
+INSTANCED_DESTRUCTIBLE_PLACEMENT_HANDLER = InstancedDestructiblePlacementHandler()
 FOLIAGE_PLACEMENT_HANDLER = FoliagePlacementHandler()
 DEFORMED_MESH_PLACEMENT_HANDLER = DeformedMeshPlacementHandler()
 WORLD_METADATA_PLACEMENT_HANDLER = WorldMetadataPlacementHandler()
@@ -1436,9 +1001,7 @@ MINIMAP_PLACEMENT_HANDLER = MinimapPlacementHandler()
 SEMANTIC_MARKER_PLACEMENT_HANDLER = SemanticMarkerPlacementHandler()
 SPLINE_PLACEMENT_HANDLER = SplinePlacementHandler()
 GI_PLACEMENT_HANDLER = GIPlacementHandler()
-COLLISION_METADATA_PLACEMENT_HANDLER = (
-    CollisionMetadataPlacementHandler()
-)
+PHYSX_COLLISION_PLACEMENT_HANDLER = PhysXCollisionPlacementHandler()
 WORLD_COLLISION_PLACEMENT_HANDLER = WorldCollisionPlacementHandler()
 EXPLICIT_NO_OP_PLACEMENT_HANDLER = ExplicitNoOpPlacementHandler()
 
@@ -1452,7 +1015,7 @@ NODE_HANDLERS.register_placement(
 )
 NODE_HANDLERS.register_placement(
     PROXY_COPIED_MESH_HANDLER,
-    *PROXY_COPIED_MESH_NODE_TYPES,
+    *PROXY_NODE_TYPES,
 )
 
 
@@ -1552,7 +1115,7 @@ NODE_HANDLERS.register_placement(
     "worldGINode",
 )
 NODE_HANDLERS.register_placement(
-    COLLISION_METADATA_PLACEMENT_HANDLER,
+    PHYSX_COLLISION_PLACEMENT_HANDLER,
     "worldFoliageDestructionNode",
     "worldTerrainCollisionNode",
 )

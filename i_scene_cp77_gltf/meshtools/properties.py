@@ -1,13 +1,13 @@
 import bpy
 
-
 _VERTEX_GROUP_ITEMS = (("None", "None", "No vertex group"),)
 _VERTEX_GROUP_SIGNATURE = None
 
 
 def _selected_group_signature(context):
     selected = tuple(
-        obj for obj in getattr(context, "selected_objects", ())
+        obj
+        for obj in getattr(context, "selected_objects", ())
         if getattr(obj, "type", None) == "MESH"
     )
     return tuple(
@@ -27,7 +27,10 @@ def vertex_group_items(_owner, context):
     remaining = sorted(names.difference(preferred))
     _VERTEX_GROUP_ITEMS = tuple(
         [("None", "None", "No vertex group")]
-        + [(name, name, f"Use '{name}' vertex group") for name in (*preferred, *remaining)]
+        + [
+            (name, name, f"Use '{name}' vertex group")
+            for name in (*preferred, *remaining)
+        ]
     )
     _VERTEX_GROUP_SIGNATURE = signature
     return _VERTEX_GROUP_ITEMS
@@ -54,10 +57,18 @@ class MeshValidationProperties(bpy.types.PropertyGroup):
         description="Enable optional UV, degeneracy, weight, and unused-bone checks",
         default=False,
     )
-    check_missing_uv: bpy.props.BoolProperty(name="Require Active UV Layer", default=True)
-    check_degenerate_faces: bpy.props.BoolProperty(name="Check Degenerate Faces", default=True)
-    check_degenerate_uvs: bpy.props.BoolProperty(name="Check Degenerate UVs", default=False)
-    check_unweighted_vertices: bpy.props.BoolProperty(name="Check Unweighted Vertices", default=True)
+    check_missing_uv: bpy.props.BoolProperty(
+        name="Require Active UV Layer", default=True
+    )
+    check_degenerate_faces: bpy.props.BoolProperty(
+        name="Check Degenerate Faces", default=True
+    )
+    check_degenerate_uvs: bpy.props.BoolProperty(
+        name="Check Degenerate UVs", default=False
+    )
+    check_unweighted_vertices: bpy.props.BoolProperty(
+        name="Check Unweighted Vertices", default=True
+    )
     check_unused_bones: bpy.props.BoolProperty(name="Check Unused Bones", default=False)
 
     show_fixes: bpy.props.BoolProperty(name="Repair Options", default=False)
@@ -69,7 +80,9 @@ class MeshValidationProperties(bpy.types.PropertyGroup):
         name="Bake Autofitter Shape Keys",
         default=False,
     )
-    fix_add_missing_uv: bpy.props.BoolProperty(name="Add Missing UV Layer", default=True)
+    fix_add_missing_uv: bpy.props.BoolProperty(
+        name="Add Missing UV Layer", default=True
+    )
     fix_dissolve_degenerate_faces: bpy.props.BoolProperty(
         name="Dissolve Degenerate Faces",
         default=True,
@@ -95,3 +108,14 @@ class MeshValidationProperties(bpy.types.PropertyGroup):
     last_issue_count: bpy.props.IntProperty(default=0, min=0, options={"SKIP_SAVE"})
     last_fix_count: bpy.props.IntProperty(default=0, min=0, options={"SKIP_SAVE"})
     last_remaining_count: bpy.props.IntProperty(default=0, min=0, options={"SKIP_SAVE"})
+
+
+class MeshAnalysisProperties(bpy.types.PropertyGroup):
+    uv_density_reference: bpy.props.FloatProperty(
+        name="Reference Density",
+        description="Texels per meter mapped to the center of the UV Density heat map",
+        default=512.0,
+        min=1.0,
+        soft_max=4096.0,
+        precision=0,
+    )

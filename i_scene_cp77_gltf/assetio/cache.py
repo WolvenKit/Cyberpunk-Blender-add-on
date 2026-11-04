@@ -4,6 +4,23 @@ from collections import OrderedDict
 from dataclasses import dataclass
 
 
+def store_bounded(cache, key, value, *, limit=64):
+    limit = max(0, int(limit))
+    cache[key] = value
+    while len(cache) > limit:
+        cache.pop(next(iter(cache)))
+    return value
+
+
+def store_bounded_lru(cache, key, value, *, limit=64):
+    limit = max(0, int(limit))
+    cache[key] = value
+    cache.move_to_end(key)
+    while len(cache) > limit:
+        cache.popitem(last=False)
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class CachedDocument:
     payload: object
@@ -33,6 +50,10 @@ class DocumentCache:
                 value.resource_kind,
                 value.source_format,
             )
+
+    def contains(self, key):
+        with self._lock:
+            return key in self._entries
 
     def store(self, key, value):
         if self.limit <= 0:

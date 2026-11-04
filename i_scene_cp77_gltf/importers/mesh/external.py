@@ -5,6 +5,19 @@ from dataclasses import dataclass
 
 import bpy
 
+from ...assetio.paths import absolute_local_path_key
+from ...bartmoss.hierarchy import parent_depth
+from ...blender.identity import rna_identity
+from ...blender.keyframes import object_transform_animated
+from ...blender.transactions import (
+    restore_id_properties,
+    snapshot_datablocks,
+    snapshot_id_properties,
+    track_created_since,
+    track_mutation,
+    transactional,
+)
+from ...core.log import get_logger
 from ...gltf.provenance import (
     ORIGIN_EXTERNAL,
     GLBContentKind,
@@ -12,20 +25,9 @@ from ...gltf.provenance import (
     mark_origin,
 )
 
+_LOG = get_logger(__name__)
+
 _VALID_OBJECT_TYPES = frozenset({"MESH", "ARMATURE"})
-_TRACKED_DATABLOCKS = (
-    "objects",
-    "collections",
-    "meshes",
-    "armatures",
-    "materials",
-    "images",
-    "actions",
-    "cameras",
-    "lights",
-    "node_groups",
-    "textures",
-)
 
 
 class ExternalGLBImportError(RuntimeError):
@@ -56,8 +58,8 @@ def _restore_context(snapshot):
     if bpy.context.mode != "OBJECT":
         try:
             bpy.ops.object.mode_set(mode="OBJECT")
-        except RuntimeError:
-            pass
+        except RuntimeError as error:
+            _LOG.debug("Object mode was not restored: %s", error, exc_info=True)
     for obj in tuple(bpy.context.selected_objects):
         obj.select_set(False)
     for obj in selected:
@@ -69,36 +71,16 @@ def _restore_context(snapshot):
     if target_mode != "OBJECT":
         try:
             bpy.ops.object.mode_set(mode=target_mode)
-        except RuntimeError:
-            pass
-
-
-def _datablock_identity(value):
-    try:
-        return int(value.as_pointer())
-    except (AttributeError, ReferenceError):
-        return id(value)
-
-
-def _snapshot_datablocks():
-    return {
-        name: frozenset(
-            _datablock_identity(value)
-            for value in getattr(bpy.data, name)
-        )
-        for name in _TRACKED_DATABLOCKS
-        if hasattr(bpy.data, name)
-    }
+        except RuntimeError as error:
+            _LOG.debug(
+                "%s mode was not restored: %s", target_mode, error, exc_info=True
+            )
 
 
 def _new_datablocks(snapshot, name):
     values = getattr(bpy.data, name, ())
     previous = snapshot.get(name, frozenset())
-    return tuple(
-        value
-        for value in values
-        if _datablock_identity(value) not in previous
-    )
+    return tuple(value for value in values if rna_identity(value) not in previous)
 
 
 def _remove_datablock(collection, value):
@@ -108,24 +90,31 @@ def _remove_datablock(collection, value):
         collection.remove(value)
 
 
-def _rollback_import(snapshot):
-    for name in _TRACKED_DATABLOCKS:
-        collection = getattr(bpy.data, name, None)
-        if collection is None:
-            continue
-        for value in reversed(_new_datablocks(snapshot, name)):
-            try:
-                _remove_datablock(collection, value)
-            except (ReferenceError, RuntimeError, TypeError, ValueError):
-                pass
+def _track_scene_state(scene):
+    """Restore the scene extras and frame range Blender's glTF importer sets on rollback"""
+    properties = snapshot_id_properties(scene)
+    frames = (scene.frame_start, scene.frame_end, scene.frame_current)
+
+    def restore():
+        restore_id_properties(scene, properties)
+        # Setting one end of the range past the other moves it, so the start is set again after the end.
+        scene.frame_start = frames[0]
+        scene.frame_end = frames[1]
+        scene.frame_start = frames[0]
+        scene.frame_current = frames[2]
+
+    track_mutation(
+        ("external_glb_scene", scene.as_pointer()), restore, label=f"scene {scene.name}"
+    )
 
 
-def _nearest_valid_parent(obj, imported_object_ids):
+def _nearest_kept_parent(obj, imported_object_ids, moving_ids):
+    """The nearest imported ancestor that stays"""
     parent = obj.parent
     while parent is not None:
-        if (
-            _datablock_identity(parent) in imported_object_ids
-            and parent.type in _VALID_OBJECT_TYPES
+        identity = rna_identity(parent)
+        if identity in imported_object_ids and (
+            parent.type in _VALID_OBJECT_TYPES or identity in moving_ids
         ):
             return parent
         parent = parent.parent
@@ -146,23 +135,20 @@ def _remove_unsupported_objects(imported_objects):
                 "CAMERA": "cameras",
                 "LIGHT": "lights",
             }.get(object_type)
-            collection = getattr(bpy.data, collection_name, None) if collection_name else None
+            collection = (
+                getattr(bpy.data, collection_name, None) if collection_name else None
+            )
             if collection is not None:
                 _remove_datablock(collection, data)
     return tuple(survivors)
 
 
-def _hierarchy_depth(obj):
-    depth = 0
-    parent = obj.parent
-    while parent is not None:
-        depth += 1
-        parent = parent.parent
-    return depth
-
-
-def _normalize_object_transforms(objects):
-    for obj in sorted(objects, key=_hierarchy_depth):
+def _normalize_object_transforms(objects, moving_ids):
+    depth_cache = {}
+    for obj in sorted(objects, key=lambda obj: parent_depth(obj, depth_cache)):
+        if rna_identity(obj) in moving_ids:
+            # Its keys set this transform on every frame, so it stays on the object.
+            continue
         matrix = obj.matrix_basis.copy()
         if getattr(matrix, "is_identity", False):
             continue
@@ -174,23 +160,32 @@ def _normalize_object_transforms(objects):
         if data.users > 1:
             obj.data = data.copy()
             data = obj.data
-        data.transform(matrix)
+        if isinstance(data, bpy.types.Mesh):
+            # The shape keys hold the mesh's shape once it has any, so they take the transform too.
+            data.transform(matrix, shape_keys=True)
+        else:
+            data.transform(matrix)
         for child in tuple(obj.children):
-            child.matrix_local = matrix @ child.matrix_local
+            if rna_identity(child) in moving_ids:
+                # An animated child's keys overwrite its transform, so the parent's goes into its parent inverse.
+                child.matrix_parent_inverse = matrix @ child.matrix_parent_inverse
+            else:
+                child.matrix_local = matrix @ child.matrix_local
         obj.matrix_basis.identity()
         if hasattr(data, "update"):
             data.update()
 
 
-def _flatten_imported_hierarchy(imported_objects):
-    imported_ids = frozenset(
-        _datablock_identity(obj) for obj in imported_objects
-    )
+def _flatten_imported_hierarchy(imported_objects, moving_ids):
+    imported_ids = frozenset(rna_identity(obj) for obj in imported_objects)
     valid_objects = tuple(
         obj for obj in imported_objects if obj.type in _VALID_OBJECT_TYPES
     )
     for obj in valid_objects:
-        parent = _nearest_valid_parent(obj, imported_ids)
+        if rna_identity(obj) in moving_ids:
+            # Its keys place it relative to its parent, so the nodes above it stay.
+            continue
+        parent = _nearest_kept_parent(obj, imported_ids, moving_ids)
         if parent is obj.parent:
             continue
         world = obj.matrix_world.copy()
@@ -199,9 +194,10 @@ def _flatten_imported_hierarchy(imported_objects):
         obj.matrix_world = world
 
     removed = 0
+    depth_cache = {}
     empties = sorted(
         (obj for obj in imported_objects if obj.type == "EMPTY"),
-        key=_hierarchy_depth,
+        key=lambda obj: parent_depth(obj, depth_cache),
         reverse=True,
     )
     for empty in empties:
@@ -222,12 +218,10 @@ def _rename_imported_objects(objects):
         key=lambda obj: obj.name.casefold(),
     )
     for index, obj in enumerate(meshes):
-        obj["cp77_external_original_name"] = obj.name
         obj.name = f"submesh_{index:02d}_LOD_1"
         if obj.data is not None and obj.data.users == 1:
             obj.data.name = obj.name
     for index, obj in enumerate(armatures):
-        obj["cp77_external_original_name"] = obj.name
         obj.name = "Armature" if index == 0 else f"Armature_{index:02d}"
         if obj.data is not None and obj.data.users == 1:
             obj.data.name = obj.name
@@ -238,7 +232,6 @@ def _mark_imported_data(objects, collections, actions, inspection):
         mark_origin(
             owner,
             ORIGIN_EXTERNAL,
-            generator=inspection.generator,
             source_path=inspection.filepath,
         )
 
@@ -252,19 +245,25 @@ def _select_imported(objects):
         bpy.context.view_layer.objects.active = objects[0]
 
 
-def import_external_glb(filepath: str, inspection: GLBInspection) -> ExternalImportSummary:
+@transactional("External GLB import")
+def import_external_glb(
+    filepath: str, inspection: GLBInspection
+) -> ExternalImportSummary:
+    """Import a non-CP77 GLB through Blender's glTF importer as one reversible unit"""
     path = os.path.abspath(os.fspath(filepath))
     if inspection.claims_cp77_origin:
         raise ExternalGLBImportError(
             "The external import path cannot import WolvenKit or direct-export GLBs."
         )
     if inspection.content_kind is GLBContentKind.EMPTY:
-        raise ExternalGLBImportError("The external GLB contains no mesh or animation payload.")
-    if os.path.normcase(os.path.abspath(inspection.filepath)) != os.path.normcase(path):
+        raise ExternalGLBImportError(
+            "The external GLB contains no mesh or animation payload."
+        )
+    if absolute_local_path_key(inspection.filepath) != absolute_local_path_key(path):
         raise ExternalGLBImportError(
             "The GLB inspection does not belong to the requested import file."
         )
-    snapshot = _snapshot_datablocks()
+    snapshot = snapshot_datablocks()
     context_snapshot = _context_snapshot()
     try:
         if bpy.context.mode != "OBJECT":
@@ -273,16 +272,28 @@ def import_external_glb(filepath: str, inspection: GLBInspection) -> ExternalImp
             raise ExternalGLBImportError(
                 "Blender's glTF importer is unavailable in the current context."
             )
-        result = bpy.ops.import_scene.gltf(filepath=path)
+        _track_scene_state(bpy.context.scene)
+        try:
+            result = bpy.ops.import_scene.gltf(filepath=path)
+        finally:
+            # Everything Blender's importer created belongs to this import's transaction, even when it fails.
+            track_created_since(snapshot)
         if "FINISHED" not in result:
-            raise ExternalGLBImportError("Blender's glTF importer did not finish successfully.")
+            raise ExternalGLBImportError(
+                "Blender's glTF importer did not finish successfully."
+            )
 
         imported_objects = _new_datablocks(snapshot, "objects")
         imported_collections = _new_datablocks(snapshot, "collections")
         imported_actions = _new_datablocks(snapshot, "actions")
         imported_objects = _remove_unsupported_objects(imported_objects)
+        moving_ids = frozenset(
+            rna_identity(obj)
+            for obj in imported_objects
+            if object_transform_animated(obj)
+        )
         valid_objects, removed_empty_count = _flatten_imported_hierarchy(
-            imported_objects
+            imported_objects, moving_ids
         )
         if not valid_objects and not imported_actions:
             raise ExternalGLBImportError(
@@ -290,7 +301,7 @@ def import_external_glb(filepath: str, inspection: GLBInspection) -> ExternalImp
             )
 
         if valid_objects:
-            _normalize_object_transforms(valid_objects)
+            _normalize_object_transforms(valid_objects, moving_ids)
             _rename_imported_objects(valid_objects)
             _select_imported(valid_objects)
         else:
@@ -299,13 +310,19 @@ def import_external_glb(filepath: str, inspection: GLBInspection) -> ExternalImp
             for obj in tuple(_new_datablocks(snapshot, "objects")):
                 try:
                     bpy.data.objects.remove(obj, do_unlink=True)
-                except (ReferenceError, RuntimeError, TypeError, ValueError):
-                    pass
+                except (ReferenceError, RuntimeError, TypeError, ValueError) as error:
+                    _LOG.debug(
+                        "Temporary glTF node was not removed: %s", error, exc_info=True
+                    )
             for collection in tuple(imported_collections):
                 try:
                     _remove_datablock(bpy.data.collections, collection)
-                except (ReferenceError, RuntimeError, TypeError, ValueError):
-                    pass
+                except (ReferenceError, RuntimeError, TypeError, ValueError) as error:
+                    _LOG.debug(
+                        "Temporary glTF collection was not removed: %s",
+                        error,
+                        exc_info=True,
+                    )
             imported_collections = ()
             _restore_context(context_snapshot)
 
@@ -325,8 +342,7 @@ def import_external_glb(filepath: str, inspection: GLBInspection) -> ExternalImp
             removed_empty_count=removed_empty_count,
         )
     except Exception as error:
-        _rollback_import(snapshot)
-        _restore_context(context_snapshot)
+        # The enclosing transaction removes what was created and restores the scene and context.
         if isinstance(error, ExternalGLBImportError):
             raise
         raise ExternalGLBImportError(f"External GLB import failed: {error}") from error

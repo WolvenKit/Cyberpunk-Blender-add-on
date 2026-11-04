@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from ...core.log import get_logger, log_once
+
+_LOG = get_logger(__name__)
 
 
 def link_collection_once(parent, child):
@@ -7,32 +10,26 @@ def link_collection_once(parent, child):
         parent.children.link(child)
 
 
-_link_collection_once = link_collection_once
-
-
-def unlink_collection_once(parent, child):
-    if parent.children.get(child.name) is child:
-        parent.children.unlink(child)
-
-
-_unlink_collection_once = unlink_collection_once
-
-
 def preserve_world_parent(obj, parent):
     world = obj.matrix_world.copy()
     obj.parent = parent
     try:
         obj.matrix_parent_inverse = parent.matrix_world.inverted_safe()
-    except AttributeError:
+    except AttributeError as error:
+        log_once(
+            _LOG,
+            "DEBUG",
+            ("preserve_world_parent", type(error).__name__),
+            "preserve world parent: fell back after %s",
+            error,
+            exc_info=True,
+        )
         obj.matrix_parent_inverse = parent.matrix_world.inverted()
     obj.matrix_world = world
 
 
-_preserve_world_parent = preserve_world_parent
-
-
 def remap_copied_object_references(copied_objects, object_map):
-    """Remap common Blender object references after copying an object graph."""
+    """Remap common Blender object references after copying an object graph"""
     for obj in copied_objects:
         parent = obj.parent
         if parent in object_map:
@@ -49,6 +46,3 @@ def remap_copied_object_references(copied_objects, object_map):
             target = getattr(constraint, "target", None)
             if target in object_map:
                 constraint.target = object_map[target]
-
-
-_remap_copied_object_references = remap_copied_object_references

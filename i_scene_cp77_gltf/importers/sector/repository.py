@@ -1,9 +1,10 @@
 from ...assetio.catalog import ResourceKind
-from ...assetio.repository import ResourceRepository
+from ...assetio.paths import depot_path_key
+from ...assetio.repository import ResourceLoadError, ResourceRepository
+from ...assetio.streaming_sector import SectorLayoutError
 from .parser import parse_sector_document
 
-
-SECTOR_PARSER_REVISION = 2
+SECTOR_PARSER_REVISION = 3
 
 
 class SectorRepository(ResourceRepository):
@@ -19,18 +20,23 @@ class SectorRepository(ResourceRepository):
         )
 
     def resolve(self, reference):
-        value = str(reference or "").replace("\\", "/").casefold()
+        value = depot_path_key(reference)
         if (
-            value.endswith((
-                ".streamingsector_inplace",
-                ".streamingsector_inplace.json",
-            ))
+            value.endswith(
+                (
+                    ".streamingsector_inplace",
+                    ".streamingsector_inplace.json",
+                )
+            )
             and self.asset_index is not None
         ):
-            return self.asset_index.resolve_expected(
-                reference,
-                ".streamingsector_inplace.json",
-            ) or ""
+            return (
+                self.asset_index.resolve_expected(
+                    reference,
+                    ".streamingsector_inplace.json",
+                )
+                or ""
+            )
         return super().resolve(reference)
 
     def load_sector(
@@ -39,9 +45,6 @@ class SectorRepository(ResourceRepository):
         *,
         parent_sector="",
         parent_sector_path="",
-        composition_depth=0,
-        source_kind="root",
-        source_depot_path="",
         required=False,
     ):
         source = self.resolve(reference)
@@ -49,20 +52,20 @@ class SectorRepository(ResourceRepository):
             source,
             parent_sector,
             parent_sector_path,
-            int(composition_depth),
-            source_kind,
-            source_depot_path,
         )
-        return self.load(
-            source or reference,
-            required=required,
-            parser_options=options,
-            parser_kwargs={
-                "source_path": source,
-                "parent_sector": parent_sector,
-                "parent_sector_path": parent_sector_path,
-                "composition_depth": composition_depth,
-                "source_kind": source_kind,
-                "source_depot_path": source_depot_path,
-            },
-        )
+        try:
+            return self.load(
+                source or reference,
+                required=required,
+                parser_options=options,
+                parser_kwargs={
+                    "source_path": source,
+                    "parent_sector": parent_sector,
+                    "parent_sector_path": parent_sector_path,
+                },
+            )
+        except ResourceLoadError as error:
+            # A sector in another layout stops the import with its own message, which names the file.
+            if isinstance(error.__cause__, SectorLayoutError):
+                raise SectorLayoutError(str(error.__cause__)) from error
+            raise

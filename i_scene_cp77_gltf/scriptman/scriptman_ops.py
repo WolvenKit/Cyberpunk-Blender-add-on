@@ -1,36 +1,28 @@
 import os
 import sys
-import tempfile
 
 import bpy
 from bpy.props import StringProperty
 from bpy.types import Operator
 
-from ..paths import resolve_user_script_path
-from ..registration import get_classes
+from ..assetio.atomic import atomic_write_text
+from ..core.log import get_logger
+from ..core.notifications import report
+from ..core.registration import get_classes
+from .user_scripts import (
+    follow_renamed_script,
+    forget_deleted_script,
+    is_managed_text,
+    load_managed_text,
+    resolve_user_script_path,
+)
 
-def _atomic_write_text(filepath, text):
-    directory = os.path.dirname(filepath)
-    os.makedirs(directory, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(
-        prefix=f".{os.path.basename(filepath)}.",
-        suffix=".tmp",
-        dir=directory,
-        text=True,
-    )
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
-            stream.write(text)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, filepath)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+_LOG = get_logger(__name__)
 
 
 class CP77CreateScript(Operator):
-    '''Operator to add a new blank .py file to the scripts directory'''
+    """Operator to add a new blank .py file to the scripts directory"""
+
     bl_idname = "script_manager.create_script"
     bl_label = "Create New Script"
     bl_description = "Create a new script in the CP77 modding scripts directory"
@@ -42,8 +34,8 @@ class CP77CreateScript(Operator):
         try:
             resolve_user_script_path(base_name, add_extension=True)
         except ValueError as error:
-            self.report({'ERROR'}, str(error))
-            return {'CANCELLED'}
+            report(self, "ERROR", str(error), logger=_LOG, error=error)
+            return {"CANCELLED"}
         script_name = base_name
         if not script_name.casefold().endswith(".py"):
             script_name += ".py"
@@ -54,12 +46,12 @@ class CP77CreateScript(Operator):
             script_name = f"{stem}_{i}.py"
             i += 1
 
-        _atomic_write_text(
+        atomic_write_text(
             resolve_user_script_path(script_name),
             "# New Script\n",
         )
 
-        return {'FINISHED'}
+        return {"FINISHED"}
 
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
@@ -77,7 +69,6 @@ class CP77LoadScript(Operator):
         script_name = self.script_file
 
         if self.new_name:
-            # Rename the script
             try:
                 script_path = resolve_user_script_path(script_name)
                 new_script_path = resolve_user_script_path(
@@ -85,52 +76,47 @@ class CP77LoadScript(Operator):
                     add_extension=True,
                 )
             except ValueError as error:
-                self.report({'ERROR'}, str(error))
-                return {'CANCELLED'}
+                report(self, "ERROR", str(error), logger=_LOG, error=error)
+                return {"CANCELLED"}
 
             if os.path.exists(script_path):
                 if not os.path.exists(new_script_path):
                     os.rename(script_path, new_script_path)
-                    self.report(
-                        {'INFO'},
+                    follow_renamed_script(script_path, new_script_path)
+                    report(
+                        self,
+                        "INFO",
                         f"Renamed '{script_name}' to "
                         f"'{os.path.basename(new_script_path)}'",
+                        logger=_LOG,
                     )
                 else:
-                    self.report({'ERROR'}, f"A script with the name '{self.new_name}' already exists.")
-                    return {'CANCELLED'}
+                    report(
+                        self,
+                        "ERROR",
+                        f"A script with the name '{self.new_name}' already exists.",
+                        logger=_LOG,
+                    )
+                    return {"CANCELLED"}
             else:
-                self.report({'ERROR'}, f"Script not found: {script_name}")
-                return {'CANCELLED'}
+                report(self, "ERROR", f"Script not found: {script_name}", logger=_LOG)
+                return {"CANCELLED"}
         else:
-            # Check if the script is already loaded
-            script_text = bpy.data.texts.get(script_name)
-            # Switch to the loaded script if present
-            if script_text is not None:
-                context.space_data.text = script_text
-            else:
-                # If the script is not loaded, load it
-                try:
-                    script_path = resolve_user_script_path(script_name)
-                except ValueError as error:
-                    self.report({'ERROR'}, str(error))
-                    return {'CANCELLED'}
+            try:
+                script_path = resolve_user_script_path(script_name)
+            except ValueError as error:
+                report(self, "ERROR", str(error), logger=_LOG, error=error)
+                return {"CANCELLED"}
+            if not os.path.exists(script_path):
+                report(self, "ERROR", f"Script not found: {script_name}", logger=_LOG)
+                return {"CANCELLED"}
+            # The script's own text, not another one that happens to share its name.
+            context.space_data.text = load_managed_text(script_path)
 
-                if os.path.exists(script_path):
-                    with open(script_path, 'r', encoding='utf-8') as f:
-                        text_data = bpy.data.texts.new(name=script_name)
-                        text_data.from_string(f.read())
-                        # Set the loaded script as active
-                        context.space_data.text = text_data
-                else:
-                    self.report({'ERROR'}, f"Script not found: {script_name}")
-                    return {'CANCELLED'}
-
-        return {'FINISHED'}
+        return {"FINISHED"}
 
     def invoke(self, context, event):
         if event.ctrl:
-            # Ctrl+Click to rename
             return context.window_manager.invoke_props_dialog(self)
         else:
             self.new_name = ""
@@ -151,15 +137,24 @@ class CP77SaveScript(Operator):
     def execute(self, context):
         script_text = context.space_data.text
         if not script_text:
-            self.report({'ERROR'}, "No active text block to save.")
-            return {'CANCELLED'}
+            report(self, "ERROR", "No active text block to save.", logger=_LOG)
+            return {"CANCELLED"}
         try:
             script_path = resolve_user_script_path(self.script_file)
         except ValueError as error:
-            self.report({'ERROR'}, str(error))
-            return {'CANCELLED'}
-        _atomic_write_text(script_path, script_text.as_string())
-        return {'FINISHED'}
+            report(self, "ERROR", str(error), logger=_LOG, error=error)
+            return {"CANCELLED"}
+        if not is_managed_text(script_text, script_path):
+            report(
+                self,
+                "ERROR",
+                f"Active text '{script_text.name}' is not '{self.script_file}'. Load the target script before saving.",
+                logger=_LOG,
+            )
+            return {"CANCELLED"}
+        atomic_write_text(script_path, script_text.as_string())
+        report(self, "INFO", f"Saved {self.script_file}", logger=_LOG)
+        return {"FINISHED"}
 
 
 class CP77DeleteScript(Operator):
@@ -173,14 +168,18 @@ class CP77DeleteScript(Operator):
         try:
             script_path = resolve_user_script_path(self.script_file)
         except ValueError as error:
-            self.report({'ERROR'}, str(error))
-            return {'CANCELLED'}
+            report(self, "ERROR", str(error), logger=_LOG, error=error)
+            return {"CANCELLED"}
 
         if os.path.exists(script_path):
             os.remove(script_path)
-            return {'FINISHED'}
-        self.report({'ERROR'}, f"Script not found: {self.script_file}")
-        return {'CANCELLED'}
+            forget_deleted_script(script_path)
+            return {"FINISHED"}
+        report(self, "ERROR", f"Script not found: {self.script_file}", logger=_LOG)
+        return {"CANCELLED"}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
 
 
 registration_classes = get_classes(sys.modules[__name__])

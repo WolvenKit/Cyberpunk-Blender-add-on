@@ -1,0 +1,177 @@
+{
+  "Header": {
+    "WolvenKitVersion": "10.0.0-beta.2-nightly.2026-10-25",
+    "WKitJsonVersion": "0.0.9",
+    "GameVersion": 2500,
+    "ExportedDateTime": "2026-11-01T06:10:58.4918579Z",
+    "DataType": "CR2W",
+    "ArchiveFileName": "engine\\materials\\defaults\\multilayer_default.mltemplate"
+  },
+  "Data": {
+    "Version": 195,
+    "BuildVersion": 0,
+    "RootChunk": {
+      "$type": "Multilayer_LayerTemplate",
+      "colorMaskLevelsIn": {
+        "Elements": [1,-0
+        ]
+      },
+      "colorMaskLevelsOut": {
+        "Elements": [0,0
+        ]
+      },
+      "colorTexture": {
+        "DepotPath": {
+          "$type": "ResourcePath",
+          "$storage": "string",
+          "$value": "engine\\materials\\defaults\\ml_default_d.xbm"
+        },
+        "Flags": "Default"
+      },
+      "cookingPlatform": "PLATFORM_PC",
+      "defaultOverrides": {
+        "$type": "Multilayer_LayerOverrideSelection",
+        "colorScale": {
+          "$type": "CName",
+          "$storage": "string",
+          "$value": "null_null"
+        },
+        "metalLevelsIn": {
+          "$type": "CName",
+          "$storage": "string",
+          "$value": "null"
+        },
+        "metalLevelsOut": {
+          "$type": "CName",
+          "$storage": "string",
+          "$value": "null"
+        },
+        "normalStrength": {
+          "$type": "CName",
+          "$storage": "string",
+          "$value": "null"
+        },
+        "roughLevelsIn": {
+          "$type": "CName",
+          "$storage": "string",
+          "$value": "null"
+        },
+        "roughLevelsOut": {
+          "$type": "CName",
+          "$storage": "string",
+          "$value": "null"
+        }
+      },
+      "metalnessTexture": {
+        "DepotPath": {
+          "$type": "ResourcePath",
+          "$storage": "string",
+          "$value": "engine\\materials\\defaults\\ml_default_rm.xbm"
+        },
+        "Flags": "Default"
+      },
+      "normalTexture": {
+        "DepotPath": {
+          "$type": "ResourcePath",
+          "$storage": "string",
+          "$value": "engine\\materials\\defaults\\ml_default_n.xbm"
+        },
+        "Flags": "Default"
+      },
+      "overrides": {
+        "$type": "Multilayer_LayerTemplateOverrides",
+        "colorScale": [
+          {
+            "$type": "Multilayer_LayerTemplateOverridesColor",
+            "n": {
+              "$type": "CName",
+              "$storage": "string",
+              "$value": "null_null"
+            },
+            "v": {
+              "Elements": [0.5,0.5,0.5
+              ]
+            }
+          }
+        ],
+        "metalLevelsIn": [
+          {
+            "$type": "Multilayer_LayerTemplateOverridesLevels",
+            "n": {
+              "$type": "CName",
+              "$storage": "string",
+              "$value": "null"
+            },
+            "v": {
+              "Elements": [1,-0
+              ]
+            }
+          }
+        ],
+        "metalLevelsOut": [
+          {
+            "$type": "Multilayer_LayerTemplateOverridesLevels",
+            "n": {
+              "$type": "CName",
+              "$storage": "string",
+              "$value": "null"
+            },
+            "v": {
+              "Elements": [1,0
+              ]
+            }
+          }
+        ],
+        "normalStrength": [
+          {
+            "$type": "Multilayer_LayerTemplateOverridesNormalStrength",
+            "n": {
+              "$type": "CName",
+              "$storage": "string",
+              "$value": "null"
+            },
+            "v": 1
+          }
+        ],
+        "roughLevelsIn": [
+          {
+            "$type": "Multilayer_LayerTemplateOverridesLevels",
+            "n": {
+              "$type": "CName",
+              "$storage": "string",
+              "$value": "null"
+            },
+            "v": {
+              "Elements": [1,-0
+              ]
+            }
+          }
+        ],
+        "roughLevelsOut": [
+          {
+            "$type": "Multilayer_LayerTemplateOverridesLevels",
+            "n": {
+              "$type": "CName",
+              "$storage": "string",
+              "$value": "null"
+            },
+            "v": {
+              "Elements": [1,0
+              ]
+            }
+          }
+        ]
+      },
+      "roughnessTexture": {
+        "DepotPath": {
+          "$type": "ResourcePath",
+          "$storage": "string",
+          "$value": "engine\\materials\\defaults\\ml_default_rm.xbm"
+        },
+        "Flags": "Default"
+      },
+      "tilingMultiplier": 1
+    },
+    "EmbeddedFiles": []
+  }
+}

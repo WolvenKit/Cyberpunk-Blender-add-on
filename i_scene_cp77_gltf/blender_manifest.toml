@@ -1,34 +1,63 @@
 schema_version = "1.0.0"
 
 id = "i_scene_cp77_gltf"
-version = "2.1.0"
+version = "2.5.0"
 name = "Cyberpunk 2077 IO Suite"
 tagline = "Import and export Cyberpunk 2077 assets with WolvenKit"
-maintainer = "RedModding Organization"
+maintainer = "Red Modding Organization"
 type = "add-on"
 
 website = "https://github.com/WolvenKit/Cyberpunk-Blender-add-on"
 tags = ["Import-Export", "Material", "Animation", "Mesh"]
 
 blender_version_min = "5.0.0"
-blender_version_max = "5.3.0"
+blender_version_max = "5.4.0"
 platforms = ["windows-x64"]
 license = ["SPDX:GPL-3.0-or-later"]
+wheels = [
+  "./wheels/click-8.5.0-py3-none-any.whl",
+  "./wheels/cloudpickle-3.1.2-py3-none-any.whl",
+  "./wheels/colorama-0.4.6-py2.py3-none-any.whl",
+  "./wheels/defusedxml-0.7.1-py2.py3-none-any.whl",
+  "./wheels/distance-0.1.3-py3-none-any.whl",
+  "./wheels/g2p_en-2.1.0-py3-none-any.whl",
+  "./wheels/inflect-7.6.0-py3-none-any.whl",
+  "./wheels/jaraco_functools-4.6.0-py3-none-any.whl",
+  "./wheels/joblib-1.6.0-py3-none-any.whl",
+  "./wheels/more_itertools-11.2.1-py3-none-any.whl",
+  "./wheels/nltk-3.10.4-py3-none-any.whl",
+  "./wheels/praat_parselmouth-0.4.7-cp311-cp311-win_amd64.whl",
+  "./wheels/praat_parselmouth-0.4.7-cp313-cp313-win_amd64.whl",
+  "./wheels/regex-2026.9.29-cp311-cp311-win_amd64.whl",
+  "./wheels/regex-2026.9.29-cp313-cp313-win_amd64.whl",
+  "./wheels/tqdm-4.70.1-py3-none-any.whl",
+  "./wheels/typeguard-4.6.0-py3-none-any.whl",
+  "./wheels/typing_extensions-4.16.0-py3-none-any.whl",
+]
 
 [permissions]
 files = "Import and export Cyberpunk 2077 project and asset files"
 clipboard = "Copy AnimGraph JSON and editor data"
-network = "Install optional JALI lip-sync dependencies when requested"
 
 [build]
 paths_exclude_pattern = [
+  "tests/",
+  "*_TEST_RESULTS_*.json",
+  "ARRANGEMENT_ATLAS_*.md",
+  "CLO_IMPORT_*.md",
+  "CLO_TRIM_*.md",
+  "GARMENT_LIFECYCLE_*.md",
+  "SHOULDER_SURFACE_*.md",
   "__pycache__/",
-  "*.py[cod]",
+  "*.pyc",
+  "*.pyo",
   ".git/",
   ".github/",
   ".idea/",
   ".vscode/",
   "*.zip",
+  # g2p_en looks for its NLTK data as zip files.
+  "!resources/nltk_data/**",
   "*.bak",
   "*.orig",
   "*.rej",

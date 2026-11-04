@@ -1,21 +1,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
 class ParsedEntity:
     appearances: tuple
     appearance_names: tuple
-    appearance_index_by_name: object
     appearances_by_appearance: object
     appearances_by_name: object
     default_appearance: str
     component_dicts: tuple
     component_data: tuple
+    all_components: tuple
     components_by_name: object
+    all_components_by_name: object
     components_by_id: object
+    slot_components: tuple
     component_ids: frozenset
     component_data_ids: frozenset
     parent_transform_lookup: object
@@ -33,6 +35,7 @@ class ParsedEntity:
 class AppearanceRequestResolution:
     appearances: tuple[str, ...]
     default_appearance: str
+    appearance_indices: tuple[int | None, ...]
     messages: tuple[str, ...] = ()
 
 
@@ -59,6 +62,7 @@ class EntityAppearancePlan:
     root_components: tuple[dict, ...]
     appearance_components: tuple[dict, ...]
     merged_components: tuple[dict, ...]
+    component_index: Any
     chunks: tuple[dict, ...]
     used_root_fallback: bool
 
@@ -76,14 +80,20 @@ class EntityRigComponentPlan:
 class EntityRigPlan:
     components: tuple[EntityRigComponentPlan, ...]
     deformation_authorities: tuple[str, ...]
+    base_components: tuple[EntityRigComponentPlan, ...] = ()
+    overlay_components: tuple[EntityRigComponentPlan, ...] = ()
 
     @property
     def ordered_components(self) -> tuple[dict, ...]:
         return tuple(item.component for item in self.components)
 
     @property
-    def control_targets_by_identity(self) -> Mapping[int, str]:
-        return {id(item.component): item.control_target for item in self.components}
+    def ordered_base_components(self) -> tuple[dict, ...]:
+        return tuple(item.component for item in self.base_components)
+
+    @property
+    def ordered_overlay_components(self) -> tuple[dict, ...]:
+        return tuple(item.component for item in self.overlay_components)
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,4 +103,5 @@ class EntityImportPlan:
     appearance_plans: tuple[EntityAppearancePlan, ...]
     mesh_requirements: tuple[EntityMeshRequirement, ...]
     rig: EntityRigPlan
+    warnings: tuple[str, ...]
     messages: tuple[str, ...] = field(default_factory=tuple)

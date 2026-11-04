@@ -1,24 +1,32 @@
 import bpy
 
-c = bpy.context
-bops = bpy.ops
+try:
+    from ...core.log import get_logger
+except ImportError:
+    import logging
 
-## make a cube
-bops.mesh.primitive_cube_add(size=2, enter_editmode=False, align='WORLD', location=(0, 0, 0))
-cube = c.object
+    def get_logger(name):
+        return logging.getLogger(f"i_scene_cp77_gltf.user_scripts.{name}")
 
-# trianghulate the faces of the cube so it'll impport
 
-bops.object.mode_set(mode='EDIT')
-bops.mesh.quads_convert_to_tris(quad_method='BEAUTY', ngon_method='BEAUTY')
-bops.object.mode_set(mode='OBJECT')
+_LOG = get_logger(__name__)
 
-# add a single bone named root so that export works
-bops.object.armature_add(enter_editmode=False, align='WORLD', location=(0, 0, 0))
-armature = c.object
+bpy.ops.mesh.primitive_cube_add(
+    size=2, enter_editmode=False, align="WORLD", location=(0, 0, 0)
+)
+cube = bpy.context.object
+
+
+bpy.ops.object.mode_set(mode="EDIT")
+bpy.ops.mesh.quads_convert_to_tris(quad_method="BEAUTY", ngon_method="BEAUTY")
+bpy.ops.object.mode_set(mode="OBJECT")
+
+
+bpy.ops.object.armature_add(enter_editmode=False, align="WORLD", location=(0, 0, 0))
+armature = bpy.context.object
 armature.data.bones[0].name = "Root"
 
-## put the names of all the bones in all of the rigs you are trying to export from wkit here
+
 vertex_group_names = [
     "Root",
     "Hips",
@@ -88,17 +96,17 @@ vertex_group_names = [
     "RightLeg",
     "RightFoot",
     "RightHeel",
-    "RightToeBase"
-    ]
+    "RightToeBase",
+]
 
-# Create vertex groups and assign the verts to them 
+
 for group_name in vertex_group_names:
     vertex_group = cube.vertex_groups.new(name=group_name)
     for vertex in cube.data.vertices:
-        vertex_group.add([vertex.index], 1.0, 'REPLACE')
+        vertex_group.add([vertex.index], 1.0, "REPLACE")
 
 cube.select_set(True)
-c.view_layer.objects.active = armature
-bops.object.parent_set(type='ARMATURE')
+bpy.context.view_layer.objects.active = armature
+bpy.ops.object.parent_set(type="ARMATURE")
 
-print('finished')
+_LOG.info("finished")

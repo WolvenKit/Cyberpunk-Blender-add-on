@@ -1,14 +1,12 @@
 import os
 
-from ..assetio.paths import DepotPath
-from ..assetio.repository import ResourceLoadError
 from ..assetio.diagnostics import IssueSeverity, ResourceIssue
+from ..assetio.paths import DepotPath, absolute_local_path_key
+from ..assetio.repository import ResourceLoadError
 from .model import MeshRepresentation, ResolvedMeshAsset
-
 
 MESH_GLB_EXTENSIONS = (".glb", ".physicalscene.glb", ".w2mesh.glb")
 MESH_JSON_EXTENSIONS = (".mesh.json", ".physicalscene.json", ".w2mesh.json")
-MESH_INDEX_EXTENSIONS = (*MESH_GLB_EXTENSIONS, *MESH_JSON_EXTENSIONS)
 MESH_COOKED_EXTENSIONS = (".mesh", ".physicalscene", ".w2mesh")
 MESH_COOKED_NAME_SUFFIXES = tuple(value.lstrip(".") for value in MESH_COOKED_EXTENSIONS)
 
@@ -20,6 +18,11 @@ def _representation(reference, resolved):
     if ".w2mesh" in value:
         return MeshRepresentation.W2MESH
     return MeshRepresentation.MESH
+
+
+def is_physical_scene(path) -> bool:
+    """Physics scene exports carry collision display geometry and no material sidecar"""
+    return _representation(path, "") is MeshRepresentation.PHYSICAL_SCENE
 
 
 class MeshRepository:
@@ -51,7 +54,11 @@ class MeshRepository:
         if not value:
             return ""
         local_file = os.path.isfile(value)
-        key = os.path.normcase(os.path.abspath(value)) if local_file else DepotPath.from_value(value).key
+        key = (
+            absolute_local_path_key(value)
+            if local_file
+            else DepotPath.from_value(value).key
+        )
         cached = self._sidecar_cache.get(key)
         if cached is not None:
             self._hits += 1
@@ -77,7 +84,11 @@ class MeshRepository:
         if not value:
             return None
         local_file = os.path.isfile(value)
-        key = os.path.normcase(os.path.abspath(value)) if local_file else DepotPath.from_value(value).key
+        key = (
+            absolute_local_path_key(value)
+            if local_file
+            else DepotPath.from_value(value).key
+        )
         cached = self._cache.get(key)
         if cached is not None:
             self._hits += 1
@@ -93,7 +104,11 @@ class MeshRepository:
                     self._cache[key] = cached
             return cached
         self._misses += 1
-        resolved = value if local_file else self.asset_index.resolve_export(value, MESH_GLB_EXTENSIONS)
+        resolved = (
+            value
+            if local_file
+            else self.asset_index.resolve_export(value, MESH_GLB_EXTENSIONS)
+        )
         if not resolved:
             issue = ResourceIssue(
                 IssueSeverity.ERROR,

@@ -1,233 +1,303 @@
-import json
+import copy
 import typing
 
 import bpy
 
-from ...animation.animgraph_constants import COMPARE_OPS, CONTAINER_OUTPUT_NAME
-from ...blender.animgraph.sockets import bind_output_socket, bind_red_socket
+from ...animation.model.animgraph.schema import enums
+from ...assetio import animgraph_json
+from ...blender.animgraph import sm_records, sm_sockets
+from ...blender.animgraph.builder import new_handle_id
+from ...blender.animgraph.sm_properties import INTERPOLATION_TYPE_ENUM
+from ...core.log import debug_exception, get_logger
+
+_LOG = get_logger(__name__)
+
+_LIST_LABELS = {
+    "transitions": "transition",
+    "globalTransitions": "global transition",
+    "conditionalEntries": "conditional entry",
+}
+
 
 class ParserTransitionsMixin:
     def _plan_transitions(self) -> None:
-        """Declare editor-derived state-machine flow constructs."""
+        """Store each state machine's transitions as records on the nodes that own them"""
         for sm_hid, data in self.definitions.items():
             states = data.get("states")
             if not isinstance(states, list) or not states:
                 continue
-            transitions = data.get("transitions") or []
-            handles, names = self._state_handles_and_names(states)
             sm_tree = self.tree_of_container.get(sm_hid) or self._resolve_tree(sm_hid)
-            if sm_tree is None:
+            sm_node = self.bl_nodes.get(sm_hid)
+            if sm_tree is None or sm_node is None:
                 continue
-
-            entry_node = self._make_state_machine_pseudo(sm_tree, sm_hid, "Entry", "Entry")
-            output_node = self._make_state_machine_output(sm_tree, sm_hid, handles, names)
-            self.state_machine_output_node[sm_hid] = output_node
-
-            default_index = data.get("defaultStateIndex", 0)
-            if isinstance(default_index, int) and 0 <= default_index < len(handles):
-                self._plan_transition_edge(
-                    entry_node, f"Default -> {names[default_index]}",
-                    handles[default_index], f"Default <- Entry", output_node)
-
-            for entry in data.get("conditionalEntries") or []:
-                cond_entry = self._payload_of(entry) or (entry if isinstance(entry, dict) else None)
-                if not isinstance(cond_entry, dict):
-                    continue
-                target_index = self._transition_target_index(cond_entry)
-                if target_index is None or not (0 <= target_index < len(handles)):
-                    continue
-                cond = self._summarize_condition(cond_entry.get("condition"))
-                label = self._transition_label(cond_entry, cond)
-                self._plan_transition_edge(
-                    entry_node, f"{label} -> {names[target_index]}",
-                    handles[target_index], f"{label} <- Entry", output_node)
-
-            for si, src_handle in enumerate(handles):
-                source_data = self.definitions.get(src_handle) if src_handle is not None else None
-                if not isinstance(source_data, dict) or src_handle not in self.bl_nodes:
-                    continue
-                for ti in source_data.get("outTransitionIndices", []) or []:
-                    if not isinstance(ti, int) or not (0 <= ti < len(transitions)):
-                        continue
-                    trans = self._payload_of(transitions[ti])
-                    if not isinstance(trans, dict):
-                        continue
-                    tgt_idx = self._transition_target_index(trans)
-                    if tgt_idx is None or not (0 <= tgt_idx < len(handles)):
-                        continue
-                    tgt_handle = handles[tgt_idx]
-                    if tgt_handle is None or tgt_handle not in self.bl_nodes or tgt_handle == src_handle:
-                        continue
-                    cond = self._transition_label(trans, self._summarize_condition(trans.get("condition")))
-                    self._plan_transition_edge(
-                        self.bl_nodes[src_handle], f"{cond} -> {names[tgt_idx]}",
-                        tgt_handle, f"{cond} <- {names[si]}", output_node)
-
-            global_transitions = data.get("globalTransitions") or []
-            if global_transitions:
-                any_node = self._make_state_machine_pseudo(sm_tree, sm_hid, "AnyState", "Any State")
-                for gi, entry in enumerate(global_transitions):
-                    trans = self._payload_of(entry)
-                    if not isinstance(trans, dict):
-                        continue
-                    tgt_idx = self._transition_target_index(trans)
-                    if tgt_idx is None or not (0 <= tgt_idx < len(handles)):
-                        continue
-                    label = self._transition_label(
-                        trans, self._summarize_condition(trans.get("condition")) or f"Global {gi}")
-                    interp = self._summarize_interpolator(data.get("anyStateInterpolator"))
-                    if interp:
-                        label = f"{label} [{interp}]"
-                    self._plan_transition_edge(
-                        any_node, f"{label} -> {names[tgt_idx]}",
-                        handles[tgt_idx], f"{label} <- Any State", output_node)
-
-    def _state_handles_and_names(self, states: typing.List[typing.Any]) -> typing.Tuple[typing.List[typing.Optional[str]], typing.List[str]]:
-        handles: typing.List[typing.Optional[str]] = []
-        names: typing.List[str] = []
-        for entry in states:
-            handle = self._entry_handle(entry)
-            inner = self.definitions.get(handle) if handle is not None else None
-            name = (inner.get("name") or {}).get("$value") if isinstance(inner, dict) else None
-            handles.append(handle)
-            names.append(name or (handle if handle is not None else "?"))
-        return handles, names
-
-    def _make_state_machine_pseudo(self, tree: bpy.types.NodeTree, sm_hid: str,
-                                   short: str, label: str) -> bpy.types.Node:
-        key = f"editor{short}_{sm_hid}"
-        existing = tree.nodes.get(key)
-        if existing is not None:
-            return existing
-        node = self._new_pseudo_node(tree, short, label, key)
-        return node
-
-    def _make_state_machine_output(self, tree: bpy.types.NodeTree, sm_hid: str,
-                                   state_handles: typing.List[typing.Optional[str]],
-                                   state_names: typing.List[str]) -> bpy.types.Node:
-        key = f"editorStateMachineOutput_{sm_hid}"
-        existing = tree.nodes.get(key)
-        node = existing if existing is not None else self._new_pseudo_node(
-            tree, "StateMachineOutput", "StateMachine Runtime Output", key)
-
-        if node.outputs.get(CONTAINER_OUTPUT_NAME) is None:
-            sock = node.outputs.new('REDengine_AnimGraphSocket_Pose', CONTAINER_OUTPUT_NAME)
-        else:
-            sock = node.outputs.get(CONTAINER_OUTPUT_NAME)
-        if sock is not None:
-            bind_output_socket(
-                sock, owner_handle=getattr(node, 'red_handle_id', ''),
-                link_type='animPoseLink', exportable=False,
-                edge_semantics='state_summary', pseudo=True)
-
-        node["red_state_handles"] = json.dumps([h for h in state_handles if h is not None])
-        node["red_state_names"] = json.dumps(state_names)
-
-
-        for handle, name in zip(state_handles, state_names):
-            if handle is None:
-                continue
-            state_node = self.bl_nodes.get(handle)
-            if state_node is None or state_node.id_data is not tree:
-                continue
-            in_name = self._unique_socket_name(node, 'INPUT', f"State: {name}")
-            in_sock = node.inputs.new('REDengine_AnimGraphSocket_Pose', in_name)
-            bind_red_socket(
-                in_sock, role='input', owner_handle=getattr(node, 'red_handle_id', ''),
-                field_name='states', json_path=f'states[{state_handles.index(handle)}]',
-                link_type='animPoseLink', source_handle=handle,
-                target_handle=getattr(node, 'red_handle_id', ''), exportable=False,
-                edge_semantics='state_summary', pseudo=True)
-            out_sock = self._output_socket_of(state_node, handle)
-            if out_sock is None:
-                continue
-            if self._safe_new_link(tree, state_node, out_sock.name, node, in_sock.name):
-                self.drawn_state_aggregation_edges += 1
-                self.transition_layout_edges.append((state_node, node))
-        return node
-
-    def _plan_transition_edge(self, src_node: bpy.types.Node, out_label: str,
-                              target_handle: typing.Optional[str], in_label: str,
-                              output_node: typing.Optional[bpy.types.Node] = None) -> None:
-        if target_handle is None or target_handle not in self.bl_nodes:
-            self.failed_transition_edges.append((src_node.name, f"missing target {target_handle}"))
-            return
-        tgt_node = self.bl_nodes[target_handle]
-        if src_node.id_data is not tgt_node.id_data:
-            self.failed_transition_edges.append((src_node.name, f"tree mismatch to {target_handle}"))
-            self.problems.append(
-                f"transition endpoint tree mismatch: {src_node.name} -> {target_handle}")
-            return
-
-        condition = out_label.split(" -> ", 1)[0]
-        target_label = out_label.split(" -> ", 1)[1] if " -> " in out_label else tgt_node.label
-        source_label = in_label.split(" <- ", 1)[1] if " <- " in in_label else src_node.label
-        index = len(self.planned_transitions) + 1
-        key = f"editorTransition_{src_node.red_handle_id}_{target_handle}_{index}"
-        node = self._new_pseudo_node(src_node.id_data, "Transition", f"Transition: {source_label} → {target_label}", key)
-        node["red_transition_condition"] = condition
-        node["red_transition_source"] = str(source_label)
-        node["red_transition_target"] = str(target_label)
-        node["red_transition_source_node"] = src_node.name
-        node["red_transition_target_node"] = tgt_node.name
-        node["red_transition_source_handle"] = str(getattr(src_node, "red_handle_id", ""))
-        node["red_transition_target_handle"] = str(target_handle)
-
-
-        self.transition_layout_edges.append((src_node, node))
-
-
-        out_sock = node.outputs.new('REDengine_AnimGraphSocket_Transition', "Transition")
-        bind_red_socket(
-            out_sock, role='output', owner_handle=getattr(node, 'red_handle_id', ''),
-            field_name='transition', json_path='transition', link_type='editorTransition',
-            source_handle=getattr(src_node, 'red_handle_id', ''), target_handle=str(target_handle),
-            exportable=False, edge_semantics='transition_summary', pseudo=True)
-        if output_node is not None and output_node.id_data is node.id_data:
-            in_name = self._unique_socket_name(
-                output_node, 'INPUT', f"Transition: {source_label} → {target_label}")
-            in_sock = output_node.inputs.new('REDengine_AnimGraphSocket_Transition', in_name)
-            bind_red_socket(
-                in_sock, role='input', owner_handle=getattr(output_node, 'red_handle_id', ''),
-                field_name='transitions', json_path=f'transitions[{index - 1}]',
-                link_type='editorTransition', source_handle=getattr(src_node, 'red_handle_id', ''),
-                target_handle=str(target_handle), exportable=False,
-                edge_semantics='transition_summary', pseudo=True)
-            if self._safe_new_link(node.id_data, node, out_sock.name, output_node, in_sock.name):
-                self.drawn_transition_edges += 1
-                self.transition_layout_edges.append((node, output_node))
-
-        self.planned_transitions.append(node)
+            marks = (len(self.transition_layout_edges), len(self.unowned_transitions))
+            try:
+                self._import_state_machine_records(sm_hid, data, sm_node, sm_tree)
+            except Exception as exc:
+                debug_exception(
+                    _LOG,
+                    "Could not import the transitions of state machine %s; they stay read-only",
+                    sm_hid,
+                )
+                self.problems.append(
+                    f"state machine {sm_hid}: transition import failed: {exc}; "
+                    f"its transitions stay read-only (exported as imported)"
+                )
+                del self.transition_layout_edges[marks[0] :]
+                del self.unowned_transitions[marks[1] :]
+                self._discard_state_machine_records(sm_node, sm_tree)
 
     @staticmethod
-    def _transition_target_index(data: dict) -> typing.Optional[int]:
+    def _discard_state_machine_records(
+        sm_node: bpy.types.Node, sm_tree: bpy.types.NodeTree
+    ) -> None:
+        """Undo a partial records import"""
+        sm_node.red_sm_records = False
+        sm_node.red_sm_states.clear()
+        sm_node.red_transitions.clear()
+        sm_node.red_sm_import_notes = ""
+        for node in list(sm_tree.nodes):
+            if getattr(node, "red_type", "") in (
+                sm_records.ENTRY_RED_TYPE,
+                sm_records.ANY_RED_TYPE,
+            ):
+                sm_tree.nodes.remove(node)
+                continue
+            records = getattr(node, "red_transitions", None)
+            if records is not None:
+                records.clear()
+                node.red_transitions_index = 0
+            sm_sockets.remove_transition_sockets(node)
+
+    def _import_state_machine_records(
+        self,
+        sm_hid: str,
+        data: dict,
+        sm_node: bpy.types.Node,
+        sm_tree: bpy.types.NodeTree,
+    ) -> None:
+        handles = [self._entry_handle(entry) for entry in data.get("states")]
+        transitions = data.get("transitions") or []
+
+        sm_node.red_sm_states.clear()
+        for handle in handles:
+            if handle is not None:
+                sm_node.red_sm_states.add().handle = handle
+
+        state_nodes: dict[str, bpy.types.Node] = {}
+        for handle in handles:
+            node = self.bl_nodes.get(handle) if handle is not None else None
+            if node is not None and node.id_data is sm_tree:
+                state_nodes[handle] = node
+
+        def state_text(handle: str) -> str:
+            node = state_nodes.get(handle)
+            label = str(getattr(node, "label", "") or "")
+            label = label.removeprefix("State: ")
+            return f"{label} ({handle})" if label else handle
+
+        notes: list[str] = []
+        sm_node.red_sm_import_notes = ""
+
+        owner_of: dict[int, str] = {}
+        orphan_of: dict[
+            int, str
+        ] = {}  # listed by a state that has no State node here
+        rows_of: dict[str, list[int]] = {}
+        for handle in handles:
+            if handle is None:
+                continue
+            rows_of.setdefault(handle, [])
+            state_data = self.definitions.get(handle)
+            listed = (
+                state_data.get("outTransitionIndices")
+                if isinstance(state_data, dict)
+                else None
+            )
+            for index in listed or []:
+                if not isinstance(index, int) or not 0 <= index < len(transitions):
+                    self.problems.append(
+                        f"state machine {sm_hid}: state {handle} lists transition {index!r}, "
+                        f"which does not exist"
+                    )
+                    continue
+                if handle not in state_nodes:
+                    orphan_of.setdefault(index, handle)
+                    continue
+                if index in owner_of:
+                    self.problems.append(
+                        f"state machine {sm_hid}: transition {index} is listed by states "
+                        f"{owner_of[index]} and {handle}; kept on {owner_of[index]}"
+                    )
+                    notes.append(
+                        f"transition {index} is also listed by state {state_text(handle)}; "
+                        f"that listing was dropped (the transition is kept on state "
+                        f"{state_text(owner_of[index])})"
+                    )
+                    continue
+                owner_of[index] = handle
+                rows_of[handle].append(index)
+
+        def add_rows(owner: bpy.types.Node, list_name: str, entries, indices) -> None:
+            owner.red_transitions_index = 0
+            for index in indices:
+                self._add_transition_record(
+                    sm_hid,
+                    owner,
+                    list_name,
+                    index,
+                    entries[index],
+                    handles,
+                    state_nodes,
+                )
+
+        for handle, node in state_nodes.items():
+            node.red_transitions.clear()
+            add_rows(node, "transitions", transitions, rows_of.get(handle, ()))
+
+        entry = sm_records.new_pseudo_node(sm_tree, sm_hid, "Entry", "Entry")
+        entry.red_transitions.clear()
+        default_index = data.get("defaultStateIndex", 0)
+        default_target = None
+        if isinstance(default_index, int) and 0 <= default_index < len(handles):
+            default_target = handles[default_index]
+        else:
+            self.problems.append(
+                f"state machine {sm_hid}: default state index {default_index!r} is not a state"
+            )
+        sm_records.record_from_wrapper(
+            entry.red_transitions.add(),
+            None,
+            sm_records.DEFAULT_LIST,
+            -1,
+            default_target,
+        )
+        self._link_layout(entry, state_nodes.get(default_target))
+        entries = data.get("conditionalEntries") or []
+        add_rows(entry, "conditionalEntries", entries, range(len(entries)))
+
+        any_state = sm_records.new_pseudo_node(sm_tree, sm_hid, "AnyState", "Any State")
+        any_state.red_transitions.clear()
+        globals_ = data.get("globalTransitions") or []
+        add_rows(any_state, "globalTransitions", globals_, range(len(globals_)))
+        self._import_any_state_interpolator(any_state, data.get("anyStateInterpolator"))
+
+        sm_node.red_transitions.clear()
+        unowned = [index for index in range(len(transitions)) if index not in owner_of]
+        for index in unowned:
+            self.unowned_transitions.append(index)
+            if index in orphan_of:
+                self.problems.append(
+                    f"state machine {sm_hid}: transition {index} is listed by state {orphan_of[index]}, "
+                    f"which has no State node in this state machine; kept on the state machine"
+                )
+                continue
+            self.problems.append(
+                f"state machine {sm_hid}: transition {index} is not listed by any state; "
+                f"kept on the state machine"
+            )
+        add_rows(sm_node, "transitions", transitions, unowned)
+
+        sm_node.red_sm_records = True
+        sm_node.red_sm_import_notes = "\n".join(notes)
+        for node in (*state_nodes.values(), entry, any_state):
+            sm_sockets.sync_transition_sockets(node)
+
+    def _add_transition_record(
+        self,
+        sm_hid: str,
+        owner: bpy.types.Node,
+        list_name: str,
+        index: int,
+        entry: typing.Any,
+        handles: list[str | None],
+        state_nodes: dict[str, bpy.types.Node],
+    ) -> None:
+        what = f"state machine {sm_hid}: {_LIST_LABELS[list_name]} {index}"
+        shared = [False]
+
+        def resolve(ref_id: str) -> dict | None:
+            copied = self._private_copy(ref_id)
+            if copied is not None:
+                shared[0] = True
+            return copied
+
+        wrapper = (
+            entry
+            if isinstance(entry, dict) and isinstance(entry.get("Data"), dict)
+            else None
+        )
+        if wrapper is None and isinstance(entry, dict) and "HandleRefId" in entry:
+            wrapper = resolve(str(entry["HandleRefId"]))
+        if wrapper is None:
+            self.problems.append(f"{what} could not be read; it was dropped")
+            return
+
+        target_index = self._transition_target_index(wrapper["Data"])
+        target = None
+        if isinstance(target_index, int) and 0 <= target_index < len(handles):
+            target = handles[target_index]
+        if target is None:
+            self.problems.append(f"{what} has no valid target state ({target_index!r})")
+
+        rec = owner.red_transitions.add()
+        sm_records.record_from_wrapper(
+            rec, wrapper, list_name, index, target, resolve=resolve
+        )
+        if shared[0]:
+            self.problems.append(f"{what} shared handle id; copied")
+        self._link_layout(owner, state_nodes.get(target))
+
+    def _link_layout(
+        self, src: bpy.types.Node | None, dst: bpy.types.Node | None
+    ) -> None:
+        """Let layout place src near the state it transitions to"""
+        if src is not None and dst is not None and src is not dst:
+            self.transition_layout_edges.append((src, dst))
+
+    def _private_copy(self, ref_id: str) -> dict | None:
+        """A copy of the wrapper ref_id names, with fresh handles throughout"""
+        data = self.handle_data.get(str(ref_id))
+        if not isinstance(data, dict):
+            return None
+        wrapper = {"HandleId": str(ref_id), "Data": copy.deepcopy(data)}
+        stack: list[typing.Any] = [wrapper]
+        while stack:
+            value = stack.pop()
+            if isinstance(value, dict):
+                if "HandleId" in value and isinstance(value.get("Data"), dict):
+                    value["HandleId"] = new_handle_id()
+                stack.extend(value.values())
+            elif isinstance(value, list):
+                stack.extend(value)
+        return wrapper
+
+    def _import_any_state_interpolator(
+        self, node: bpy.types.Node, value: typing.Any
+    ) -> None:
+        node.red_sm_any_interpolator_json = animgraph_json.dumps(value, indent=None)
+        idata = value.get("Data") if isinstance(value, dict) else None
+        choice = "Linear"
+        if isinstance(idata, dict) and "interpolationType" in idata:
+            choice = enums.normalize_choice(
+                INTERPOLATION_TYPE_ENUM, idata["interpolationType"]
+            )
+        try:
+            node.red_sm_any_interpolation = choice
+        except TypeError:
+            self.problems.append(
+                f"any state interpolation {choice!r} is not a known value; kept in the original JSON"
+            )
+
+    @staticmethod
+    def _transition_target_index(data: dict) -> int | None:
         for key in ("targetStateIndex", "stateIndex", "targetIndex"):
             value = data.get(key)
             if isinstance(value, int):
                 return value
         return None
 
-    def _transition_label(self, data: dict, condition: str) -> str:
-        parts = [condition or "?"]
-        priority = data.get("priority")
-        if isinstance(priority, int) and priority:
-            parts.append(f"p{priority}")
-        if data.get("isForcedToTrue"):
-            parts.append("forced")
-        if data.get("isEnabled") is False:
-            parts.append("disabled")
-        duration = data.get("duration")
-        if isinstance(duration, (int, float)) and duration:
-            parts.append(f"{duration:.2f}s")
-        return " ".join(parts)
-
-    def _summarize_interpolator(self, value: typing.Any) -> str:
-        data = self._payload_of(value) if isinstance(value, dict) else None
-        if not isinstance(data, dict):
-            return ""
-        return data.get("$type", "").replace("anim", "").replace("AnimStateTransitionInterpolator", "Interp")
-
-    def _payload_of(self, entry: typing.Any) -> typing.Optional[dict]:
+    def _payload_of(self, entry: typing.Any) -> dict | None:
         if not isinstance(entry, dict):
             return None
         if isinstance(entry.get("Data"), dict):
@@ -247,105 +317,11 @@ class ParserTransitionsMixin:
             if socket is not None:
                 self.input_socket[(hid, key)] = socket
 
-    def _link_transitions(self) -> None:
-        return
-
-    def _summarize_condition(self, condition: typing.Any) -> str:
-        if not isinstance(condition, dict):
-            return "?"
-        data = self._payload_of(condition) or condition
-        if not isinstance(data, dict):
-            return "?"
-        ctype = data.get("$type", "")
-        short = ctype.replace("animAnimStateTransitionCondition_", "")
-        lower = short.lower()
-
-        if "compositesimultaneous" in lower:
-            children = []
-            for key in ("conditions", "conditionList", "childConditions"):
-                value = data.get(key)
-                if isinstance(value, list):
-                    children.extend(value)
-            rendered = [self._summarize_condition(c) for c in children]
-            rendered = [r for r in rendered if r and r != "?"]
-            return " AND ".join(rendered) if rendered else "AND(?)"
-
-        if "externalevent" in lower:
-            ev = self._cname(data.get("eventName")) or self._cname(data.get("name"))
-            return f"evt:{ev}" if ev else "evt"
-        if "animevent" in lower:
-            ev = self._cname(data.get("eventName")) or self._cname(data.get("event"))
-            return f"animEvt:{ev}" if ev else "animEvt"
-        if "footphase" in lower:
-            phase = data.get("phase") or self._cname(data.get("phaseName"))
-            return f"foot:{phase}" if phase else "footPhase"
-        if "animend" in lower or "anyanimend" in lower:
-            ev = self._cname(data.get("eventName"))
-            return f"animEnd:{ev}" if ev else "animEnd"
-        if "hasanimation" in lower:
-            name = self._cname(data.get("animationName")) or self._cname(data.get("animName"))
-            return f"hasAnim:{name}" if name else "hasAnim"
-        if "timed" in lower or "time" == lower:
-            value = data.get("time") or data.get("duration") or data.get("seconds")
-            return f"time>={value}" if value is not None else "timed"
-        if "feature" in lower:
-            feature = self._cname(data.get("featureName")) or self._cname(data.get("animFeatureName"))
-            return f"feature:{feature}" if feature else short or "feature"
-        if "wrappervalue" in lower:
-            return "wrapperValue"
-        if "locomotion" in lower:
-            return short or "locomotion"
-
-        if "variable" in lower:
-            var = self._cname(data.get("variableName")) or "?"
-            op = COMPARE_OPS.get(data.get("compareFunc"), data.get("compareFunc", "=="))
-            if "bool" in lower and "compareValue" not in data:
-                return f"{var}==True"
-            return f"{var}{op}{data.get('compareValue', '?')}"
-
-        return short or "?"
-
-    @staticmethod
-    def _cname(value: typing.Any) -> str:
-        if isinstance(value, dict):
-            text = value.get("$value", "")
-            return "" if text == "None" else str(text)
-        if isinstance(value, str):
-            return "" if value == "None" else value
-        return ""
-
-    def _safe_new_link(self, tree: bpy.types.NodeTree,
-                       src_node: bpy.types.Node, out_name: str,
-                       dst_node: bpy.types.Node, in_name: str) -> bool:
-        if src_node.id_data is not tree or dst_node.id_data is not tree:
-            return False
-        out_sock = src_node.outputs.get(out_name)
-        in_sock = dst_node.inputs.get(in_name)
-        if out_sock is None or in_sock is None:
-            return False
-        for link in tree.links:
-            if (getattr(link.from_node, 'name', None) == src_node.name
-                    and getattr(link.to_node, 'name', None) == dst_node.name
-                    and getattr(link.from_socket, 'name', None) == out_name
-                    and getattr(link.to_socket, 'name', None) == in_name):
-                return False
-        try:
-            tree.links.new(out_sock, in_sock)
-            return True
-        except Exception as exc:
-            self.problems.append(
-                f"could not create visual helper link {src_node.name}.{out_name} -> "
-                f"{dst_node.name}.{in_name}: {exc}")
-            return False
-
     def _unique_socket_name(self, node: bpy.types.Node, in_out: str, base: str) -> str:
-        collection = node.outputs if in_out == 'OUTPUT' else node.inputs
+        collection = node.outputs if in_out == "OUTPUT" else node.inputs
         name = base
         suffix = 2
         while collection.get(name) is not None:
             name = f"{base} ({suffix})"
             suffix += 1
         return name
-
-    def _declare_transition_socket(self, node: bpy.types.Node, name: str, in_out: str) -> None:
-        self._ensure_socket(node, in_out, name, 'REDengine_AnimGraphSocket_Transition')

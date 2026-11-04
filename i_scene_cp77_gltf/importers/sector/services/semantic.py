@@ -1,26 +1,14 @@
 from __future__ import annotations
-from ....blender.transactions import track_created_datablock
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 
 import bpy
 
+from ....assetio.values import cname_text, nested_dict
+from ....blender.naming import fit_id_name
+from ....blender.transactions import track_created_datablock
 from ...common.paths import depot_path_from_value
-from ....assetio.values import nested_dict
-
-
-SEMANTIC_MARKER_CONTRACTS = {
-    "worldAISpotNode": "AI_SPOT_NODE_WORLD",
-    "worldPopulationSpawnerNode": "POPULATION_SPAWNER_NODE_WORLD",
-    "worldCompiledSmartObjectsNode": (
-        "COMPILED_SMART_OBJECT_RESOURCE_NODE_WORLD"
-    ),
-    "worldSmartObjectNode": "SMART_OBJECT_NODE_WORLD",
-    "worldStaticGpsLocationEntranceMarkerNode": (
-        "GPS_LOCATION_ENTRANCE_MARKER_NODE_WORLD"
-    ),
-}
 
 
 @dataclass(slots=True, frozen=True)
@@ -67,24 +55,6 @@ SEMANTIC_MARKER_SPECS = {
 }
 
 
-@dataclass(slots=True, frozen=True)
-class SemanticResourceResult:
-    label: str
-    kind: str
-    depot_path: str
-    resolved_path: str
-    expected_path: str
-    status: str
-    warn_missing: bool
-
-
-@dataclass(slots=True, frozen=True)
-class SemanticPlacement:
-    object: object
-    resources: tuple[SemanticResourceResult, ...]
-
-
-
 class SemanticMarkerService:
     def __init__(self, session):
         self.session = session
@@ -98,75 +68,46 @@ class SemanticMarkerService:
                 f"Unsupported semantic marker node type: {node_type}"
             ) from error
 
-    @staticmethod
-    def marker_contract(node_type):
-        try:
-            return SEMANTIC_MARKER_CONTRACTS[node_type]
-        except KeyError as error:
-            raise ValueError(
-                f"Unsupported semantic marker node type: {node_type}"
-            ) from error
-
-    def resolve(
-        self,
-        *,
-        label,
-        kind,
-        depot_path,
-        warn_missing,
-    ):
+    def resolve(self, kind, depot_path):
         normalized = str(depot_path or "")
         suffix = os.path.splitext(normalized)[1].lower()
-        expected_extension = (
-            f"{suffix}.json"
-            if suffix
-            else ".json"
-        )
-        resolved = self.session.resource_resolver.resolve_json(
+        expected_extension = f"{suffix}.json" if suffix else ".json"
+        return self.session.resource_resolver.resolve_json(
             kind,
             normalized,
             expected_extension,
-        )
-        return SemanticResourceResult(
-            label=label,
-            kind=kind,
-            depot_path=resolved.depot_path,
-            resolved_path=resolved.resolved_path,
-            expected_path=resolved.expected_path,
-            status=resolved.status,
-            warn_missing=bool(warn_missing),
         )
 
     @staticmethod
     def resource_requests(node_type, data):
         if node_type == "worldAISpotNode":
             spot_data = nested_dict(data, "spot", "Data")
-            workspot = depot_path_from_value(
-                spot_data.get("resource")
-            )
+            workspot = depot_path_from_value(spot_data.get("resource"))
             return (
-                ("workspotTemplate", "workspot", workspot, False),
-            ) if workspot else ()
+                (("workspotTemplate", "cp77_workspot", workspot, False),)
+                if workspot
+                else ()
+            )
 
         if node_type == "worldCompiledSmartObjectsNode":
-            resource = depot_path_from_value(
-                data.get("resource")
-            )
+            resource = depot_path_from_value(data.get("resource"))
             return (
                 (
-                    "compiledSmartObjects",
-                    "smartobjects",
-                    resource,
-                    True,
-                ),
-            ) if resource else ()
+                    (
+                        "compiledSmartObjects",
+                        "smartobjects",
+                        resource,
+                        True,
+                    ),
+                )
+                if resource
+                else ()
+            )
 
         if node_type == "worldSmartObjectNode":
             smart_data = nested_dict(data, "object", "Data")
             requests = []
-            workspot = depot_path_from_value(
-                smart_data.get("workspotTemplate")
-            )
+            workspot = depot_path_from_value(smart_data.get("workspotTemplate"))
             action_database = depot_path_from_value(
                 smart_data.get("motionActionDatabase")
             )
@@ -174,7 +115,7 @@ class SemanticMarkerService:
                 requests.append(
                     (
                         "workspotTemplate",
-                        "workspot",
+                        "cp77_workspot",
                         workspot,
                         True,
                     )
@@ -193,19 +134,12 @@ class SemanticMarkerService:
         return ()
 
     def resources(self, node_type, data):
+        """(label, whether a missing one is warned of, resolution) of each resource the node names"""
         return tuple(
-            self.resolve(
-                label=label,
-                kind=kind,
-                depot_path=depot_path,
-                warn_missing=warn_missing,
+            (label, warn_missing, self.resolve(kind, depot_path))
+            for label, kind, depot_path, warn_missing in self.resource_requests(
+                node_type, data
             )
-            for (
-                label,
-                kind,
-                depot_path,
-                warn_missing,
-            ) in self.resource_requests(node_type, data)
         )
 
     @staticmethod
@@ -216,18 +150,11 @@ class SemanticMarkerService:
         spec,
     ):
         base = f"{node_type}_{debug_name}"
-        return (
-            f"{base}_{instance_index}"
-            if spec.append_instance_index
-            else base
-        )
+        return f"{base}_{instance_index}" if spec.append_instance_index else base
 
     @staticmethod
     def _resource_by_label(resources):
-        return {
-            resource.label: resource
-            for resource in resources
-        }
+        return {label: resource for label, _warn_missing, resource in resources}
 
     def _node_properties(
         self,
@@ -236,9 +163,7 @@ class SemanticMarkerService:
     ):
         data = context.data
         node_type = context.node_type
-        properties = {
-            "semanticRepresentation": self.marker_contract(node_type),
-        }
+        properties = {}
         resources_by_label = self._resource_by_label(resources)
 
         if node_type == "worldAISpotNode":
@@ -248,128 +173,47 @@ class SemanticMarkerService:
                 "spotDef",
                 "Data",
             )
-            workspot = resources_by_label.get(
-                "workspotTemplate"
+            workspot = resources_by_label.get("workspotTemplate")
+            properties.update(
+                {
+                    "workspotTemplate": (workspot.depot_path if workspot else ""),
+                    "spotType": str(spot_data.get("$type", "")),
+                    "spotDefinitionType": str(spot_definition.get("$type", "")),
+                    "snapToGround": bool(spot_data.get("snapToGround", 0)),
+                    "useClippingSpace": bool(spot_data.get("useClippingSpace", 0)),
+                    "isWorkspotInfinite": bool(data.get("isWorkspotInfinite", 0)),
+                    "isWorkspotStatic": bool(data.get("isWorkspotStatic", 0)),
+                    "disableBumps": bool(data.get("disableBumps", 0)),
+                }
             )
-            properties.update({
-                "workspotTemplate": (
-                    workspot.depot_path if workspot else ""
-                ),
-                "resolvedWorkspotTemplate": (
-                    workspot.resolved_path if workspot else ""
-                ),
-                "workspotResourceStatus": (
-                    workspot.status if workspot else "NO_RESOURCE_PATH"
-                ),
-                "spotType": str(spot_data.get("$type", "")),
-                "spotDefinitionType": str(
-                    spot_definition.get("$type", "")
-                ),
-                "snapToGround": bool(
-                    spot_data.get("snapToGround", 0)
-                ),
-                "useClippingSpace": bool(
-                    spot_data.get("useClippingSpace", 0)
-                ),
-                "isWorkspotInfinite": bool(
-                    data.get("isWorkspotInfinite", 0)
-                ),
-                "isWorkspotStatic": bool(
-                    data.get("isWorkspotStatic", 0)
-                ),
-                "disableBumps": bool(
-                    data.get("disableBumps", 0)
-                ),
-            })
 
         elif node_type == "worldPopulationSpawnerNode":
-            properties.update({
-                "appearanceName": context.operations.cname_value(
-                    data.get("appearanceName")
-                ),
-                "objectRecordId": context.operations.cname_value(
-                    data.get("objectRecordId")
-                ),
-                "spawnOnStart": bool(
-                    data.get("spawnOnStart", 0)
-                ),
-                "spawnInView": str(
-                    data.get("spawnInView", "")
-                ),
-                "alwaysSpawned": str(
-                    data.get("alwaysSpawned", "")
-                ),
-                "prefetchAppearance": bool(
-                    data.get("prefetchAppearance", 0)
-                ),
-                "isVehicle": bool(
-                    data.get("isVehicle", 0)
-                ),
-            })
-
-        elif node_type == "worldCompiledSmartObjectsNode":
-            resource = resources_by_label.get(
-                "compiledSmartObjects"
+            properties.update(
+                {
+                    "appearanceName": cname_text(data.get("appearanceName")),
+                    "objectRecordId": cname_text(data.get("objectRecordId")),
+                    "spawnOnStart": bool(data.get("spawnOnStart", 0)),
+                    "spawnInView": str(data.get("spawnInView", "")),
+                    "alwaysSpawned": str(data.get("alwaysSpawned", "")),
+                    "prefetchAppearance": bool(data.get("prefetchAppearance", 0)),
+                    "isVehicle": bool(data.get("isVehicle", 0)),
+                }
             )
-            properties.update({
-                "assetDepotPath": (
-                    resource.depot_path if resource else ""
-                ),
-                "resolvedAssetPath": (
-                    resource.resolved_path if resource else ""
-                ),
-                "expectedAssetPath": (
-                    resource.expected_path if resource else ""
-                ),
-                "semanticResourceStatus": (
-                    resource.status
-                    if resource
-                    else "NO_RESOURCE_PATH"
-                ),
-            })
 
         elif node_type == "worldSmartObjectNode":
             smart_data = nested_dict(data, "object", "Data")
-            workspot = resources_by_label.get(
-                "workspotTemplate"
+            workspot = resources_by_label.get("workspotTemplate")
+            action_database = resources_by_label.get("motionActionDatabase")
+            properties.update(
+                {
+                    "workspotTemplate": (workspot.depot_path if workspot else ""),
+                    "motionActionDatabase": (
+                        action_database.depot_path if action_database else ""
+                    ),
+                    "smartObjectEnabled": bool(smart_data.get("enabled", 0)),
+                    "smartObjectType": str(smart_data.get("$type", "")),
+                }
             )
-            action_database = resources_by_label.get(
-                "motionActionDatabase"
-            )
-            properties.update({
-                "workspotTemplate": (
-                    workspot.depot_path if workspot else ""
-                ),
-                "resolvedWorkspotTemplate": (
-                    workspot.resolved_path if workspot else ""
-                ),
-                "workspotResourceStatus": (
-                    workspot.status
-                    if workspot
-                    else "NO_RESOURCE_PATH"
-                ),
-                "motionActionDatabase": (
-                    action_database.depot_path
-                    if action_database
-                    else ""
-                ),
-                "resolvedMotionActionDatabase": (
-                    action_database.resolved_path
-                    if action_database
-                    else ""
-                ),
-                "motionActionDatabaseStatus": (
-                    action_database.status
-                    if action_database
-                    else "NO_RESOURCE_PATH"
-                ),
-                "smartObjectEnabled": bool(
-                    smart_data.get("enabled", 0)
-                ),
-                "smartObjectType": str(
-                    smart_data.get("$type", "")
-                ),
-            })
 
         return properties
 
@@ -378,11 +222,11 @@ class SemanticMarkerService:
         node_type = context.node_type
         spec = self.marker_spec(node_type)
         resources = self.resources(node_type, data)
-        debug_name = context.operations.cname_value(
+        debug_name = cname_text(
             data.get("debugName"),
             str(context.node_index),
         )
-        name = context.operations.trim_name(
+        name = fit_id_name(
             self._name(
                 node_type,
                 debug_name,
@@ -398,7 +242,7 @@ class SemanticMarkerService:
             obj.display_type = "WIRE"
         if spec.color is not None:
             obj.color = spec.color
-        context.sector_collection.objects.link(obj)
+        context.collection_for_instance(instance).objects.link(obj)
         obj.matrix_world = context.operations.instance_matrix(
             instance,
             context.execution.scale_factor,
@@ -408,30 +252,23 @@ class SemanticMarkerService:
             context,
             resources,
         )
-        properties.update({
-            "nodeDataIndex": instance["nodeDataIndex"],
-            "instance_idx": instance_index,
-        })
+        properties.update(
+            {
+                "cp77_node_data_index": instance.index,
+                "cp77_instance_idx": instance_index,
+            }
+        )
         context.operations.assign_custom_properties(
             obj,
-            data,
+            context.node,
             context.sector_name,
-            context.node_index,
             **properties,
         )
 
         if node_type == "worldAISpotNode":
-            obj["aiSpotData"] = context.operations.safe_json(
-                data.get("spot", {})
-            )
-            obj["aiSpotDefinitionData"] = (
-                context.operations.safe_json(
-                    data.get("spotDef", {})
-                )
-            )
-        elif node_type == "worldCompiledSmartObjectsNode":
-            obj["compiledSmartObjectData"] = (
-                context.operations.safe_json(data)
+            obj["aiSpotData"] = context.session.safe_json(data.get("spot", {}))
+            obj["aiSpotDefinitionData"] = context.session.safe_json(
+                data.get("spotDef", {})
             )
         elif node_type == "worldSmartObjectNode":
             smart_data = nested_dict(
@@ -439,35 +276,12 @@ class SemanticMarkerService:
                 "object",
                 "Data",
             )
-            obj["smartObjectActions"] = (
-                context.operations.safe_json(
-                    smart_data.get("actions", [])
-                )
-            )
-            obj["smartObjectData"] = (
-                context.operations.safe_json(smart_data)
-            )
-        elif (
-            node_type
-            == "worldStaticGpsLocationEntranceMarkerNode"
-        ):
-            obj["gpsMarkerData"] = (
-                context.operations.safe_json(data)
-            )
+            obj["smartObjectData"] = context.session.safe_json(smart_data)
 
-        for resource in resources:
-            if (
-                resource.warn_missing
-                and resource.depot_path
-                and not resource.resolved_path
-            ):
+        for label, warn_missing, resource in resources:
+            if warn_missing and resource.depot_path and not resource.resolved_path:
                 context.operations.warning(
                     f"{context.sector_name}: {node_type} node "
-                    f"{context.node_index} {resource.label} not found: "
+                    f"{context.node_index} {label} not found: "
                     f"{resource.depot_path}"
                 )
-
-        return SemanticPlacement(
-            object=obj,
-            resources=resources,
-        )

@@ -6,7 +6,7 @@ from .values import cname_text
 
 
 def rig_array_errors(root) -> tuple[str, ...]:
-    """Validate rig parallel arrays and hierarchy without mutating the payload."""
+    """Validate rig parallel arrays and hierarchy without mutating the payload"""
 
     if not isinstance(root, dict):
         return ("rig root must be an object",)
@@ -60,17 +60,14 @@ def rig_array_errors(root) -> tuple[str, ...]:
         normalized = []
         for index, value in enumerate(parents):
             if isinstance(value, bool) or not isinstance(value, int):
-                errors.append(
-                    f"boneParentIndexes[{index}] must be an integer"
-                )
+                errors.append(f"boneParentIndexes[{index}] must be an integer")
                 normalized.append(-1)
                 continue
             parent = int(value)
             normalized.append(parent)
             if parent < -1 or parent >= count:
                 errors.append(
-                    f"boneParentIndexes[{index}]={parent} is outside "
-                    f"[-1, {count - 1}]"
+                    f"boneParentIndexes[{index}]={parent} is outside [-1, {count - 1}]"
                 )
             elif parent == index:
                 errors.append(f"boneParentIndexes[{index}] references itself")
@@ -84,7 +81,7 @@ def rig_array_errors(root) -> tuple[str, ...]:
             current = start
             while 0 <= current < count and state[current] != 2:
                 if current in position:
-                    cycle = path[position[current]:] + [current]
+                    cycle = path[position[current] :] + [current]
                     errors.append(
                         "bone hierarchy contains a cycle: "
                         + " -> ".join(map(str, cycle))

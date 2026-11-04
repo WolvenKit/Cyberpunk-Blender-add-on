@@ -1,95 +1,111 @@
 from __future__ import annotations
 
-import copy
 import math
 import os
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass
 
+import bpy
 import numpy as np
 
-from ...gltf.provenance import (
-    ORIGIN_KEY,
-    ORIGIN_PLUGIN,
-    ORIGIN_VERSION_KEY,
-    SOURCE_GENERATOR_KEY,
-    SOURCE_PATH_KEY,
-    mark_origin,
-)
-from ...gltf.container import GLBContainerError, read_glb_container
-
-try:
-    import bpy
-    from mathutils import Matrix
-except ImportError:
-    bpy = None
-    Matrix = None
-
-from ...animation.blender_pose import model_matrix_to_basis_explicit
-from ...animation.keyframes import (
-    assign_action_with_slot,
-    bulk_set_keyframes,
-    get_action_fcurves,
-)
-from ...blender.transactions import track_created_datablock
-from ...animation.metadata import (
+from ...animation.domain.rig.naming import merged_bone_name
+from ...animation.model.clip.metadata import (
+    ANIMATION_SCHEMA,
     FPS,
     SKIN_EXTRAS_SNAPSHOT_KEY,
     SOURCE_REST_SNAPSHOT_KEY,
-    apply_action_extras,
-    apply_skin_extras,
-    store_action_source,
-    store_json_snapshot,
+    TRACKS_IMPORTED_KEY,
+    AnimationMetadataError,
     normalize_animation_extras,
-    plain_value as _idprop_plain,
+    track_payload_duration,
 )
-from ...animation.rig_binding import merged_bone_name
-from ...animation.tracks import import_anim_tracks, prepare_anim_track_properties
-from ...bartmoss.hierarchy import local_matrices_to_model
+from ...assetio.values import plain_value
+from ...bartmoss.arrays import all_close
+from ...bartmoss.curve import (
+    sample_frame_grid,
+    sample_linear,
+    sample_quaternions_xyzw,
+    sample_step,
+)
+from ...bartmoss.hierarchy import bone_basis_corrections, local_matrices_to_model
+from ...bartmoss.matrix import RIGID_TOLERANCE
 from ...bartmoss.quaternion import (
-    multiply_wxyz,
-    wxyz_from_matrices as _quaternions_wxyz_from_matrices,
+    product_matrix_wxyz,
+    rotate_vector_xyzw,
+    wxyz_from_matrices,
+    wxyz_from_xyzw,
 )
 from ...bartmoss.trs import (
-    compose_matrices as compose_trs_batch,
-    decompose_matrices as _decompose_trs_batch,
+    compose_matrices,
+    decompose_matrices,
 )
+from ...blender.action_metadata import (
+    apply_action_extras,
+    apply_skin_extras,
+    clip_action_name,
+    new_clip_action,
+    store_action_source,
+    store_json_snapshot,
+)
+from ...blender.animation_context import track_animation_import_state
+from ...blender.armature import inheritance_issue, rest_model_matrices
+from ...blender.context import BlenderContextSnapshot
+from ...blender.event_markers import sync_markers_from_events
+from ...blender.keyframes import (
+    action_curve_map,
+    assign_action_with_slot,
+    bulk_set_keyframes,
+    get_action_fcurves,
+    property_curve_fingerprint,
+    transform_curve_fingerprint,
+    write_pose_curves,
+)
+from ...blender.tracks import import_anim_tracks, prepare_anim_track_properties
+from ...blender.transactions import (
+    DatablockImportTransaction,
+    child_import_savepoint,
+    current_import_transaction,
+    raise_if_rollback_incomplete,
+    rollback_import_child,
+    track_created_datablock,
+)
+from ...core.log import get_logger
+from ...gltf.accessors import GLTFAccessorReader
+from ...gltf.container import GLBContainer, GLBContainerError, read_gltf_container
+from ...gltf.mesh_contract import validate_direct_extensions
+from ...gltf.provenance import (
+    ORIGIN_PLUGIN,
+    mark_origin,
+)
+from ...gltf.skeleton import (
+    GLTFSkeletonError,
+    SamplingContext,
+    SkeletonBinding,
+    build_node_hierarchy,
+    build_sampling_context,
+    build_skeleton_binding,
+)
+from ...materials.blender.skin_runtime import bind_skin_materials_for_armature
 from ...redSpace.contracts import (
-    BLENDER_BONE_RIGHT_TO_GLTF as _BLENDER_BONE_RIGHT_TO_GLTF,
-    GLTF_TO_BLENDER_BONE_RIGHT as _GLTF_TO_BLENDER_BONE_RIGHT,
-    GLTF_TO_RED as _GLTF_TO_RED,
-    RIG_SPACE_CONTRACT_CURRENT as RIG_SPACE_CONTRACT,
+    RIG_SPACE_CONTRACT_CURRENT,
     SOURCE_REST_SPACE_CONTRACT,
 )
-from ...redSpace.transforms import gltf_matrix_to_red, gltf_relative_to_blender
+from ...redSpace.transforms import (
+    gltf_relative_to_blender,
+    gltf_relative_to_blender_factors,
+    gltf_rest_relative_to_blender,
+)
+from ..rig.gltf import build_rest_armature_from_binding
 
+_LOG = get_logger(__name__)
 
-_COMPONENT_DTYPES = {
-    5120: np.dtype("<i1"),
-    5121: np.dtype("<u1"),
-    5122: np.dtype("<i2"),
-    5123: np.dtype("<u2"),
-    5125: np.dtype("<u4"),
-    5126: np.dtype("<f4"),
-}
 _SUPPORTED_GLTF_INTERPOLATIONS = frozenset({"LINEAR", "STEP"})
 
-# glTF sampler inputs are stored as float32 seconds. True integer-frame keys pick
-# up only a few millionths of a frame when multiplied by 30, while WolvenKit also
-# emits deliberate near-frame and fractional-frame keys (including offsets around
-# 2.6e-4 frames in unmodified game clips). Keep the tolerance below those authored
-# offsets so import/export does not silently retime the animation.
+# Below the near-frame key offsets WolvenKit writes on purpose, so key times survive import and export.
 _FRAME_SNAP_TOLERANCE = 1e-5
-
-_TYPE_WIDTHS = {
-    "SCALAR": 1,
-    "VEC2": 2,
-    "VEC3": 3,
-    "VEC4": 4,
-    "MAT2": 4,
-    "MAT3": 9,
-    "MAT4": 16,
-}
+# glTF stores rotations x, y, z, w; Blender pose channels hold w, x, y, z.
+_XYZW_TO_WXYZ = np.eye(4)[[3, 0, 1, 2]]
 
 
 class DirectAnimationImportError(RuntimeError):
@@ -101,25 +117,11 @@ class UnsupportedDirectAnimation(DirectAnimationImportError):
 
 
 class DenseBasisRequired(UnsupportedDirectAnimation):
-    """The clip is directly importable but requires dense basis conversion."""
-
-    pass
+    """The clip is directly importable but requires dense basis conversion"""
 
 
-@dataclass(frozen=True)
-class GLBData:
-    document: dict
-    binary: bytes
 
-
-@dataclass(frozen=True)
-class SkeletonBinding:
-    skin_index: int
-    joint_nodes: tuple[int, ...]
-    bone_names: tuple[str, ...]
-    source_parent_indices: tuple[int, ...]
-    topological_joint_indices: tuple[int, ...]
-    skin_extras: dict
+_CLIP_DATA_ERRORS = (DirectAnimationImportError, AnimationMetadataError, ValueError)
 
 
 @dataclass(frozen=True)
@@ -131,6 +133,7 @@ class SampledAnimation:
     extras: dict
     duration_seconds: float = 0.0
     has_scale_channels: bool = False
+    source_channels: tuple[ParsedGLTFChannel, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -156,10 +159,12 @@ class SparseAnimation:
     name: str
     location_channels: tuple[SparsePropertyChannel | None, ...]
     rotation_channels: tuple[SparsePropertyChannel | None, ...]
+    scale_channels: tuple[SparsePropertyChannel | None, ...]
     extras: dict
     frame_count: int
     source_keypoints: int
     duration_seconds: float = 0.0
+    source_channels: tuple[ParsedGLTFChannel, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -167,10 +172,11 @@ class SparseConversionContext:
     node_to_joint: dict[int, int]
     translation_rotations: np.ndarray
     translation_offsets: np.ndarray
-    rotation_left_wxyz: np.ndarray
-    rotation_right_wxyz: np.ndarray
+    # Per joint: the source rotation (x, y, z, w) to the pose rotation (w, x, y, z), as one matrix product.
+    rotation_matrices: np.ndarray
     default_locations: np.ndarray
     default_rotations_wxyz: np.ndarray
+    pivot_offsets: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -182,26 +188,13 @@ class SparsePoseBase:
 
 
 @dataclass(frozen=True)
-class SamplingContext:
-    node_parents: tuple[int, ...]
-    node_topology: tuple[int, ...]
-    default_translations: np.ndarray
-    default_rotations: np.ndarray
-    default_scales: np.ndarray
-    default_local_matrices: np.ndarray
-    default_global_matrices: np.ndarray
-    joint_default_prefixes: np.ndarray
-    node_to_joint: dict[int, int]
-    joint_node_set: frozenset[int]
-
-
-@dataclass(frozen=True)
 class TargetBinding:
     bone_names: tuple[str, ...]
     pose_bones: tuple
     rest_matrices: np.ndarray
     inverse_rest_matrices: np.ndarray
     inverse_rest_relative: np.ndarray
+    basis_corrections: np.ndarray
     location_paths: tuple[str, ...]
     rotation_paths: tuple[str, ...]
     scale_paths: tuple[str, ...]
@@ -209,397 +202,29 @@ class TargetBinding:
     merged_target: bool
 
 
-class AccessorReader:
-    def __init__(self, glb: GLBData):
-        self.document = glb.document
-        self.binary = glb.binary
+class AccessorReader(GLTFAccessorReader):
+    """Cache shared animation inputs without retaining every decoded clip"""
+
+    def __init__(self, glb):
+        super().__init__(glb, error_type=DirectAnimationImportError)
         usage = {}
         for animation in self.document.get("animations", ()):
             for sampler in animation.get("samplers", ()):
                 for key in ("input", "output"):
-                    accessor_index = sampler.get(key)
-                    if accessor_index is not None:
-                        accessor_index = int(accessor_index)
-                        usage[accessor_index] = usage.get(accessor_index, 0) + 1
-        self.cacheable = {
-            accessor_index
-            for accessor_index, count in usage.items()
-            if count > 1
-        }
+                    index = sampler.get(key)
+                    if index is not None:
+                        usage[index] = usage.get(index, 0) + 1
+        self.cacheable = {index for index, count in usage.items() if count > 1}
         self.cache = {}
 
-    def read(self, accessor_index: int) -> np.ndarray:
-        if accessor_index in self.cacheable:
-            cached = self.cache.get(accessor_index)
-            if cached is not None:
-                return cached
-
-        accessors = self.document.get("accessors", ())
-        if not 0 <= accessor_index < len(accessors):
-            raise DirectAnimationImportError(
-                f"Invalid glTF accessor index {accessor_index}."
-            )
-        accessor = accessors[accessor_index]
-        if accessor.get("sparse"):
-            raise UnsupportedDirectAnimation(
-                f"Sparse accessor {accessor_index} is not supported by direct animation import."
-            )
-        view_index = accessor.get("bufferView")
-        if view_index is None:
-            count = int(accessor.get("count", 0))
-            width = _TYPE_WIDTHS.get(accessor.get("type"))
-            if width is None:
-                raise UnsupportedDirectAnimation(
-                    f"Unsupported accessor type {accessor.get('type')!r}."
-                )
-            result = np.zeros((count, width), dtype=np.float64)
-            if width == 1:
-                result = result[:, 0]
-            if accessor_index in self.cacheable:
-                self.cache[accessor_index] = result
-            return result
-
-        views = self.document.get("bufferViews", ())
-        if not 0 <= view_index < len(views):
-            raise DirectAnimationImportError(
-                f"Invalid glTF bufferView index {view_index}."
-            )
-        view = views[view_index]
-        if int(view.get("buffer", 0)) != 0:
-            raise UnsupportedDirectAnimation(
-                "Direct animation import supports the embedded GLB buffer only."
-            )
-
-        component_type = int(accessor.get("componentType", 0))
-        dtype = _COMPONENT_DTYPES.get(component_type)
-        if dtype is None:
-            raise UnsupportedDirectAnimation(
-                f"Unsupported accessor component type {component_type}."
-            )
-        width = _TYPE_WIDTHS.get(accessor.get("type"))
-        if width is None:
-            raise UnsupportedDirectAnimation(
-                f"Unsupported accessor type {accessor.get('type')!r}."
-            )
-
-        count = int(accessor.get("count", 0))
-        offset = int(view.get("byteOffset", 0)) + int(accessor.get("byteOffset", 0))
-        item_bytes = dtype.itemsize * width
-        stride = int(view.get("byteStride", item_bytes))
-        if stride < item_bytes:
-            raise DirectAnimationImportError(
-                f"Accessor {accessor_index} has invalid byte stride {stride}."
-            )
-
-        end = offset + (count - 1) * stride + item_bytes if count else offset
-        view_start = int(view.get("byteOffset", 0))
-        view_end = view_start + int(view.get("byteLength", 0))
-        if offset < view_start or end > view_end or end > len(self.binary):
-            raise DirectAnimationImportError(
-                f"Accessor {accessor_index} exceeds its GLB bufferView."
-            )
-
-        if stride == item_bytes:
-            raw = np.frombuffer(
-                self.binary, dtype=dtype, count=count * width, offset=offset
-            ).reshape(count, width)
-        else:
-            raw = np.ndarray(
-                shape=(count, width),
-                dtype=dtype,
-                buffer=self.binary,
-                offset=offset,
-                strides=(stride, dtype.itemsize),
-            )
-
-        result = np.asarray(raw, dtype=np.float64).copy()
-        if accessor.get("normalized") and component_type != 5126:
-            if component_type in (5120, 5122):
-                maximum = float(np.iinfo(dtype).max)
-                result = np.maximum(result / maximum, -1.0)
-            else:
-                result /= float(np.iinfo(dtype).max)
-        if width == 1:
-            result = result[:, 0]
+    def read(self, accessor_index):
+        cached = self.cache.get(accessor_index)
+        if cached is not None:
+            return cached
+        result = super().read(accessor_index, dtype=np.float64)
         if accessor_index in self.cacheable:
             self.cache[accessor_index] = result
         return result
-
-
-def read_glb(filepath: str) -> GLBData:
-    try:
-        container = read_glb_container(filepath)
-    except GLBContainerError as error:
-        raise DirectAnimationImportError(str(error)) from error
-    return GLBData(document=container.document, binary=container.binary)
-
-
-def build_sampling_context(document: dict, binding: SkeletonBinding) -> SamplingContext:
-    nodes = document.get("nodes", ())
-    node_parents = tuple(_node_parents(nodes))
-    node_topology = _topological_indices(node_parents)
-    defaults = [_node_default_trs(node) for node in nodes]
-    if defaults:
-        default_translations = np.asarray([value[0] for value in defaults], dtype=np.float64)
-        default_rotations = np.asarray([value[1] for value in defaults], dtype=np.float64)
-        default_scales = np.asarray([value[2] for value in defaults], dtype=np.float64)
-    else:
-        default_translations = np.empty((0, 3), dtype=np.float64)
-        default_rotations = np.empty((0, 4), dtype=np.float64)
-        default_scales = np.empty((0, 3), dtype=np.float64)
-
-    node_count = len(nodes)
-    default_local = compose_trs_batch(
-        default_translations,
-        default_rotations,
-        default_scales,
-    )
-    default_global = np.empty((node_count, 4, 4), dtype=np.float64)
-    default_segment = np.empty((node_count, 4, 4), dtype=np.float64)
-    node_to_joint = {
-        node_index: joint_index
-        for joint_index, node_index in enumerate(binding.joint_nodes)
-    }
-    joint_default_prefixes = np.empty(
-        (len(binding.joint_nodes), 4, 4), dtype=np.float64
-    )
-    nearest_joint_ancestor = np.full(node_count, -1, dtype=np.int32)
-    identity = np.eye(4, dtype=np.float64)
-
-    for node_index in node_topology:
-        parent_index = node_parents[node_index]
-        if parent_index < 0:
-            default_global[node_index] = default_local[node_index]
-            default_segment[node_index] = default_local[node_index]
-            prefix = identity
-            nearest_joint = -1
-        else:
-            default_global[node_index] = (
-                default_global[parent_index] @ default_local[node_index]
-            )
-            parent_joint = node_to_joint.get(parent_index)
-            if parent_joint is not None:
-                default_segment[node_index] = default_local[node_index]
-                prefix = identity
-                nearest_joint = parent_joint
-            else:
-                default_segment[node_index] = (
-                    default_segment[parent_index] @ default_local[node_index]
-                )
-                prefix = default_segment[parent_index]
-                nearest_joint = int(nearest_joint_ancestor[parent_index])
-
-        nearest_joint_ancestor[node_index] = nearest_joint
-        joint_index = node_to_joint.get(node_index)
-        if joint_index is not None:
-            expected_parent = binding.source_parent_indices[joint_index]
-            if nearest_joint != expected_parent:
-                raise UnsupportedDirectAnimation(
-                    f"Could not resolve joint hierarchy for {binding.bone_names[joint_index]!r}."
-                )
-            joint_default_prefixes[joint_index] = prefix
-
-    return SamplingContext(
-        node_parents=node_parents,
-        node_topology=node_topology,
-        default_translations=default_translations,
-        default_rotations=default_rotations,
-        default_scales=default_scales,
-        default_local_matrices=default_local,
-        default_global_matrices=default_global,
-        joint_default_prefixes=joint_default_prefixes,
-        node_to_joint=node_to_joint,
-        joint_node_set=frozenset(node_to_joint),
-    )
-
-
-def _node_default_trs(node: dict):
-    if "matrix" in node:
-        matrix = np.asarray(node["matrix"], dtype=np.float64).reshape(4, 4).T
-        translation, rotation_xyzw, scale = _decompose_trs_batch(
-            matrix.reshape(1, 4, 4)
-        )
-        return translation[0], rotation_xyzw[0], scale[0]
-    return (
-        np.asarray(node.get("translation", (0.0, 0.0, 0.0)), dtype=np.float64),
-        np.asarray(node.get("rotation", (0.0, 0.0, 0.0, 1.0)), dtype=np.float64),
-        np.asarray(node.get("scale", (1.0, 1.0, 1.0)), dtype=np.float64),
-    )
-
-
-def _node_parents(nodes) -> list[int]:
-    parents = [-1] * len(nodes)
-    for parent_index, node in enumerate(nodes):
-        for child_index in node.get("children", ()):
-            child_index = int(child_index)
-            if not 0 <= child_index < len(nodes):
-                raise DirectAnimationImportError(
-                    f"Node {parent_index} references invalid child {child_index}."
-                )
-            if parents[child_index] != -1:
-                raise UnsupportedDirectAnimation(
-                    f"Node {child_index} has multiple parents."
-                )
-            parents[child_index] = parent_index
-    return parents
-
-
-def _topological_indices(parents) -> tuple[int, ...]:
-    children = [[] for _ in parents]
-    roots = []
-    for index, parent in enumerate(parents):
-        if parent < 0:
-            roots.append(index)
-        elif parent < len(parents):
-            children[parent].append(index)
-        else:
-            raise DirectAnimationImportError(f"Invalid parent index {parent}.")
-    ordered = []
-    stack = list(reversed(roots))
-    while stack:
-        index = stack.pop()
-        ordered.append(index)
-        stack.extend(reversed(children[index]))
-    if len(ordered) != len(parents):
-        raise UnsupportedDirectAnimation("The glTF node hierarchy contains a cycle.")
-    return tuple(ordered)
-
-
-def build_skeleton_binding(document: dict, skin_index: int = 0) -> SkeletonBinding:
-    skins = document.get("skins", ())
-    nodes = document.get("nodes", ())
-    if len(skins) != 1 or skin_index != 0:
-        raise UnsupportedDirectAnimation(
-            "Direct CP77 animation import currently requires exactly one skin."
-        )
-    skin = skins[skin_index]
-    joints = tuple(int(index) for index in skin.get("joints", ()))
-    if not joints:
-        raise UnsupportedDirectAnimation("The animation GLB skin has no joints.")
-    if len(set(joints)) != len(joints):
-        raise DirectAnimationImportError("The skin contains duplicate joint nodes.")
-
-    extras = copy.deepcopy(skin.get("extras") or {})
-    extra_names = tuple(str(name) for name in extras.get("boneNames", ()))
-    node_names = tuple(str(nodes[index].get("name", "")) for index in joints)
-    bone_names = extra_names if len(extra_names) == len(joints) else node_names
-    if not all(bone_names) or len(set(bone_names)) != len(bone_names):
-        raise UnsupportedDirectAnimation(
-            "The skin does not provide unique names for every joint."
-        )
-    if extra_names and extra_names != node_names:
-        raise UnsupportedDirectAnimation(
-            "Skin extras boneNames do not match the glTF joint node names."
-        )
-
-    node_parents = _node_parents(nodes)
-    joint_lookup = {node_index: joint_index for joint_index, node_index in enumerate(joints)}
-    source_parents = []
-    for node_index in joints:
-        parent_node = node_parents[node_index]
-        while parent_node >= 0 and parent_node not in joint_lookup:
-            parent_node = node_parents[parent_node]
-        source_parents.append(joint_lookup.get(parent_node, -1))
-
-    extra_parents = extras.get("boneParentIndexes")
-    if isinstance(extra_parents, list) and len(extra_parents) == len(joints):
-        normalized = tuple(int(value) for value in extra_parents)
-        if normalized != tuple(source_parents):
-            raise UnsupportedDirectAnimation(
-                "Skin extras boneParentIndexes do not match the glTF joint hierarchy."
-            )
-
-    joint_topology = _topological_indices(source_parents)
-    return SkeletonBinding(
-        skin_index=skin_index,
-        joint_nodes=joints,
-        bone_names=bone_names,
-        source_parent_indices=tuple(source_parents),
-        topological_joint_indices=joint_topology,
-        skin_extras=extras,
-    )
-
-
-def _sample_linear(times, values, sample_times):
-    if len(times) == 0:
-        raise DirectAnimationImportError("Animation sampler has no input keys.")
-    if len(times) != len(values):
-        raise DirectAnimationImportError("Animation sampler input/output counts differ.")
-    if len(times) == 1:
-        return np.repeat(values[:1], len(sample_times), axis=0)
-    right = np.searchsorted(times, sample_times, side="right")
-    right = np.clip(right, 1, len(times) - 1)
-    left = right - 1
-    denominator = times[right] - times[left]
-    factor = np.divide(
-        sample_times - times[left],
-        denominator,
-        out=np.zeros_like(sample_times),
-        where=np.abs(denominator) > 1e-15,
-    )
-    factor = np.clip(factor, 0.0, 1.0)
-    before = sample_times <= times[0]
-    after = sample_times >= times[-1]
-    result = values[left] + (values[right] - values[left]) * factor[:, None]
-    result[before] = values[0]
-    result[after] = values[-1]
-    return result
-
-
-def _sample_step(times, values, sample_times):
-    if len(times) == 0 or len(times) != len(values):
-        raise DirectAnimationImportError("Invalid STEP animation sampler.")
-    indices = np.searchsorted(times, sample_times, side="right") - 1
-    indices = np.clip(indices, 0, len(times) - 1)
-    return values[indices]
-
-
-def _sample_quaternions(times, values, sample_times, interpolation):
-    values = np.asarray(values, dtype=np.float64).copy()
-    lengths = np.linalg.norm(values, axis=1)
-    values[lengths <= 1e-15] = (0.0, 0.0, 0.0, 1.0)
-    lengths = np.linalg.norm(values, axis=1)
-    values /= lengths[:, None]
-    if len(values) > 1:
-        adjacent_dots = np.sum(values[:-1] * values[1:], axis=1)
-        signs = np.ones(len(values), dtype=np.float64)
-        signs[1:] = np.cumprod(
-            np.where(adjacent_dots < 0.0, -1.0, 1.0)
-        )
-        values *= signs[:, None]
-    if interpolation == "STEP" or len(times) == 1:
-        return _sample_step(times, values, sample_times)
-
-    right = np.searchsorted(times, sample_times, side="right")
-    right = np.clip(right, 1, len(times) - 1)
-    left = right - 1
-    denominator = times[right] - times[left]
-    factor = np.divide(
-        sample_times - times[left], denominator,
-        out=np.zeros_like(sample_times), where=np.abs(denominator) > 1e-15,
-    )
-    factor = np.clip(factor, 0.0, 1.0)
-    q0 = values[left]
-    q1 = values[right]
-    dot = np.sum(q0 * q1, axis=1)
-    q1 = np.where((dot < 0.0)[:, None], -q1, q1)
-    dot = np.clip(np.abs(dot), 0.0, 1.0)
-    theta = np.arccos(dot)
-    sin_theta = np.sin(theta)
-    linear = sin_theta < 1e-7
-    w0 = np.empty_like(factor)
-    w1 = np.empty_like(factor)
-    w0[linear] = 1.0 - factor[linear]
-    w1[linear] = factor[linear]
-    nonlinear = ~linear
-    w0[nonlinear] = np.sin((1.0 - factor[nonlinear]) * theta[nonlinear]) / sin_theta[nonlinear]
-    w1[nonlinear] = np.sin(factor[nonlinear] * theta[nonlinear]) / sin_theta[nonlinear]
-    result = q0 * w0[:, None] + q1 * w1[:, None]
-    result /= np.maximum(np.linalg.norm(result, axis=1)[:, None], 1e-15)
-    result[sample_times <= times[0]] = values[0]
-    result[sample_times >= times[-1]] = values[-1]
-    return result
-
 
 
 def _parse_gltf_channel(
@@ -612,7 +237,7 @@ def _parse_gltf_channel(
     seen_targets = set()
     animation_name = animation.get("name", animation_index)
 
-    for channel in animation.get("channels", ()):
+    for channel_index, channel in enumerate(animation.get("channels", ())):
         target = channel.get("target") or {}
         node_value = target.get("node")
         path = target.get("path")
@@ -667,11 +292,31 @@ def _parse_gltf_channel(
                 f"Animation sampler {sampler_index} has invalid accessors."
             ) from error
 
+        input_layout, output_layout = (
+            reader.accessors[input_accessor],
+            reader.accessors[output_accessor],
+        )
+        if (
+            input_layout.get("type") != "SCALAR"
+            or input_layout.get("componentType") != 5126
+        ):
+            raise DirectAnimationImportError(
+                "Animation input keys must use FLOAT SCALAR seconds."
+            )
+        expected_type = "VEC4" if path == "rotation" else "VEC3"
+        if (
+            output_layout.get("type") != expected_type
+            or output_layout.get("componentType") != 5126
+        ):
+            raise DirectAnimationImportError(
+                f"Animation {path} output must use FLOAT {expected_type} values."
+            )
+
         times = np.asarray(reader.read(input_accessor), dtype=np.float64).reshape(-1)
         if not len(times):
             seen_targets.discard(key)
             continue
-        if times[0] < 0.0 or np.any(np.diff(times) <= 0.0):
+        if times[0] < 0.0 or (times[1:] <= times[:-1]).any():
             raise DirectAnimationImportError(
                 f"Animation sampler {sampler_index} input times are not strictly increasing."
             )
@@ -683,6 +328,19 @@ def _parse_gltf_channel(
                 f"Animation sampler {sampler_index} output size does not match its {path} input."
             )
         values = values.reshape(len(times), width)
+        if (
+            path == "rotation"
+            and not (
+                np.abs(np.sqrt((values * values).sum(axis=1)) - 1.0) <= 1.0e-3
+            ).all()
+        ):
+            raise DirectAnimationImportError(
+                "Animation rotations must contain unit quaternions."
+            )
+        if not np.isfinite(times).all() or not np.isfinite(values).all():
+            raise DirectAnimationImportError(
+                f"Animation sampler {sampler_index} contains non-finite data."
+            )
         yield ParsedGLTFChannel(
             node_index=node_index,
             joint_index=joint_index,
@@ -693,8 +351,66 @@ def _parse_gltf_channel(
             sampler_index=sampler_index,
         )
 
+
+def _normalized_animation_extras(animation: dict, animation_index: int) -> dict:
+    return normalize_animation_extras(
+        animation.get("extras"),
+        label=f"Animation {animation.get('name') or animation_index!r} extras",
+        error_type=DirectAnimationImportError,
+        compatible_schema=True,
+    )
+
+
+def _declared_schema_version(animation: dict):
+    extras = animation.get("extras")
+    schema = extras.get("schema") if isinstance(extras, dict) else None
+    return schema.get("version") if isinstance(schema, dict) else None
+
+
+def _schema_warnings(file_name, versions) -> list[str]:
+    warnings = []
+    current = ANIMATION_SCHEMA["version"]
+    for version, count in sorted(
+        versions.items(), key=lambda item: (item[0] is not None, item[0] or 0)
+    ):
+        if version is None:
+            warnings.append(
+                f"{file_name}: {count} clip(s) declare no animation schema; "
+                f"metadata was read as schema version {current} with defaults"
+            )
+        else:
+            relation = "newer" if version > current else "older"
+            warnings.append(
+                f"{file_name}: {count} clip(s) use {relation} animation schema "
+                f"version {version} (this add-on reads version {current}); "
+                "missing metadata was filled with defaults"
+            )
+    return warnings
+
+
+def _validate_track_binding_counts(
+    binding: SkeletonBinding, extras: dict, animation_name
+) -> None:
+    track_names = binding.skin_extras.get("trackNames") or ()
+    has_track_payload = any(
+        extras.get(label, ()) for label in ("trackKeys", "constTrackKeys")
+    )
+    if has_track_payload and not track_names:
+        raise DirectAnimationImportError(
+            f"Animation {animation_name!r} contains track keys, but the skin exposes no trackNames."
+        )
+    for label in ("trackKeys", "constTrackKeys"):
+        for entry in extras.get(label, ()) or ():
+            track_index = int(entry.get("trackIndex", -1))
+            if track_index >= len(track_names):
+                raise DirectAnimationImportError(
+                    f"Animation {animation_name!r} {label} references track {track_index}, "
+                    f"but the rig exposes only {len(track_names)} tracks."
+                )
+
+
 def _snap_frames_to_grid(frames):
-    """Snap float32 time-quantization noise onto the integer frame grid."""
+    """Snap float32 time-quantization noise onto the integer frame grid"""
     frames = np.asarray(frames, dtype=np.float64)
     nearest = np.round(frames)
     snap = np.abs(frames - nearest) <= _FRAME_SNAP_TOLERANCE
@@ -705,7 +421,7 @@ def _snap_frames_to_grid(frames):
 
 
 def _clip_end_frame(maximum_time, fps: float = FPS) -> int:
-    """Resolve the last frame index for a clip, absorbing float32 time error."""
+    """Resolve the last frame index for a clip, absorbing float32 time error"""
     scaled = float(maximum_time) * fps
     nearest = round(scaled)
     if abs(scaled - nearest) <= _FRAME_SNAP_TOLERANCE:
@@ -714,7 +430,7 @@ def _clip_end_frame(maximum_time, fps: float = FPS) -> int:
 
 
 def sample_animation(
-    glb: GLBData,
+    glb: GLBContainer,
     binding: SkeletonBinding,
     animation_index: int,
     fps: float = FPS,
@@ -728,10 +444,16 @@ def sample_animation(
         raise DirectAnimationImportError(f"Invalid animation index {animation_index}.")
     animation = animations[animation_index]
     reader = reader or AccessorReader(glb)
-    context = context or build_sampling_context(document, binding)
+    context = context or build_sampling_context(build_node_hierarchy(document), binding)
+    extras = _normalized_animation_extras(animation, animation_index)
+    animation_name = animation.get("name") or animation_index
+    _validate_track_binding_counts(binding, extras, animation_name)
     channel_records = tuple(
         _parse_gltf_channel(
-            animation, animation_index, reader, context.node_to_joint
+            animation,
+            animation_index,
+            reader,
+            context.node_to_joint,
         )
     )
 
@@ -739,11 +461,16 @@ def sample_animation(
         (float(channel.times[-1]) for channel in channel_records),
         default=0.0,
     )
-    has_scale_channels = any(
-        channel.path == "scale" for channel in channel_records
+    has_scale_channels = any(channel.path == "scale" for channel in channel_records)
+    source_frames = (
+        np.concatenate(
+            [_snap_frames_to_grid(channel.times * fps) for channel in channel_records]
+        )
+        if channel_records
+        else np.empty(0, dtype=np.float64)
     )
-    end_frame = _clip_end_frame(maximum_time, fps)
-    frames = np.arange(end_frame + 1, dtype=np.float64)
+    final_frame = float(_snap_frames_to_grid(np.asarray([maximum_time * fps]))[0])
+    frames = sample_frame_grid(0.0, final_frame, source_frames)
     sample_times = frames / fps
     frame_count = len(frames)
     node_count = len(document.get("nodes", ()))
@@ -758,25 +485,26 @@ def sample_animation(
     ).copy()
 
     for channel in channel_records:
+        channel_times = _snap_frames_to_grid(channel.times * fps) / fps
         if channel.path == "rotation":
-            rotations[:, channel.node_index] = _sample_quaternions(
-                channel.times,
+            rotations[:, channel.node_index] = sample_quaternions_xyzw(
+                channel_times,
                 channel.values,
                 sample_times,
                 channel.interpolation,
             )
         else:
             sampled_values = (
-                _sample_step(channel.times, channel.values, sample_times)
+                sample_step(channel_times, channel.values, sample_times)
                 if channel.interpolation == "STEP"
-                else _sample_linear(channel.times, channel.values, sample_times)
+                else sample_linear(channel_times, channel.values, sample_times)
             )
             if channel.path == "translation":
                 translations[:, channel.node_index] = sampled_values
             else:
                 scales[:, channel.node_index] = sampled_values
 
-    local = compose_trs_batch(
+    local = compose_matrices(
         translations,
         rotations,
         scales,
@@ -814,13 +542,10 @@ def sample_animation(
         frames=frames,
         model_matrices=model_blender,
         relative_matrices=relative_blender,
-        extras=normalize_animation_extras(
-            animation.get("extras"),
-            label=f"Animation {animation.get('name') or animation_index!r} extras",
-            error_type=DirectAnimationImportError,
-        ),
-        duration_seconds=float(maximum_time),
+        extras=extras,
+        duration_seconds=max(float(maximum_time), track_payload_duration(extras)),
         has_scale_channels=has_scale_channels,
+        source_channels=channel_records,
     )
 
 
@@ -833,75 +558,131 @@ def _constant_property_channel(frames, values, interpolation):
     return SparsePropertyChannel(frames, values, interpolation)
 
 
+def _rigid_inverse(matrix):
+    inverse = np.eye(4, dtype=np.float64)
+    rotation = matrix[:3, :3].T
+    inverse[:3, :3] = rotation
+    inverse[:3, 3] = -rotation @ matrix[:3, 3]
+    return inverse
+
 
 def build_sparse_conversion_context(
     binding: SkeletonBinding,
     context: SamplingContext,
     target: TargetBinding,
 ) -> SparseConversionContext:
+    """Factor each joint's pose basis into left/right constants around the source TRS"""
     joint_count = len(binding.bone_names)
     translation_rotations = np.empty((joint_count, 3, 3), dtype=np.float64)
     translation_offsets = np.empty((joint_count, 3), dtype=np.float64)
-    rotation_left = np.empty((joint_count, 4), dtype=np.float64)
-    rotation_right = np.empty((joint_count, 4), dtype=np.float64)
+    rotation_matrices = np.empty((joint_count, 4, 4), dtype=np.float64)
     default_locations = np.empty((joint_count, 3), dtype=np.float64)
     default_rotations = np.empty((joint_count, 4), dtype=np.float64)
+    pivot_offsets = np.empty((joint_count, 3), dtype=np.float64)
 
-    right_matrix = _GLTF_TO_BLENDER_BONE_RIGHT
-    right_rotation = _quaternions_wxyz_from_matrices(
-        right_matrix[:3, :3].reshape(1, 3, 3)
-    )[0]
     for joint_index, node_index in enumerate(binding.joint_nodes):
-        prefix = context.joint_default_prefixes[joint_index]
-        conversion_left = (
-            _GLTF_TO_RED
-            if binding.source_parent_indices[joint_index] < 0
-            else _BLENDER_BONE_RIGHT_TO_GLTF
+        correction = target.basis_corrections[joint_index]
+        conversion_left, conversion_right = gltf_relative_to_blender_factors(
+            binding.source_parent_indices[joint_index] < 0
         )
+        right_matrix = conversion_right @ correction
+        right_rotation = wxyz_from_matrices(right_matrix[:3, :3].reshape(1, 3, 3))[0]
+        prefix = context.joint_default_prefixes[joint_index]
         left_matrix = (
-            target.inverse_rest_relative[joint_index]
+            _rigid_inverse(correction)
+            @ target.inverse_rest_relative[joint_index]
             @ conversion_left
             @ prefix
         )
         left_axes = left_matrix[:3, :3]
         scales = np.linalg.norm(left_axes, axis=0)
         normalized_left = left_axes / np.maximum(scales[None, :], 1e-15)
-        if not np.allclose(scales, 1.0, atol=2e-5) or not np.allclose(
-            normalized_left.T @ normalized_left, np.eye(3), atol=2e-5
+        if not np.allclose(scales, scales[:1], atol=RIGID_TOLERANCE) or not np.allclose(
+            normalized_left.T @ normalized_left, np.eye(3), atol=RIGID_TOLERANCE
         ):
             raise UnsupportedDirectAnimation(
                 "Sparse animation conversion requires rigid source and target bases."
             )
-        left_rotation = _quaternions_wxyz_from_matrices(
-            normalized_left.reshape(1, 3, 3)
-        )[0]
+        left_rotation = wxyz_from_matrices(normalized_left.reshape(1, 3, 3))[0]
         translation_rotations[joint_index] = left_axes
         translation_offsets[joint_index] = left_matrix[:3, 3]
-        rotation_left[joint_index] = left_rotation
-        rotation_right[joint_index] = right_rotation
+        rotation_matrices[joint_index] = (
+            product_matrix_wxyz(left_rotation, right_rotation) @ _XYZW_TO_WXYZ
+        )
+        pivot_offsets[joint_index] = right_matrix[:3, 3]
 
+        source_default = context.default_rotations[node_index]
         default_locations[joint_index] = (
-            left_axes @ context.default_translations[node_index]
+            left_axes
+            @ (
+                context.default_translations[node_index]
+                + rotate_vector_xyzw(source_default, right_matrix[:3, 3])
+            )
             + left_matrix[:3, 3]
         )
-        source_default = context.default_rotations[node_index]
-        source_default_wxyz = source_default[[3, 0, 1, 2]]
-        default_rotation = multiply_wxyz(
-            multiply_wxyz(left_rotation, source_default_wxyz),
-            right_rotation,
-        )
-        default_rotations[joint_index] = (
-            default_rotation / max(np.linalg.norm(default_rotation), 1e-15)
+        default_rotation = rotation_matrices[joint_index] @ source_default
+        default_rotations[joint_index] = default_rotation / max(
+            np.linalg.norm(default_rotation), 1e-15
         )
 
     return SparseConversionContext(
         node_to_joint=context.node_to_joint,
         translation_rotations=translation_rotations,
         translation_offsets=translation_offsets,
-        rotation_left_wxyz=rotation_left,
-        rotation_right_wxyz=rotation_right,
+        rotation_matrices=rotation_matrices,
         default_locations=default_locations,
         default_rotations_wxyz=default_rotations,
+        pivot_offsets=pivot_offsets,
+    )
+
+
+def _pivot_location_channel(
+    conversion, context, node_index, joint_index, translation, rotation, fps
+):
+    """Sample a pivot joint's location from its translation and rotation channels"""
+    interpolations = {
+        channel[2] for channel in (translation, rotation) if channel is not None
+    }
+    if len(interpolations) != 1 or not interpolations <= {"LINEAR", "STEP"}:
+        raise DenseBasisRequired(
+            "A rest pivot offset with mixed or cubic interpolation requires dense basis conversion."
+        )
+    interpolation = interpolations.pop()
+    frames = np.unique(
+        np.concatenate(
+            [channel[3] for channel in (translation, rotation) if channel is not None]
+        )
+    )
+    seconds = frames / fps
+    if translation is None:
+        translations = np.repeat(
+            np.asarray(context.default_translations[node_index], dtype=np.float64)[
+                None
+            ],
+            len(frames),
+            axis=0,
+        )
+    elif interpolation == "STEP":
+        translations = sample_step(translation[0], translation[1], seconds)
+    else:
+        translations = sample_linear(translation[0], translation[1], seconds)
+    if rotation is None:
+        rotations = np.repeat(
+            np.asarray(context.default_rotations[node_index], dtype=np.float64)[None],
+            len(frames),
+            axis=0,
+        )
+    else:
+        rotations = sample_quaternions_xyzw(
+            rotation[0], rotation[1], seconds, interpolation
+        )
+    source = translations + rotate_vector_xyzw(
+        rotations, conversion.pivot_offsets[joint_index]
+    )
+    return _constant_property_channel(
+        frames,
+        _transform_sparse_translation(conversion, joint_index, source),
+        interpolation,
     )
 
 
@@ -913,12 +694,7 @@ def _transform_sparse_translation(conversion, joint_index, values):
 
 def _transform_sparse_rotation(conversion, joint_index, values):
     values = np.asarray(values, dtype=np.float64).reshape(-1, 4)
-    source_wxyz = values[:, (3, 0, 1, 2)]
-    left = conversion.rotation_left_wxyz[joint_index]
-    right = conversion.rotation_right_wxyz[joint_index]
-    result = multiply_wxyz(
-        multiply_wxyz(left, source_wxyz), right
-    )
+    result = values @ conversion.rotation_matrices[joint_index].T
     result /= np.maximum(np.linalg.norm(result, axis=1)[:, None], 1e-15)
     if len(result) > 1:
         dots = np.sum(result[:-1] * result[1:], axis=1)
@@ -928,7 +704,7 @@ def _transform_sparse_rotation(conversion, joint_index, values):
 
 
 def sparse_animation(
-    glb: GLBData,
+    glb: GLBContainer,
     binding: SkeletonBinding,
     animation_index: int,
     target: TargetBinding,
@@ -946,19 +722,30 @@ def sparse_animation(
         raise DirectAnimationImportError(f"Invalid animation index {animation_index}.")
     animation = animations[animation_index]
     reader = reader or AccessorReader(glb)
-    context = context or build_sampling_context(document, binding)
-    conversion = conversion or build_sparse_conversion_context(
-        binding, context, target
-    )
+    context = context or build_sampling_context(build_node_hierarchy(document), binding)
+    extras = _normalized_animation_extras(animation, animation_index)
+    animation_name = animation.get("name") or animation_index
+    _validate_track_binding_counts(binding, extras, animation_name)
+    conversion = conversion or build_sparse_conversion_context(binding, context, target)
     location_channels = [None] * len(binding.bone_names)
     rotation_channels = [None] * len(binding.bone_names)
+    scale_channels = [None] * len(binding.bone_names)
     seen_targets = set()
-    maximum_time = 0.0
+    maximum_time = track_payload_duration(extras)
     source_keypoints = 0
+    pivot_joints = np.linalg.norm(conversion.pivot_offsets, axis=1) > 1e-8
+    pivot_translations = {}
+    pivot_rotations = {}
 
-    for channel in _parse_gltf_channel(
-        animation, animation_index, reader, conversion.node_to_joint
-    ):
+    source_channels = tuple(
+        _parse_gltf_channel(
+            animation,
+            animation_index,
+            reader,
+            conversion.node_to_joint,
+        )
+    )
+    for channel in source_channels:
         joint_index = channel.joint_index
         node_index = channel.node_index
         path = channel.path
@@ -970,18 +757,61 @@ def sparse_animation(
 
         if path == "scale":
             default_scale = context.default_scales[node_index]
-            if np.allclose(
-                values,
-                default_scale.reshape(1, 3),
-                atol=2e-6,
-                rtol=2e-6,
-            ):
+            if all_close(values, default_scale.reshape(1, 3), 2e-6):
                 continue
-            raise DenseBasisRequired(
-                "Non-default or animated scale requires dense basis conversion."
+            if pivot_joints[joint_index]:
+                raise DenseBasisRequired(
+                    "Animated scale on a bone with a rest pivot offset requires dense basis conversion."
+                )
+            if np.any(values <= 1e-8) or not all_close(
+                default_scale, default_scale[0], 2e-6
+            ):
+                raise DenseBasisRequired(
+                    "Mirrored, singular or non-uniform rest scale requires dense basis conversion."
+                )
+            _, conversion_right = gltf_relative_to_blender_factors(
+                binding.source_parent_indices[joint_index] < 0
             )
+            scale_axes = (conversion_right @ target.basis_corrections[joint_index])[
+                :3, :3
+            ]
+            if not np.allclose(
+                np.abs(scale_axes).max(axis=0), 1.0, atol=1e-6
+            ) and not np.allclose(values, values[:, :1], atol=1e-6):
+                raise UnsupportedDirectAnimation(
+                    "Non-uniform scale would introduce shear in the target bone basis."
+                )
+            rest_inverse_scale = np.linalg.norm(
+                conversion.translation_rotations[joint_index][:, 0]
+            )
+            transformed = (values * rest_inverse_scale) @ np.square(scale_axes)
+            scale_channels[joint_index] = _constant_property_channel(
+                _snap_frames_to_grid(times * fps), transformed, interpolation
+            )
+            source_keypoints += len(times) * 3
+            continue
 
         source_keypoints += len(times) * (3 if path == "translation" else 4)
+        channel_frames = _snap_frames_to_grid(times * fps)
+        source_values = values
+        if (
+            path == "rotation"
+            and interpolation == "LINEAR"
+            and len(times) > 1
+            and np.any(np.diff(channel_frames) > 1.0 + 1e-5)
+        ):
+            sampled_frames = sample_frame_grid(
+                0.0, float(channel_frames[-1]), channel_frames
+            )
+            values = sample_quaternions_xyzw(
+                times, values, sampled_frames / fps, "LINEAR"
+            )
+            channel_frames = sampled_frames
+        if pivot_joints[joint_index]:
+            stash = pivot_translations if path == "translation" else pivot_rotations
+            stash[joint_index] = (times, source_values, interpolation, channel_frames)
+            if path == "translation":
+                continue
         transformed = (
             _transform_sparse_translation(conversion, joint_index, values)
             if path == "translation"
@@ -990,15 +820,10 @@ def sparse_animation(
         if path == "translation":
             if pose_base is not None and pose_base.location_mask[joint_index]:
                 base_value = pose_base.location_values[joint_index]
-                if np.allclose(
-                    transformed,
-                    base_value.reshape(1, 3),
-                    atol=1e-9,
-                    rtol=1e-9,
-                ):
+                if all_close(transformed, base_value.reshape(1, 3), 1e-9):
                     continue
             location_channels[joint_index] = _constant_property_channel(
-                _snap_frames_to_grid(times * fps), transformed, interpolation
+                channel_frames, transformed, interpolation
             )
         else:
             alignment_value = (
@@ -1009,16 +834,38 @@ def sparse_animation(
             if len(transformed) and np.dot(transformed[0], alignment_value) < 0.0:
                 transformed = -transformed
             if pose_base is not None and pose_base.rotation_mask[joint_index]:
-                if np.allclose(
-                    transformed,
-                    alignment_value.reshape(1, 4),
-                    atol=1e-9,
-                    rtol=1e-9,
-                ):
+                if all_close(transformed, alignment_value.reshape(1, 4), 1e-9):
                     continue
             rotation_channels[joint_index] = _constant_property_channel(
-                _snap_frames_to_grid(times * fps), transformed, interpolation
+                channel_frames, transformed, interpolation
             )
+
+    for joint_index in np.flatnonzero(pivot_joints):
+        translation = pivot_translations.get(int(joint_index))
+        rotation = pivot_rotations.get(int(joint_index))
+        if translation is None and rotation is None:
+            continue
+        location = _pivot_location_channel(
+            conversion,
+            context,
+            binding.joint_nodes[joint_index],
+            int(joint_index),
+            translation,
+            rotation,
+            fps,
+        )
+        seen_targets.add((int(joint_index), "translation"))
+        if (
+            pose_base is not None
+            and pose_base.location_mask[joint_index]
+            and all_close(
+                location.values,
+                pose_base.location_values[joint_index].reshape(1, 3),
+                1e-9,
+            )
+        ):
+            continue
+        location_channels[joint_index] = location
 
     if pose_base is not None or include_defaults:
         for joint_index in range(len(binding.bone_names)):
@@ -1029,11 +876,10 @@ def sparse_animation(
                     include_defaults
                     or not (
                         pose_base.location_mask[joint_index]
-                        and np.allclose(
+                        and all_close(
                             conversion.default_locations[joint_index],
                             pose_base.location_values[joint_index],
-                            atol=1e-9,
-                            rtol=1e-9,
+                            1e-9,
                         )
                     )
                 )
@@ -1057,15 +903,20 @@ def sparse_animation(
                                     pose_base.rotation_values_wxyz[joint_index],
                                 )
                             )
-                        ) >= 1.0 - 1e-9
+                        )
+                        >= 1.0 - 1e-9
                     )
                 )
             ):
                 default_rotation = conversion.default_rotations_wxyz[joint_index].copy()
-                if pose_base is not None and np.dot(
-                    default_rotation,
-                    pose_base.rotation_values_wxyz[joint_index],
-                ) < 0.0:
+                if (
+                    pose_base is not None
+                    and np.dot(
+                        default_rotation,
+                        pose_base.rotation_values_wxyz[joint_index],
+                    )
+                    < 0.0
+                ):
                     default_rotation = -default_rotation
                 rotation_channels[joint_index] = SparsePropertyChannel(
                     np.array((0.0,), dtype=np.float64),
@@ -1077,15 +928,14 @@ def sparse_animation(
         name=str(animation.get("name") or f"Animation_{animation_index:03d}"),
         location_channels=tuple(location_channels),
         rotation_channels=tuple(rotation_channels),
-        extras=normalize_animation_extras(
-            animation.get("extras"),
-            label=f"Animation {animation.get('name') or animation_index!r} extras",
-            error_type=DirectAnimationImportError,
-        ),
+        scale_channels=tuple(scale_channels),
+        extras=extras,
         frame_count=max(1, _clip_end_frame(maximum_time, fps) + 1),
         source_keypoints=source_keypoints,
         duration_seconds=float(maximum_time),
+        source_channels=source_channels,
     )
+
 
 def build_sparse_pose_base(
     sparse: SparseAnimation,
@@ -1130,7 +980,11 @@ def _resolve_target_bone_names(armature, binding: SkeletonBinding) -> tuple[str,
     resolved = []
     used = set()
     for source_name in binding.bone_names:
-        target_name = source_name if pose_bones.get(source_name) is not None else merged_bone_name(source_name)
+        target_name = (
+            source_name
+            if pose_bones.get(source_name) is not None
+            else merged_bone_name(source_name)
+        )
         if pose_bones.get(target_name) is None:
             raise UnsupportedDirectAnimation(
                 f"Target armature is missing required bone {source_name!r} "
@@ -1152,7 +1006,7 @@ def validate_target_armature(armature, binding: SkeletonBinding) -> tuple[str, .
             "before importing animations."
         )
     contract = str(armature.data.get("cp77_rig_space_contract", ""))
-    if contract != RIG_SPACE_CONTRACT:
+    if contract != RIG_SPACE_CONTRACT_CURRENT:
         raise UnsupportedDirectAnimation(
             "The selected armature was not imported with the supported JSON rig-space contract."
         )
@@ -1160,79 +1014,83 @@ def validate_target_armature(armature, binding: SkeletonBinding) -> tuple[str, .
     target_names = _resolve_target_bone_names(armature, binding)
     for source_name, target_name in zip(binding.bone_names, target_names):
         pose_bone = armature.pose.bones[target_name]
-        inherit_scale = getattr(pose_bone.bone, "inherit_scale", "FULL")
-        if inherit_scale != "FULL":
+        issue = inheritance_issue(pose_bone.bone)
+        if issue:
             raise UnsupportedDirectAnimation(
-                f"Target bone {target_name!r} for source joint {source_name!r} "
-                f"uses unsupported inherit_scale={inherit_scale!r}."
-            )
-        if not getattr(pose_bone.bone, "use_inherit_rotation", True):
-            raise UnsupportedDirectAnimation(
-                f"Target bone {target_name!r} disables inherited rotation."
-            )
-        if not getattr(pose_bone.bone, "use_local_location", True):
-            raise UnsupportedDirectAnimation(
-                f"Target bone {target_name!r} disables local location."
+                f"Target bone {target_name!r} for source joint {source_name!r} {issue}."
             )
         if getattr(pose_bone, "rotation_mode", "QUATERNION") != "QUATERNION":
             pose_bone.rotation_mode = "QUATERNION"
     return target_names
 
 
-def _source_rest_snapshot(binding, target_binding) -> dict:
+def _source_rest_snapshot(binding, target_binding, document, context) -> dict:
     matrices = np.linalg.inv(target_binding.inverse_rest_relative)
+    authored_transforms = []
+    for index, node_index in enumerate(binding.joint_nodes):
+        node = document["nodes"][node_index]
+        if "matrix" in node or not np.allclose(
+            context.joint_default_prefixes[index], np.eye(4), atol=1e-12, rtol=0
+        ):
+            authored_transforms.append(None)
+        else:
+            authored_transforms.append(
+                {
+                    key: node[key]
+                    for key in ("translation", "rotation", "scale")
+                    if key in node
+                }
+            )
     return {
         "version": 1,
         "space": SOURCE_REST_SPACE_CONTRACT,
         "boneNames": list(binding.bone_names),
         "matrices": matrices.reshape(len(matrices), 16).tolist(),
+        "gltfTransforms": authored_transforms,
     }
 
 
-def _assign_action(armature, action):
-    return assign_action_with_slot(armature, action)
-
-
-def _action_fcurves(action, armature):
-    return get_action_fcurves(action, armature, create=True)
-
-
-def _ensure_fcurve(fcurves, data_path, index, group_name):
-    return fcurves.ensure(data_path, index=index, group_name=group_name)
-
-
-def _bulk_keys(fcurve, frames, values, interpolation="LINEAR"):
-    return bulk_set_keyframes(
-        fcurve,
-        frames,
-        values,
-        interpolation=interpolation,
-        collapse_constant=True,
-    )
-
-def _matrix_from_numpy(value):
-    return Matrix(tuple(tuple(float(component) for component in row) for row in value))
-
-
-def _matrix_to_numpy(value):
-    return np.asarray(value, dtype=np.float64)
-
-
-def _source_rest_relative_matrices(
-    binding: SkeletonBinding,
-    context: SamplingContext,
-) -> np.ndarray:
-    source_rest = np.empty((len(binding.bone_names), 4, 4), dtype=np.float64)
-    for joint_index, node_index in enumerate(binding.joint_nodes):
-        relative_gltf = (
-            context.joint_default_prefixes[joint_index]
-            @ context.default_local_matrices[node_index]
-        )
-        source_rest[joint_index] = gltf_relative_to_blender(
-            relative_gltf,
-            binding.source_parent_indices[joint_index] < 0,
-        )
-    return source_rest
+def _source_channels_snapshot(action, armature, target_binding, channels) -> dict:
+    """Preserve authored channels and their absence while imported curves remain unchanged"""
+    curve_map = action_curve_map(action, armature)
+    authored = {
+        (int(channel.joint_index), str(channel.path)): channel for channel in channels
+    }
+    payload = []
+    for joint_index in range(len(target_binding.bone_names)):
+        paths = {
+            "location": target_binding.location_paths[joint_index],
+            "rotation_quaternion": target_binding.rotation_paths[joint_index],
+            "scale": target_binding.scale_paths[joint_index],
+        }
+        transform_fingerprint = None
+        if np.any(np.abs(target_binding.basis_corrections[joint_index, :3, 3]) > 1e-8):
+            transform_fingerprint = transform_curve_fingerprint(curve_map, paths)
+        for path, property_name, width in (
+            ("translation", "location", 3),
+            ("rotation", "rotation_quaternion", 4),
+            ("scale", "scale", 3),
+        ):
+            entry = {
+                "jointIndex": joint_index,
+                "path": path,
+                "curveFingerprint": transform_fingerprint
+                or property_curve_fingerprint(curve_map, paths[property_name], width),
+            }
+            channel = authored.get((joint_index, path))
+            if channel is None:
+                entry["omitted"] = True
+            else:
+                entry.update(
+                    interpolation=str(channel.interpolation),
+                    times=[float(value) for value in channel.times],
+                    values=[
+                        [float(component) for component in row]
+                        for row in channel.values
+                    ],
+                )
+            payload.append(entry)
+    return {"version": 1, "channels": payload}
 
 
 def build_target_binding(
@@ -1243,13 +1101,17 @@ def build_target_binding(
 ) -> TargetBinding:
     target_names = target_names or _resolve_target_bone_names(armature, binding)
     pose_bones = tuple(armature.pose.bones[name] for name in target_names)
-    rest_matrices = np.asarray(
-        [_matrix_to_numpy(pose_bone.bone.matrix_local) for pose_bone in pose_bones],
-        dtype=np.float64,
-    )
+    # Edit bones carry no scale or shear: anything beyond a rotation in matrix_local is float32 noise, which Blender's
+    # roll math amplifies for a bone pointing nearly opposite its parent's Y axis.
+    rest_matrices = rest_model_matrices(pose_bone.bone for pose_bone in pose_bones)
     inverse_rest = np.linalg.inv(rest_matrices)
 
-    source_rest_relative = _source_rest_relative_matrices(binding, context)
+    source_rest_relative = gltf_rest_relative_to_blender(
+        context.default_local_matrices,
+        context.joint_default_prefixes,
+        binding.joint_nodes,
+        binding.source_parent_indices,
+    )
     inverse_source_rest_relative = np.linalg.inv(source_rest_relative)
     source_axes = source_rest_relative[:, :3, :3]
     source_scales = np.linalg.norm(source_axes, axis=1)
@@ -1261,17 +1123,15 @@ def build_target_binding(
     rest_axes = rest_matrices[:, :3, :3]
     rest_scales = np.linalg.norm(rest_axes, axis=1)
     normalized_rest = rest_axes / np.maximum(rest_scales[:, None, :], 1e-15)
-    rest_orthogonality = np.matmul(
-        np.swapaxes(normalized_rest, 1, 2), normalized_rest
-    )
+    rest_orthogonality = np.matmul(np.swapaxes(normalized_rest, 1, 2), normalized_rest)
+    # A uniform rest scale commutes with every rotation, so pose bases relative to it stay free of shear.
     fast_numpy_basis = bool(
-        np.allclose(source_scales, 1.0, atol=2e-5)
-        and np.allclose(source_orthogonality, np.eye(3), atol=2e-5)
-        and np.allclose(rest_scales, 1.0, atol=2e-5)
-        and np.allclose(rest_orthogonality, np.eye(3), atol=2e-5)
-        and all(getattr(pb.bone, "inherit_scale", "FULL") == "FULL" for pb in pose_bones)
-        and all(getattr(pb.bone, "use_inherit_rotation", True) for pb in pose_bones)
-        and all(getattr(pb.bone, "use_local_location", True) for pb in pose_bones)
+        np.all(source_scales > RIGID_TOLERANCE)
+        and np.allclose(source_scales, source_scales[:, :1], atol=RIGID_TOLERANCE)
+        and np.allclose(source_orthogonality, np.eye(3), atol=RIGID_TOLERANCE)
+        and np.allclose(rest_scales, 1.0, atol=RIGID_TOLERANCE)
+        and np.allclose(rest_orthogonality, np.eye(3), atol=RIGID_TOLERANCE)
+        and not any(inheritance_issue(pose_bone.bone) for pose_bone in pose_bones)
     )
     if not fast_numpy_basis:
         raise UnsupportedDirectAnimation(
@@ -1290,8 +1150,13 @@ def build_target_binding(
         rest_matrices=rest_matrices,
         inverse_rest_matrices=inverse_rest,
         inverse_rest_relative=inverse_source_rest_relative,
+        basis_corrections=bone_basis_corrections(
+            source_rest_relative, binding.source_parent_indices, rest_matrices
+        ),
         location_paths=tuple(pb.path_from_id("location") for pb in pose_bones),
-        rotation_paths=tuple(pb.path_from_id("rotation_quaternion") for pb in pose_bones),
+        rotation_paths=tuple(
+            pb.path_from_id("rotation_quaternion") for pb in pose_bones
+        ),
         scale_paths=tuple(pb.path_from_id("scale") for pb in pose_bones),
         fast_numpy_basis=True,
         merged_target=merged_target,
@@ -1306,94 +1171,40 @@ def _basis_channels_numpy(
     basis = np.empty_like(sampled.relative_matrices)
     for joint_index in binding.topological_joint_indices:
         basis[:, joint_index] = np.matmul(
-            target.inverse_rest_relative[joint_index],
-            sampled.relative_matrices[:, joint_index],
+            np.matmul(
+                np.linalg.inv(target.basis_corrections[joint_index]),
+                target.inverse_rest_relative[joint_index],
+            ),
+            np.matmul(
+                sampled.relative_matrices[:, joint_index],
+                target.basis_corrections[joint_index],
+            ),
         )
 
-    locations = basis[..., :3, 3].copy()
     axes = basis[..., :3, :3]
-    scales = np.linalg.norm(axes, axis=-2)
-    rotations = axes / np.maximum(scales[..., None, :], 1e-15)
-    quaternions = _quaternions_wxyz_from_matrices(rotations)
-    return locations, quaternions, scales
-
-
-def _basis_channels_blender(
-    armature,
-    binding: SkeletonBinding,
-    sampled: SampledAnimation,
-    target: TargetBinding,
-):
-    """Safety fallback for rigs that cannot use the vectorized basis path.
-
-    Keep this path correct but isolated; a complete NumPy equivalent of
-    Bone.convert_local_to_pose remains required before it can be considered fast.
-    """
-    if sampled.model_matrices is None:
-        raise DirectAnimationImportError(
-            "Model matrices are required for Blender basis conversion fallback."
+    rotations = axes / np.maximum(np.linalg.norm(axes, axis=-2)[..., None, :], 1e-15)
+    if not np.allclose(
+        np.swapaxes(rotations, -1, -2) @ rotations, np.eye(3), atol=RIGID_TOLERANCE
+    ):
+        raise UnsupportedDirectAnimation(
+            "Animation transforms introduce shear that Blender pose channels cannot represent."
         )
-    frame_count = len(sampled.frames)
-    joint_count = len(binding.bone_names)
-    locations = np.zeros((frame_count, joint_count, 3), dtype=np.float64)
-    rotations = np.zeros((frame_count, joint_count, 4), dtype=np.float64)
-    scales = np.ones((frame_count, joint_count, 3), dtype=np.float64)
-
-    for frame_index in range(frame_count):
-        desired = [
-            _matrix_from_numpy(sampled.model_matrices[frame_index, joint_index])
-            for joint_index in range(joint_count)
-        ]
-        for joint_index in binding.topological_joint_indices:
-            pose_bone = target.pose_bones[joint_index]
-            parent_index = binding.source_parent_indices[joint_index]
-            basis = model_matrix_to_basis_explicit(
-                pose_bone,
-                desired[joint_index],
-                parent_matrix=(
-                    None if parent_index < 0 else desired[parent_index]
-                ),
-                parent_matrix_local=(
-                    None
-                    if parent_index < 0
-                    else target.pose_bones[parent_index].bone.matrix_local
-                ),
-            )
-            location, rotation, scale = basis.decompose()
-            rotation.normalize()
-            locations[frame_index, joint_index] = tuple(location)
-            rotations[frame_index, joint_index] = (
-                rotation.w, rotation.x, rotation.y, rotation.z
-            )
-            scales[frame_index, joint_index] = tuple(scale)
-    return locations, rotations, scales
+    locations, rotations_xyzw, scales = decompose_matrices(basis)
+    return locations, wxyz_from_xyzw(rotations_xyzw), scales
 
 
 def _basis_channels(
-    armature,
     binding: SkeletonBinding,
     sampled: SampledAnimation,
     target: TargetBinding,
 ):
-    locations, rotations, scales = _basis_channels_numpy(
-        binding, sampled, target
-    )
+    locations, rotations, scales = _basis_channels_numpy(binding, sampled, target)
 
     for joint_index in range(len(binding.bone_names)):
-        dots = np.sum(
-            rotations[:-1, joint_index] * rotations[1:, joint_index], axis=1
-        )
+        dots = np.sum(rotations[:-1, joint_index] * rotations[1:, joint_index], axis=1)
         flips = np.cumprod(np.where(dots < 0.0, -1.0, 1.0))
         rotations[1:, joint_index] *= flips[:, None]
     return locations, rotations, scales
-
-
-def _property_is_default(channel, default_value):
-    return (
-        channel is not None
-        and len(channel.values) == 1
-        and np.allclose(channel.values[0], default_value, atol=1e-7)
-    )
 
 
 def _replace_curve_keys(
@@ -1405,71 +1216,72 @@ def _replace_curve_keys(
     values,
     interpolation="LINEAR",
 ):
-    curve = _ensure_fcurve(fcurves, data_path, index, group_name)
+    curve = fcurves.ensure(data_path, index=index, group_name=group_name)
     previous_count = len(curve.keyframe_points)
     if previous_count:
         curve.keyframe_points.clear()
-    new_count = _bulk_keys(
-        curve,
-        frames,
-        values,
-        interpolation=interpolation,
+    new_count = bulk_set_keyframes(
+        curve, frames, values, interpolation=interpolation, collapse_constant=True
     )
     return curve, previous_count, new_count
 
 
 def _build_sparse_pose_template(
     armature,
-    binding,
     pose_base,
     target_binding,
 ):
+    """Seed complete bone transforms so switching Actions cannot retain a prior pose"""
     action = track_created_datablock(
         "actions",
         bpy.data.actions.new("__CP77_DIRECT_ANIM_POSE_TEMPLATE__"),
     )
     action.use_fake_user = False
-    fcurves = _action_fcurves(action, armature)
+    fcurves = get_action_fcurves(action, armature, create=True)
     curve_count = 0
     keypoint_count = 0
     try:
         for joint_index, bone_name in enumerate(target_binding.bone_names):
             location = pose_base.location_values[joint_index]
             rotation = pose_base.rotation_values_wxyz[joint_index]
-            if pose_base.location_mask[joint_index] and not np.allclose(
-                location,
-                (0.0, 0.0, 0.0),
-                atol=1e-9,
-                rtol=1e-9,
-            ):
+            if pose_base.location_mask[joint_index]:
                 path = target_binding.location_paths[joint_index]
                 for component in range(3):
-                    curve = _ensure_fcurve(
-                        fcurves, path, component, bone_name
-                    )
-                    keypoint_count += _bulk_keys(
+                    curve = fcurves.ensure(path, index=component, group_name=bone_name)
+                    keypoint_count += bulk_set_keyframes(
                         curve,
                         (0.0,),
                         (location[component],),
+                        interpolation="LINEAR",
+                        collapse_constant=True,
                     )
                     curve_count += 1
-            if pose_base.rotation_mask[joint_index] and not np.allclose(
-                rotation,
-                (1.0, 0.0, 0.0, 0.0),
-                atol=1e-9,
-                rtol=1e-9,
-            ):
+            if pose_base.rotation_mask[joint_index]:
                 path = target_binding.rotation_paths[joint_index]
                 for component in range(4):
-                    curve = _ensure_fcurve(
-                        fcurves, path, component, bone_name
-                    )
-                    keypoint_count += _bulk_keys(
+                    curve = fcurves.ensure(path, index=component, group_name=bone_name)
+                    keypoint_count += bulk_set_keyframes(
                         curve,
                         (0.0,),
                         (rotation[component],),
+                        interpolation="LINEAR",
+                        collapse_constant=True,
                     )
                     curve_count += 1
+            for component in range(3):
+                curve = fcurves.ensure(
+                    target_binding.scale_paths[joint_index],
+                    index=component,
+                    group_name=bone_name,
+                )
+                keypoint_count += bulk_set_keyframes(
+                    curve,
+                    (0.0,),
+                    (1.0,),
+                    interpolation="LINEAR",
+                    collapse_constant=True,
+                )
+                curve_count += 1
         return action, curve_count, keypoint_count
     except Exception:
         if bpy.data.actions.get(action.name) is action:
@@ -1479,7 +1291,6 @@ def _build_sparse_pose_template(
 
 def _write_sparse_pose_action(
     armature,
-    binding,
     sparse,
     import_tracks,
     target_binding,
@@ -1492,17 +1303,15 @@ def _write_sparse_pose_action(
     shell_started = time.perf_counter()
     if template_action is not None:
         action = track_created_datablock("actions", template_action.copy())
-        action.name = sparse.name
+        action.name = clip_action_name(sparse.name, armature)
+        action.use_fake_user = True
     else:
-        action = track_created_datablock(
-            "actions", bpy.data.actions.new(sparse.name)
-        )
-    action.use_fake_user = True
+        action = new_clip_action(sparse.name, armature)
     try:
-        fcurves = _action_fcurves(action, armature)
-        timing_totals["action_shell"] = timing_totals.get(
-            "action_shell", 0.0
-        ) + (time.perf_counter() - shell_started)
+        fcurves = get_action_fcurves(action, armature, create=True)
+        timing_totals["action_shell"] = timing_totals.get("action_shell", 0.0) + (
+            time.perf_counter() - shell_started
+        )
 
         pose_started = time.perf_counter()
         pose_curve_count = int(template_curve_count)
@@ -1510,55 +1319,54 @@ def _write_sparse_pose_action(
         pose_override_curve_count = 0
         pose_override_keypoint_count = 0
         for joint_index, bone_name in enumerate(target_binding.bone_names):
-            location = sparse.location_channels[joint_index]
-            rotation = sparse.rotation_channels[joint_index]
-            if location is not None:
-                path = target_binding.location_paths[joint_index]
-                for component in range(3):
-                    existing = fcurves.find(data_path=path, index=component)
-                    was_existing = existing is not None
+            properties = (
+                (
+                    sparse.location_channels[joint_index],
+                    target_binding.location_paths[joint_index],
+                    3,
+                ),
+                (
+                    sparse.rotation_channels[joint_index],
+                    target_binding.rotation_paths[joint_index],
+                    4,
+                ),
+                (
+                    sparse.scale_channels[joint_index],
+                    target_binding.scale_paths[joint_index],
+                    3,
+                ),
+            )
+            for channel, path, width in properties:
+                if channel is None:
+                    continue
+                for component in range(width):
+                    was_existing = (
+                        fcurves.find(data_path=path, index=component) is not None
+                    )
                     _, previous_count, new_count = _replace_curve_keys(
                         fcurves,
                         path,
                         component,
                         bone_name,
-                        location.frames,
-                        location.values[:, component],
-                        interpolation=location.interpolation,
+                        channel.frames,
+                        channel.values[:, component],
+                        interpolation=channel.interpolation,
                     )
                     pose_keypoint_count += new_count - previous_count
                     pose_override_curve_count += 1
                     pose_override_keypoint_count += new_count
                     if not was_existing:
                         pose_curve_count += 1
-            if rotation is not None:
-                path = target_binding.rotation_paths[joint_index]
-                for component in range(4):
-                    existing = fcurves.find(data_path=path, index=component)
-                    was_existing = existing is not None
-                    _, previous_count, new_count = _replace_curve_keys(
-                        fcurves,
-                        path,
-                        component,
-                        bone_name,
-                        rotation.frames,
-                        rotation.values[:, component],
-                        interpolation=rotation.interpolation,
-                    )
-                    pose_keypoint_count += new_count - previous_count
-                    pose_override_curve_count += 1
-                    pose_override_keypoint_count += new_count
-                    if not was_existing:
-                        pose_curve_count += 1
-        timing_totals["pose_curves"] = timing_totals.get(
-            "pose_curves", 0.0
-        ) + (time.perf_counter() - pose_started)
+        timing_totals["pose_curves"] = timing_totals.get("pose_curves", 0.0) + (
+            time.perf_counter() - pose_started
+        )
 
         metadata_started = time.perf_counter()
-        apply_action_extras(action, sparse.extras)
-        timing_totals["metadata"] = timing_totals.get(
-            "metadata", 0.0
-        ) + (time.perf_counter() - metadata_started)
+        if apply_action_extras(action, sparse.extras):
+            sync_markers_from_events(action)
+        timing_totals["metadata"] = timing_totals.get("metadata", 0.0) + (
+            time.perf_counter() - metadata_started
+        )
 
         track_stats = {
             "curve_count": 0,
@@ -1567,16 +1375,19 @@ def _write_sparse_pose_action(
         }
         if import_tracks:
             tracks_started = time.perf_counter()
-            track_stats = import_anim_tracks(
-                action,
-                armature=armature,
-                ensure_properties=False,
-                extras=sparse.extras,
-                replace_existing=False,
-            ) or track_stats
-            timing_totals["track_curves"] = timing_totals.get(
-                "track_curves", 0.0
-            ) + (time.perf_counter() - tracks_started)
+            track_stats = (
+                import_anim_tracks(
+                    action,
+                    armature=armature,
+                    ensure_properties=False,
+                    extras=sparse.extras,
+                    replace_existing=False,
+                )
+                or track_stats
+            )
+            timing_totals["track_curves"] = timing_totals.get("track_curves", 0.0) + (
+                time.perf_counter() - tracks_started
+            )
 
         return action, {
             "pose_curves": pose_curve_count,
@@ -1603,57 +1414,33 @@ def _write_pose_action(
 ):
     timing_totals = timing_totals if timing_totals is not None else {}
     shell_started = time.perf_counter()
-    action = track_created_datablock(
-        "actions", bpy.data.actions.new(sampled.name)
-    )
-    action.use_fake_user = True
+    action = new_clip_action(sampled.name, armature)
     try:
-        fcurves = _action_fcurves(action, armature)
-        timing_totals["action_shell"] = timing_totals.get(
-            "action_shell", 0.0
-        ) + (time.perf_counter() - shell_started)
+        fcurves = get_action_fcurves(action, armature, create=True)
+        timing_totals["action_shell"] = timing_totals.get("action_shell", 0.0) + (
+            time.perf_counter() - shell_started
+        )
 
         pose_started = time.perf_counter()
-        locations, rotations, scales = _basis_channels(
-            armature, binding, sampled, target_binding
+        locations, rotations, scales = _basis_channels(binding, sampled, target_binding)
+        pose_curve_count, pose_keypoint_count = write_pose_curves(
+            fcurves,
+            target_binding.pose_bones,
+            sampled.frames,
+            locations,
+            rotations,
+            scales,
         )
-        frames = sampled.frames.astype(np.float64)
-        pose_curve_count = 0
-        pose_keypoint_count = 0
-
-        for joint_index, bone_name in enumerate(target_binding.bone_names):
-            location_path = target_binding.location_paths[joint_index]
-            rotation_path = target_binding.rotation_paths[joint_index]
-            scale_path = target_binding.scale_paths[joint_index]
-
-            for component in range(3):
-                curve = _ensure_fcurve(fcurves, location_path, component, bone_name)
-                pose_keypoint_count += _bulk_keys(
-                    curve, frames, locations[:, joint_index, component]
-                )
-                pose_curve_count += 1
-            for component in range(4):
-                curve = _ensure_fcurve(fcurves, rotation_path, component, bone_name)
-                pose_keypoint_count += _bulk_keys(
-                    curve, frames, rotations[:, joint_index, component]
-                )
-                pose_curve_count += 1
-            if not np.allclose(scales[:, joint_index], 1.0, atol=1e-7):
-                for component in range(3):
-                    curve = _ensure_fcurve(fcurves, scale_path, component, bone_name)
-                    pose_keypoint_count += _bulk_keys(
-                        curve, frames, scales[:, joint_index, component]
-                    )
-                    pose_curve_count += 1
-        timing_totals["pose_curves"] = timing_totals.get(
-            "pose_curves", 0.0
-        ) + (time.perf_counter() - pose_started)
+        timing_totals["pose_curves"] = timing_totals.get("pose_curves", 0.0) + (
+            time.perf_counter() - pose_started
+        )
 
         metadata_started = time.perf_counter()
-        apply_action_extras(action, sampled.extras)
-        timing_totals["metadata"] = timing_totals.get(
-            "metadata", 0.0
-        ) + (time.perf_counter() - metadata_started)
+        if apply_action_extras(action, sampled.extras):
+            sync_markers_from_events(action)
+        timing_totals["metadata"] = timing_totals.get("metadata", 0.0) + (
+            time.perf_counter() - metadata_started
+        )
 
         track_stats = {
             "curve_count": 0,
@@ -1662,16 +1449,19 @@ def _write_pose_action(
         }
         if import_tracks:
             tracks_started = time.perf_counter()
-            track_stats = import_anim_tracks(
-                action,
-                armature=armature,
-                ensure_properties=False,
-                extras=sampled.extras,
-                replace_existing=False,
-            ) or track_stats
-            timing_totals["track_curves"] = timing_totals.get(
-                "track_curves", 0.0
-            ) + (time.perf_counter() - tracks_started)
+            track_stats = (
+                import_anim_tracks(
+                    action,
+                    armature=armature,
+                    ensure_properties=False,
+                    extras=sampled.extras,
+                    replace_existing=False,
+                )
+                or track_stats
+            )
+            timing_totals["track_curves"] = timing_totals.get("track_curves", 0.0) + (
+                time.perf_counter() - tracks_started
+            )
 
         return action, {
             "pose_curves": pose_curve_count,
@@ -1688,130 +1478,30 @@ def _write_pose_action(
         raise
 
 
-def _rest_local_trs_red(binding: SkeletonBinding, context: SamplingContext):
-    """Per-joint parent-relative rest as REDengine-space TRS dictionaries.
-
-    The joint's parent-relative glTF rest (accumulating through any intermediate
-    non-joint nodes) is converted to the RED frame with a pure-rotation change of
-    basis. The rig reader accumulates these local transforms and applies its bone-local
-    convention, yielding a rest numerically identical to _source_rest_relative_matrices.
-    """
-    relative_gltf = np.stack(
-        [
-            context.joint_default_prefixes[joint_index]
-            @ context.default_local_matrices[node_index]
-            for joint_index, node_index in enumerate(binding.joint_nodes)
-        ]
-    )
-    red_local = gltf_matrix_to_red(relative_gltf)
-    translations, rotations_xyzw, scales = _decompose_trs_batch(red_local)
-    transforms = [
-        {
-            "Translation": {
-                "X": float(translations[index, 0]),
-                "Y": float(translations[index, 1]),
-                "Z": float(translations[index, 2]),
-            },
-            "Rotation": {
-                "i": float(rotations_xyzw[index, 0]),
-                "j": float(rotations_xyzw[index, 1]),
-                "k": float(rotations_xyzw[index, 2]),
-                "r": float(rotations_xyzw[index, 3]),
-            },
-            "Scale": {
-                "X": float(scales[index, 0]),
-                "Y": float(scales[index, 1]),
-                "Z": float(scales[index, 2]),
-            },
-        }
-        for index in range(len(binding.bone_names))
-    ]
-    return transforms, translations, rotations_xyzw, scales
-
-
-def build_rest_armature_from_binding(
-    binding: SkeletonBinding,
-    context: SamplingContext,
-    *,
-    source_label: str = "",
-    name: str | None = None,
-    assign_shapes: bool = True,
-    model_space_matrices=None,
-):
-    """Construct a rig-import-compatible armature from an anims GLB rest pose.
-
-    Used when an .anims.glb is imported with no target armature selected. The rest is
-    handed to the rig reader so the bone-local basis, rig-space
-    contract, and track metadata match a JSON-imported rig. Interactive animation imports
-    retain bone shapes; hidden mesh-source rest armatures may disable them.
-    """
-    if bpy is None or Matrix is None:
-        raise RuntimeError("Blender is required to construct a rest armature.")
-    # Armature construction stays owned by the importer rig domain.
-    from ...animation.rig import RigData
-    from ..rig import create_armature_from_rig_data
-
-    skin_extras = binding.skin_extras or {}
-    bone_transforms, translations, rotations_xyzw, scales = _rest_local_trs_red(
-        binding, context
-    )
-    rig_path = str(skin_extras.get("rigPath", "") or "")
-    rig_name = name or (
-        os.path.splitext(os.path.basename(rig_path))[0]
-        if rig_path
-        else "Armature__rest"
-    )
-
-    rig_data = RigData(
-        num_bones=len(binding.bone_names),
-        parent_indices=np.asarray(binding.source_parent_indices, dtype=np.int16),
-        bone_names=list(binding.bone_names),
-        track_names=[str(value) for value in (skin_extras.get("trackNames") or ())],
-        ls_q=np.ascontiguousarray(rotations_xyzw[:, (3, 0, 1, 2)], dtype=np.float32),
-        ls_t=np.ascontiguousarray(translations, dtype=np.float32),
-        ls_s=np.ascontiguousarray(scales, dtype=np.float32),
-        rig_name=rig_name,
-        disable_connect=True,
-        apose_ms=[],
-        apose_ls=[],
-        bone_transforms=bone_transforms,
-        parts=[],
-        rig_extra_tracks=[],
-        reference_tracks=[],
-        cooking_platform="",
-        distance_category_to_lod_map=[],
-        ik_setups=[],
-        level_of_detail_start_indices=[],
-        ragdoll_desc=[],
-        ragdoll_names=[],
-    )
-    return create_armature_from_rig_data(
-        rig_data,
-        "T-Pose",
-        source_rig_file=source_label or rig_path,
-        source_document=None,
-        assign_shapes=assign_shapes,
-        model_space_matrices=model_space_matrices,
-    )
-
-
-def import_anims_glb_to_armature(
+def _import_anims_glb_to_armature_impl(
     filepath: str,
     armature=None,
     *,
     import_tracks: bool = True,
     verbose: bool = False,
+    assign_action: bool = True,
 ):
-    if bpy is None or Matrix is None:
-        raise RuntimeError("Blender is required to create animation actions.")
-
     started_at = time.perf_counter()
-    glb = read_glb(filepath)
+    glb = read_gltf_container(filepath)
+    try:
+        validate_direct_extensions(glb.document)
+    except ValueError as error:
+        raise DirectAnimationImportError(str(error)) from error
     parse_seconds = time.perf_counter() - started_at
     setup_started = time.perf_counter()
-    binding = build_skeleton_binding(glb.document)
+    if len(glb.document.get("skins") or ()) != 1:
+        raise ValueError(
+            "Direct CP77 animation and rig import requires exactly one skin."
+        )
+    hierarchy = build_node_hierarchy(glb.document)
+    binding = build_skeleton_binding(glb.document, hierarchy)
     reader = AccessorReader(glb)
-    sampling_context = build_sampling_context(glb.document, binding)
+    sampling_context = build_sampling_context(hierarchy, binding)
     if armature is None:
         armature = build_rest_armature_from_binding(
             binding,
@@ -1822,14 +1512,31 @@ def import_anims_glb_to_armature(
     animations = glb.document.get("animations", ())
     if not animations:
         raise UnsupportedDirectAnimation("The GLB contains no animations.")
+    file_name = os.path.basename(filepath)
+    importable = []
+    skipped_clips = []
+    schema_versions = {}
+    for animation_index, animation in enumerate(animations):
+        try:
+            _normalized_animation_extras(animation, animation_index)
+        except DirectAnimationImportError as error:
+            skipped_clips.append(f"{animation.get('name') or animation_index}: {error}")
+            continue
+        version = _declared_schema_version(animation)
+        if version != ANIMATION_SCHEMA["version"]:
+            schema_versions[version] = schema_versions.get(version, 0) + 1
+        importable.append(animation_index)
+    if not importable:
+        raise DirectAnimationImportError(
+            f"No animation clip in {file_name} has valid metadata; first error: {skipped_clips[0]}"
+        )
 
     target_binding = build_target_binding(
         armature, binding, sampling_context, target_names
     )
-    if verbose and not target_binding.fast_numpy_basis:
-        print(
-            "[CP77 Direct Anim] Target rig requires the Blender basis fallback; "
-            "dense clips may be substantially slower."
+    if not target_binding.fast_numpy_basis:
+        _LOG.warning(
+            "Target rig requires the Blender basis fallback; dense clips may be substantially slower"
         )
     sparse_conversion = (
         build_sparse_conversion_context(binding, sampling_context, target_binding)
@@ -1841,7 +1548,7 @@ def import_anims_glb_to_armature(
     sparse_template_curve_count = 0
     sparse_template_keypoint_count = 0
     if sparse_conversion is not None:
-        for base_animation_index in range(len(animations)):
+        for base_animation_index in importable:
             try:
                 base_sparse = sparse_animation(
                     glb,
@@ -1853,7 +1560,7 @@ def import_anims_glb_to_armature(
                     conversion=sparse_conversion,
                     include_defaults=True,
                 )
-            except DenseBasisRequired:
+            except _CLIP_DATA_ERRORS:
                 continue
             sparse_pose_base = build_sparse_pose_base(
                 base_sparse,
@@ -1867,7 +1574,6 @@ def import_anims_glb_to_armature(
                 sparse_template_keypoint_count,
             ) = _build_sparse_pose_template(
                 armature,
-                binding,
                 sparse_pose_base,
                 target_binding,
             )
@@ -1877,20 +1583,6 @@ def import_anims_glb_to_armature(
     previous_action = animation_data.action
     previous_slot = getattr(animation_data, "action_slot", None)
     created_actions = []
-    skin_property_keys = {
-        "rigPath", "boneNames", "boneParentIndexes", "trackNames",
-        SKIN_EXTRAS_SNAPSHOT_KEY,
-        SOURCE_REST_SNAPSHOT_KEY,
-        ORIGIN_KEY,
-        ORIGIN_VERSION_KEY,
-        SOURCE_GENERATOR_KEY,
-        SOURCE_PATH_KEY,
-    }
-    previous_skin_values = {
-        key: _idprop_plain(armature.get(key))
-        for key in skin_property_keys
-        if key in armature
-    }
     conversion_seconds = 0.0
     action_seconds = 0.0
     total_pose_curves = 0
@@ -1909,14 +1601,14 @@ def import_anims_glb_to_armature(
 
     try:
         skin_extras = binding.skin_extras
-        source_generator = str((glb.document.get("asset") or {}).get("generator", "") or "")
         mark_origin(
             armature,
             ORIGIN_PLUGIN,
-            generator=source_generator,
             source_path=filepath,
         )
-        source_rest_snapshot = _source_rest_snapshot(binding, target_binding)
+        source_rest_snapshot = _source_rest_snapshot(
+            binding, target_binding, glb.document, sampling_context
+        )
         store_json_snapshot(armature, SKIN_EXTRAS_SNAPSHOT_KEY, skin_extras)
         store_json_snapshot(
             armature,
@@ -1928,80 +1620,121 @@ def import_anims_glb_to_armature(
         else:
             rig_path = skin_extras.get("rigPath")
             if rig_path is not None:
-                armature["rigPath"] = _idprop_plain(rig_path)
+                armature["rigPath"] = plain_value(rig_path)
             track_names = skin_extras.get("trackNames") or ()
             armature["trackNames"] = {
-                str(index): str(name)
-                for index, name in enumerate(track_names)
+                str(index): str(name) for index, name in enumerate(track_names)
             }
 
-        if import_tracks:
-            prepare_anim_track_properties(
-                (animation.get("extras") or {} for animation in animations),
-                armature,
-            )
+        if import_tracks and prepare_anim_track_properties(
+            (animations[index].get("extras") or {} for index in importable),
+            armature,
+        ):
+            bind_skin_materials_for_armature(armature)
 
         total_frames = 0
         sparse_clip_count = 0
         dense_clip_count = 0
-        for animation_index, animation in enumerate(animations):
+        for clip_number, animation_index in enumerate(importable, start=1):
+            clip_state = child_import_savepoint()
             conversion_started = time.perf_counter()
-            sparse = None
-            if target_binding.fast_numpy_basis:
-                try:
-                    sparse = sparse_animation(
+            try:
+                sparse = None
+                sampled = None
+                if target_binding.fast_numpy_basis:
+                    try:
+                        sparse = sparse_animation(
+                            glb,
+                            binding,
+                            animation_index,
+                            target_binding,
+                            reader=reader,
+                            context=sampling_context,
+                            conversion=sparse_conversion,
+                            pose_base=sparse_pose_base,
+                        )
+                    except DenseBasisRequired:
+                        sparse = None
+                if sparse is None:
+                    sampled = sample_animation(
                         glb,
                         binding,
                         animation_index,
-                        target_binding,
                         reader=reader,
                         context=sampling_context,
-                        conversion=sparse_conversion,
-                        pose_base=sparse_pose_base,
+                        include_model_matrices=False,
                     )
-                except DenseBasisRequired:
-                    sparse = None
-
+                clip_conversion_seconds = time.perf_counter() - conversion_started
+                clip_frame_count = (
+                    sparse.frame_count if sparse is not None else len(sampled.frames)
+                )
+                action_started = time.perf_counter()
+                if sparse is not None:
+                    action, action_stats = _write_sparse_pose_action(
+                        armature,
+                        sparse,
+                        import_tracks=import_tracks,
+                        target_binding=target_binding,
+                        template_action=sparse_template_action,
+                        template_curve_count=sparse_template_curve_count,
+                        template_keypoint_count=sparse_template_keypoint_count,
+                        timing_totals=blender_timing,
+                    )
+                else:
+                    action, action_stats = _write_pose_action(
+                        armature,
+                        binding,
+                        sampled,
+                        import_tracks=import_tracks,
+                        target_binding=target_binding,
+                        timing_totals=blender_timing,
+                    )
+                clip_action_seconds = time.perf_counter() - action_started
+                # Persist the authoritative clip length so re-export preserves a static
+                # tail even when the trailing keyframes hold a constant pose.
+                mark_origin(
+                    action,
+                    ORIGIN_PLUGIN,
+                    source_path=filepath,
+                )
+                action["cp77_direct_anim_frame_count"] = int(clip_frame_count)
+                action[TRACKS_IMPORTED_KEY] = bool(import_tracks)
+                action["cp77_direct_anim_duration_seconds"] = float(
+                    sparse.duration_seconds
+                    if sparse is not None
+                    else sampled.duration_seconds
+                )
+                # Each action keeps the skin and rest it was imported with, for its own export.
+                store_action_source(
+                    action,
+                    source_name=sparse.name if sparse is not None else sampled.name,
+                    skin=skin_extras,
+                    source_rest=source_rest_snapshot,
+                    source_channels=_source_channels_snapshot(
+                        action,
+                        armature,
+                        target_binding,
+                        sparse.source_channels
+                        if sparse is not None
+                        else sampled.source_channels,
+                    ),
+                )
+            except _CLIP_DATA_ERRORS as error:
+                rollback_import_child(
+                    clip_state,
+                    f"animation clip {animations[animation_index].get('name') or animation_index}",
+                )
+                skipped_clips.append(
+                    f"{animations[animation_index].get('name') or animation_index}: {error}"
+                )
+                continue
             if sparse is not None:
                 sparse_clip_count += 1
-                conversion_seconds += time.perf_counter() - conversion_started
-                clip_frame_count = sparse.frame_count
-                total_frames += clip_frame_count
-                action_started = time.perf_counter()
-                action, action_stats = _write_sparse_pose_action(
-                    armature,
-                    binding,
-                    sparse,
-                    import_tracks=import_tracks,
-                    target_binding=target_binding,
-                    template_action=sparse_template_action,
-                    template_curve_count=sparse_template_curve_count,
-                    template_keypoint_count=sparse_template_keypoint_count,
-                    timing_totals=blender_timing,
-                )
             else:
                 dense_clip_count += 1
-                sampled = sample_animation(
-                    glb,
-                    binding,
-                    animation_index,
-                    reader=reader,
-                    context=sampling_context,
-                    include_model_matrices=True,
-                )
-                conversion_seconds += time.perf_counter() - conversion_started
-                clip_frame_count = len(sampled.frames)
-                total_frames += clip_frame_count
-                action_started = time.perf_counter()
-                action, action_stats = _write_pose_action(
-                    armature,
-                    binding,
-                    sampled,
-                    import_tracks=import_tracks,
-                    target_binding=target_binding,
-                    timing_totals=blender_timing,
-                )
-            action_seconds += time.perf_counter() - action_started
+            conversion_seconds += clip_conversion_seconds
+            action_seconds += clip_action_seconds
+            total_frames += clip_frame_count
             total_pose_curves += action_stats["pose_curves"]
             total_pose_keypoints += action_stats["pose_keypoints"]
             total_pose_override_curves += action_stats["pose_override_curves"]
@@ -2009,104 +1742,108 @@ def import_anims_glb_to_armature(
             total_track_curves += action_stats["track_curves"]
             total_track_keypoints += action_stats["track_keypoints"]
             total_omitted_zero_tracks += action_stats["omitted_zero_tracks"]
-            # Persist the authoritative clip length so re-export preserves a static
-            # tail even when the trailing keyframes hold a constant pose.
-            mark_origin(
-                action,
-                ORIGIN_PLUGIN,
-                generator=source_generator,
-                source_path=filepath,
-            )
-            action["cp77_direct_anim_frame_count"] = int(clip_frame_count)
-            action["cp77_direct_anim_duration_seconds"] = float(
-                sparse.duration_seconds if sparse is not None else sampled.duration_seconds
-            )
-            # Skin/rest provenance belongs to the Action, not only the armature. A
-            # MetaRig can host clips imported from several .anims.glb files; keeping
-            # these snapshots per action prevents a later import from changing the
-            # skeleton used when an earlier action is exported.
-            store_action_source(
-                action,
-                skin=skin_extras,
-                source_rest=source_rest_snapshot,
-            )
             created_actions.append(action)
             if verbose and (
-                animation_index == 0
-                or (animation_index + 1) % 10 == 0
-                or animation_index + 1 == len(animations)
+                clip_number == 1
+                or clip_number % 10 == 0
+                or clip_number == len(importable)
             ):
-                print(
-                    f"[CP77 Direct Anim] Created {animation_index + 1}/"
-                    f"{len(animations)} actions; latest={action.name}"
+                _LOG.debug(
+                    "Created %d/%d actions; latest=%s",
+                    clip_number,
+                    len(importable),
+                    action.name,
                 )
 
+        if not created_actions:
+            raise DirectAnimationImportError(
+                f"No animation clip in {file_name} could be imported; first error: {skipped_clips[0]}"
+            )
+
         if previous_action is not None:
-            _assign_action(armature, previous_action)
+            assign_action_with_slot(armature, previous_action)
             if previous_slot is not None and hasattr(animation_data, "action_slot"):
                 try:
                     animation_data.action_slot = previous_slot
                 except (TypeError, RuntimeError):
                     pass
-        elif created_actions:
-            _assign_action(armature, created_actions[0])
+        elif created_actions and assign_action:
+            assign_action_with_slot(armature, created_actions[0])
 
-    except Exception:
-        if sparse_template_action is not None and bpy.data.actions.get(
-            sparse_template_action.name
-        ) is sparse_template_action:
+    finally:
+        # The template only seeds the clips; a failed import's actions, assignment and rig properties are restored by
+        # the transaction that tracks them (see import_anims_glb_to_armature).
+        if (
+            sparse_template_action is not None
+            and bpy.data.actions.get(sparse_template_action.name)
+            is sparse_template_action
+        ):
             bpy.data.actions.remove(sparse_template_action)
-        if previous_action is not None:
-            _assign_action(armature, previous_action)
-        else:
-            animation_data.action = None
-        for action in created_actions:
-            if bpy.data.actions.get(action.name) is action:
-                bpy.data.actions.remove(action)
-        for key in skin_property_keys:
-            if key in previous_skin_values:
-                armature[key] = previous_skin_values[key]
-            elif key in armature:
-                del armature[key]
-        raise
-
-    if sparse_template_action is not None and bpy.data.actions.get(
-        sparse_template_action.name
-    ) is sparse_template_action:
-        bpy.data.actions.remove(sparse_template_action)
 
     elapsed_seconds = time.perf_counter() - started_at
     if verbose:
-        print(
-            "[CP77 Direct Anim] Timing: "
-            f"parse={parse_seconds:.3f}s, setup={setup_seconds:.3f}s, "
-            f"convert={conversion_seconds:.3f}s, "
-            f"Blender data={action_seconds:.3f}s, total={elapsed_seconds:.3f}s"
+        _LOG.debug(
+            "Timing: parse=%.3fs, setup=%.3fs, convert=%.3fs, Blender data=%.3fs, total=%.3fs",
+            parse_seconds,
+            setup_seconds,
+            conversion_seconds,
+            action_seconds,
+            elapsed_seconds,
         )
-        print(
-            "[CP77 Direct Anim] Blender data split: "
-            f"actions={blender_timing['action_shell']:.3f}s, "
-            f"pose={blender_timing['pose_curves']:.3f}s, "
-            f"metadata={blender_timing['metadata']:.3f}s, "
-            f"tracks={blender_timing['track_curves']:.3f}s"
+        _LOG.debug(
+            "Blender data split: actions=%.3fs, pose=%.3fs, metadata=%.3fs, tracks=%.3fs",
+            blender_timing["action_shell"],
+            blender_timing["pose_curves"],
+            blender_timing["metadata"],
+            blender_timing["track_curves"],
         )
-        print(
-            "[CP77 Direct Anim] Payload: "
-            f"pose={total_pose_curves} curves/{total_pose_keypoints} keys, "
-            f"tracks={total_track_curves} curves/{total_track_keypoints} keys, "
-            f"omitted_zero_tracks={total_omitted_zero_tracks}, "
-            f"sparse_clips={sparse_clip_count}, dense_clips={dense_clip_count}, "
-            f"pose_template={sparse_template_curve_count} curves/"
-            f"{sparse_template_keypoint_count} keys, "
-            f"python_pose_writes={total_pose_override_curves} curves/"
-            f"{total_pose_override_keypoints} keys"
+        _LOG.debug(
+            "Payload: pose=%d curves/%d keys, tracks=%d curves/%d keys, "
+            "omitted_zero_tracks=%d, sparse_clips=%d, dense_clips=%d, "
+            "pose_template=%d curves/%d keys, python_pose_writes=%d curves/%d keys",
+            total_pose_curves,
+            total_pose_keypoints,
+            total_track_curves,
+            total_track_keypoints,
+            total_omitted_zero_tracks,
+            sparse_clip_count,
+            dense_clip_count,
+            sparse_template_curve_count,
+            sparse_template_keypoint_count,
+            total_pose_override_curves,
+            total_pose_override_keypoints,
+        )
+        animation_type_counts = {}
+        additive_action_names = []
+        for action in created_actions:
+            animation_type = str(action.get("animationType", "Normal") or "Normal")
+            animation_type_counts[animation_type] = (
+                animation_type_counts.get(animation_type, 0) + 1
+            )
+            if animation_type != "Normal":
+                additive_action_names.append(action.name)
+        _LOG.debug(
+            "Animation types: %s; additive actions=%s",
+            ", ".join(
+                f"{name}={count}"
+                for name, count in sorted(animation_type_counts.items())
+            )
+            or "none",
+            tuple(additive_action_names),
         )
 
+    warnings = _schema_warnings(file_name, schema_versions)
+    if skipped_clips:
+        warnings.append(
+            f"{file_name}: skipped {len(skipped_clips)} of {len(animations)} "
+            f"animation clip(s) with invalid data; first: {skipped_clips[0]}"
+        )
     return {
         "direct_imported": True,
         "filepath": os.path.abspath(filepath),
         "armature": armature,
         "actions": created_actions,
+        "warnings": tuple(warnings),
         "animation_count": len(created_actions),
         "bone_count": len(binding.bone_names),
         "frame_count": total_frames,
@@ -2130,3 +1867,37 @@ def import_anims_glb_to_armature(
         "pose_template_curve_count": sparse_template_curve_count,
         "pose_template_keypoint_count": sparse_template_keypoint_count,
     }
+
+
+def import_anims_glb_to_armature(
+    filepath, armature=None, *, import_tracks=True, verbose=False, assign_action=True
+):
+    """Import actions and an optional reconstructed rig as one reversible transaction"""
+    active = current_import_transaction()
+    owner = active or DatablockImportTransaction()
+    savepoint = owner.savepoint()
+    snapshot = BlenderContextSnapshot().store() if active is None else None
+    try:
+        with owner.scope() if active is None else nullcontext():
+            track_animation_import_state(armature)
+            result = _import_anims_glb_to_armature_impl(
+                filepath,
+                armature,
+                import_tracks=import_tracks,
+                verbose=verbose,
+                assign_action=assign_action,
+            )
+    except Exception as error:
+        report = owner.rollback() if active is None else owner.rollback_to(savepoint)
+        if snapshot is not None:
+            snapshot.restore()
+        raise_if_rollback_incomplete(
+            report, error, error_type=DirectAnimationImportError
+        )
+        if isinstance(error, (GLBContainerError, GLTFSkeletonError)):
+            raise DirectAnimationImportError(str(error)) from error
+        raise
+    if active is None:
+        owner.commit()
+    result["all_objects"] = [result["armature"]]
+    return result

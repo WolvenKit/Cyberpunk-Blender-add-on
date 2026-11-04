@@ -2,11 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...common.paths import (
-    depot_path_key,
-    expected_resource_path,
-    normalize_depot_path,
-)
+from ....assetio.paths import depot_path_key, depot_to_local_fragment
+from ....assetio.resolver import resolve_mirrored_export
+from ...common.paths import expected_resource_path
 
 
 @dataclass(slots=True, frozen=True)
@@ -31,10 +29,9 @@ class IndexedResourceResolver:
         *,
         append_expected_json=True,
     ):
-        normalized = normalize_depot_path(depot_path)
+        normalized = depot_to_local_fragment(depot_path)
         normalized_candidates = tuple(
-            (bool(append_json), str(extension))
-            for append_json, extension in candidates
+            (bool(append_json), str(extension)) for append_json, extension in candidates
         )
         cache_key = (
             str(kind),
@@ -69,6 +66,15 @@ class IndexedResourceResolver:
                 )
                 or ""
             )
+            if not resolved_path and self.session.raw_root:
+                resolved_path = (
+                    resolve_mirrored_export(
+                        indexed_path,
+                        self.session.raw_root,
+                        (extension,),
+                    )
+                    or ""
+                )
             if resolved_path:
                 break
 

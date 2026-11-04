@@ -1,50 +1,45 @@
 from bpy.props import BoolProperty, EnumProperty, IntProperty, StringProperty
 from bpy.types import Operator
 
-from ...animation.rigify.mapping import DIRECTION_FORWARD
-from ...blender.animation_context import active_armature
-from ..model import RigifyBakeRequest
-from ..services.rigify.bake import bake_to_source
-from ..services.rigify.operations import (
-    activate_linked_rig,
-    generate_rigify,
-    toggle_constraint_direction,
-)
-from ..services.rigify.pairing import find_pair, get_constraint_direction
+from ...blender.operator_results import execute_operation
+from ...core.log import get_logger
+from ...core.notifications import report
+from ..model.requests import BAKE_RANGE_ACTION, BAKE_RANGE_MANUAL, BAKE_RANGE_SCENE
+from ..services import rigify
 
-
-def _finish(operator, result):
-    if result.message:
-        operator.report({result.level}, result.message)
-    return result.blender_status
+_LOG = get_logger(__name__)
 
 
 class CP77ToRigify(Operator):
     bl_idname = "rigify_generator.cp77"
-    bl_parent_id = "CP77_PT_animspanel"
     bl_options = {"REGISTER", "UNDO"}
     bl_label = "Generate Rigify"
 
     def execute(self, context):
-        return _finish(self, generate_rigify(context))
+        return execute_operation(self, "Rigify generation", rigify.generate, context)
 
 
-class CP77_OT_ToggleConstraintDirection(Operator):
-    bl_idname = "cp77.toggle_constraint_direction"
-    bl_label = "Toggle Rigify Constraint Direction"
+class CP77_OT_SetRigifyLiveSync(Operator):
+    bl_idname = "cp77.set_rigify_live_sync"
+    bl_label = "Rigify Live Sync"
+    bl_description = (
+        "Make the Cyberpunk rig follow the Rigify rig, or let it play its own action"
+    )
     bl_options = {"REGISTER", "UNDO"}
 
+    enabled: BoolProperty(name="Follow Rigify", default=True)
     source_name: StringProperty(options={"HIDDEN"})
     rigify_name: StringProperty(options={"HIDDEN"})
 
     def execute(self, context):
-        return _finish(
+        return execute_operation(
             self,
-            toggle_constraint_direction(
-                context,
-                source_name=self.source_name,
-                rigify_name=self.rigify_name,
-            ),
+            "Rigify live sync",
+            rigify.set_live_sync,
+            context,
+            enabled=self.enabled,
+            source_name=self.source_name,
+            rigify_name=self.rigify_name,
         )
 
 
@@ -56,17 +51,19 @@ class CP77_OT_ActivateLinkedRig(Operator):
     target_name: StringProperty(options={"HIDDEN"})
 
     def execute(self, context):
-        return _finish(self, activate_linked_rig(context, self.target_name))
+        return execute_operation(
+            self,
+            "Rig activation",
+            rigify.activate_linked_rig,
+            context,
+            self.target_name,
+        )
 
 
-class CP77_OT_BakeRigifyToSource(Operator):
-    bl_idname = "cp77.bake_rigify_to_source"
-    bl_label = "Bake Rigify to Cyberpunk"
-    bl_options = {"REGISTER", "UNDO"}
-
+class _RigifyBakeOperator:
     action_name: StringProperty(
         name="Action Name",
-        description="Name of the new action. Defaults to '<rigify action>_baked'",
+        description="Name of the new action",
         default="",
     )
     overwrite: BoolProperty(
@@ -77,71 +74,122 @@ class CP77_OT_BakeRigifyToSource(Operator):
     frame_range_source: EnumProperty(
         name="Frame Range",
         items=[
-            ("SCENE", "Scene Range", "Use scene.frame_start / scene.frame_end"),
-            ("ACTION", "Action Range", "Use the Rigify action's own frame_range"),
-            ("MANUAL", "Manual", "Specify start and end frames"),
+            (
+                BAKE_RANGE_ACTION,
+                "Action Range",
+                "Use the baked action's own frame range",
+            ),
+            (
+                BAKE_RANGE_SCENE,
+                "Scene Range",
+                "Use scene.frame_start / scene.frame_end",
+            ),
+            (BAKE_RANGE_MANUAL, "Manual", "Specify start and end frames"),
         ],
-        default="SCENE",
+        default=BAKE_RANGE_ACTION,
     )
     frame_start: IntProperty(name="Start", default=1, min=0)
     frame_end: IntProperty(name="End", default=250, min=0)
     step: IntProperty(name="Step", description="Frame step", default=1, min=1, max=10)
 
+    defaults = None
+    baker = None
+    label = ""
+
     @classmethod
     def poll(cls, context):
-        source, rig = find_pair(active_armature(context))
-        return bool(rig and rig.animation_data and rig.animation_data.action)
+        return cls.defaults(context) is not None
 
     def invoke(self, context, event):
-        source, rig = find_pair(active_armature(context))
-        if rig is None or rig.animation_data is None or rig.animation_data.action is None:
-            self.report({"ERROR"}, "Rigify rig has no action to bake")
+        defaults = type(self).defaults(context)
+        if defaults is None:
+            report(self, "ERROR", "Nothing to bake", logger=_LOG)
             return {"CANCELLED"}
-        action = rig.animation_data.action
-        self.action_name = f"{action.name}_baked"
-        self.frame_start, self.frame_end = map(int, action.frame_range)
-        if get_constraint_direction(source) != DIRECTION_FORWARD:
-            self.report({"WARNING"}, "Switch constraints to FORWARD before baking for meaningful results.")
+        self.action_name = defaults.action_name
+        self.frame_start, self.frame_end = defaults.frame_start, defaults.frame_end
         return context.window_manager.invoke_props_dialog(self, width=400)
+
+    def draw_header(self, layout, source, rig):
+        pass
 
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
-        source, rig = find_pair(active_armature(context))
-        if rig is not None and rig.animation_data and rig.animation_data.action:
-            col = layout.column(align=True)
-            col.enabled = False
-            col.label(text=f"From: {rig.name} → {rig.animation_data.action.name}", icon="ARMATURE_DATA")
-            col.label(text=f"Onto: {source.name}", icon="OUTLINER_OB_ARMATURE")
+        source, rig = rigify.linked_pair(context)
+        if source is not None and rig is not None:
+            self.draw_header(layout, source, rig)
             layout.separator()
         layout.prop(self, "action_name")
         layout.prop(self, "overwrite")
         layout.separator()
         layout.prop(self, "frame_range_source")
-        if self.frame_range_source == "MANUAL":
+        if self.frame_range_source == BAKE_RANGE_MANUAL:
             row = layout.row(align=True)
             row.prop(self, "frame_start")
             row.prop(self, "frame_end")
         layout.prop(self, "step")
-        layout.separator()
-        info = layout.column(align=True)
-        info.scale_y = 0.85
-        info.label(text="Animation-bone subset only (animBones).", icon="INFO")
-        info.label(text="Forward constraints are preserved.", icon="INFO")
 
     def execute(self, context):
-        source, rig = find_pair(active_armature(context))
-        if self.frame_range_source == "SCENE":
-            start, end = context.scene.frame_start, context.scene.frame_end
-        elif self.frame_range_source == "ACTION" and rig and rig.animation_data and rig.animation_data.action:
-            start, end = map(int, rig.animation_data.action.frame_range)
-        else:
-            start, end = self.frame_start, self.frame_end
-        request = RigifyBakeRequest(
+        return execute_operation(
+            self,
+            self.label,
+            type(self).baker,
+            context,
             action_name=self.action_name,
-            overwrite=bool(self.overwrite),
-            frame_start=int(start),
-            frame_end=int(end),
-            step=max(1, int(self.step)),
+            overwrite=self.overwrite,
+            frame_range_source=self.frame_range_source,
+            frame_start=self.frame_start,
+            frame_end=self.frame_end,
+            step=self.step,
         )
-        return _finish(self, bake_to_source(context, source, rig, request))
+
+
+class CP77_OT_BakeRigifyToSource(_RigifyBakeOperator, Operator):
+    bl_idname = "cp77.bake_rigify_to_source"
+    bl_label = "Bake Rigify to Cyberpunk"
+    bl_description = "Bake the Rigify rig's action onto the Cyberpunk rig's animation bones, ready for export"
+    bl_options = {"REGISTER", "UNDO"}
+
+    defaults = staticmethod(rigify.bake_defaults)
+    baker = staticmethod(rigify.bake_active)
+    label = "Rigify bake"
+
+    def draw_header(self, layout, source, rig):
+        col = layout.column(align=True)
+        col.enabled = False
+        action = rig.animation_data.action if rig.animation_data else None
+        col.label(
+            text=f"From: {rig.name} → {action.name if action else '—'}",
+            icon="ARMATURE_DATA",
+        )
+        col.label(text=f"Onto: {source.name}", icon="OUTLINER_OB_ARMATURE")
+
+
+class CP77_OT_BakeSourceToRigify(_RigifyBakeOperator, Operator):
+    bl_idname = "cp77.bake_source_to_rigify"
+    bl_label = "Bake Cyberpunk to Rigify"
+    bl_description = "Bake the Cyberpunk rig's action onto the Rigify controls (limbs in FK), so it can be edited with them"
+    bl_options = {"REGISTER", "UNDO"}
+
+    defaults = staticmethod(rigify.source_bake_defaults)
+    baker = staticmethod(rigify.bake_source_active)
+    label = "Rigify control bake"
+
+    def draw_header(self, layout, source, rig):
+        col = layout.column(align=True)
+        col.enabled = False
+        action = source.animation_data.action if source.animation_data else None
+        col.label(
+            text=f"From: {source.name} → {action.name if action else '—'}",
+            icon="OUTLINER_OB_ARMATURE",
+        )
+        col.label(text=f"Onto: {rig.name} controls", icon="ARMATURE_DATA")
+
+
+RIGIFY_OPERATOR_CLASSES = (
+    CP77ToRigify,
+    CP77_OT_SetRigifyLiveSync,
+    CP77_OT_ActivateLinkedRig,
+    CP77_OT_BakeRigifyToSource,
+    CP77_OT_BakeSourceToRigify,
+)

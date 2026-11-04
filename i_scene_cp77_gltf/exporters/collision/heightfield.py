@@ -1,107 +1,149 @@
-import base64
-import struct
+import copy
+import functools
+import os
+
+from mathutils import Matrix, Vector
+
+from ...assetio.atomic import atomic_write_json
+from ...assetio.documents import load_json_payload
+from ...assetio.json_style import JsonStyle
+from ...assetio.physx_heightfield import heightfield_grid
+from ...assetio.resources import get_resources_dir
+from ...assetio.streaming_sector import node_instance_entry, streaming_sector_document
+from ...assetio.transform_values import world_transform_entry
+from ...assetio.values import coerce_int, json_array
+from ...blender.matrix import object_world_matrix
+from ..sector.transforms import transform_values
+
+# The streaming distance of each of the twelve terrain collision entries of the 121 game sectors, which a heightfield
+# cooked here, with no entry of its own to copy it from, takes.
+TERRAIN_STREAMING_DISTANCE = 443.404999
+# A cook scales a tile so that its highest sample is the top of the signed 16-bit range.
+_HIGHEST_SAMPLE = 32767
+_IMPORTED_KIND = "WORLD_HEIGHTFIELD"
+_SCALE_TOLERANCE = 1.0e-4
 
 
-class BinaryWriter:
-    def __init__(self):
-        self._buffer = bytearray()
-
-    @property
-    def buffer(self):
-        return bytes(self._buffer)
-
-    def _write_internal(self, data: bytes):
-        self._buffer.extend(data)
-
-    def write_byte(self, value):
-        self._write_internal(struct.pack("B", int(value)))
-
-    def write_chars(self, data: bytes):
-        self._write_internal(struct.pack(f"{len(data)}s", data))
-
-    def write_int16(self, value):
-        self._write_internal(struct.pack("h", int(value)))
-
-    def write_uint16(self, value):
-        self._write_internal(struct.pack("H", int(value)))
-
-    def write_uint32(self, value):
-        self._write_internal(struct.pack("I", int(value)))
-
-    def write_single(self, value):
-        self._write_internal(struct.pack("f", float(value)))
+@functools.cache
+def _node_template():
+    return load_json_payload(
+        os.path.join(get_resources_dir(), "base.worldTerrainCollisionNode.json")
+    )
 
 
-class PhysXWriter:
-    @staticmethod
-    def __write_header(bw: BinaryWriter, version: int = 2):
-        bw.write_chars(b"NXS")
+def _source_materials(shape):
+    values = json_array(getattr(shape, "heightfield_materials_json", "") or "")
+    if values:
+        return values
+    value = str(
+        getattr(shape, "physics_material_source", "")
+        or shape.physics_material
+        or "Default"
+    )
+    storage = str(getattr(shape, "physics_material_storage", "string") or "string")
+    if storage == "uint64" and not value.isdigit():
+        storage = "string"
+    return [{"$type": "CName", "$storage": storage, "$value": value}]
 
-        # mismatch flag byte: reader interprets mismatch = (byte & 1) != 1
-        # Use 1 so that mismatch becomes False when reading.
-        bw.write_byte(1)
 
-        bw.write_chars(b"HFHF")
+def _source_material_indices(shape):
+    """The material index of each sample the shape recorded on import"""
+    recorded = json_array(getattr(shape, "heightfield_material_indices_json", "") or "")
+    indices = [coerce_int(value, -1) for value in recorded]
+    return indices if indices and min(indices) >= 0 else [0] * 16
 
-        bw.write_uint32(version)
 
-    @staticmethod
-    def __write_heightfield(bw: BinaryWriter, hf: dict, version: int = 1):
-        rows = int(hf["rows"])
-        cols = int(hf["columns"])
+def _geometry_holds_scale(obj):
+    """Whether the heightfield cooked into the shapes of obj already has the object's scale in it"""
+    return obj.type == "MESH" and obj.physx.source_kind != _IMPORTED_KIND
 
-        bw.write_uint32(rows)
-        bw.write_uint32(cols)
 
-        if version >= 2:
-            bw.write_uint32(int(hf["row_limit"]))
-            bw.write_uint32(int(hf["col_limit"]))
-            bw.write_uint32(int(hf["nb_columns"]))
-        else:
-            bw.write_single(float(hf["row_limit"]))
-            bw.write_single(float(hf["col_limit"]))
-            bw.write_single(float(hf["nb_columns"]))
+def _shape_world_matrix(obj, shape):
+    """The world matrix of shape, a rigid one"""
+    world = object_world_matrix(obj)
+    if _geometry_holds_scale(obj):
+        undo = Vector(tuple(1.0 / value if value else 1.0 for value in obj.scale))
+        world = world @ Matrix.Diagonal(undo).to_4x4()
+    if any(abs(value - 1.0) > _SCALE_TOLERANCE for value in world.to_scale()):
+        raise ValueError(
+            f"{obj.name} is scaled; heightfield collisions cannot be scaled, apply or clear its scale."
+        )
+    return world @ (
+        Matrix.Translation(Vector(shape.local_pos))
+        @ shape.local_rot.to_matrix().to_4x4()
+    )
 
-        bw.write_single(float(hf["thickness"]))
-        bw.write_single(float(hf["convex_edge_threshold"]))
-        bw.write_uint16(int(hf["flags"]))
-        bw.write_uint32(int(hf["format"]))
 
-        bounds = hf["min_max_bounds"]
-        mn = bounds["min"]
-        mx = bounds["max"]
+def cooked_heightfield_shapes(obj):
+    """The cooked heightfield shapes of obj"""
+    physx = getattr(obj, "physx", None)
+    for shape in physx.shapes if physx is not None else ():
+        if shape.shape_type == "HEIGHTFIELD" and shape.is_cooked and shape.cooked_data:
+            yield shape
 
-        bw.write_single(float(mn["x"]))
-        bw.write_single(float(mn["y"]))
-        bw.write_single(float(mn["z"]))
-        bw.write_single(float(mx["x"]))
-        bw.write_single(float(mx["y"]))
-        bw.write_single(float(mx["z"]))
 
-        # Sample metadata / statistics
-        samples = hf["samples"]
-        nb_samples = len(samples)
-        bw.write_uint32(int(hf.get("sample_stride", 4)))
-        bw.write_uint32(nb_samples)
-        bw.write_single(float(hf["min_height"]))
-        bw.write_single(float(hf["max_height"]))
+def terrain_collision_node(obj, shape):
+    """The worldTerrainCollisionNode of the cooked heightfield shape of obj and its entry's matrix"""
+    try:
+        rows, columns = heightfield_grid(shape.cooked_data)
+    except ValueError as error:
+        raise ValueError(f"{obj.name}: {error}; cook it again.") from error
+    node = copy.deepcopy(_node_template())
+    data = node["Data"]
+    data["debugName"]["$value"] = shape.name or obj.name
+    data["heightfieldGeometry"]["Bytes"] = shape.cooked_data
+    data["heightScale"] = float(shape.heightfield_height_scale)
+    data["rowScale"] = float(shape.heightfield_row_scale)
+    data["columnScale"] = float(shape.heightfield_column_scale)
+    extents = data["extents"]
+    extents["X"], extents["Y"], extents["Z"] = (
+        float(value) for value in shape.heightfield_extents
+    )
+    data["materials"] = _source_materials(shape)
+    data["materialIndices"] = _source_material_indices(shape)
+    data["sourcePrefabHash"] = str(shape.heightfield_source_prefab_hash or "0")
 
-        # Heightfield samples
-        for s in samples:
-            bw.write_int16(int(s["height"]))
-            bw.write_byte(int(s["material_index_0"]))
-            bw.write_byte(int(s["material_index_1"]))
+    location, rotation, _scale = _shape_world_matrix(obj, shape).decompose()
+    data["actorTransform"] = world_transform_entry(
+        location, (rotation.x, rotation.y, rotation.z, rotation.w)
+    )
+    middle = Vector(
+        (
+            rows * data["rowScale"] / 2.0,
+            _HIGHEST_SAMPLE / 2.0 * data["heightScale"],
+            columns * data["columnScale"] / 2.0,
+        )
+    )
+    return node, Matrix.Translation(location + rotation @ middle)
 
-    @staticmethod
-    def write(heightfields):
-        if not isinstance(heightfields, (list, tuple)):
-            heightfields = [heightfields]
 
-        bw = BinaryWriter()
+def export_selected_heightfields(context, filepath):
+    records = [
+        (obj, shape)
+        for obj in context.selected_objects
+        for shape in cooked_heightfield_shapes(obj)
+    ]
+    if not records:
+        raise ValueError("No selected canonical PhysX HEIGHTFIELD shapes are cooked")
 
-        for hf in heightfields:
-            PhysXWriter.__write_header(bw, version=int(hf.get("version", 1)))
-            PhysXWriter.__write_heightfield(bw, hf, version=int(hf.get("version", 1)))
-
-        raw_bytes = bw.buffer
-        return base64.b64encode(raw_bytes).decode("ascii")
+    if not filepath.lower().endswith(".streamingsector.json"):
+        filepath += ".streamingsector.json"
+    nodes, entries = [], []
+    for index, (obj, shape) in enumerate(records):
+        node, matrix = terrain_collision_node(obj, shape)
+        nodes.append(node)
+        entries.append(
+            node_instance_entry(
+                index,
+                transform_values(matrix),
+                streaming_distance=TERRAIN_STREAMING_DISTANCE,
+            )
+        )
+    sector = streaming_sector_document(
+        nodes,
+        entries,
+        category="Exterior",
+        archive_file_name=os.path.basename(filepath),
+    )
+    atomic_write_json(filepath, sector, style=JsonStyle())
+    return len(records), filepath

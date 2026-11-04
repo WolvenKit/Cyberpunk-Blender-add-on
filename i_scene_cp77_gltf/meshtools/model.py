@@ -1,32 +1,23 @@
 from dataclasses import dataclass
-from typing import Any
 
+from ..blender.identity import real_users
 from ..blender.mesh_validation import MeshValidationOptions
+from ..blender.operator_results import OperationResult
 
 
-@dataclass(frozen=True, slots=True)
-class MeshToolResult:
-    ok: bool
-    message: str = ""
-    severity: str = "INFO"
-    payload: Any = None
-    warnings: tuple[str, ...] = ()
-
-    @property
-    def blender_status(self):
-        return {"FINISHED"} if self.ok else {"CANCELLED"}
-
-    @classmethod
-    def success(cls, message="", payload=None):
-        return cls(True, message, "INFO", payload, ())
-
-    @classmethod
-    def warning(cls, message, payload=None):
-        return cls(True, message, "WARNING", payload, ())
-
-    @classmethod
-    def failure(cls, message="", payload=None):
-        return cls(False, message, "ERROR", payload, ())
+def shared_mesh_refusal(objects, action: str) -> OperationResult | None:
+    """The refusal for objects whose mesh other objects share, or None"""
+    shared = [obj.name for obj in objects if real_users(obj.data) > 1]
+    if not shared:
+        return None
+    names = ", ".join(shared[:3]) + (
+        f" and {len(shared) - 3} more" if len(shared) > 3 else ""
+    )
+    return OperationResult.cancelled(
+        f"{names} share their mesh with other objects; make them single user "
+        f"(Object > Relations > Make Single User > Object & Data) to {action} them.",
+        "ERROR_INVALID_CONTEXT",
+    )
 
 
 @dataclass(frozen=True, slots=True)
