@@ -6,14 +6,14 @@ from .mat_common import (
     param_color,
     param_texture_path,
 )
-
-# material_cache_identity is imported as this handler's material cache hook.
 from .overlay_common import (
     additive_surface,
     combine_vector,
     control,
     split_vector,
 )
+
+from .overlay_common import material_cache_identity as material_cache_identity
 
 
 class HUDUIDot(MaterialTypeBase):
