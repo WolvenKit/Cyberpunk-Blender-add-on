@@ -1,7 +1,6 @@
 from functools import partial
 
 import bpy
-from bpy.app.translations import pgettext
 
 from ..blender import shader_nodes
 from ..blender.transactions import new_tracked_datablock
@@ -813,7 +812,7 @@ class ParallaxScreenTransparent(MaterialTypeBase):
 
     def create(self, Data, Mat):
         CurMat = Mat.node_tree
-        pBSDF = CurMat.nodes[pgettext("Principled BSDF")]
+        pBSDF = shader_nodes.principled_bsdf(CurMat.nodes)
         CurMat.nodes.remove(pBSDF)
 
         values = self._values(Data)

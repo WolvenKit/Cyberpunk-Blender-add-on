@@ -1,5 +1,3 @@
-from bpy.app.translations import pgettext
-
 from ..blender import shader_nodes
 from ..materials.blender.nodes import create_node
 from .graph import mix_color_socket
@@ -23,7 +21,7 @@ class WindowParallaxInteriorProxy(WindowParallaxInterior):
     def create(self, Data, Mat):
         data = Data if isinstance(Data, dict) else {}
         tree = Mat.node_tree
-        bsdf = tree.nodes[pgettext("Principled BSDF")]
+        bsdf = shader_nodes.principled_bsdf(tree.nodes)
         coords = build_window_parallax_coordinates(
             self,
             tree,

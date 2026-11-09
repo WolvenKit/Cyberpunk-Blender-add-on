@@ -1,5 +1,3 @@
-from bpy.app.translations import pgettext
-
 from ..blender import shader_nodes
 from ..materials.blender.nodes import create_node
 from .mat_common import param_color, param_float
@@ -247,7 +245,7 @@ class MetalBaseBlendable(MetalBase):
         data = Data if isinstance(Data, dict) else {}
         context = super().create(data, Mat)
         tree = Mat.node_tree
-        bsdf = tree.nodes[pgettext("Principled BSDF")]
+        bsdf = shader_nodes.principled_bsdf(tree.nodes)
         fade_distance = self._fade_distance(tree, data)
         base_texture = context["base_texture"]
         raw_alpha = base_texture.outputs["Alpha"] if base_texture is not None else None

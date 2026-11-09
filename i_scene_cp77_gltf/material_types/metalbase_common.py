@@ -1,5 +1,3 @@
-from bpy.app.translations import pgettext
-
 from ..bartmoss.scalar import clamp01
 from ..blender import shader_nodes
 from ..blender.shader_nodes import assign_socket, mix_color_sockets
@@ -105,7 +103,7 @@ class MetalBaseCore(MaterialTypeBase):
         return result
 
     def _bsdf(self, CurMat):
-        return CurMat.nodes[pgettext("Principled BSDF")], bsdf_socket_names()
+        return shader_nodes.principled_bsdf(CurMat.nodes), bsdf_socket_names()
 
     def _uv_source(self, CurMat, data, *, tile_key="LayerTile", location=(-2100, 400)):
         tile = param_float(data, tile_key, self.layer_tile_default) if tile_key else 1.0

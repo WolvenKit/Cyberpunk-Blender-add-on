@@ -1,5 +1,3 @@
-from bpy.app.translations import pgettext
-
 from ..blender import shader_nodes
 from ..materials.blender.images import image_has_alpha
 from ..materials.blender.nodes import (
@@ -234,7 +232,7 @@ class EmissiveControl(MaterialTypeBase):
         Mat.use_nodes = True
         CurMat = Mat.node_tree
         sockets = bsdf_socket_names()
-        pBSDF = CurMat.nodes[pgettext("Principled BSDF")]
+        pBSDF = shader_nodes.principled_bsdf(CurMat.nodes)
 
         base_color_node = self._base_color(CurMat, data)
 

@@ -1,5 +1,3 @@
-from bpy.app.translations import pgettext
-
 from ..assetio.paths import backslash_depot_key
 from ..blender import shader_nodes
 from ..materials.blender.images import image_is_placeholder, ui_default_render_image
@@ -561,7 +559,7 @@ class MetalBaseUI(MaterialTypeBase):
 
     def create(self, Data, Mat):
         CurMat = Mat.node_tree
-        pBSDF = CurMat.nodes[pgettext("Principled BSDF")]
+        pBSDF = shader_nodes.principled_bsdf(CurMat.nodes)
         sockets = bsdf_socket_names()
 
         image = self._resolve_render_texture(Data)

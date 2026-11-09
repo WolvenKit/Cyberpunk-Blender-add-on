@@ -81,7 +81,7 @@ class Eye(MaterialTypeBase):
         tree = Mat.node_tree
         nodes = tree.nodes
         links = tree.links
-        principled = nodes.get("Principled BSDF")
+        principled = shader_nodes.principled_bsdf(nodes)
         if principled is None:
             return
 

@@ -16,6 +16,7 @@ from ...bartmoss.uv import (
 from ...blender.context import get_safe_mode, safe_mode_switch
 from ...blender.operator_results import OperationResult
 from ...blender.selection import selected_meshes
+from ...blender.shader_nodes import principled_bsdf
 from ...core.log import get_logger
 from ..ownership import find_owned_material, is_owned, tag_owned
 
@@ -65,7 +66,7 @@ def ensure_uv_checker_material():
     texture_node = material.node_tree.nodes.new(type="ShaderNodeTexImage")
     texture_node.location = (-200, 0)
     texture_node.image = image
-    shader_node = material.node_tree.nodes.get("Principled BSDF")
+    shader_node = principled_bsdf(material.node_tree.nodes)
     color_output = texture_node.outputs.get("Color")
     base_color_input = shader_node.inputs.get("Base Color") if shader_node else None
     if color_output is None or base_color_input is None:
