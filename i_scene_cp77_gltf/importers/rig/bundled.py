@@ -91,7 +91,6 @@ def import_bundled_metarig(path, *, collection=None):
             "rig": paths[0],
             "cp77_source_rig_file": source_label,
             "cp77_rig_merge_order": list(paths),
-            "cp77_rig_merge_order": list(paths),
             "cp77_metarig_definition_hash": definition_hash,
             "cp77_metarig_overlay_owner_hash": definition_hash,
         }
