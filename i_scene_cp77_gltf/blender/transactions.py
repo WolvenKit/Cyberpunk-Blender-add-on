@@ -868,18 +868,14 @@ class DatablockImportTransaction:
         return discovered
 
     def rollback_to(self, savepoint):
+        if not isinstance(savepoint, ImportSavepoint):
+            raise TypeError(
+                f"rollback_to takes an ImportSavepoint, not {type(savepoint).__name__}"
+            )
         if self._closed:
             return RollbackReport(failures=(("transaction", "closed"),))
-        target_created = (
-            savepoint.created_count
-            if isinstance(savepoint, ImportSavepoint)
-            else int(savepoint)
-        )
-        target_mutations = (
-            savepoint.mutation_count if isinstance(savepoint, ImportSavepoint) else 0
-        )
-        target_created = max(0, min(target_created, len(self._created)))
-        target_mutations = max(0, min(target_mutations, len(self._mutations)))
+        target_created = max(0, min(savepoint.created_count, len(self._created)))
+        target_mutations = max(0, min(savepoint.mutation_count, len(self._mutations)))
         failures = []
         restored = 0
         removed = 0
