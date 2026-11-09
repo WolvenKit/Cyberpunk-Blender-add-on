@@ -230,9 +230,10 @@ def _resolve_indexed_image(reference, root, image_format):
         local_reference = reference.replace("\\", os.sep).replace("/", os.sep)
         indexed_reference = _with_image_extension(local_reference, image_format)
         try:
-            return indexes.resolve(indexed_reference, root, ext)
+            resolved = indexes.resolve(indexed_reference, root, ext)
         except (OSError, ValueError):
             return None
+        return resolved
     finally:
         if started is not None:
             end_material_phase(
