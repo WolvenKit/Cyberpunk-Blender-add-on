@@ -339,6 +339,8 @@ def reconfigure(
 ) -> None:
     """Swap the active preview's configuration in place and re-layer the current frame"""
     session = _session
+    if session is None:
+        return
     armature = session.armature
     previous = session.configuration
     for name in previous.base_bones - configuration.base_bones:
