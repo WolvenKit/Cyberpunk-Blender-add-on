@@ -201,7 +201,9 @@ _validated_at = {}
 
 def _snapshot_is_current(snapshot):
     mtimes = snapshot.directory_mtimes
-    if not mtimes or len(mtimes) > _MAX_VALIDATED_DIRECTORIES:
+    if not mtimes:
+        return not os.path.isdir(snapshot.root.value)
+    if len(mtimes) > _MAX_VALIDATED_DIRECTORIES:
         return True
     # One stamp per root and suffix set, holding the generation it checked: a rescan replaces it rather than adding one.
     key = (snapshot.root.key, snapshot.indexed_suffixes, snapshot.depth)
