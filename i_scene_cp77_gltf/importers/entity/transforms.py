@@ -92,6 +92,16 @@ def _rig_json_bone_source(rig_j):
     return source
 
 
+def _rig_bone_matrices(rig_j):
+    cache_key = id(rig_j)
+    cached = _RIG_BONE_MATRIX_CACHE.get(cache_key)
+    if cached is not None and cached[0] is rig_j:
+        return cached[1]
+    matrices = {}
+    _RIG_BONE_MATRIX_CACHE[cache_key] = (rig_j, matrices)
+    return matrices
+
+
 def _rig_json_model_space_matrices(rig_j):
     if type(rig_j) is not dict:
         return ()
@@ -99,7 +109,7 @@ def _rig_json_model_space_matrices(rig_j):
     cached = _RIG_MODEL_SPACE_CACHE.get(cache_key)
     if cached is not None and cached[0] is rig_j:
         return cached[1]
-    matrix_cache = _RIG_BONE_MATRIX_CACHE.setdefault(cache_key, {})
+    matrix_cache = _rig_bone_matrices(rig_j)
     matrices = tuple(
         _rig_json_bone_matrix_for_index(rig_j, index, matrix_cache)
         for index in range(len(rig_j.get("boneNames") or ()))
@@ -162,7 +172,7 @@ def _rig_json_bone_matrix_for_index(rig_j, index, matrices, resolving=None):
 def rig_json_bone_matrix(rig_j, bone_name, rig_bone_index=None):
     if type(rig_j) is not dict or not bone_name:
         return Matrix.Identity(4)
-    matrices = _RIG_BONE_MATRIX_CACHE.setdefault(id(rig_j), {})
+    matrices = _rig_bone_matrices(rig_j)
     cached = matrices.get(bone_name)
     if cached is not None:
         return cached
