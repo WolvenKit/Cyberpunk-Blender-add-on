@@ -1,5 +1,4 @@
 import bpy
-import gpu
 from gpu_extras.batch import batch_for_shader
 from mathutils import Matrix, Vector
 
@@ -9,6 +8,7 @@ from ...bartmoss.wireframes import (
     sphere_wireframe,
     wheel_wireframe,
 )
+from ...blender.gpu_overlay import line_drawing, uniform_color_shader
 from ...blender.physics.cooked_shapes import decode_cooked_geometry
 from ...blender.physics.vehicle_geometry import basis_matrix
 from ...core.log import get_logger, log_once
@@ -18,7 +18,6 @@ from ..blender.vehicle_validation import resolved_game_config
 _LOG = get_logger(__name__)
 
 _handle = None
-_shader = None
 _cooked_line_cache = {}
 LINE_COLOR = (0.0, 1.0, 0.0, 1.0)
 
@@ -299,14 +298,11 @@ def _draw_callback():
     if not scene.physx.viz_enabled:
         return
 
-    global _shader
     # World-space vertices are rebuilt on every draw so the overlay follows moving transforms.
     all_verts, all_indices = _build_visualization_data(bpy.context)
-    if _shader is None:
-        _shader = gpu.shader.from_builtin("UNIFORM_COLOR")
     try:
-        gpu.state.blend_set("ALPHA")
-        _draw_lines(_shader, all_verts, all_indices, LINE_COLOR)
+        with line_drawing():
+            _draw_lines(uniform_color_shader(), all_verts, all_indices, LINE_COLOR)
     except (ReferenceError, RuntimeError, TypeError, ValueError) as error:
         log_once(
             _LOG,
@@ -315,11 +311,6 @@ def _draw_callback():
             "PhysX viewport draw failed: %s",
             error,
         )
-    finally:
-        gpu.state.point_size_set(1.0)
-        gpu.state.line_width_set(1.0)
-        gpu.state.depth_test_set("NONE")
-        gpu.state.blend_set("NONE")
 
 
 def register_viz():
@@ -332,12 +323,11 @@ def register_viz():
 
 
 def unregister_viz():
-    global _handle, _shader
+    global _handle
     if _handle is not None:
         try:
             bpy.types.SpaceView3D.draw_handler_remove(_handle, "WINDOW")
         except (ReferenceError, RuntimeError, TypeError, ValueError):
             pass
     _handle = None
-    _shader = None
     _cooked_line_cache.clear()

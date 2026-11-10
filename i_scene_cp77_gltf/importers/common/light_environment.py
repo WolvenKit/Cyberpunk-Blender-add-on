@@ -1,35 +1,15 @@
 from __future__ import annotations
 
-import json
 import math
 
 from mathutils import Vector
 
-from ...assetio.values import json_array
 from ...bartmoss.scalar import luminance
+from ...blender.scene_registry import store_names, stored_names
 
 _REGISTRY_KEY = "cp77_environment_light_registry"
 _SCENE_LIGHT_REGISTRY_KEY = "cp77_scene_light_registry"
 _EPSILON = 1e-8
-
-
-def _registry_names(scene, key):
-    return [
-        str(value)
-        for value in json_array(scene.get(key, "") if scene is not None else "")
-        if value
-    ]
-
-
-def _store_registry_names(scene, key, names):
-    if scene is None:
-        return
-    encoded = json.dumps(
-        list(dict.fromkeys(str(name) for name in names if name)),
-        separators=(",", ":"),
-    )
-    if str(scene.get(key, "") or "") != encoded:
-        scene[key] = encoded
 
 
 def _base_color(obj):
@@ -90,8 +70,8 @@ def register_environment_lights(scene, objects):
     if scene is None:
         return 0
 
-    scene_names = _registry_names(scene, _SCENE_LIGHT_REGISTRY_KEY)
-    env_names = _registry_names(scene, _REGISTRY_KEY)
+    scene_names = stored_names(scene, _SCENE_LIGHT_REGISTRY_KEY)
+    env_names = stored_names(scene, _REGISTRY_KEY)
     scene_seen = set(scene_names)
     env_seen = set(env_names)
     environment_count = 0
@@ -113,8 +93,8 @@ def register_environment_lights(scene, objects):
             env_seen.add(obj.name)
             env_names.append(obj.name)
 
-    _store_registry_names(scene, _SCENE_LIGHT_REGISTRY_KEY, scene_names)
-    _store_registry_names(scene, _REGISTRY_KEY, env_names)
+    store_names(scene, _SCENE_LIGHT_REGISTRY_KEY, scene_names)
+    store_names(scene, _REGISTRY_KEY, env_names)
     return environment_count
 
 
@@ -130,13 +110,13 @@ def rebuild_environment_light_registry(scene):
         scene_names.append(obj.name)
         if is_environment_light(obj):
             env_names.append(obj.name)
-    _store_registry_names(scene, _SCENE_LIGHT_REGISTRY_KEY, scene_names)
-    _store_registry_names(scene, _REGISTRY_KEY, env_names)
+    store_names(scene, _SCENE_LIGHT_REGISTRY_KEY, scene_names)
+    store_names(scene, _REGISTRY_KEY, env_names)
     return len(scene_names)
 
 
 def _registered(scene, key, predicate):
-    names = _registry_names(scene, key)
+    names = stored_names(scene, key)
     valid = []
     objects = []
     for name in names:
@@ -146,7 +126,7 @@ def _registered(scene, key, predicate):
         valid.append(name)
         objects.append(obj)
     if valid != names:
-        _store_registry_names(scene, key, valid)
+        store_names(scene, key, valid)
     return tuple(objects)
 
 

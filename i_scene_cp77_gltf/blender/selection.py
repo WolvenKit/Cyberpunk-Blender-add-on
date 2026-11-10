@@ -11,11 +11,18 @@ def _find_layer_collection_by_name(name, collection):
     return None
 
 
-def selected_meshes(context=None):
-    """The selected mesh objects"""
-    return [
-        obj for obj in (context or bpy.context).selected_objects if obj.type == "MESH"
+def selected_meshes(context=None, *, include_active=False):
+    """The selected mesh objects, or the active mesh when include_active is set and none is selected"""
+    context = context or bpy.context
+    meshes = [
+        obj
+        for obj in getattr(context, "selected_objects", ())
+        if getattr(obj, "type", None) == "MESH"
     ]
+    if meshes or not include_active:
+        return meshes
+    active = getattr(context, "active_object", None)
+    return [active] if getattr(active, "type", None) == "MESH" else []
 
 
 def set_active_collection(collection, context=None):

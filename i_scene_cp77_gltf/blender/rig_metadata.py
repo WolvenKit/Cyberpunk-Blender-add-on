@@ -31,6 +31,7 @@ from ..animation.domain.rig.metadata import (
     encode_json_document,
     source_rig_paths_from,
 )
+from ..assetio.cache import store_bounded
 from ..assetio.paths import local_path_key
 from ..assetio.values import json_array
 
@@ -90,9 +91,9 @@ def _stored_documents(payload: str) -> dict:
             local_path_key(path): document
             for path, document in decode_rig_part_documents(payload).items()
         }
-        if len(_STORED_DOCUMENTS) >= _STORED_DOCUMENT_LIMIT:
-            _STORED_DOCUMENTS.pop(next(iter(_STORED_DOCUMENTS)))
-        _STORED_DOCUMENTS[payload] = documents
+        store_bounded(
+            _STORED_DOCUMENTS, payload, documents, limit=_STORED_DOCUMENT_LIMIT
+        )
     return documents
 
 

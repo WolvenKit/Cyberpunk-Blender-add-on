@@ -1,7 +1,7 @@
 import numpy as np
 
 from ...animation.model.clip.metadata import validate_animation_extras
-from ...gltf.accessors import GLTFAccessorReader
+from ...gltf.accessors import FLOAT, GLTFAccessorReader
 from ...gltf.container import (
     GLBContainer,
     GLBContainerError,
@@ -88,7 +88,7 @@ def validate_direct_animation_document(document: dict, binary: bytes) -> dict:
             raise DirectAnimationExportError(
                 f"accessors[{index}] has an invalid bufferView."
             )
-        if int(accessor.get("componentType", -1)) != 5126:
+        if int(accessor.get("componentType", -1)) != FLOAT:
             raise DirectAnimationExportError(
                 f"accessors[{index}] must use FLOAT componentType 5126."
             )

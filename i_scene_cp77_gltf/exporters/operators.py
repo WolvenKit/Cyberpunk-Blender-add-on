@@ -1,5 +1,4 @@
 import os
-import re
 import sys
 
 import bpy.utils.previews
@@ -14,6 +13,7 @@ from bpy.types import Operator, PropertyGroup, TOPBAR_MT_file_export, UIList
 from bpy_extras.io_utils import ExportHelper
 
 from ..animation.domain.clip.root_motion import ROOT_MOTION_EXPORT_ITEMS
+from ..assetio.paths import safe_file_stem
 from ..blender.gltf_exclusions import collect_excluded_objects
 from ..blender.mesh_validation import MeshValidationOptions
 from ..blender.operator_results import execute_operation
@@ -853,21 +853,11 @@ class CP77MaterialInstanceExport(Operator, ExportHelper):
             )
             return {"CANCELLED"}
 
-        default_name = active_material.name
-        invalid_chars = r'[<>:"/\\|?*\n\t\r\x00-\x1F]'
-        safe_string = re.sub(invalid_chars, "_", default_name)
-        safe_string = safe_string.replace(" ", "_")
-        safe_string = safe_string.lower()
-
-        projpath = str(active_material.get("cp77_project_path", ""))
-        if projpath == "":
-            self.filepath = f"{safe_string}.mi.json"
-            context.window_manager.fileselect_add(self)
-            return {"RUNNING_MODAL"}
-
-        basepath = projpath + "\\"
-
-        self.filepath = basepath + f"{safe_string}.mi.json"
+        self.filepath = default_project_output(
+            active_material.get("cp77_project_path", ""),
+            safe_file_stem(active_material.name),
+            ".mi.json",
+        )
         context.window_manager.fileselect_add(self)
         return {"RUNNING_MODAL"}
 

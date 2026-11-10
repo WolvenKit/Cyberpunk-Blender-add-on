@@ -18,6 +18,7 @@ from ....animation.domain.animgraph.vector_preview import (
     collect_vector_input_requirements,
 )
 from ....assetio import animgraph_json as json_io
+from ....assetio.handles import resolve_handle
 from ....assetio.transform_values import (
     quaternion_ijkr_from_wxyz,
     quaternion_wxyz_from_ijkr,
@@ -79,20 +80,6 @@ def _get_bone_name(node_dict, key):
     name_obj = _get_wk(b_dict, "name", {})
     val = name_obj.get("$value", "") if isinstance(name_obj, dict) else name_obj
     return str(val) if val else ""
-
-
-def _resolve_handle(obj, node_map):
-    if not isinstance(obj, dict):
-        return obj
-    if "HandleRefId" in obj:
-        handle_id = obj["HandleRefId"]
-        resolved = node_map.get(handle_id)
-        if resolved is None:
-            resolved = node_map.get(str(handle_id))
-        return resolved if resolved is not None else {}
-    if "Data" in obj:
-        return obj["Data"]
-    return obj
 
 
 def _build_document_index(obj, target_types):
@@ -412,7 +399,7 @@ def _bone_prefix(name):
 
 def _extract_dangle_info(dangle_node, node_map):
     constraint_ref = _get_wk(dangle_node, "dangleConstraint", {})
-    sim_data = _resolve_handle(constraint_ref, node_map)
+    sim_data = resolve_handle(constraint_ref, node_map)
     if not sim_data:
         return None
 

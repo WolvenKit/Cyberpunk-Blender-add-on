@@ -8,7 +8,7 @@ import numpy as np
 
 from ..core.log import debug_exception, get_logger, log_once
 from ..gltf.mesh_contract import MAX_SKIN_INFLUENCES, SKIN_WEIGHT_EPSILON
-from .context import preserved_context
+from .context import preserved_context, safe_mode_switch
 from .mesh_validation import (
     MeshValidationError,
     MeshValidationOptions,
@@ -218,12 +218,7 @@ def copy_armature_without_unused_bones(armature, unused_names):
         bpy.context.scene.collection.objects.link(temporary)
 
         with preserved_context():
-            if bpy.context.mode != "OBJECT":
-                result = bpy.ops.object.mode_set(mode="OBJECT")
-                if "FINISHED" not in result:
-                    raise MeshValidationError(
-                        "Blender cancelled the switch to Object Mode"
-                    )
+            safe_mode_switch("OBJECT")
             result = bpy.ops.object.select_all(action="DESELECT")
             if "FINISHED" not in result:
                 raise MeshValidationError("Blender cancelled object deselection")
@@ -232,11 +227,7 @@ def copy_armature_without_unused_bones(armature, unused_names):
             temporary.hide_select = False
             temporary.select_set(True)
             bpy.context.view_layer.objects.active = temporary
-            result = bpy.ops.object.mode_set(mode="EDIT")
-            if "FINISHED" not in result:
-                raise MeshValidationError(
-                    "Blender cancelled the switch to Armature Edit Mode"
-                )
+            safe_mode_switch("EDIT")
             edit_bones = temporary.data.edit_bones
             matrices = {bone.name: bone.matrix.copy() for bone in edit_bones}
             original_parent = {
@@ -258,9 +249,7 @@ def copy_armature_without_unused_bones(armature, unused_names):
                 edit_bone = edit_bones.get(name)
                 if edit_bone is not None:
                     edit_bones.remove(edit_bone)
-            result = bpy.ops.object.mode_set(mode="OBJECT")
-            if "FINISHED" not in result:
-                raise MeshValidationError("Blender cancelled the return to Object Mode")
+            safe_mode_switch("OBJECT")
         return temporary
     except Exception:
         cleanup_validation_temporaries(

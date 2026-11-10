@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 _WINDOWS_DRIVE = re.compile(r"^[A-Za-z]:[\\/]")
+_UNSAFE_FILE_CHARACTERS = re.compile(r'[<>:"/\\|?*\x00-\x1F]')
 # Whether local path lookups ignore letter case (Windows). A case-folding asset index then finds nothing that a direct
 # lookup of the same path misses.
 LOCAL_PATHS_IGNORE_CASE = os.path.normcase("A") == os.path.normcase("a")
@@ -36,6 +37,10 @@ def is_plain_file_name(name) -> bool:
         and value not in (".", "..")
         and not any(mark in value for mark in ("/", "\\", ":"))
     )
+
+
+def safe_file_stem(name) -> str:
+    return _UNSAFE_FILE_CHARACTERS.sub("_", str(name or "")).replace(" ", "_").lower()
 
 
 def strip_windows_extended_prefix(path):

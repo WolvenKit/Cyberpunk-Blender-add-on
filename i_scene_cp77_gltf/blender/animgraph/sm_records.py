@@ -12,11 +12,10 @@ from ...animation.model.animgraph.schema import enums
 from ...animation.model.animgraph.sm_assembly import (
     TransitionSpec,
     overlay_data,
-    tidy_float,
     tidy_floats,
 )
 from ...assetio import animgraph_json
-from ...assetio.values import cname_text
+from ...assetio.values import cname_text, nine_digit_float
 from . import property_codec
 from .sm_properties import (
     BLEND_INTERPOLATOR_TYPE,
@@ -125,7 +124,7 @@ def read_condition(cond) -> sm_conditions.FlatCondition:
         original = None
     fields: dict = {}
     if short != sm_conditions.GROUP:
-        # Floats are tidied (see ``tidy_float``); an unchanged value keeps its original token.
+        # Floats are tidied (see ``nine_digit_float``); an unchanged value keeps its original token.
         current = {
             f.key: tidy_floats(property_codec.encode_simple_value(f))
             for f in cond.fields
@@ -396,7 +395,7 @@ def record_to_spec(rec, owner: str) -> TransitionSpec:
         "priority": int(rec.priority),
     }
     if not entry:
-        data["duration"] = tidy_float(rec.duration)
+        data["duration"] = nine_digit_float(rec.duration)
         data["canRequestInertialization"] = bool(rec.can_request_inertialization)
         data["supportBlendFromPose"] = bool(rec.support_blend_from_pose)
         data["isOutTransitionFromAction"] = bool(rec.is_out_transition_from_action)

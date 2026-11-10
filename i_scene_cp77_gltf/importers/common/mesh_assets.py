@@ -21,7 +21,7 @@ from ...blender.transactions import (
     track_created_datablock,
 )
 from ...core.log import debug_exception, get_logger, is_enabled, log_once
-from ...gltf.submesh import submesh_index_from_name
+from ...gltf.submesh import submesh_index_for_object
 from ...materials.blender.builder import (
     material_handler_timing_stats,
     material_organization_phase_timing_stats,
@@ -98,60 +98,8 @@ def _copy_object_for_transaction(source_obj, *, copy_data=True):
     return obj
 
 
-@lru_cache(maxsize=4096)
-def _submesh_index_from_names(object_name, material_names):
-    index = submesh_index_from_name(object_name, None)
-    if index is not None:
-        return index
-    for material_name in material_names:
-        index = submesh_index_from_name(material_name, None)
-        if index is not None:
-            return index
-    return None
-
-
 def clear_submesh_index_cache():
-    _submesh_index_from_names.cache_clear()
     _JSON_APPS_CACHE.clear()
-
-
-def submesh_index_for_object(obj):
-    try:
-        explicit_index = int(obj.get("cp77_submesh_index", -1))
-    except (AttributeError, ReferenceError, TypeError, ValueError) as error:
-        log_once(
-            _LOG,
-            "DEBUG",
-            ("submesh_index_for_object 1", type(error).__name__),
-            "submesh index for object: fell back after %s",
-            error,
-            exc_info=True,
-        )
-        explicit_index = -1
-    if explicit_index >= 0:
-        return explicit_index
-
-    try:
-        object_name = str(getattr(obj, "name", "") or "")
-        data = getattr(obj, "data", None)
-        materials = getattr(data, "materials", ()) if data is not None else ()
-        material_names = tuple(
-            str(getattr(material, "name", "") or "")
-            for material in materials
-            if material is not None
-        )
-    except (AttributeError, ReferenceError, RuntimeError, TypeError) as error:
-        log_once(
-            _LOG,
-            "DEBUG",
-            ("submesh_index_for_object 2", type(error).__name__),
-            "submesh index for object: fell back after %s",
-            error,
-            exc_info=True,
-        )
-        object_name = str(getattr(obj, "name", "") or "")
-        material_names = ()
-    return _submesh_index_from_names(object_name, material_names)
 
 
 def _appearance_name(mesh_appearance):

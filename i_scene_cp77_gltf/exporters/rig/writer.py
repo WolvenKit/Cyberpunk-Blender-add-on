@@ -21,7 +21,8 @@ from ...animation.services.rig.repository import rig_source_document
 from ...assetio.atomic import atomic_write_text
 from ...assetio.paths import strip_json_suffix
 from ...assetio.rig_documents import minimal_rig_document
-from ...assetio.values import cname_entry
+from ...assetio.transform_values import quaternion_wxyz_from_wkit, vector3_from_data
+from ...assetio.values import cname_entry, cname_texts
 from ...bartmoss.matrix import RIGID_TOLERANCE, rigid_matrices
 from ...bartmoss.trs import compose_matrix
 from ...blender.armature import rest_model_matrices
@@ -33,6 +34,7 @@ from ...redSpace.transforms import (
     current_bone_model_transform_to_red,
     red_model_transform_to_current_bone,
 )
+from .errors import RigExportError
 
 
 def _imported_bone_matrix(bone) -> Matrix | None:
@@ -41,18 +43,6 @@ def _imported_bone_matrix(bone) -> Matrix | None:
 
 def _imported_source_model_matrix(bone) -> Matrix | None:
     return matrix_from_flat(bone.get(RIG_IMPORT_SOURCE_MODEL_KEY))
-
-
-def _to_list_of_strings(seq) -> list[str]:
-    if not isinstance(seq, (list, tuple)):
-        return []
-    result = []
-    for value in seq:
-        if isinstance(value, dict) and "$value" in value:
-            result.append(str(value.get("$value", "")))
-        elif isinstance(value, str):
-            result.append(value)
-    return result
 
 
 def _rig_export_template_from_armature(arm_obj) -> dict:
@@ -107,7 +97,7 @@ def _ordered_export_bones(arm_data, lod_counts=()):
     for collection_index, bone in enumerate(bones):
         name = str(bone.name)
         if name in bone_by_name:
-            raise ValueError(f"Duplicate armature bone name '{name}'.")
+            raise RigExportError(f"Duplicate armature bone name '{name}'.")
         bone_by_name[name] = bone
 
         source_index = _bone_source_index(
@@ -245,7 +235,7 @@ def _remap_bone_references(
                 if 0 <= source_index < len(source_names)
                 else source_index
             )
-            raise ValueError(
+            raise RigExportError(
                 f"Bone '{name}' was deleted but {user} still uses it; restore the bone before exporting."
             )
         return export_index
@@ -286,16 +276,8 @@ def _remap_bone_references(
 
 
 def _transform_scale(transform: Any) -> Vector:
-    if not isinstance(transform, dict):
-        return Vector((1.0, 1.0, 1.0))
-    scale = transform.get("Scale", {})
-    return Vector(
-        (
-            float(scale.get("X", 1.0)),
-            float(scale.get("Y", 1.0)),
-            float(scale.get("Z", 1.0)),
-        )
-    )
+    scale = transform.get("Scale") if isinstance(transform, dict) else None
+    return Vector(vector3_from_data(scale, (1.0, 1.0, 1.0)))
 
 
 def _quaternion_length_squared(quaternion: Quaternion) -> float:
@@ -305,18 +287,7 @@ def _quaternion_length_squared(quaternion: Quaternion) -> float:
 def _transform_quaternion(transform: Any) -> Quaternion | None:
     if not isinstance(transform, dict):
         return None
-    rotation = transform.get("Rotation", {})
-    try:
-        quat = Quaternion(
-            (
-                float(rotation.get("r", 1.0)),
-                float(rotation.get("i", 0.0)),
-                float(rotation.get("j", 0.0)),
-                float(rotation.get("k", 0.0)),
-            )
-        )
-    except (TypeError, ValueError):
-        return None
+    quat = Quaternion(quaternion_wxyz_from_wkit(transform.get("Rotation")))
     if _quaternion_length_squared(quat) < 1e-12:
         return None
     quat.normalize()
@@ -426,7 +397,7 @@ def _matrix_max_abs_difference(first: Matrix, second: Matrix) -> float:
 
 
 def _source_pose_data(root: dict, local_array_name: str, model_array_name: str | None):
-    names = _to_list_of_strings(root.get("boneNames", []))
+    names = cname_texts(root.get("boneNames", []))
     count = len(names)
     parents_raw = root.get("boneParentIndexes", [])
     parents = [
@@ -511,7 +482,7 @@ def _build_topology_export_context(arm_obj, root: dict):
         arm_data, root.get("levelOfDetailStartIndices") or ()
     )
     parents = _parent_indices_for_ordered_bones(bones)
-    source_names = _to_list_of_strings(root.get("boneNames", []))
+    source_names = cname_texts(root.get("boneNames", []))
     source_count = len(source_names)
     source_index_by_name = _source_name_index(source_names)
 
@@ -585,13 +556,13 @@ def _build_topology_export_context(arm_obj, root: dict):
                     or _matrix_max_abs_difference(current_blender, expected_blender)
                     > RIGID_TOLERANCE
                 ):
-                    raise ValueError(
+                    raise RigExportError(
                         f"Bone '{bone.name}' has no stored import rotation baseline and no longer "
                         "matches the source rig. Re-import the rig before exporting edited rotations."
                     )
                 imported_blender = expected_blender
             if source_model is None:
-                raise ValueError(
+                raise RigExportError(
                     f"Bone '{bone.name}' has no REDengine source model transform for the "
                     f"imported {imported_pose_name.replace('_', '-').lower()}."
                 )
@@ -805,7 +776,7 @@ def build_rig_json_from_armature(
     arm_data = arm_obj.data
     contract = str(arm_data.get("cp77_rig_space_contract", ""))
     if contract and contract != RIG_SPACE_CONTRACT_CURRENT:
-        raise ValueError(f"Unsupported rig coordinate contract: {contract}")
+        raise RigExportError(f"Unsupported rig coordinate contract: {contract}")
 
     document = _rig_export_template_from_armature(arm_obj)
     root = document.setdefault("Data", {}).setdefault("RootChunk", {})
@@ -814,7 +785,7 @@ def build_rig_json_from_armature(
     target = _resolve_rig_export_pose_target(arm_data, pose_target)
     topology = _build_topology_export_context(arm_obj, source_root)
 
-    original_names = _to_list_of_strings(source_root.get("boneNames", []))
+    original_names = cname_texts(source_root.get("boneNames", []))
     original_parents = (
         list(source_root.get("boneParentIndexes", []))
         if isinstance(source_root.get("boneParentIndexes"), list)
@@ -888,7 +859,7 @@ def build_rig_json_from_armature(
         *populated_parallel_arrays,
     )
 
-    track_names = _to_list_of_strings(root.get("trackNames", []))
+    track_names = cname_texts(root.get("trackNames", []))
     if not track_names:
         track_names = [str(value) for value in arm_data.get("trackNames", [])]
         root["trackNames"] = [cname_entry(name) for name in track_names]

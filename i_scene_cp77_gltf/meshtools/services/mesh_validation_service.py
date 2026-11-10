@@ -9,24 +9,11 @@ from ...blender.mesh_validation import (
     format_validation_issues,
 )
 from ...blender.operator_results import OperationResult
+from ...blender.selection import selected_meshes
 from ...core.log import get_logger
 from ..model import MeshValidationSummary
 
 _LOG = get_logger(__name__)
-
-
-def selected_meshes(context):
-    meshes = tuple(
-        obj
-        for obj in getattr(context, "selected_objects", ())
-        if getattr(obj, "type", None) == "MESH"
-    )
-    if meshes:
-        return meshes
-    active = getattr(context, "active_object", None)
-    if active is not None and getattr(active, "type", None) == "MESH":
-        return (active,)
-    return ()
 
 
 def _validation_report(issues, *, heading):
@@ -36,7 +23,7 @@ def _validation_report(issues, *, heading):
 
 
 def validate_selected_meshes(context, request):
-    meshes = selected_meshes(context)
+    meshes = selected_meshes(context, include_active=True)
     if not meshes:
         return OperationResult.cancelled("Select at least one mesh to validate.")
     try:
@@ -74,7 +61,7 @@ def validate_selected_meshes(context, request):
 
 
 def fix_selected_meshes(context, request):
-    meshes = selected_meshes(context)
+    meshes = selected_meshes(context, include_active=True)
     if not meshes:
         return OperationResult.cancelled("Select at least one mesh to repair.")
 

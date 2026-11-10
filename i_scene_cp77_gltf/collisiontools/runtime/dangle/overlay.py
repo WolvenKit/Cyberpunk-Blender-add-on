@@ -15,6 +15,7 @@ from ....bartmoss.wireframes import (
     two_sided_ellipsoid_wireframe,
 )
 from ....blender.armature_bones import resolve_pose_bone
+from ....blender.gpu_overlay import line_drawing, uniform_color_shader
 from ....core.log import get_logger, log_once
 from .simulation import collision, spaces, spring
 
@@ -168,7 +169,7 @@ def _iter_authored_shapes(state):
 
 class DangleDrawCache:
     def __init__(self):
-        self.shader = gpu.shader.from_builtin("UNIFORM_COLOR")
+        self.shader = uniform_color_shader()
         self.batches = {}
         self.matrix_world = Matrix.Identity(4)
         self.simulator = None
@@ -302,28 +303,16 @@ class DangleDrawCache:
             self._rebuild(self.simulator)
         if not self.batches:
             return
-        pushed = False
-        try:
-            gpu.state.blend_set("ALPHA")
-            gpu.state.depth_test_set("LESS_EQUAL")
-            gpu.matrix.push()
-            pushed = True
+        with line_drawing(depth_test="LESS_EQUAL"), gpu.matrix.push_pop():
             gpu.matrix.multiply_matrix(self.matrix_world)
             self.shader.bind()
             for name, batch in self.batches.items():
                 self.shader.uniform_float("color", _COLORS[name])
                 batch.draw(self.shader)
-        finally:
-            if pushed:
-                gpu.matrix.pop()
-            gpu.state.depth_test_set("NONE")
-            gpu.state.blend_set("NONE")
-            gpu.state.line_width_set(1.0)
-            gpu.state.point_size_set(1.0)
 
 
 def _build_static_rig_batches(arm, st):
-    shader = gpu.shader.from_builtin("UNIFORM_COLOR")
+    shader = uniform_color_shader()
     draw_items = []
     mw = arm.matrix_world
 
@@ -466,18 +455,11 @@ def _draw_static_rig(arm, st):
         _STATIC_DRAW_CACHE.clear()
         _STATIC_DRAW_CACHE[key] = cached
     shader, draw_items = cached
-    try:
-        gpu.state.blend_set("ALPHA")
-        gpu.state.depth_test_set("LESS_EQUAL")
+    with line_drawing(depth_test="LESS_EQUAL"):
         shader.bind()
         for batch, color in draw_items:
             shader.uniform_float("color", color)
             batch.draw(shader)
-    finally:
-        gpu.state.depth_test_set("NONE")
-        gpu.state.blend_set("NONE")
-        gpu.state.line_width_set(1.0)
-        gpu.state.point_size_set(1.0)
 
 
 @persistent
@@ -526,11 +508,6 @@ def _master_draw_callback():
             "Dangle viewport draw failed: %s",
             error,
         )
-    finally:
-        gpu.state.depth_test_set("NONE")
-        gpu.state.blend_set("NONE")
-        gpu.state.line_width_set(1.0)
-        gpu.state.point_size_set(1.0)
 
 
 def update_draw_cache(rig_id: str, sim):

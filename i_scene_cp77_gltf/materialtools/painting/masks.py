@@ -1,6 +1,7 @@
 import bpy
 
 from ...assetio.values import coerce_int
+from ...blender.context import safe_mode_switch
 from ...blender.operator_results import OperationResult
 from ...blender.transactions import new_tracked_datablock, track_mutation, transactional
 from ...core.log import get_logger, log_once
@@ -310,22 +311,14 @@ def toggle_texture_paint(owner, context):
             with material_sync_guard():
                 props.last_paint_brush = current_brush_name
         try:
-            result = bpy.ops.object.mode_set(mode="OBJECT")
-        except (AttributeError, RuntimeError, TypeError) as error:
+            safe_mode_switch("OBJECT")
+        except RuntimeError as error:
             report(
                 owner,
                 "ERROR",
                 f"Could not leave Texture Paint mode: {error}",
                 logger=_LOG,
                 error=error,
-            )
-            return {"CANCELLED"}
-        if not isinstance(result, set) or "FINISHED" not in result:
-            report(
-                owner,
-                "ERROR",
-                f"Leaving Texture Paint returned {sorted(result)}",
-                logger=_LOG,
             )
             return {"CANCELLED"}
         _restore_paint_targets()
@@ -397,7 +390,7 @@ def toggle_texture_paint(owner, context):
         nodes = state.node_tree.nodes
         previous_active = nodes.active
         nodes.active = mask_node
-        result = bpy.ops.object.mode_set(mode="TEXTURE_PAINT")
+        safe_mode_switch("TEXTURE_PAINT")
     except (
         AttributeError,
         ReferenceError,
@@ -429,26 +422,6 @@ def toggle_texture_paint(owner, context):
             f"Could not enter Texture Paint mode: {error}",
             logger=_LOG,
             error=error,
-        )
-        return {"CANCELLED"}
-    if not isinstance(result, set) or "FINISHED" not in result:
-        restore_surface_paint(context)
-        try:
-            nodes.active = previous_active
-        except (AttributeError, ReferenceError, RuntimeError, TypeError) as exc:
-            log_once(
-                _LOG,
-                "DEBUG",
-                ("toggle_texture_paint 5", type(exc).__name__),
-                "toggle texture paint: fell back after %s",
-                exc,
-                exc_info=True,
-            )
-        report(
-            owner,
-            "ERROR",
-            f"Entering Texture Paint returned {sorted(result) if isinstance(result, set) else result!r}",
-            logger=_LOG,
         )
         return {"CANCELLED"}
     if _PAINT_PREVIOUS_NODE not in state.material:

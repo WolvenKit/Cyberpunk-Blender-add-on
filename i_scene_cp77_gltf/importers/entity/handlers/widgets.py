@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-import json
 import os
 
 import bpy
 from mathutils import Matrix
 
 from ....assetio.documents import DocumentLoadError
-from ....assetio.values import cname_or_empty, resource_path_text, strict_handle_data
+from ....assetio.values import (
+    cname_or_empty,
+    json_text,
+    resource_path_text,
+    strict_handle_data,
+)
 from ....blender.collections import root_objects
 from ....blender.ink import screens
 from ....blender.ink.materials import bind_render_texture
@@ -201,9 +205,7 @@ class EntityWorldWidgetHandler:
         materials, bound_slots = bind_render_texture(target_objects, image, name)
         screens.register(root, image, loaded, animation, max_dimension=max_dimension)
         root["cp77_ink_bound_material_slots"] = int(bound_slots)
-        root["cp77_ink_bound_materials"] = json.dumps(
-            list(materials), separators=(",", ":")
-        )
+        root["cp77_ink_bound_materials"] = json_text(list(materials))
         if bound_slots:
             _LOG.debug(
                 "ink widget %s: bound %d slot(s) on %s with %s",

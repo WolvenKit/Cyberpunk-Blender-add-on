@@ -15,7 +15,7 @@ from ...assetio.paths import (
 )
 from ...assetio.values import json_array, json_object
 from ...blender import selection
-from ...blender.context import BlenderContextSnapshot
+from ...blender.context import BlenderContextSnapshot, safe_mode_switch
 from ...blender.identity import rna_identity, rna_is_live
 from ...blender.mesh import (
     ensure_color_attribute_alias,
@@ -1270,8 +1270,7 @@ def import_cyberpunk_glb(
             if owns_transaction:
                 context_snapshot = BlenderContextSnapshot().store()
             original_fps = (context.scene.render.fps, context.scene.render.fps_base)
-            if context.mode != "OBJECT":
-                bpy.ops.object.mode_set(mode="OBJECT")
+            safe_mode_switch("OBJECT")
             filepath = os.path.abspath(os.fspath(filepath))
             directory = os.path.dirname(filepath)
             file_name = os.path.basename(filepath)

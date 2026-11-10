@@ -96,13 +96,12 @@ class BlenderContextSnapshot:
             return
         context = bpy.context
 
-        if _MODE_MAP.get(context.mode, context.mode) != "OBJECT":
-            try:
-                bpy.ops.object.mode_set(mode="OBJECT")
-            except Exception:
-                debug_exception(
-                    _LOG, "Could not return to Object Mode while restoring the context"
-                )
+        try:
+            safe_mode_switch("OBJECT")
+        except Exception:
+            debug_exception(
+                _LOG, "Could not return to Object Mode while restoring the context"
+            )
 
         for obj_name, vis_state in self.object_visibility.items():
             if obj_name in bpy.data.objects:
@@ -147,18 +146,14 @@ class BlenderContextSnapshot:
         if self.cursor_location:
             context.scene.cursor.location = self.cursor_location
 
-        if self.mode:
-            target_mode = _MODE_MAP.get(self.mode, self.mode)
-            current_mode = _MODE_MAP.get(context.mode, context.mode)
-            if current_mode != target_mode:
-                try:
-                    bpy.ops.object.mode_set(mode=target_mode)
-                except Exception:
-                    debug_exception(
-                        _LOG,
-                        "Could not restore %s mode while restoring the context",
-                        target_mode,
-                    )
+        try:
+            safe_mode_switch(self.mode)
+        except Exception:
+            debug_exception(
+                _LOG,
+                "Could not restore %s mode while restoring the context",
+                self.mode,
+            )
         self._stored = False
 
 

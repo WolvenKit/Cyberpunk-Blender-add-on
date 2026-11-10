@@ -29,6 +29,7 @@ from ...bartmoss.hierarchy import (
     bone_basis_corrections,
     local_matrices_to_model,
     model_matrices_to_local,
+    nearest_kept_ancestors,
 )
 from ...bartmoss.matrix import as_matrix_4x4
 from ...bartmoss.quaternion import normalize_sequence_xyzw
@@ -102,17 +103,6 @@ def _validate_parent_indices(names: tuple[str, ...], parents: tuple[int, ...]) -
             raise DirectAnimationExportError(
                 f"Invalid parent index {parent} for source joint {names[index]!r}."
             )
-
-
-def _derive_parent_indices(target_bones: tuple[Any, ...]) -> tuple[int, ...]:
-    index_by_name = {bone.name: index for index, bone in enumerate(target_bones)}
-    parents = []
-    for bone in target_bones:
-        parent = bone.parent
-        while parent is not None and parent.name not in index_by_name:
-            parent = parent.parent
-        parents.append(index_by_name.get(parent.name, -1) if parent is not None else -1)
-    return tuple(parents)
 
 
 def build_skeleton_export_binding(
@@ -195,6 +185,15 @@ def build_skeleton_export_binding(
         target_bones.append(bone)
     target_names = tuple(target_names)
     target_bones = tuple(target_bones)
+    derived_parents = tuple(
+        nearest_kept_ancestors(
+            {
+                bone.name: bone.parent.name if bone.parent is not None else None
+                for bone in armature.data.bones
+            },
+            target_names,
+        )
+    )
 
     parents_value = _sequence_plain(snapshot.get("boneParentIndexes"))
     if parents_value and len(parents_value) == len(source_names):
@@ -204,13 +203,13 @@ def build_skeleton_export_binding(
         except DirectAnimationExportError:
             if selected_source is not None:
                 raise
-            parent_indices = _derive_parent_indices(target_bones)
+            parent_indices = derived_parents
     elif selected_source is not None:
         raise DirectAnimationExportError(
             "The selected source rig/action has no complete boneParentIndexes table."
         )
     else:
-        parent_indices = _derive_parent_indices(target_bones)
+        parent_indices = derived_parents
     _validate_parent_indices(source_names, parent_indices)
 
     selected_rest = (
@@ -1358,7 +1357,7 @@ def build_direct_animation_glb(
         binding.source_names,
         binding.parent_indices,
         binding.rest_relative_gltf,
-        binding.rest_global_gltf,
+        np.linalg.inv(binding.rest_global_gltf),
         binding.skin_extras,
         builder,
         authored_transforms=binding.authored_node_transforms,

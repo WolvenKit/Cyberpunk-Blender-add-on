@@ -11,7 +11,7 @@ import numpy as np
 from ...animation.domain.rig.naming import merged_bone_name
 from ...bartmoss.arrays import float32_bit_keys, stable_unique_integer_rows
 from ...bartmoss.geometry import transform_normalized_direction_deltas
-from ...bartmoss.hierarchy import local_matrices_to_model
+from ...bartmoss.hierarchy import local_matrices_to_model, nearest_kept_ancestors
 from ...bartmoss.matrix import as_matrix_4x4, matrix_is_identity
 from ...bartmoss.weights import normalization_divisors
 from ...blender.custom_normals import set_custom_normals_from_corners
@@ -41,9 +41,10 @@ from ...blender.morphs import (
     source_position_only_morphs,
 )
 from ...core.log import get_logger, log_once
+from ...gltf.accessors import UNSIGNED_BYTE, UNSIGNED_INT, UNSIGNED_SHORT
+from ...gltf.anims import skin_nodes
 from ...gltf.builder import GLBBuilder
 from ...gltf.channels import assign_attribute_channels, named_channel
-from ...gltf.extras import skin_extras_for_export
 from ...gltf.garment_support import (
     GARMENT_CAP_ATTRIBUTE,
     GARMENT_SUPPORT_MORPH,
@@ -850,14 +851,13 @@ def _binding_from_source_names(
                 "The imported mesh skin binding parent count does not match its joints."
             )
     else:
-        parent_indices = []
-        for bone in bones:
-            parent = bone.parent
-            while parent is not None and parent.name not in index_of_target:
-                parent = parent.parent
-            parent_indices.append(
-                -1 if parent is None else index_of_target[parent.name]
-            )
+        parent_indices = nearest_kept_ancestors(
+            {
+                bone.name: bone.parent.name if bone.parent is not None else None
+                for bone in armature.data.bones
+            },
+            target_names,
+        )
 
     for index, parent_index in enumerate(parent_indices):
         if parent_index < -1 or parent_index >= index:
@@ -1549,7 +1549,7 @@ def _write_primitive(builder: GLBBuilder, submesh: ExportSubmesh) -> dict:
         attributes[name.upper()] = builder.add_normalized_accessor(
             color,
             "VEC4",
-            5121,
+            UNSIGNED_BYTE,
             name=f"{submesh.name}/{name.upper()}",
             target=_ARRAY_BUFFER,
         )
@@ -1560,7 +1560,7 @@ def _write_primitive(builder: GLBBuilder, submesh: ExportSubmesh) -> dict:
             attributes[JOINT_ATTRIBUTES[block]] = builder.add_integer_accessor(
                 submesh.joint_indices[:, span],
                 "VEC4",
-                5123,
+                UNSIGNED_SHORT,
                 name=f"{submesh.name}/{JOINT_ATTRIBUTES[block]}",
                 target=_ARRAY_BUFFER,
                 include_bounds=True,
@@ -1573,7 +1573,7 @@ def _write_primitive(builder: GLBBuilder, submesh: ExportSubmesh) -> dict:
                 include_bounds=False,
             )
 
-    component_type = 5125 if vertex_count > VERT_LIMIT else 5123
+    component_type = UNSIGNED_INT if vertex_count > VERT_LIMIT else UNSIGNED_SHORT
     primitive = {
         "attributes": attributes,
         "indices": builder.add_integer_accessor(
@@ -1769,38 +1769,8 @@ def assemble_mesh_document(
     builder = GLBBuilder(error_type=DirectMeshExportError)
     nodes = []
     skin = None
-    joint_offset = 0
 
     if binding is not None:
-        inverse_bind_accessor = builder.add_float_accessor(
-            binding.inverse_bind_gltf,
-            "MAT4",
-            name="Bind Matrices",
-            matrix_column_major=True,
-            include_bounds=False,
-        )
-        child_lists = [[] for _ in binding.bone_names]
-        root_indices = []
-        for index, parent_index in enumerate(binding.parent_indices):
-            if parent_index < 0:
-                root_indices.append(index)
-            else:
-                child_lists[parent_index].append(index)
-
-        nodes.append(
-            {"name": "Armature", "children": [index + 1 for index in root_indices]}
-        )
-        joint_offset = 1
-        transforms = node_transforms(binding.node_local_gltf)
-        for index, bone_name in enumerate(binding.bone_names):
-            node = {"name": bone_name}
-            node.update(transforms[index])
-            if child_lists[index]:
-                node["children"] = [
-                    child + joint_offset for child in child_lists[index]
-                ]
-            nodes.append(node)
-
         skin_extras = (
             copy.deepcopy(binding.skin_extras)
             if binding.skin_extras is not None
@@ -1810,15 +1780,15 @@ def assemble_mesh_document(
                 "boneParentIndexes": list(binding.parent_indices),
             }
         )
-        skin_extras = skin_extras_for_export(skin_extras)
-        skin = {
-            "name": "Armature",
-            "inverseBindMatrices": inverse_bind_accessor,
-            "joints": [
-                index + joint_offset for index in range(len(binding.bone_names))
-            ],
-            "extras": skin_extras,
-        }
+        nodes, skin = skin_nodes(
+            binding.bone_names,
+            binding.parent_indices,
+            binding.node_local_gltf,
+            binding.inverse_bind_gltf,
+            skin_extras,
+            builder,
+            authored_transforms=node_transforms(binding.node_local_gltf),
+        )
 
     meshes = []
     expected_morph_names = None

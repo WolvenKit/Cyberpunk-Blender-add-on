@@ -14,6 +14,7 @@ from ...blender.operator_results import OperationResult
 from ...core.log import get_logger
 from .buffers import ScenePlacements
 from .edits import edited_lights, scaled_objects, sector_edits
+from .errors import SectorExportError
 from .new_sectors import new_sector_collections
 from .repository import SectorSourceRepository
 from .writer import skipped_objects, write_generated_sector, write_new_sector
@@ -77,7 +78,7 @@ def _written_sectors(scene, placements, parsed, layout, include_heightfields):
     for owner, _text, descriptor in written:
         key = depot_path_key(descriptor.depot_path)
         if key in owners:
-            raise ValueError(
+            raise SectorExportError(
                 f"{owners[key]} and {owner} would both be written to {descriptor.depot_path}; rename the "
                 "new sector."
             )

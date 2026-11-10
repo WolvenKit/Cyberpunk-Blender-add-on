@@ -9,6 +9,7 @@ from functools import wraps
 import bpy
 
 from ..core.log import debug_exception, get_logger, log_once
+from .context import safe_mode_switch
 from .identity import rna_identity, rna_is_live
 
 _ACTIVE_IMPORT_TRANSACTION = ContextVar("cp77_active_import_transaction", default=None)
@@ -501,7 +502,7 @@ def _force_object_mode():
     if context is None or getattr(context, "mode", "OBJECT") == "OBJECT":
         return
     try:
-        bpy.ops.object.mode_set(mode="OBJECT")
+        safe_mode_switch("OBJECT")
     except (AttributeError, RuntimeError, TypeError) as error:
         log_once(
             _LOG,
@@ -753,7 +754,7 @@ def track_created_since(snapshot):
     return tuple(created)
 
 
-def _remove_datablock(collection_name, value):
+def remove_datablock(collection_name, value):
     if value is None:
         return
     collection = getattr(bpy.data, collection_name, None)
@@ -778,7 +779,7 @@ def _remove_datablocks(entries):
     for name, value in live:
         if rna_is_live(value):
             try:
-                _remove_datablock(name, value)
+                remove_datablock(name, value)
             except Exception as error:
                 debug_exception(
                     _LOG,

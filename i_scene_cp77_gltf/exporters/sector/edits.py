@@ -19,6 +19,7 @@ from ...blender.matrix import instance_matrix
 from ...entity.domain.lights import light_settings_changed, static_light_settings
 from ...importers.common.light_channels import stored_light_channel_records
 from .buffers import ScenePlacements, sector_depot_path
+from .errors import SectorExportError
 from .transforms import moved_matrix, moved_placement, scale_change, transform_values
 
 _COLLISION = "worldCollisionNode"
@@ -52,7 +53,7 @@ def _joint(matrices, problem):
         return None
     first = matrices[0]
     if any(matrix is None or not placements_near(matrix, first) for matrix in matrices):
-        raise ValueError(problem)
+        raise SectorExportError(problem)
     return first
 
 
@@ -61,7 +62,7 @@ def _edited_light(entry, node, roots):
     settings = static_light_settings(node.data)
     edited = [root for root in roots if light_settings_changed(root, settings)]
     if edited and len(roots) > 1:
-        raise ValueError(_apart(entry, node, len(roots), "lights"))
+        raise SectorExportError(_apart(entry, node, len(roots), "lights"))
     return edited[0] if edited else None
 
 
@@ -273,7 +274,7 @@ def _group_edits(entry, instance, node, holdings):
         if not held:
             return NodeDeletion(entry, node_type), None
         if len(held) < holdings.index.counts.get(entry, 0):
-            raise ValueError(
+            raise SectorExportError(
                 f"some instances of node data {entry} ({node_type}) were deleted, which ArchiveXL cannot "
                 "write; delete all of them or none."
             )
@@ -284,7 +285,7 @@ def _group_edits(entry, instance, node, holdings):
     ]
     if node.node_type == _OCCLUDER:
         if any(moved_matrix(obj) is not None for obj in objects):
-            raise ValueError(
+            raise SectorExportError(
                 f"node data {entry} ({node_type}) cannot be moved, only deleted; put its instances back "
                 "where they were."
             )
@@ -317,7 +318,7 @@ def _placement_edits(entry, instance, node, holdings):
         return None, None
     if node.node_type == _TERRAIN_COLLISION:
         # Its actor stands where the node puts it, which an entry's mutation does not change.
-        raise ValueError(
+        raise SectorExportError(
             f"node data {entry} ({node_type}) cannot be moved, only deleted; put it back where it was."
         )
     return None, NodeMutation(entry, node_type, *transform_values(placement))
@@ -327,7 +328,7 @@ def sector_edits(collection, source, placements=None) -> SectorEdits:
     """The ArchiveXL edits of an imported sector collection against its source"""
     expected = coerce_int(collection.get("expectedNodes"), source.node_data_count)
     if expected != source.node_data_count:
-        raise ValueError(
+        raise SectorExportError(
             f"{source.source_path}: the sector holds {source.node_data_count} node data entries but held "
             f"{expected} when it was imported; import it again before exporting its edits."
         )
@@ -350,11 +351,11 @@ def sector_edits(collection, source, placements=None) -> SectorEdits:
             if mutation is not None:
                 mutations.append(mutation)
     except ValueError as error:
-        raise ValueError(f"{source.source_path}: {error}") from error
+        raise SectorExportError(f"{source.source_path}: {error}") from error
     path = sector_depot_path(source.source_path)
     if path is None:
         if deletions or mutations:
-            raise ValueError(
+            raise SectorExportError(
                 f"{source.source_path}: the sector lies outside a project's source/raw, so its depot path "
                 "is unknown; import it from its project."
             )

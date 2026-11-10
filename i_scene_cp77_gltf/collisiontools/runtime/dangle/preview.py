@@ -9,9 +9,10 @@ from ....blender.animgraph.preview_settings import adopt_dangle_settings
 from ....blender.animgraph.results_overlay import redraw_editors
 from ....blender.animgraph.rig_binding import binding_tree, bound_armature
 from ....blender.animgraph.source import load_graph_payload
-from ....blender.context import tag_view3d_redraw
+from ....blender.context import safe_mode_switch, tag_view3d_redraw
+from ....blender.identity import rna_identity
 from ....blender.operator_results import OperationResult
-from ....core.log import debug_exception, get_logger, log_once
+from ....core.log import debug_exception, get_logger
 from ...blender.dangle_context import get_active_rig
 from .graph_state import GraphPreviewState
 from .overlay import _DRAW_CACHES, update_draw_cache
@@ -357,28 +358,12 @@ def _log_graph_preview_context(level, stage, rig, source_payload=None, *, errors
         _LOG.exception("AnimGraph preview diagnostic capture failed: stage=%s", stage)
 
 
-def _session_key(rig):
-    try:
-        return int(rig.as_pointer())
-    except (ReferenceError, AttributeError) as error:
-        log_once(
-            _LOG,
-            "DEBUG",
-            ("_session_key", type(error).__name__),
-            "session key: fell back after %s",
-            error,
-            exc_info=True,
-        )
-        return None
-
-
 def register_preview_session(rig, stop_callback, graph_tree=None, simulator=None):
-    key = _session_key(rig)
-    if key is not None:
-        _ACTIVE_PREVIEW_SESSIONS[key] = stop_callback
-        if graph_tree is not None:
-            _SESSION_GRAPHS[key] = binding_tree(graph_tree).name
-            _SESSION_SIMULATORS[key] = simulator
+    key = rna_identity(rig)
+    _ACTIVE_PREVIEW_SESSIONS[key] = stop_callback
+    if graph_tree is not None:
+        _SESSION_GRAPHS[key] = binding_tree(graph_tree).name
+        _SESSION_SIMULATORS[key] = simulator
     return key
 
 
@@ -434,8 +419,7 @@ def set_view_handle(graph_tree, handle) -> None:
 
 
 def preview_running(rig) -> bool:
-    key = _session_key(rig)
-    return key is not None and key in _ACTIVE_PREVIEW_SESSIONS
+    return rna_identity(rig) in _ACTIVE_PREVIEW_SESSIONS
 
 
 def stop_active_previews():
@@ -452,8 +436,7 @@ def stop_active_previews():
 
 
 def stop_preview(context, rig, restore_pose=True):
-    key = _session_key(rig)
-    stop_callback = _ACTIVE_PREVIEW_SESSIONS.get(key) if key is not None else None
+    stop_callback = _ACTIVE_PREVIEW_SESSIONS.get(rna_identity(rig))
     if stop_callback is not None:
         stop_callback(context, restore_pose)
         return True
@@ -714,7 +697,7 @@ def _enter_pose_mode(context, rig) -> bool:
     try:
         context.view_layer.objects.active = rig
         rig.select_set(True)
-        bpy.ops.object.mode_set(mode="POSE")
+        safe_mode_switch("POSE")
     except (RuntimeError, ReferenceError):
         return False
     return rig.mode == "POSE"

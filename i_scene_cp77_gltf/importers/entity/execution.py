@@ -21,6 +21,7 @@ from ...blender.transactions import (
 )
 from ...core.log import get_logger, log_once, operation
 from ...core.notifications import import_message
+from ...gltf.submesh import submesh_index_for_object
 from ...materials.blender.images import (
     begin_image_failure_capture,
     end_image_failure_capture,
@@ -40,7 +41,6 @@ from ..common.mesh_assets import (
     clear_submesh_index_cache,
     get_group,
     meshes_from_mesheswapps,
-    submesh_index_for_object,
 )
 from ..common.paths import depot_path
 from ..common.progress import NO_PROGRESS, BlenderImportProgress

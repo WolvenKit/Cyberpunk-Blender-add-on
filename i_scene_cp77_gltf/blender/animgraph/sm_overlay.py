@@ -428,12 +428,12 @@ def _draw_batches(segments, viewport, scale: float) -> None:
     import gpu
     from gpu_extras.batch import batch_for_shader
 
+    from ..gpu_overlay import line_drawing
+
     shader = gpu.shader.from_builtin("POLYLINE_SMOOTH_COLOR")
     shader.bind()
     shader.uniform_float("viewportSize", viewport)
-    previous_blend = gpu.state.blend_get()
-    gpu.state.blend_set("ALPHA")
-    try:
+    with line_drawing():
         # One batch of independent line pairs per width for opaque wires. Translucent
         # wires are drawn as their own strip so overlapping joints do not darken them.
         opaque = {}
@@ -460,8 +460,6 @@ def _draw_batches(segments, viewport, scale: float) -> None:
             batch_for_shader(
                 shader, "LINE_STRIP", {"pos": points, "color": [colour] * len(points)}
             ).draw(shader)
-    finally:
-        gpu.state.blend_set(previous_blend)
 
 
 def draw_callback() -> None:

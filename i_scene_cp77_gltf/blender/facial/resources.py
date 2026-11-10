@@ -7,6 +7,7 @@ from ...animation.domain.facial.validation import validate_setup
 from ...animation.model.facial.setup import TrackSegments
 from ...animation.services.facial.repository import FacialRepository
 from ...animation.services.rig.parser import RigParseMode
+from ...assetio.cache import store_bounded
 from ...assetio.documents import DocumentSession, FileIdentity
 from ...assetio.paths import local_path_key
 from ...assetio.references import resource_references
@@ -75,9 +76,7 @@ def load_resource(armature, setup_path):
             resource = resolve_resource(
                 armature, setup_path, FacialRepository(documents)
             )
-        if len(_RESOURCES) >= _RESOURCE_CACHE_LIMIT:
-            _RESOURCES.pop(next(iter(_RESOURCES)))
-        _RESOURCES[key] = resource
+        store_bounded(_RESOURCES, key, resource, limit=_RESOURCE_CACHE_LIMIT)
     return resource
 
 

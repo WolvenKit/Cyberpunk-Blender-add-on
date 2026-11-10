@@ -7,28 +7,14 @@ from ....blender.armature_bones import (
     resolve_pose_bone,
 )
 from ....blender.context import tag_view3d_redraw
-from ....core.log import get_logger, log_once
+from ....blender.identity import rna_identity
+from ....core.log import get_logger
 
 _LOG = get_logger(__name__)
 
 SYNC_LOCK = False
 _LAST_ACTIVE = (None, None)
 _POLL_INTERVAL = 0.15
-
-
-def _rig_key(rig):
-    try:
-        return int(rig.as_pointer())
-    except (AttributeError, ReferenceError) as error:
-        log_once(
-            _LOG,
-            "DEBUG",
-            ("_rig_key", type(error).__name__),
-            "rig key: fell back after %s",
-            error,
-            exc_info=True,
-        )
-        return None
 
 
 def _find_particle_for_bone(rig, state, bone_name):
@@ -70,10 +56,10 @@ def _poll_selection():
 
     active_pb = getattr(ctx, "active_pose_bone", None)
     if active_pb is None or active_pb.id_data is not obj:
-        _LAST_ACTIVE = (_rig_key(obj), None)
+        _LAST_ACTIVE = (rna_identity(obj), None)
         return _POLL_INTERVAL
 
-    key = (_rig_key(obj), active_pb.name)
+    key = (rna_identity(obj), active_pb.name)
     if key == _LAST_ACTIVE:
         return _POLL_INTERVAL
     _LAST_ACTIVE = key
@@ -131,7 +117,7 @@ def on_active_particle_update(self, context):
     SYNC_LOCK = True
     try:
         _select_single_pose_bone(rig, target_name)
-        _LAST_ACTIVE = (_rig_key(rig), target_name)
+        _LAST_ACTIVE = (rna_identity(rig), target_name)
     finally:
         SYNC_LOCK = False
 

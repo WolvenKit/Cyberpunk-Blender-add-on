@@ -43,6 +43,7 @@ from ..collision.heightfield import (
 )
 from .buffers import placement_record
 from .edits import placed_entries
+from .errors import SectorExportError
 from .new_sectors import NEW_SECTOR_KEY
 from .transforms import placement_matrix, scale_change, scales_near, transform_values
 
@@ -110,7 +111,7 @@ class _Sources:
             self._handles[key] = HandleIndex.build(list(entries.values()))
         data = self._handles[key].standalone(node.data)
         if _shares_buffer(data):
-            raise ValueError(
+            raise SectorExportError(
                 f"{obj.name}: its node shares a buffer with another node of {source.sector_name}, which "
                 "no other sector can hold; keep it in its sector with its scale cleared, or delete it."
             )
@@ -187,7 +188,7 @@ def _plain_data(obj, node, source, sources):
     elif node.node_type in PLAIN_NODE_FIELDS:
         data = plain_node_data(node.node_type, node.data)
     else:
-        raise ValueError(
+        raise SectorExportError(
             f"{obj.name}: {node.source_node_type} placements cannot be written as {node.node_type} "
             "nodes; move it back into its sector or delete it."
         )
@@ -199,13 +200,13 @@ def _placed(obj, record, sources):
     sector_name, entry, _kind, _element = record
     source = sources.sources.get(sector_name)
     if source is None:
-        raise ValueError(
+        raise SectorExportError(
             f"{obj.name} copies a placement of {sector_name}, but the scene holds no one imported sector "
             "of that name; import it, or delete the copy."
         )
     placed = sources.entries(source).get(entry)
     if placed is None:
-        raise ValueError(
+        raise SectorExportError(
             f"{obj.name} copies node data {entry} of {sector_name}, which places nothing in it now; "
             "import the sector again."
         )
@@ -224,7 +225,7 @@ def _require_scalable(obj, inner, actor, change):
         _ROUND_SHAPES[name] for name in classes.intersection(_ROUND_SHAPES)
     )
     if rounded:
-        raise ValueError(
+        raise SectorExportError(
             f"{obj.name}: its {' and '.join(rounded)} collision shapes can only be scaled alike on "
             "every axis; scale it evenly."
         )
@@ -235,7 +236,7 @@ def _require_scalable(obj, inner, actor, change):
             and rotation is not None
             and scale_shears(Quaternion(rotation).normalized().to_matrix(), change)
         ):
-            raise ValueError(
+            raise SectorExportError(
                 f"{obj.name}: its box collision shapes are turned across its axes, so a scale that "
                 "differs along them would shear the boxes, which no box can hold; scale it evenly."
             )
@@ -245,14 +246,14 @@ def _collision_copy(obj, record, source, instance, node):
     """The _Copy of the collision actor obj copies"""
     sector_name, entry, _kind, actor_index = record
     if node.source_node_type != _COOKED_COLLISION:
-        raise ValueError(
+        raise SectorExportError(
             f"{obj.name}: collision actors of {node.source_node_type} nodes cannot be written into "
             f"another sector (node data {entry} of {sector_name}); keep it in its sector with its scale "
             "cleared, or delete it."
         )
     actors = node.data.get("actors")
     if not isinstance(actors, list) or not 0 <= actor_index < len(actors):
-        raise ValueError(
+        raise SectorExportError(
             f"{obj.name} copies actor {actor_index} of node data {entry} of {sector_name}, which holds "
             "no such actor now; import the sector again."
         )
@@ -280,7 +281,7 @@ def _collision_copy(obj, record, source, instance, node):
             extents=tuple(extents),
         )
     except ValueError as error:
-        raise ValueError(
+        raise SectorExportError(
             f"{obj.name} (node data {entry} of {sector_name}): {error}."
         ) from error
     return _Copy(
@@ -300,7 +301,7 @@ def _copied_node(obj, record, sources):
         return None
     what = _UNCOPIED.get(node.node_type)
     if what is not None:
-        raise ValueError(
+        raise SectorExportError(
             f"{obj.name}: {what} cannot be copied into a new sector (node data {entry} of "
             f"{sector_name}); move it back into its sector or delete it."
         )
@@ -353,7 +354,7 @@ def _require_reachable(obj, data, source, project: ProjectLayout):
         if depot_path_key(path) in embedded and not os.path.isfile(
             project.archive_file(path)
         ):
-            raise ValueError(
+            raise SectorExportError(
                 f"{obj.name}: {path} is embedded in {source.sector_name} and is not a file of the "
                 "project's source/archive, so no other sector can reach it; add it to the project, or "
                 "keep the object in its sector with its scale cleared."
@@ -362,11 +363,11 @@ def _require_reachable(obj, data, source, project: ProjectLayout):
 
 def _depot_path(project: ProjectLayout, name):
     if not project.name:
-        raise ValueError(
+        raise SectorExportError(
             f"{project.root} has no .cpmodproj to name the folder of its new sectors."
         )
     if not is_plain_file_name(name):
-        raise ValueError(
+        raise SectorExportError(
             f"{name}: a new sector is written to a file of its name, which cannot hold / \\ or :; "
             "rename it."
         )
@@ -388,7 +389,7 @@ def _inplace_resource(owner, copies):
         return None
     if len(named) > 1:
         (_path, first), (_other, second) = list(named.values())[:2]
-        raise ValueError(
+        raise SectorExportError(
             f"{owner} holds copies whose resources lie in the inplace resources of {first.sector_name} "
             f"and {second.sector_name}, but a sector names one; move the copies of one of them into "
             "another new sector."
@@ -397,7 +398,7 @@ def _inplace_resource(owner, copies):
     if depot_path_key(
         resource_path_text(source.extern_inplace_resource)
     ) != depot_path_key(path):
-        raise ValueError(
+        raise SectorExportError(
             f"{source.source_path} does not name the inplace resource {path} that its node data names; "
             "export the sector again from the game."
         )
@@ -428,7 +429,7 @@ def _global_node_ids(owner, copies, depot_path):
     }
     made = [value for value in ids if value]
     if len(set(made)) != len(made) or taken.intersection(made):
-        raise ValueError(
+        raise SectorExportError(
             f"{owner}: two of its copies, or a copy and a node of its source sector, would share a global "
             "node id; rename the new sector."
         )

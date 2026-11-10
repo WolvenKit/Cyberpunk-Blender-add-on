@@ -1,12 +1,11 @@
 import bpy
-import gpu
 from gpu_extras.batch import batch_for_shader
 
 from ...blender.context import tag_view3d_redraw
+from ...blender.gpu_overlay import line_drawing, uniform_color_shader
 
 _handle = None
 _armature_name = ""
-_shader = None
 _batch = None
 _dirty = True
 LINE_COLOR = (1.0, 0.0, 0.0, 1.0)
@@ -42,38 +41,31 @@ def invalidate_frame() -> None:
 
 
 def _ensure_batch(armature):
-    global _shader, _batch, _dirty
+    global _batch, _dirty
     if not _dirty and _batch is not None:
-        return _shader, _batch
+        return _batch
     coords = collect_lines_world(armature)
     if not coords:
         _batch = None
         _dirty = False
-        return None, None
-    if _shader is None:
-        _shader = gpu.shader.from_builtin("UNIFORM_COLOR")
-    _batch = batch_for_shader(_shader, "LINES", {"pos": coords})
+        return None
+    _batch = batch_for_shader(uniform_color_shader(), "LINES", {"pos": coords})
     _dirty = False
-    return _shader, _batch
+    return _batch
 
 
 def draw_bone_lines(arm_obj_name):
     arm_obj = bpy.data.objects.get(arm_obj_name)
     if not arm_obj:
         return
-    shader, batch = _ensure_batch(arm_obj)
-    if shader is None or batch is None:
+    batch = _ensure_batch(arm_obj)
+    if batch is None:
         return
-    try:
-        gpu.state.blend_set("ALPHA")
-        gpu.state.line_width_set(LINE_WIDTH)
+    shader = uniform_color_shader()
+    with line_drawing(LINE_WIDTH):
         shader.bind()
         shader.uniform_float("color", LINE_COLOR)
         batch.draw(shader)
-    finally:
-        gpu.state.line_width_set(1.0)
-        gpu.state.depth_test_set("NONE")
-        gpu.state.blend_set("NONE")
 
 
 def collect_lines_world(arm_obj) -> list:
@@ -108,7 +100,7 @@ def start(armature) -> bool:
 
 
 def stop() -> bool:
-    global _handle, _armature_name, _shader, _batch, _dirty
+    global _handle, _armature_name, _batch, _dirty
     if _handle is None:
         return False
     try:
@@ -116,7 +108,6 @@ def stop() -> bool:
     finally:
         _handle = None
         _armature_name = ""
-        _shader = None
         _batch = None
         _dirty = True
         tag_view3d_redraw()

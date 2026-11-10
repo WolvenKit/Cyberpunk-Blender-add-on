@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 from collections import defaultdict
 from typing import Any
 
 from ....animation.model.animgraph import sm_conditions
 from ....animation.model.animgraph.constants import ANIM_NODE_PREFIX
 from ....animation.model.animgraph.schema import enums, registry
+from ....assetio.values import json_text
 from ....core.log import debug_exception, get_logger, log_once
 from .. import (
     index as graph_index,
@@ -96,25 +96,18 @@ def _presenter_known(node_type: str, presenter_id: str) -> bool:
         return bool(presenter_id)
 
 
-def _safe_json(value: Any) -> str:
-    try:
-        return json.dumps(value, ensure_ascii=False, sort_keys=True)
-    except (TypeError, ValueError):
-        return str(value)
-
-
 def _variable_encode_preview(var: Any) -> tuple[bool, str]:
     """Validate that one graph variable can be encoded as JSON"""
     vt = str(get_attr(var, "var_type", ""))
     try:
         if vt == "Bool":
-            return True, _safe_json(bool(var.current_bool))
+            return True, json_text(bool(var.current_bool))
         if vt == "Int":
-            return True, _safe_json(int(var.current_int))
+            return True, json_text(int(var.current_int))
         if vt == "Float":
-            return True, _safe_json(float(var.current_float))
+            return True, json_text(float(var.current_float))
         if vt == "Vector":
-            return True, _safe_json(
+            return True, json_text(
                 {
                     "$type": "Vector4",
                     "X": float(var.current_vector[0]),
@@ -124,7 +117,7 @@ def _variable_encode_preview(var: Any) -> tuple[bool, str]:
                 }
             )
         if vt == "Quaternion":
-            return True, _safe_json(
+            return True, json_text(
                 {
                     "$type": "Quaternion",
                     "i": float(var.current_vector[0]),
@@ -134,16 +127,9 @@ def _variable_encode_preview(var: Any) -> tuple[bool, str]:
                 }
             )
         if vt == "Transform":
-            raw = str(
+            return True, str(
                 get_attr(var, "current_json", "") or get_attr(var, "current_value", "")
             )
-            if raw:
-                try:
-                    json.loads(raw)
-                    return True, raw
-                except (TypeError, ValueError):
-                    return True, raw
-            return True, ""
 
         raw = str(
             get_attr(var, "current_json", "") or get_attr(var, "current_value", "")

@@ -16,6 +16,7 @@ from ...animation.model.animgraph.indices import transform_index
 from ...animation.model.animgraph.schema import registry, rtti
 from ...assetio.animgraph_json import dumps, loads
 from ...assetio.atomic import atomic_write_text
+from ...assetio.handles import resolve_handle
 from ...assetio.headers import (
     SUPPORTED_GAME_VERSION,
     SUPPORTED_WKIT_JSON_VERSION,
@@ -27,6 +28,7 @@ from ...assetio.transform_values import encode_qs_transform
 from ...assetio.values import coerce_float, coerce_int
 from ...bartmoss.vehicle import STANDARD_GRAVITY
 from ...core.log import debug_exception, get_logger
+from ..common.errors import ExportError
 from .references import normalize_inline_first_references
 
 _LOG = get_logger(__name__)
@@ -61,7 +63,7 @@ SOLVER_TO_RED_TYPE = {
 }
 
 
-class AnimGraphPatchError(ValueError):
+class AnimGraphPatchError(ExportError, ValueError):
     pass
 
 
@@ -88,16 +90,6 @@ def _build_handle_index(
         data_by_handle[handle] = data
         wrapper_by_handle[handle] = value
     return data_by_handle, wrapper_by_handle, maximum
-
-
-def resolve_handle(value: Any, data_by_handle: Mapping[str, dict]) -> Any:
-    if not isinstance(value, dict):
-        return value
-    if isinstance(value.get("Data"), dict):
-        return value["Data"]
-    if "HandleRefId" in value:
-        return data_by_handle.get(str(value["HandleRefId"]))
-    return value
 
 
 def _state_list(value: Any) -> list[Any]:
