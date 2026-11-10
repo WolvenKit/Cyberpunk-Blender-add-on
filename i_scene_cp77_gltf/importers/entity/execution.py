@@ -64,6 +64,12 @@ from ..common.mesh_assets import (
 )
 from ..common.progress import NO_PROGRESS, BlenderImportProgress
 from ..common.results import ImportResult, summarize_messages, unique_messages
+from .collisions import (
+    AppearanceColliders,
+    EntityCollisionRuntime,
+    EntityCollisionService,
+    collect_collider_components,
+)
 from .context import AppearanceExecutionContext, EntityHandlerOperations
 from .execution_cache import (
     ComponentHandleLookup,
@@ -75,6 +81,11 @@ from .handlers.animators import (
     EntityTransformAnimatorHandler,
     EntityTransformAnimatorService,
 )
+from .handlers.lights import (
+    collect_light_channel_components,
+    collect_light_components,
+    create_auxiliary_component_registry,
+)
 from .handlers.meshes import (
     EntityMeshHandler,
     EntityMeshService,
@@ -83,6 +94,7 @@ from .handlers.meshes import (
     EntityStaticMeshOperations,
     EntityStaticMeshService,
 )
+from .handlers.widgets import create_widget_component_registry
 from .options import EntityImportRequest
 from .planner import compile_entity_import_plan, normalize_appearance_requests
 from .policy import (
@@ -543,21 +555,11 @@ def _import_entity_impl(request: EntityImportRequest, *, progress=NO_PROGRESS):
             )
 
             light_handler_registry = None
-            collect_light_channel_components = None
-            collect_light_components = None
             if include_lights or include_light_channels:
-                from .handlers.lights import (
-                    collect_light_channel_components,
-                    collect_light_components,
-                    create_auxiliary_component_registry,
-                )
-
                 light_handler_registry = create_auxiliary_component_registry()
 
             widget_handler_registry = None
             if include_inkwidgets:
-                from .handlers.widgets import create_widget_component_registry
-
                 widget_handler_registry = create_widget_component_registry()
 
             imported_appearance_collections = session.imported_collections
@@ -836,11 +838,6 @@ def _import_entity_impl(request: EntityImportRequest, *, progress=NO_PROGRESS):
                             )
 
                 if x == 0 and include_collisions and include_entity_colliders:
-                    from .collisions import (
-                        AppearanceColliders,
-                        collect_collider_components,
-                    )
-
                     # A collider both files carry imports once, from the entity.
                     colliders = tuple(
                         component
@@ -1052,8 +1049,6 @@ def _import_entity_impl(request: EntityImportRequest, *, progress=NO_PROGRESS):
             appearance_progress.finish(detail="Appearances complete")
             progress.set(88.0, "Importing collisions", force=True)
             if include_collisions:
-                from .collisions import EntityCollisionRuntime, EntityCollisionService
-
                 physx_target_collection = (
                     imported_appearance_collections[0]
                     if imported_appearance_collections

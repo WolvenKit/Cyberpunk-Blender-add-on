@@ -4,7 +4,19 @@ import time
 
 import bpy
 
+from ....animation.domain.animgraph.animation_scope import (
+    available_animation_names,
+    graph_animation_names,
+)
+from ....animation.domain.animgraph.math_expression import MathExpressionError
+from ....animation.domain.animgraph.topology import (
+    handle_index,
+    resolve,
+    static_condition_result,
+    static_switch_branch,
+)
 from ....animation.model.animgraph.constants import ANIMGRAPH_TREE_ID
+from ....animation.runtime.animgraph.linked_forces import LinkedForcePreview
 from ....blender.animgraph.preview_settings import adopt_dangle_settings
 from ....blender.animgraph.results_overlay import redraw_editors
 from ....blender.animgraph.rig_binding import binding_tree, bound_armature
@@ -12,8 +24,12 @@ from ....blender.animgraph.source import load_graph_payload
 from ....blender.context import safe_mode_switch, tag_view3d_redraw
 from ....blender.identity import rna_identity
 from ....blender.operator_results import OperationResult
+from ....blender.rig_metadata import source_rig_part_bindings
 from ....core.log import debug_exception, get_logger
+from ....gltf.provenance import SOURCE_PATH_KEY
 from ...blender.dangle_context import get_active_rig
+from ...blender.dangle_source import load_source_payload
+from .editor_state import refresh_graph_operations
 from .graph_state import GraphPreviewState
 from .overlay import _DRAW_CACHES, update_draw_cache
 from .simulation import core, solvers, spaces
@@ -42,18 +58,6 @@ def _graph_preview_snapshot(rig, source_payload=None, *, errors=()):
     root_handle = ""
     if isinstance(source_payload, dict):
         try:
-            from ....animation.domain.animgraph.animation_scope import (
-                available_animation_names,
-                graph_animation_names,
-            )
-            from ....animation.domain.animgraph.topology import (
-                handle_index,
-                resolve,
-                static_condition_result,
-                static_switch_branch,
-            )
-            from ....gltf.provenance import SOURCE_PATH_KEY
-
             actions = getattr(getattr(bpy, "data", None), "actions", None)
             graph_names = graph_animation_names(source_payload)
             available = available_animation_names(
@@ -100,7 +104,6 @@ def _graph_preview_snapshot(rig, source_payload=None, *, errors=()):
                 )
                 if str(tag or "") and str(tag) != "None"
             )
-            from ....blender.rig_metadata import source_rig_part_bindings
 
             metarig_part_bindings = source_rig_part_bindings(rig)
             for handle, node in sorted(index.items(), key=lambda item: item[0]):
@@ -512,7 +515,6 @@ def disable_rig(context):
 
 def refresh_graph_state(state, payload):
     """Read the graph's conditions, named inputs and dangle operations into state, keeping solver edits"""
-    from .editor_state import refresh_graph_operations
 
     rig = getattr(state, "id_data", None)
     try:
@@ -531,8 +533,6 @@ def refresh_graph_state(state, payload):
 
 
 def _refresh_graph_inputs(rig):
-    from ...blender.dangle_source import load_source_payload
-
     return refresh_graph_state(rig.dangle_state, load_source_payload(rig))
 
 
@@ -803,10 +803,6 @@ def prepare_preview(context, graph_tree=None):
                 return OperationResult.cancelled(
                     "Linked external force requires the imported AnimGraph source."
                 )
-            from ....animation.domain.animgraph.math_expression import (
-                MathExpressionError,
-            )
-            from ....animation.runtime.animgraph.linked_forces import LinkedForcePreview
 
             try:
                 linked_runtime = LinkedForcePreview(source_payload, linked)

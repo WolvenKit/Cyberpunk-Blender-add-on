@@ -11,6 +11,7 @@ from ...bartmoss.wireframes import (
 from ...blender.gpu_overlay import line_drawing, uniform_color_shader
 from ...blender.identity import rna_identity
 from ...blender.physics.cooked_shapes import decode_cooked_geometry
+from ...blender.physics.vehicle_chassis import vehicle_chassis_phys_objects
 from ...blender.physics.vehicle_geometry import basis_matrix
 from ...core.log import get_logger, log_once
 from ..blender.vehicle_config import vehicle_live_dynamics_config, vehicle_objects
@@ -68,7 +69,6 @@ def _append_vehicle_visualization(context, all_verts, all_indices, depsgraph=Non
     frame = rigid_world @ basis
     actor_frame = frame @ Matrix.Translation(Vector(vehicle.chassis_shape_offset))
     dimensions = Vector(vehicle.chassis_dims) * 0.5
-    from ...blender.physics.vehicle_chassis import vehicle_chassis_phys_objects
 
     if not vehicle_chassis_phys_objects(context.scene, getattr(vehicle, "rig", None)):
         local_verts, local_lines = _collect_primitive_lines("BOX", dimensions)

@@ -15,8 +15,8 @@ from ...blender.animgraph import (
     sm_records,
 )
 from ...blender.animgraph.access import get_attr, get_idprop
-from ...blender.animgraph.builder import new_handle_id
 from ...blender.animgraph.property_codec import encode_node_property
+from ...blender.animgraph.sm_model import new_handle_id
 from ...blender.animgraph.sm_records import ANY_RED_TYPE, ENTRY_RED_TYPE, _pseudo_node
 from .defaults import schema_default_data_for_type
 from .paths import (

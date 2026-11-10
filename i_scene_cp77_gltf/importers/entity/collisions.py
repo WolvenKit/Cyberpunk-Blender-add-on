@@ -16,6 +16,7 @@ from ...blender.physics.entity_colliders import (
     PhysXEntityContext,
 )
 from ...blender.physics.resources import import_phys_resource
+from ...blender.physics.vehicle_phys import adopt_vehicle_phys_objects
 from ...core.log import debug_exception, get_logger
 from ...entity.domain.entity_data import component_name
 from .context import EntityHandlerOperations
@@ -230,7 +231,6 @@ class EntityCollisionService:
                 for item in runtime.blender_context.scene.physx.actors
                 if item.obj_ref is not None and item.obj_ref.as_pointer() not in before
             )
-            from ...blender.physics.vehicle_phys import adopt_vehicle_phys_objects
 
             adopt_vehicle_phys_objects(runtime.rig, created)
         except Exception:

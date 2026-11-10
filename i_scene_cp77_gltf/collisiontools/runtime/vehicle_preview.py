@@ -13,12 +13,14 @@ from mathutils import Matrix, Vector
 from ...bartmoss.vehicle import STANDARD_GRAVITY, fixed_step_count
 from ...blender.identity import rna_identity
 from ...blender.physics.bridge_session import require_initialized_bridge
+from ...blender.physics.vehicle_chassis import vehicle_chassis_phys_objects
 from ...blender.physics.vehicle_geometry import (
     WHEEL_FIELDS,
     basis_matrix,
     matrix_from_pose,
     vehicle_root,
 )
+from ...blender.physics.vehicle_phys import adopt_loaded_vehicle_phys
 from ...core.log import get_logger
 from ...physics.domain.vehicle.gears import (
     PHYSX_MAX_FORWARD_GEARS,
@@ -27,7 +29,10 @@ from ...physics.domain.vehicle.gears import (
 )
 from ...physics.model.vehicle.timing import VEHICLE_FIXED_TIME_STEP
 from ...physics.runtime.bridge_contract import validate_vehicle_bridge_contract
-from ..blender.vehicle_authoring_state import scene_gravity_magnitude
+from ..blender.vehicle_authoring_state import (
+    bike_vehicle_config,
+    scene_gravity_magnitude,
+)
 from ..blender.vehicle_config import (
     validate_vehicle,
     vehicle_config,
@@ -634,8 +639,6 @@ def build_vehicle(context, bridge=None):
         raise ValueError("; ".join(errors))
     bridge = bridge or require_initialized_bridge(context)
     if vehicle.source_mode == "RIG" and getattr(vehicle, "rig", None) is not None:
-        from ...blender.physics.vehicle_phys import adopt_loaded_vehicle_phys
-
         adopt_loaded_vehicle_phys(context, vehicle.rig)
 
     state = _runtime(context.scene)
@@ -723,8 +726,6 @@ def _build_native_vehicle(scene, bridge, state, *, dynamic_state=None):
 
     is_bike = getattr(vehicle, "vehicle_kind", "CAR") == "BIKE"
     if is_bike:
-        from ..blender.vehicle_authoring_state import bike_vehicle_config
-
         config = bike_vehicle_config(vehicle)
     else:
         config = vehicle_config(vehicle)
@@ -791,7 +792,6 @@ def _build_native_vehicle(scene, bridge, state, *, dynamic_state=None):
     state.chassis_origin_translation = Matrix.Translation(-state.chassis_shape_offset)
     state.chassis_scale = root.matrix_world.to_scale()
     state.chassis_scale_matrix = _scale_matrix(state.chassis_scale)
-    from ...blender.physics.vehicle_chassis import vehicle_chassis_phys_objects
 
     state.chassis_phys_objects = vehicle_chassis_phys_objects(
         scene, getattr(vehicle, "rig", None)

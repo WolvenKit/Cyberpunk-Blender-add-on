@@ -24,6 +24,7 @@ from ...blender.entity.transforms import (
     request_child_of_inverse,
 )
 from ...blender.identity import rna_identity, rna_is_live
+from ...blender.ink import screens as ink_screens
 from ...blender.light_channels import (
     clear_light_channel_records,
     is_light_channel_volume,
@@ -1059,8 +1060,6 @@ def _copy_collection_tree_with_placement_root(
     _remap_blueprint_references(copy_map, blueprint)
 
     if blueprint.animated_widget_roots:
-        from ...blender.ink import screens as ink_screens
-
         for source_root in blueprint.animated_widget_roots:
             copied_root = copy_map.get(source_root)
             if copied_root is not None:

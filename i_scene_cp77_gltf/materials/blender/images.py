@@ -13,6 +13,7 @@ from ...blender.identity import rna_identity
 from ...blender.image_cache import LoadedImageIndex
 from ...blender.transactions import track_created_datablock
 from ...core.log import get_logger
+from ..resources import active_material_asset_indexes
 from .helper_caches import register_helper_cache
 from .profiling import begin_material_phase, end_material_phase
 
@@ -185,7 +186,6 @@ def _resolve_indexed_image(reference, root, image_format):
     try:
         if not reference or not root:
             return None
-        from ..resources import active_material_asset_indexes
 
         ext = _image_format_extension(image_format)
         indexes = active_material_asset_indexes()

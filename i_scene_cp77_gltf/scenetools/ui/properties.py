@@ -11,6 +11,7 @@ from bpy.props import (
 from bpy.types import PropertyGroup
 
 from ...bartmoss.celestial import DAY_HOURS, wrap_hour
+from ...core.log import get_logger
 from ...entity.domain.light_channel_semantics import (
     LC_AUTOMATED,
     LC_CHANNEL1,
@@ -35,6 +36,8 @@ from ..application.lights import (
 )
 from ..application.options import SEASON_ITEMS, WEATHER_ITEMS, RefreshScope
 from ..runtime.ownership import scene_has_owned_runtime
+
+_LOG = get_logger(__name__)
 
 # Whom or what each group's lights light, for the rows' tooltips.
 _GROUP_RULES = {
@@ -106,7 +109,14 @@ def _refresh_scoped(context, scope):
     settings = scene.cp77_scene_tools
     if not settings.live_update or not scene_has_owned_runtime(scene):
         return
-    refresh_environment(scene, settings, scope)
+    try:
+        refresh_environment(scene, settings, scope)
+    except Exception:
+        _LOG.warning(
+            "Scene Tools could not apply the %s change",
+            scope.name.lower(),
+            exc_info=True,
+        )
 
 
 def _refresh_full(self, context):

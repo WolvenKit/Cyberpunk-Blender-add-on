@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ...entity.domain.chunks import FULL_MASK, parse_mask, part_visible
 from ...entity.model.component_types import SKINNED_TYPES
+from ..handlers.ui_refresh import choices_key, schedule_refresh
 from ..operators.appearances import (
     CP77_OT_EntityDuplicateAppearance,
     CP77_OT_EntityMakeDefault,
@@ -18,7 +19,6 @@ from ..operators.components import (
 )
 from ..operators.export import CP77_OT_EntityExport
 from ..runtime.scene_cache import component_view, entity_index
-from ..runtime.ui_refresh import choices_key, schedule_refresh
 from ..services.selection import current_collection, selected_component
 from .menus import (
     PART_CONTEXT_KEY,

@@ -6,6 +6,7 @@ import bpy
 
 from ...animation.model.animgraph.handles import normalized_source_handle
 from ...core.log import get_logger, log_once
+from ..gpu_overlay import line_drawing
 from . import sm_overlay
 from .rig_binding import binding_tree
 from .tree import REDengine_AnimGraphTree
@@ -203,8 +204,6 @@ def _shapes(tree, shown) -> tuple[list, list]:
 def _draw(fills, outlines, viewport) -> None:
     import gpu
     from gpu_extras.batch import batch_for_shader
-
-    from ..gpu_overlay import line_drawing
 
     with line_drawing():
         if fills:

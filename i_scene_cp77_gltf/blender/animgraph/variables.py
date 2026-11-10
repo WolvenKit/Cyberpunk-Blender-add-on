@@ -13,6 +13,7 @@ from ...animation.model.animgraph.constants import ANIM_NODE_PREFIX, ANIMGRAPH_T
 from ...assetio.values import cname_text, coerce_float, coerce_int, json_text
 from ...core.log import get_logger, log_once
 from .property_codec import encode_node_property, property_by_key
+from .rig_binding import bound_armature, root_tree_for
 
 _LOG = get_logger(__name__)
 
@@ -182,31 +183,6 @@ def sync_variable_summary(slot: Any) -> None:
         _LOG.debug("AnimGraph variable summary synchronization failed", exc_info=True)
 
 
-def root_tree_for(tree: bpy.types.NodeTree | None) -> bpy.types.NodeTree | None:
-    if tree is None:
-        return None
-    if getattr(tree, "bl_idname", "") != ANIMGRAPH_TREE_ID:
-        return None
-    parent_name = ""
-    try:
-        parent_name = str(tree.get("red_parent_graph", ""))
-    except (AttributeError, TypeError) as error:
-        log_once(
-            _LOG,
-            "DEBUG",
-            ("root_tree_for", type(error).__name__),
-            "root tree for: fell back after %s",
-            error,
-            exc_info=True,
-        )
-        parent_name = ""
-    if parent_name:
-        parent = bpy.data.node_groups.get(parent_name)
-        if parent is not None and getattr(parent, "bl_idname", "") == ANIMGRAPH_TREE_ID:
-            return parent
-    return tree
-
-
 def related_trees(root_tree: bpy.types.NodeTree) -> list[bpy.types.NodeTree]:
     root = root_tree_for(root_tree) or root_tree
     out: list[bpy.types.NodeTree] = []
@@ -335,7 +311,6 @@ def _set_node_binding(
 def bound_float_property(node):
     if variable_type_for_node(node) != "Float":
         return None
-    from .rig_binding import bound_armature
 
     armature = bound_armature(getattr(node, "id_data", None))
     name = node_variable_name(node)
@@ -345,8 +320,6 @@ def bound_float_property(node):
 
 
 def float_variable_value(tree, name):
-    from .rig_binding import bound_armature
-
     root = root_tree_for(tree) or tree
     return resolve_float_variable(
         name, getattr(root, "variables", ()), bound_armature(root)

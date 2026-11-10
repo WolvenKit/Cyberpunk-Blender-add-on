@@ -24,6 +24,7 @@ from ..blender.animgraph.sm_properties import (
     REDengine_SMStateRef,
     REDengine_SMTransition,
 )
+from ..blender.animgraph.sm_sockets import REDengine_AnimGraphSocket_TransitionOut
 from ..blender.animgraph.sockets import (
     REDengine_AnimGraphSocket_Bool,
     REDengine_AnimGraphSocket_Editor,
@@ -33,7 +34,6 @@ from ..blender.animgraph.sockets import (
     REDengine_AnimGraphSocket_Quaternion,
     REDengine_AnimGraphSocket_Transform,
     REDengine_AnimGraphSocket_Transition,
-    REDengine_AnimGraphSocket_TransitionOut,
     REDengine_AnimGraphSocket_Vector,
 )
 from ..blender.animgraph.tree import REDengine_AnimGraphTree

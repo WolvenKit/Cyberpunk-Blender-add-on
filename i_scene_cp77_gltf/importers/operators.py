@@ -18,17 +18,27 @@ from bpy.types import (
 from bpy_extras.io_utils import ImportHelper
 
 from ..animation.model.animgraph.constants import ANIMGRAPH_FILE_FILTER
+from ..animation.services.rig.repository import (
+    register_stored_rig_documents,
+    unregister_stored_rig_documents,
+)
 from ..assetio.cache import store_bounded
 from ..assetio.documents import DocumentSession, FileIdentity
 from ..assetio.index import IndexPolicy
 from ..assetio.paths import absolute_local_path_key, material_sidecar_path
 from ..blender.gpu_backend import opengl_shader_warning
 from ..blender.import_hooks import after_import, before_import
+from ..blender.rig_metadata import (
+    default_rig_part,
+    rig_part_items,
+    stored_rig_part_document,
+)
 from ..blender.selection import select_objects
 from ..blender.transactions import (
     BlenderImportTransaction,
     raise_if_rollback_incomplete,
 )
+from ..blender.workspace import show_graph
 from ..core.addon_identity import get_addon_preferences
 from ..core.log import debug_exception, get_logger, log_once
 from ..core.notifications import import_operation, report
@@ -38,6 +48,8 @@ from ..gltf.provenance import inspect_glb
 from ..icons.cp77_icons import get_icon
 from ..materials.repository import MaterialResourceRepository
 from ..materials.resources import load_material_bundle
+from .animation.mocap import import_mocap_to_armature
+from .animgraph.graph_import import import_graph
 from .animgraph.parser import cancel_deferred_link_timers
 from .character.npz import (
     CP77_OT_LoadBaseCharacter,
@@ -48,12 +60,16 @@ from .character.npz import (
 from .common import appearance_list, dialog_model
 from .common.dialog_model import balanced_rows, category_property
 from .entity import dialog as entity_dialog
+from .entity.execution import import_entity
+from .entity.options import EntityImportRequest
 from .entity.repository import EntityRepository
+from .entity.rigs import register_rig_cache_handlers, unregister_rig_cache_handlers
 from .materials.multilayer_setup import CP77ImportMLSetup
 from .mesh.external import import_external_glb
 from .mesh.orchestration import import_cyberpunk_glb, resolve_direct_animation_target
 from .rig.reader import create_armature_from_data
 from .sector import dialog as sector_dialog
+from .sector.execution import import_sectors
 from .sector.options import DECAL_MODES, SECTOR_CHOICES
 
 _LOG = get_logger(__name__)
@@ -179,8 +195,6 @@ class CP77MocapImport(Operator, ImportHelper):
 
     @import_operation
     def execute(self, context):
-        from .animation.mocap import import_mocap_to_armature
-
         armature = context.active_object
         names = [entry.name for entry in self.files if entry.name] or [
             os.path.basename(self.filepath)
@@ -217,8 +231,6 @@ def _animgraph_armature_items(_self, context):
 
 
 def _animgraph_rig_part_items(self, _context):
-    from ..blender.rig_metadata import rig_part_items
-
     armature = bpy.data.objects.get(self.armature)
     items = [
         (
@@ -265,10 +277,6 @@ class CP77AnimGraphImport(Operator, ImportHelper):
 
     @import_operation
     def execute(self, context):
-        from ..blender.rig_metadata import default_rig_part
-        from ..blender.workspace import show_graph
-        from .animgraph.graph_import import import_graph
-
         armature = bpy.data.objects.get(self.armature)
         if armature is None or armature.type != "ARMATURE":
             report(
@@ -610,8 +618,6 @@ class CP77EntityImport(Operator, ImportHelper):
         configured = str(cp77_addon_prefs.depotfolder_path or "")
         if configured and os.path.isdir(configured):
             depot_root = configured
-        from .entity.execution import import_entity
-        from .entity.options import EntityImportRequest
 
         before = before_import(context.scene)
         try:
@@ -834,8 +840,6 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
 
     @import_operation
     def execute(self, context):
-        from .sector.execution import import_sectors
-
         state = dialog_model.state_from_operator(
             self,
             sector_dialog.DialogState,
@@ -1317,18 +1321,9 @@ def register_importers():
         _LEDGER.add_cleanup(
             "AnimGraph deferred link timers", cancel_deferred_link_timers
         )
-        from .entity.rigs import (
-            register_rig_cache_handlers,
-            unregister_rig_cache_handlers,
-        )
 
         register_rig_cache_handlers()
         _LEDGER.add_cleanup("rig cache handlers", unregister_rig_cache_handlers)
-        from ..animation.services.rig.repository import (
-            register_stored_rig_documents,
-            unregister_stored_rig_documents,
-        )
-        from ..blender.rig_metadata import stored_rig_part_document
 
         register_stored_rig_documents(stored_rig_part_document)
         _LEDGER.add_cleanup("stored rig documents", unregister_stored_rig_documents)

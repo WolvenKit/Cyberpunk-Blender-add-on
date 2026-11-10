@@ -11,6 +11,8 @@ import traceback
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler
 from pathlib import Path
 
+from .addon_identity import get_addon_preferences, user_config_dir
+
 LOGGER_NAME = "i_scene_cp77_gltf"
 TRACE = 5
 logging.addLevelName(TRACE, "TRACE")
@@ -730,8 +732,6 @@ class RotatingLogFile(RotatingFileHandler):
 def _default_log_directory():
     reason = None
     try:
-        from .addon_identity import user_config_dir
-
         configured = user_config_dir("logs")
         if configured:
             return Path(configured), None
@@ -857,8 +857,6 @@ def configure_from_preferences(context=None):
     level = _DEFAULT_LEVEL
     write_file = True
     try:
-        from .addon_identity import get_addon_preferences
-
         preferences = get_addon_preferences(context, required=False)
         if preferences is not None:
             level = getattr(preferences, "log_level", _DEFAULT_LEVEL)

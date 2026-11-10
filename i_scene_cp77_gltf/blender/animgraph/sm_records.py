@@ -16,12 +16,14 @@ from ...animation.model.animgraph.sm_assembly import (
 )
 from ...assetio import animgraph_json
 from ...assetio.values import cname_text, nine_digit_float
-from . import property_codec
-from .sm_properties import (
+from . import categories, property_codec
+from .sm_model import (
     BLEND_INTERPOLATOR_TYPE,
     INTERPOLATION_TYPE_ENUM,
     INTERPOLATION_TYPE_ITEMS,
+    new_handle_id,
 )
+from .tree_ops import new_editor_node
 
 ENTRY_OWNER = "__entry__"
 ANY_OWNER = "__any__"
@@ -46,12 +48,6 @@ def _loads(text: str) -> Any:
         return animgraph_json.loads(text)
     except ValueError:
         return None
-
-
-def _new_handle() -> str:
-    from .builder import new_handle_id
-
-    return new_handle_id()
 
 
 def _is_ref(value: Any) -> bool:
@@ -268,9 +264,9 @@ def record_from_wrapper(
     _reset(rec)
     if wrapper is None:
         if list_name != DEFAULT_LIST:
-            rec.handle_id = _new_handle()
+            rec.handle_id = new_handle_id()
             if list_name != "conditionalEntries":
-                rec.interpolator_handle = _new_handle()
+                rec.interpolator_handle = new_handle_id()
         return
 
     wrapper = copy.deepcopy(wrapper)
@@ -317,13 +313,13 @@ def renew_record(rec) -> None:
         return
     rec.original_index = -1
     rec.original_json = ""
-    rec.handle_id = _new_handle()
+    rec.handle_id = new_handle_id()
     entry = rec.list_name == "conditionalEntries"
     rec.interpolator_handle = (
-        "" if entry or not rec.interpolator_type else _new_handle()
+        "" if entry or not rec.interpolator_type else new_handle_id()
     )
     for cond in rec.conditions:
-        cond.handle_id = _new_handle()
+        cond.handle_id = new_handle_id()
 
 
 def _depot_ref(text: str, original: Any) -> dict:
@@ -354,7 +350,7 @@ def _interpolator_wrapper(rec, interp_type: str, original_interp: Any) -> dict:
         handle = str(original_interp.get("HandleId", ""))
     if not handle:
         handle = (
-            _new_handle()
+            new_handle_id()
         )  # a placeholder for this export only; the record is not changed
     original_data = (
         original_interp.get("Data") if isinstance(original_interp, dict) else None
@@ -385,7 +381,7 @@ def record_to_spec(rec, owner: str) -> TransitionSpec:
     original_data = original["Data"] if original else {}
     entry = rec.list_name == "conditionalEntries"
 
-    handle = rec.handle_id or _new_handle()
+    handle = rec.handle_id or new_handle_id()
 
     data: dict = {
         "$type": original_data.get("$type")
@@ -524,8 +520,6 @@ def _pseudo_node(sm_tree, red_type: str):
 
 def new_pseudo_node(sm_tree, sm_handle: str, short: str, label: str):
     """The Entry or Any State node of a state machine subtree, created on first use"""
-    from . import categories
-    from .tree_ops import new_editor_node
 
     key = f"editor{short}_{sm_handle}"
     existing = sm_tree.nodes.get(key)

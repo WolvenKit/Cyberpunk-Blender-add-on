@@ -50,6 +50,7 @@ from ...gltf.submesh import submesh_index_from_name
 from ...redSpace.contracts import SOURCE_REST_SPACE_CONTRACT
 from ...redSpace.transforms import gltf_relative_to_blender
 from ..rig.gltf import build_rest_armature_from_binding
+from ..rig.reader import set_armature_model_space_matrices
 from .document import (
     BIND_MATRIX_TOLERANCE,
     DirectMeshData,
@@ -705,8 +706,6 @@ def _set_created_armature_bind_pose(armature, skin, expected_matrices):
         )
     if maximum <= BIND_MATRIX_TOLERANCE:
         return maximum, False
-
-    from ..rig.reader import set_armature_model_space_matrices
 
     target_names = []
     for source_name in skin.bone_names:

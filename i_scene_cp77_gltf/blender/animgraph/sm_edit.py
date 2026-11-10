@@ -6,9 +6,9 @@ from ...animation.model.animgraph import sm_conditions
 from ...assetio import animgraph_json
 from ...core.log import get_logger, log_once
 from . import property_codec, sm_overlay, sm_records, sm_sockets
-from .builder import build_node, new_handle_id
+from .builder import build_node
 from .layout import estimated_node_size
-from .sm_properties import BLEND_INTERPOLATOR_TYPE, REDengine_SMStateRef
+from .sm_model import BLEND_INTERPOLATOR_TYPE, new_handle_id
 from .sm_records import ANY_RED_TYPE, ENTRY_RED_TYPE, _pseudo_node
 
 _LOG = get_logger(__name__)
@@ -102,7 +102,7 @@ def owner_node(struct):
             exc_info=True,
         )
         return None
-    state_ref = isinstance(struct, REDengine_SMStateRef)
+    state_ref = getattr(struct.bl_rna, "identifier", "") == "REDengine_SMStateRef"
     for node in getattr(tree, "nodes", ()) or ():
         for rec in () if state_ref else (getattr(node, "red_transitions", ()) or ()):
             if rec.as_pointer() == pointer:

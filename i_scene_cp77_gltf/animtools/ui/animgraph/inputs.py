@@ -2,7 +2,7 @@
 import bpy
 
 from ....blender.animgraph import rig_binding
-from ....blender.animgraph.variables import root_tree_for
+from ....blender.animgraph.rig_binding import root_tree_for
 from ...operators.animgraph.context import animgraph_editor_poll
 from .node_widgets import draw_binding_box
 from .variable_widgets import draw_variable_value

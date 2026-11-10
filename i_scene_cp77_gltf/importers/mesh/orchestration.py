@@ -60,8 +60,10 @@ from ...materials.resources import material_resource_scope
 from ...materials.shadow_policy import object_shadow_policy
 from ...meshes.repository import is_physical_scene
 from ...redSpace.contracts import RIG_SPACE_CONTRACT_CURRENT
+from ..animation.document import import_anims_glb_to_armature
 from ..common.material_appearances import requested_material_names_by_submesh
 from ..common.results import ImportResult, summarize_messages, unique_messages
+from ..rig.gltf import import_gltf_rig
 from .appearances import create_mesh_appearance_variants
 from .decal_receivers import bind_mesh_decals
 from .document import decode_mesh_glb
@@ -361,8 +363,6 @@ def resolve_direct_animation_target(context, explicit_target=None):
 def _try_direct_animation_import(
     filepath, context, animation_target, import_tracks, verbose
 ):
-    from ..animation.document import import_anims_glb_to_armature
-
     target = (
         None
         if animation_target == "NEW"
@@ -1296,8 +1296,6 @@ def import_cyberpunk_glb(
                         f"{file_name} contains no mesh or animation payload."
                     )
                 if kind == "rig":
-                    from ..rig.gltf import import_gltf_rig
-
                     if file_name.casefold().endswith(".anims.glb"):
                         error_messages.append(
                             f"{file_name} contains a skin but no animation clips; "

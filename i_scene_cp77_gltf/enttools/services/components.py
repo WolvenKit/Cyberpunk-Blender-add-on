@@ -17,7 +17,6 @@ from ...blender.transactions import (
     transactional,
 )
 from ...core.log import get_logger
-from ...core.notifications import show_message
 from ...entity.domain import chunks
 from ...entity.domain.chunks import FULL_MASK, mask_text, parse_mask
 from ...entity.domain.document import (
@@ -267,23 +266,6 @@ def set_field(context, collection, index: int, field: str, value) -> OperationRe
     item = ensure_appearance_state(collection).components[index]
     write_values(item, _FIELD_VALUES[field](value))
     return apply_field(context, collection, index, field)
-
-
-def field_changed(context, item, field: str) -> None:
-    """A component field was edited in the panel"""
-    collection = item.id_data
-    index = next(
-        i
-        for i, candidate in enumerate(collection.cp77_entity_state.components)
-        if candidate == item
-    )
-    result = apply_field(context, collection, index, field)
-    if not result.ok:
-        show_message(result.message, severity=result.level, logger=_LOG)
-    elif field in {"attach", "name"}:
-        from .selection import refresh_choices
-
-        refresh_choices(context)
 
 
 @transactional("Entity chunk visibility")

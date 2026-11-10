@@ -13,6 +13,8 @@ from ...blender.transactions import (
     transactional,
 )
 from ...entity.model.import_record import IMPORT_RECORD_KEY
+from ...importers.entity.execution import import_entity
+from ...importers.entity.options import EntityImportRequest
 from ..blender import mesh_appearance
 from ..blender.rigs import reconcile_appearance_rig
 from ..blender.scene import appearance_record, component_objects, holds_imported_lights
@@ -134,9 +136,6 @@ def switch_appearance(context, import_id: str, appearance: str) -> OperationResu
         None,
     )
     if target is None:
-        from ...importers.entity.execution import import_entity
-        from ...importers.entity.options import EntityImportRequest
-
         record = appearance_record(collections[0])
         parents = collection_parent_map().get(collections[0].as_pointer(), ())
         imported = []

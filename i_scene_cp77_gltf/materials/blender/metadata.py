@@ -1,4 +1,3 @@
-
 def material_metadata(material_data):
     if "BaseMaterial" not in material_data:
         return None

@@ -9,6 +9,7 @@ from ..common.sync import (
     material_syncing,
 )
 from ..depot.state import clear_depot_state_cache
+from ..depot.thumbnails import clear_thumbnails
 from ..multilayer.editor import (
     apply_color_to_shader,
     apply_layer_opacity,
@@ -28,6 +29,7 @@ from ..painting.masks import (
     activate_selected_mask,
     toggle_texture_paint,
 )
+from ..painting.surface import restore_surface_paint
 
 _LOG = get_logger(__name__)
 
@@ -387,9 +389,6 @@ def stop_timers():
 
 
 def clear_material_runtime_caches():
-    from ..depot.thumbnails import clear_thumbnails
-    from ..painting.surface import restore_surface_paint
-
     restore_surface_paint(bpy.context)
     clear_thumbnails()
     clear_material_cache(

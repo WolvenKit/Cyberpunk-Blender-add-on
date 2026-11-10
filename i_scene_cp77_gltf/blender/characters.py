@@ -52,7 +52,5 @@ def breast_shape_objects(props):
         for obj in character_objects(props, "BODY")
         if obj.type == "MESH"
         and obj.data.shape_keys
-        and any(
-            name in obj.data.shape_keys.key_blocks for name in BREAST_KEYS.values()
-        )
+        and any(name in obj.data.shape_keys.key_blocks for name in BREAST_KEYS.values())
     ]

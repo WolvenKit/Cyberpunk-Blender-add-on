@@ -9,8 +9,9 @@ from functools import wraps
 import bpy
 
 from ..core.log import debug_exception, get_logger, log_once
-from .context import safe_mode_switch
+from .context import BlenderContextSnapshot, safe_mode_switch
 from .identity import rna_identity, rna_is_live
+from .operator_results import OperationResult
 
 _ACTIVE_IMPORT_TRANSACTION = ContextVar("cp77_active_import_transaction", default=None)
 _LOG = get_logger(__name__)
@@ -1085,8 +1086,6 @@ class BlenderImportTransaction(DatablockImportTransaction):
         super().__init__()
         self._context_snapshot = None
         if restore_context:
-            from .context import BlenderContextSnapshot
-
             self._context_snapshot = BlenderContextSnapshot().store()
         if capture_existing_state:
             self._collections = tuple(
@@ -1257,8 +1256,6 @@ class BlenderImportTransaction(DatablockImportTransaction):
 
 
 def _failed(result) -> bool:
-    from .operator_results import OperationResult
-
     return isinstance(result, OperationResult) and not result.ok
 
 

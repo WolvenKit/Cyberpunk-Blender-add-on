@@ -2,6 +2,7 @@ import bpy
 
 from ...animation.model.animgraph.schema import enums
 from ...core.log import debug_exception, get_logger
+from . import variables
 
 _LOG = get_logger(__name__)
 
@@ -56,8 +57,6 @@ NODE_VALUE_KIND_ITEMS = (
 
 def _on_anim_variable_updated(self, context):
     try:
-        from . import variables
-
         variables.propagate_variable_to_nodes(self)
     except Exception:
         _LOG.error("AnimGraph variable value update failed", exc_info=True)

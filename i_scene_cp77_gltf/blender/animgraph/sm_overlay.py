@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import bpy
 
+from ...animation.model.animgraph.constants import ANIMGRAPH_TREE_ID
 from ...core.log import debug_exception, get_logger, log_once
+from ..gpu_overlay import line_drawing
 from . import sm_records, sm_sockets
 from .sm_sockets import IN_NAME, IN_SOCKET_ID, ROW_SOCKET_ID
-from .tree import REDengine_AnimGraphTree
 
 PALETTE = (
     (0.90, 0.62, 0.00),
@@ -416,10 +417,7 @@ def _current_tree():
     if space is None or getattr(space, "type", "") != "NODE_EDITOR":
         return None
     tree = getattr(space, "edit_tree", None)
-    if (
-        tree is None
-        or getattr(tree, "bl_idname", "") != REDengine_AnimGraphTree.bl_idname
-    ):
+    if tree is None or getattr(tree, "bl_idname", "") != ANIMGRAPH_TREE_ID:
         return None
     return tree
 
@@ -427,8 +425,6 @@ def _current_tree():
 def _draw_batches(segments, viewport, scale: float) -> None:
     import gpu
     from gpu_extras.batch import batch_for_shader
-
-    from ..gpu_overlay import line_drawing
 
     shader = gpu.shader.from_builtin("POLYLINE_SMOOTH_COLOR")
     shader.bind()

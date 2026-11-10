@@ -12,6 +12,7 @@ from ...runtime.dangle.editor_state import (
     restore_editor_state,
     serialize_editor_state,
 )
+from .sync import sync_editor_to_graph
 
 _LOG = get_logger(__name__)
 
@@ -28,8 +29,6 @@ def _sync_rig_if_linked(rig, context, result, *, removed_handles=()):
     if not result.ok or rig is None or not _linked_to_graph(rig):
         return result
     try:
-        from .sync import sync_editor_to_graph
-
         sync_editor_to_graph(
             rig,
             context,
