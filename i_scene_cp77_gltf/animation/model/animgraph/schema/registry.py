@@ -76,6 +76,13 @@ DEFAULT_FLOAT_CURVE = {
 
 
 _SCHEMA_RECORDS: dict[str, dict] = dict(overrides.records())
+_SCHEMA_CACHES: list = []
+
+
+def schema_cache(function):
+    cached = cache(function)
+    _SCHEMA_CACHES.append(cached)
+    return cached
 
 
 def install_records(rows) -> None:
@@ -88,8 +95,8 @@ def install_records(rows) -> None:
     _SCHEMA_RECORDS.clear()
     _SCHEMA_RECORDS.update(by_name)
     _NODE_CLASS_CACHE.clear()
-    _all_properties.cache_clear()
-    _declaration_order.cache_clear()
+    for cached in _SCHEMA_CACHES:
+        cached.cache_clear()
 
 
 def _records() -> tuple[dict[str, dict], bool]:
@@ -206,7 +213,7 @@ def all_properties(name_or_short: str) -> tuple[dict, ...]:
     return _all_properties(full_name(name_or_short))
 
 
-@cache
+@schema_cache
 def _all_properties(full: str) -> tuple[dict, ...]:
     records, _ok = _records()
     props: list[dict] = []
@@ -245,7 +252,7 @@ def ordered_field_names(name_or_short: str, actual_keys: Iterable[str]) -> list[
     return sorted(keys, key=lambda key: (order.get(key, 10_000), input_order[key]))
 
 
-@cache
+@schema_cache
 def _declaration_order(full: str) -> dict[str, int]:
     return {str(p.get("name")): i for i, p in enumerate(_all_properties(full))}
 

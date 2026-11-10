@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import cache
 from typing import Any
 
 from ..constants import ANIM_NODE_PREFIX
@@ -256,7 +255,7 @@ def property_definitions(name_or_short: str) -> tuple[PropertyDef, ...]:
     return tuple(defs)
 
 
-@cache
+@registry.schema_cache
 def node_definition(name_or_short: str) -> NodeDefinition:
     red_type = registry.full_name(name_or_short)
     require_class(red_type)

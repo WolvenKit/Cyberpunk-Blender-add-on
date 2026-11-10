@@ -91,10 +91,10 @@ def fill_condition(
     cond.fields.clear()
     if short == sm_conditions.GROUP:
         return
-    specs = sm_conditions.CONDITION_TYPES.get(short, ())
+    specs = sm_conditions.condition_types().get(short, ())
     defaults = (
         sm_conditions.default_condition_data(short)
-        if short in sm_conditions.CONDITION_TYPES
+        if short in sm_conditions.condition_types()
         else {}
     )
     values = {

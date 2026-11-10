@@ -299,9 +299,7 @@ def viterbi_align(
 
 
 class TranscriptAligner:
-    def __init__(
-        self, audio_path: str, transcript: str, method: str = "auto", model=None
-    ):
+    def __init__(self, audio_path: str, transcript: str, model, method: str = "auto"):
         """method is 'auto', 'forced' or 'legacy'"""
         if not dependency_status().parselmouth:
             raise ImportError("parselmouth is required")

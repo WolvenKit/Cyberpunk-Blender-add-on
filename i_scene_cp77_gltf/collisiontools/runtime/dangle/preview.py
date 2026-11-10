@@ -767,6 +767,7 @@ def prepare_preview(context, graph_tree=None):
 
 
 def step_preview(context, simulator, cache_key, dt):
+    simulator.scene = context.scene
     simulator.timeline_playing = _timeline_playback_active()
     solvers.update_simulation(simulator, min(dt, 0.1), time_dilation=1.0)
     draw_started = time.perf_counter()

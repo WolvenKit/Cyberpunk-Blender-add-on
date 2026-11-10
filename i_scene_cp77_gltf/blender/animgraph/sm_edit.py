@@ -352,7 +352,7 @@ def _check_index(rec, index: int, *, allow_root: bool = False) -> None:
 
 
 def _check_type(short: str) -> None:
-    if short not in sm_conditions.CONDITION_TYPES:
+    if short not in sm_conditions.condition_types():
         raise ValueError(f"unknown condition type {short!r}")
 
 
@@ -443,7 +443,7 @@ def remove_condition(rec, index: int) -> None:
 
 
 def _spec_map(short: str) -> dict:
-    return {spec.name: spec for spec in sm_conditions.CONDITION_TYPES.get(short, ())}
+    return {spec.name: spec for spec in sm_conditions.condition_types().get(short, ())}
 
 
 def change_condition_type(rec, index: int, short: str) -> None:
@@ -467,7 +467,7 @@ def change_condition_type(rec, index: int, short: str) -> None:
         old_specs = _spec_map(old_short)
         current = {field.key: field for field in cond.fields}
         data = sm_conditions.default_condition_data(short)
-        for spec in sm_conditions.CONDITION_TYPES[short]:
+        for spec in sm_conditions.condition_types()[short]:
             old = old_specs.get(spec.name)
             field = current.get(spec.name)
             if (

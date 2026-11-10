@@ -71,6 +71,8 @@ def _source_actor(obj, *, kind, sector, node_data_index, actor_index):
 
 
 def _material(material):
+    if material is None:
+        return dict(_DEFAULT_PHYSMAT)
     source = material
     if isinstance(material, dict):
         source = cname_value(material, "Default")
@@ -85,7 +87,7 @@ def _material(material):
         )
     if isinstance(material, dict):
         return material
-    return {"$type": "CName", "$storage": "string", "$value": name}
+    return {"$type": "CName", "$storage": "string", "$value": str(material)}
 
 
 def _collision_geometry(session, sector_hash, entry_hash):
