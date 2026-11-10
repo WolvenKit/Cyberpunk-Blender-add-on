@@ -2,6 +2,7 @@ from ..assetio.paths import backslash_depot_key
 from ..bartmoss.scalar import clamp01
 from ..blender import shader_nodes
 from ..blender.shader_nodes import assign_if_changed, set_default_if_changed
+from ..materials.skin_regions import DEFAULT_FACE_REGIONSET_PATH, WRINKLE_REGION_COUNT
 from .bundles import smoothstep_socket, tangent_normal_blend_socket
 from .decal_math import ev_to_linear
 from .graph import (
@@ -24,12 +25,7 @@ from .normal_math import (
     encode_tangent_normal,
     tangent_to_normal_map,
 )
-from .skin_regions import DEFAULT_FACE_REGIONSET_PATH
-from .skin_wrinkles import (
-    WRINKLE_REGION_COUNT,
-    blend_wrinkle_normal,
-    build_wrinkle_influence,
-)
+from .skin_wrinkles import blend_wrinkle_normal, build_wrinkle_influence
 
 _WHITE = (1.0, 1.0, 1.0, 1.0)
 

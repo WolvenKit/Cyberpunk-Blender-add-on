@@ -15,8 +15,9 @@ from ..blender.naming import fit_id_name
 from ..blender.shader_nodes import assign_socket, outputs_detached, replace_link
 from ..blender.transactions import track_created_datablock
 from ..core.log import get_logger, log_once
+from ..materials.blender.layout import set_absolute_locations
 from .bundles import material_bundle_node
-from .graph import mix_color_socket, mix_scalar_socket, set_absolute_locations
+from .graph import mix_color_socket, mix_scalar_socket
 from .mat_common import find_input, get_or_build_node_group, new_labeled_node
 
 _LOG = get_logger(__name__)

@@ -6,8 +6,8 @@ from ..bartmoss.scalar import clamp01, lerp_three
 from ..blender import shader_nodes
 from ..blender.shader_nodes import set_default_if_changed
 from ..blender.transactions import new_tracked_datablock
+from ..materials.blender.layout import combine_bundle_node, separate_bundle_node
 from ..materials.blender.nodes import CreateShaderNodeValue, create_node
-from .graph import combine_bundle_node, separate_bundle_node
 from .mat_common import find_input, param_color, param_float
 from .normal_math import directx_tangent_to_normal_map
 

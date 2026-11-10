@@ -16,10 +16,10 @@ from ...blender import shader_nodes
 from ...blender.transactions import track_created_datablock
 from ...core.log import get_logger, log_once
 from ...core.notifications import report
-from ...material_types.graph import add_bundle_items
 from ...material_types.mat_common import find_input
 from ...material_types.multilayered import LAYER_BUNDLE_ITEMS
 from ...material_types.normal_math import vector_normal_z_node
+from ...materials.blender.layout import add_bundle_items
 from ...materials.blender.nodes import (
     configure_tangent_normal_map,
 )

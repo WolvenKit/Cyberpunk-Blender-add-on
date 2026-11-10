@@ -13,11 +13,6 @@ from ...blender.shader_nodes import outputs_detached
 from ...blender.transactions import track_created_datablock
 from ...core.addon_identity import get_addon_preferences, get_addon_version
 from ...core.log import get_logger, log_once
-from ...material_types.graph import (
-    bundle_principled_surface_links,
-    organize_material_graph,
-    organize_material_groups,
-)
 from ..parser import base_material_path
 from .cache import (
     _MATERIAL_CACHE,
@@ -35,13 +30,18 @@ from .cache import (
     structure_snapshot,
 )
 from .images import embedded_textures_of, record_material_placeholders
+from .layout import (
+    bundle_principled_surface_links,
+    organize_material_graph,
+    organize_material_groups,
+)
 from .profiling import (
     begin_material_phase,
     end_material_phase,
     finish_material_build,
     start_material_build,
 )
-from .registry import DECAL_REGISTRY, REGISTRY
+from .registry import DECAL_REGISTRY, REGISTRY, HandlerFactory
 
 _LOG = get_logger(__name__)
 
@@ -860,12 +860,8 @@ class MaterialBuilder:
                 )
 
             if self.experimental_features:
-                from ...material_types.unknown import unknownMaterial
-
-                unknown = unknownMaterial(
-                    self.BasePath,
-                    self.image_format,
-                    self.ProjPath,
+                unknown = HandlerFactory("unknown", "unknownMaterial", "bip")(
+                    self, rawMat
                 )
                 unknown.create(rawMat["Data"], bpyMat)
 
