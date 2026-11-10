@@ -134,6 +134,14 @@ def _closest_hit(tree, point, directions, max_distance):
     return best
 
 
+def _receiver_triangle(probe, receiver_tree, triangle_offset, directions, max_distance):
+    hit = (
+        _closest_hit(receiver_tree, probe, directions, max_distance)
+        or receiver_tree.find_nearest(probe)[2:]
+    )
+    return triangle_offset + hit[0]
+
+
 def _face_samples(center, corners, extent):
     """Points spread evenly over a face"""
     steps = min(_VOTE_MAX_STEPS, max(1, math.ceil(extent / _VOTE_SPACING)))
@@ -276,18 +284,18 @@ def bind_decal_receivers(
         receiver = votes.most_common(1)[0][0]
         face_receivers[face] = receiver
         receiver_tree, triangle_offset = receiver_data.receiver_trees[receiver]
-
-        def receiver_triangle(probe):
-            hit = (
-                _closest_hit(receiver_tree, probe, directions, max_distance)
-                or receiver_tree.find_nearest(probe)[2:]
-            )
-            return triangle_offset + hit[0]
-
-        anchors[face] = receiver_triangle(face_centers[face])
+        anchors[face] = _receiver_triangle(
+            face_centers[face], receiver_tree, triangle_offset, directions, max_distance
+        )
         for loop, triangle in zip(loops, hits):
             if triangle is None or triangle_receiver[triangle] != receiver:
-                triangle = receiver_triangle(probes[loop])
+                triangle = _receiver_triangle(
+                    probes[loop],
+                    receiver_tree,
+                    triangle_offset,
+                    directions,
+                    max_distance,
+                )
             corner_triangles[loop] = triangle
 
     corner_receivers = face_receivers[loop_faces]

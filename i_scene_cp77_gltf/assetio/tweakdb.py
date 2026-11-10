@@ -887,60 +887,21 @@ class TweakDatabase:
                 for index in range(count + 16)
             }
             named = {}
-
-            def rewrite(owner, field, value, source, slot=None):
-                if isinstance(value, FieldUpdate):
-                    return FieldUpdate(
-                        value.operation, rewrite(owner, field, value.value, source)
-                    )
-                if isinstance(value, list):
-                    targets = compiled.foreign_keys(f"{owner}.{field}") or ()
-                    names = [
-                        candidates[target] for target in targets if target in candidates
-                    ]
-                    names.reverse()
-                    result = []
-                    for item in value:
-                        if isinstance(item, dict) and names:
-                            result.append(
-                                rewrite(owner, field, item, source, slot=names.pop())
-                            )
-                        else:
-                            result.append(item)
-                    return result
-                if not isinstance(value, dict):
-                    return value
-                name = (
-                    slot
-                    if slot is not None
-                    else candidates.get(compiled.foreign_key(f"{owner}.{field}"))
-                )
-                if name is None:
-                    return value
-                fields = {
-                    key: rewrite(name, key, child, source)
-                    for key, child in value.items()
-                    if key not in _ATTRIBUTE_KEYS
-                }
-                named.setdefault(name, []).append(
-                    RecordDefinition(
-                        name,
-                        str(value.get("$base", "") or ""),
-                        fields,
-                        source,
-                        "tweak-inline",
-                        str(value.get("$type", "") or ""),
-                    )
-                )
-                return name
-
             rewritten = []
             for definition in definitions:
                 if definition.source_kind != "tweak":
                     rewritten.append(definition)
                     continue
                 fields = {
-                    key: rewrite(record_id, key, value, definition.source)
+                    key: _rewrite_inline(
+                        compiled,
+                        candidates,
+                        named,
+                        record_id,
+                        key,
+                        value,
+                        definition.source,
+                    )
                     for key, value in definition.fields.items()
                 }
                 rewritten.append(
@@ -1304,6 +1265,65 @@ def _inline_count(value):
     if isinstance(value, FieldUpdate):
         return _inline_count(value.value)
     return 0
+
+
+def _rewrite_inline(
+    compiled, candidates, named, owner, field, value, source, slot=None
+):
+    if isinstance(value, FieldUpdate):
+        return FieldUpdate(
+            value.operation,
+            _rewrite_inline(
+                compiled, candidates, named, owner, field, value.value, source
+            ),
+        )
+    if isinstance(value, list):
+        targets = compiled.foreign_keys(f"{owner}.{field}") or ()
+        names = [candidates[target] for target in targets if target in candidates]
+        names.reverse()
+        result = []
+        for item in value:
+            if isinstance(item, dict) and names:
+                result.append(
+                    _rewrite_inline(
+                        compiled,
+                        candidates,
+                        named,
+                        owner,
+                        field,
+                        item,
+                        source,
+                        slot=names.pop(),
+                    )
+                )
+            else:
+                result.append(item)
+        return result
+    if not isinstance(value, dict):
+        return value
+    name = (
+        slot
+        if slot is not None
+        else candidates.get(compiled.foreign_key(f"{owner}.{field}"))
+    )
+    if name is None:
+        return value
+    fields = {
+        key: _rewrite_inline(compiled, candidates, named, name, key, child, source)
+        for key, child in value.items()
+        if key not in _ATTRIBUTE_KEYS
+    }
+    named.setdefault(name, []).append(
+        RecordDefinition(
+            name,
+            str(value.get("$base", "") or ""),
+            fields,
+            source,
+            "tweak-inline",
+            str(value.get("$type", "") or ""),
+        )
+    )
+    return name
 
 
 def tweakxl_load_order(paths, root):

@@ -7,6 +7,7 @@ import time
 from bisect import bisect_right
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
+from functools import partial
 
 import bpy
 from mathutils import Matrix, Quaternion, Vector
@@ -1274,6 +1275,18 @@ def _content_nodes(sector_collection):
     return nodes
 
 
+def _volume_node(obj, *, nodes, owners, sector_name):
+    node = _item_node(obj) or next(
+        (
+            nodes[rna_identity(owner)]
+            for owner in owners[rna_identity(obj)]
+            if nodes.get(rna_identity(owner)) is not None
+        ),
+        None,
+    )
+    return None if node is None else (node[0] or sector_name, node[1])
+
+
 def _retire_new_channel_volumes(sector_collections, kept):
     """Keep the channel volumes this import placed as records on their sector collection"""
     retired = 0
@@ -1294,20 +1307,12 @@ def _retire_new_channel_volumes(sector_collections, kept):
         volumes = [
             obj for obj in sector_collection.all_objects if rna_identity(obj) in owners
         ]
-
-        def node_of(obj):
-            node = _item_node(obj) or next(
-                (
-                    nodes[rna_identity(owner)]
-                    for owner in owners[rna_identity(obj)]
-                    if nodes.get(rna_identity(owner)) is not None
-                ),
-                None,
-            )
-            return None if node is None else (node[0] or sector_name, node[1])
-
         retired += retire_light_channel_volumes(
-            sector_collection, volumes, node_of=node_of
+            sector_collection,
+            volumes,
+            node_of=partial(
+                _volume_node, nodes=nodes, owners=owners, sector_name=sector_name
+            ),
         )
         for owner_list in owners.values():
             for owner in owner_list:
