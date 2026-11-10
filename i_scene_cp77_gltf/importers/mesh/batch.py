@@ -9,6 +9,7 @@ from ...core.log import get_logger
 from ...gltf.provenance import inspect_glb
 from ...materials.repository import MaterialResourceRepository
 from .external import import_external_glb
+from .options import GlbImportOptions
 from .orchestration import import_cyberpunk_glb
 
 _LOG = get_logger(__name__)
@@ -39,16 +40,19 @@ def _import_file(context, path, request, documents, resources, report_owner, war
     if inspection.claims_cp77_origin and not inspection.direct_import_supported:
         raise ValueError(f"Unsupported CP77 payload: {kind}.")
     result = import_cyberpunk_glb(
+        context,
         path,
-        with_materials=request.with_materials,
-        remap_depot=request.remap_depot,
-        image_format=request.image_format,
-        hide_armatures=request.hide_armatures,
-        import_garmentsupport=request.import_garmentsupport,
-        appearances=request.appearances,
-        import_tracks=request.import_tracks,
-        animation_target=request.animation_target,
-        content_kind=kind,
+        GlbImportOptions(
+            with_materials=request.with_materials,
+            remap_depot=request.remap_depot,
+            image_format=request.image_format,
+            hide_armatures=request.hide_armatures,
+            import_garmentsupport=request.import_garmentsupport,
+            appearances=tuple(request.appearances),
+            import_tracks=request.import_tracks,
+            animation_target=request.animation_target,
+            content_kind=kind,
+        ),
         document_session=documents,
         material_resources=resources,
         report_owner=report_owner,

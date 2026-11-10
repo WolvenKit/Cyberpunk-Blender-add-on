@@ -29,6 +29,7 @@ from .materials.instance import cp77_materialinstance_export
 from .materials.multilayer_mask import cp77_mlmask_export
 from .materials.multilayer_setup import cp77_mlsetup_export
 from .materials.project_paths import default_project_output, replace_depot_suffix
+from .mesh.options import GlbExportOptions
 from .mesh.orchestration import export_cyberpunk_collections_glb, export_cyberpunk_glb
 from .mesh.writer import mesh_glb_path
 from .rig.writer import export_active_rig
@@ -703,20 +704,22 @@ class CP77GLBExport(ExportValidationProperties, Operator, ExportHelper):
             self,
             "Export",
             export_cyberpunk_glb,
-            context=context,
-            filepath=self.filepath,
-            export_poses=self.export_poses,
-            export_visible=self.export_visible,
-            limit_selected=self.limit_selected,
-            is_skinned=self.is_skinned,
-            try_fix=self.try_fix,
-            apply_transform=self.apply_transform,
-            apply_modifiers=self.apply_modifiers,
-            export_tracks=bool(self.export_tracks),
-            root_motion=self.root_motion,
-            selected_action_names=selected_action_names,
-            source_rig_path=self._selected_rig_path() if self.export_poses else "",
-            mesh_validation_options=_mesh_validation_options(self),
+            context,
+            self.filepath,
+            GlbExportOptions(
+                export_poses=self.export_poses,
+                export_visible=self.export_visible,
+                limit_selected=self.limit_selected,
+                is_skinned=self.is_skinned,
+                try_fix=self.try_fix,
+                apply_transform=self.apply_transform,
+                apply_modifiers=self.apply_modifiers,
+                export_tracks=bool(self.export_tracks),
+                root_motion=self.root_motion,
+                selected_action_names=selected_action_names,
+                source_rig_path=self._selected_rig_path() if self.export_poses else "",
+                mesh_validation_options=_mesh_validation_options(self),
+            ),
         )
 
 

@@ -6,6 +6,7 @@ from ..materials.blender.images import DEFAULT_IMAGE_FORMAT
 from .common.results import ImportResult
 from .entity.execution import import_entity
 from .entity.options import EntityImportRequest
+from .mesh.options import GlbImportOptions
 from .mesh.orchestration import import_cyberpunk_glb
 
 
@@ -39,15 +40,18 @@ def import_glb_for_script(
     panel_props = getattr(context.scene, "cp77_panel_props", None)
     remap_depot = bool(getattr(panel_props, "remap_depot", False))
     result = import_cyberpunk_glb(
-        with_materials=with_materials,
-        remap_depot=remap_depot,
-        image_format=image_format,
-        filepath=str(filepath),
-        hide_armatures=hide_armatures,
-        import_garmentsupport=import_garmentsupport,
-        appearances=_appearance_tuple(appearances),
-        import_tracks=import_tracks,
-        animation_target=animation_target,
+        context,
+        str(filepath),
+        GlbImportOptions(
+            with_materials=with_materials,
+            remap_depot=remap_depot,
+            image_format=image_format,
+            hide_armatures=hide_armatures,
+            import_garmentsupport=import_garmentsupport,
+            appearances=_appearance_tuple(appearances),
+            import_tracks=import_tracks,
+            animation_target=animation_target,
+        ),
     )
     return _raise_on_failure(result)
 

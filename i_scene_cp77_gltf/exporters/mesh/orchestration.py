@@ -13,6 +13,7 @@ from ...blender.selection import select_objects, set_active_collection
 from ...core.log import get_logger
 from ..animation.writer import export_animation
 from ..common.errors import ExportError
+from .options import GlbExportOptions
 from .scope import MeshExportScope, resolve_mesh_export_scope
 from .validation import format_fix_summary, prepare_meshes_for_export
 from .writer import export_mesh_glb_direct, mesh_glb_payload
@@ -155,19 +156,21 @@ def export_cyberpunk_collections_glb(
                     result = export_cyberpunk_glb(
                         context,
                         collection_path,
-                        export_poses=export_poses,
-                        export_visible=False,
-                        limit_selected=True,
-                        is_skinned=is_skinned,
-                        try_fix=try_fix,
-                        apply_transform=apply_transform,
-                        export_tracks=export_tracks,
-                        root_motion=root_motion,
-                        apply_modifiers=apply_modifiers,
-                        called_from_loop=True,
-                        mesh_validation_options=mesh_validation_options,
-                        mesh_scope=MeshExportScope(meshes, "collection"),
-                        excluded_objects=excluded_objects,
+                        GlbExportOptions(
+                            export_poses=export_poses,
+                            export_visible=False,
+                            limit_selected=True,
+                            is_skinned=is_skinned,
+                            try_fix=try_fix,
+                            apply_transform=apply_transform,
+                            export_tracks=export_tracks,
+                            root_motion=root_motion,
+                            apply_modifiers=apply_modifiers,
+                            called_from_loop=True,
+                            mesh_validation_options=mesh_validation_options,
+                            mesh_scope=MeshExportScope(meshes, "collection"),
+                            excluded_objects=excluded_objects,
+                        ),
                     )
                     if result.ok:
                         exported.append((collection.name, None, result.warnings))
@@ -195,26 +198,23 @@ def export_cyberpunk_collections_glb(
     return exported
 
 
-def export_cyberpunk_glb(
-    context,
-    filepath,
-    export_poses=False,
-    export_visible=False,
-    limit_selected=True,
-    is_skinned=True,
-    try_fix=False,
-    apply_transform=True,
-    export_tracks=False,
-    apply_modifiers=True,
-    called_from_loop=False,
-    selected_action_names=None,
-    mesh_validation_options=None,
-    mesh_scope=None,
-    excluded_objects=None,
-    root_motion="CLIP",
-    source_rig_path="",
-):
+def export_cyberpunk_glb(context, filepath, options):
     """Write the selected meshes, or the selected MetaRig's animations, as one Cyberpunk GLB"""
+    export_poses = options.export_poses
+    export_visible = options.export_visible
+    limit_selected = options.limit_selected
+    is_skinned = options.is_skinned
+    try_fix = options.try_fix
+    apply_transform = options.apply_transform
+    export_tracks = options.export_tracks
+    apply_modifiers = options.apply_modifiers
+    called_from_loop = options.called_from_loop
+    selected_action_names = options.selected_action_names
+    mesh_validation_options = options.mesh_validation_options
+    mesh_scope = options.mesh_scope
+    excluded_objects = options.excluded_objects
+    root_motion = options.root_motion
+    source_rig_path = options.source_rig_path
     snapshot = None if called_from_loop else BlenderContextSnapshot().store()
     selected_objects = tuple(context.selected_objects)
     try:

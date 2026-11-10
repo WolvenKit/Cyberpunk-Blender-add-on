@@ -45,6 +45,7 @@ from ...meshes.repository import (
     is_physical_scene,
 )
 from ..mesh.document import decode_mesh_glb
+from ..mesh.options import GlbImportOptions
 from ..mesh.orchestration import (
     ensure_collection_material_coverage,
     import_cyberpunk_glb,
@@ -1594,20 +1595,25 @@ def meshes_from_mesheswapps(
                 import_started = time.perf_counter()
                 import_cpu_started = time.process_time()
                 imported_results = import_cyberpunk_glb(
-                    with_materials=with_mats,
-                    remap_depot=props.remap_depot,
-                    filepath=meshpath,
-                    appearances=apps,
+                    bpy.context,
+                    meshpath,
+                    GlbImportOptions(
+                        with_materials=with_mats,
+                        remap_depot=props.remap_depot,
+                        import_garmentsupport=False,
+                        appearances=tuple(apps or ()),
+                        import_tracks=False,
+                        bulk_import=True,
+                        collection_name=groupname,
+                        select_objects=False,
+                        appearance_variants=False,
+                    ),
                     document_session=document_session,
                     material_resources=material_resources,
                     transaction=transaction,
-                    bulk_import=True,
                     collection_parent=Masters,
-                    collection_name=groupname,
-                    select_objects=False,
                     decoded_mesh_data=decoded_mesh_data,
                     timing=debug_timings,
-                    appearance_variants=False,
                 )
                 import_elapsed += time.perf_counter() - import_started
                 import_cpu_elapsed += time.process_time() - import_cpu_started

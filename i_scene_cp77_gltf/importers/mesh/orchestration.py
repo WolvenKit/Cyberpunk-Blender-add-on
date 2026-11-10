@@ -1177,34 +1177,35 @@ def ensure_collection_material_coverage(
 
 
 def import_cyberpunk_glb(
+    context,
     filepath,
+    options,
     *,
-    with_materials=False,
-    remap_depot=False,
-    exclude_unused_mats=True,
-    image_format=DEFAULT_IMAGE_FORMAT,
-    hide_armatures=True,
-    import_garmentsupport=False,
-    appearances=None,
-    import_tracks=False,
-    animation_target=None,
     document_session=None,
     material_resources=None,
-    content_kind=None,
     transaction=None,
-    bulk_import=False,
     collection_parent=None,
-    collection_name: str = "",
-    select_objects: bool = True,
     decoded_mesh_data=None,
     report_owner=None,
     timing=None,
-    appearance_variants=True,
 ):
+    with_materials = options.with_materials
+    remap_depot = options.remap_depot
+    exclude_unused_mats = options.exclude_unused_mats
+    image_format = options.image_format
+    hide_armatures = options.hide_armatures
+    import_garmentsupport = options.import_garmentsupport
+    appearances = options.appearances
+    import_tracks = options.import_tracks
+    animation_target = options.animation_target
+    content_kind = options.content_kind
+    bulk_import = options.bulk_import
+    collection_name = options.collection_name
+    select_objects = options.select_objects
+    appearance_variants = options.appearance_variants
     prefs = get_addon_preferences()
     detailed_logging = _LOG.isEnabledFor(logging.DEBUG) and not bulk_import
-    context = bpy.context
-    appearances = appearances or []
+    appearances = list(appearances or ())
     imported_animation = False
     succeeded = False
 

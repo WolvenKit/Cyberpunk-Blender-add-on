@@ -157,6 +157,38 @@ def _program_node_diagnostic(entry) -> dict[str, Any] | None:
     }
 
 
+_STRUCTURED_KINDS = (
+    "POSE_OP",
+    "LOOK_AT_CONTROLLER",
+    "FACIAL_MIXER",
+    "TRAJECTORY_FROM_META_POSE",
+    "SHARED_META_POSE",
+    "FACIAL_SHARED_META_POSE",
+    "SHARED_META_POSE_ADDITIVE",
+    "IDENTITY",
+    "SK_ANIM",
+    "STACK_TRANSFORMS_EXTEND",
+    "STACK_TRANSFORMS_SHRINK",
+    "STACK_TRACKS_EXTEND",
+    "STACK_TRACKS_SHRINK",
+    "STATE_MACHINE",
+    "SLOT_PASSTHROUGH",
+    "SWITCH",
+    "BLEND_TWO",
+    "INERTIALIZATION",
+    "BLEND_MULTIPLE",
+    "BLEND_MASK_DYNAMIC",
+    "WORKSPOT_HUB",
+    "NPC_EXPLORATION",
+)
+
+
+def _has_structured_nodes(plan) -> bool:
+    return bool(plan.blend_handles) or any(
+        program_handles(plan.root, kind=kind) for kind in _STRUCTURED_KINDS
+    )
+
+
 class AnimGraphRuntime:
     def __init__(
         self,
@@ -638,9 +670,7 @@ class AnimGraphRuntime:
         chain.reverse()
         return tuple(chain)
 
-    def _compile_structured(self, source_payload: Mapping[str, Any]) -> None:
-        if not self.host.has_graph:
-            return
+    def _compile_pose_plan(self, source_payload: Mapping[str, Any]):
         root_chunk = source_payload.get("Data", {}).get("RootChunk", {})
         root_reference = root_chunk.get("rootNode")
         self._source_root_reference = root_reference
@@ -713,9 +743,10 @@ class AnimGraphRuntime:
         )
         if plan.boundaries:
             raise ValueError("Graph preview unavailable: " + "\n".join(plan.boundaries))
-        if plan.root is None:
-            return
-        stack = [plan.root]
+        return plan
+
+    def _log_slot_condition_fallbacks(self, root) -> None:
+        stack = [root]
         seen_slots = set()
         while stack:
             program_node = stack.pop()
@@ -745,39 +776,11 @@ class AnimGraphRuntime:
                     str(program_node.data.get("selectedGraph", "") or ""),
                 )
             stack.extend(reversed(program_node.children))
-        has_structured_nodes = bool(plan.blend_handles) or any(
-            program_handles(plan.root, kind=kind)
-            for kind in (
-                "POSE_OP",
-                "LOOK_AT_CONTROLLER",
-                "FACIAL_MIXER",
-                "TRAJECTORY_FROM_META_POSE",
-                "SHARED_META_POSE",
-                "FACIAL_SHARED_META_POSE",
-                "SHARED_META_POSE_ADDITIVE",
-                "IDENTITY",
-                "SK_ANIM",
-                "STACK_TRANSFORMS_EXTEND",
-                "STACK_TRANSFORMS_SHRINK",
-                "STACK_TRACKS_EXTEND",
-                "STACK_TRACKS_SHRINK",
-                "STATE_MACHINE",
-                "SLOT_PASSTHROUGH",
-                "SWITCH",
-                "BLEND_TWO",
-                "INERTIALIZATION",
-                "BLEND_MULTIPLE",
-                "BLEND_MASK_DYNAMIC",
-                "WORKSPOT_HUB",
-                "NPC_EXPLORATION",
-            )
-        )
-        if not has_structured_nodes:
-            return
-        self.program = plan.root
+
+    def _collect_program_nodes(self, root) -> list:
         nodes = []
         seen = set()
-        stack = [plan.root]
+        stack = [root]
         while stack:
             program_node = stack.pop()
             identity = id(program_node)
@@ -811,6 +814,9 @@ class AnimGraphRuntime:
             stack.extend(program_node.children)
         self._stack_transform_names.discard("")
         self.stack_track_names.discard("")
+        return nodes
+
+    def _bind_program_nodes(self, nodes) -> None:
         self._program_steps = {
             id(node): (
                 node,
@@ -832,145 +838,155 @@ class AnimGraphRuntime:
             )
             self.required_tracks.update(self.facial_binding.track_names)
 
-        for program_node in nodes:
-            handle = normalized_source_handle(program_node.handle)
-            if program_node.kind == "POSE_OP":
-                if program_node.data:
-                    self._pure_pose_handles.add(handle)
-                    mapped = self._map_pure_pose_data(program_node)
-                    self._pose_plans[handle] = mapped
-                else:
-                    node = self._nodes.get(handle)
-                    if node is None:
-                        raise ValueError(
-                            f"AnimGraph pose operation handle {handle!r} is missing from the Blender graph"
-                        )
-                    prepared = self.host.prepare_node_operation(node)
-                    if prepared is not None:
-                        self._pose_plans[handle] = prepared
-                        self.required_bones.update(prepared.required_bones)
-                        self.required_tracks.update(prepared.requested_tracks)
-            elif program_node.kind == "LOOK_AT_CONTROLLER":
-                mapped = dict(program_node.data)
-                parts = []
-                for raw in mapped.get("orderedBodyParts", ()) or ():
-                    item = dict(raw)
-                    bone = str(item.get("defaultPositionBoneName", "") or "")
-                    item["defaultPositionBoneName"] = self.resolve_structured_bone(
-                        bone, required=False
-                    )
-                    parts.append(item)
-                mapped["orderedBodyParts"] = tuple(parts)
-                settings = []
-                for raw in mapped.get("stateMachinesSettings", ()) or ():
-                    item = dict(raw)
-                    bone = str(item.get("sphereAttachmentBone", "") or "")
-                    item["sphereAttachmentBone"] = self.resolve_structured_bone(
-                        bone, required=False
-                    )
-                    for key in (
-                        "enableFloatTrack",
-                        "eyesOverrideFloatTrack",
-                        "coneLimitReached",
-                    ):
-                        track = str(item.get(key, "") or "")
-                        item[key] = (
-                            self.resolve_structured_track(track, required=False)
-                            if track
-                            else ""
-                        )
-                    settings.append(item)
-                mapped["stateMachinesSettings"] = tuple(settings)
-                self.look_at_data[handle] = mapped
-                self.look_at_states[handle] = LookAtControllerState()
-                self.internal_graph_inputs.update(inactive_graph_inputs(mapped))
-            elif program_node.kind == "FACIAL_MIXER":
-                self.facial_mixer_data[handle] = dict(program_node.data)
-                self.facial_mixer_states[handle] = FacialMixerState()
-            elif program_node.kind == "TRAJECTORY_FROM_META_POSE":
-                target = str(program_node.data.get("metaPoseTrajectoryLs", "") or "")
-                target = (
-                    self.resolve_structured_bone(target, required=True)
-                    if target
+    def _compile_pose_op(self, handle, program_node) -> None:
+        if program_node.data:
+            self._pure_pose_handles.add(handle)
+            mapped = self._map_pure_pose_data(program_node)
+            self._pose_plans[handle] = mapped
+            return
+        node = self._nodes.get(handle)
+        if node is None:
+            raise ValueError(
+                f"AnimGraph pose operation handle {handle!r} is missing from the Blender graph"
+            )
+        prepared = self.host.prepare_node_operation(node)
+        if prepared is not None:
+            self._pose_plans[handle] = prepared
+            self.required_bones.update(prepared.required_bones)
+            self.required_tracks.update(prepared.requested_tracks)
+
+    def _compile_look_at(self, handle, program_node) -> None:
+        mapped = dict(program_node.data)
+        parts = []
+        for raw in mapped.get("orderedBodyParts", ()) or ():
+            item = dict(raw)
+            bone = str(item.get("defaultPositionBoneName", "") or "")
+            item["defaultPositionBoneName"] = self.resolve_structured_bone(
+                bone, required=False
+            )
+            parts.append(item)
+        mapped["orderedBodyParts"] = tuple(parts)
+        settings = []
+        for raw in mapped.get("stateMachinesSettings", ()) or ():
+            item = dict(raw)
+            bone = str(item.get("sphereAttachmentBone", "") or "")
+            item["sphereAttachmentBone"] = self.resolve_structured_bone(
+                bone, required=False
+            )
+            for key in (
+                "enableFloatTrack",
+                "eyesOverrideFloatTrack",
+                "coneLimitReached",
+            ):
+                track = str(item.get(key, "") or "")
+                item[key] = (
+                    self.resolve_structured_track(track, required=False)
+                    if track
                     else ""
                 )
-                source = self.resolve_structured_bone("Trajectory", required=True)
-                known_tracks = set(self.host.track_names())
-                predictive = ()
-                if all(name in known_tracks for name in PREDICTIVE_LOOK_AT_TRACKS):
-                    predictive = tuple(
-                        self.resolve_structured_track(name, required=True)
-                        for name in PREDICTIVE_LOOK_AT_TRACKS
-                    )
-                self._trajectory_meta_data[handle] = {
-                    "target": target,
-                    "source": source,
-                    "predictiveTracks": predictive,
-                }
-            elif program_node.kind == "BLEND_OVERRIDE":
-                mapped = dict(program_node.data)
-                mapped_bones = []
-                # A listed bone or track the rig does not have is skipped: one graph's lists (a weapon's, say)
-                # name bones only some of the rigs it runs on have.
-                for item in mapped.get("bones", ()):
-                    authored = str(item.get("bone", "") or "")
-                    resolved = self.resolve_structured_bone(authored)
-                    if resolved and authored not in self._missing_optional_bones:
-                        mapped_bones.append(
-                            {"bone": resolved, "weight": float(item.get("weight", 1.0))}
-                        )
-                        if (
-                            mapped.get("blendMethod") == "BoneBranch"
-                            and resolved not in self._stack_transform_names
-                        ):
-                            self.required_bones.update(
-                                self.host.bone_descendants(resolved)
-                            )
-                mapped["bones"] = tuple(mapped_bones)
-                mapped_tracks = []
-                for item in mapped.get("tracks", ()):
-                    name = str(item.get("track", "") or "")
-                    track = self.resolve_structured_track(name) if name else ""
-                    if track and name not in self._missing_optional_tracks:
-                        mapped_tracks.append(
-                            {"track": track, "weight": float(item.get("weight", 1.0))}
-                        )
-                mapped["tracks"] = tuple(mapped_tracks)
-                if bool(mapped.get("blendAllTracks", False)):
-                    self.required_tracks.update(self.host.track_names())
-                if mapped.get("blendMethod") == "Mask":
-                    self._require_rig_part_bones(mapped.get("maskName", ""))
-                self.blend_data[handle] = mapped
-                self.blend_active[handle] = False
-            elif program_node.kind == "BLEND_MASK_DYNAMIC":
-                for mask_name in program_node.data.get("masks", ()):
-                    self._require_rig_part_bones(mask_name)
-            elif program_node.kind == "BLEND_ADDITIVE":
-                mapped = dict(program_node.data)
-                self.additive_data[handle] = mapped
-                self.additive_masks[handle] = self._compile_additive_mask(
-                    str(mapped.get("maskName", "") or "")
+            settings.append(item)
+        mapped["stateMachinesSettings"] = tuple(settings)
+        self.look_at_data[handle] = mapped
+        self.look_at_states[handle] = LookAtControllerState()
+        self.internal_graph_inputs.update(inactive_graph_inputs(mapped))
+
+    def _compile_trajectory_meta_pose(self, handle, program_node) -> None:
+        target = str(program_node.data.get("metaPoseTrajectoryLs", "") or "")
+        target = self.resolve_structured_bone(target, required=True) if target else ""
+        source = self.resolve_structured_bone("Trajectory", required=True)
+        known_tracks = set(self.host.track_names())
+        predictive = ()
+        if all(name in known_tracks for name in PREDICTIVE_LOOK_AT_TRACKS):
+            predictive = tuple(
+                self.resolve_structured_track(name, required=True)
+                for name in PREDICTIVE_LOOK_AT_TRACKS
+            )
+        self._trajectory_meta_data[handle] = {
+            "target": target,
+            "source": source,
+            "predictiveTracks": predictive,
+        }
+
+    def _compile_blend_override(self, handle, program_node) -> None:
+        mapped = dict(program_node.data)
+        mapped_bones = []
+        # A listed bone or track the rig does not have is skipped: one graph's lists (a weapon's, say)
+        # name bones only some of the rigs it runs on have.
+        for item in mapped.get("bones", ()):
+            authored = str(item.get("bone", "") or "")
+            resolved = self.resolve_structured_bone(authored)
+            if resolved and authored not in self._missing_optional_bones:
+                mapped_bones.append(
+                    {"bone": resolved, "weight": float(item.get("weight", 1.0))}
                 )
-                self.additive_active[handle] = False
-                previous_track = str(mapped.get("previousFrameWeightTrack", "") or "")
-                if previous_track:
-                    mapped["previousFrameWeightTrack"] = self.resolve_structured_track(
-                        previous_track, required=True
-                    )
-                    self.additive_previous_track_values[handle] = float(
-                        mapped.get("previousFrameWeightDefault", 0.0) or 0.0
-                    )
-                if str(mapped.get("blendTracks", "AGBT_Add")).split("::")[-1] not in {
-                    "AGBT_BasePose",
-                    "BasePose",
-                    "0",
-                }:
-                    self.required_tracks.update(self.host.track_names())
+                if (
+                    mapped.get("blendMethod") == "BoneBranch"
+                    and resolved not in self._stack_transform_names
+                ):
+                    self.required_bones.update(self.host.bone_descendants(resolved))
+        mapped["bones"] = tuple(mapped_bones)
+        mapped_tracks = []
+        for item in mapped.get("tracks", ()):
+            name = str(item.get("track", "") or "")
+            track = self.resolve_structured_track(name) if name else ""
+            if track and name not in self._missing_optional_tracks:
+                mapped_tracks.append(
+                    {"track": track, "weight": float(item.get("weight", 1.0))}
+                )
+        mapped["tracks"] = tuple(mapped_tracks)
+        if bool(mapped.get("blendAllTracks", False)):
+            self.required_tracks.update(self.host.track_names())
+        if mapped.get("blendMethod") == "Mask":
+            self._require_rig_part_bones(mapped.get("maskName", ""))
+        self.blend_data[handle] = mapped
+        self.blend_active[handle] = False
 
-            elif program_node.kind in {"SK_ANIM", "WORKSPOT_HUB", "NPC_EXPLORATION"}:
-                self.required_bones.update(self.owned_bones)
-                self.required_tracks.update(self.host.track_names())
+    def _compile_blend_additive(self, handle, program_node) -> None:
+        mapped = dict(program_node.data)
+        self.additive_data[handle] = mapped
+        self.additive_masks[handle] = self._compile_additive_mask(
+            str(mapped.get("maskName", "") or "")
+        )
+        self.additive_active[handle] = False
+        previous_track = str(mapped.get("previousFrameWeightTrack", "") or "")
+        if previous_track:
+            mapped["previousFrameWeightTrack"] = self.resolve_structured_track(
+                previous_track, required=True
+            )
+            self.additive_previous_track_values[handle] = float(
+                mapped.get("previousFrameWeightDefault", 0.0) or 0.0
+            )
+        if str(mapped.get("blendTracks", "AGBT_Add")).split("::")[-1] not in {
+            "AGBT_BasePose",
+            "BasePose",
+            "0",
+        }:
+            self.required_tracks.update(self.host.track_names())
 
+    def _compile_node_data(self, program_node) -> None:
+        handle = normalized_source_handle(program_node.handle)
+        kind = program_node.kind
+        if kind == "POSE_OP":
+            self._compile_pose_op(handle, program_node)
+        elif kind == "LOOK_AT_CONTROLLER":
+            self._compile_look_at(handle, program_node)
+        elif kind == "FACIAL_MIXER":
+            self.facial_mixer_data[handle] = dict(program_node.data)
+            self.facial_mixer_states[handle] = FacialMixerState()
+        elif kind == "TRAJECTORY_FROM_META_POSE":
+            self._compile_trajectory_meta_pose(handle, program_node)
+        elif kind == "BLEND_OVERRIDE":
+            self._compile_blend_override(handle, program_node)
+        elif kind == "BLEND_MASK_DYNAMIC":
+            for mask_name in program_node.data.get("masks", ()):
+                self._require_rig_part_bones(mask_name)
+        elif kind == "BLEND_ADDITIVE":
+            self._compile_blend_additive(handle, program_node)
+        elif kind in {"SK_ANIM", "WORKSPOT_HUB", "NPC_EXPLORATION"}:
+            self.required_bones.update(self.owned_bones)
+            self.required_tracks.update(self.host.track_names())
+
+    def _compile_stack_data(self, nodes) -> None:
         # Pair by tag; serialized editor IDs are not runtime authority.
         transform_remove_counts = self._stack_remove_counts(
             "animAnimNode_StackTransformsExtender",
@@ -991,8 +1007,9 @@ class AnimGraphRuntime:
                     mapped["removeCount"] = track_remove_counts.get(handle, 0)
                 self._stack_data_by_handle[handle] = mapped
 
-        dangle_handles = tuple(program_handles(plan.root, kind="DANGLE"))
-        drag_handles = tuple(program_handles(plan.root, kind="DRAG"))
+    def _compile_pose_bridge(self, root) -> tuple[tuple, tuple]:
+        dangle_handles = tuple(program_handles(root, kind="DANGLE"))
+        drag_handles = tuple(program_handles(root, kind="DRAG"))
         self._red_pose_bridge = bool(
             (
                 (self.owner_scope_bound and self._meta_rig_merged_data is not None)
@@ -1017,9 +1034,9 @@ class AnimGraphRuntime:
             )
         if dangle_handles:
             self.required_bones.update(self.host.structured_base_frame_requirements())
+        return dangle_handles, drag_handles
 
-        self.required_bones.update(self.host.with_ancestor_bones(self.required_bones))
-        self._linear_program = self._build_linear_program(plan.root)
+    def _compile_input_capture(self) -> None:
         self._input_capture_bones = ()
         if (
             self._red_pose_bridge
@@ -1047,7 +1064,8 @@ class AnimGraphRuntime:
                 len(dependency_only),
                 dependency_only,
             )
-        self.structured = True
+
+    def _log_structured_compile(self, root, dangle_handles, drag_handles) -> None:
         if self._missing_optional_bones or self._missing_optional_tracks:
             _LOG.debug(
                 "AnimGraph optional bindings unavailable and inactive: bones=%r tracks=%r",
@@ -1058,11 +1076,11 @@ class AnimGraphRuntime:
             "Compiled branch-local AnimGraph preview: lod=%d performance_mode=%s blend_override=%d blend_additive=%d shared_meta=%d shared_meta_additive=%d trajectory_meta=%d dangles=%d drags=%d pose_ops=%d stack_transforms=%d stack_tracks=%d",
             self.host.settings.skeletal_lod,
             self.host.settings.performance_mode,
-            len(program_handles(plan.root, kind="BLEND_OVERRIDE")),
-            len(program_handles(plan.root, kind="BLEND_ADDITIVE")),
-            len(program_handles(plan.root, kind="SHARED_META_POSE")),
-            len(program_handles(plan.root, kind="SHARED_META_POSE_ADDITIVE")),
-            len(program_handles(plan.root, kind="TRAJECTORY_FROM_META_POSE")),
+            len(program_handles(root, kind="BLEND_OVERRIDE")),
+            len(program_handles(root, kind="BLEND_ADDITIVE")),
+            len(program_handles(root, kind="SHARED_META_POSE")),
+            len(program_handles(root, kind="SHARED_META_POSE_ADDITIVE")),
+            len(program_handles(root, kind="TRAJECTORY_FROM_META_POSE")),
             len(dangle_handles),
             len(drag_handles),
             len(self._pose_plans),
@@ -1078,6 +1096,28 @@ class AnimGraphRuntime:
             _LOG.debug(
                 "AnimGraph pose bridge: REDengine local pose -> Blender bone-space output"
             )
+
+    def _compile_structured(self, source_payload: Mapping[str, Any]) -> None:
+        if not self.host.has_graph:
+            return
+        plan = self._compile_pose_plan(source_payload)
+        if plan.root is None:
+            return
+        self._log_slot_condition_fallbacks(plan.root)
+        if not _has_structured_nodes(plan):
+            return
+        self.program = plan.root
+        nodes = self._collect_program_nodes(plan.root)
+        self._bind_program_nodes(nodes)
+        for program_node in nodes:
+            self._compile_node_data(program_node)
+        self._compile_stack_data(nodes)
+        dangle_handles, drag_handles = self._compile_pose_bridge(plan.root)
+        self.required_bones.update(self.host.with_ancestor_bones(self.required_bones))
+        self._linear_program = self._build_linear_program(plan.root)
+        self._compile_input_capture()
+        self.structured = True
+        self._log_structured_compile(plan.root, dangle_handles, drag_handles)
 
     def _compile(self, source_handles: tuple[str, ...]) -> None:
         if not self.host.has_graph:
