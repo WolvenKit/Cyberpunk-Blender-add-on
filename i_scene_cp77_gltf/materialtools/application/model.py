@@ -100,24 +100,17 @@ class MultilayerTemplateLoadResult:
 
 @dataclass(frozen=True, slots=True)
 class MaterialDepotScanResult:
-    loaded_count: int
-    setup_count: int
+    template_count: int
+    microblend_loaded_count: int
+    microblend_existing_count: int
     failures: tuple[str, ...]
     collision_count: int
     first_palette: Any = None
 
     @property
     def succeeded(self) -> bool:
-        return bool(self.loaded_count or self.setup_count)
-
-
-@dataclass(frozen=True, slots=True)
-class MicroblendLoadResult:
-    loaded_count: int
-    existing_count: int
-    failures: tuple[str, ...]
-    collision_count: int
-
-    @property
-    def succeeded(self) -> bool:
-        return bool(self.loaded_count or self.existing_count)
+        return bool(
+            self.template_count
+            or self.microblend_loaded_count
+            or self.microblend_existing_count
+        )

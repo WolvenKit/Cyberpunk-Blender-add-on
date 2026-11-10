@@ -22,9 +22,8 @@ from ...importers.mesh.orchestration import MaterialReloadError, reload_material
 from ...materials.blender import multilayer as multilayer_service
 from ..application.execution import (
     create_material_from_template,
-    load_depot_microblends,
     load_multilayer_template,
-    scan_multilayer_templates,
+    scan_material_depot,
 )
 from ..application.options import (
     MATERIAL_TEMPLATE_COOKED_EXTENSION,
@@ -423,61 +422,6 @@ class CP77_OT_LoadMaterialTemplate(Operator):
             return {"CANCELLED"}
 
 
-class CP77_OT_LoadDepotMicroblends(Operator):
-    bl_idname = "cp77.load_depot_microblends"
-    bl_label = "Load Depot Microblends"
-    bl_description = "Scan the Material Tools depot and load every image whose path contains microblend"
-    bl_options = {"REGISTER", "UNDO"}
-
-    @import_operation
-    def execute(self, context):
-        props = context.scene.cp77_ml_props
-        root = ensure_material_depot_path(context, props)
-        if not os.path.isdir(root):
-            report(
-                self,
-                "ERROR",
-                "Select a valid material depot folder in Material Tools.",
-                logger=_LOG,
-            )
-            return {"CANCELLED"}
-        try:
-            result = load_depot_microblends(root)
-        except Exception as error:
-            report(self, "ERROR", str(error), logger=_LOG, error=error)
-            return {"CANCELLED"}
-        if not result.succeeded and not result.failures:
-            report(
-                self,
-                "WARNING",
-                "No microblend images were found in the depot",
-                logger=_LOG,
-            )
-            return {"CANCELLED"}
-
-        failure_text = f"; {len(result.failures)} failed" if result.failures else ""
-        collision_text = (
-            f"; {result.collision_count} path collision(s)"
-            if result.collision_count
-            else ""
-        )
-        message = (
-            f"Loaded {result.loaded_count} microblend image(s); "
-            f"{result.existing_count} already present{failure_text}{collision_text}"
-        )
-        if result.failures:
-            _LOG.warning(
-                "Microblend image scan: %d failure(s); first: %s",
-                len(result.failures),
-                "; ".join(result.failures[:3]),
-            )
-            _LOG.debug(
-                "Microblend image scan failures:\n  %s", "\n  ".join(result.failures)
-            )
-        report(self, {"WARNING"} if result.failures else {"INFO"}, message, logger=_LOG)
-        return {"FINISHED"} if result.succeeded else {"CANCELLED"}
-
-
 class CP77_OT_LoadMultilayerTemplate(Operator):
     bl_idname = "cp77.load_multilayer_template"
     bl_label = "Add Multilayer Template"
@@ -545,7 +489,7 @@ class CP77_OT_ApplyMultilayerTemplate(Operator):
 class CP77_OT_ScanMaterialDepot(Operator):
     bl_idname = "cp77.scan_material_depot"
     bl_label = "Scan Multilayer Template Depot"
-    bl_options = {"REGISTER"}
+    bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
         props = context.scene.cp77_ml_props
@@ -559,7 +503,7 @@ class CP77_OT_ScanMaterialDepot(Operator):
             )
             return {"CANCELLED"}
         try:
-            result = scan_multilayer_templates(root)
+            result = scan_material_depot(root)
         except Exception as error:
             report(self, "ERROR", str(error), logger=_LOG, error=error)
             return {"CANCELLED"}
@@ -579,18 +523,19 @@ class CP77_OT_ScanMaterialDepot(Operator):
         )
         failure_text = f"; {len(result.failures)} failed" if result.failures else ""
         message = (
-            f"Found {result.setup_count} MLSETUP files; "
-            f"loaded {result.loaded_count} MLTEMPLATE files"
+            f"Loaded {result.template_count} MLTEMPLATE files and "
+            f"{result.microblend_loaded_count} microblend image(s); "
+            f"{result.microblend_existing_count} already present"
             f"{failure_text}{collision_text}"
         )
         if result.failures:
             _LOG.warning(
-                "Multilayer template scan: %d failure(s); first: %s",
+                "Material depot scan: %d failure(s); first: %s",
                 len(result.failures),
                 "; ".join(result.failures[:3]),
             )
             _LOG.debug(
-                "Multilayer template scan failures:\n  %s", "\n  ".join(result.failures)
+                "Material depot scan failures:\n  %s", "\n  ".join(result.failures)
             )
         report(self, "WARNING" if result.failures else "INFO", message, logger=_LOG)
         return {"FINISHED"} if result.succeeded else {"CANCELLED"}
@@ -672,7 +617,6 @@ MATERIAL_OPERATOR_CLASSES = (
     CP77MlSetupCreateMultilayerMaterial,
     CP77MlSetupRelocateMesh,
     CP77_OT_LoadMaterialTemplate,
-    CP77_OT_LoadDepotMicroblends,
     CP77_OT_LoadMultilayerTemplate,
     CP77_OT_ApplyMultilayerTemplate,
     CP77_OT_ScanMaterialDepot,

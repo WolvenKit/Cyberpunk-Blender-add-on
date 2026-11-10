@@ -59,7 +59,6 @@ MULTILAYER_TEMPLATE_COOKED_EXTENSION = _canonical_cooked_extension(
     ResourceKind.MLTEMPLATE
 )
 MATERIAL_TEMPLATE_EXTENSION = _json_export_extensions(ResourceKind.MATERIAL_TEMPLATE)[0]
-MULTILAYER_SETUP_EXTENSION = _json_export_extensions(ResourceKind.MLSETUP)[0]
 MULTILAYER_TEMPLATE_EXTENSION = _json_export_extensions(ResourceKind.MLTEMPLATE)[0]
 MATERIAL_TOOL_RESOURCE_EXTENSIONS = tuple(
     dict.fromkeys(
@@ -82,6 +81,7 @@ class MaterialToolsRequest:
     root: str
     extensions: tuple[str, ...] = MATERIAL_TOOL_RESOURCE_EXTENSIONS
     index_policy: IndexPolicy = IndexPolicy.REUSE
+    path_contains: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         root = LocalPath.from_value(self.root).value if self.root else ""

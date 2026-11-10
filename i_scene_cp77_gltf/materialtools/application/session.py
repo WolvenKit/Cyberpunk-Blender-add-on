@@ -66,6 +66,7 @@ class MaterialToolsSession:
                     self.request.root,
                     self.request.extensions,
                     policy=self.request.index_policy,
+                    path_contains=dict(self.request.path_contains),
                 )
             else:
                 self.asset_index = None
