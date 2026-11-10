@@ -356,7 +356,7 @@ def _scan(tree, container) -> tuple:
 
 
 def _build(sm_tree, space=None) -> tuple:
-    """(segments, tree scale) for sm_tree (see wire_segments)"""
+    """(segments, tree scale) for sm_tree"""
     if sm_tree is None:
         return [], 1.0
     try:
@@ -408,11 +408,6 @@ def _build(sm_tree, space=None) -> tuple:
             )
             continue
     return segments, scale
-
-
-def wire_segments(sm_tree, space=None) -> list:
-    """One (start, end, rgba, width) per transition that has a distinct, known target"""
-    return _build(sm_tree, space)[0]
 
 
 def _current_tree():

@@ -199,7 +199,7 @@ def _signature_prefix(
     ).encode("utf-8")
 
 
-def _set_hashed_render_method(material):
+def _set_dithered_render_method(material):
     material.surface_render_method = "DITHERED"
 
 
@@ -577,7 +577,7 @@ class MaterialBuilder:
             )
             finalize_started = begin_material_phase()
             try:
-                _set_hashed_render_method(bpyMat)
+                _set_dithered_render_method(bpyMat)
                 if not is_decal:
                     bpyMat["cp77_no_shadows"] = False
             finally:
@@ -718,7 +718,7 @@ class MaterialBuilder:
         finalize_started = begin_material_phase()
         try:
             if not rule.preserve_render_method:
-                _set_hashed_render_method(bpyMat)
+                _set_dithered_render_method(bpyMat)
             if not is_decal:
                 bpyMat["cp77_no_shadows"] = rule.no_shadows
         finally:
@@ -766,6 +766,7 @@ class MaterialBuilder:
 
         if not force_rebuild:
             lookup_started = begin_material_phase()
+            cached = prototype = None
             try:
                 cached = _lookup_cached(_MATERIAL_CACHE, signature)
                 if cached is not None:
@@ -800,14 +801,8 @@ class MaterialBuilder:
                             rawMat.get("Name", "") if isinstance(rawMat, dict) else ""
                         ),
                         metadata={
-                            "exactHit": (
-                                cached is not None if "cached" in locals() else False
-                            ),
-                            "prototypeHit": (
-                                prototype is not None
-                                if "prototype" in locals()
-                                else False
-                            ),
+                            "exactHit": cached is not None,
+                            "prototypeHit": prototype is not None,
                         },
                     )
         else:
@@ -875,7 +870,7 @@ class MaterialBuilder:
                 unknown.create(rawMat["Data"], bpyMat)
 
             _organize_material_graph(bpyMat)
-            _set_hashed_render_method(bpyMat)
+            _set_dithered_render_method(bpyMat)
             bpyMat["cp77_no_shadows"] = False
             return _cache_material(
                 signature,
@@ -913,6 +908,7 @@ class MaterialBuilder:
                 )
         if not force_rebuild:
             lookup_started = begin_material_phase()
+            cached = None
             try:
                 cached = _lookup_cached(_MATERIAL_CACHE, signature)
                 if cached is not None:
@@ -926,9 +922,7 @@ class MaterialBuilder:
                         "material.cache_lookup",
                         label=self.archive_material_name(),
                         metadata={
-                            "exactHit": (
-                                cached is not None if "cached" in locals() else False
-                            ),
+                            "exactHit": cached is not None,
                             "decal": True,
                         },
                     )
@@ -968,7 +962,7 @@ class MaterialBuilder:
             else:
                 _LOG.warning("Unhandled decal - missing baseMaterial DepotPath")
                 _organize_material_graph(bpyMat)
-                _set_hashed_render_method(bpyMat)
+                _set_dithered_render_method(bpyMat)
             return _cache_material(
                 signature,
                 signature,

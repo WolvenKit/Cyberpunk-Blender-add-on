@@ -17,6 +17,5 @@ class Invisible(MaterialTypeBase):
 
         mat_tree.links.new(transparent.outputs["BSDF"], output.inputs["Surface"])
 
-        # Render method is applied by setup._set_hashed_render_method after
-        # Keep backface culling enabled for invisible surfaces.
+        # The builder sets the render method after create; keep backface culling on.
         Mat.use_backface_culling = True

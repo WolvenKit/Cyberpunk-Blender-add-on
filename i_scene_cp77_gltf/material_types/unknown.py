@@ -64,7 +64,7 @@ class unknownMaterial(MaterialTypeBase):
                 imgy = imgy - imgydelta
 
             elif isinstance(Data[param], int) or isinstance(Data[param], float):
-                scalar = CreateShaderNodeValue(CurMat, Data[param], x, y, param)
+                CreateShaderNodeValue(CurMat, Data[param], x, y, param)
                 if code is not None:
                     code.append(
                         f"{param}Val = CreateShaderNodeValue(CurMat,Data['{param}'],{x},{y},'{param}')"
@@ -72,17 +72,13 @@ class unknownMaterial(MaterialTypeBase):
                 y = y - ydelta
             elif isinstance(Data[param], dict):
                 if "Red" in Data[param]:
-                    ColScale = CreateShaderNodeRGB(
-                        CurMat, Data[param], x, y, param, False
-                    )
+                    CreateShaderNodeRGB(CurMat, Data[param], x, y, param, False)
                     if code is not None:
                         code.append(
                             f"{param}Scale = CreateShaderNodeRGB(CurMat, Data['{param}'],{x},{y},'{param}',False)"
                         )
                 elif "Color" in param or "color" in param:
-                    ColScale = CreateShaderNodeRGB(
-                        CurMat, Data[param], x, y, param, True
-                    )
+                    CreateShaderNodeRGB(CurMat, Data[param], x, y, param, True)
                     if code is not None:
                         code.append(
                             f"{param}Scale = CreateShaderNodeRGB(CurMat, Data['{param}'],{x},{y},'{param}',True)"

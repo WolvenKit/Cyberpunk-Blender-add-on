@@ -47,6 +47,7 @@ from ..objects import new_empty
 from .decal_projection import PendingDecalProjection, project_pending_decals
 
 _LOG = get_logger(__name__)
+_FALLBACK_DECAL_COLOR = (1.0, 0.905, 0.062, 1.0)
 
 
 @dataclass(slots=True, frozen=True)
@@ -620,7 +621,7 @@ class DecalService:
     @staticmethod
     def fallback_wire(plane):
         plane.display_type = "WIRE"
-        plane.color = (1.0, 0.905, 0.062, 1.0)
+        plane.color = _FALLBACK_DECAL_COLOR
         plane.show_wire = True
         plane.display.show_shadows = False
 

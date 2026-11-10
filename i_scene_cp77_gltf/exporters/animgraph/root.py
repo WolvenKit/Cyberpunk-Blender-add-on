@@ -437,10 +437,8 @@ def encode_rootchunk_summary(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def write_graph_document(path: str, tree: bpy.types.NodeTree) -> dict[str, Any]:
-    """Write the graph tree belongs to as a WolvenKit AnimGraph document at path"""
+def write_graph_document(path: str, tree: bpy.types.NodeTree) -> str:
+    """Write the graph tree belongs to as a WolvenKit AnimGraph document at path, returning the text written"""
     from ...blender.animgraph.rig_binding import binding_tree
 
-    payload = encode_wolvenkit_json(binding_tree(tree))
-    write_json(path, payload)
-    return payload
+    return write_json(path, encode_wolvenkit_json(binding_tree(tree)))

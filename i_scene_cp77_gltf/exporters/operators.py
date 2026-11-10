@@ -805,7 +805,6 @@ class CP77HairProfileExport(Operator, ExportHelper):
     bl_idname = "export_scene.hp"
     bl_label = "Export Hair Profile"
     bl_description = "Generates a new .hp.json in your mod project folder which can be imported in WolvenKit"
-    bl_parent_id = "CP77_PT_MaterialTools"
 
     filepath: StringProperty(subtype="FILE_PATH")
     filename_ext = ".hp.json"
@@ -887,7 +886,6 @@ class CP77MlSetupExport(Operator):
     bl_label = "Export MLSetup"
     # A successful export points the material at the written setup.
     bl_options = {"REGISTER", "UNDO"}
-    bl_parent_id = "CP77_PT_MaterialTools"
     bl_description = "Export selected material to a mlsetup json file which can be converted in WolvenKit"
 
     filepath: StringProperty(subtype="FILE_PATH")

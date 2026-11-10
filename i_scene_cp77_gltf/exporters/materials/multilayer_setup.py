@@ -1,6 +1,5 @@
 import copy
 import json
-import ntpath
 import os
 
 import bpy
@@ -24,8 +23,6 @@ from .project_paths import project_raw_file, source_raw_relative
 
 _LOG = get_logger(__name__)
 
-prefix = ""
-
 
 _OVERRIDE_SPECS = (
     ("ColorScale", "colorScale", 3),
@@ -35,13 +32,6 @@ _OVERRIDE_SPECS = (
     ("RoughLevelsIn", "roughLevelsIn", 2),
     ("RoughLevelsOut", "roughLevelsOut", 2),
 )
-
-
-def prefix_mat(mltemplate):
-    value = str(mltemplate or "").replace("/", "\\")
-    directory, name = ntpath.split(value)
-    output_name = prefix + name
-    return ntpath.join(directory, output_name) if directory else output_name
 
 
 def make_rel(filepath):
@@ -263,6 +253,146 @@ def _resolve_layer_override(
     return name, True
 
 
+def _read_setup(setup_path, project_path, depot_path):
+    mlsetup = copy.deepcopy(
+        _load_rooted_json(str(setup_path) + ".json", project_path, depot_path)
+    )
+    root_chunk = mlsetup["Data"]["RootChunk"]
+    json_layers = root_chunk.get("layers")
+    if json_layers is None:
+        json_layers = root_chunk.get("Layers")
+    if not isinstance(json_layers, list):
+        raise ValueError("MLSetup has no layer list")
+    return mlsetup, json_layers
+
+
+def _layer_values(layer):
+    template_path = _layer_template_path(layer)
+    if not template_path:
+        raise KeyError("MLTemplate metadata")
+    values = {
+        "matTile": _socket_components(layer, "MatTile", 1),
+        "mbTile": _socket_components(layer, "MbTile", 1),
+        "microblendNormalStrength": _socket_components(
+            layer, "MicroblendNormalStrength", 1
+        ),
+        "microblendContrast": _socket_components(layer, "MicroblendContrast", 1),
+        "offsetU": _socket_components(layer, "OffsetU", 1),
+        "offsetV": _socket_components(layer, "OffsetV", 1),
+        "microblendOffsetU": _socket_components(layer, "MicroblendOffsetU", 1),
+        "microblendOffsetV": _socket_components(layer, "MicroblendOffsetV", 1),
+        "opacity": _socket_components(layer, "Opacity", 1),
+    }
+    override_values = {
+        "ColorScale": _socket_components(layer, "ColorScale", 3),
+        "NormalStrength": _socket_components(layer, "NormalStrength", 1),
+        "MetalLevelsIn": _socket_components(layer, "MetalLevelsIn", 2),
+        "MetalLevelsOut": _socket_components(layer, "MetalLevelsOut", 2),
+        "RoughLevelsIn": _socket_components(layer, "RoughLevelsIn", 2),
+        "RoughLevelsOut": _socket_components(layer, "RoughLevelsOut", 2),
+    }
+    return template_path, values, override_values, _microblend_path(layer)
+
+
+def _resolve_layers(json_layers, linked, project_path, depot_path, write_mltemplate):
+    layer_count = max(linked) + 1
+    while len(json_layers) < layer_count:
+        json_layers.append(_default_ml_layer())
+    del json_layers[layer_count:]
+
+    tolerance = 0.00001
+    template_states = {}
+    unmatched = []
+
+    for index in range(layer_count):
+        layer_number = index + 1
+        layer = linked.get(index)
+        if layer is None:
+            json_layers[index] = _default_ml_layer()
+            continue
+        json_layer = json_layers[index]
+        try:
+            template_path, values, override_values, microblend = _layer_values(layer)
+            state = _template_state(
+                template_states,
+                template_path,
+                project_path,
+                depot_path,
+            )
+        except (
+            AttributeError,
+            FileNotFoundError,
+            KeyError,
+            ReferenceError,
+            TypeError,
+            ValueError,
+        ) as error:
+            log_once(
+                _LOG,
+                "DEBUG",
+                ("cp77_mlsetup_export", type(error).__name__),
+                "cp77 mlsetup export: fell back after %s",
+                error,
+                exc_info=True,
+            )
+            raise ValueError(
+                f"Layer {layer_number} could not be exported: {error}"
+            ) from error
+
+        json_layer.update(values)
+        if microblend:
+            json_layer["microblend"]["DepotPath"]["$value"] = make_rel(microblend)
+        state["layers"].append(json_layer)
+        json_layer["material"]["DepotPath"]["$value"] = state["output"]
+
+        for table_key, json_key, dimensions in _OVERRIDE_SPECS:
+            value = override_values[table_key]
+            try:
+                name, created = _resolve_layer_override(
+                    state,
+                    table_key,
+                    json_key,
+                    value,
+                    dimensions,
+                    tolerance,
+                    bool(write_mltemplate),
+                    str((json_layer.get(json_key) or {}).get("$value", "") or ""),
+                )
+            except (KeyError, TypeError, ValueError) as error:
+                raise ValueError(
+                    f"{table_key} in Layer {layer_number} could not be written: {error}"
+                ) from error
+            if name is None:
+                unmatched.append((layer_number, table_key))
+                continue
+            json_layer[json_key]["$value"] = name
+            if created:
+                state["output"] = str(template_path or "").replace("/", "\\")
+                for layer_json in state["layers"]:
+                    layer_json["material"]["DepotPath"]["$value"] = state["output"]
+    return template_states, unmatched
+
+
+def _write_setup(mlsetuppath, mlsetup, dirty_states, project_path):
+    payloads = {
+        mlsetuppath: (json.dumps(mlsetup, indent=2, ensure_ascii=False) + "\n").encode(
+            "utf-8"
+        )
+    }
+    for state in dirty_states:
+        try:
+            # The template path comes from imported data, so it must stay inside the project.
+            output_path = project_raw_file(project_path, state["output"])
+        except ValueError as error:
+            raise ValueError(
+                f"Modified MLTemplate {state['output']} was not written: {error}"
+            ) from error
+        payloads[output_path] = (
+            json.dumps(state["json"], indent=2, ensure_ascii=False) + "\n"
+        ).encode("utf-8")
+    atomic_write_many(payloads)
+
+
 def cp77_mlsetup_export(context, mlsetuppath, write_mltemplate):
     """Write the active material's multilayer setup to mlsetuppath"""
     active_object = getattr(context, "active_object", None)
@@ -290,15 +420,7 @@ def cp77_mlsetup_export(context, mlsetuppath, write_mltemplate):
     project_path = active_material.get("cp77_project_path")
     depot_path = active_material.get("DepotPath")
     try:
-        mlsetup = copy.deepcopy(
-            _load_rooted_json(str(setup_path) + ".json", project_path, depot_path)
-        )
-        root_chunk = mlsetup["Data"]["RootChunk"]
-        json_layers = root_chunk.get("layers")
-        if json_layers is None:
-            json_layers = root_chunk.get("Layers")
-        if not isinstance(json_layers, list):
-            raise ValueError("MLSetup has no layer list")
+        mlsetup, json_layers = _read_setup(setup_path, project_path, depot_path)
     except (FileNotFoundError, KeyError, TypeError, ValueError) as error:
         return OperationResult.cancelled(
             f"Could not load {setup_path}: {error}", error=error
@@ -313,108 +435,12 @@ def cp77_mlsetup_export(context, mlsetuppath, write_mltemplate):
     }
     if not linked:
         return OperationResult.cancelled("No linked multilayer layers were found.")
-    layer_count = max(linked) + 1
-    while len(json_layers) < layer_count:
-        json_layers.append(_default_ml_layer())
-    del json_layers[layer_count:]
-
-    tolerance = 0.00001
-    template_states = {}
-    unmatched = []
-
-    for index in range(layer_count):
-        layer_number = index + 1
-        layer = linked.get(index)
-        if layer is None:
-            json_layers[index] = _default_ml_layer()
-            continue
-        json_layer = json_layers[index]
-        try:
-            template_path = _layer_template_path(layer)
-            if not template_path:
-                raise KeyError("MLTemplate metadata")
-            values = {
-                "matTile": _socket_components(layer, "MatTile", 1),
-                "mbTile": _socket_components(layer, "MbTile", 1),
-                "microblendNormalStrength": _socket_components(
-                    layer, "MicroblendNormalStrength", 1
-                ),
-                "microblendContrast": _socket_components(
-                    layer, "MicroblendContrast", 1
-                ),
-                "offsetU": _socket_components(layer, "OffsetU", 1),
-                "offsetV": _socket_components(layer, "OffsetV", 1),
-                "microblendOffsetU": _socket_components(layer, "MicroblendOffsetU", 1),
-                "microblendOffsetV": _socket_components(layer, "MicroblendOffsetV", 1),
-                "opacity": _socket_components(layer, "Opacity", 1),
-            }
-            override_values = {
-                "ColorScale": _socket_components(layer, "ColorScale", 3),
-                "NormalStrength": _socket_components(layer, "NormalStrength", 1),
-                "MetalLevelsIn": _socket_components(layer, "MetalLevelsIn", 2),
-                "MetalLevelsOut": _socket_components(layer, "MetalLevelsOut", 2),
-                "RoughLevelsIn": _socket_components(layer, "RoughLevelsIn", 2),
-                "RoughLevelsOut": _socket_components(layer, "RoughLevelsOut", 2),
-            }
-            microblend = _microblend_path(layer)
-            state = _template_state(
-                template_states,
-                template_path,
-                project_path,
-                depot_path,
-            )
-        except (
-            AttributeError,
-            FileNotFoundError,
-            KeyError,
-            ReferenceError,
-            TypeError,
-            ValueError,
-        ) as error:
-            log_once(
-                _LOG,
-                "DEBUG",
-                ("cp77_mlsetup_export", type(error).__name__),
-                "cp77 mlsetup export: fell back after %s",
-                error,
-                exc_info=True,
-            )
-            return OperationResult.cancelled(
-                f"Layer {layer_number} could not be exported: {error}", error=error
-            )
-
-        json_layer.update(values)
-        if microblend:
-            json_layer["microblend"]["DepotPath"]["$value"] = make_rel(microblend)
-        state["layers"].append(json_layer)
-        json_layer["material"]["DepotPath"]["$value"] = state["output"]
-
-        for table_key, json_key, dimensions in _OVERRIDE_SPECS:
-            value = override_values[table_key]
-            try:
-                name, created = _resolve_layer_override(
-                    state,
-                    table_key,
-                    json_key,
-                    value,
-                    dimensions,
-                    tolerance,
-                    bool(write_mltemplate),
-                    str((json_layer.get(json_key) or {}).get("$value", "") or ""),
-                )
-            except (KeyError, TypeError, ValueError) as error:
-                return OperationResult.cancelled(
-                    f"{table_key} in Layer {layer_number} could not be written: {error}",
-                    error=error,
-                )
-            if name is None:
-                unmatched.append((layer_number, table_key))
-                continue
-            json_layer[json_key]["$value"] = name
-            if created:
-                state["output"] = prefix_mat(template_path)
-                for layer_json in state["layers"]:
-                    layer_json["material"]["DepotPath"]["$value"] = state["output"]
+    try:
+        template_states, unmatched = _resolve_layers(
+            json_layers, linked, project_path, depot_path, write_mltemplate
+        )
+    except ValueError as error:
+        return OperationResult.cancelled(str(error), error=error)
 
     if unmatched:
         preview = ", ".join(f"Layer {layer}: {name}" for layer, name in unmatched[:6])
@@ -431,25 +457,10 @@ def cp77_mlsetup_export(context, mlsetuppath, write_mltemplate):
         return OperationResult.cancelled(
             "Modified MLTemplate overrides require a WolvenKit project path."
         )
-
-    payloads = {
-        mlsetuppath: (json.dumps(mlsetup, indent=2, ensure_ascii=False) + "\n").encode(
-            "utf-8"
-        )
-    }
-    for state in dirty_states:
-        try:
-            # The template path comes from imported data, so it must stay inside the project.
-            output_path = project_raw_file(project_path, state["output"])
-        except ValueError as error:
-            return OperationResult.cancelled(
-                f"Modified MLTemplate {state['output']} was not written: {error}",
-                error=error,
-            )
-        payloads[output_path] = (
-            json.dumps(state["json"], indent=2, ensure_ascii=False) + "\n"
-        ).encode("utf-8")
-    atomic_write_many(payloads)
+    try:
+        _write_setup(mlsetuppath, mlsetup, dirty_states, project_path)
+    except ValueError as error:
+        return OperationResult.cancelled(str(error), error=error)
 
     message = f"Exported MLSETUP from {active_material.name} on {active_object.name}"
     if dirty_states:

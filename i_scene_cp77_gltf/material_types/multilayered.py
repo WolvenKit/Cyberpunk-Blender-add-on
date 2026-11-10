@@ -1532,7 +1532,6 @@ class Multilayered(MaterialTypeBase):
         )
 
         TileMult = float(matTemplateObj.get("tilingMultiplier", 1))
-        colorMaskIn = matTemplateObj["colorMaskLevelsIn"]["Elements"]
         colorMaskOut = matTemplateObj["colorMaskLevelsOut"]["Elements"]
 
         cloned = _clone_template_group(
@@ -2534,7 +2533,7 @@ class Multilayered(MaterialTypeBase):
         CurMat = Mat.node_tree
         node_lookup = {n.name: n for n in CurMat.nodes}
 
-        orig_pbsdf = node_lookup.get("Principled BSDF")
+        orig_pbsdf = shader_nodes.principled_bsdf(CurMat.nodes)
 
         ml_surface = ml_surface_node_group()
         ml_surface.color_tag = "SHADER"
@@ -2577,7 +2576,7 @@ class Multilayered(MaterialTypeBase):
         if normal is not None:
             CurMat.links.new(surface_channels.outputs["Normal"], normal)
 
-        material_output = node_lookup.get("Material Output")
+        material_output = shader_nodes.material_output(CurMat.nodes)
         if material_output is None:
             material_output = create_node(
                 CurMat.nodes, "ShaderNodeOutputMaterial", (600, 120)

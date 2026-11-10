@@ -78,10 +78,6 @@ def _node_name(node: Any) -> str:
     return str(get_attr(node, "name", "<node>") or "<node>")
 
 
-def _node_label(node: Any) -> str:
-    return str(get_attr(node, "label", "") or _node_name(node))
-
-
 def _presenter_known(node_type: str, presenter_id: str) -> bool:
     if presenters is None:
         return bool(presenter_id)
@@ -303,7 +299,6 @@ def report_for_tree(tree: Any) -> dict:
         for node in getattr(tree_obj, "nodes", []) or []:
             counters["nodes_total"] += 1
             nname = _node_name(node)
-            nlabel = _node_label(node)
             nhandle = graph_index.node_handle(node)
             ntype = graph_index.node_type(node)
             exportable = graph_index.node_is_exportable(node)

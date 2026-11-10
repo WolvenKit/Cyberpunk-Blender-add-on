@@ -142,11 +142,6 @@ def _export(filename, use_yaml, include_heightfields):
     return paths, sectors, tuple(warnings)
 
 
-def export_sectors(filename, use_yaml, *, include_heightfields=False) -> dict:
-    """Write the .xl holding the edits of the scene's imported sectors and its new sectors"""
-    return _export(filename, use_yaml, include_heightfields)[0]
-
-
 def export_project_sectors(
     filename, use_yaml, *, include_heightfields=False
 ) -> OperationResult:
@@ -163,4 +158,5 @@ def export_project_sectors(
         f"Exported {os.path.basename(paths['archive_xl_path'])}: {len(edited)} sectors edited, {moved} placements "
         f"moved, {deleted} deleted, {len(paths['sector_paths'])} new sectors.",
         warnings=warnings,
+        paths=paths,
     )

@@ -12,7 +12,6 @@ from .dangle_animgraph import (
 )
 from .dangle_editing import (
     DANGLE_OT_add_chain,
-    DANGLE_OT_add_dangle_node,
     DANGLE_OT_add_ellipsoid,
     DANGLE_OT_add_link,
     DANGLE_OT_add_particle,
@@ -109,7 +108,6 @@ DANGLE_OPERATOR_CLASSES = (
     DANGLE_OT_preview_whole_graph,
     DANGLE_OT_push_to_editor,
     DANGLE_OT_pull_from_editor,
-    DANGLE_OT_add_dangle_node,
     DANGLE_OT_remove_dangle_node,
     DANGLE_OT_add_chain,
     DANGLE_OT_remove_chain,

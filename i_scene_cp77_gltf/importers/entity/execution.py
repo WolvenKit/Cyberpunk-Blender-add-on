@@ -150,7 +150,6 @@ def _import_entity_impl(request: EntityImportRequest, *, progress=NO_PROGRESS):
     parent_collection_name = request.parent_collection_name
     animation_files = request.animation_files
     include_animations = request.include_animations
-    generate_overrides = request.generate_overrides
     parsed_entity = request.parsed_entity
     imported_collections_out = request.imported_collections_out
     imported_rigs_out = request.imported_rigs_out

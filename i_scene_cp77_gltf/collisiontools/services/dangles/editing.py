@@ -68,18 +68,6 @@ def _waits_for_preview(edit):
     return guarded
 
 
-def add_dangle_node_for_rig(rig):
-    if rig is None:
-        return OperationResult.cancelled()
-    return OperationResult.cancelled(
-        "New Dangle creation is unavailable until pose-chain insertion is supported."
-    )
-
-
-def add_dangle_node(context):
-    return add_dangle_node_for_rig(get_active_rig(context))
-
-
 @_waits_for_preview
 def remove_dangle_node(context):
     rig = get_active_rig(context)

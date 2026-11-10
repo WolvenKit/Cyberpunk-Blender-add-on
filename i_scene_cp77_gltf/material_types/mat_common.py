@@ -9,7 +9,7 @@ from ..blender.shader_nodes import set_default_if_changed
 from ..blender.transactions import new_tracked_datablock
 from ..core.log import get_logger
 from ..materials.blender.helper_caches import register_helper_cache
-from ..materials.blender.images import imageFromRelPath, resolve_relative_image_path
+from ..materials.blender.images import imageFromRelPath
 from ..materials.blender.nodes import (
     CreateRebildNormalGroup,
     CreateShaderNodeValue,
@@ -59,17 +59,6 @@ class MaterialTypeBase:
             self.image_format,
             **options,
         )
-
-    def found(self, texture_path):
-        result = depot_texture_exists(
-            texture_path,
-            self.image_format,
-            self.BasePath,
-            self.ProjPath,
-        )
-        if not result:
-            _LOG.warning("Texture not found: %s", texture_path)
-        return result
 
     def _load_relative_image(
         self,
@@ -259,13 +248,9 @@ def populate_color_ramp(ramp_node, entries, alpha=1.0):
 
 _DECAL_VALUES_CACHE = OrderedDict()
 _DECAL_VALUES_CACHE_LIMIT = 2048
-_TEXTURE_RESOLUTION_CACHE = OrderedDict()
-_TEXTURE_RESOLUTION_CACHE_LIMIT = 4096
 _DECAL_HELPER_STATS = {
     "value_hits": 0,
     "value_misses": 0,
-    "path_hits": 0,
-    "path_misses": 0,
 }
 
 
@@ -305,55 +290,15 @@ def decal_values(data, priority=()):
     return result
 
 
-def resolve_depot_texture(texture_path, image_format, depot_path, proj_path=""):
-    """Resolve a decal texture through the canonical indexed image boundary"""
-    if not texture_path:
-        return None
-    key = (
-        str(texture_path),
-        str(image_format).lower(),
-        str(depot_path),
-        str(proj_path),
-    )
-    if key in _TEXTURE_RESOLUTION_CACHE:
-        cached = _TEXTURE_RESOLUTION_CACHE[key]
-        _TEXTURE_RESOLUTION_CACHE.move_to_end(key)
-        _DECAL_HELPER_STATS["path_hits"] += 1
-        return cached
-
-    _DECAL_HELPER_STATS["path_misses"] += 1
-    resolved = resolve_relative_image_path(
-        texture_path,
-        image_format=image_format,
-        DepotPath=depot_path,
-        ProjPath=proj_path,
-    )
-    return store_bounded_lru(
-        _TEXTURE_RESOLUTION_CACHE,
-        key,
-        resolved,
-        limit=_TEXTURE_RESOLUTION_CACHE_LIMIT,
-    )
-
-
-def depot_texture_exists(texture_path, image_format, depot_path, proj_path=""):
-    return (
-        resolve_depot_texture(texture_path, image_format, depot_path, proj_path)
-        is not None
-    )
-
-
 def decal_helper_cache_stats():
     return {
         **_DECAL_HELPER_STATS,
         "value_entries": len(_DECAL_VALUES_CACHE),
-        "path_entries": len(_TEXTURE_RESOLUTION_CACHE),
     }
 
 
 def clear_decal_helper_caches():
     _DECAL_VALUES_CACHE.clear()
-    _TEXTURE_RESOLUTION_CACHE.clear()
     for key in _DECAL_HELPER_STATS:
         _DECAL_HELPER_STATS[key] = 0
 

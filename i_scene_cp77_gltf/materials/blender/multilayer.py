@@ -21,6 +21,63 @@ from .nodes import createOverrideTable
 
 _LOG = get_logger(__name__)
 
+_ALT_SORT_TEMPLATES = frozenset(
+    {
+        "annodised",
+        "cliff_",
+        "dust_",
+        "dirt_",
+        "ebony_",
+        "factory_floor_old",
+        "factory_floor_rough",
+        "factory_floor_cracked",
+        "grass_",
+        "gravel",
+        "grime_",
+        "mirror",
+        "mud_",
+        "patina",
+        "pebbles",
+        "plaster_exterior_01_300",
+        "plaster_exterior_damp_01_300",
+        "plaster_exterior_neutral_01_300",
+        "plaster_exterior_damp_neutral_01_300",
+        "plaster_exterior_patched_neutral_01_300",
+        "plaster_exterior_rough_neutral_01_300_copy",
+        "rock_",
+        "sand_",
+        "soil_",
+        "trash_",
+        "terrain",
+        "water",
+        "windows",
+    }
+)
+_STEEL_SORT_TEMPLATES = frozenset(
+    {
+        "steel_dented_01_100",
+        "steel_dented_coroded_01_100",
+        "steel_dented_rusty_01_100",
+        "steel_galvanized_corrugated_01_300",
+        "steel_galvanized_corrugated_02_300",
+        "steel_galvanized_corrugated_rust_01_300",
+        "steel_galvanized_corrugated_rust_02_300",
+        "iron_old",
+    }
+)
+_COLOR_BLOCK_OFFSETS = {
+    "alt": {0: 0, 1: 0, 2: 2, 3: 1, 4: 2},
+    "concrete": {0: 0, 1: 0, 2: 2, 3: 1, 4: 2},
+    "steel": {0: 0, 1: 1, 2: 1, 3: 0, 4: 2},
+    "asphalt_paint": {0: 0, 1: 1, 2: 0, 3: 2},
+    "default": {
+        5: {0: 0, 1: 1, 2: 1, 3: 1},
+        6: {0: 0, 1: 1, 2: 2, 3: 2, 4: 4},
+        8: {0: 0, 1: 1, 2: 2, 3: 3, 4: 3, 5: 2, 6: 4},
+        9: {0: 0, 1: 1, 2: 1, 3: 1, 4: 0, 5: 0, 6: 3, 7: 0},
+    },
+}
+
 _PALETTE_PROPERTY_KEYS = (
     "MLTemplatePath",
     "ColorScaleList",
@@ -70,7 +127,6 @@ def cp77_step_sort(r, g, b, repetitions=1):
         h2 = -1
     else:
         h2 = int(h * repetitions)
-    lum2 = int(lum * repetitions)
     v2 = int(v * repetitions)
     if h2 % 2 == 1:
         v2 = repetitions - v2
@@ -171,62 +227,10 @@ def _sorted_override_colors(template_name, override_table):
     if not ordered:
         ordered = list(color_table.values())
 
-    alt_sort_substrings = {
-        "annodised",
-        "cliff_",
-        "dust_",
-        "dirt_",
-        "ebony_",
-        "factory_floor_old",
-        "factory_floor_rough",
-        "factory_floor_cracked",
-        "grass_",
-        "gravel",
-        "grime_",
-        "mirror",
-        "mud_",
-        "patina",
-        "pebbles",
-        "plaster_exterior_01_300",
-        "plaster_exterior_damp_01_300",
-        "plaster_exterior_neutral_01_300",
-        "plaster_exterior_damp_neutral_01_300",
-        "plaster_exterior_patched_neutral_01_300",
-        "plaster_exterior_rough_neutral_01_300_copy",
-        "rock_",
-        "sand_",
-        "soil_",
-        "trash_",
-        "terrain",
-        "water",
-        "windows",
-    }
-    steel_sort_substrings = {
-        "steel_dented_01_100",
-        "steel_dented_coroded_01_100",
-        "steel_dented_rusty_01_100",
-        "steel_galvanized_corrugated_01_300",
-        "steel_galvanized_corrugated_02_300",
-        "steel_galvanized_corrugated_rust_01_300",
-        "steel_galvanized_corrugated_rust_02_300",
-        "iron_old",
-    }
-    offset_maps = {
-        "alt": {0: 0, 1: 0, 2: 2, 3: 1, 4: 2},
-        "concrete": {0: 0, 1: 0, 2: 2, 3: 1, 4: 2},
-        "steel": {0: 0, 1: 1, 2: 1, 3: 0, 4: 2},
-        "asphalt_paint": {0: 0, 1: 1, 2: 0, 3: 2},
-        "default": {
-            5: {0: 0, 1: 1, 2: 1, 3: 1},
-            6: {0: 0, 1: 1, 2: 2, 3: 2, 4: 4},
-            8: {0: 0, 1: 1, 2: 2, 3: 3, 4: 3, 5: 2, 6: 4},
-            9: {0: 0, 1: 1, 2: 1, 3: 1, 4: 0, 5: 0, 6: 3, 7: 0},
-        },
-    }
     lower_name = template_name.lower()
-    if any(token in lower_name for token in alt_sort_substrings):
+    if any(token in lower_name for token in _ALT_SORT_TEMPLATES):
         category = "alt"
-    elif any(token in lower_name for token in steel_sort_substrings):
+    elif any(token in lower_name for token in _STEEL_SORT_TEMPLATES):
         category = "steel"
     elif "asphalt_paint_01_300" in lower_name:
         category = "asphalt_paint"
@@ -243,9 +247,11 @@ def _sorted_override_colors(template_name, override_table):
     for color in ordered:
         block_position = block_number * block_len
         if category:
-            offset = offset_maps[category].get(block_index, 0)
+            offset = _COLOR_BLOCK_OFFSETS[category].get(block_index, 0)
         else:
-            offset = offset_maps["default"].get(block_len, {}).get(block_index, 0)
+            offset = (
+                _COLOR_BLOCK_OFFSETS["default"].get(block_len, {}).get(block_index, 0)
+            )
         insert_at = min(len(result), block_position + offset)
         result.insert(insert_at, color)
         block_index += 1

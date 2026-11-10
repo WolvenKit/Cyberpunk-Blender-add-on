@@ -957,6 +957,7 @@ def strip_private_export_metadata(payload: dict) -> dict:
 def validate_payload(payload: dict) -> dict:
     errors: list[str] = []
     warnings: list[str] = []
+    unreachable: list[str] = []
     root = ((payload or {}).get("Data") or {}).get("RootChunk") or {}
     if not isinstance(root, dict) or root.get("$type") != "animAnimGraph":
         errors.append("Data.RootChunk is not animAnimGraph")
@@ -1014,6 +1015,7 @@ def validate_payload(payload: dict) -> dict:
                     rtti.is_graph_node_type(str(node.get("$type", "")))
                     and handle not in expected
                 ):
+                    unreachable.append(handle)
                     warnings.append(
                         f"Animation node {handle} is unreachable from initialization roots"
                     )
@@ -1023,6 +1025,7 @@ def validate_payload(payload: dict) -> dict:
         "ready": not errors,
         "errors": errors,
         "warnings": warnings,
+        "unreachableNodes": unreachable,
         "handles": len(handles),
         "references": len(refs),
         "dangleNodes": dangle_count,

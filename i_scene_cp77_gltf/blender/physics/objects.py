@@ -11,7 +11,6 @@ def update_collision_bits(self, context):
     if self.collision_preset not in COLLISION_PRESETS:
         return
 
-    # tuple: ([MyLayers], [CollidesWith], [QueryableBy])
     data = COLLISION_PRESETS[self.collision_preset]
     my_layers = data[0]
     collides_with = data[1]

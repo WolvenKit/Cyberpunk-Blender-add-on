@@ -138,12 +138,7 @@ class DANGLE_OT_export_animgraph(bpy.types.Operator, ExportHelper):
         refresh_error = summary.get("editorRefreshError")
         warnings = summary.get("warnings", ()) or ()
         if warnings:
-            unreachable = sum(
-                1
-                for warning in warnings
-                if str(warning).startswith("Animation node ")
-                and "unreachable from initialization roots" in str(warning)
-            )
+            unreachable = len(summary.get("unreachableNodes", ()))
             _LOG.warning(
                 "AnimGraph export validation warnings: total=%d unreachable_nodes=%d other=%d first=%s",
                 len(warnings),

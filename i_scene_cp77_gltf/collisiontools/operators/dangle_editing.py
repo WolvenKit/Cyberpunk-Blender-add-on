@@ -4,7 +4,6 @@ from bpy.props import IntProperty
 from ...blender.operator_results import finish_operator
 from ..services.dangles.editing import (
     add_chain,
-    add_dangle_node,
     add_particle,
     add_selected_bones_to_chain,
     add_shape,
@@ -15,14 +14,6 @@ from ..services.dangles.editing import (
     remove_particle,
     remove_shape,
 )
-
-
-class DANGLE_OT_add_dangle_node(bpy.types.Operator):
-    bl_idname = "dangle.add_node"
-    bl_label = "Add Node"
-
-    def execute(self, context):
-        return finish_operator(self, add_dangle_node(context))
 
 
 class DANGLE_OT_remove_dangle_node(bpy.types.Operator):

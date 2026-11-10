@@ -106,8 +106,7 @@ def _ensure_preview_ground(context):
 
 def initialize_scene(context, add_ground=True):
     try:
-        bridge = require_initialized_bridge(context)
-        px_scene = context.scene.physx
+        require_initialized_bridge(context)
         if add_ground:
             _ensure_preview_ground(context)
     except ImportError as error:

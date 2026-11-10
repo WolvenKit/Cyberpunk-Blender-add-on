@@ -48,6 +48,7 @@ from ..transforms import resolve_handle_data
 _LOG = get_logger(__name__)
 _UNSET = object()
 _LIGHT_DIRECTION_CORRECTION = Matrix(red_light_local_to_blender_light())
+_LIGHT_CHANNEL_COLOR = (0.005, 0.79105, 1, 1)
 
 
 def light_channel_geometry(component, shape_lookup=None):
@@ -365,7 +366,7 @@ def create_light_channel_mesh(component, shape_lookup):
 
     obj = track_created_datablock("objects", bpy.data.objects.new(name, mesh_data))
     obj.display_type = "WIRE"
-    obj.color = (0.005, 0.79105, 1, 1)
+    obj.color = _LIGHT_CHANNEL_COLOR
     obj.show_wire = True
     obj.show_in_front = True
     obj.display.show_shadows = False

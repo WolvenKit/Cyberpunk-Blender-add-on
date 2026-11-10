@@ -36,7 +36,6 @@ class EntityImportRequest:
     parent_collection_name: str = ""
     animation_files: Any = None
     include_animations: bool = True
-    generate_overrides: bool = False
     parsed_entity: Any = None
     imported_collections_out: Any = None
     imported_rigs_out: Any = None
@@ -122,7 +121,6 @@ class EntityImportRequest:
         object.__setattr__(
             self, "parent_collection_name", str(self.parent_collection_name or "")
         )
-        object.__setattr__(self, "generate_overrides", bool(self.generate_overrides))
         object.__setattr__(
             self,
             "manage_master_visibility",

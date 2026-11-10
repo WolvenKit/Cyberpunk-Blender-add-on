@@ -30,7 +30,6 @@ def _draw_dangle_nodes(layout, context, rig):
         "active_dangle_node",
     )
     col = row.column(align=True)
-    col.operator("dangle.add_node", icon="ADD", text="")
     col.operator("dangle.remove_node", icon="REMOVE", text="")
 
     dnode = get_active_dangle_node(context)

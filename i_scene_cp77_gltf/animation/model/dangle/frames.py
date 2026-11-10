@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import NamedTuple, Protocol
+from typing import NamedTuple
 
 
 class EllipsoidFrame(NamedTuple):
@@ -81,37 +80,3 @@ class PendulumParams(NamedTuple):
     half_sine: float
     """float32 sine and cosine of half of ``half_angle`` (the rotation limit as a quaternion)."""
     half_cosine: float
-
-
-class DangleFrames(Protocol):
-    """Host-side frame evaluation for one DangleSystem"""
-
-    def begin_shapes(self, shapes: Sequence[dict]) -> None:
-        """Make each shape's current transform the previous one and take the new one from its bone"""
-
-    def initialize_shapes(self, shapes: Sequence[dict]) -> None:
-        """Snap previous, current and posed transforms of each shape to its bone"""
-
-    def pose_shapes(self, shapes: Sequence[dict], progress: float) -> None:
-        """Pose each shape between its previous and current transform"""
-
-    def dyng_frame(self, node_index: int, progress: float) -> DyngFrame:
-        """Interpolate the node's tracked bones and evaluate its constraint frames"""
-
-    def reset_dyng_interpolation(self, node_index: int) -> None:
-        """Make the previous and interpolated frames of the node's particles their current frames"""
-
-    def current_bone_axis(self, particle_index: int):
-        """A particle's capsule axis rotated by its current bone (float32)"""
-
-    def spring_frame(self, node_index: int, progress: float) -> SpringFrame:
-        """Spring parent frame between the previous and current step"""
-
-    def spring_rest_position(self, node_index: int) -> tuple:
-        """Current spring parent position"""
-
-    def pendulum_frame(self, node_index: int, progress: float) -> PendulumFrame:
-        """Pendulum constraint frame between the previous and current step"""
-
-    def pendulum_rest_frame(self, node_index: int) -> tuple:
-        """(current parent position, unnormalized current constraint axis)"""

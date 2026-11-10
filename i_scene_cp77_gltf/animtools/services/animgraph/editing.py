@@ -4,7 +4,6 @@ import bpy
 
 from ....animation.domain.animgraph.curve_points import inserted_curve_point
 from ....animation.model.animgraph import direct_conn
-from ....assetio.values import coerce_int
 from ....blender.animgraph import builder, curve_mapping, sm_edit, variables
 from ....blender.animgraph.access import edit_collection
 from ....blender.animgraph.property_codec import (
@@ -12,7 +11,6 @@ from ....blender.animgraph.property_codec import (
     sort_curve_points,
 )
 from ....blender.operator_results import OperationResult
-from ....collisiontools.services.dangles.editing import add_dangle_node_for_rig
 
 DANGLE_NODE_TYPE = "Dangle"
 
@@ -108,40 +106,12 @@ def _dangle_rig(tree):
     return rig
 
 
-def _handle_key(node) -> int:
-    return coerce_int(str(node.red_handle_id), -1, unwrap=False)
-
-
-def _add_dangle_node(rig, location) -> OperationResult:
-    result = add_dangle_node_for_rig(rig)
-    if not result.ok:
-        return OperationResult.cancelled(
-            result.message or "Could not add Dangle node",
-            result.level,
-            error=result.error,
-        )
-    refreshed = bpy.data.node_groups.get(
-        str(rig.dangle_state.animgraph_tree_name or "")
-    )
-    if refreshed is not None:
-        candidates = [
-            candidate
-            for candidate in refreshed.nodes
-            if str(getattr(candidate, "red_type", "")) == "animAnimNode_Dangle"
-        ]
-        if candidates:
-            node = max(candidates, key=_handle_key)
-            _select_only(refreshed, node)
-            node.location = location
-    return OperationResult.finished()
-
-
 def add_node(tree, node_type: str, location) -> OperationResult:
     """Add a node of node_type at location and make it the only selected, active node"""
-    if node_type == DANGLE_NODE_TYPE:
-        rig = _dangle_rig(tree)
-        if rig is not None:
-            return _add_dangle_node(rig, location)
+    if node_type == DANGLE_NODE_TYPE and _dangle_rig(tree) is not None:
+        return OperationResult.cancelled(
+            "New Dangle creation is unavailable until pose-chain insertion is supported."
+        )
     node = builder.build_node(tree, node_type, location=location)
     warnings = ()
     try:

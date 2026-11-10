@@ -837,8 +837,6 @@ class DyngSimulator:
             parent_index
         ].copy()
 
-    # animation.model.dangle.frames.DangleFrames
-
     def begin_shapes(self, shapes):
         collision.begin_shape_transforms(self, shapes)
 
