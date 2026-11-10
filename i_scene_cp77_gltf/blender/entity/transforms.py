@@ -102,7 +102,7 @@ def _rig_bone_matrices(rig_j):
     return matrices
 
 
-def _rig_json_model_space_matrices(rig_j):
+def rig_json_model_space_matrices(rig_j):
     if type(rig_j) is not dict:
         return ()
     cache_key = id(rig_j)
@@ -118,14 +118,14 @@ def _rig_json_model_space_matrices(rig_j):
     return matrices
 
 
-def _rig_json_bone_matrix_array(rig_j):
+def rig_json_bone_matrix_array(rig_j):
     if type(rig_j) is not dict:
         return np.empty((0, 4, 4), dtype=np.float64)
     cache_key = id(rig_j)
     cached = _RIG_BONE_MATRIX_ARRAY_CACHE.get(cache_key)
     if cached is not None and cached[0] is rig_j:
         return cached[1]
-    matrices = _rig_json_model_space_matrices(rig_j)
+    matrices = rig_json_model_space_matrices(rig_j)
     array = np.asarray(matrices, dtype=np.float64)
     if not matrices:
         array = np.empty((0, 4, 4), dtype=np.float64)

@@ -22,7 +22,7 @@ from ...blender.physics.vehicle_geometry import vehicle_actor_world
 from ...core.log import get_logger, log_once
 from ..blender.vehicle_authoring_state import scene_gravity_magnitude
 from ..blender.vehicle_config import vehicle_live_dynamics_config
-from .vehicle_preview import _runtime
+from .vehicle_preview import vehicle_runtime_state
 
 _LOG = get_logger(__name__)
 
@@ -129,7 +129,7 @@ def _build_guides(context):
     if (vehicle.rig if vehicle.source_mode == "RIG" else vehicle.chassis) is None:
         return (), ()
     config = _guide_config(scene, vehicle)
-    state = _runtime(scene, create=False)
+    state = vehicle_runtime_state(scene, create=False)
     actor = vehicle_actor_world(vehicle)
     labels = []
 

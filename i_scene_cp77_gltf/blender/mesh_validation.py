@@ -70,7 +70,7 @@ def autofitter_shape_keys(mesh_object):
     )
 
 
-def _loop_vertex_indices(mesh):
+def loop_vertex_indices(mesh):
     values = np.empty(len(mesh.loops), dtype=np.int32)
     mesh.loops.foreach_get("vertex_index", values)
     return values
@@ -82,7 +82,7 @@ def predicted_export_vertex_count(mesh):
     if not mesh.loop_triangles or not mesh.loops:
         return 0
 
-    loop_vertices = _loop_vertex_indices(mesh).astype(np.int64, copy=False)
+    loop_vertices = loop_vertex_indices(mesh).astype(np.int64, copy=False)
     columns = []
 
     for layer in getattr(mesh, "uv_layers", ()):

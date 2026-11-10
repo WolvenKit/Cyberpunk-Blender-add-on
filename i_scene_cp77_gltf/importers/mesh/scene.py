@@ -34,7 +34,7 @@ from ...blender.mesh import (
     shading_signature,
     store_source_vertex_indices,
 )
-from ...blender.mesh_validation import _loop_vertex_indices
+from ...blender.mesh_validation import loop_vertex_indices
 from ...blender.morphs import store_source_morph_shading
 from ...blender.transactions import (
     DatablockImportTransaction,
@@ -116,7 +116,7 @@ def _build_mesh_geometry(
             )
 
     loop_vertices = (
-        _loop_vertex_indices(mesh)
+        loop_vertex_indices(mesh)
         if geometry_changed or len(mesh.loops) != loop_count
         else triangles.reshape(-1)
     )
@@ -1083,7 +1083,7 @@ def _import_mesh_glb_impl(
                 resolved_armature,
             )
             if topology_rebuilt:
-                loop_vertices = _loop_vertex_indices(obj.data)
+                loop_vertices = loop_vertex_indices(obj.data)
             modifier = obj.modifiers.new(name="Armature", type="ARMATURE")
             modifier.object = resolved_armature
 

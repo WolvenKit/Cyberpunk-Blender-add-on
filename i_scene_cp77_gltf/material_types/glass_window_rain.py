@@ -1,6 +1,6 @@
 from ..blender import shader_nodes
 from ..blender.shader_nodes import assign_socket
-from .glass import _SCALAR_DEFAULTS, Glass
+from .glass import SCALAR_DEFAULTS, Glass
 from .graph import grid_location
 from .mat_common import (
     get_or_build_node_group,
@@ -16,7 +16,7 @@ from .normal_math import (
 from .overlay_common import combine_vector, control, split_vector
 
 _DEFAULTS = {
-    **_SCALAR_DEFAULTS,
+    **SCALAR_DEFAULTS,
     "GlassTint": r"base\materials\placeholder\white.xbm",
     "TintColor": (162 / 255, 173 / 255, 180 / 255, 0.0),
     "TintSurface": (129 / 255, 131 / 255, 106 / 255, 1.0),

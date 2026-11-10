@@ -15,7 +15,7 @@ class ReferenceHandler(GraphNodeHandler):
     kinds = ("REFERENCE",)
 
     def execute(self, context, step):
-        result = context._reference_frame(step.input_frame)
+        result = context.reference_frame(step.input_frame)
         step.frame_cache[step.cache_key] = result
         return result
 
@@ -36,7 +36,7 @@ class NullLinkHandler(GraphNodeHandler):
         result = (
             identity_frame(step.input_frame)
             if step.additive_branch
-            else context._reference_frame(step.input_frame)
+            else context.reference_frame(step.input_frame)
         )
         step.frame_cache[step.cache_key] = result
         return result

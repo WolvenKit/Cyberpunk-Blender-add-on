@@ -547,7 +547,7 @@ class DangleAnimGraphHost:
     def dangle_frame_requirements(self, config_index: int) -> tuple[str, ...]:
         names = set()
         tracked = self.simulator.system.node_tracked_indices[config_index]
-        pose_bones = tuple(getattr(self.simulator, "_pose_bones", ()) or ())
+        pose_bones = tuple(getattr(self.simulator, "tracked_pose_bones", ()) or ())
         for raw_index in tracked:
             index = int(raw_index)
             if (
@@ -556,7 +556,7 @@ class DangleAnimGraphHost:
                 and pose_bones[index] is not None
             ):
                 names.add(str(self.simulator.bone_names[index]))
-        topologies = getattr(self.simulator, "_node_output_topology", ())
+        topologies = getattr(self.simulator, "node_output_topology", ())
         if 0 <= config_index < len(topologies):
             names.update(
                 str(name) for name in topologies[config_index].get("pose_bones", {})
@@ -566,7 +566,7 @@ class DangleAnimGraphHost:
     def structured_base_frame_requirements(self) -> tuple[str, ...]:
         names = set()
         bone_names = tuple(getattr(self.simulator, "bone_names", ()) or ())
-        pose_bones = tuple(getattr(self.simulator, "_pose_bones", ()) or ())
+        pose_bones = tuple(getattr(self.simulator, "tracked_pose_bones", ()) or ())
         indices = self.simulator.system.dyng_particle_indices
         for raw_index in indices:
             index = int(raw_index)
@@ -590,9 +590,9 @@ class DangleAnimGraphHost:
     ) -> DangleStep:
         required = self.dangle_frame_requirements(config_index)
         base_matrices = self.frame_model_matrices(child, required)
-        self.simulator._sample_node_input(config_index, model_matrices=base_matrices)
-        self.simulator._step_node(config_index, raw_dt, time_dilation, skip_physics)
-        matrices, apply_names = solvers._compose_dangle_node_matrices(
+        self.simulator.sample_node_input(config_index, model_matrices=base_matrices)
+        self.simulator.step_node(config_index, raw_dt, time_dilation, skip_physics)
+        matrices, apply_names = solvers.compose_dangle_node_matrices(
             self.simulator, config_index, base_matrices=base_matrices
         )
         return DangleStep(matrices, apply_names, base_matrices)

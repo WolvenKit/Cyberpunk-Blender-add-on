@@ -190,14 +190,14 @@ class Skin(MaterialTypeBase):
 
     def _images(self, data, blendable):
         images = {
-            key: self._load_relative_image(
+            key: self.load_relative_image(
                 param_texture_path(data, key), non_color=non_color, error_label=key
             )
             for key, non_color in self._texture_keys(data, blendable)
         }
         micro_path = param_texture_path(data, "MicroDetail")
         images["MicroDetail"] = (
-            self._load_relative_image(
+            self.load_relative_image(
                 micro_path, non_color=True, error_label="MicroDetail"
             )
             if micro_path
@@ -519,7 +519,7 @@ class Skin(MaterialTypeBase):
         micro1 = micro2 = None
         micro1_source = micro2_source = None
         if micro_tex_path:
-            image = self._load_relative_image(
+            image = self.load_relative_image(
                 micro_tex_path, non_color=True, error_label="MicroDetail"
             )
             if image is not None:

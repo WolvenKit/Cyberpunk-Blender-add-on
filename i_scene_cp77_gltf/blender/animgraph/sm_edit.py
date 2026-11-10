@@ -9,7 +9,7 @@ from . import property_codec, sm_overlay, sm_records, sm_sockets
 from .builder import build_node
 from .layout import estimated_node_size
 from .sm_model import BLEND_INTERPOLATOR_TYPE, new_handle_id
-from .sm_records import ANY_RED_TYPE, ENTRY_RED_TYPE, _pseudo_node
+from .sm_records import ANY_RED_TYPE, ENTRY_RED_TYPE, pseudo_node
 
 _LOG = get_logger(__name__)
 
@@ -530,7 +530,7 @@ def default_row(entry):
 def default_state_handle(sm_node) -> str:
     """Handle of the default state (the target of Entry's default row), or "" """
     tree = getattr(sm_node, "node_tree", None)
-    rec = default_row(_pseudo_node(tree, ENTRY_RED_TYPE)) if tree is not None else None
+    rec = default_row(pseudo_node(tree, ENTRY_RED_TYPE)) if tree is not None else None
     return str(rec.target_handle) if rec is not None else ""
 
 
@@ -621,7 +621,7 @@ def add_state(sm_node, name: str = DEFAULT_STATE_NAME):
     _name_state(node, unique)
     register_new_state(sm_node, node)
     _fit_width(node)
-    _place_right_of(node, existing or [_pseudo_node(tree, ENTRY_RED_TYPE)])
+    _place_right_of(node, existing or [pseudo_node(tree, ENTRY_RED_TYPE)])
     return node
 
 
@@ -861,7 +861,7 @@ def move_state(sm_node, index: int, delta: int) -> int:
 def set_default_state(sm_node, state_node) -> None:
     """Make state_node the default state (the target of Entry's default row)"""
     tree = _require_state_of(sm_node, state_node)
-    entry = _pseudo_node(tree, ENTRY_RED_TYPE)
+    entry = pseudo_node(tree, ENTRY_RED_TYPE)
     if entry is None:
         raise ValueError("this state machine has no Entry node")
     rec = default_row(entry)
@@ -896,8 +896,8 @@ def scaffold_state_machine(sm_node) -> None:
         return
     if (
         any(is_state(node) or _is_frozen_state(node) for node in tree.nodes)
-        or _pseudo_node(tree, ENTRY_RED_TYPE) is not None
-        or _pseudo_node(tree, ANY_RED_TYPE) is not None
+        or pseudo_node(tree, ENTRY_RED_TYPE) is not None
+        or pseudo_node(tree, ANY_RED_TYPE) is not None
         or len(sm_node.red_sm_states)
     ):
         raise ValueError(f"{sm_node.name!r} already has states")

@@ -86,7 +86,7 @@ _LIVE_UPDATE_TIMERS = {}
 _RUNTIME = {}
 
 
-def _runtime(scene, create=True):
+def vehicle_runtime_state(scene, create=True):
     key = rna_identity(scene)
     state = _RUNTIME.get(key)
     if state is None and create:
@@ -521,7 +521,7 @@ def _log_wheel_telemetry(state, stats, wheel_count, *, initial=False):
     state.telemetry_lateral_force_peak = ()
 
 
-def _flush_vehicle_live_updates_for_scene(scene, bridge=None):
+def flush_vehicle_live_updates_for_scene(scene, bridge=None):
     """Applies the queued edits to the built vehicle"""
     vehicle = getattr(scene, "physx_vehicle", None)
     if vehicle is None or not vehicle.preview_built or vehicle.preview_dirty:
@@ -543,7 +543,7 @@ def _flush_vehicle_live_updates_for_scene(scene, bridge=None):
         else:
             live_config = vehicle_live_dynamics_config(vehicle)
             bridge.update_vehicle_dynamics(live_config)
-            state = _runtime(scene, create=False)
+            state = vehicle_runtime_state(scene, create=False)
             if state is not None:
                 state.max_steer = max(live_config.get("steer_angles") or (0.0,))
     except Exception as error:
@@ -592,7 +592,7 @@ def _schedule_vehicle_live_update(scene):
         if physx is not None and physx.sim_running:
             return
         try:
-            _flush_vehicle_live_updates_for_scene(target_scene)
+            flush_vehicle_live_updates_for_scene(target_scene)
         except Exception as error:
             vehicle.live_update_error = str(error)
             vehicle.preview_message = f"Live dynamics update rejected: {error}"
@@ -637,7 +637,7 @@ def build_vehicle(context, bridge=None):
     if vehicle.source_mode == "RIG" and getattr(vehicle, "rig", None) is not None:
         adopt_loaded_vehicle_phys(context, vehicle.rig)
 
-    state = _runtime(context.scene)
+    state = vehicle_runtime_state(context.scene)
     root = vehicle_root(vehicle)
     wheel_fields = _wheel_fields(vehicle)
     state.source_mode = vehicle.source_mode
@@ -690,7 +690,7 @@ def _wheel_fields(vehicle):
 
 def _rebuild_vehicle_in_place(scene, bridge):
     """Rebuilds the native vehicle where it is now, keeping its motion"""
-    state = _runtime(scene, create=False)
+    state = vehicle_runtime_state(scene, create=False)
     if state is None or state.handle <= 0 or state.chassis is None:
         raise RuntimeError("Build the vehicle preview before changing its collider")
     dynamic_state = bridge.get_vehicle_dynamic_state()
@@ -871,7 +871,7 @@ def build_vehicle_if_enabled(context, bridge):
 def vehicle_step_schedule(scene, elapsed):
     """(step count, step length) that advance a built vehicle preview by elapsed seconds"""
     vehicle = getattr(scene, "physx_vehicle", None)
-    state = _runtime(scene, create=False)
+    state = vehicle_runtime_state(scene, create=False)
     if (
         vehicle is None
         or state is None
@@ -938,7 +938,7 @@ def _sync_native_wheel_poses(state, actor_world, wheel_poses):
 
 def sync_vehicle_preview(context, bridge, poses, _dt):
     vehicle = getattr(context.scene, "physx_vehicle", None)
-    state = _runtime(context.scene, create=False)
+    state = vehicle_runtime_state(context.scene, create=False)
     if (
         vehicle is None
         or state is None

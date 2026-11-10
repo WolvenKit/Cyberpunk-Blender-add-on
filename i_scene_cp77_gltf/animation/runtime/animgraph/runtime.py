@@ -170,7 +170,7 @@ class AnimGraphRuntime:
         self.required_tracks: set[str] = set()
         self.owned_bones: set[str] = set()
         self.owned_tracks: set[str] = set()
-        self._owner_scope_bound = False
+        self.owner_scope_bound = False
         self._meta_rig_paths: tuple[str, ...] = ()
         self._meta_rig_datas: tuple[Any, ...] = ()
         self._meta_rig_part_bindings: tuple[Mapping[str, str], ...] = ()
@@ -178,13 +178,13 @@ class AnimGraphRuntime:
         self._meta_rig_merged_data = None
         self._red_pose_bridge = False
         self._facial_session = None
-        self._facial_binding = None
+        self.facial_binding = None
         self._facial_root_bridge_bones: tuple[str, ...] | None = None
         self._facial_owner_parent_overrides: dict[str, str] | None = None
         self._facial_owner_reference_overrides: dict[str, Any] | None = None
         self._facial_owner_reference_track_overrides: dict[str, float] | None = None
         self._facial_owner_resolved_names: tuple[str, ...] | None = None
-        self._meta_parent_frame_current: BranchFrame | None = None
+        self.meta_parent_frame_current: BranchFrame | None = None
         self._facial_transform_trace_stages: set[str] = set()
         self._input_tracks: dict[str, TrackSnapshot] = {}
         self._last_output_tracks: dict[str, TrackSnapshot | None] = {}
@@ -195,19 +195,19 @@ class AnimGraphRuntime:
         self._input_capture_bones: tuple[str, ...] = ()
         self._nodes = host.nodes_by_handle()
         self._pose_plans: dict[str, Any] = {}
-        self._blend_data: dict[str, dict[str, Any]] = {}
-        self._blend_active: dict[str, bool] = {}
-        self._additive_data: dict[str, dict[str, Any]] = {}
-        self._additive_active: dict[str, bool] = {}
-        self._additive_masks: dict[str, Mapping[str, float] | None] = {}
-        self._additive_previous_track_values: dict[str, float] = {}
+        self.blend_data: dict[str, dict[str, Any]] = {}
+        self.blend_active: dict[str, bool] = {}
+        self.additive_data: dict[str, dict[str, Any]] = {}
+        self.additive_active: dict[str, bool] = {}
+        self.additive_masks: dict[str, Mapping[str, float] | None] = {}
+        self.additive_previous_track_values: dict[str, float] = {}
         self._source_anim_times: dict[str, float] = {}
         self._one_shot_running: dict[str, bool] = {}
         self._workspot_states: dict[str, WorkspotHubState] = {}
         self._exploration_states: dict[str, tuple[tuple, float]] = {}
         # Values nodes publish by tag during a frame's update, read by TagValue.
-        self._data_flow: dict[str, float] = {}
-        self._blend_weights: dict[str, tuple[float, ...]] = {}
+        self.data_flow: dict[str, float] = {}
+        self.blend_weights: dict[str, tuple[float, ...]] = {}
         # Each node's output frame in the last step, by normalized handle, for the results and the viewed node.
         self._last_frames: dict[str, BranchFrame] = {}
         # Handles of the pose nodes the last step executed, on additive branches too.
@@ -221,28 +221,28 @@ class AnimGraphRuntime:
             tuple[str, int], tuple[dict[str, Any], dict[str, float]]
         ] = {}
         self._source_anim_advanced_frame: dict[str, int] = {}
-        self._source_index: dict[str, dict[str, Any]] = {}
+        self.source_index: dict[str, dict[str, Any]] = {}
         self._source_root_reference: Any = None
         self._float_variable_names: frozenset[str] = frozenset()
         self._rig_float_inputs = None
-        self._rotate_angles: dict[str, float] = {}
-        self._quaternion_rotations: dict[str, tuple[float, float, float, float]] = {}
+        self.rotate_angles: dict[str, float] = {}
+        self.quaternion_rotations: dict[str, tuple[float, float, float, float]] = {}
         # Extra transforms written by AdditionalTransform: name -> (parent, reference QsTransform).
         self._extra_transforms: dict[str, tuple[str, Any]] = {}
-        self._translation_values: dict[str, tuple[float, float, float]] = {}
-        self._additional_track_times: dict[str, float] = {}
-        self._state_machine_states: dict[str, int] = {}
-        self._state_machine_blends: dict[str, dict[str, Any]] = {}
-        self._state_condition_history: dict[Any, Any] = {}
-        self._switch_selected: dict[str, int] = {}
-        self._blend_two_active: dict[str, frozenset[int]] = {}
+        self.translation_values: dict[str, tuple[float, float, float]] = {}
+        self.additional_track_times: dict[str, float] = {}
+        self.state_machine_states: dict[str, int] = {}
+        self.state_machine_blends: dict[str, dict[str, Any]] = {}
+        self.state_condition_history: dict[Any, Any] = {}
+        self.switch_selected: dict[str, int] = {}
+        self.blend_two_active: dict[str, frozenset[int]] = {}
         # Each Blend2's weight as it last played, for the sync data gathered before its next update.
-        self._blend_two_weight: dict[str, float] = {}
-        self._switch_blends: dict[str, tuple[int, float]] = {}
-        self._switch_active: dict[str, frozenset[int]] = {}
-        self._state_machine_pending: dict[str, int] = {}
-        self._state_machine_transition_delay: set[str] = set()
-        self._anim_end_events: set[str] = set()
+        self.blend_two_weight: dict[str, float] = {}
+        self.switch_blends: dict[str, tuple[int, float]] = {}
+        self.switch_active: dict[str, frozenset[int]] = {}
+        self.state_machine_pending: dict[str, int] = {}
+        self.state_machine_transition_delay: set[str] = set()
+        self.anim_end_events: set[str] = set()
         # Names of the clip events the playing clips passed this frame, for AnimEvent conditions.
         self._anim_events: set[str] = set()
         # Each clip's events, read once per clip.
@@ -254,29 +254,29 @@ class AnimGraphRuntime:
         self._preview_feature_text: str | None = None
         self._preview_features: dict[tuple[str, str], Any] = {}
         self._program_steps: dict[int, tuple[Any, Any, str]] = {}
-        self._current_raw_dt = 0.0
+        self.current_raw_dt = 0.0
         self._current_graph_dt = 0.0
-        self._shared_meta_binding = None
+        self.shared_meta_binding = None
         self._shared_meta_nodes: dict[str, Any] = {}
         self._stack_transform_names: set[str] = set()
-        self._stack_track_names: set[str] = set()
+        self.stack_track_names: set[str] = set()
         self._missing_optional_bones: set[str] = set()
         self._missing_optional_tracks: set[str] = set()
         self._stack_data_by_handle: dict[str, dict[str, Any]] = {}
         self._pure_pose_handles: set[str] = set()
-        self._look_at_data: dict[str, dict[str, Any]] = {}
-        self._look_at_states: dict[str, LookAtControllerState] = {}
-        self._facial_mixer_data: dict[str, dict[str, Any]] = {}
-        self._facial_mixer_states: dict[str, FacialMixerState] = {}
+        self.look_at_data: dict[str, dict[str, Any]] = {}
+        self.look_at_states: dict[str, LookAtControllerState] = {}
+        self.facial_mixer_data: dict[str, dict[str, Any]] = {}
+        self.facial_mixer_states: dict[str, FacialMixerState] = {}
         self._trajectory_meta_data: dict[str, dict[str, Any]] = {}
-        self._internal_graph_inputs: dict[tuple[str, str], Any] = {}
+        self.internal_graph_inputs: dict[tuple[str, str], Any] = {}
         self._blender_pose_dirty = False
-        self._perf_frames = 0
+        self.perf_frames = 0
         self._previous_anim_end_events: frozenset[str] = frozenset()
-        self._mask_blend_active: dict[str, bool] = {}
-        self._blend_multiple_selection: dict[str, tuple[int, int, float]] = {}
-        self._blend_multiple_active: dict[str, frozenset[int]] = {}
-        self._time_warp_progress: dict[str, float] = {}
+        self.mask_blend_active: dict[str, bool] = {}
+        self.blend_multiple_selection: dict[str, tuple[int, int, float]] = {}
+        self.blend_multiple_active: dict[str, frozenset[int]] = {}
+        self.time_warp_progress: dict[str, float] = {}
         self._foot_phase_tracks: dict[tuple[str, float], Any] = {}
         self._rig_part_cache: (
             dict[str, tuple[dict[str, float], frozenset[str]]] | None
@@ -285,9 +285,9 @@ class AnimGraphRuntime:
         self._source_action_types_logged: set[tuple] = set()
         self._execution_trace: deque[tuple[Any, bool]] = deque(maxlen=32)
         self._last_program_node: tuple[Any, bool] | None = None
-        self._inertialization_states: dict[str, Any] = {}
+        self.inertialization_states: dict[str, Any] = {}
         # (frame, duration) of the latest inertialization request; read by Inertialization nodes.
-        self._inertialization_request: tuple[int, float] = (-1, 0.0)
+        self.inertialization_request: tuple[int, float] = (-1, 0.0)
         self._perf_capture = 0.0
         self._perf_execute = 0.0
         self._perf_final_restore = 0.0
@@ -297,12 +297,12 @@ class AnimGraphRuntime:
         self._perf_depsgraph_time = 0.0
         self._perf_dangle = 0.0
         self._perf_drag = 0.0
-        self._perf_stack = 0.0
+        self.perf_stack = 0.0
         self._perf_pose_ops = 0.0
         self._perf_pose_op_types: dict[str, float] = {}
-        self._perf_pose_space = 0.0
-        self._perf_shared_meta = 0.0
-        self._perf_blend = 0.0
+        self.perf_pose_space = 0.0
+        self.perf_shared_meta = 0.0
+        self.perf_blend = 0.0
         self._perf_step_total = 0.0
         self._perf_draw = 0.0
         self._frame_cache_names: tuple[str, ...] = ()
@@ -315,7 +315,7 @@ class AnimGraphRuntime:
         self._perf_deferred_final_syncs = 0
         self._drag_config_by_handle = host.drag_config_by_handle()
         self._dangle_config_by_handle = host.dangle_config_by_handle()
-        self.values = ValueGraph(self._source_index, self)
+        self.values = ValueGraph(self.source_index, self)
         if source_payload is not None:
             self._compile_structured(source_payload)
         if not self.structured:
@@ -348,7 +348,7 @@ class AnimGraphRuntime:
 
     def resolve_structured_track(self, authored: str, *, required: bool = False) -> str:
         name = str(authored or "")
-        if not name or name in self._stack_track_names:
+        if not name or name in self.stack_track_names:
             return name
         known = set(self.host.track_names())
         exists = name in known if known else self.host.has_track(name)
@@ -450,7 +450,7 @@ class AnimGraphRuntime:
                 continue
             self.owned_tracks.add(name)
             self.required_tracks.add(name)
-        self._owner_scope_bound = True
+        self.owner_scope_bound = True
         owner_binding = next(
             (
                 value
@@ -473,13 +473,13 @@ class AnimGraphRuntime:
         )
 
     def _graph_output_bones(self) -> tuple[str, ...]:
-        if self._owner_scope_bound:
+        if self.owner_scope_bound:
             owned = self.owned_bones
             return tuple(name for name in self.host.frame_bone_names() if name in owned)
         return tuple(self.host.frame_bone_names())
 
     def _graph_output_tracks(self) -> tuple[str, ...]:
-        if self._owner_scope_bound:
+        if self.owner_scope_bound:
             owned = self.owned_tracks
             return tuple(name for name in self.required_tracks if name in owned)
         return tuple(self.required_tracks)
@@ -513,7 +513,7 @@ class AnimGraphRuntime:
         mapped_tracks = []
         for name in binding.track_names:
             mapped_tracks.append(self.resolve_structured_track(name, required=True))
-        self._shared_meta_binding = binding.with_resolved_names(
+        self.shared_meta_binding = binding.with_resolved_names(
             mapped_bones, mapped_tracks
         )
         for program_node in shared_nodes:
@@ -579,9 +579,9 @@ class AnimGraphRuntime:
         """Shrinker remove counts from extender pairing over the whole graph"""
         items = []
         for handle in layout_order_handles(
-            self._source_root_reference, self._source_index
+            self._source_root_reference, self.source_index
         ):
-            node = self._source_index.get(handle)
+            node = self.source_index.get(handle)
             node_type = (
                 str(node.get("$type", "") or "") if isinstance(node, Mapping) else ""
             )
@@ -649,7 +649,7 @@ class AnimGraphRuntime:
         self._available_animations = frozenset(available_animations)
         try:
             index = handle_index(source_payload)
-            self._source_index = index
+            self.source_index = index
             self.values.index = index
             self.host.bind_values(
                 lambda handle: self.values.value("float", {"HandleRefId": handle})
@@ -791,7 +791,7 @@ class AnimGraphRuntime:
                     for item in program_node.data.get("entries", ())
                 )
             elif program_node.kind == "STACK_TRACKS_EXTEND":
-                self._stack_track_names.update(
+                self.stack_track_names.update(
                     str(item.get("name", "") or "")
                     for item in program_node.data.get("entries", ())
                 )
@@ -810,7 +810,7 @@ class AnimGraphRuntime:
                     self._stack_transform_names.add(item["name"])
             stack.extend(program_node.children)
         self._stack_transform_names.discard("")
-        self._stack_track_names.discard("")
+        self.stack_track_names.discard("")
         self._program_steps = {
             id(node): (
                 node,
@@ -826,11 +826,11 @@ class AnimGraphRuntime:
             in {"animAnimNode_Sermo", "animAnimNode_FacialSharedMetaPose"}
             for node in nodes
         ):
-            self._facial_session, self._facial_binding = self.host.bind_facial_graph()
+            self._facial_session, self.facial_binding = self.host.bind_facial_graph()
             self.required_bones.update(
-                name for name in self._facial_binding.bone_names if name
+                name for name in self.facial_binding.bone_names if name
             )
-            self.required_tracks.update(self._facial_binding.track_names)
+            self.required_tracks.update(self.facial_binding.track_names)
 
         for program_node in nodes:
             handle = normalized_source_handle(program_node.handle)
@@ -881,12 +881,12 @@ class AnimGraphRuntime:
                         )
                     settings.append(item)
                 mapped["stateMachinesSettings"] = tuple(settings)
-                self._look_at_data[handle] = mapped
-                self._look_at_states[handle] = LookAtControllerState()
-                self._internal_graph_inputs.update(inactive_graph_inputs(mapped))
+                self.look_at_data[handle] = mapped
+                self.look_at_states[handle] = LookAtControllerState()
+                self.internal_graph_inputs.update(inactive_graph_inputs(mapped))
             elif program_node.kind == "FACIAL_MIXER":
-                self._facial_mixer_data[handle] = dict(program_node.data)
-                self._facial_mixer_states[handle] = FacialMixerState()
+                self.facial_mixer_data[handle] = dict(program_node.data)
+                self.facial_mixer_states[handle] = FacialMixerState()
             elif program_node.kind == "TRAJECTORY_FROM_META_POSE":
                 target = str(program_node.data.get("metaPoseTrajectoryLs", "") or "")
                 target = (
@@ -940,24 +940,24 @@ class AnimGraphRuntime:
                     self.required_tracks.update(self.host.track_names())
                 if mapped.get("blendMethod") == "Mask":
                     self._require_rig_part_bones(mapped.get("maskName", ""))
-                self._blend_data[handle] = mapped
-                self._blend_active[handle] = False
+                self.blend_data[handle] = mapped
+                self.blend_active[handle] = False
             elif program_node.kind == "BLEND_MASK_DYNAMIC":
                 for mask_name in program_node.data.get("masks", ()):
                     self._require_rig_part_bones(mask_name)
             elif program_node.kind == "BLEND_ADDITIVE":
                 mapped = dict(program_node.data)
-                self._additive_data[handle] = mapped
-                self._additive_masks[handle] = self._compile_additive_mask(
+                self.additive_data[handle] = mapped
+                self.additive_masks[handle] = self._compile_additive_mask(
                     str(mapped.get("maskName", "") or "")
                 )
-                self._additive_active[handle] = False
+                self.additive_active[handle] = False
                 previous_track = str(mapped.get("previousFrameWeightTrack", "") or "")
                 if previous_track:
                     mapped["previousFrameWeightTrack"] = self.resolve_structured_track(
                         previous_track, required=True
                     )
-                    self._additive_previous_track_values[handle] = float(
+                    self.additive_previous_track_values[handle] = float(
                         mapped.get("previousFrameWeightDefault", 0.0) or 0.0
                     )
                 if str(mapped.get("blendTracks", "AGBT_Add")).split("::")[-1] not in {
@@ -995,13 +995,13 @@ class AnimGraphRuntime:
         drag_handles = tuple(program_handles(plan.root, kind="DRAG"))
         self._red_pose_bridge = bool(
             (
-                (self._owner_scope_bound and self._meta_rig_merged_data is not None)
-                or self._facial_binding is not None
+                (self.owner_scope_bound and self._meta_rig_merged_data is not None)
+                or self.facial_binding is not None
             )
             and not dangle_handles
             and not drag_handles
         )
-        if self._facial_binding is not None:
+        if self.facial_binding is not None:
             if not self._red_pose_bridge:
                 raise ValueError(
                     "Sermo requires the local-pose graph bridge; mixed dangle/drag graphs are not supported"
@@ -1023,12 +1023,12 @@ class AnimGraphRuntime:
         self._input_capture_bones = ()
         if (
             self._red_pose_bridge
-            and self._owner_scope_bound
+            and self.owner_scope_bound
             and self._linear_program
             and self._linear_program[0].kind == "REFERENCE"
         ):
             capture_bones = set(self.required_bones - self.owned_bones)
-            binding = self._shared_meta_binding
+            binding = self.shared_meta_binding
             if binding is not None:
                 capture_bones.update(binding.transform_names)
             self._input_capture_bones = tuple(
@@ -1039,7 +1039,7 @@ class AnimGraphRuntime:
                 len(self._input_capture_bones),
                 len(self.required_bones),
             )
-        if self._owner_scope_bound:
+        if self.owner_scope_bound:
             dependency_only = tuple(sorted(self.required_bones - self.owned_bones))
             _LOG.debug(
                 "MetaRig Graph transform scope: owned=%d dependency_only=%d dependencies=%s",
@@ -1067,7 +1067,7 @@ class AnimGraphRuntime:
             len(drag_handles),
             len(self._pose_plans),
             len(self._stack_transform_names),
-            len(self._stack_track_names),
+            len(self.stack_track_names),
         )
         if self._linear_program:
             _LOG.debug(
@@ -1175,7 +1175,7 @@ class AnimGraphRuntime:
         cached = self._facial_root_bridge_bones
         if cached is not None:
             return cached
-        if self._facial_binding is None:
+        if self.facial_binding is None:
             self._facial_root_bridge_bones = ()
             return ()
         _paths, rig_datas, scope = self._load_meta_rig_context(required=True)
@@ -1215,7 +1215,7 @@ class AnimGraphRuntime:
         return self._facial_root_bridge_bones
 
     def _facial_owner_context(self):
-        if self._facial_binding is None:
+        if self.facial_binding is None:
             return None
         _paths, rig_datas, scope = self._load_meta_rig_context(required=True)
         if scope is None or not 0 <= int(scope.owner_index) < len(rig_datas):
@@ -1310,7 +1310,7 @@ class AnimGraphRuntime:
         overrides = self._facial_owner_reference_track_overrides
         if overrides is None:
             overrides = {}
-            binding = self._facial_binding
+            binding = self.facial_binding
             if binding is not None:
                 overrides = {
                     str(name): float(value)
@@ -1322,13 +1322,13 @@ class AnimGraphRuntime:
         result.update(overrides)
         return result
 
-    def _trace_facial_frame(self, stage: str, frame: BranchFrame) -> None:
+    def trace_facial_frame(self, stage: str, frame: BranchFrame) -> None:
         traced = self._facial_transform_trace_stages
         if stage in traced:
             return
         traced.add(stage)
         names = ("Spine2", "Spine3", "Neck", "Neck1", "Head")
-        binding = self._facial_binding
+        binding = self.facial_binding
         binding_names = tuple(getattr(binding, "bone_names", ()) or ())
         used_indices = tuple(getattr(binding, "used_bone_indices", ()) or ())
         sermo_used = frozenset(
@@ -1385,7 +1385,7 @@ class AnimGraphRuntime:
         )
 
     def _facial_graph_input_frame(self, meta_frame: BranchFrame) -> BranchFrame:
-        if self._facial_binding is None or not self._owner_scope_bound:
+        if self.facial_binding is None or not self.owner_scope_bound:
             return meta_frame
         owner_names = frozenset(name for name in self._facial_owner_names() if name)
         owner_parents = self._facial_owner_parent_map(meta_frame.parent_map)
@@ -1399,9 +1399,7 @@ class AnimGraphRuntime:
             if name in owner_reference
         }
         tracks = {}
-        owner_track_names = tuple(
-            getattr(self._facial_binding, "track_names", ()) or ()
-        )
+        owner_track_names = tuple(getattr(self.facial_binding, "track_names", ()) or ())
         for name in owner_track_names:
             if not name:
                 continue
@@ -1436,11 +1434,11 @@ class AnimGraphRuntime:
             False,
             ik_targets=meta_frame.ik_targets,
         )
-        self._trace_facial_frame("owner_reference_input", frame)
+        self.trace_facial_frame("owner_reference_input", frame)
         return frame
 
-    def _facial_shared_parent_pose(self, meta_frame: BranchFrame) -> dict[str, Any]:
-        binding = self._shared_meta_binding
+    def facial_shared_parent_pose(self, meta_frame: BranchFrame) -> dict[str, Any]:
+        binding = self.shared_meta_binding
         if binding is None:
             return {}
         bridges = frozenset(self._facial_root_bridge_names())
@@ -1460,7 +1458,7 @@ class AnimGraphRuntime:
     def _facial_part_frame_to_meta(
         self, frame: BranchFrame, meta_input: BranchFrame
     ) -> BranchFrame:
-        if self._facial_binding is None or not self._owner_scope_bound:
+        if self.facial_binding is None or not self.owner_scope_bound:
             return frame
         physical_parents = meta_input.parent_map
         bridges = frozenset(self._facial_root_bridge_names())
@@ -1497,11 +1495,9 @@ class AnimGraphRuntime:
             return self._resolved_source_pose(
                 names, self._meta_rig_datas, "bone_transforms"
             )
-        if self._facial_binding is not None:
+        if self.facial_binding is not None:
             source = dict(
-                zip(
-                    self._facial_binding.bone_names, self._facial_binding.reference_pose
-                )
+                zip(self.facial_binding.bone_names, self.facial_binding.reference_pose)
             )
             missing = set(names) - source.keys()
             if missing:
@@ -1717,7 +1713,7 @@ class AnimGraphRuntime:
         )
 
     def _semantic_dirty_bones(self, frame: BranchFrame) -> tuple[str, ...]:
-        if self._owner_scope_bound:
+        if self.owner_scope_bound:
             names = self._graph_output_bones()
         else:
             names = self._frame_cache_names or self.host.frame_bone_names()
@@ -1774,15 +1770,15 @@ class AnimGraphRuntime:
                 self.host.tag_update()
                 self._perf_deferred_final_syncs += 1
 
-    def _reference_frame(self, input_frame: BranchFrame) -> BranchFrame:
+    def reference_frame(self, input_frame: BranchFrame) -> BranchFrame:
         reference = dict(input_frame.reference_pose)
         defaults = dict(input_frame.reference_tracks)
         pose = dict(input_frame.pose)
         reset_bones = (
             set(reference)
-            if self._facial_binding is not None and self._owner_scope_bound
+            if self.facial_binding is not None and self.owner_scope_bound
             else self.owned_bones
-            if self._owner_scope_bound
+            if self.owner_scope_bound
             else set(reference)
         )
         for name in reset_bones:
@@ -1791,9 +1787,9 @@ class AnimGraphRuntime:
         tracks = dict(input_frame.tracks)
         reset_tracks = (
             set(defaults)
-            if self._facial_binding is not None and self._owner_scope_bound
+            if self.facial_binding is not None and self.owner_scope_bound
             else self.owned_tracks
-            if self._owner_scope_bound
+            if self.owner_scope_bound
             else set(defaults)
         )
         for name in reset_tracks:
@@ -1820,7 +1816,7 @@ class AnimGraphRuntime:
             self._pose_hierarchy_plan_cache[key] = plan
         return plan
 
-    def _pose_ls_to_ms(self, frame: BranchFrame) -> BranchFrame:
+    def pose_ls_to_ms(self, frame: BranchFrame) -> BranchFrame:
         if frame.model_space:
             return frame
         pose = pose_ls_to_ms(
@@ -1838,7 +1834,7 @@ class AnimGraphRuntime:
             ik_targets=frame.ik_targets,
         )
 
-    def _pose_ms_to_ls(self, frame: BranchFrame) -> BranchFrame:
+    def pose_ms_to_ls(self, frame: BranchFrame) -> BranchFrame:
         if not frame.model_space:
             return frame
         pose = pose_ms_to_ls(
@@ -1882,10 +1878,10 @@ class AnimGraphRuntime:
         return frozenset(self._previous_anim_end_events)
 
     def data_flow(self) -> dict[str, float]:
-        return self._data_flow
+        return self.data_flow
 
     def raw_dt(self) -> float:
-        return self._current_raw_dt
+        return self.current_raw_dt
 
     def graph_dt(self) -> float:
         return self._current_graph_dt
@@ -1918,7 +1914,7 @@ class AnimGraphRuntime:
         """A VectorInput's value"""
         value = (
             self.feature_values().get((group, name))
-            if (group, name) in self._internal_graph_inputs
+            if (group, name) in self.internal_graph_inputs
             else None
         )
         if value is None:
@@ -1937,7 +1933,7 @@ class AnimGraphRuntime:
             self._preview_features = _parsed_preview_features(raw)
             self._preview_feature_text = raw
         result = dict(self._preview_features)
-        result.update(self._internal_graph_inputs)
+        result.update(self.internal_graph_inputs)
         self._preview_feature_cache = result
         return result
 
@@ -1951,7 +1947,7 @@ class AnimGraphRuntime:
             if not handle or handle in seen:
                 continue
             seen.add(handle)
-            node = self._source_index.get(handle)
+            node = self.source_index.get(handle)
             if not isinstance(node, Mapping):
                 continue
             stack = list(node.values())
@@ -1985,11 +1981,11 @@ class AnimGraphRuntime:
             clip_end,
         )
 
-    def _gather_sync_entries(self, program_node, weight: float, entries: list) -> None:
+    def gather_sync_entries(self, program_node, weight: float, entries: list) -> None:
         """Collect clip progress below a pose input"""
-        selections = self._switch_selected
-        blends = self._switch_blends
-        actives = self._switch_active
+        selections = self.switch_selected
+        blends = self.switch_blends
+        actives = self.switch_active
         pending = [(program_node, float(weight))]
         while pending:
             node, node_weight = pending.pop()
@@ -2023,7 +2019,7 @@ class AnimGraphRuntime:
                 ):
                     pending.append((node.children[index], node_weight * input_weight))
             elif node.kind == "BLEND_MULTIPLE":
-                first, second, alpha = self._blend_multiple_selection.get(
+                first, second, alpha = self.blend_multiple_selection.get(
                     normalized_source_handle(node.handle),
                     (-1, -1, 0.0),
                 )
@@ -2037,9 +2033,9 @@ class AnimGraphRuntime:
                 pending.append((node.children[0], node_weight))
             elif node.kind == "BLEND_TWO":
                 handle = normalized_source_handle(node.handle)
-                weight_two = self._blend_two_weight.get(handle, 0.0)
+                weight_two = self.blend_two_weight.get(handle, 0.0)
                 for index in sorted(
-                    self._blend_two_active.get(handle, frozenset()), reverse=True
+                    self.blend_two_active.get(handle, frozenset()), reverse=True
                 ):
                     share = weight_two if index == 1 else 1.0 - weight_two
                     if index < len(node.children) and share > 0.0:
@@ -2089,11 +2085,11 @@ class AnimGraphRuntime:
             cache[key] = synchronizer if synchronizer.ok else None
         return cache[key]
 
-    def _sync_branch(self, program_node, progress) -> None:
+    def sync_branch(self, program_node, progress) -> None:
         """Retime a freshly activated input to the gathered progress"""
-        selections = self._switch_selected
-        blends = self._switch_blends
-        actives = self._switch_active
+        selections = self.switch_selected
+        blends = self.switch_blends
+        actives = self.switch_active
         pending = [program_node]
         while pending:
             node = pending.pop()
@@ -2164,7 +2160,7 @@ class AnimGraphRuntime:
                         actives[handle] = frozenset(indices)
                 pending.extend(node.children[index] for index in indices)
             elif node.kind == "BLEND_MULTIPLE":
-                first, second, alpha = self._blend_multiple_selection.get(
+                first, second, alpha = self.blend_multiple_selection.get(
                     normalized_source_handle(node.handle),
                     (-1, -1, 0.0),
                 )
@@ -2177,24 +2173,24 @@ class AnimGraphRuntime:
                 # The base input is synced, and the added input while it plays.
                 handle = normalized_source_handle(node.handle)
                 pending.append(node.children[0])
-                active = self._additive_active.get(handle)
+                active = self.additive_active.get(handle)
                 if active is None:
                     # Just reset with its branch: whether the added input plays is decided now, as on activation,
                     # so its own execution finds it active and does not reset the retimed clips.
-                    data = self._additive_data.get(handle, {})
+                    data = self.additive_data.get(handle, {})
                     weight = final_additive_weight(
-                        self._additive_control(handle, data),
+                        self.additive_control(handle, data),
                         data.get("biasValue", 0.0),
                         data.get("scaleValue", 1.0),
                     )
-                    active = self._additive_active[handle] = additive_branch_active(
+                    active = self.additive_active[handle] = additive_branch_active(
                         weight
                     )
                 if active and len(node.children) > 1:
                     pending.append(node.children[1])
             elif node.kind == "BLEND_TWO":
                 handle = normalized_source_handle(node.handle)
-                active = self._blend_two_active.get(handle)
+                active = self.blend_two_active.get(handle)
                 if active is None:
                     # A Blend2 reached here was just reset with its branch: it is given its inputs now, so its own
                     # execution finds them active and does not reset the retimed clips.
@@ -2204,8 +2200,8 @@ class AnimGraphRuntime:
                     )
                     value = self.values.linked("float", handle, "weightNode", minimum)
                     weight = blend_two_weight(value, minimum, maximum)
-                    active = self._blend_two_active[handle] = blend_two_inputs(weight)
-                    self._blend_two_weight[handle] = weight
+                    active = self.blend_two_active[handle] = blend_two_inputs(weight)
+                    self.blend_two_weight[handle] = weight
                 pending.extend(
                     node.children[index]
                     for index in sorted(active)
@@ -2214,18 +2210,18 @@ class AnimGraphRuntime:
             elif len(node.children) == 1:
                 pending.append(node.children[0])
 
-    def _additive_control(self, handle: str, data: Mapping[str, Any]) -> float:
+    def additive_control(self, handle: str, data: Mapping[str, Any]) -> float:
         """A BlendAdditive's control value"""
         if str(data.get("previousFrameWeightTrack", "") or ""):
             default = data.get("previousFrameWeightDefault", 0.0) or 0.0
-            return float(self._additive_previous_track_values.get(handle, default))
+            return float(self.additive_previous_track_values.get(handle, default))
         return (
             self.values.linked("float", handle, "weightNode", 0.0)
             if data.get("hasWeightNode")
             else 0.0
         )
 
-    def _rig_part_mask(
+    def rig_part_mask(
         self, name: str
     ) -> tuple[dict[str, float], frozenset[str]] | None:
         """Bone weights and model-space-rotation bones of a rig part, or None when unknown"""
@@ -2240,7 +2236,7 @@ class AnimGraphRuntime:
         return cache.get(str(name or ""))
 
     def _require_rig_part_bones(self, name: str) -> None:
-        part = self._rig_part_mask(name)
+        part = self.rig_part_mask(name)
         if part is None:
             return
         for bone in part[0]:
@@ -2248,13 +2244,13 @@ class AnimGraphRuntime:
             if resolved is not None:
                 self.required_bones.add(resolved)
 
-    def _request_inertialization(self, duration: float) -> None:
-        frame, previous = self._inertialization_request
-        if frame == self._perf_frames:
+    def request_inertialization(self, duration: float) -> None:
+        frame, previous = self.inertialization_request
+        if frame == self.perf_frames:
             duration = max(float(duration), previous)
-        self._inertialization_request = (self._perf_frames, float(duration))
+        self.inertialization_request = (self.perf_frames, float(duration))
 
-    def _reset_branch_activation(self, program_node) -> None:
+    def reset_branch_activation(self, program_node) -> None:
         for raw_handle in program_handles(program_node, kind="SK_ANIM"):
             handle = normalized_source_handle(raw_handle)
             self._source_anim_times.pop(handle, None)
@@ -2262,7 +2258,7 @@ class AnimGraphRuntime:
             self._one_shot_running.pop(handle, None)
         for raw_handle in program_handles(program_node, kind="POSE_OP"):
             handle = normalized_source_handle(raw_handle)
-            source = self._source_index.get(handle, {})
+            source = self.source_index.get(handle, {})
             node_type = (
                 str(source.get("$type", "") or "")
                 if isinstance(source, Mapping)
@@ -2271,55 +2267,55 @@ class AnimGraphRuntime:
             if node_type == "animAnimNode_RotateBone" and bool(
                 source.get("resetOnActivation", True)
             ):
-                self._rotate_angles.pop(handle, None)
+                self.rotate_angles.pop(handle, None)
             elif node_type == "animAnimNode_RotateBoneByQuaternion" and bool(
                 source.get("resetOnActivation", True)
             ):
-                self._quaternion_rotations.pop(handle, None)
+                self.quaternion_rotations.pop(handle, None)
             elif node_type == "animAnimNode_TranslateBone" and bool(
                 source.get("resetOnActivation", True)
             ):
-                self._translation_values.pop(handle, None)
+                self.translation_values.pop(handle, None)
             elif node_type == "animAnimNode_AdditionalFloatTrack":
-                self._additional_track_times.pop(handle, None)
+                self.additional_track_times.pop(handle, None)
         for handle in self._branch_reachable_source_handles(program_node):
-            source = self._source_index.get(handle)
+            source = self.source_index.get(handle)
             if isinstance(source, Mapping):
                 self.values.reset_node(handle, source)
         for raw_handle in program_handles(program_node, kind="LOOK_AT_CONTROLLER"):
-            state = self._look_at_states.get(normalized_source_handle(raw_handle))
+            state = self.look_at_states.get(normalized_source_handle(raw_handle))
             if state is not None:
                 state.clear()
                 values = inactive_graph_inputs(
-                    self._look_at_data.get(normalized_source_handle(raw_handle), {})
+                    self.look_at_data.get(normalized_source_handle(raw_handle), {})
                 )
-                self._internal_graph_inputs.update(values)
+                self.internal_graph_inputs.update(values)
                 if self._preview_feature_cache is not None:
                     self._preview_feature_cache.update(values)
                 self.values.invalidate("vector", "float")
         for raw_handle in program_handles(program_node, kind="FACIAL_MIXER"):
-            state = self._facial_mixer_states.get(normalized_source_handle(raw_handle))
+            state = self.facial_mixer_states.get(normalized_source_handle(raw_handle))
             if state is not None:
                 state.clear()
         for raw_handle in program_handles(program_node, kind="BLEND_ADDITIVE"):
-            self._additive_active.pop(normalized_source_handle(raw_handle), None)
+            self.additive_active.pop(normalized_source_handle(raw_handle), None)
         for raw_handle in program_handles(program_node, kind="BLEND_TWO"):
-            self._blend_two_active.pop(normalized_source_handle(raw_handle), None)
-            self._blend_two_weight.pop(normalized_source_handle(raw_handle), None)
-            self._time_warp_progress.pop(normalized_source_handle(raw_handle), None)
+            self.blend_two_active.pop(normalized_source_handle(raw_handle), None)
+            self.blend_two_weight.pop(normalized_source_handle(raw_handle), None)
+            self.time_warp_progress.pop(normalized_source_handle(raw_handle), None)
         for raw_handle in program_handles(program_node, kind="BLEND_MASK_DYNAMIC"):
-            self._mask_blend_active.pop(normalized_source_handle(raw_handle), None)
+            self.mask_blend_active.pop(normalized_source_handle(raw_handle), None)
         for raw_handle in program_handles(program_node, kind="BLEND_MULTIPLE"):
-            self._blend_multiple_active.pop(normalized_source_handle(raw_handle), None)
-            self._time_warp_progress.pop(normalized_source_handle(raw_handle), None)
+            self.blend_multiple_active.pop(normalized_source_handle(raw_handle), None)
+            self.time_warp_progress.pop(normalized_source_handle(raw_handle), None)
         for raw_handle in program_handles(program_node, kind="INERTIALIZATION"):
-            self._inertialization_states.pop(normalized_source_handle(raw_handle), None)
+            self.inertialization_states.pop(normalized_source_handle(raw_handle), None)
         for raw_handle in program_handles(program_node, kind="SWITCH"):
             switch_handle = normalized_source_handle(raw_handle)
-            self._switch_selected.pop(switch_handle, None)
-            self._switch_blends.pop(switch_handle, None)
-            self._switch_active.pop(switch_handle, None)
-            self._time_warp_progress.pop(switch_handle, None)
+            self.switch_selected.pop(switch_handle, None)
+            self.switch_blends.pop(switch_handle, None)
+            self.switch_active.pop(switch_handle, None)
+            self.time_warp_progress.pop(switch_handle, None)
         drag_handles = program_handles(program_node, kind="DRAG")
         for handle in drag_handles:
             config_index = self._drag_config_by_handle.get(
@@ -2331,7 +2327,7 @@ class AnimGraphRuntime:
             if runtime_index is not None:
                 self.host.reset_drag(runtime_index)
 
-    def _reference_model_pose(self, frame: BranchFrame) -> dict[str, Any]:
+    def reference_model_pose(self, frame: BranchFrame) -> dict[str, Any]:
         key = (
             scope_signature(frame),
             isinstance(frame.reference_pose, EngineSpacePose),
@@ -2439,7 +2435,7 @@ class AnimGraphRuntime:
             prior = tracks.get(name, TrackSnapshot(False, 0.0))
             exists = (
                 prior.existed
-                or name in self._stack_track_names
+                or name in self.stack_track_names
                 or node_type == "animAnimNode_AdditionalFloatTrack"
             )
             tracks[name] = TrackSnapshot(exists, float(track_values[name]))
@@ -2461,7 +2457,7 @@ class AnimGraphRuntime:
             ik_targets=ik_targets,
         )
 
-    def _execute_stack_node(
+    def execute_stack_node(
         self, program_node, child: BranchFrame, *, copy_frame: bool = True
     ) -> BranchFrame:
         handle = normalized_source_handle(program_node.handle)
@@ -2544,7 +2540,7 @@ class AnimGraphRuntime:
             ik_targets=child.ik_targets,
         )
 
-    def _execute_shared_meta_frame(
+    def execute_shared_meta_frame(
         self,
         program_node,
         child: BranchFrame,
@@ -2556,7 +2552,7 @@ class AnimGraphRuntime:
         node_name = "SharedMetaPoseAdditive" if additive else "SharedMetaPose"
         if child.model_space:
             raise ValueError(f"{node_name} preview requires local-space input")
-        binding = self._shared_meta_binding
+        binding = self.shared_meta_binding
         if binding is None:
             raise ValueError(f"{node_name} has no bound parent-pose context")
         handle = normalized_source_handle(program_node.handle)
@@ -2569,10 +2565,10 @@ class AnimGraphRuntime:
         pose = dict(child.pose) if copy_frame else child.pose
         tracks = dict(child.tracks) if copy_frame else child.tracks
         track_values = {name: snap.value for name, snap in tracks.items()}
-        parent_frame = self._meta_parent_frame_current or input_frame
+        parent_frame = self.meta_parent_frame_current or input_frame
         parent_pose = (
-            self._facial_shared_parent_pose(parent_frame)
-            if self._facial_binding is not None and self._owner_scope_bound
+            self.facial_shared_parent_pose(parent_frame)
+            if self.facial_binding is not None and self.owner_scope_bound
             else parent_frame.pose
         )
         parent_tracks = {name: snap.value for name, snap in parent_frame.tracks.items()}
@@ -2626,10 +2622,10 @@ class AnimGraphRuntime:
             ik_targets=child.ik_targets,
         )
         if not additive:
-            self._trace_facial_frame("shared_meta_output", result)
+            self.trace_facial_frame("shared_meta_output", result)
         return result
 
-    def _execute_trajectory_from_meta_pose_frame(
+    def execute_trajectory_from_meta_pose_frame(
         self,
         program_node,
         child: BranchFrame,
@@ -2645,7 +2641,7 @@ class AnimGraphRuntime:
         if not target or target not in child.pose:
             return child
         source = str(data.get("source", "") or "")
-        parent_frame = self._meta_parent_frame_current or input_frame
+        parent_frame = self.meta_parent_frame_current or input_frame
         trajectory = parent_frame.pose.get(source)
         if trajectory is None:
             trajectory = child.reference_pose.get(target)
@@ -2673,7 +2669,7 @@ class AnimGraphRuntime:
             ik_targets=child.ik_targets,
         )
 
-    def _sync_look_at_request(self, handle, state, data):
+    def sync_look_at_request(self, handle, state, data):
         controls = self.host.look_at_controls()
         active = controls.enabled
         part = controls.part
@@ -2690,7 +2686,7 @@ class AnimGraphRuntime:
         if active and part not in configured:
             available = {
                 str(item.get(key, ""))
-                for value in self._look_at_data.values()
+                for value in self.look_at_data.values()
                 for item in value.get("stateMachinesSettings", ())
                 for key in ("partName", "partAlias")
             }
@@ -2708,10 +2704,10 @@ class AnimGraphRuntime:
             changed = previous is not None
             state.service_requests.pop(key, None)
         if changed:
-            for mixer in self._facial_mixer_states.values():
+            for mixer in self.facial_mixer_states.values():
                 mixer.notify_look_at()
 
-    def _advance_facial_mixer_frame(self, state, data, frame, dt):
+    def advance_facial_mixer_frame(self, state, data, frame, dt):
         def duration(name):
             clip = self.host.clip(name)
             if clip is None:
@@ -2811,14 +2807,14 @@ class AnimGraphRuntime:
         return events
 
     def _emit_source_anim_end(self, data: Mapping[str, Any]) -> None:
-        self._anim_end_events.add("At least one animation ended")
+        self.anim_end_events.add("At least one animation ended")
         event_name = str(data.get("animLoopEventName", "") or "")
         if (
             bool(data.get("fireAnimLoopEvent", False))
             and event_name
             and event_name != "None"
         ):
-            self._anim_end_events.add(event_name)
+            self.anim_end_events.add(event_name)
 
     def _sampled_action_frame(
         self,
@@ -2958,7 +2954,7 @@ class AnimGraphRuntime:
         )
         if not absolute or not is_additive_animation_type(clip.animation_type):
             return frame
-        base = self._reference_frame(input_frame)
+        base = self.reference_frame(input_frame)
         pose = dict(base.pose)
         base_tracks = {name: snapshot.value for name, snapshot in base.tracks.items()}
         evaluate_blend_additive(
@@ -2991,7 +2987,7 @@ class AnimGraphRuntime:
             normalized_source_handle(program_node.handle), True
         )
 
-    def _execute_one_shot(
+    def execute_one_shot(
         self,
         program_node,
         raw_dt,
@@ -3003,7 +2999,7 @@ class AnimGraphRuntime:
         additive_branch,
     ) -> BranchFrame:
         """SkOneShotAnim, playing its clip once over the input pose"""
-        base = self._execute_program(
+        base = self.execute_program(
             program_node.children[0],
             raw_dt,
             time_dilation,
@@ -3026,7 +3022,7 @@ class AnimGraphRuntime:
             clip, program_node.data
         )
         time_seconds = float(self._source_anim_times.get(handle, clip_front))
-        shot = self._sample_source_action(
+        shot = self.sample_source_action(
             program_node,
             input_frame,
             additive_branch=bool(additive_branch),
@@ -3068,11 +3064,11 @@ class AnimGraphRuntime:
             ik_targets=base.ik_targets,
         )
 
-    def _execute_workspot_hub(
+    def execute_workspot_hub(
         self, program_node, raw_dt, input_frame, additive_branch
     ) -> BranchFrame:
         """WorkspotHub, playing the workspot clip from the UpdateWorkspot preview features"""
-        if self._facial_binding is not None:
+        if self.facial_binding is not None:
             raise ValueError(
                 "WorkspotHub facial idle playback is not implemented by Graph preview"
             )
@@ -3109,7 +3105,7 @@ class AnimGraphRuntime:
         )
         return interpolate_frames(current, upcoming, state.blend_weight)
 
-    def _execute_npc_exploration(
+    def execute_npc_exploration(
         self, program_node, raw_dt, input_frame, additive_branch
     ) -> BranchFrame:
         """NPCExploration, playing the traversal clip for the exploration preview features"""
@@ -3138,7 +3134,7 @@ class AnimGraphRuntime:
         )
         return result
 
-    def _sample_source_action(
+    def sample_source_action(
         self,
         program_node,
         input_frame: BranchFrame,
@@ -3188,7 +3184,7 @@ class AnimGraphRuntime:
             input_frame,
         )
         pose, tracks = frame.pose, frame.tracks
-        if self._source_anim_advanced_frame.get(handle) != self._perf_frames:
+        if self._source_anim_advanced_frame.get(handle) != self.perf_frames:
             end_time = max(
                 clip_front, (frame_end - frame_start) / float(FPS) - clip_end
             )
@@ -3230,11 +3226,11 @@ class AnimGraphRuntime:
             if ended:
                 self._emit_source_anim_end(data)
             if data.get("pushDataByTag"):
-                self._data_flow[data["pushDataByTag"]] = (
+                self.data_flow[data["pushDataByTag"]] = (
                     (time_seconds - clip_front) / span if span > 0.0 else 0.0
                 )
             self._source_anim_times[handle] = next_time
-            self._source_anim_advanced_frame[handle] = self._perf_frames
+            self._source_anim_advanced_frame[handle] = self.perf_frames
         return BranchFrame(
             pose,
             tracks,
@@ -3255,7 +3251,7 @@ class AnimGraphRuntime:
                 frame = input_frame
                 continue
             if kind == "REFERENCE":
-                frame = self._reference_frame(input_frame)
+                frame = self.reference_frame(input_frame)
                 continue
             if kind == "IDENTITY":
                 frame = identity_frame(input_frame)
@@ -3264,36 +3260,36 @@ class AnimGraphRuntime:
                 continue
             if kind in ("SHARED_META_POSE", "SHARED_META_POSE_ADDITIVE"):
                 started = perf_counter()
-                frame = self._execute_shared_meta_frame(
+                frame = self.execute_shared_meta_frame(
                     program_node,
                     frame,
                     input_frame,
                     additive=kind == "SHARED_META_POSE_ADDITIVE",
                     copy_frame=False,
                 )
-                self._perf_shared_meta += perf_counter() - started
+                self.perf_shared_meta += perf_counter() - started
                 continue
             if kind == "TRAJECTORY_FROM_META_POSE":
                 started = perf_counter()
-                frame = self._execute_trajectory_from_meta_pose_frame(
+                frame = self.execute_trajectory_from_meta_pose_frame(
                     program_node, frame, input_frame, copy_frame=False
                 )
-                self._perf_shared_meta += perf_counter() - started
+                self.perf_shared_meta += perf_counter() - started
                 continue
             if kind == "POSE_LS_TO_MS":
                 started = perf_counter()
-                frame = self._pose_ls_to_ms(frame)
-                self._perf_pose_space += perf_counter() - started
+                frame = self.pose_ls_to_ms(frame)
+                self.perf_pose_space += perf_counter() - started
                 continue
             if kind == "POSE_MS_TO_LS":
                 started = perf_counter()
-                frame = self._pose_ms_to_ls(frame)
-                self._perf_pose_space += perf_counter() - started
+                frame = self.pose_ms_to_ls(frame)
+                self.perf_pose_space += perf_counter() - started
                 continue
             if kind.startswith("STACK_"):
                 started = perf_counter()
-                frame = self._execute_stack_node(program_node, frame, copy_frame=False)
-                self._perf_stack += perf_counter() - started
+                frame = self.execute_stack_node(program_node, frame, copy_frame=False)
+                self.perf_stack += perf_counter() - started
                 continue
             if kind == "POSE_OP":
                 started = perf_counter()
@@ -3320,7 +3316,7 @@ class AnimGraphRuntime:
             self._program_steps[id(program_node)] = entry
         return entry
 
-    def _execute_program(
+    def execute_program(
         self,
         program_node,
         raw_dt,
@@ -3360,7 +3356,7 @@ class AnimGraphRuntime:
             )
 
         child = (
-            self._execute_program(
+            self.execute_program(
                 program_node.children[0],
                 raw_dt,
                 time_dilation,
@@ -3453,15 +3449,15 @@ class AnimGraphRuntime:
     ) -> None:
         if not self.structured or self.program is None:
             raise RuntimeError("branch-local graph runtime is not compiled")
-        self._current_raw_dt = float(raw_dt)
+        self.current_raw_dt = float(raw_dt)
         self._current_graph_dt = float(raw_dt) * float(time_dilation)
         self._capture_float_variable_inputs()
         self.values.begin_frame()
-        self._previous_anim_end_events = frozenset(self._anim_end_events)
-        self._anim_end_events.clear()
+        self._previous_anim_end_events = frozenset(self.anim_end_events)
+        self.anim_end_events.clear()
         self._anim_events.clear()
-        self._data_flow.clear()
-        self._blend_weights.clear()
+        self.data_flow.clear()
+        self.blend_weights.clear()
         self._ran_handles.clear()
         self._external_events_this_frame = self._consume_preview_external_events()
         self._preview_feature_cache = None
@@ -3471,9 +3467,9 @@ class AnimGraphRuntime:
             input_frame = self._capture_frame()
             self._perf_capture += perf_counter() - capture_started
         meta_input_frame = input_frame
-        self._trace_facial_frame("meta_input", meta_input_frame)
+        self.trace_facial_frame("meta_input", meta_input_frame)
         input_frame = self._facial_graph_input_frame(meta_input_frame)
-        self._meta_parent_frame_current = (
+        self.meta_parent_frame_current = (
             meta_input_frame if input_frame is not meta_input_frame else None
         )
         output_bones = self._graph_output_bones()
@@ -3490,7 +3486,7 @@ class AnimGraphRuntime:
                 self._last_frames = {}
             else:
                 frame_cache = {}
-                output = self._execute_program(
+                output = self.execute_program(
                     self.program,
                     raw_dt,
                     time_dilation,
@@ -3506,7 +3502,7 @@ class AnimGraphRuntime:
                 }
                 if self.view_handle in self._last_frames:
                     # A node inside a PoseLsToMs section holds a model-space pose; the rig shows it in local space.
-                    output = self._pose_ms_to_ls(self._last_frames[self.view_handle])
+                    output = self.pose_ms_to_ls(self._last_frames[self.view_handle])
         except Exception as error:
             try:
                 features = self.feature_values()
@@ -3532,25 +3528,25 @@ class AnimGraphRuntime:
                 float(time_dilation),
                 bool(skip_physics),
                 tuple(sorted(self._external_events_this_frame)),
-                tuple(sorted(self._anim_end_events)),
+                tuple(sorted(self.anim_end_events)),
                 dict(features),
-                dict(self._state_machine_states),
-                dict(self._state_machine_pending),
-                tuple(sorted(self._state_machine_transition_delay)),
-                dict(self._switch_selected),
+                dict(self.state_machine_states),
+                dict(self.state_machine_pending),
+                tuple(sorted(self.state_machine_transition_delay)),
+                dict(self.switch_selected),
                 error,
             )
             _LOG.error(
                 "AnimGraph runtime execution trace: %r",
                 tuple(map(_program_node_diagnostic, self._execution_trace)),
             )
-            self._meta_parent_frame_current = None
+            self.meta_parent_frame_current = None
             raise
         self._perf_execute += perf_counter() - execute_started
-        self._trace_facial_frame("part_output", output)
+        self.trace_facial_frame("part_output", output)
         output = self._facial_part_frame_to_meta(output, meta_input_frame)
-        self._trace_facial_frame("meta_output", output)
-        self._meta_parent_frame_current = None
+        self.trace_facial_frame("meta_output", output)
+        self.meta_parent_frame_current = None
         restore_started = perf_counter()
         dirty_bones = self._semantic_dirty_bones(output)
         self._perf_semantic_dirty_bones += len(dirty_bones)
@@ -3565,7 +3561,7 @@ class AnimGraphRuntime:
         }
         self._perf_final_restore += perf_counter() - restore_started
         self._written_tracks.update(output_tracks)
-        self._perf_frames += 1
+        self.perf_frames += 1
 
     def _input_fields(self) -> dict[str, tuple[str, ...]]:
         """Each program node's inputs, in child order, by the field they come from"""
@@ -3592,7 +3588,7 @@ class AnimGraphRuntime:
     def results(self) -> SolveResults:
         """What the last step solved"""
         transitions = {}
-        for handle, blend in self._state_machine_blends.items():
+        for handle, blend in self.state_machine_blends.items():
             duration = max(1e-8, float(blend.get("duration", 0.0) or 0.0))
             progress = min(1.0, float(blend.get("elapsed", 0.0) or 0.0) / duration)
             transitions[handle] = (int(blend["source"]), int(blend["target"]), progress)
@@ -3605,9 +3601,9 @@ class AnimGraphRuntime:
         fields = self._input_fields()
         weights = {
             handle: dict(zip(fields.get(handle, ()), shares))
-            for handle, shares in self._blend_weights.items()
+            for handle, shares in self.blend_weights.items()
         }
-        for handle, selected in self._switch_selected.items():
+        for handle, selected in self.switch_selected.items():
             if handle in ran and handle not in weights:
                 weights[handle] = {
                     name: float(index == selected)
@@ -3615,9 +3611,9 @@ class AnimGraphRuntime:
                 }
         return SolveResults(
             ran,
-            dict(self._state_machine_states),
+            dict(self.state_machine_states),
             transitions,
-            dict(self._switch_selected),
+            dict(self.switch_selected),
             weights,
         )
 
@@ -3640,7 +3636,7 @@ class AnimGraphRuntime:
         return dict(self._last_graph_output_pose)
 
     def performance_hotspots(self) -> str | None:
-        frames = max(1, int(self._perf_frames))
+        frames = max(1, int(self.perf_frames))
         timings = self._perf_pose_op_types
         if not timings:
             return None
@@ -3651,7 +3647,7 @@ class AnimGraphRuntime:
         )
 
     def performance_summary(self) -> str | None:
-        frames = int(self._perf_frames)
+        frames = int(self.perf_frames)
         if frames <= 0:
             return None
         total = self._perf_capture + self._perf_execute + self._perf_final_restore
@@ -3684,11 +3680,11 @@ class AnimGraphRuntime:
                 capture_events,
                 evaluated_events,
                 input_bones / max(1, capture_events),
-                (self._perf_stack / frames) * 1000.0,
-                (self._perf_pose_space / frames) * 1000.0,
+                (self.perf_stack / frames) * 1000.0,
+                (self.perf_pose_space / frames) * 1000.0,
                 (self._perf_pose_ops / frames) * 1000.0,
-                (self._perf_shared_meta / frames) * 1000.0,
-                (self._perf_blend / frames) * 1000.0,
+                (self.perf_shared_meta / frames) * 1000.0,
+                (self.perf_blend / frames) * 1000.0,
                 (self._perf_dangle / frames) * 1000.0,
                 (self._perf_drag / frames) * 1000.0,
             )

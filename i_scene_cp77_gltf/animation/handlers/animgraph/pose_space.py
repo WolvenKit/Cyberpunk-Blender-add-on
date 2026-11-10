@@ -11,8 +11,8 @@ class PoseLsToMsHandler(GraphNodeHandler):
 
     def execute(self, context, step):
         started = perf_counter()
-        result = context._pose_ls_to_ms(step.child)
-        context._perf_pose_space += perf_counter() - started
+        result = context.pose_ls_to_ms(step.child)
+        context.perf_pose_space += perf_counter() - started
         step.frame_cache[step.cache_key] = result
         return result
 
@@ -23,7 +23,7 @@ class PoseMsToLsHandler(GraphNodeHandler):
 
     def execute(self, context, step):
         started = perf_counter()
-        result = context._pose_ms_to_ls(step.child)
-        context._perf_pose_space += perf_counter() - started
+        result = context.pose_ms_to_ls(step.child)
+        context.perf_pose_space += perf_counter() - started
         step.frame_cache[step.cache_key] = result
         return result

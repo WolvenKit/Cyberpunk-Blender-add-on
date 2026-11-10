@@ -21,7 +21,7 @@ from ....core.log import get_logger, log_once
 from .simulation import collision, spaces, spring
 
 _GLOBAL_HANDLER = None
-_DRAW_CACHES = {}
+DRAW_CACHES = {}
 _STATIC_DRAW_CACHE = {}
 _LOG = get_logger(__name__)
 
@@ -185,12 +185,12 @@ class DangleDrawCache:
 
     @staticmethod
     def _live_bone_matrix(sim, bone_index):
-        if 0 <= int(bone_index) < len(sim._pose_bones):
-            pose_bone = sim._pose_bones[int(bone_index)]
+        if 0 <= int(bone_index) < len(sim.tracked_pose_bones):
+            pose_bone = sim.tracked_pose_bones[int(bone_index)]
             if pose_bone is not None:
                 return pose_bone.matrix.copy()
-        if 0 <= int(bone_index) < len(sim._interp_bone_xform):
-            return sim._interp_bone_xform[int(bone_index)].copy()
+        if 0 <= int(bone_index) < len(sim.interp_bone_xform):
+            return sim.interp_bone_xform[int(bone_index)].copy()
         return Matrix.Identity(4)
 
     def _rebuild(self, sim):
@@ -504,7 +504,7 @@ def _master_draw_callback(context):
     if not _dangle_overlays_enabled(context):
         return
     try:
-        for cache in tuple(_DRAW_CACHES.values()):
+        for cache in tuple(DRAW_CACHES.values()):
             cache.draw()
         arm = context.object
         if arm and arm.type == "ARMATURE" and arm.dangle_state.is_dangle_rig:
@@ -523,9 +523,9 @@ def _master_draw_callback(context):
 
 
 def update_draw_cache(rig_id: str, sim):
-    if rig_id not in _DRAW_CACHES:
-        _DRAW_CACHES[rig_id] = DangleDrawCache()
-    _DRAW_CACHES[rig_id].update(sim)
+    if rig_id not in DRAW_CACHES:
+        DRAW_CACHES[rig_id] = DangleDrawCache()
+    DRAW_CACHES[rig_id].update(sim)
 
 
 def register_global_handler():
@@ -541,5 +541,5 @@ def unregister_all():
     if _GLOBAL_HANDLER:
         bpy.types.SpaceView3D.draw_handler_remove(_GLOBAL_HANDLER, "WINDOW")
         _GLOBAL_HANDLER = None
-    _DRAW_CACHES.clear()
+    DRAW_CACHES.clear()
     _STATIC_DRAW_CACHE.clear()

@@ -17,8 +17,8 @@ def _compile_shape(sim, shape, node_index=None):
     if bone_index is None:
         bone_index = -1
     current_ms = (
-        sim._cur_bone_xform[bone_index] @ adjusted_ls
-        if 0 <= bone_index < len(sim._cur_bone_xform)
+        sim.cur_bone_xform[bone_index] @ adjusted_ls
+        if 0 <= bone_index < len(sim.cur_bone_xform)
         else Matrix.Identity(4)
     )
     extents = np.array(
@@ -121,9 +121,9 @@ def begin_shape_transforms(sim, shapes):
     for shape in shapes:
         shape["prev_xform_ms"] = shape["cur_xform_ms"].copy()
         bone_index = int(shape.get("bone_index", -1))
-        if 0 <= bone_index < len(sim._cur_bone_xform):
+        if 0 <= bone_index < len(sim.cur_bone_xform):
             _set_current_transform(
-                shape, sim._cur_bone_xform[bone_index] @ shape["ls_mat"]
+                shape, sim.cur_bone_xform[bone_index] @ shape["ls_mat"]
             )
 
 
@@ -131,8 +131,8 @@ def initialize_shape_transforms(sim, shapes):
     for shape in shapes:
         bone_index = int(shape.get("bone_index", -1))
         current = (
-            sim._cur_bone_xform[bone_index] @ shape["ls_mat"]
-            if 0 <= bone_index < len(sim._cur_bone_xform)
+            sim.cur_bone_xform[bone_index] @ shape["ls_mat"]
+            if 0 <= bone_index < len(sim.cur_bone_xform)
             else shape["cur_xform_ms"].copy()
         )
         shape["prev_xform_ms"] = current.copy()

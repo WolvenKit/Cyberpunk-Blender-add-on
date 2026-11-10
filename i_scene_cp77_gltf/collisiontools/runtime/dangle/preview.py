@@ -33,7 +33,7 @@ from ...blender.dangle_context import get_active_rig
 from ...blender.dangle_source import load_source_payload
 from .editor_state import refresh_graph_operations
 from .graph_state import GraphPreviewState
-from .overlay import _DRAW_CACHES, update_draw_cache
+from .overlay import DRAW_CACHES, update_draw_cache
 from .simulation import core, solvers, spaces
 
 SUPPORTED_PREVIEW_SOLVERS = {"DYNG", "PBD", "SPRING", "PENDULUM"}
@@ -412,8 +412,8 @@ def disable_rig(context):
     if rig is None:
         return OperationResult.cancelled("No active Dangle rig selected.", "WARNING")
     stop_preview(context, rig, restore_pose=True)
-    _DRAW_CACHES.pop(f"{rig.as_pointer()}", None)
-    _DRAW_CACHES.pop(rig.name, None)
+    DRAW_CACHES.pop(f"{rig.as_pointer()}", None)
+    DRAW_CACHES.pop(rig.name, None)
     state = rig.dangle_state
     state.dangle_nodes.clear()
     state.collision_shapes.clear()
@@ -550,14 +550,14 @@ def _timeline_playback_active() -> bool:
 
 
 def _register_frame_change_capture(simulator):
-    existing = getattr(simulator, "_frame_change_capture_handlers", None)
+    existing = getattr(simulator, "frame_change_capture_handlers", None)
     if existing is not None:
         return
 
     def _prepare_before_animation(_scene, _depsgraph=None):
         try:
             if getattr(getattr(simulator, "state", None), "is_playing", False):
-                simulator._timeline_playing = _timeline_playback_active()
+                simulator.timeline_playing = _timeline_playback_active()
                 simulator.prepare_frame_change_upstream()
         except ReferenceError:
             return
@@ -573,7 +573,7 @@ def _register_frame_change_capture(simulator):
         except Exception:
             _LOG.exception("Dangle frame-change upstream capture failed")
 
-    simulator._frame_change_capture_handlers = (
+    simulator.frame_change_capture_handlers = (
         _prepare_before_animation,
         _capture_after_animation,
     )
@@ -584,7 +584,7 @@ def _register_frame_change_capture(simulator):
 def _unregister_frame_change_capture(simulator):
     if simulator is None:
         return
-    handlers = getattr(simulator, "_frame_change_capture_handlers", None)
+    handlers = getattr(simulator, "frame_change_capture_handlers", None)
     if handlers is None:
         return
     pre_handler, post_handler = handlers
@@ -596,7 +596,7 @@ def _unregister_frame_change_capture(simulator):
         bpy.app.handlers.frame_change_post.remove(post_handler)
     except ValueError:
         pass
-    simulator._frame_change_capture_handlers = None
+    simulator.frame_change_capture_handlers = None
 
 
 def _enter_pose_mode(context, rig) -> bool:
@@ -767,7 +767,7 @@ def prepare_preview(context, graph_tree=None):
 
 
 def step_preview(context, simulator, cache_key, dt):
-    simulator._timeline_playing = _timeline_playback_active()
+    simulator.timeline_playing = _timeline_playback_active()
     solvers.update_simulation(simulator, min(dt, 0.1), time_dilation=1.0)
     draw_started = time.perf_counter()
     update_draw_cache(cache_key, simulator)
@@ -811,5 +811,5 @@ def finalize_preview(context, rig, simulator, cache_key, restore_pose=True):
     except ReferenceError:
         pass
     if cache_key is not None:
-        _DRAW_CACHES.pop(cache_key, None)
+        DRAW_CACHES.pop(cache_key, None)
     tag_view3d_redraw(context)

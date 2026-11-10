@@ -35,7 +35,7 @@ class FootStepScalingHandler(PoseOpHandler):
         written = evaluate_foot_step_scaling(
             op.pose,
             op.child.parent_map,
-            context._reference_model_pose(op.child),
+            context.reference_model_pose(op.child),
             op.data,
             float(speed),
             float(weight),

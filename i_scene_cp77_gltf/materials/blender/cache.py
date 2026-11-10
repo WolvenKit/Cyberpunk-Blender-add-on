@@ -20,10 +20,10 @@ _MATERIAL_PROTOTYPE_SIGNATURE_PROP = "_cp77_material_prototype_signature"
 _MATERIAL_SIGNED_NAME_PROP = "_cp77_material_signed_name"
 # A rollback that removes any of these can leave the caches naming removed datablocks.
 _ROLLBACK_DATABLOCKS = frozenset({"materials", "node_groups", "images"})
-_MATERIAL_CACHE = {}
-_MATERIAL_PROTOTYPE_CACHE = {}
+MATERIAL_CACHE = {}
+MATERIAL_PROTOTYPE_CACHE = {}
 _MATERIAL_CACHE_INDEXED = False
-_MATERIAL_CACHE_STATS = {
+MATERIAL_CACHE_STATS = {
     "hits": 0,
     "exact_hits": 0,
     "prototype_hits": 0,
@@ -82,7 +82,7 @@ def _ensure_material_cache_indexed():
         if isinstance(signature, str) and signature:
             indexed += int(
                 _prefer_material(
-                    _MATERIAL_CACHE,
+                    MATERIAL_CACHE,
                     signature,
                     material,
                 )
@@ -90,18 +90,18 @@ def _ensure_material_cache_indexed():
         if isinstance(prototype_signature, str) and prototype_signature:
             prototype_indexed += int(
                 _prefer_material(
-                    _MATERIAL_PROTOTYPE_CACHE,
+                    MATERIAL_PROTOTYPE_CACHE,
                     prototype_signature,
                     material,
                 )
             )
 
-    _MATERIAL_CACHE_STATS["indexed"] += indexed
-    _MATERIAL_CACHE_STATS["prototype_indexed"] += prototype_indexed
+    MATERIAL_CACHE_STATS["indexed"] += indexed
+    MATERIAL_CACHE_STATS["prototype_indexed"] += prototype_indexed
     _MATERIAL_CACHE_INDEXED = True
 
 
-def _lookup_cached(cache, signature):
+def lookup_cached(cache, signature):
     global _MATERIAL_CACHE_INDEXED
     _ensure_material_cache_indexed()
     material = cache.get(signature)
@@ -110,8 +110,8 @@ def _lookup_cached(cache, signature):
     if material is None:
         return None
 
-    _MATERIAL_CACHE_STATS["stale"] += 1
-    for each in (_MATERIAL_CACHE, _MATERIAL_PROTOTYPE_CACHE):
+    MATERIAL_CACHE_STATS["stale"] += 1
+    for each in (MATERIAL_CACHE, MATERIAL_PROTOTYPE_CACHE):
         for dead in [key for key, value in each.items() if not rna_is_live(value)]:
             del each[dead]
     _MATERIAL_CACHE_INDEXED = False
@@ -120,14 +120,14 @@ def _lookup_cached(cache, signature):
     return material if rna_is_live(material) else None
 
 
-def _record_exact_hit():
-    _MATERIAL_CACHE_STATS["hits"] += 1
-    _MATERIAL_CACHE_STATS["exact_hits"] += 1
+def record_exact_hit():
+    MATERIAL_CACHE_STATS["hits"] += 1
+    MATERIAL_CACHE_STATS["exact_hits"] += 1
 
 
-def _record_prototype_hit():
-    _MATERIAL_CACHE_STATS["hits"] += 1
-    _MATERIAL_CACHE_STATS["prototype_hits"] += 1
+def record_prototype_hit():
+    MATERIAL_CACHE_STATS["hits"] += 1
+    MATERIAL_CACHE_STATS["prototype_hits"] += 1
 
 
 def _restore_material_signature(material, signature):
@@ -137,8 +137,8 @@ def _restore_material_signature(material, signature):
     _MATERIAL_CACHE_INDEXED = False
 
 
-def _invalidate_material_signature(signature):
-    _MATERIAL_CACHE.pop(signature, None)
+def invalidate_material_signature(signature):
+    MATERIAL_CACHE.pop(signature, None)
     for material in bpy.data.materials:
         try:
             if material.get(_MATERIAL_SIGNATURE_PROP) == signature:
@@ -157,7 +157,7 @@ def _invalidate_material_signature(signature):
             pass
 
 
-def _cache_material(
+def cache_material(
     signature,
     prototype_signature,
     material,
@@ -169,9 +169,9 @@ def _cache_material(
         material[_MATERIAL_SIGNATURE_PROP] = signature
         material[_MATERIAL_PROTOTYPE_SIGNATURE_PROP] = prototype_signature
         material[_MATERIAL_SIGNED_NAME_PROP] = material.name
-        _MATERIAL_CACHE[signature] = material
-        _MATERIAL_PROTOTYPE_CACHE[prototype_signature] = material
-        _MATERIAL_CACHE_STATS["clones" if cloned else "builds"] += 1
+        MATERIAL_CACHE[signature] = material
+        MATERIAL_PROTOTYPE_CACHE[prototype_signature] = material
+        MATERIAL_CACHE_STATS["clones" if cloned else "builds"] += 1
         return material
     finally:
         if started is not None:
@@ -191,7 +191,7 @@ def rename_cached_material(material, name):
         material[_MATERIAL_SIGNED_NAME_PROP] = material.name
 
 
-def _raw_material_digests(raw_material):
+def raw_material_digests(raw_material):
     if not isinstance(raw_material, dict):
         encoded = json.dumps(
             raw_material,
@@ -234,8 +234,8 @@ def _raw_material_digests(raw_material):
 
 
 def reset_material_cache_stats():
-    for key in _MATERIAL_CACHE_STATS:
-        _MATERIAL_CACHE_STATS[key] = 0
+    for key in MATERIAL_CACHE_STATS:
+        MATERIAL_CACHE_STATS[key] = 0
 
 
 def begin_structure_sharing():
@@ -261,7 +261,7 @@ def remember_structure(key, material, slots):
     snapshot.name = _STRUCTURE_SNAPSHOT_NAME
     previous = _STRUCTURE_SNAPSHOTS.get(key)
     _STRUCTURE_SNAPSHOTS[key] = (snapshot, dict(slots))
-    _MATERIAL_CACHE_STATS["structure_shapes"] += 1
+    MATERIAL_CACHE_STATS["structure_shapes"] += 1
     if previous is not None:
         _RETIRED_SNAPSHOTS.append(previous[0])
 
@@ -278,7 +278,7 @@ def structure_snapshot(key):
 
 
 def record_structure_copy():
-    _MATERIAL_CACHE_STATS["structure_copies"] += 1
+    MATERIAL_CACHE_STATS["structure_copies"] += 1
 
 
 def _clear_structure_snapshots():
@@ -305,8 +305,8 @@ def clear_material_cache(
 ):
     """Clear transient lookup state without necessarily erasing telemetry or live signatures"""
     global _MATERIAL_CACHE_INDEXED
-    _MATERIAL_CACHE.clear()
-    _MATERIAL_PROTOTYPE_CACHE.clear()
+    MATERIAL_CACHE.clear()
+    MATERIAL_PROTOTYPE_CACHE.clear()
     _MATERIAL_CACHE_INDEXED = False
 
     if reset_stats:
@@ -341,28 +341,28 @@ register_rollback_hook("material_cache", _clear_after_rollback)
 
 def warm_material_cache_index():
     """Index signature-tagged Blender materials for persistent cache reuse"""
-    before_exact = len(_MATERIAL_CACHE)
-    before_prototypes = len(_MATERIAL_PROTOTYPE_CACHE)
+    before_exact = len(MATERIAL_CACHE)
+    before_prototypes = len(MATERIAL_PROTOTYPE_CACHE)
     _ensure_material_cache_indexed()
     return {
-        "exact_entries_added": max(0, len(_MATERIAL_CACHE) - before_exact),
+        "exact_entries_added": max(0, len(MATERIAL_CACHE) - before_exact),
         "prototype_entries_added": max(
             0,
-            len(_MATERIAL_PROTOTYPE_CACHE) - before_prototypes,
+            len(MATERIAL_PROTOTYPE_CACHE) - before_prototypes,
         ),
         "indexed": bool(_MATERIAL_CACHE_INDEXED),
     }
 
 
 def material_cache_counters():
-    return dict(_MATERIAL_CACHE_STATS)
+    return dict(MATERIAL_CACHE_STATS)
 
 
 def material_cache_stats(*, include_helpers=True):
     stats = {
-        **_MATERIAL_CACHE_STATS,
-        "entries": len(_MATERIAL_CACHE),
-        "prototype_entries": len(_MATERIAL_PROTOTYPE_CACHE),
+        **MATERIAL_CACHE_STATS,
+        "entries": len(MATERIAL_CACHE),
+        "prototype_entries": len(MATERIAL_PROTOTYPE_CACHE),
     }
     if include_helpers:
         helpers = helper_cache_stats()

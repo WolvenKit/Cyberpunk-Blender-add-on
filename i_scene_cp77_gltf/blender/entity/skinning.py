@@ -7,8 +7,8 @@ from ...animation.domain.rig.naming import merged_bone_name
 from ...assetio.values import cname_value
 from ..collections import preserve_world_parent
 from .transforms import (
-    _rig_json_bone_matrix_array,
-    _rig_json_model_space_matrices,
+    rig_json_bone_matrix_array,
+    rig_json_model_space_matrices,
     cache_armature_bones,
     is_live_armature_object,
     rig_bone_index_for,
@@ -121,7 +121,7 @@ def component_skin_attachment_matrix(mesh_j, rig_j):
         _SKIN_ATTACHMENT_CACHE[cache_key] = (mesh_j, rig_j, result)
         return result
 
-    rig_matrices = _rig_json_model_space_matrices(rig_j)
+    rig_matrices = rig_json_model_space_matrices(rig_j)
     rig_model_space = (
         rig_matrices[target_index]
         if target_index < len(rig_matrices)
@@ -153,7 +153,7 @@ def component_skin_attachment_matrix(mesh_j, rig_j):
         child_bind_matrices.append(child_skin_to_rig)
 
     if child_names:
-        rig_matrix_array = _rig_json_bone_matrix_array(rig_j)
+        rig_matrix_array = rig_json_bone_matrix_array(rig_j)
         target_array = rig_matrix_array[np.asarray(child_target_indices, dtype=np.intp)]
         bind_array = np.stack(child_bind_matrices)
         products = np.matmul(target_array, bind_array)

@@ -10,7 +10,7 @@ from ...assetio.paths import animgraph_json_path
 from ...blender.context import node_editor_tree
 from ...core.log import get_logger
 from ...core.notifications import report
-from .nodes import _runtime_node, encode_selected_node
+from .nodes import runtime_node, encode_selected_node
 from .root import encode_rootchunk_summary, encode_wolvenkit_json
 from .tree_document import encode_active_tree
 from .variables import encode_root_variables
@@ -104,7 +104,7 @@ class REDENGINE_OT_encode_selected_node(bpy.types.Operator):
         return (
             node_editor_tree(context, ANIMGRAPH_TREE_ID) is not None
             and node is not None
-            and _runtime_node(node)
+            and runtime_node(node)
         )
 
     def execute(self, context):

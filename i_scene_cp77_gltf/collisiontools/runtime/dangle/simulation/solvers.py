@@ -110,7 +110,7 @@ def _compile_lookat_map(sim, node_index):
 
 
 def compile_output_topology(sim):
-    sim._node_output_topology = []
+    sim.node_output_topology = []
     arm = sim.arm_obj
     bone_indices = {bone.name: index for index, bone in enumerate(arm.data.bones)}
 
@@ -194,7 +194,7 @@ def compile_output_topology(sim):
                 ),
             )
         )
-        sim._node_output_topology.append(
+        sim.node_output_topology.append(
             {
                 "particle_order": particle_order,
                 "lookat_map": lookat_map,
@@ -222,9 +222,9 @@ def _correct_children_matrices(
         apply_names.add(child_name)
 
 
-def _compose_dangle_node_matrices(sim, node_index, base_matrices=None):
+def compose_dangle_node_matrices(sim, node_index, base_matrices=None):
     dnode = sim.state.dangle_nodes[node_index]
-    topology = sim._node_output_topology[node_index]
+    topology = sim.node_output_topology[node_index]
     lookat_map = topology["lookat_map"]
     pose_bones = topology["pose_bones"]
     subtrees = topology["subtrees"]
@@ -347,13 +347,13 @@ def _apply_dangle_node(sim, node_index):
     if not 0 <= int(node_index) < len(cached) or not cached[int(node_index)]:
         return
 
-    matrices, apply_names = _compose_dangle_node_matrices(sim, node_index)
+    matrices, apply_names = compose_dangle_node_matrices(sim, node_index)
     if not apply_names:
         return
 
     sim.prepare_output_bones(apply_names)
     _apply_model_space_matrices(
-        matrices, apply_names, sim._node_output_topology[node_index]
+        matrices, apply_names, sim.node_output_topology[node_index]
     )
     sim.mark_output_bones(apply_names)
     _finish_graph_pose_write(sim)

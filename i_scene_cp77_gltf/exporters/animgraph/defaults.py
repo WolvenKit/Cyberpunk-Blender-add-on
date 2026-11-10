@@ -103,7 +103,7 @@ def _schema_color() -> dict[str, Any]:
     return {"$type": "Color", "Alpha": 0, "Blue": 0, "Green": 0, "Red": 0}
 
 
-def _schema_resource_path() -> dict[str, Any]:
+def schema_resource_path() -> dict[str, Any]:
     return {"$type": "ResourcePath", "$storage": "uint64", "$value": "0"}
 
 
@@ -129,7 +129,7 @@ def schema_default_value(
     if t.startswith("handle:"):
         return None
     if t.startswith("rRef:"):
-        return {"DepotPath": _schema_resource_path(), "Flags": "Default"}
+        return {"DepotPath": schema_resource_path(), "Flags": "Default"}
 
     try:
         enum_type = enums.resolve_enum_type(
@@ -159,7 +159,7 @@ def schema_default_value(
     if t == "CName":
         return cname("None")
     if t == "ResourcePath":
-        return _schema_resource_path()
+        return schema_resource_path()
     if t == "Color":
         return _schema_color()
     if t == "Vector2":

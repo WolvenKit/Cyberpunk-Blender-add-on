@@ -28,7 +28,7 @@ from .text import BlenderFonts
 _LOG = get_logger(__name__)
 # Widget edits not yet exported, as JSON on the screen's object.
 PENDING_EDITS_KEY = "inkPendingEdits"
-_FONTS = BlenderFonts()
+SCREEN_FONTS = BlenderFonts()
 _PIXELS = PartPixels()
 _SCREENS: dict[str, Screen] = {}
 # The playing screens' objects by pointer, each with the name it was last found by, so a renamed screen keeps playing.
@@ -57,7 +57,7 @@ class Screen:
             return False
         canvas, _scale, _laid_out = render_library(
             self.loaded,
-            _FONTS,
+            SCREEN_FONTS,
             _PIXELS,
             overrides=overrides,
             max_dimension=self.max_dimension,
@@ -75,7 +75,7 @@ def render(
     """The switched-on canvas of a loaded library"""
     canvas, _scale, _laid_out = render_library(
         loaded,
-        _FONTS,
+        SCREEN_FONTS,
         _PIXELS,
         overrides=switched_on_overrides(animation),
         max_dimension=max_dimension,

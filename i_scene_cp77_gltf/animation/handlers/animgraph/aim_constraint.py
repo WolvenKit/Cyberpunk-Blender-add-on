@@ -63,7 +63,7 @@ class AimConstraintHandler(PoseOpHandler):
                 "animAnimNode_AimConstraint_ObjectUp",
                 "animAnimNode_AimConstraint_ObjectRotationUp",
             }
-            else context._reference_model_pose(op.child)
+            else context.reference_model_pose(op.child)
         )
         evaluation = evaluate_aim_constraint(
             op.pose,

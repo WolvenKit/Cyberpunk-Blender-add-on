@@ -5,7 +5,7 @@ import bpy
 from ...animation.model.animgraph.constants import ANIMGRAPH_TREE_ID
 from ...blender.animgraph.access import get_attr, get_idprop
 from ...core.log import debug_exception, get_logger
-from .nodes import _runtime_node, encode_runtime_node_entry
+from .nodes import runtime_node, encode_runtime_node_entry
 from .tree_state import node_sort_key, root_tree, tree_nodes
 
 _LOG = get_logger(__name__)
@@ -16,7 +16,7 @@ def _tree_bool(tree: Any, key: str) -> bool:
 
 
 def _is_editor_projection_node(node: Any) -> bool:
-    if _runtime_node(node):
+    if runtime_node(node):
         return False
     red_type = str(get_attr(node, "red_type", "") or "")
     handle = str(get_attr(node, "red_handle_id", "") or "")
@@ -68,7 +68,7 @@ def encode_active_tree(tree: bpy.types.NodeTree) -> dict[str, Any]:
         raise ValueError("active editor tree is not a REDengine animGraph tree")
 
     all_nodes = tree_nodes(tree)
-    runtime_nodes = [node for node in all_nodes if _runtime_node(node)]
+    runtime_nodes = [node for node in all_nodes if runtime_node(node)]
     skipped_nodes = [
         node
         for node in all_nodes

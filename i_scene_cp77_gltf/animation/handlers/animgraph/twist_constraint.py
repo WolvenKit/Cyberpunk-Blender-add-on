@@ -31,7 +31,7 @@ class TwistConstraintHandler(PoseOpHandler):
             op.data,
             reference_pose_ms=None
             if op.child.model_space
-            else context._reference_model_pose(op.child),
+            else context.reference_model_pose(op.child),
             model_space=op.child.model_space,
         )
         return evaluation

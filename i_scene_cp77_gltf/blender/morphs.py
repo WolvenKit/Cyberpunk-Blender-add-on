@@ -5,7 +5,7 @@ import numpy as np
 
 from ..assetio.values import json_object, json_text
 from .custom_normals import set_custom_normals_from_corners
-from .mesh import _mesh_signature
+from .mesh import mesh_signature
 
 _SOURCE_MORPH_SHADING = "cp77_source_morph_shading"
 
@@ -13,7 +13,7 @@ _SOURCE_MORPH_SHADING = "cp77_source_morph_shading"
 def _key_signature(key):
     points = np.empty(len(key.data) * 3, dtype=np.float32)
     key.data.foreach_get("co", points)
-    return _mesh_signature(b"CP77Morph", points)
+    return mesh_signature(b"CP77Morph", points)
 
 
 def store_source_morph_shading(

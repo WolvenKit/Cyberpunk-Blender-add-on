@@ -19,9 +19,9 @@ from ...blender.animgraph.access import get_attr, get_idprop
 from ...blender.animgraph.rig_binding import binding_tree
 from ...core.log import get_logger
 from .dangle_patch import validate_payload, write_json
-from .defaults import _schema_resource_path, unresolved_default_collector
+from .defaults import schema_resource_path, unresolved_default_collector
 from .handles import finalize_new_handles
-from .nodes import _encode_tree_runtime_entries, _json_idprop, take_unlisted_entries
+from .nodes import encode_tree_runtime_entries, json_idprop, take_unlisted_entries
 from .paths import indexed_socket_links
 from .references import normalize_inline_first_references
 from .tree_state import root_tree
@@ -63,7 +63,7 @@ def _require_source_metadata(root: bpy.types.NodeTree, key: str) -> Any:
 
 def _source_root_output_spec(root: bpy.types.NodeTree) -> dict[str, Any]:
     _require_source_metadata(root, "red_root_output_json")
-    spec = _json_idprop(root, "red_root_output_json", None)
+    spec = json_idprop(root, "red_root_output_json", None)
     if not isinstance(spec, dict):
         raise ValueError("invalid required source metadata: red_root_output_json")
     return spec
@@ -103,7 +103,7 @@ def _source_ordered_root_entries(
         encoded_order.append(handle)
 
     _require_source_metadata(root, "red_root_nodes_order_json")
-    specs_raw = _json_idprop(root, "red_root_nodes_order_json", None)
+    specs_raw = json_idprop(root, "red_root_nodes_order_json", None)
     if not isinstance(specs_raw, list):
         raise ValueError("invalid required source metadata: red_root_nodes_order_json")
     specs = specs_raw
@@ -156,7 +156,7 @@ def _source_ordered_root_entries(
                 h = str(spec or "")
             if h:
                 source_known_handles.add(h)
-        refs_raw = _json_idprop(root, "red_nodes_to_init_refs_json", [])
+        refs_raw = json_idprop(root, "red_nodes_to_init_refs_json", [])
         if isinstance(refs_raw, list):
             source_known_handles.update(str(value) for value in refs_raw if value)
         source_known_handles.add(_root_handle(root))
@@ -208,7 +208,7 @@ def _default_root_chunk_scalars(
         "jsonFilesDirectory": "",
         "nodesToInit": [],
         "oneFrameToggle": 0,
-        "staticCommandsRig": {"DepotPath": _schema_resource_path(), "Flags": "Default"},
+        "staticCommandsRig": {"DepotPath": schema_resource_path(), "Flags": "Default"},
         "timeDeltaMultiplier": 1,
         "useAnimCommands": 0,
         "useAnimCommandsForCrowd": 0,
@@ -216,7 +216,7 @@ def _default_root_chunk_scalars(
         "useLunaticMode": 0,
     }
     _require_source_metadata(root, "red_rootchunk_scalars_json")
-    scalars = _json_idprop(root, "red_rootchunk_scalars_json", None)
+    scalars = json_idprop(root, "red_rootchunk_scalars_json", None)
     if not isinstance(scalars, dict):
         raise ValueError("invalid required source metadata: red_rootchunk_scalars_json")
     for key, value in scalars.items():
@@ -244,7 +244,7 @@ def encode_root_node(
 ) -> dict[str, Any]:
     root_handle = _root_handle(root)
     _require_source_metadata(root, "red_root_data_fields_json")
-    root_fields = _json_idprop(root, "red_root_data_fields_json", None)
+    root_fields = json_idprop(root, "red_root_data_fields_json", None)
     if not isinstance(root_fields, dict):
         raise ValueError("invalid required source metadata: red_root_data_fields_json")
     root_data = dict(root_fields)
@@ -276,9 +276,7 @@ def encode_rootchunk_payload(tree: bpy.types.NodeTree) -> dict[str, Any]:
 
     take_unlisted_entries()
     with indexed_socket_links():
-        entries = _encode_tree_runtime_entries(
-            root, embed_containers=True, _stack=set()
-        )
+        entries = encode_tree_runtime_entries(root, embed_containers=True, _stack=set())
         root_entry = encode_root_node(root, entries)
     ref_style = normalize_inline_first_references(
         root_entry, entries + take_unlisted_entries()

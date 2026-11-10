@@ -5,7 +5,7 @@ from ...core.log import get_logger
 from ...core.notifications import report
 from ...physics.runtime.bridge import require_bridge
 from ..runtime.simulation import (
-    _ACTIVE_SIM_SESSIONS,
+    ACTIVE_SIM_SESSIONS,
     end_runtime_session,
     register_simulation_session,
     remove_manipulator,
@@ -150,7 +150,7 @@ class PHYSX_OT_sim_step(bpy.types.Operator):
         remove_manipulator(self._cursor_handle)
         self._cursor_handle = "0"
         if self._session_key is not None:
-            _ACTIVE_SIM_SESSIONS.pop(self._session_key, None)
+            ACTIVE_SIM_SESSIONS.pop(self._session_key, None)
             self._session_key = None
         self._window_manager = None
         self._scene = None

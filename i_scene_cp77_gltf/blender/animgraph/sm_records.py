@@ -107,7 +107,7 @@ def fill_condition(
     ordered = [(spec.name, spec) for spec in specs if spec.name in values]
     ordered += [(key, None) for key in sorted(values) if key not in known]
     for key, spec in ordered:
-        property_codec._add_array_field(
+        property_codec.add_array_field(
             host, key, values[key], red_type_hint=_field_hint(spec)
         )
 
@@ -509,7 +509,7 @@ def owner_key(node) -> str:
     return str(getattr(node, "red_handle_id", ""))
 
 
-def _pseudo_node(sm_tree, red_type: str):
+def pseudo_node(sm_tree, red_type: str):
     if sm_tree is None:
         return None
     for node in sm_tree.nodes:

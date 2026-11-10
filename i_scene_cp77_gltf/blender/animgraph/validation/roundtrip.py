@@ -20,7 +20,7 @@ from .. import (
 )
 from ..access import get_attr, get_idprop
 from ..property_codec import encode_node_property
-from ..sm_records import ENTRY_RED_TYPE, _pseudo_node
+from ..sm_records import ENTRY_RED_TYPE, pseudo_node
 from . import reporting
 
 _LOG = get_logger(__name__)
@@ -202,7 +202,7 @@ def _audit_state_machine(
             limit=WARNING_LIMIT,
         )
 
-    entry = _pseudo_node(tree, ENTRY_RED_TYPE)
+    entry = pseudo_node(tree, ENTRY_RED_TYPE)
     if entry is not None and sm_edit.default_row(entry) is None:
         counters["default_state_unset"] += 1
         reporting.append_limited(

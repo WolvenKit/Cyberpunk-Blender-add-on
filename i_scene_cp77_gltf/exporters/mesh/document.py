@@ -31,7 +31,7 @@ from ...blender.mesh import (
     shading_signature,
     source_vertex_indices,
 )
-from ...blender.mesh_validation import VERT_LIMIT, _loop_vertex_indices
+from ...blender.mesh_validation import VERT_LIMIT, loop_vertex_indices
 from ...blender.morphs import (
     evaluated_morph_frame,
     mesh_corner_frame,
@@ -394,7 +394,7 @@ def _morph_deltas_through_modifiers(
     blocks = _export_shape_keys(obj, export_garment_morph=export_garment_morph)
     if not blocks:
         return [], [], []
-    base_loops = _loop_vertex_indices(base_mesh)
+    base_loops = loop_vertex_indices(base_mesh)
     base_totals = np.empty(len(base_mesh.polygons), dtype=np.int32)
     base_mesh.polygons.foreach_get("loop_total", base_totals)
     base_normals, base_tangents, base_signs = mesh_corner_frame(base_mesh, uv_name)
@@ -408,7 +408,7 @@ def _morph_deltas_through_modifiers(
     basis_key_normals = np.asarray(
         key_blocks[0].normals_split_get(), dtype=np.float32
     ).reshape(-1, 3)
-    raw_loops = _loop_vertex_indices(obj.data)
+    raw_loops = loop_vertex_indices(obj.data)
     raw_geometry_signature, raw_frame_signature = geometry_and_tangent_frame_signatures(
         obj.data, uv_name=uv_name
     )
@@ -1123,7 +1123,7 @@ def build_export_submesh(
                 f"{obj.name!r} uses multiple material regions; separate them into individual submesh objects before exporting."
             )
 
-        loop_vertices = _loop_vertex_indices(mesh)
+        loop_vertices = loop_vertex_indices(mesh)
         triangles_loops = _triangle_loops(mesh)
         uv_layers = _uv_loop_layers(mesh)
         tangent_uv_name = next(

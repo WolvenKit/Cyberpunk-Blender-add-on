@@ -28,10 +28,10 @@ from ....material_types.decal_composite import PROJECTION_COVERAGE_ATTRIBUTE
 from ....materials.blender.builder import MaterialBuilder
 from ....materials.blender.bulk import bulk_material_import_scope
 from ....materials.blender.cache import (
-    _MATERIAL_CACHE,
-    _cache_material,
-    _lookup_cached,
-    _record_prototype_hit,
+    MATERIAL_CACHE,
+    cache_material,
+    lookup_cached,
+    record_prototype_hit,
     rename_cached_material,
 )
 from ....materials.blender.images import DEFAULT_IMAGE_FORMAT
@@ -373,22 +373,20 @@ class DecalService:
             return None, None
         root = builder.obj["Data"]["RootChunk"]
         signature = builder.decal_signature(root, cache_identity=identity)
-        if _lookup_cached(_MATERIAL_CACHE, signature) is not None:
+        if lookup_cached(MATERIAL_CACHE, signature) is not None:
             return None, None
         prototype, state, added_nodes = entry
         material = track_created_datablock("materials", prototype.copy())
         try:
             material.name = builder.archive_material_name()
             restore_graph_state(material.node_tree, state, added_nodes)
-            builder._set_material_source_properties(
-                material, {}, include_template=False
-            )
-            _cache_material(signature, signature, material, cloned=True)
-            _record_prototype_hit()
+            builder.set_material_source_properties(material, {}, include_template=False)
+            cache_material(signature, signature, material, cloned=True)
+            record_prototype_hit()
             self.stats["graph_reuses"] += 1
             return material, state
         except Exception:
-            builder._remove_failed_material(material)
+            builder.remove_failed_material(material)
             raise
 
     def cache_stats(self):

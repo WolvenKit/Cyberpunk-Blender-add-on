@@ -108,7 +108,7 @@ _OVERRIDE_PALETTE_STATS = {
 }
 
 
-def _load_rooted_json(reference, project_path, depot_path):
+def load_rooted_json(reference, project_path, depot_path):
     extension = full_suffix(reference)
     resolved = resolve_rooted_path(
         reference,
@@ -667,7 +667,7 @@ def sync_hidden_layer_links(node_tree, root):
             link.is_muted = muted
 
 
-def _role_node(nodes, role, fallback=None):
+def role_node(nodes, role, fallback=None):
     if nodes is None:
         return None
     for node in nodes:
@@ -679,15 +679,15 @@ def _role_node(nodes, role, fallback=None):
     return nodes.get(fallback) if fallback else None
 
 
-def _layer_template_path(layer):
+def layer_template_path(layer):
     layer_tree = getattr(layer, "node_tree", None)
     if layer_tree is None:
         return ""
-    base = _role_node(getattr(layer_tree, "nodes", None), "base_material", "Group")
+    base = role_node(getattr(layer_tree, "nodes", None), "base_material", "Group")
     template_tree = getattr(base, "node_tree", None) if base is not None else None
     if template_tree is None:
         return str(layer.get("cp77_ml_template", ""))
-    group_input = _role_node(
+    group_input = role_node(
         getattr(template_tree, "nodes", None), "group_input", "Group Input"
     )
     if group_input is not None:
@@ -727,12 +727,12 @@ def generate_override_palettes(objects, *, include_disconnected=False):
                 MAX_LAYERS,
                 include_disconnected,
             ):
-                template_path = _layer_template_path(layer)
+                template_path = layer_template_path(layer)
                 if not template_path:
                     warnings.append(f"Layer {index + 1} has no MLTemplate metadata.")
                     continue
                 try:
-                    template_json = _load_rooted_json(
+                    template_json = load_rooted_json(
                         template_path + ".json",
                         project_path,
                         depot_path,

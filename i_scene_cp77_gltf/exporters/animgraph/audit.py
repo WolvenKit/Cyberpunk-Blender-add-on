@@ -17,8 +17,8 @@ from ...blender.animgraph import variables as variable_bindings
 from ...blender.animgraph.access import get_attr
 from ...blender.animgraph.property_codec import encode_node_property
 from ...core.log import debug_exception, get_logger
-from .nodes import _json_idprop, _runtime_node
-from .paths import _iter_exportable_input_sockets, _json_path_get, _link_source_handle
+from .nodes import json_idprop, runtime_node
+from .paths import iter_exportable_input_sockets, json_path_get, link_source_handle
 from .tree_state import root_tree
 
 _LOG = get_logger(__name__)
@@ -217,7 +217,7 @@ def export_reversal_audit_for_payload(
 
     for tree_obj in _related_trees_for_export(root):
         for node in getattr(tree_obj, "nodes", []) or []:
-            if not _runtime_node(node):
+            if not runtime_node(node):
                 continue
             counters["runtimeNodes"] += 1
             handle = str(get_attr(node, "red_handle_id", "") or "")
@@ -319,7 +319,7 @@ def export_reversal_audit_for_payload(
                     )
                     continue
                 ok, actual = (
-                    _json_path_get(data, path)
+                    json_path_get(data, path)
                     if isinstance(data, dict)
                     else (False, None)
                 )
@@ -344,9 +344,7 @@ def export_reversal_audit_for_payload(
                 else:
                     counters["propertiesRoundtripped"] += 1
 
-            preserved_fields = _json_idprop(
-                node, "red_preserved_export_fields_json", {}
-            )
+            preserved_fields = json_idprop(node, "red_preserved_export_fields_json", {})
             if isinstance(preserved_fields, dict):
                 for key in preserved_fields:
                     counters["preservedFieldsTotal"] += 1
@@ -359,11 +357,11 @@ def export_reversal_audit_for_payload(
                     else:
                         counters["preservedFieldsRoundtripped"] += 1
 
-            for sock in _iter_exportable_input_sockets(node):
+            for sock in iter_exportable_input_sockets(node):
                 counters["socketsTotal"] += 1
                 path = str(get_attr(sock, "red_json_path", "") or "")
                 link_type = str(get_attr(sock, "red_link_type", "") or "")
-                source = _link_source_handle(sock)
+                source = link_source_handle(sock)
                 if not path or not link_type:
                     counters["socketsMissingBinding"] += 1
                     block(
@@ -372,7 +370,7 @@ def export_reversal_audit_for_payload(
                     )
                     continue
                 ok, wrapper = (
-                    _json_path_get(data, path)
+                    json_path_get(data, path)
                     if isinstance(data, dict)
                     else (False, None)
                 )

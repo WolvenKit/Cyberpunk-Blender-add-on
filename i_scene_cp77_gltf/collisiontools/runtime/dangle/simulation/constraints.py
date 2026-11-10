@@ -158,7 +158,7 @@ _Z_AXIS = Vector((0.0, 0.0, 1.0))
 def dyng_frame(sim, node_index):
     """Ellipsoid and cone frames and directed capsule axes of a DynG node from the interpolated bones"""
     system = sim.system
-    interpolated = sim._interp_bone_xform
+    interpolated = sim.interp_bone_xform
 
     ellipsoids = {}
     selection = system.node_ell_sel[node_index]

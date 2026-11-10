@@ -54,9 +54,9 @@ def _host():
 
 def _runtime_cleanup_registry():
     package = _shared_native_state()
-    if not hasattr(package, "_cp77_runtime_cleanup_clients"):
-        package._cp77_runtime_cleanup_clients = {}
-    return package._cp77_runtime_cleanup_clients
+    if not hasattr(package, "cp77_runtime_cleanup_clients"):
+        package.cp77_runtime_cleanup_clients = {}
+    return package.cp77_runtime_cleanup_clients
 
 
 def register_runtime_cleanup_client(name, callback):
@@ -77,7 +77,7 @@ def unregister_runtime_cleanup_client(name, callback=None):
     package = sys.modules.get(_NATIVE_PACKAGE_NAME)
     if package is None:
         return
-    registry = getattr(package, "_cp77_runtime_cleanup_clients", {})
+    registry = getattr(package, "cp77_runtime_cleanup_clients", {})
     identifier = (_RUNTIME_OWNER, str(name or "").strip())
     existing = registry.get(identifier)
     if existing is not None and (callback is None or existing is callback):
@@ -86,7 +86,7 @@ def unregister_runtime_cleanup_client(name, callback=None):
 
 def _cleanup_runtime_clients(bridge, *, all_owners=False):
     package = sys.modules.get(_NATIVE_PACKAGE_NAME)
-    registry = getattr(package, "_cp77_runtime_cleanup_clients", {})
+    registry = getattr(package, "cp77_runtime_cleanup_clients", {})
     errors = []
     for (owner, name), callback in tuple(registry.items()):
         if not all_owners and owner != _RUNTIME_OWNER:
@@ -178,7 +178,7 @@ def invalidate_physx_runtime():
         if active_owner:
             package = sys.modules.get(_NATIVE_PACKAGE_NAME)
             if package is not None:
-                package._cp77_runtime_active_owner = None
+                package.cp77_runtime_active_owner = None
     _raise_cleanup_failures(errors)
 
 
@@ -230,9 +230,9 @@ def _shared_native_state():
         package = types.ModuleType(_NATIVE_PACKAGE_NAME)
         package.__path__ = []
         sys.modules[_NATIVE_PACKAGE_NAME] = package
-    if not hasattr(package, "_cp77_runtime_owners"):
-        package._cp77_runtime_owners = set()
-        package._cp77_runtime_active_owner = None
+    if not hasattr(package, "cp77_runtime_owners"):
+        package.cp77_runtime_owners = set()
+        package.cp77_runtime_active_owner = None
     return package
 
 
@@ -240,28 +240,28 @@ def bridge_owned_by_extension():
     package = sys.modules.get(_NATIVE_PACKAGE_NAME)
     return (
         package is not None
-        and getattr(package, "_cp77_runtime_active_owner", None) == _RUNTIME_OWNER
+        and getattr(package, "cp77_runtime_active_owner", None) == _RUNTIME_OWNER
     )
 
 
 def _claim_native_runtime():
     package = _shared_native_state()
-    active = package._cp77_runtime_active_owner
+    active = package.cp77_runtime_active_owner
     if active is not None and active != _RUNTIME_OWNER:
         raise RuntimeError(
             f"PhysX native bridge is active in {active}; stop its simulation before using {_RUNTIME_OWNER}"
         )
-    package._cp77_runtime_active_owner = _RUNTIME_OWNER
+    package.cp77_runtime_active_owner = _RUNTIME_OWNER
 
 
 def _release_native_runtime():
     package = sys.modules.get(_NATIVE_PACKAGE_NAME)
     if package is None:
         return False, False
-    was_active = getattr(package, "_cp77_runtime_active_owner", None) == _RUNTIME_OWNER
+    was_active = getattr(package, "cp77_runtime_active_owner", None) == _RUNTIME_OWNER
     if was_active:
-        package._cp77_runtime_active_owner = None
-    owners = getattr(package, "_cp77_runtime_owners", set())
+        package.cp77_runtime_active_owner = None
+    owners = getattr(package, "cp77_runtime_owners", set())
     owners.discard(_RUNTIME_OWNER)
     return was_active, not bool(owners)
 
@@ -311,7 +311,7 @@ def initialize_physx_capability(*, retry_transient=False):
         except Exception as error:
             return _set_unavailable(error, bridge_path, error=error)
         package = _shared_native_state()
-        package._cp77_runtime_owners.add(_RUNTIME_OWNER)
+        package.cp77_runtime_owners.add(_RUNTIME_OWNER)
         register_runtime_cleanup_client(
             "_capability_scene_state", _shared_runtime_invalidated
         )
@@ -341,7 +341,7 @@ def initialize_physx_capability(*, retry_transient=False):
         sys.modules[_NATIVE_MODULE_NAME] = module
         spec.loader.exec_module(module)
         validate_current_bridge_contract(module)
-        package._cp77_runtime_owners.add(_RUNTIME_OWNER)
+        package.cp77_runtime_owners.add(_RUNTIME_OWNER)
         register_runtime_cleanup_client(
             "_capability_scene_state", _shared_runtime_invalidated
         )
@@ -356,7 +356,7 @@ def initialize_physx_capability(*, retry_transient=False):
         if sys.modules.get(_NATIVE_MODULE_NAME) is module:
             sys.modules.pop(_NATIVE_MODULE_NAME, None)
         package = sys.modules.get(_NATIVE_PACKAGE_NAME)
-        if package is not None and not getattr(package, "_cp77_runtime_owners", set()):
+        if package is not None and not getattr(package, "cp77_runtime_owners", set()):
             sys.modules.pop(_NATIVE_PACKAGE_NAME, None)
         _BRIDGE = None
         _release_native_resources()

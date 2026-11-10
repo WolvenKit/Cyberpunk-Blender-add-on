@@ -15,7 +15,7 @@ from ...physics.runtime.cloth_provider import (
 )
 from .overlay import mark_overlay_dirty
 from .vehicle_preview import (
-    _flush_vehicle_live_updates_for_scene,
+    flush_vehicle_live_updates_for_scene,
     apply_vehicle_inputs,
     clear_vehicle_inputs,
     sync_vehicle_preview,
@@ -24,7 +24,7 @@ from .vehicle_preview import (
 
 _LOG = get_logger(__name__)
 
-_ACTIVE_SIM_SESSIONS = {}
+ACTIVE_SIM_SESSIONS = {}
 
 
 def simulation_timestep(scene):
@@ -38,12 +38,12 @@ def simulation_timestep(scene):
 def register_simulation_session(key, stop_callback, *, owner="collisiontools"):
     if not callable(stop_callback):
         raise TypeError("Simulation stop callback must be callable")
-    _ACTIVE_SIM_SESSIONS[key] = (str(owner or "collisiontools"), stop_callback)
+    ACTIVE_SIM_SESSIONS[key] = (str(owner or "collisiontools"), stop_callback)
 
 
 def stop_active_simulations(*, owner=None):
     failures = []
-    for key, (session_owner, stop_callback) in tuple(_ACTIVE_SIM_SESSIONS.items()):
+    for key, (session_owner, stop_callback) in tuple(ACTIVE_SIM_SESSIONS.items()):
         if owner is not None and session_owner != owner:
             continue
         try:
@@ -52,7 +52,7 @@ def stop_active_simulations(*, owner=None):
             _LOG.warning("Could not stop an active PhysX simulation", exc_info=True)
             failures.append(error)
         finally:
-            _ACTIVE_SIM_SESSIONS.pop(key, None)
+            ACTIVE_SIM_SESSIONS.pop(key, None)
     if failures:
         raise RuntimeError("; ".join(str(error) for error in failures)) from failures[0]
 
@@ -61,7 +61,7 @@ def step_bridge_batch(context, bridge, dt, steps=1, poses=None):
     """Steps the native scene"""
     count = max(1, int(steps))
     prepare_cloth_step(context, bridge)
-    _flush_vehicle_live_updates_for_scene(context.scene, bridge)
+    flush_vehicle_live_updates_for_scene(context.scene, bridge)
     completed = 0
     for step_index in range(count):
         if step_index:

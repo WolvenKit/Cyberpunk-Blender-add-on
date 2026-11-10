@@ -62,7 +62,7 @@ def shading_signature(mesh):
         return ""
     values = np.empty(len(normals) * 3, dtype=np.float32)
     normals.foreach_get("vector", values)
-    return _mesh_signature(b"CP77Shading", values)
+    return mesh_signature(b"CP77Shading", values)
 
 
 def is_mesh(value):
@@ -148,7 +148,7 @@ def uv_by_bounds(objects, *, scale_offset=None):
     return updated
 
 
-def _mesh_signature(person, *arrays):
+def mesh_signature(person, *arrays):
     digest = blake2b(digest_size=16, person=person)
     for values in arrays:
         contiguous = np.ascontiguousarray(values)
@@ -176,14 +176,14 @@ def geometry_and_tangent_frame_signatures(mesh, *, uv_name="UVMap"):
     if arrays is None:
         return "", ""
 
-    geometry = _mesh_signature(b"CP77Geometry", *arrays)
+    geometry = mesh_signature(b"CP77Geometry", *arrays)
     uv_layer = mesh.uv_layers.get(uv_name) if getattr(mesh, "uv_layers", None) else None
     if uv_layer is None:
         return geometry, ""
 
     uv = np.empty(len(mesh.loops) * 2, dtype=np.float32)
     uv_layer.uv.foreach_get("vector", uv)
-    tangent = _mesh_signature(b"CP77TangentFrame", *arrays, uv)
+    tangent = mesh_signature(b"CP77TangentFrame", *arrays, uv)
     return geometry, tangent
 
 
@@ -191,7 +191,7 @@ def geometry_signature(mesh):
     arrays = _geometry_signature_arrays(mesh)
     if arrays is None:
         return ""
-    return _mesh_signature(b"CP77Geometry", *arrays)
+    return mesh_signature(b"CP77Geometry", *arrays)
 
 
 def export_material_names(obj) -> list[str]:
@@ -274,7 +274,7 @@ def export_signature(obj, *, mesh_cache=None):
     (geometry, groups, weights), attributes = arrays
     names = "".join(group.name for group in obj.vertex_groups)
     materials = "".join(export_material_names(obj))
-    return _mesh_signature(
+    return mesh_signature(
         b"CP77Export",
         geometry,
         groups,
