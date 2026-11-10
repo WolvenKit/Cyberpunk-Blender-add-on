@@ -1,8 +1,8 @@
 from ...assetio.catalog import ResourceKind
 from ...assetio.paths import depot_path_key
 from ...assetio.repository import ResourceLoadError, ResourceRepository
+from ...assetio.sector_parser import parse_sector_document
 from ...assetio.streaming_sector import SectorLayoutError
-from .parser import parse_sector_document
 
 SECTOR_PARSER_REVISION = 3
 

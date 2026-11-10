@@ -4,15 +4,15 @@ import os
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 
-from ...assetio.paths import depot_path_key
+from ...assetio.paths import depot_path, depot_path_key
 from ...assetio.values import build_embedded_handle_lookup
-from ..common.entity_data import (
+from ...entity.domain.entity_data import (
     component_name,
     ent_appearance_name,
     resolve_ent_appearance_alias,
     resolve_requested_appearance_name,
 )
-from ..common.paths import depot_path, depot_to_local_path
+from ..common.paths import depot_to_local_path
 from .execution_cache import build_component_pass_index
 from .model import (
     AppearanceRequestResolution,

@@ -4,8 +4,8 @@ import math
 
 from mathutils import Vector
 
-from ...bartmoss.scalar import luminance
-from ...blender.scene_registry import store_names, stored_names
+from ..bartmoss.scalar import luminance
+from .scene_registry import store_names, stored_names
 
 _REGISTRY_KEY = "cp77_environment_light_registry"
 _SCENE_LIGHT_REGISTRY_KEY = "cp77_scene_light_registry"

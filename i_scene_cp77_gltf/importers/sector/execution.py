@@ -12,15 +12,30 @@ from functools import partial
 import bpy
 from mathutils import Matrix, Quaternion, Vector
 
-from ...assetio.paths import local_path_key, same_local_path
+from ...assetio.paths import depot_path, local_path_key, same_local_path
+from ...assetio.sector_model import PlacedContent
 from ...assetio.streaming_sector import COOKED_PLAIN_TYPES
 from ...assetio.values import cname_text, coerce_int, json_array
 from ...bartmoss.matrix import flatten_matrix, matrix_is_identity
+from ...blender.entity.transforms import (
+    clear_pending_child_of_inverse_requests,
+    flush_pending_child_of_inverse_requests,
+    pending_child_of_inverse_count,
+    request_child_of_inverse,
+)
 from ...blender.identity import rna_identity, rna_is_live
+from ...blender.light_channels import (
+    clear_light_channel_records,
+    is_light_channel_volume,
+    rebuild_light_channel_links,
+    retire_light_channel_volumes,
+    stored_light_channel_records,
+)
 from ...blender.matrix import instance_matrix, object_world_matrix
 from ...blender.mesh import is_preview_only_modifier
 from ...blender.naming import fit_id_name
 from ...blender.physics.actors import prune_actor_registry
+from ...blender.reflection_probe_registry import mark_registered_reflection_probes_dirty
 from ...blender.shader_nodes import remove_unused_shading
 from ...blender.transactions import (
     BlenderImportTransaction,
@@ -54,31 +69,14 @@ from ...materials.blender.profiling import (
     material_profile_total,
 )
 from ..common.cache import acquire_material_cache, release_material_cache
-from ..common.light_channels import (
-    clear_light_channel_records,
-    is_light_channel_volume,
-    rebuild_light_channel_links,
-    retire_light_channel_volumes,
-    stored_light_channel_records,
-)
-from ..common.light_near_shadows import unblock_near_geometry
-from ..common.paths import depot_path
 from ..common.progress import NO_PROGRESS, BlenderImportProgress
-from ..common.reflection_probe_registry import mark_registered_reflection_probes_dirty
 from ..common.results import ImportResult, unique_messages
-from ..entity.transforms import (
-    clear_pending_child_of_inverse_requests,
-    flush_pending_child_of_inverse_requests,
-    pending_child_of_inverse_count,
-    request_child_of_inverse,
-)
 from .context import (
     SectorContentError,
     SectorExecutionContext,
     SectorNodeContext,
     SectorPlacementOperations,
 )
-from .model import PlacedContent
 from .objects import (
     NodePropertyAssigner,
     assign_id_properties,
@@ -2390,8 +2388,6 @@ def _import_sectors(session, *, progress=NO_PROGRESS):
     else:
         track_collection_state(masters, label="MasterInstances")
     masters.hide_viewport = False
-    # Instances render regardless; this only stops the masters themselves rendering.
-    masters.hide_render = True
     session.masters = masters
 
     master_started = time.perf_counter()
@@ -2804,9 +2800,6 @@ def _import_sectors(session, *, progress=NO_PROGRESS):
                         "Sector light channels: kept %d volume(s) as records",
                         channel_summary["retired"],
                     )
-                for sector_collection in created_sector_collections:
-                    if sector_collection is not None:
-                        unblock_near_geometry(sector_collection)
                 mark_registered_reflection_probes_dirty(bpy.context.scene)
             except Exception as error:
                 message = f"Sector light-channel linking skipped: {error}"

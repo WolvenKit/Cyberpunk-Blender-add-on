@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ...blender.scene_registry import store_names, stored_names
-from ...core.log import get_logger, log_once
+from ..core.log import get_logger, log_once
+from .scene_registry import store_names, stored_names
 
 _LOG = get_logger(__name__)
 

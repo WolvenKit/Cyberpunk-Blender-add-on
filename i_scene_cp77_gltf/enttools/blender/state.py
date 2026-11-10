@@ -7,6 +7,7 @@ import bpy
 from ...entity.domain.chunks import FULL_MASK, mask_text, parse_mask
 from ...entity.domain.components import component_edit_from
 from ...entity.domain.document import AppearanceDocument, EntityDocument
+from ...entity.model.component_types import COMPONENT_TAG_KEY
 from ...entity.model.edits import (
     AppearanceEdit,
     Binding,
@@ -15,7 +16,6 @@ from ...entity.model.edits import (
     EntityEdit,
     ValidationIssue,
 )
-from ...importers.entity.records import COMPONENT_TAG_KEY
 from ..runtime.documents import source_documents
 from ..runtime.scene_cache import entity_index
 from ..runtime.updates import suspended

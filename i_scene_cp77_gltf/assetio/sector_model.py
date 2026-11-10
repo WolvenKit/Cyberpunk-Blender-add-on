@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from ...assetio.streaming_sector import NodeInstance
+from .streaming_sector import NodeInstance
 
 # The order in which planned nodes are placed: proxies after the content they stand for.
 STANDARD_PHASE = 20
@@ -42,7 +42,6 @@ class SectorNode:
     data: dict[str, Any]
     raw_entry: dict[str, Any]
     instances: tuple[NodeInstance, ...]
-    category: NodeCategory
     mesh_path: str = ""
     mesh_appearance: str = "default"
     entity_template_path: str = ""

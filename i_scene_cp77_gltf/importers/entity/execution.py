@@ -5,12 +5,37 @@ import os
 import random
 import time
 import uuid
+from functools import partial
 
 import bpy
 
-from ...assetio.paths import local_path_key, split_source_raw_root
+from ...assetio.paths import depot_path, local_path_key, split_source_raw_root
 from ...assetio.values import cname_value
+from ...blender.collections import remap_copied_object_references
+from ...blender.entity.skinning import (
+    bind_skinned_objects_to_rig,
+    clear_skinning_caches,
+    component_skin_attachment_matrix,
+)
+from ...blender.entity.transforms import (
+    EntityTransformResolver,
+    build_slot_lookup,
+    build_slot_owner_binding_maps,
+    clear_pending_child_of_inverse_requests,
+    clear_transform_caches,
+    component_local_matrix,
+    component_uses_skinning,
+    configure_child_of_constraint,
+    flush_pending_child_of_inverse_requests,
+    is_live_armature_object,
+    visual_scale_matrix,
+)
 from ...blender.facial.session import preload, stored_paths
+from ...blender.light_channels import (
+    rebuild_light_channel_links,
+    retire_light_channel_volumes,
+)
+from ...blender.reflection_probe_registry import mark_registered_reflection_probes_dirty
 from ...blender.transactions import (
     BlenderImportTransaction,
     child_import_savepoint,
@@ -21,6 +46,7 @@ from ...blender.transactions import (
 )
 from ...core.log import get_logger, log_once, operation
 from ...core.notifications import import_message
+from ...entity.domain.entity_data import component_name
 from ...gltf.submesh import submesh_index_for_object
 from ...materials.blender.images import (
     begin_image_failure_capture,
@@ -28,23 +54,15 @@ from ...materials.blender.images import (
     image_load_failure_message,
 )
 from ...materials.blender.multilayer import override_palette_batched
+from ...materials.blender.skin_runtime import bind_skin_materials_for_object
 from ...physics.services.repository import physics_resources_from_mesh_root
 from ..common.cache import acquire_material_cache, release_material_cache
-from ..common.collections import remap_copied_object_references
-from ..common.entity_data import component_name
-from ..common.light_channels import (
-    rebuild_light_channel_links,
-    retire_light_channel_volumes,
-)
-from ..common.light_near_shadows import unblock_near_geometry
 from ..common.mesh_assets import (
     clear_submesh_index_cache,
     get_group,
     meshes_from_mesheswapps,
 )
-from ..common.paths import depot_path
 from ..common.progress import NO_PROGRESS, BlenderImportProgress
-from ..common.reflection_probe_registry import mark_registered_reflection_probes_dirty
 from ..common.results import ImportResult, summarize_messages, unique_messages
 from .context import AppearanceExecutionContext, EntityHandlerOperations
 from .execution_cache import (
@@ -83,27 +101,9 @@ from .resources import entity_index_extensions
 from .rig_planning import is_animated_rig_component
 from .rigs import EntityRigRuntime, EntityRigService, clear_rig_caches
 from .session import EntityImportSession
-from .skinning import (
-    bind_skinned_objects_to_rig,
-    clear_skinning_caches,
-    component_skin_attachment_matrix,
-)
 from .transform_animator import (
     build_anim_impl_lookup,
     build_transform_animator_lookup,
-)
-from .transforms import (
-    EntityTransformResolver,
-    build_slot_lookup,
-    build_slot_owner_binding_maps,
-    clear_pending_child_of_inverse_requests,
-    clear_transform_caches,
-    component_local_matrix,
-    component_uses_skinning,
-    configure_child_of_constraint,
-    flush_pending_child_of_inverse_requests,
-    is_live_armature_object,
-    visual_scale_matrix,
 )
 
 _LOG = get_logger(__name__)
@@ -536,7 +536,10 @@ def _import_entity_impl(request: EntityImportRequest, *, progress=NO_PROGRESS):
                 chunk_mask_value=chunk_mask_value,
                 submesh_index_for_object=submesh_index_for_object,
                 visual_scale_matrix=cached_visual_scale_matrix,
-                bind_skinned_objects_to_rig=bind_skinned_objects_to_rig,
+                bind_skinned_objects_to_rig=partial(
+                    bind_skinned_objects_to_rig,
+                    bind_materials=bind_skin_materials_for_object,
+                ),
             )
 
             light_handler_registry = None
@@ -1141,7 +1144,6 @@ def _import_entity_impl(request: EntityImportRequest, *, progress=NO_PROGRESS):
                             summary["lights"],
                             summary["unresolved"],
                         )
-                        unblock_near_geometry(imported_collection)
                     if not request.light_channel_volumes_kept:
                         retire_light_channel_volumes(
                             imported_collection, tuple(imported_collection.all_objects)

@@ -15,9 +15,9 @@ from ...assetio.paths import strip_json_suffix
 from ...assetio.streaming_sector import destructible_transforms, transform_range
 from ...assetio.values import coerce_int, json_array, json_object
 from ...bartmoss.matrix import placements_near
+from ...blender.light_channels import stored_light_channel_records
 from ...blender.matrix import instance_matrix
 from ...entity.domain.lights import light_settings_changed, static_light_settings
-from ...importers.common.light_channels import stored_light_channel_records
 from .buffers import ScenePlacements, sector_depot_path
 from .errors import SectorExportError
 from .transforms import moved_matrix, moved_placement, scale_change, transform_values

@@ -18,7 +18,6 @@ from ...core.notifications import (
     import_operation,
     report,
 )
-from ...importers.mesh.orchestration import MaterialReloadError, reload_materials
 from ...materials.blender import multilayer as multilayer_service
 from ..application.execution import (
     create_material_from_template,
@@ -53,6 +52,7 @@ from ..workflows.creation import (
     create_multilayer_object,
     relocate_mesh_material,
 )
+from ..workflows.reload import MaterialReloadError, reload_materials
 
 _LOG = get_logger(__name__)
 

@@ -4,7 +4,7 @@ import json
 
 import bpy
 
-from ...blender.collections import root_objects
+from ...blender.collections import remap_copied_object_references, root_objects
 from ...blender.identity import rna_identity
 from ...blender.mesh_source import base_mesh, mesh_source
 from ...blender.operator_results import OperationResult
@@ -27,7 +27,6 @@ from ...entity.domain.document import (
     slot_bone,
 )
 from ...entity.model.component_types import SKINNED_TYPES
-from ...importers.common.collections import remap_copied_object_references
 from ..blender import apply, mesh_appearance
 from ..blender.scene import (
     COMPONENT_NAME_KEY,

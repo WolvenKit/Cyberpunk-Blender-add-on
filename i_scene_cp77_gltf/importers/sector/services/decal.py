@@ -11,7 +11,7 @@ import numpy as np
 from mathutils import Matrix
 
 from ....assetio.documents import file_identity
-from ....assetio.paths import local_path_key
+from ....assetio.paths import depot_path, local_path_key
 from ....blender.decal_overrides import (
     apply_override_values,
     apply_sector_alpha,
@@ -42,7 +42,6 @@ from ....materials.blender.profiling import (
 )
 from ....materials.blender.registry import DECAL_REGISTRY
 from ....materials.parser import base_material_path
-from ...common.paths import depot_path
 from ..objects import new_empty
 from .decal_projection import PendingDecalProjection, project_pending_decals
 

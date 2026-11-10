@@ -4,6 +4,9 @@ import posixpath
 import re
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import Any
+
+from .values import resource_path_text
 
 _WINDOWS_DRIVE = re.compile(r"^[A-Za-z]:[\\/]")
 _UNSAFE_FILE_CHARACTERS = re.compile(r'[<>:"/\\|?*\x00-\x1F]')
@@ -284,3 +287,18 @@ class DepotPath:
 
     def __str__(self):
         return self.value
+
+
+def depot_path_from_value(value: Any, *, normalize: bool = True) -> str:
+    resolved = resource_path_text(value)
+    return depot_to_local_fragment(resolved) if normalize else resolved
+
+
+def depot_path(data: Any, *keys: str, normalize: bool = True) -> str:
+    if not isinstance(data, dict):
+        return ""
+    for key in keys:
+        resolved = depot_path_from_value(data.get(key), normalize=normalize)
+        if resolved:
+            return resolved
+    return ""

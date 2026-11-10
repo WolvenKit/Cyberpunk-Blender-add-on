@@ -5,11 +5,11 @@ import numpy as np
 from mathutils import Matrix, Quaternion, Vector
 
 from ...animation.domain.rig.naming import merged_bone_name
+from ...assetio.paths import depot_path
 from ...assetio.values import cname_value, resolve_handle_reference
-from ...blender.red_transforms import transform_matrix
 from ...core.log import get_logger, log_once
-from ..common.entity_data import build_component_lookup, component_name
-from ..common.paths import depot_path
+from ...entity.domain.entity_data import build_component_lookup, component_name
+from ..red_transforms import transform_matrix
 
 _LOG = get_logger(__name__)
 

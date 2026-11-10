@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from ...assetio.transform_values import vector3_from_data
 from ...assetio.values import cname_value, coerce_float
-from ..common.entity_data import component_name
+from ...entity.domain.entity_data import component_name
 
 _AXIS_INDEX = {"X": 0, "Y": 1, "Z": 2}
 _EPSILON = 1.0e-9

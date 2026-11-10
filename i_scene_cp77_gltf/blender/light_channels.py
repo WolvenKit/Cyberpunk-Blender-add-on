@@ -7,14 +7,12 @@ import bpy
 from mathutils import Matrix, Vector
 from mathutils.geometry import intersect_ray_tri
 
-from ...assetio.paths import depot_path_key
-from ...assetio.values import json_array
-from ...bartmoss.clipping import bounds_intersect
-from ...bartmoss.geometry import aabb_sample_points, point_in_aabb, sphere_aabb
-from ...blender.naming import fit_id_name
-from ...blender.transactions import track_created_datablock
-from ...core.log import debug_exception, get_logger, log_once
-from .light_channel_semantics import (
+from ..assetio.paths import depot_path_key
+from ..assetio.values import json_array
+from ..bartmoss.clipping import bounds_intersect
+from ..bartmoss.geometry import aabb_sample_points, point_in_aabb, sphere_aabb
+from ..core.log import debug_exception, get_logger, log_once
+from ..entity.domain.light_channel_semantics import (
     LC_CHANNEL_WORLD,
     LC_CHARACTER,
     LC_PLAYER,
@@ -24,6 +22,8 @@ from .light_channel_semantics import (
     effective_component_light_channel,
     mapped_light_channel,
 )
+from .naming import fit_id_name
+from .transactions import track_created_datablock
 
 _LOG = get_logger(__name__)
 
@@ -587,7 +587,7 @@ def _light_bounds(obj):
     )
 
 
-def children_of(lights):
+def _children_of(lights):
     """Each light's children by pointer, gathered in one pass"""
     wanted = {light.as_pointer() for light in lights}
     children = {}
@@ -697,7 +697,7 @@ def relink_light(light, scope_collection):
         scope_collection["cp77_light_link_collections"] = json.dumps(
             [*names, target.name], separators=(",", ":")
         )
-    _assign_receiver_collection(light, target, children_of((light,)))
+    _assign_receiver_collection(light, target, _children_of((light,)))
 
 
 def rebuild_light_channel_links(
@@ -742,7 +742,7 @@ def rebuild_light_channel_links(
         receiver["cp77_light_receiver_mask"] = int(mask)
 
     receivers_finished = time.perf_counter()
-    children = children_of(lights)
+    children = _children_of(lights)
     _clear_old_link_collections(scope_collection, lights, children)
     clear_finished = time.perf_counter()
     collections = {}

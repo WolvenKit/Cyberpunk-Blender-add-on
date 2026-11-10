@@ -217,7 +217,7 @@ def _animgraph_armature_items(_self, context):
 
 
 def _animgraph_rig_part_items(self, _context):
-    from .animgraph.graph_import import rig_part_items
+    from ..blender.rig_metadata import rig_part_items
 
     armature = bpy.data.objects.get(self.armature)
     items = [
@@ -265,8 +265,9 @@ class CP77AnimGraphImport(Operator, ImportHelper):
 
     @import_operation
     def execute(self, context):
+        from ..blender.rig_metadata import default_rig_part
         from ..blender.workspace import show_graph
-        from .animgraph.graph_import import default_rig_part, import_graph
+        from .animgraph.graph_import import import_graph
 
         armature = bpy.data.objects.get(self.armature)
         if armature is None or armature.type != "ARMATURE":

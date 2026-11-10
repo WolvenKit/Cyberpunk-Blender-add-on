@@ -17,9 +17,9 @@ from ....blender.ink import screens
 from ....blender.ink.materials import bind_render_texture
 from ....blender.transactions import track_created_datablock
 from ....core.log import get_logger, log_once
+from ....entity.domain.entity_data import component_name
 from ....ink.domain.animation import load_animation
 from ....ink.services.library import load_library
-from ...common.entity_data import component_name
 from ..registry import EntityComponentHandlerRegistry
 
 WIDGET_COMPONENT_TYPES = frozenset({"WorldWidgetComponent"})

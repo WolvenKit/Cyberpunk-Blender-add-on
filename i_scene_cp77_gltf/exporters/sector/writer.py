@@ -13,6 +13,7 @@ from ...assetio.handles import HandleIndex
 from ...assetio.json_style import JsonStyle, styled_dumps
 from ...assetio.paths import depot_path_key, is_plain_file_name
 from ...assetio.project_layout import ProjectLayout
+from ...assetio.sector_model import ParsedSector
 from ...assetio.streaming_block import SectorDescriptor, streaming_box
 from ...assetio.streaming_sector import (
     COOKED_PLAIN_TYPES,
@@ -35,7 +36,6 @@ from ...assetio.values import nested_dict, resource_path_text
 from ...bartmoss.matrix import box_around, scale_shears
 from ...blender.matrix import instance_matrix, object_world_matrix
 from ...entity.domain.lights import edited_light_data
-from ...importers.sector.model import ParsedSector
 from ..collision.heightfield import (
     TERRAIN_STREAMING_DISTANCE,
     cooked_heightfield_shapes,

@@ -13,6 +13,7 @@ import bpy
 from ...assetio.catalog import ResourceKind
 from ...assetio.paths import local_path_key, material_sidecar_path
 from ...assetio.values import json_array
+from ...blender.collections import preserve_world_parent, remap_copied_object_references
 from ...blender.identity import authored_material_name, rna_is_live
 from ...blender.naming import fit_id_name
 from ...blender.transactions import (
@@ -52,11 +53,7 @@ from .cache import (
     acquire_material_cache,
     release_material_cache,
 )
-from .collections import (
-    link_collection_once,
-    preserve_world_parent,
-    remap_copied_object_references,
-)
+from .collections import link_collection_once
 from .material_appearances import (
     is_source_default_appearance,
     resolve_appearance_materials,

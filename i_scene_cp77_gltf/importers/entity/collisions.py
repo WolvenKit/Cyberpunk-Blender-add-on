@@ -4,7 +4,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from ...assetio.paths import depot_path
 from ...assetio.values import collect_handle_data
+from ...blender.entity.transforms import (
+    EntityTransformResolver,
+    build_slot_owner_binding_maps,
+)
 from ...blender.physics.entity_colliders import (
     COLLIDER_COMPONENT_TYPES,
     EntityColliderImporter,
@@ -12,10 +17,8 @@ from ...blender.physics.entity_colliders import (
 )
 from ...blender.physics.resources import import_phys_resource
 from ...core.log import debug_exception, get_logger
-from ..common.entity_data import component_name
-from ..common.paths import depot_path
+from ...entity.domain.entity_data import component_name
 from .context import EntityHandlerOperations
-from .transforms import EntityTransformResolver, build_slot_owner_binding_maps
 
 _LOG = get_logger(__name__)
 

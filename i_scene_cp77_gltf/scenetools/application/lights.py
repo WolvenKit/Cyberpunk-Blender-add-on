@@ -7,9 +7,11 @@ from bpy.app.handlers import persistent
 
 from ...assetio.documents import DocumentLoadError, DocumentSession
 from ...assetio.values import coerce_int
+from ...blender.light_channels import relink_light
 from ...blender.transactions import restore_id_property, snapshot_id_property
 from ...core.log import debug_exception, get_logger
 from ...core.notifications import show_message
+from ...entity.domain.light_channel_semantics import decode_light_channel
 from ...entity.domain.lights import (
     LightGroup,
     VehicleLightGroup,
@@ -18,8 +20,6 @@ from ...entity.domain.lights import (
     static_light_settings,
 )
 from ...exporters.sector.repository import SectorSourceRepository
-from ...importers.common.light_channel_semantics import decode_light_channel
-from ...importers.common.light_channels import relink_light
 from ..blender.lights import light_up, rebuild_static_light, show_lights, switch_zones
 from ..blender.vehicle_lights import light_vehicles
 from ..runtime.lights import (

@@ -3,8 +3,9 @@ from __future__ import annotations
 import os
 from collections import defaultdict
 
-from ...assetio.paths import depot_path_key, strip_json_suffix
-from ...assetio.streaming_sector import (
+from .paths import depot_path, depot_path_key, strip_json_suffix
+from .sector_model import ParsedSector, SectorNode, SectorResourceRef
+from .streaming_sector import (
     COOKED_PLAIN_TYPES,
     destructible_transforms,
     inner_nodes,
@@ -13,10 +14,7 @@ from ...assetio.streaming_sector import (
     resource_depot_paths,
     transform_range,
 )
-from ...assetio.values import cname_text, coerce_int, nested_dict
-from ..common.paths import depot_path
-from .model import ParsedSector, SectorNode, SectorResourceRef
-from .options import classify_node_type
+from .values import cname_text, coerce_int, nested_dict
 
 _DESTRUCTIBLE_NODE_TYPE = "worldInstancedDestructibleMeshNode"
 _INSTANCED_MESH_NODE_TYPE = "worldInstancedMeshNode"
@@ -141,7 +139,6 @@ def _sector_node(
         data=data,
         raw_entry=entry,
         instances=tuple(instances),
-        category=classify_node_type(node_type),
         mesh_path=mesh_path,
         mesh_appearance=cname_text(data.get("meshAppearance"), "default"),
         entity_template_path=entity_template_path,

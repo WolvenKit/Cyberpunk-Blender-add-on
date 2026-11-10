@@ -11,8 +11,7 @@ from bpy.props import (
 from bpy.types import PropertyGroup
 
 from ...bartmoss.celestial import DAY_HOURS, wrap_hour
-from ...entity.domain.lights import LightGroup, VehicleLightGroup
-from ...importers.common.light_channel_semantics import (
+from ...entity.domain.light_channel_semantics import (
     LC_AUTOMATED,
     LC_CHANNEL1,
     LC_CHANNEL_WORLD,
@@ -22,6 +21,7 @@ from ...importers.common.light_channel_semantics import (
     decode_light_channel,
     light_channel_text,
 )
+from ...entity.domain.lights import LightGroup, VehicleLightGroup
 from ..application.execution import refresh_environment
 from ..application.lights import (
     brighten_group,

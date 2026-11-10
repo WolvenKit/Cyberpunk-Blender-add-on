@@ -6,10 +6,10 @@ import bpy
 import numpy as np
 from mathutils import Matrix
 
+from ....blender.collections import remap_copied_object_references
 from ....blender.identity import rna_identity
 from ....blender.naming import fit_id_name
 from ....blender.transactions import track_created_datablock
-from ...common.collections import remap_copied_object_references
 from ..context import DeformationDataError
 from ..objects import copy_object, new_collection, new_empty
 from .buffers import column_matrix

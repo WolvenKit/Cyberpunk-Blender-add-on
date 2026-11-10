@@ -15,7 +15,15 @@ from ...assetio.mesh_npz import (
     require_indices,
 )
 from ...assetio.resources import BASE_CHARACTERS, get_char_dir, get_rig_dir
+from ...blender.characters import (
+    BREAST_KEYS,
+    CHARACTER_LOAD_KEY,
+    CHARACTER_ROLE_KEY,
+    breast_shape_objects,
+    character_objects,
+)
 from ...blender.custom_normals import set_custom_normals_from_corners
+from ...blender.entity.skinning import bind_skinned_objects_to_rig
 from ...blender.identity import rna_is_live
 from ...blender.transactions import (
     track_created_datablock,
@@ -24,16 +32,12 @@ from ...blender.transactions import (
 )
 from ...core.log import get_logger
 from ...core.notifications import import_operation, report
-from ..entity.skinning import bind_skinned_objects_to_rig
+from ...materials.blender.skin_runtime import bind_skin_materials_for_object
 from ..rig.bundled import import_bundled_metarig
 
 _LOG = get_logger(__name__)
 
 MAGIC_SK = b"SKNZ"
-
-# Loaded character parts carry their role and the load they came from, so the shape sliders find them after a rename.
-CHARACTER_ROLE_KEY = "cp77_character_role"
-CHARACTER_LOAD_KEY = "cp77_character_load"
 
 
 _HEAD_FEATURES = {
@@ -43,42 +47,6 @@ _HEAD_FEATURES = {
     "jaw": ("4", "jaw", 25),
     "ears": ("5", "ear", 25),
 }
-
-_BREAST_KEYS = {
-    1: "t0_000_wa_base__full_breast_small_breast",
-    2: "t0_000_wa_base__full_breast_big_breast",
-}
-
-_ROLE_FIELDS = {
-    "HEAD": ("head_mesh_names", "head_load_token"),
-    "BODY": ("body_mesh_name", "body_load_token"),
-}
-
-
-def character_objects(props, role):
-    """The loaded objects of role"""
-    names_field, token_field = _ROLE_FIELDS[role]
-    names = [name for name in getattr(props, names_field).split(";") if name]
-    token = getattr(props, token_field)
-
-    def belongs(obj):
-        return not token or (
-            obj.get(CHARACTER_LOAD_KEY) == token and obj.get(CHARACTER_ROLE_KEY) == role
-        )
-
-    found = [
-        obj
-        for obj in (bpy.data.objects.get(name) for name in names)
-        if obj is not None and belongs(obj)
-    ]
-    if token and len(found) < len(names):
-        found = [
-            obj
-            for obj in bpy.data.objects
-            if obj.get(CHARACTER_LOAD_KEY) == token
-            and obj.get(CHARACTER_ROLE_KEY) == role
-        ]
-    return found
 
 
 def _get_max_feature_variant(props, feature_attr):
@@ -143,19 +111,6 @@ def _update_head_feature(props, feature_attr):
         props.is_updating = False
 
 
-def breast_shape_objects(props):
-    """The loaded body submeshes that carry breast shape keys"""
-    return [
-        obj
-        for obj in character_objects(props, "BODY")
-        if obj.type == "MESH"
-        and obj.data.shape_keys
-        and any(
-            name in obj.data.shape_keys.key_blocks for name in _BREAST_KEYS.values()
-        )
-    ]
-
-
 def _update_body_breasts(props):
     """Toggles breast shape keys on the body meshes and cycles slider values if out of range"""
     if getattr(props, "is_updating", False):
@@ -169,7 +124,7 @@ def _update_body_breasts(props):
 
         present = [
             k
-            for k, name in _BREAST_KEYS.items()
+            for k, name in BREAST_KEYS.items()
             if any(name in body.data.shape_keys.key_blocks for body in bodies)
         ]
         max_val = max(present) if present else 0
@@ -179,7 +134,7 @@ def _update_body_breasts(props):
             val = new_val
 
         for body in bodies:
-            for k_val, key_name in _BREAST_KEYS.items():
+            for k_val, key_name in BREAST_KEYS.items():
                 kb = body.data.shape_keys.key_blocks.get(key_name)
                 if kb:
                     kb.value = 1.0 if val == k_val else 0.0
@@ -771,7 +726,9 @@ def _bind_to_rig(objects, rig):
     """Deform the character's meshes with rig as skinned meshes are bound to a MetaRig"""
     for obj in objects:
         obj.modifiers.new("Armature", "ARMATURE").object = rig
-    bind_skinned_objects_to_rig(objects, rig)
+    bind_skinned_objects_to_rig(
+        objects, rig, bind_materials=bind_skin_materials_for_object
+    )
 
 
 @transactional("Load Base Character")
