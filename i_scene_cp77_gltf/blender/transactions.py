@@ -702,12 +702,7 @@ def _remove_datablock(collection_name, value):
     try:
         collection.remove(value, do_unlink=True)
     except TypeError:
-        try:
-            collection.remove(value)
-        except (ReferenceError, RuntimeError, TypeError, ValueError):
-            pass
-    except (ReferenceError, RuntimeError, ValueError):
-        pass
+        collection.remove(value)
 
 
 def _remove_datablocks(entries):
