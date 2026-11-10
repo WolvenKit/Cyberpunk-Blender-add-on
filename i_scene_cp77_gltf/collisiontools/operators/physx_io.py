@@ -43,8 +43,7 @@ class PHYSX_OT_export_phys(bpy.types.Operator):
                 self, OperationResult.cancelled("Actor object is missing.")
             )
         try:
-            if not export_actor_item_to_phys(actor, self.filepath):
-                raise RuntimeError("Export failed. Check the log for details.")
+            export_actor_item_to_phys(actor, self.filepath)
         except Exception as error:
             return finish_operator(
                 self, OperationResult.cancelled(str(error), error=error)

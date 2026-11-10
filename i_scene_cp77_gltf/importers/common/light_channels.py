@@ -13,7 +13,7 @@ from ...bartmoss.clipping import bounds_intersect
 from ...bartmoss.geometry import aabb_sample_points, point_in_aabb, sphere_aabb
 from ...blender.naming import fit_id_name
 from ...blender.transactions import track_created_datablock
-from ...core.log import get_logger, log_once
+from ...core.log import debug_exception, get_logger, log_once
 from .light_channel_semantics import (
     LC_CHANNEL_WORLD,
     LC_CHARACTER,
@@ -483,6 +483,11 @@ def _record_placement(stored, rigs):
     try:
         return armature.matrix_world @ pose_bone.matrix @ Matrix(stored["bone_matrix"])
     except (KeyError, TypeError, ValueError):
+        debug_exception(
+            _LOG,
+            "Stored light channel volume on bone %s has no usable bone matrix",
+            pose_bone.name,
+        )
         return None
 
 
@@ -504,7 +509,7 @@ def stored_light_channel_records(collections):
     records = []
     for collection in collections:
         rigs = _read_rigs(collection)
-        for stored in _read_records(collection):
+        for index, stored in enumerate(_read_records(collection)):
             try:
                 bounds = tuple(
                     tuple(float(value) for value in corner)
@@ -545,6 +550,12 @@ def stored_light_channel_records(collections):
                     }
                 )
             except (KeyError, TypeError, ValueError):
+                debug_exception(
+                    _LOG,
+                    "Dropped unreadable light channel volume record %d of %s",
+                    index,
+                    collection.name,
+                )
                 continue
     return records
 
@@ -613,7 +624,11 @@ def _clear_old_link_collections(scope_collection, lights, children):
         try:
             bpy.data.collections.remove(collection, do_unlink=True)
         except (ReferenceError, RuntimeError, TypeError):
-            pass
+            debug_exception(
+                _LOG,
+                "An old light link collection of %s was not removed",
+                scope_collection.name,
+            )
     scope_collection["cp77_light_link_collections"] = "[]"
 
 
@@ -628,7 +643,9 @@ def _new_link_collection(scope_collection, mask, receivers, serial):
         try:
             collection.objects.link(receiver)
         except (RuntimeError, TypeError, ReferenceError):
-            continue
+            debug_exception(
+                _LOG, "A receiver was not linked into light link collection %s", name
+            )
     return collection
 
 

@@ -102,7 +102,9 @@ def _mask_weights(armature, mask_name: str):
     if mask_name not in masks:
         return (
             None,
-            f"Rig part mask '{mask_name}' is not available on this MetaRig. Reimport the rig with this build if necessary.",
+            OperationResult.cancelled(
+                f"Rig part mask '{mask_name}' is not available on this MetaRig. Reimport the rig with this build if necessary."
+            ),
         )
     return dict(masks[mask_name]), None
 
@@ -118,10 +120,14 @@ def _build_entry(
     standalone=False,
 ):
     if not action_is_additive(action):
-        return None, f"Action '{action.name}' is not an additive animation."
+        return None, OperationResult.cancelled(
+            f"Action '{action.name}' is not an additive animation."
+        )
     plan = compile_action_plan(action, armature)
     if not plan.bones and not plan.tracks:
-        return None, f"Action '{action.name}' has no previewable bone or track curves."
+        return None, OperationResult.cancelled(
+            f"Action '{action.name}' has no previewable bone or track curves."
+        )
 
     mask_weights, mask_error = _mask_weights(armature, mask_name)
     if mask_error:
@@ -140,7 +146,10 @@ def _build_entry(
         except (KeyError, RuntimeError, TypeError, ValueError) as exc:
             return (
                 None,
-                f"Could not resolve reference pose for keyed additive bones in Action '{action.name}': {exc}",
+                OperationResult.cancelled(
+                    f"Could not resolve reference pose for keyed additive bones in Action '{action.name}': {exc}",
+                    error=exc,
+                ),
             )
     frame_start, frame_end = action_playback_frame_domain(action)
     return additive_preview.AdditiveEntry(
@@ -172,12 +181,16 @@ def _secondary_entry(
     action = _action_at_selector(settings, ActionListSlot.SECONDARY)
     if action is None or not action_is_additive(action):
         if options.secondary_action == "NONE":
-            return None, "Choose an additive Action for slot 2."
+            return None, OperationResult.cancelled(
+                "Choose an additive Action for slot 2."
+            )
         action = bpy.data.actions.get(options.secondary_action)
         if action is None:
             return (
                 None,
-                f"Additive slot 2 Action '{options.secondary_action}' was not found.",
+                OperationResult.cancelled(
+                    f"Additive slot 2 Action '{options.secondary_action}' was not found."
+                ),
             )
     else:
         settings.secondary_action = action.name
@@ -267,12 +280,16 @@ def _build_configuration(
         if secondary.plan.action == action:
             return (
                 None,
-                "Additive slot 2 must use a different Action from the primary additive Action.",
+                OperationResult.cancelled(
+                    "Additive slot 2 must use a different Action from the primary additive Action."
+                ),
             )
         if base_action is not None and secondary.plan.action == base_action:
             return (
                 None,
-                "The normal base Action cannot also be used as additive slot 2.",
+                OperationResult.cancelled(
+                    "The normal base Action cannot also be used as additive slot 2."
+                ),
             )
         entries.append(secondary)
 
@@ -312,7 +329,10 @@ def _build_configuration(
             except (KeyError, RuntimeError, TypeError, ValueError) as exc:
                 return (
                     None,
-                    f"Could not resolve standalone additive reference pose for '{action.name}': {exc}",
+                    OperationResult.cancelled(
+                        f"Could not resolve standalone additive reference pose for '{action.name}': {exc}",
+                        error=exc,
+                    ),
                 )
         else:
             reference_basis = reference_basis_from_rigs(
@@ -383,7 +403,7 @@ def reconfigure(context, *, primary_action_name: str | None = None) -> Operation
         standalone=standalone,
     )
     if error:
-        return OperationResult(False, error, "ERROR")
+        return error
     _track_preview_state(armature, session.scene)
     additive_preview.track_configuration(session)
     try:
@@ -395,7 +415,7 @@ def reconfigure(context, *, primary_action_name: str | None = None) -> Operation
         additive_preview.reconfigure(configuration, capture_tracks(armature, missing))
     except _PREVIEW_ERRORS as exc:
         return OperationResult(
-            False, f"Could not reconfigure additive preview: {exc}", "ERROR"
+            False, f"Could not reconfigure additive preview: {exc}", "ERROR", error=exc
         )
 
     base_label = _base_label(configuration.base_action)
@@ -449,7 +469,7 @@ def start(
         standalone=standalone,
     )
     if error:
-        return OperationResult(False, error, "ERROR")
+        return error
 
     if stop_playback:
         stopped = playback.stop(context)
@@ -505,7 +525,7 @@ def start(
     except _PREVIEW_ERRORS as exc:
         additive_preview.clear(restore=True)
         return OperationResult(
-            False, f"Could not initialize additive preview: {exc}", "ERROR"
+            False, f"Could not initialize additive preview: {exc}", "ERROR", error=exc
         )
 
     if play:

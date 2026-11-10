@@ -104,7 +104,9 @@ def _enter_pose_mode(armature) -> OperationResult | None:
     try:
         safe_mode_switch("POSE")
     except RuntimeError as exc:
-        return OperationResult(False, f"Failed to enter pose mode: {exc}", "ERROR")
+        return OperationResult(
+            False, f"Failed to enter pose mode: {exc}", "ERROR", error=exc
+        )
     return None
 
 

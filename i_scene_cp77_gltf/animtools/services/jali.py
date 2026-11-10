@@ -94,7 +94,10 @@ def generate_lipsync(context, request: JALIGenerationRequest) -> OperationResult
     status = dependency_status()
     if not status.parselmouth:
         return OperationResult(
-            False, f"parselmouth didn't load: {status.parselmouth_error}", "ERROR"
+            False,
+            f"parselmouth didn't load: {status.parselmouth_error}",
+            "ERROR",
+            error=status.parselmouth_error,
         )
     audio_path = resolve_existing_path(bpy.path.abspath(request.audio_path), warn=False)
     if not audio_path:

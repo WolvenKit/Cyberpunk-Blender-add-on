@@ -1018,10 +1018,16 @@ def compatible_actions_for_export(armature, *, source_rig_path: str = ""):
 def _animation_duration_frames(action, extras: dict, action_start: float) -> float:
     duration = max(0.0, track_payload_duration(extras) * FPS)
     imported_duration_seconds = action.get("cp77_direct_anim_duration_seconds")
-    try:
-        duration = max(duration, float(imported_duration_seconds) * FPS)
-    except (TypeError, ValueError):
-        pass
+    if imported_duration_seconds is not None:
+        try:
+            duration = max(duration, float(imported_duration_seconds) * FPS)
+        except (TypeError, ValueError):
+            _LOG.warning(
+                "Action %s has an unreadable cp77_direct_anim_duration_seconds %r",
+                action.name,
+                imported_duration_seconds,
+                exc_info=True,
+            )
 
     try:
         frame_end = float(action.frame_range[1])
@@ -1046,10 +1052,16 @@ def _animation_duration_frames(action, extras: dict, action_start: float) -> flo
 
     if imported_duration_seconds is None:
         imported_frame_count = action.get("cp77_direct_anim_frame_count")
-        try:
-            duration = max(duration, float(imported_frame_count) - 1.0)
-        except (TypeError, ValueError):
-            pass
+        if imported_frame_count is not None:
+            try:
+                duration = max(duration, float(imported_frame_count) - 1.0)
+            except (TypeError, ValueError):
+                _LOG.warning(
+                    "Action %s has an unreadable cp77_direct_anim_frame_count %r",
+                    action.name,
+                    imported_frame_count,
+                    exc_info=True,
+                )
 
     return duration
 

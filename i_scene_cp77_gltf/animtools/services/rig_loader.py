@@ -26,7 +26,7 @@ def load_selected_rig(
     try:
         armature = import_bundled_metarig(filepath)
     except (OSError, ValueError) as error:
-        return OperationResult(False, f"Rig load failed: {error}", "ERROR")
+        return OperationResult(False, f"Rig load failed: {error}", "ERROR", error=error)
     select_objects([armature], clear=True, context=context)
     if fbx_rotation:
         rotate_quat_180(None, context)

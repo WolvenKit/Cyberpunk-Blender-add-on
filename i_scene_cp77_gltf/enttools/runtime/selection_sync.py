@@ -47,7 +47,10 @@ def _run_pending():
             with syncing():
                 separate_renamed_meshes()
         except Exception:
-            debug_exception(_LOG, "Renamed mesh separation skipped")
+            _LOG.warning(
+                "Renamed mesh separation failed; later edits may change a mesh other objects share",
+                exc_info=True,
+            )
     if follow and getattr(context.scene, "cp77_entity_tools", None) is not None:
         try:
             from ..services.selection import follow_active_object

@@ -376,7 +376,16 @@ class AnimGraphRuntime:
                 raise ValueError(
                     f"MetaRig part ownership binding failed: {exc}"
                 ) from exc
-            _LOG.debug("MetaRig part ownership unavailable for %s: %s", graph_path, exc)
+            if part_bindings:
+                _LOG.warning(
+                    "MetaRig part ownership binding failed for %s",
+                    graph_path,
+                    exc_info=True,
+                )
+            else:
+                debug_exception(
+                    _LOG, "MetaRig part ownership unavailable for %s", graph_path
+                )
             return (), (), None
         self._meta_rig_paths = paths
         self._meta_rig_datas = rig_datas

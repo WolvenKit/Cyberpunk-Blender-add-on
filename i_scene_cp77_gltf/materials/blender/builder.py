@@ -12,7 +12,7 @@ from ...assetio.paths import absolute_local_path_key, backslash_depot_key
 from ...blender.shader_nodes import outputs_detached
 from ...blender.transactions import track_created_datablock
 from ...core.addon_identity import get_addon_preferences, get_addon_version
-from ...core.log import get_logger
+from ...core.log import get_logger, log_once
 from ...material_types.graph import (
     bundle_principled_surface_links,
     organize_material_graph,
@@ -502,7 +502,10 @@ class MaterialBuilder:
             )
             key = handler.structure_key(raw_material["Data"])
         except Exception:
-            _LOG.debug(
+            log_once(
+                _LOG,
+                "WARNING",
+                ("material shape", raw_material.get("MaterialTemplate", "")),
                 "Material shape unavailable for %s; building it in full",
                 raw_material.get("Name", ""),
                 exc_info=True,
@@ -531,7 +534,10 @@ class MaterialBuilder:
                 organize_material_groups(material)
                 _refresh_copied_tree(material)
         except Exception:
-            _LOG.debug(
+            log_once(
+                _LOG,
+                "WARNING",
+                ("material shape copy", raw_material.get("MaterialTemplate", "")),
                 "Material %s could not be copied from its shape; building it in full",
                 raw_material.get("Name", ""),
                 exc_info=True,

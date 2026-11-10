@@ -23,7 +23,7 @@ from ....blender.identity import rna_identity, rna_is_live
 from ....blender.naming import fit_id_name
 from ....blender.shader_nodes import outputs_detached, remove_unused_shading
 from ....blender.transactions import track_created_datablock
-from ....core.log import get_logger, is_enabled, log_once
+from ....core.log import debug_exception, get_logger, is_enabled, log_once
 from ....material_types.decal_composite import PROJECTION_COVERAGE_ATTRIBUTE
 from ....materials.blender.builder import MaterialBuilder
 from ....materials.blender.bulk import bulk_material_import_scope
@@ -608,6 +608,7 @@ class DecalService:
                 status="BUILT",
             )
         except Exception as error:
+            debug_exception(_LOG, "Decal material %s failed to build", material_path)
             return DecalMaterialResult(
                 material=None,
                 material_path=material_path,

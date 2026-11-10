@@ -123,8 +123,8 @@ def _remove_file(path: str) -> bool:
     try:
         if os.path.exists(path):
             os.unlink(path)
-    except OSError as error:
-        _LOG.debug("%s was not removed: %s", path, error)
+    except OSError:
+        debug_exception(_LOG, "%s was not removed", path)
         return False
     return True
 
@@ -145,13 +145,13 @@ def _sync_directories(paths) -> None:
     for directory in {os.path.dirname(path) or os.curdir for path in paths}:
         try:
             descriptor = os.open(directory, os.O_RDONLY)
-        except OSError as error:
-            _LOG.debug("Folder %s was not opened for syncing: %s", directory, error)
+        except OSError:
+            debug_exception(_LOG, "Folder %s was not opened for syncing", directory)
             continue
         try:
             os.fsync(descriptor)
-        except OSError as error:
-            _LOG.debug("Folder %s was not synced: %s", directory, error)
+        except OSError:
+            debug_exception(_LOG, "Folder %s was not synced", directory)
         finally:
             os.close(descriptor)
 

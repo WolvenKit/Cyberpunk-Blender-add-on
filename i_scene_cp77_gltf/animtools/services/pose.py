@@ -40,7 +40,7 @@ def insert_pose_keyframes(context, *, frame_all: bool) -> OperationResult:
             safe_mode_switch("POSE")
         except RuntimeError as exc:
             return OperationResult(
-                False, f"Failed to switch to pose mode: {exc}", "ERROR"
+                False, f"Failed to switch to pose mode: {exc}", "ERROR", error=exc
             )
     try:
         scene = context.scene

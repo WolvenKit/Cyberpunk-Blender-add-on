@@ -16,10 +16,11 @@ from bpy.props import (
 from ..bartmoss.vehicle import STANDARD_GRAVITY
 from ..blender.physics.objects import update_collision_bits
 from ..core.log import debug_exception, get_logger, log_once
+from ..core.notifications import report
 from ..physics.model.collision_layers import DEFAULT_PRESET_INDEX, get_preset_items
 from ..physics.model.materials import physics_material_enum_items
-from ..physics.runtime.bridge import require_bridge
 from .runtime.dangle.rigs import clear_dangle_rigs
+from .services.scene import update_gravity
 from .services.vehicle_resolver import base_vehicle_choices, record_override_choices
 
 _LOG = get_logger(__name__)
@@ -779,12 +780,10 @@ def clear_property_item_caches():
 
 def update_gravity_cb(self, context):
     if self.is_initialized:
-        try:
-            _bridge = require_bridge()
-            g = self.gravity
-            _bridge.set_gravity(g[0], g[1], g[2])
-        except (ImportError, RuntimeError):
+        result = update_gravity(context)
+        if not result.ok:
             self.is_initialized = False
+            report(None, "WARNING", result.message, error=result.error, logger=_LOG)
 
 
 def get_armature_items(self, context):

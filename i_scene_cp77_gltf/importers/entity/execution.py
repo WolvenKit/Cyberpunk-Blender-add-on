@@ -19,7 +19,7 @@ from ...blender.transactions import (
     rollback_report_message,
     track_created_datablock,
 )
-from ...core.log import debug_exception, get_logger, log_once, operation
+from ...core.log import get_logger, log_once, operation
 from ...core.notifications import import_message
 from ...materials.blender.images import (
     begin_image_failure_capture,
@@ -416,8 +416,7 @@ def _import_entity_impl(request: EntityImportRequest, *, progress=NO_PROGRESS):
                     f"Entity rig setup skipped for {ent_name}: "
                     f"{type(error).__name__}: {error}"
                 )
-                _LOG.warning("%s", message)
-                debug_exception(_LOG, "Exception details")
+                _LOG.warning("%s", message, exc_info=True)
                 if message not in warning_messages:
                     warning_messages.append(message)
                 rig_runtime = EntityRigRuntime(

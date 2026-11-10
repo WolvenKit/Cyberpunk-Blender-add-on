@@ -48,12 +48,12 @@ def stop_active_simulations(*, owner=None):
         try:
             stop_callback()
         except Exception as error:
-            debug_exception(_LOG, "Could not stop an active PhysX simulation")
+            _LOG.warning("Could not stop an active PhysX simulation", exc_info=True)
             failures.append(error)
         finally:
             _ACTIVE_SIM_SESSIONS.pop(key, None)
     if failures:
-        raise RuntimeError("; ".join(str(error) for error in failures))
+        raise RuntimeError("; ".join(str(error) for error in failures)) from failures[0]
 
 
 def step_bridge_batch(context, bridge, dt, steps=1, poses=None):
@@ -261,4 +261,6 @@ def remove_manipulator(cursor_handle):
     try:
         require_bridge().remove_actor(int(cursor_handle))
     except (ImportError, RuntimeError, ValueError):
-        pass
+        _LOG.warning(
+            "Could not remove the manipulator actor %s", cursor_handle, exc_info=True
+        )

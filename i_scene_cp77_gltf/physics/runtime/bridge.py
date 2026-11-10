@@ -94,11 +94,21 @@ def _cleanup_runtime_clients(bridge, *, all_owners=False):
         try:
             callback(bridge)
         except Exception as error:
-            debug_exception(
-                _LOG, "A native runtime client cleanup failed: %s.%s", owner, name
+            _LOG.warning(
+                "A native runtime client cleanup failed: %s.%s",
+                owner,
+                name,
+                exc_info=True,
             )
-            errors.append(RuntimeError(f"{owner}.{name}: {error}"))
+            errors.append((f"{owner}.{name}", error))
     return errors
+
+
+def _raise_cleanup_failures(errors):
+    if errors:
+        raise RuntimeError(
+            "; ".join(f"{label}: {error}" for label, error in errors)
+        ) from errors[0][1]
 
 
 def _shared_runtime_invalidated(bridge):
@@ -135,20 +145,18 @@ def reset_native_scene(bridge):
         raise RuntimeError(
             "PhysX scene reset requires the active extension-owned bridge"
         )
-    errors = _cleanup_runtime_clients(bridge, all_owners=True)
-    if errors:
-        raise RuntimeError("; ".join(str(error) for error in errors))
+    _raise_cleanup_failures(_cleanup_runtime_clients(bridge, all_owners=True))
     bridge.reset()
 
 
 def invalidate_physx_runtime():
     bridge = _BRIDGE
     active_owner = bridge_owned_by_extension()
-    errors = _cleanup_runtime_clients(
-        bridge if active_owner else None, all_owners=active_owner
+    _raise_cleanup_failures(
+        _cleanup_runtime_clients(
+            bridge if active_owner else None, all_owners=active_owner
+        )
     )
-    if errors:
-        raise RuntimeError("; ".join(str(error) for error in errors))
     if bridge is not None and active_owner:
         if hasattr(bridge, "nvcloth_is_initialized") and hasattr(
             bridge, "nvcloth_shutdown"
@@ -373,11 +381,11 @@ def shutdown_physx_capability():
     global _CAPABILITY, _BRIDGE
     bridge = _BRIDGE
     active_owner = bridge_owned_by_extension()
-    errors = _cleanup_runtime_clients(
-        bridge if active_owner else None, all_owners=active_owner
+    _raise_cleanup_failures(
+        _cleanup_runtime_clients(
+            bridge if active_owner else None, all_owners=active_owner
+        )
     )
-    if errors:
-        raise RuntimeError("; ".join(str(error) for error in errors))
     if bridge is not None and active_owner:
         if hasattr(bridge, "nvcloth_is_initialized") and hasattr(
             bridge, "nvcloth_shutdown"

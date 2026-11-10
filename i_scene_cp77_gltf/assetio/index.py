@@ -421,8 +421,8 @@ def _scan_snapshot(root, suffixes, generation, depth=None, path_contains=()):
                                 _indexed_depot_key(relative),
                                 path,
                             )
-                        except (PermissionError, OSError) as error:
-                            _LOG.debug("Could not access %s: %s", entry.path, error)
+                        except (PermissionError, OSError):
+                            debug_exception(_LOG, "Could not access %s", entry.path)
             except (PermissionError, OSError) as error:
                 _LOG.warning(
                     "Could not scan directory %s: %s", folder, error, exc_info=True

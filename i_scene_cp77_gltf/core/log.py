@@ -319,49 +319,18 @@ class _LocalQueueHandler(QueueHandler):
             return True
         except queue.Full:
             pass
-
-        record_queue = self.queue
-        if not isinstance(record_queue, queue.Queue):
-            return False
-
-        with record_queue.not_full:
-            if (
-                record_queue.maxsize <= 0
-                or record_queue._qsize() < record_queue.maxsize
-            ):
-                record_queue._put(record)
-                record_queue.unfinished_tasks += 1
-                record_queue.not_empty.notify()
-                return True
-
-            items = record_queue.queue
-            incoming_priority = _record_priority(record)
-            candidate = next(
-                (
-                    index
-                    for index, existing in enumerate(items)
-                    if _record_priority(existing) < incoming_priority
-                ),
-                None,
-            )
-            if candidate is None and incoming_priority >= 4:
-                candidate = next(
-                    (
-                        index
-                        for index, existing in enumerate(items)
-                        if _record_priority(existing) == incoming_priority
-                    ),
-                    None,
-                )
-            if candidate is None:
-                return False
-
-            evicted = items[candidate]
-            del items[candidate]
-            record_queue._put(record)
+        try:
+            evicted = self.queue.get_nowait()
+        except queue.Empty:
+            pass
+        else:
+            self.queue.task_done()
             self._record_drop(evicted)
-            record_queue.not_empty.notify()
-            return True
+        try:
+            self.queue.put_nowait(record)
+        except queue.Full:
+            return False
+        return True
 
     def enqueue(self, record):
         if self._cp77_stopping:
@@ -759,15 +728,16 @@ class RotatingLogFile(RotatingFileHandler):
 
 
 def _default_log_directory():
+    reason = None
     try:
         from .addon_identity import user_config_dir
 
         configured = user_config_dir("logs")
         if configured:
-            return Path(configured)
-    except Exception:
-        pass
-    return Path.home() / ".cp77_io_suite" / "logs"
+            return Path(configured), None
+    except Exception as error:
+        reason = error
+    return Path.home() / ".cp77_io_suite" / "logs", reason
 
 
 def configure_logging(
@@ -819,9 +789,11 @@ def configure_logging(
             )
         if file_enabled:
             try:
-                directory = (
-                    Path(log_directory) if log_directory else _default_log_directory()
-                )
+                fallback_reason = None
+                if log_directory:
+                    directory = Path(log_directory)
+                else:
+                    directory, fallback_reason = _default_log_directory()
                 directory.mkdir(parents=True, exist_ok=True)
                 path = directory / "cp77_io_suite.log"
                 file_handler = RotatingLogFile(
@@ -865,6 +837,12 @@ def configure_logging(
                     _FILE_LISTENER = listener
                     _FILE_HANDLER = file_handler
                     _CURRENT_LOG_PATH = path
+                    if fallback_reason is not None:
+                        logger.warning(
+                            "The add-on's log folder is unavailable; logging to %s",
+                            directory,
+                            exc_info=fallback_reason,
+                        )
             except OSError as error:
                 if console:
                     logger.setLevel(console_level_value)

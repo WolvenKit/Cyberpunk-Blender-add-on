@@ -1780,7 +1780,12 @@ class _SectorCollectionRouter:
             try:
                 collection["cp77_node_data_index"] = int(node_data_index)
             except (TypeError, ValueError):
-                pass
+                debug_exception(
+                    _LOG,
+                    "Node data index %r of %s is not a number",
+                    node_data_index,
+                    collection.name,
+                )
         elif "cp77_node_data_index" in collection:
             del collection["cp77_node_data_index"]
         self.source_cache[key] = collection

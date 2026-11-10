@@ -7,7 +7,7 @@ from ..blender.animgraph.tree import (
     unregister_tree_change_hook,
 )
 from ..blender.physics.bridge_session import BRIDGE_HOST
-from ..core.log import debug_exception, get_logger
+from ..core.log import get_logger
 from ..core.registration import RegistrationLedger
 from ..physics.runtime.bridge import (
     install_host,
@@ -87,14 +87,11 @@ def _depsgraph_update_handler(scene, depsgraph):
 
 @bpy.app.handlers.persistent
 def _native_runtime_invalidation_handler(*_args):
-    errors = []
-
     def run_cleanup(callback):
         try:
             callback()
-        except Exception as error:
-            debug_exception(_LOG, "A Physics Tools cleanup step failed")
-            errors.append(error)
+        except Exception:
+            _LOG.warning("A Physics Tools cleanup step failed", exc_info=True)
 
     for callback in (
         stop_active_previews,
@@ -104,12 +101,6 @@ def _native_runtime_invalidation_handler(*_args):
         invalidate_physx_runtime,
     ):
         run_cleanup(callback)
-
-    if errors:
-        _LOG.warning(
-            "Native runtime invalidation reported: %s",
-            "; ".join(str(error) for error in errors),
-        )
 
 
 def _register_animgraph_hooks():

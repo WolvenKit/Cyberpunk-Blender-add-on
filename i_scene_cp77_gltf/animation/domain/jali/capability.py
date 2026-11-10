@@ -37,21 +37,21 @@ class _LazyModule:
 class DependencyStatus:
     parselmouth: bool
     g2p: bool
-    parselmouth_error: str = ""
-    g2p_error: str = ""
+    parselmouth_error: Exception | None = None
+    g2p_error: Exception | None = None
 
 
-def _probe(name: str) -> tuple[bool, str]:
+def _probe(name: str) -> tuple[bool, Exception | None]:
     try:
         _import(name)
     except ImportError as error:
-        return False, str(error)
+        return False, error
     except Exception as error:
         debug_exception(
             _LOG, "Could not import %s; that capability is unavailable", name
         )
-        return False, f"{type(error).__name__}: {error}"
-    return True, ""
+        return False, error
+    return True, None
 
 
 @lru_cache(maxsize=1)

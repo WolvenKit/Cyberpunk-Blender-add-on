@@ -5,7 +5,7 @@ from bpy.app.handlers import persistent
 
 from ...blender.animgraph import node_lod, sm_links, sm_overlay
 from ...blender.tracks import clear_track_property_cache
-from ...core.log import get_logger
+from ...core.log import get_logger, log_on_change
 from . import additive_preview, facial, overlay, read_models
 
 _LOG = get_logger(__name__)
@@ -15,8 +15,16 @@ def _call(label: str, function, *args, **kwargs) -> None:
     """Run one runtime step so that a failure is logged without skipping the steps after it"""
     try:
         function(*args, **kwargs)
-    except Exception:
-        _LOG.exception("Animation Tools %s failed", label)
+    except Exception as error:
+        log_on_change(
+            _LOG,
+            "ERROR",
+            label,
+            "Animation Tools %s failed: %s",
+            label,
+            error,
+            exc_info=True,
+        )
 
 
 @persistent
