@@ -1,6 +1,6 @@
 from ..blender import shader_nodes
 from ..materials.blender.nodes import create_node
-from .mat_common import param_float
+from .mat_common import param_float, scene_time_socket
 from .metalbase_common import COLUMN_TEXTURE, MetalBaseCore
 
 
@@ -37,7 +37,7 @@ class MetalBaseAtlasAnimation(MetalBaseCore):
             mapping.inputs["Location"].default_value = (0.0, 0.0, 0.0)
             return mapping.outputs["Vector"]
 
-        time = self._time(CurMat, (-2500, 240), label="Flipbook Time")
+        time = scene_time_socket(CurMat.nodes, (-2500, 240), "Flipbook Time")
         frame = shader_nodes.math(
             CurMat.nodes,
             CurMat.links,
@@ -61,7 +61,7 @@ class MetalBaseAtlasAnimation(MetalBaseCore):
         shader_nodes.socket_by_identifier(
             scaled_time.inputs, "Value_001"
         ).default_value = speed
-        CurMat.links.new(time.outputs["Value"], scaled_time.inputs["Value"])
+        CurMat.links.new(time, scaled_time.inputs["Value"])
         CurMat.links.new(scaled_time.outputs["Value"], frame.inputs["Value"])
 
         floored = shader_nodes.math(

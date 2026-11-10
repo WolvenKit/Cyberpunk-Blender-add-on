@@ -2,16 +2,15 @@ from ..assetio.paths import backslash_depot_key
 from ..blender import shader_nodes
 from ..blender.shader_nodes import assign_socket
 from ..materials.blender.images import imageFromFilePath, resolve_relative_image_path
+from ..materials.params import coerce_texture_path, lookup_param
 from .graph import grid_location, mix_color_socket, set_transparent
 from .mat_common import (
     MaterialTypeBase,
-    coerce_texture_path,
-    create_scene_time_value,
     get_or_build_node_group,
-    lookup_param,
     new_labeled_node,
     param_color,
     param_float,
+    scene_time_socket,
 )
 
 _LINE = r"base\fx\textures\ui\fx_network_vis_solidline.xbm"
@@ -667,8 +666,7 @@ class HUDMarkers(MaterialTypeBase):
             )
             node.outputs["Value"].default_value = param_float(data, key, default)
             controls[key] = node.outputs["Value"]
-        time = create_scene_time_value(tree, -1600, -400, "Time")
-        time.name = "Time"
+        time = scene_time_socket(tree.nodes, (-1600, -400), "Time")
 
         colors = []
         color_alphas = []
@@ -880,7 +878,7 @@ class HUDMarkers(MaterialTypeBase):
                 "Normal": geometry.outputs["Normal"],
                 "Tiling": controls["WorldSpaceNoiseTilling"],
                 "Speed": controls["NoiseSpeed"],
-                "Time": time.outputs["Value"],
+                "Time": time,
             },
             (-600, -400),
         )

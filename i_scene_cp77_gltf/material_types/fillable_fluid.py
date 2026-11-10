@@ -6,7 +6,6 @@ from .graph import set_transparent, value_socket
 from .mat_common import (
     MaterialTypeBase,
     add_group_node,
-    create_scene_time_value,
     find_input,
     get_or_build_node_group,
     new_labeled_node,
@@ -14,6 +13,7 @@ from .mat_common import (
     param_float,
     param_texture_path,
     param_vector,
+    scene_time_socket,
 )
 
 TEMPLATE = "base\\materials\\fillable_fluid.mt"
@@ -280,8 +280,7 @@ class FillableFluid(MaterialTypeBase):
         bbox_min = param_vector(data, "FluidBoundingBoxMin", (0.0, 0.0, 0.0, 0.0))
         bbox_max = param_vector(data, "FluidBoundingBoxMax", (0.0, 0.0, 0.0, 0.0))
 
-        time = create_scene_time_value(tree, -2200, 760, "CP77 Fluid Time")
-        time_socket = time.outputs["Value"]
+        time_socket = scene_time_socket(tree.nodes, (-2200, 760), "CP77 Fluid Time")
 
         # Runtime material-parameter slots 0..3 are used when ControlledByFx is set.
         suffix = " (fx-driven)" if controlled_by_fx else " (material value)"

@@ -1,7 +1,7 @@
 from ..bartmoss.scalar import clamp01
 from ..blender import shader_nodes
 from .bundles import direct_ev_strength_socket, scalar_lerp_socket
-from .mat_common import param_float
+from .mat_common import param_float, scene_time_socket
 from .metalbase_common import (
     COLUMN_ADJUST,
     COLUMN_COMBINE,
@@ -32,7 +32,9 @@ class MetalBaseGlitter(MetalBaseCore):
         looped = clamp01(param_float(data, "Looped", 0.0))
         histogram = max(1.0e-4, param_float(data, "HistogramRange", 0.491935015))
 
-        time = self._time(CurMat, (COLUMN_TEXTURE - 200, -700), label="Glitter Time")
+        time = scene_time_socket(
+            CurMat.nodes, (COLUMN_TEXTURE - 200, -700), "Glitter Time"
+        )
         swept = shader_nodes.math(
             CurMat.nodes,
             CurMat.links,
@@ -44,7 +46,7 @@ class MetalBaseGlitter(MetalBaseCore):
         shader_nodes.socket_by_identifier(
             swept.inputs, "Value_001"
         ).default_value = speed
-        CurMat.links.new(time.outputs["Value"], swept.inputs["Value"])
+        CurMat.links.new(time, swept.inputs["Value"])
 
         linear = shader_nodes.math(
             CurMat.nodes,

@@ -3,9 +3,8 @@ import math
 from ..assetio.paths import backslash_depot_key
 from ..bartmoss.geometry import calc_subuv_offset
 from ..blender import shader_nodes
-from ..materials.blender.images import image_is_placeholder
 from .bundles import decal_uv_transform_socket, smoothstep_socket
-from .decal_nodes import _new_graph, _set_transparent
+from .decal_nodes import _new_graph, _red, _set_transparent, _texture
 from .graph import mix_color_socket, mix_scalar_socket, rgb_socket, value_socket
 from .mat_common import (
     MaterialTypeBase,
@@ -14,7 +13,6 @@ from .mat_common import (
     new_labeled_node,
     param_color,
     param_float,
-    param_texture_path,
 )
 from .normal_math import (
     create_cp77_normal_texture,
@@ -23,31 +21,6 @@ from .normal_math import (
     encode_tangent_normal,
     tangent_to_normal_map,
 )
-
-
-def _texture(owner, nodes, links, data, key, location, uv, *, non_color=False):
-    path = param_texture_path(data, key)
-    if not path:
-        return None
-    image = owner._load_relative_image(
-        path,
-        non_color=non_color,
-        error_label=key,
-    )
-    if image is None or image_is_placeholder(image):
-        return None
-    node = new_labeled_node(nodes, "ShaderNodeTexImage", key, location)
-    node.image = image
-    node.extension = "REPEAT"
-    links.new(uv, find_input(node, "Vector"))
-    return node
-
-
-def _red(nodes, links, source, name, location):
-    separate = new_labeled_node(nodes, "ShaderNodeSeparateColor", name, location)
-    separate.mode = "RGB"
-    links.new(source, separate.inputs["Color"])
-    return separate.outputs["Red"]
 
 
 def _subuv(nodes, uv, frame, columns, rows, location, label):
@@ -92,7 +65,7 @@ class TrailDecal(MaterialTypeBase):
 
         if has_color:
             diffuse = _texture(
-                self, nodes, links, data, "DiffuseTexture", (-1260, 560), uv
+                self, nodes, links, data, None, "DiffuseTexture", (-1260, 560), uv
             )
             diffuse_color = (
                 diffuse.outputs["Color"]
@@ -356,6 +329,7 @@ class AnimatedDecal(MaterialTypeBase):
             nodes,
             links,
             data,
+            None,
             "RevealMasks",
             (-900, -200),
             next_uv,
@@ -432,10 +406,10 @@ class AnimatedDecal(MaterialTypeBase):
         )
 
         diffuse_current = _texture(
-            self, nodes, links, data, "DiffuseTexture", (-900, 620), current_uv
+            self, nodes, links, data, None, "DiffuseTexture", (-900, 620), current_uv
         )
         diffuse_next = _texture(
-            self, nodes, links, data, "DiffuseTexture", (-900, 420), next_uv
+            self, nodes, links, data, None, "DiffuseTexture", (-900, 420), next_uv
         )
         current_color = (
             diffuse_current.outputs["Color"]
@@ -501,6 +475,7 @@ class AnimatedDecal(MaterialTypeBase):
             nodes,
             links,
             data,
+            None,
             "NormalTexture",
             (-900, 80),
             current_uv,
@@ -511,6 +486,7 @@ class AnimatedDecal(MaterialTypeBase):
             nodes,
             links,
             data,
+            None,
             "NormalTexture",
             (-900, -100),
             next_uv,
@@ -578,10 +554,26 @@ class AnimatedDecal(MaterialTypeBase):
             ("MetalnessTexture", "Metallic", -620),
         ):
             current = _texture(
-                self, nodes, links, data, key, (-900, y), current_uv, non_color=True
+                self,
+                nodes,
+                links,
+                data,
+                None,
+                key,
+                (-900, y),
+                current_uv,
+                non_color=True,
             )
             following = _texture(
-                self, nodes, links, data, key, (-900, y - 140), next_uv, non_color=True
+                self,
+                nodes,
+                links,
+                data,
+                None,
+                key,
+                (-900, y - 140),
+                next_uv,
+                non_color=True,
             )
             current_value = (
                 _red(
@@ -685,6 +677,7 @@ class BloodPuddleDecal(MaterialTypeBase):
             nodes,
             links,
             data,
+            None,
             "NoiseTexture",
             (-1740, 80),
             noise_uv,
@@ -920,7 +913,7 @@ class SimpleEmissiveDecal(MaterialTypeBase):
             (-1320, 260),
             "Simple Emissive SubUV",
         )
-        texture = _texture(self, nodes, links, data, "Diffuse", (-1000, 420), uv)
+        texture = _texture(self, nodes, links, data, None, "Diffuse", (-1000, 420), uv)
         sampled = (
             texture.outputs["Color"]
             if texture

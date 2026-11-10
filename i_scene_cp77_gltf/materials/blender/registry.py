@@ -812,7 +812,6 @@ REGISTRY.register(
         factory=HandlerFactory("cloak", "Cloak", "bip"),
         no_shadows=True,
         preserve_render_method=True,
-        semantic_cache_identity=True,
     ),
 )
 
@@ -824,7 +823,6 @@ REGISTRY.register(
     MaterialRule(
         factory=HandlerFactory("glass_window_rain", "GlassWindowRain", "bip"),
         preserve_render_method=True,
-        semantic_cache_identity=True,
     ),
 )
 

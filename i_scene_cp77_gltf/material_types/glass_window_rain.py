@@ -3,10 +3,10 @@ from ..blender.shader_nodes import assign_socket
 from .glass import _SCALAR_DEFAULTS, Glass
 from .graph import grid_location
 from .mat_common import (
-    create_scene_time_value,
     get_or_build_node_group,
     new_labeled_node,
     param_texture_path,
+    scene_time_socket,
 )
 from .normal_math import (
     decode_cp77_normal,
@@ -431,8 +431,7 @@ class GlassWindowRain(Glass):
             else self._mask_uv(nodes, links, data, (-2000, 200), _DEFAULTS)
         )
         amount = control(tree, data, "RainAmount", 0.0)
-        clock = create_scene_time_value(tree, -1800, -1200, "Simulation Time")
-        clock.name = "Simulation Time"
+        clock = scene_time_socket(tree.nodes, (-1800, -1200), "Simulation Time")
         flow_tiling = control(tree, data, "FlowTiling", _DEFAULTS["FlowTiling"])
         rain_tiling = control(tree, data, "RainTiling", _DEFAULTS["RainTiling"])
 
@@ -472,7 +471,7 @@ class GlassWindowRain(Glass):
             "Flow": flow.outputs["Color"],
             "Flow Tiling": flow_tiling,
             "Rain Tiling": rain_tiling,
-            "Time": clock.outputs["Value"],
+            "Time": clock,
         }.items():
             links.new(value, coordinates.inputs[name])
         dots = texture("DotsTxt", "Droplet Mask", coordinates.outputs["Drops UV"])
@@ -512,7 +511,7 @@ class GlassWindowRain(Glass):
             "Flow Blue": flow_blue,
             "Normal Strength": scalar("NormalStrength"),
             "Rain Amount": amount,
-            "Time": clock.outputs["Value"],
+            "Time": clock,
         }.items():
             assign_socket(links, value, tangent.inputs[name])
         encoded = encode_tangent_normal(
@@ -525,13 +524,6 @@ class GlassWindowRain(Glass):
             tree, encoded, location=(400, -1000), label="Window Normal"
         )
         return normal, normal
-
-
-def material_cache_identity(raw_material):
-    if not isinstance(raw_material, dict):
-        return raw_material
-    identity = dict(raw_material)
-    return identity
 
 
 used_params = tuple(

@@ -10,6 +10,7 @@ from ..blender.shader_nodes import replace_link
 from ..core.log import get_logger, log_once
 from ..materials.blender.images import image_has_alpha, image_is_placeholder
 from ..materials.cache_identity import filtered_material_data_identity
+from ..materials.params import lookup_param
 from .bundles import (
     alpha_contrast_socket,
     decal_uv_transform_socket,
@@ -40,7 +41,6 @@ from .mat_common import (
     find_input,
     find_output,
     get_or_build_node_group,
-    lookup_param,
     material_property_socket,
     new_labeled_node,
     param_color,
@@ -271,7 +271,7 @@ def _projected_parallax_frame(nodes, links, location=(-1840, -1040)):
 
 def _resolved_texture_path(data, profile, name):
     path = param_texture_path(data, name)
-    if not path and isinstance(profile.defaults.get(name), str):
+    if not path and profile is not None and isinstance(profile.defaults.get(name), str):
         path = profile.defaults[name]
     return str(path) if path else None
 
@@ -295,7 +295,7 @@ def _texture(
     image = owner._load_relative_image(
         path,
         non_color=non_color,
-        error_label=profile.name,
+        error_label=name if profile is None else profile.name,
     )
     if image is None or image_is_placeholder(image):
         return None

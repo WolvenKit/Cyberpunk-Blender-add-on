@@ -11,12 +11,16 @@ from ..core.log import get_logger
 from ..materials.blender.helper_caches import register_helper_cache
 from ..materials.blender.images import imageFromRelPath
 from ..materials.blender.nodes import (
-    CreateRebildNormalGroup,
     CreateShaderNodeValue,
-    configure_tangent_normal_map,
     create_node,
 )
 from ..materials.blender.profiling import begin_material_phase, end_material_phase
+from ..materials.params import (
+    clear_param_key_cache,
+    coerce_texture_path,
+    lookup_param,
+    param_key_cache_stats,
+)
 
 _LOG = get_logger(__name__)
 
@@ -221,14 +225,6 @@ def set_scene_fps_driver(driver, *, expression="frame / (fps / fps_base)"):
             end_material_phase(started, "material.driver_create", label="scene_time")
 
 
-def create_scene_time_value(tree, x, y, label="Time"):
-    """Value node driven by scene time in seconds"""
-    node = CreateShaderNodeValue(tree, 1, x, y, label)
-    fcurve = node.outputs["Value"].driver_add("default_value")
-    set_scene_fps_driver(fcurve.driver)
-    return node
-
-
 def populate_color_ramp(ramp_node, entries, alpha=1.0):
     """Fill a ColorRamp from serialized REDengine gradient colors"""
     elements = ramp_node.color_ramp.elements
@@ -303,62 +299,12 @@ def clear_decal_helper_caches():
         _DECAL_HELPER_STATS[key] = 0
 
 
-_PARAM_KEY_CACHE = OrderedDict()
-_PARAM_KEY_CACHE_LIMIT = 4096
-_PARAM_CACHE_STATS = {"hits": 0, "misses": 0}
-
-
-def _normalized_param_keys(data, *, refresh=False):
-    cache_key = id(data)
-    cached = _PARAM_KEY_CACHE.get(cache_key)
-    if (
-        not refresh
-        and cached is not None
-        and cached[0] is data
-        and cached[1] == len(data)
-    ):
-        _PARAM_KEY_CACHE.move_to_end(cache_key)
-        _PARAM_CACHE_STATS["hits"] += 1
-        return cached[2]
-
-    _PARAM_CACHE_STATS["misses"] += 1
-    normalized = {str(candidate).casefold(): candidate for candidate in data}
-    store_bounded_lru(
-        _PARAM_KEY_CACHE,
-        cache_key,
-        (data, len(data), normalized),
-        limit=_PARAM_KEY_CACHE_LIMIT,
-    )
-    return normalized
-
-
-def clear_param_key_cache():
-    _PARAM_KEY_CACHE.clear()
-    _PARAM_CACHE_STATS.update(hits=0, misses=0)
-
-
-def param_key_cache_stats():
-    return {**_PARAM_CACHE_STATS, "entries": len(_PARAM_KEY_CACHE)}
-
-
 register_helper_cache(
     "decal", clear=clear_decal_helper_caches, stats=decal_helper_cache_stats
 )
 register_helper_cache(
     "material_params", clear=clear_param_key_cache, stats=param_key_cache_stats
 )
-
-
-def lookup_param(data, key, default=None):
-    if not isinstance(data, dict):
-        return default
-    if key in data:
-        return data[key]
-    normalized_key = str(key).casefold()
-    matched = _normalized_param_keys(data).get(normalized_key)
-    if matched is not None and matched not in data:
-        matched = _normalized_param_keys(data, refresh=True).get(normalized_key)
-    return data.get(matched, default) if matched is not None else default
 
 
 def unwrap_param(value):
@@ -446,25 +392,6 @@ def coerce_color(value, default):
 
 def param_color(data, key, default):
     return coerce_color(unwrap_param(lookup_param(data, key, default)), default)
-
-
-def coerce_texture_path(value):
-    visited = set()
-    while isinstance(value, dict) and id(value) not in visited:
-        visited.add(id(value))
-        if "DepotPath" in value:
-            value = value["DepotPath"]
-        elif "$value" in value:
-            value = value["$value"]
-        elif "texture" in value:
-            value = value["texture"]
-        elif "value" in value:
-            value = value["value"]
-        else:
-            return ""
-    if not isinstance(value, str) or value == "null":
-        return ""
-    return value
 
 
 def param_texture_path(data, key):
@@ -644,32 +571,6 @@ def add_group_node(tree, group, loc, label=None, name=None):
     if name:
         node.name = name
     return node
-
-
-def create_normal_map_rel(
-    curMat, rel_path, x, y, label, image_format, depot_path, proj_path
-):
-    """Create the depot-relative normal-map graph"""
-    nMap = configure_tangent_normal_map(curMat.nodes.new("ShaderNodeNormalMap"))
-    nMap.location = (x, y)
-    nMap.hide = True
-
-    if rel_path:
-        img = imageFromRelPath(
-            rel_path,
-            image_format,
-            isNormal=True,
-            DepotPath=depot_path,
-            ProjPath=proj_path,
-        )
-        img_node = create_node(
-            curMat.nodes, "ShaderNodeTexImage", (x - 400, y), label=label, image=img
-        )
-        rebuild = CreateRebildNormalGroup(curMat, x - 150, y, label + " Rebuilt")
-        curMat.links.new(img_node.outputs["Color"], rebuild.inputs["Image"])
-        curMat.links.new(rebuild.outputs["Image"], nMap.inputs["Color"])
-
-    return nMap
 
 
 def material_property_socket(

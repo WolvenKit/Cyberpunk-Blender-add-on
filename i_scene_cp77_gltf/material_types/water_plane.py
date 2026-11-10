@@ -4,12 +4,12 @@ from .graph import set_transparent
 from .mat_common import (
     MaterialTypeBase,
     create_relative_texture_node,
-    create_scene_time_value,
     find_input,
     new_labeled_node,
     param_color,
     param_float,
     param_vector,
+    scene_time_socket,
 )
 from .normal_math import (
     decode_cp77_normal,
@@ -102,8 +102,7 @@ class WaterPlane(MaterialTypeBase):
             nodes, "ShaderNodeTexCoord", "Water UV", (-1600, 260)
         )
         uv = texcoord.outputs["UV"]
-        time_node = create_scene_time_value(tree, -1600, -140, "Water Time")
-        time = time_node.outputs["Value"]
+        time = scene_time_socket(tree.nodes, (-1600, -140), "Water Time")
         scale_speed = param_vector(
             data, "TexCoordDtortScaleSpeed", (2.0, 2.0, 0.05, 0.0)
         )

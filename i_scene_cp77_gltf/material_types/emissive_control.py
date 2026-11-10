@@ -9,12 +9,12 @@ from .emissive_common import ABSENT_COLOR_FALLBACK
 from .graph import set_alpha_clip
 from .mat_common import (
     MaterialTypeBase,
-    create_normal_map_rel,
     param_color,
     param_float,
     param_texture_path,
 )
 from .metalbase_common import scale_components
+from .normal_math import create_normal_map_rel
 
 
 class EmissiveControl(MaterialTypeBase):

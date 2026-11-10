@@ -3,12 +3,12 @@ from ..blender.shader_nodes import assign_socket
 from .graph import grid_location
 from .mat_common import (
     MaterialTypeBase,
-    create_scene_time_value,
     get_or_build_node_group,
     new_labeled_node,
     param_color,
     param_texture_path,
     param_vector,
+    scene_time_socket,
 )
 from .overlay_common import combine_vector, control, split_vector, transmission_surface
 
@@ -488,8 +488,7 @@ class Cloak(MaterialTypeBase):
         }
         transition = control(tree, data, "MaterialParam0.x", 0.0)
         dirt_influence = control(tree, data, "MaterialParam1.x", 0.0)
-        clock = create_scene_time_value(tree, -1600, -800, "Time")
-        clock.name = "Time"
+        clock = scene_time_socket(tree.nodes, (-1600, -800), "Time")
         uv_node = new_labeled_node(
             tree.nodes, "ShaderNodeTexCoord", "Optical Coordinates", (-1400, 800)
         )
@@ -570,7 +569,7 @@ class Cloak(MaterialTypeBase):
             tree.nodes,
             tree.links,
             "MULTIPLY",
-            clock.outputs["Value"],
+            clock,
             speed,
             name="Iridescence Time",
             location=grid_location(tree, (200, 160)),
@@ -730,13 +729,6 @@ class Cloak(MaterialTypeBase):
         transmission_surface(Mat, terms.outputs["Light"], transmission)
         Mat.use_backface_culling = True
         Mat.diffuse_color = tint
-
-
-def material_cache_identity(raw_material):
-    if not isinstance(raw_material, dict):
-        return raw_material
-    identity = dict(raw_material)
-    return identity
 
 
 used_params = (

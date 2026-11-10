@@ -4,9 +4,9 @@ from .graph import color_channel_socket, separate_color_sockets, set_transparent
 from .mat_common import (
     MaterialTypeBase,
     create_relative_texture_node,
-    create_scene_time_value,
     new_labeled_node,
     param_float,
+    scene_time_socket,
 )
 
 TEMPLATE = r"base\materials\rain.mt"
@@ -83,7 +83,7 @@ class Rain(MaterialTypeBase):
         alpha = None
 
         if rain_type == 1:
-            time = create_scene_time_value(tree, -1320, -40, "Rain Time")
+            time = scene_time_socket(tree.nodes, (-1320, -40), "Rain Time")
             channels = []
             specs = (
                 ("Red", 1.0, 1.0, 1.0),
@@ -94,7 +94,7 @@ class Rain(MaterialTypeBase):
                 shifted = _offset_uv(
                     tree,
                     uv,
-                    time.outputs["Value"],
+                    time,
                     speed * time_scale,
                     (1.0, 5.0, 1.0),
                     (0.5 * seed_scale, 0.0),

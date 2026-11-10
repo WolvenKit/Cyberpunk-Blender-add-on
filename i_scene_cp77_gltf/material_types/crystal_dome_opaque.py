@@ -1,5 +1,6 @@
 from ..bartmoss.scalar import clamp01
 from ..blender import shader_nodes
+from .crystal_dome import quantised_time
 from .decal_math import ev_to_linear
 from .graph import mix_color_socket, set_alpha_clip, value_socket, white_noise_socket
 
@@ -8,12 +9,12 @@ from .graph import mix_color_socket, set_alpha_clip, value_socket, white_noise_s
 # surface, so they are retained as metadata without adding dead graph links.
 from .mat_common import (
     MaterialTypeBase,
-    create_scene_time_value,
     find_input,
     new_labeled_node,
     param_color,
     param_float,
     param_vector,
+    scene_time_socket,
 )
 
 TEMPLATE = "base\\fx\\_shaders\\crystal_dome_opaque.mt"
@@ -214,8 +215,8 @@ class CrystalDomeOpaque(MaterialTypeBase):
             rect_signed_node.inputs, "Value_002"
         ).default_value = -1.0
 
-        vertical_time = self._quantised_time(
-            nodes, links, time_socket, 10.357, (-2640, -200)
+        vertical_time = quantised_time(
+            nodes, links, time_socket, 10.357, (-2640, -200), fract=False
         )
         vertical_scaled = shader_nodes.math(
             nodes,
@@ -251,8 +252,8 @@ class CrystalDomeOpaque(MaterialTypeBase):
             nodes, links, "hash11 Vertical", (-1280, -200), vertical_key
         )
 
-        horizontal_time = self._quantised_time(
-            nodes, links, time_socket, 2.429, (-2640, -420)
+        horizontal_time = quantised_time(
+            nodes, links, time_socket, 2.429, (-2640, -420), fract=False
         )
         seeded_y = shader_nodes.math(
             nodes,
@@ -398,34 +399,6 @@ class CrystalDomeOpaque(MaterialTypeBase):
         )
         return unoise_x, horizontal, vertical
 
-    def _quantised_time(self, nodes, links, time_socket, rate, location):
-        scaled = shader_nodes.math(
-            nodes,
-            links,
-            "MULTIPLY",
-            time_socket,
-            rate,
-            name=f"Time x {rate}",
-            location=location,
-        )
-        stepped = shader_nodes.math(
-            nodes,
-            links,
-            "FLOOR",
-            scaled,
-            name="floor",
-            location=(location[0] + 170, location[1]),
-        )
-        return shader_nodes.math(
-            nodes,
-            links,
-            "DIVIDE",
-            stepped,
-            rate,
-            name=f"/ {rate}",
-            location=(location[0] + 340, location[1]),
-        )
-
     def _pair_hash(self, nodes, links, name, location, x_socket, y_socket, scale):
         """Build the deterministic pair hash from independently floored scaled UV components"""
         scaled_x = shader_nodes.math(
@@ -520,8 +493,9 @@ class CrystalDomeOpaque(MaterialTypeBase):
         nodes.clear()
 
         tiling = param_vector(data, "Tiling", _TILING)
-        time = create_scene_time_value(tree, -3000, 840, "CP77 Crystal Dome Time")
-        time_socket = time.outputs["Value"]
+        time_socket = scene_time_socket(
+            tree.nodes, (-3000, 840), "CP77 Crystal Dome Time"
+        )
         reveal, gate = self._runtime_params(nodes, links, data)
 
         uv = new_labeled_node(nodes, "ShaderNodeUVMap", "UV", (-3000, 60))

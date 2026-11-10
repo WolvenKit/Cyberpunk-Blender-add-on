@@ -638,82 +638,21 @@ def sphere_mask_socket(tree, uv, radius, hardness, location, label="Sphere Mask"
     return node.outputs["Mask"]
 
 
-def _four_way_scalar_group():
+_FOUR_WAY_SOCKETS = {
+    "FLOAT": ("NodeSocketFloat", "Value", "Float"),
+    "RGBA": ("NodeSocketColor", "Color", "Color"),
+}
+
+
+def _four_way_group(kind):
+    socket_type, prefix, suffix = _FOUR_WAY_SOCKETS[kind]
+
     def build(group):
         nodes = group.nodes
         links = group.links
         group_input = nodes.new("NodeGroupInput")
         group_output = nodes.new("NodeGroupOutput")
-        current = group_input.outputs["Value 0"]
-        for index in range(1, 4):
-            condition = shader_nodes.math(
-                nodes, links, "GREATER_THAN", label=f"Index ≥ {index}"
-            ).node
-            shader_nodes.socket_by_identifier(
-                condition.inputs, "Value_001"
-            ).default_value = index - 0.5
-            delta = shader_nodes.math(
-                nodes, links, "SUBTRACT", label=f"Value {index} Delta"
-            ).node
-            weighted = shader_nodes.math(
-                nodes, links, "MULTIPLY", label=f"Value {index} Weight"
-            ).node
-            selected = shader_nodes.math(
-                nodes, links, "ADD", label=f"Select Value {index}"
-            ).node
-            links.new(group_input.outputs["Index"], condition.inputs["Value"])
-            links.new(group_input.outputs[f"Value {index}"], delta.inputs["Value"])
-            links.new(
-                current, shader_nodes.socket_by_identifier(delta.inputs, "Value_001")
-            )
-            links.new(delta.outputs["Value"], weighted.inputs["Value"])
-            links.new(
-                condition.outputs["Value"],
-                shader_nodes.socket_by_identifier(weighted.inputs, "Value_001"),
-            )
-            links.new(current, selected.inputs["Value"])
-            links.new(
-                weighted.outputs["Value"],
-                shader_nodes.socket_by_identifier(selected.inputs, "Value_001"),
-            )
-            current = selected.outputs["Value"]
-        links.new(current, group_output.inputs["Value"])
-
-    return get_or_build_node_group(
-        "CP77 Four-way Scalar Select Bundle v1",
-        (
-            ("NodeSocketFloat", "Index"),
-            ("NodeSocketFloat", "Value 0"),
-            ("NodeSocketFloat", "Value 1"),
-            ("NodeSocketFloat", "Value 2"),
-            ("NodeSocketFloat", "Value 3"),
-        ),
-        (("NodeSocketFloat", "Value"),),
-        build,
-    )
-
-
-def four_way_scalar_socket(tree, index, values, location, label="Select Value"):
-    node = material_bundle_node(
-        tree,
-        _four_way_scalar_group(),
-        location,
-        label,
-        {
-            "Index": index,
-            **{f"Value {item}": values[item] for item in range(4)},
-        },
-    )
-    return node.outputs["Value"]
-
-
-def _four_way_color_group():
-    def build(group):
-        nodes = group.nodes
-        links = group.links
-        group_input = nodes.new("NodeGroupInput")
-        group_output = nodes.new("NodeGroupOutput")
-        current = group_input.outputs["Color 0"]
+        current = group_input.outputs[f"{prefix} 0"]
         for index in range(1, 4):
             condition = shader_nodes.math(
                 nodes, links, "GREATER_THAN", label=f"Index ≥ {index}"
@@ -722,8 +661,8 @@ def _four_way_color_group():
                 condition.inputs, "Value_001"
             ).default_value = index - 0.5
             selected = nodes.new("ShaderNodeMix")
-            selected.data_type = "RGBA"
-            selected.label = f"Select Color {index}"
+            selected.data_type = kind
+            selected.label = f"Select {prefix} {index}"
             selected.clamp_factor = False
             links.new(group_input.outputs["Index"], condition.inputs["Value"])
             links.new(
@@ -731,43 +670,43 @@ def _four_way_color_group():
                 shader_nodes.socket_by_identifier(selected.inputs, "Factor_Float"),
             )
             links.new(
-                current, shader_nodes.socket_by_identifier(selected.inputs, "A_Color")
+                current,
+                shader_nodes.socket_by_identifier(selected.inputs, f"A_{suffix}"),
             )
             links.new(
-                group_input.outputs[f"Color {index}"],
-                shader_nodes.socket_by_identifier(selected.inputs, "B_Color"),
+                group_input.outputs[f"{prefix} {index}"],
+                shader_nodes.socket_by_identifier(selected.inputs, f"B_{suffix}"),
             )
             current = shader_nodes.socket_by_identifier(
-                selected.outputs, "Result_Color"
+                selected.outputs, f"Result_{suffix}"
             )
-        links.new(current, group_output.inputs["Color"])
+        links.new(current, group_output.inputs[prefix])
 
+    label = "Scalar" if kind == "FLOAT" else "Color"
     return get_or_build_node_group(
-        "CP77 Four-way Color Select Bundle v1",
+        f"CP77 Four-way {label} Select Bundle v1",
         (
             ("NodeSocketFloat", "Index"),
-            ("NodeSocketColor", "Color 0"),
-            ("NodeSocketColor", "Color 1"),
-            ("NodeSocketColor", "Color 2"),
-            ("NodeSocketColor", "Color 3"),
+            *((socket_type, f"{prefix} {item}") for item in range(4)),
         ),
-        (("NodeSocketColor", "Color"),),
+        ((socket_type, prefix),),
         build,
     )
 
 
-def four_way_color_socket(tree, index, colors, location, label="Select Color"):
+def four_way_socket(tree, index, values, location, label=None, *, kind):
+    _socket_type, prefix, _suffix = _FOUR_WAY_SOCKETS[kind]
     node = material_bundle_node(
         tree,
-        _four_way_color_group(),
+        _four_way_group(kind),
         location,
-        label,
+        label or f"Select {prefix}",
         {
             "Index": index,
-            **{f"Color {item}": colors[item] for item in range(4)},
+            **{f"{prefix} {item}": values[item] for item in range(4)},
         },
     )
-    return node.outputs["Color"]
+    return node.outputs[prefix]
 
 
 def _light_zone_group():
@@ -791,14 +730,24 @@ def _light_zone_group():
             level.attribute_name = zone_level_property(zone)
             levels.append(level.outputs["Fac"])
         links.new(
-            four_way_color_socket(
-                group, group_input.outputs["Zone"], colors, (0, 0), "Select Zone Color"
+            four_way_socket(
+                group,
+                group_input.outputs["Zone"],
+                colors,
+                (0, 0),
+                "Select Zone Color",
+                kind="RGBA",
             ),
             group_output.inputs["Color"],
         )
         links.new(
-            four_way_scalar_socket(
-                group, group_input.outputs["Zone"], levels, (0, 0), "Select Zone Level"
+            four_way_socket(
+                group,
+                group_input.outputs["Zone"],
+                levels,
+                (0, 0),
+                "Select Zone Level",
+                kind="FLOAT",
             ),
             group_output.inputs["Level"],
         )
@@ -852,10 +801,12 @@ def light_zone_emission(tree, zone, data, debug_colors, mask, location):
     x, y = location
     debug = param_vector(data, "DebugLightsIntensity", (0.0, 0.0, 0.0, 0.0))
     if any(abs(value) > 1.0e-6 for value in debug):
-        color = four_way_color_socket(
-            tree, zone, debug_colors, (x, y + 200), "Debug Zone Color"
+        color = four_way_socket(
+            tree, zone, debug_colors, (x, y + 200), "Debug Zone Color", kind="RGBA"
         )
-        level = four_way_scalar_socket(tree, zone, debug, (x, y), "Debug Zone Level")
+        level = four_way_socket(
+            tree, zone, debug, (x, y), "Debug Zone Level", kind="FLOAT"
+        )
     else:
         color, level = light_zone_bundle(
             tree, zone, (x, y + 100), "Zone Color and Level"
@@ -863,8 +814,8 @@ def light_zone_emission(tree, zone, data, debug_colors, mask, location):
     zone_evs = tuple(
         param_float(data, f"Zone{index}EmissiveEV", 5.0) for index in range(4)
     )
-    zone_ev = four_way_scalar_socket(
-        tree, zone, zone_evs, (x, y - 200), "Zone Emissive EV"
+    zone_ev = four_way_socket(
+        tree, zone, zone_evs, (x, y - 200), "Zone Emissive EV", kind="FLOAT"
     )
     leveled = shader_nodes.math(
         tree.nodes,

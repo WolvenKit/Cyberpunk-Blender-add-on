@@ -299,23 +299,6 @@ def _restore_palette(palette, snapshot):
         palette.colors.active = restored[active_index]
 
 
-def _palette_matches_snapshot(palette, snapshot):
-    properties, colors, _active_index = snapshot
-    for key in _PALETTE_PROPERTY_KEYS:
-        if key in properties:
-            if key not in palette or palette[key] != properties[key]:
-                return False
-        elif key in palette:
-            return False
-    current = []
-    for color in tuple(getattr(palette, "colors", ())):
-        try:
-            current.append(tuple(float(value) for value in color.color[:3]))
-        except (ReferenceError, ValueError):
-            return False
-    return tuple(current) == colors
-
-
 def _palette_data(template_path, override_table):
     template_name = _template_palette_name(template_path)
     properties = {
@@ -382,7 +365,7 @@ def _palette_signature(properties, colors):
     return tuple(signature_properties), tuple(colors)
 
 
-def _palette_matches_data(palette, properties, colors):
+def _palette_matches(palette, properties, colors):
     for key in _PALETTE_PROPERTY_KEYS:
         try:
             if key in properties:
@@ -419,7 +402,7 @@ def _create_palette_from_data(template_path, properties, colors):
         palette = new_tracked_datablock("palettes", palette_name)
         snapshot = None
     else:
-        if _palette_matches_data(palette, properties, colors):
+        if _palette_matches(palette, properties, colors):
             _OVERRIDE_PALETTE_STATS["unchanged"] += 1
             _PALETTE_INDEX[normalized] = palette
             return palette
@@ -429,8 +412,8 @@ def _create_palette_from_data(template_path, properties, colors):
             lambda palette=palette, snapshot=snapshot: _restore_palette(
                 palette, snapshot
             ),
-            verify=lambda palette=palette, snapshot=snapshot: _palette_matches_snapshot(
-                palette, snapshot
+            verify=lambda palette=palette, snapshot=snapshot: _palette_matches(
+                palette, snapshot[0], snapshot[1]
             ),
             label=f"multilayer palette {palette.name}",
         )

@@ -11,7 +11,7 @@ from ..materials.blender.nodes import create_node
 from .bundles import material_bundle_node
 from .graph import cp77_bitangent_socket, cp77_uv_tangent_node, fract_socket
 from .mat_common import get_or_build_node_group, param_float, param_vector
-from .shader_hash import HASH_OFFSET, HASH_SCALE
+from .shader_hash import hash2_socket, hash11_socket, hash12_socket
 
 _EPSILON = 1.0e-4
 _VERTICAL_BASIS_THRESHOLD = 0.5
@@ -40,484 +40,6 @@ def _combine(tree, x, y, z=None, location=(0, 0), label="Vector"):
     if z is not None:
         tree.links.new(z, node.inputs["Z"])
     return node.outputs["Vector"]
-
-
-def _build_hash11_nodes(tree, source, location, label):
-    mul = shader_nodes.math(
-        tree.nodes,
-        tree.links,
-        "MULTIPLY",
-        None,
-        HASH_SCALE,
-        label=f"{label} * .1031",
-        location=location,
-        hide=True,
-    ).node
-    tree.links.new(source, mul.inputs["Value"])
-    p = fract_socket(
-        tree, mul.outputs["Value"], (location[0] + 150, location[1]), f"{label} frac"
-    )
-    plus = shader_nodes.math(
-        tree.nodes,
-        tree.links,
-        "ADD",
-        None,
-        HASH_OFFSET,
-        label=f"{label} + 33.33",
-        location=(location[0] + 300, location[1]),
-        hide=True,
-    ).node
-    tree.links.new(p, plus.inputs["Value"])
-    p2 = shader_nodes.math(
-        tree.nodes,
-        tree.links,
-        "MULTIPLY",
-        label=f"{label} scramble",
-        location=(location[0] + 450, location[1]),
-        hide=True,
-    ).node
-    tree.links.new(p, p2.inputs["Value"])
-    tree.links.new(
-        plus.outputs["Value"], shader_nodes.socket_by_identifier(p2.inputs, "Value_001")
-    )
-    doubled = shader_nodes.math(
-        tree.nodes,
-        tree.links,
-        "MULTIPLY",
-        None,
-        2.0,
-        label=f"{label} x2",
-        location=(location[0] + 600, location[1]),
-        hide=True,
-    ).node
-    tree.links.new(p2.outputs["Value"], doubled.inputs["Value"])
-    final_mul = shader_nodes.math(
-        tree.nodes,
-        tree.links,
-        "MULTIPLY",
-        label=f"{label} final",
-        location=(location[0] + 750, location[1]),
-        hide=True,
-    ).node
-    tree.links.new(p2.outputs["Value"], final_mul.inputs["Value"])
-    tree.links.new(
-        doubled.outputs["Value"],
-        shader_nodes.socket_by_identifier(final_mul.inputs, "Value_001"),
-    )
-    return fract_socket(
-        tree, final_mul.outputs["Value"], (location[0] + 900, location[1]), label
-    )
-
-
-def _build_hash_p3_nodes(tree, source, mode, location, label):
-    if mode == "21":
-        p3 = _combine(
-            tree, source, source, source, location=location, label=f"{label} p.xxx"
-        )
-    elif mode == "22":
-        split = create_node(
-            tree.nodes, "ShaderNodeSeparateXYZ", location, label=f"{label} Input"
-        )
-        tree.links.new(source, split.inputs["Vector"])
-        p3 = _combine(
-            tree,
-            split.outputs["X"],
-            split.outputs["Y"],
-            split.outputs["X"],
-            location=(location[0] + 170, location[1]),
-            label=f"{label} p.xyx",
-        )
-    else:
-        p3 = source
-
-    scale = shader_nodes.vector_math(
-        tree.nodes,
-        tree.links,
-        "MULTIPLY",
-        label=f"{label} Hash Scale",
-        location=(location[0] + 340, location[1]),
-        hide=True,
-    ).node
-    shader_nodes.socket_by_identifier(scale.inputs, "Vector_001").default_value = (
-        0.1031,
-        0.1030,
-        0.0973,
-    )
-    tree.links.new(p3, scale.inputs["Vector"])
-    frac = shader_nodes.vector_math(
-        tree.nodes,
-        tree.links,
-        "FRACTION",
-        label=f"{label} frac",
-        location=(location[0] + 510, location[1]),
-        hide=True,
-    ).node
-    tree.links.new(scale.outputs["Vector"], frac.inputs["Vector"])
-    split = create_node(
-        tree.nodes,
-        "ShaderNodeSeparateXYZ",
-        (location[0] + 680, location[1]),
-        label=f"{label} p3",
-    )
-    tree.links.new(frac.outputs["Vector"], split.inputs["Vector"])
-
-    permute = _combine(
-        tree,
-        split.outputs["Y"],
-        split.outputs["Z"],
-        split.outputs["X"],
-        location=(location[0] + 850, location[1] - 120),
-        label=f"{label} p3.yzx",
-    )
-    add_const = shader_nodes.vector_math(
-        tree.nodes,
-        tree.links,
-        "ADD",
-        label=f"{label} +33.33",
-        location=(location[0] + 1020, location[1] - 120),
-        hide=True,
-    ).node
-    shader_nodes.socket_by_identifier(add_const.inputs, "Vector_001").default_value = (
-        33.33,
-        33.33,
-        33.33,
-    )
-    tree.links.new(permute, add_const.inputs["Vector"])
-    dot = shader_nodes.vector_math(
-        tree.nodes,
-        tree.links,
-        "DOT_PRODUCT",
-        label=f"{label} Dot",
-        location=(location[0] + 1190, location[1] - 40),
-        hide=True,
-    ).node
-    tree.links.new(frac.outputs["Vector"], dot.inputs["Vector"])
-    tree.links.new(
-        add_const.outputs["Vector"],
-        shader_nodes.socket_by_identifier(dot.inputs, "Vector_001"),
-    )
-    dot_value = dot.outputs["Value"]
-    dot3 = _combine(
-        tree,
-        dot_value,
-        dot_value,
-        dot_value,
-        location=(location[0] + 1360, location[1] - 40),
-        label=f"{label} Dot.xxx",
-    )
-    scrambled = shader_nodes.vector_math(
-        tree.nodes,
-        tree.links,
-        "ADD",
-        label=f"{label} Scrambled",
-        location=(location[0] + 1530, location[1]),
-        hide=True,
-    ).node
-    tree.links.new(frac.outputs["Vector"], scrambled.inputs["Vector"])
-    tree.links.new(
-        dot3, shader_nodes.socket_by_identifier(scrambled.inputs, "Vector_001")
-    )
-    split2 = create_node(
-        tree.nodes,
-        "ShaderNodeSeparateXYZ",
-        (location[0] + 1700, location[1]),
-        label=f"{label} Scrambled XYZ",
-    )
-    tree.links.new(scrambled.outputs["Vector"], split2.inputs["Vector"])
-
-    sum_xy = shader_nodes.math(
-        tree.nodes,
-        tree.links,
-        "ADD",
-        label=f"{label} x+y",
-        location=(location[0] + 1870, location[1] + 70),
-        hide=True,
-    ).node
-    tree.links.new(split2.outputs["X"], sum_xy.inputs["Value"])
-    tree.links.new(
-        split2.outputs["Y"],
-        shader_nodes.socket_by_identifier(sum_xy.inputs, "Value_001"),
-    )
-    out_x_mul = shader_nodes.math(
-        tree.nodes,
-        tree.links,
-        "MULTIPLY",
-        label=f"{label} X",
-        location=(location[0] + 2040, location[1] + 70),
-        hide=True,
-    ).node
-    tree.links.new(sum_xy.outputs["Value"], out_x_mul.inputs["Value"])
-    tree.links.new(
-        split2.outputs["Z"],
-        shader_nodes.socket_by_identifier(out_x_mul.inputs, "Value_001"),
-    )
-    out_x = fract_socket(
-        tree,
-        out_x_mul.outputs["Value"],
-        (location[0] + 2210, location[1] + 70),
-        f"{label}.x",
-    )
-
-    sum_xz = shader_nodes.math(
-        tree.nodes,
-        tree.links,
-        "ADD",
-        label=f"{label} x+z",
-        location=(location[0] + 1870, location[1] - 90),
-        hide=True,
-    ).node
-    tree.links.new(split2.outputs["X"], sum_xz.inputs["Value"])
-    tree.links.new(
-        split2.outputs["Z"],
-        shader_nodes.socket_by_identifier(sum_xz.inputs, "Value_001"),
-    )
-    out_y_mul = shader_nodes.math(
-        tree.nodes,
-        tree.links,
-        "MULTIPLY",
-        label=f"{label} Y",
-        location=(location[0] + 2040, location[1] - 90),
-        hide=True,
-    ).node
-    tree.links.new(sum_xz.outputs["Value"], out_y_mul.inputs["Value"])
-    tree.links.new(
-        split2.outputs["Y"],
-        shader_nodes.socket_by_identifier(out_y_mul.inputs, "Value_001"),
-    )
-    out_y = fract_socket(
-        tree,
-        out_y_mul.outputs["Value"],
-        (location[0] + 2210, location[1] - 90),
-        f"{label}.y",
-    )
-    return _combine(
-        tree, out_x, out_y, location=(location[0] + 2380, location[1]), label=label
-    )
-
-
-def _build_hash12_nodes(tree, source, location, label):
-    split = create_node(
-        tree.nodes, "ShaderNodeSeparateXYZ", location, label=f"{label} Input"
-    )
-    tree.links.new(source, split.inputs["Vector"])
-    p3 = _combine(
-        tree,
-        split.outputs["X"],
-        split.outputs["Y"],
-        split.outputs["X"],
-        location=(location[0] + 170, location[1]),
-        label=f"{label} p.xyx",
-    )
-    scale = shader_nodes.vector_math(
-        tree.nodes,
-        tree.links,
-        "SCALE",
-        label=f"{label} * .1031",
-        location=(location[0] + 340, location[1]),
-        hide=True,
-    ).node
-    scale.inputs["Scale"].default_value = HASH_SCALE
-    tree.links.new(p3, scale.inputs["Vector"])
-    frac = shader_nodes.vector_math(
-        tree.nodes,
-        tree.links,
-        "FRACTION",
-        label=f"{label} frac",
-        location=(location[0] + 510, location[1]),
-        hide=True,
-    ).node
-    tree.links.new(scale.outputs["Vector"], frac.inputs["Vector"])
-    p = create_node(
-        tree.nodes,
-        "ShaderNodeSeparateXYZ",
-        (location[0] + 680, location[1]),
-        label=f"{label} p3",
-    )
-    tree.links.new(frac.outputs["Vector"], p.inputs["Vector"])
-    permute = _combine(
-        tree,
-        p.outputs["Y"],
-        p.outputs["Z"],
-        p.outputs["X"],
-        location=(location[0] + 850, location[1] - 120),
-        label=f"{label} p3.yzx",
-    )
-    plus = shader_nodes.vector_math(
-        tree.nodes,
-        tree.links,
-        "ADD",
-        label=f"{label} +33.33",
-        location=(location[0] + 1020, location[1] - 120),
-        hide=True,
-    ).node
-    shader_nodes.socket_by_identifier(plus.inputs, "Vector_001").default_value = (
-        HASH_OFFSET,
-    ) * 3
-    tree.links.new(permute, plus.inputs["Vector"])
-    dot = shader_nodes.vector_math(
-        tree.nodes,
-        tree.links,
-        "DOT_PRODUCT",
-        label=f"{label} Dot",
-        location=(location[0] + 1190, location[1]),
-        hide=True,
-    ).node
-    tree.links.new(frac.outputs["Vector"], dot.inputs["Vector"])
-    tree.links.new(
-        plus.outputs["Vector"],
-        shader_nodes.socket_by_identifier(dot.inputs, "Vector_001"),
-    )
-    dot_value = dot.outputs["Value"]
-    dot3 = _combine(
-        tree,
-        dot_value,
-        dot_value,
-        dot_value,
-        location=(location[0] + 1360, location[1] - 100),
-        label=f"{label} Dot.xxx",
-    )
-    scrambled = shader_nodes.vector_math(
-        tree.nodes,
-        tree.links,
-        "ADD",
-        label=f"{label} Scrambled",
-        location=(location[0] + 1530, location[1]),
-        hide=True,
-    ).node
-    tree.links.new(frac.outputs["Vector"], scrambled.inputs["Vector"])
-    tree.links.new(
-        dot3, shader_nodes.socket_by_identifier(scrambled.inputs, "Vector_001")
-    )
-    ps = create_node(
-        tree.nodes,
-        "ShaderNodeSeparateXYZ",
-        (location[0] + 1700, location[1]),
-        label=f"{label} XYZ",
-    )
-    tree.links.new(scrambled.outputs["Vector"], ps.inputs["Vector"])
-    xy = shader_nodes.math(
-        tree.nodes,
-        tree.links,
-        "ADD",
-        label=f"{label} x+y",
-        location=(location[0] + 1870, location[1] + 40),
-        hide=True,
-    ).node
-    tree.links.new(ps.outputs["X"], xy.inputs["Value"])
-    tree.links.new(
-        ps.outputs["Y"], shader_nodes.socket_by_identifier(xy.inputs, "Value_001")
-    )
-    mul = shader_nodes.math(
-        tree.nodes,
-        tree.links,
-        "MULTIPLY",
-        label=f"{label} Product",
-        location=(location[0] + 2040, location[1] + 40),
-        hide=True,
-    ).node
-    tree.links.new(xy.outputs["Value"], mul.inputs["Value"])
-    tree.links.new(
-        ps.outputs["Z"], shader_nodes.socket_by_identifier(mul.inputs, "Value_001")
-    )
-    return fract_socket(
-        tree, mul.outputs["Value"], (location[0] + 2210, location[1] + 40), label
-    )
-
-
-def _hash11_group():
-    def build(group):
-        group_input = group.nodes.new("NodeGroupInput")
-        group_output = group.nodes.new("NodeGroupOutput")
-        result = _build_hash11_nodes(
-            group,
-            group_input.outputs["Value"],
-            (-500, 0),
-            "Hash",
-        )
-        group.links.new(result, group_output.inputs["Value"])
-
-    return get_or_build_node_group(
-        "CP77 Window Hash 1 from 1 Bundle v1",
-        (("NodeSocketFloat", "Value"),),
-        (("NodeSocketFloat", "Value"),),
-        build,
-    )
-
-
-def _hash11(tree, source, location, label):
-    node = material_bundle_node(
-        tree,
-        _hash11_group(),
-        location,
-        label,
-        {"Value": source},
-    )
-    return node.outputs["Value"]
-
-
-def _hash_p3_group(mode):
-    socket_type = "NodeSocketFloat" if mode == "21" else "NodeSocketVector"
-
-    def build(group):
-        group_input = group.nodes.new("NodeGroupInput")
-        group_output = group.nodes.new("NodeGroupOutput")
-        result = _build_hash_p3_nodes(
-            group,
-            group_input.outputs["Value"],
-            mode,
-            (-1200, 0),
-            "Hash",
-        )
-        group.links.new(result, group_output.inputs["Vector"])
-
-    return get_or_build_node_group(
-        f"CP77 Window Hash {mode} Bundle v2",
-        ((socket_type, "Value"),),
-        (("NodeSocketVector", "Vector"),),
-        build,
-    )
-
-
-def _hash_p3(tree, source, mode, location, label):
-    node = material_bundle_node(
-        tree,
-        _hash_p3_group(mode),
-        location,
-        label,
-        {"Value": source},
-    )
-    return node.outputs["Vector"]
-
-
-def _hash12_group():
-    def build(group):
-        group_input = group.nodes.new("NodeGroupInput")
-        group_output = group.nodes.new("NodeGroupOutput")
-        result = _build_hash12_nodes(
-            group,
-            group_input.outputs["Vector"],
-            (-1100, 0),
-            "Hash",
-        )
-        group.links.new(result, group_output.inputs["Value"])
-
-    return get_or_build_node_group(
-        "CP77 Window Hash 1 from 2 Bundle v1",
-        (("NodeSocketVector", "Vector"),),
-        (("NodeSocketFloat", "Value"),),
-        build,
-    )
-
-
-def _hash12(tree, source, location, label):
-    node = material_bundle_node(
-        tree,
-        _hash12_group(),
-        location,
-        label,
-        {"Vector": source},
-    )
-    return node.outputs["Value"]
 
 
 def _build_source_basis_nodes(tree, location=(-4200, 700)):
@@ -1064,7 +586,7 @@ def _object_id(tree, pivot, location=(-3300, 1050)):
         hide=True,
     ).node
     tree.links.new(pivot, floor.inputs["Vector"])
-    xy = _hash_p3(
+    xy = hash2_socket(
         tree,
         floor.outputs["Vector"],
         "23",
@@ -1078,7 +600,7 @@ def _object_id(tree, pivot, location=(-3300, 1050)):
         label="Object Translation XYZ",
     )
     tree.links.new(floor.outputs["Vector"], split_floor.inputs["Vector"])
-    zw = _hash_p3(
+    zw = hash2_socket(
         tree,
         split_floor.outputs["Z"],
         "21",
@@ -1247,7 +769,7 @@ def _build_room_state_nodes(
         hide=True,
     ).node
     tree.links.new(row.outputs["Value"], row_floor.inputs["Value"])
-    z_random = _hash11(
+    z_random = hash11_socket(
         tree,
         row_floor.outputs["Value"],
         (location[0] + 500, location[1]),
@@ -1573,10 +1095,10 @@ def _build_room_state_nodes(
         location=(location[0] + 3490, location[1]),
         label="Room Seed Input",
     )
-    random_seed = _hash_p3(
+    random_seed = hash2_socket(
         tree, seed_input, "22", (location[0] + 3660, location[1]), "randomSeed"
     )
-    random = _hash12(
+    random = hash12_socket(
         tree, random_seed, (location[0] + 6100, location[1] - 60), "Room Random"
     )
 
@@ -1593,7 +1115,7 @@ def _build_room_state_nodes(
         cell_y.outputs["Value"],
         shader_nodes.socket_by_identifier(idw_plus_row.inputs, "Value_001"),
     )
-    stable = _hash11(
+    stable = hash11_socket(
         tree,
         idw_plus_row.outputs["Value"],
         (location[0] + 6270, location[1] - 220),

@@ -3,12 +3,12 @@ from ..blender import shader_nodes
 from .graph import mix_color_socket, set_transparent, value_socket
 from .mat_common import (
     MaterialTypeBase,
-    create_scene_time_value,
     find_input,
     new_labeled_node,
     param_color,
     param_float,
     param_vector,
+    scene_time_socket,
 )
 from .normal_math import (
     decode_cp77_normal,
@@ -110,8 +110,7 @@ class FillableFluidVertex(MaterialTypeBase):
         bbox_max = param_vector(data, "FluidBoundingBoxMax", (0.0, 0.0, 0.0, 0.0))
         fresnel_bias = param_float(data, "FresnelBias", _SCALAR_DEFAULTS["FresnelBias"])
 
-        time = create_scene_time_value(tree, -2200, 700, "CP77 Fluid Time")
-        time_socket = time.outputs["Value"]
+        time_socket = scene_time_socket(tree.nodes, (-2200, 700), "CP77 Fluid Time")
 
         label_suffix = " (fx-driven)" if controlled_by_fx else " (material value)"
         fill_amount = value_socket(

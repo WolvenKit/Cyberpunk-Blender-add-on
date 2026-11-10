@@ -12,14 +12,12 @@ from .graph import (
     separate_color_sockets,
 )
 from .mat_common import (
-    coerce_texture_path,
-    create_scene_time_value,
     find_input,
-    lookup_param,
     material_property_socket,
     new_labeled_node,
     param_float,
     param_vector,
+    scene_time_socket,
 )
 from .multilayered import Multilayered
 
@@ -115,9 +113,7 @@ def _pow_abs_color(nodes, links, color, exponent, location):
 
 
 class MultilayerBlackbodyInject(Multilayered):
-    def _texture_path(self, data, key):
-        raw = lookup_param(data, key, _TEXTURE_DEFAULTS.get(key, ""))
-        return coerce_texture_path(raw)
+    texture_defaults = _TEXTURE_DEFAULTS
 
     def _texture(self, nodes, links, data, key, location, uv):
         node = self._relative_texture_node(
@@ -177,14 +173,14 @@ class MultilayerBlackbodyInject(Multilayered):
                 location=(-2080, -1120),
             )
             if abs(noise_uv[2]) > 1.0e-12 or abs(noise_uv[3]) > 1.0e-12:
-                scene_time = create_scene_time_value(
-                    tree, -2080, -1420, "CP77 Blackbody Time"
+                scene_time = scene_time_socket(
+                    tree.nodes, (-2080, -1420), "CP77 Blackbody Time"
                 )
                 offset_u = shader_nodes.math(
                     nodes,
                     links,
                     "MULTIPLY",
-                    scene_time.outputs["Value"],
+                    scene_time,
                     noise_uv[2],
                     name="Damage Noise U Speed",
                     location=(-1880, -1400),
@@ -193,7 +189,7 @@ class MultilayerBlackbodyInject(Multilayered):
                     nodes,
                     links,
                     "MULTIPLY",
-                    scene_time.outputs["Value"],
+                    scene_time,
                     noise_uv[3],
                     name="Damage Noise V Speed",
                     location=(-1880, -1500),

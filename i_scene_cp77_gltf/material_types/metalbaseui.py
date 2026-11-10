@@ -6,10 +6,10 @@ from .bundles import emissive_scale_bundle
 from .graph import cp77_bitangent_socket, cp77_uv_tangent_node, mix_scalar_socket
 from .mat_common import (
     MaterialTypeBase,
-    create_scene_time_value,
     param_color,
     param_float,
     param_vector,
+    scene_time_socket,
 )
 
 LAYER_COUNT = 4
@@ -189,14 +189,14 @@ class MetalBaseUI(MaterialTypeBase):
             return None
 
         density = param_vector(Data, "ScanlinesDensity", (125.0, 125.0, 0.0, 2.0))
-        time = create_scene_time_value(CurMat, -2200, 120)
+        time = scene_time_socket(CurMat.nodes, (-2200, 120), "Time")
         scroll_u = shader_nodes.math(
             CurMat.nodes, CurMat.links, "MULTIPLY", location=(-2030, 150), hide=True
         ).node
         shader_nodes.socket_by_identifier(
             scroll_u.inputs, "Value_001"
         ).default_value = density[2]
-        CurMat.links.new(time.outputs["Value"], scroll_u.inputs["Value"])
+        CurMat.links.new(time, scroll_u.inputs["Value"])
         scroll_v = shader_nodes.math(
             CurMat.nodes,
             CurMat.links,
@@ -208,7 +208,7 @@ class MetalBaseUI(MaterialTypeBase):
         shader_nodes.socket_by_identifier(
             scroll_v.inputs, "Value_001"
         ).default_value = density[3]
-        CurMat.links.new(time.outputs["Value"], scroll_v.inputs["Value"])
+        CurMat.links.new(time, scroll_v.inputs["Value"])
 
         scroll = create_node(CurMat.nodes, "ShaderNodeCombineXYZ", (-1880, 130))
         CurMat.links.new(scroll_u.outputs["Value"], scroll.inputs["X"])

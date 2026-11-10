@@ -1,16 +1,17 @@
 from ..assetio.paths import backslash_depot_key
 from ..blender import shader_nodes
+from .emissive_common import EmissiveSlotsMixin
 from .graph import mix_color_socket
 from .mat_common import (
     MaterialTypeBase,
-    create_scene_time_value,
     find_input,
     new_labeled_node,
     param_color,
     param_float,
+    scene_time_socket,
     write_slot_values,
 )
-from .shader_hash import HASH_OFFSET, HASH_SCALE
+from .shader_hash import hash11_socket
 
 # The editor's white texture leaves the colour as it is, so it is not sampled.
 _WHITE_TEXTURE = "engine\\textures\\editor\\white.xbm"
@@ -36,59 +37,7 @@ def _modulated(data):
     return param_float(data, "UseMatParamToCtrlNoise", 0.0) >= 1.0
 
 
-def _hash(nodes, links, value, location):
-    """A pseudo-random number in [0, 1) from value"""
-    x, y = location
-    q = shader_nodes.math(
-        nodes,
-        links,
-        "FRACT",
-        shader_nodes.math(
-            nodes,
-            links,
-            "MULTIPLY",
-            value,
-            HASH_SCALE,
-            name="Hash Scale",
-            location=(x, y),
-        ),
-        name="Hash Fraction",
-        location=(x + 180, y),
-    )
-    q = shader_nodes.math(
-        nodes,
-        links,
-        "MULTIPLY",
-        q,
-        shader_nodes.math(
-            nodes,
-            links,
-            "ADD",
-            q,
-            HASH_OFFSET,
-            name="Hash Offset",
-            location=(x + 360, y - 120),
-        ),
-        name="Hash Square",
-        location=(x + 540, y),
-    )
-    q = shader_nodes.math(
-        nodes,
-        links,
-        "MULTIPLY",
-        q,
-        shader_nodes.math(
-            nodes, links, "ADD", q, q, name="Hash Double", location=(x + 720, y - 120)
-        ),
-        name="Hash Double Square",
-        location=(x + 900, y),
-    )
-    return shader_nodes.math(
-        nodes, links, "FRACT", q, name="Hash", location=(x + 1080, y)
-    )
-
-
-class NeonTubes(MaterialTypeBase):
+class NeonTubes(EmissiveSlotsMixin, MaterialTypeBase):
     texture_defaults = {"tex1": _WHITE_TEXTURE}
 
     def _image(self, data):
@@ -141,10 +90,6 @@ class NeonTubes(MaterialTypeBase):
             values["Blink Lift"] = 1.0 - param_float(data, "UseBlinkingNoise", 0.0)
         return values
 
-    def apply_structure_values(self, Data, Mat, slots):
-        data = Data if isinstance(Data, dict) else {}
-        self._write_values(Mat, data, slots)
-
     def _write_values(self, Mat, data, slots):
         nodes = Mat.node_tree.nodes
         image = self._image(data)
@@ -154,14 +99,6 @@ class NeonTubes(MaterialTypeBase):
             if node.image is not image:
                 node.image = image
         Mat.diffuse_color = (*param_color(data, "color", _WHITE)[:3], 1.0)
-
-    def _slot(self, slot, node, socket=None):
-        self.structure_slots[slot] = (node.name, socket)
-
-    def _value(self, nodes, slot, location):
-        node = new_labeled_node(nodes, "ShaderNodeValue", slot, location)
-        self._slot(slot, node)
-        return node.outputs["Value"]
 
     def _color(self, nodes, links, image):
         tint = new_labeled_node(nodes, "ShaderNodeRGB", "color", (-500, 520))
@@ -248,17 +185,17 @@ class NeonTubes(MaterialTypeBase):
     def _blink(self, tree):
         """saturate(remap(noise, MinNoiseValue..1) + 1 - UseBlinkingNoise), noise hashed from scene time"""
         nodes, links = tree.nodes, tree.links
-        time = create_scene_time_value(tree, -1740, -460, "CP77 Neon Time")
+        time = scene_time_socket(tree.nodes, (-1740, -460), "CP77 Neon Time")
         seeded = shader_nodes.math(
             nodes,
             links,
             "ADD",
-            time.outputs["Value"],
+            time,
             self._value(nodes, "Noise Seed", (-1740, -600)),
             name="Time + Seed",
             location=(-1560, -460),
         )
-        noise = _hash(nodes, links, seeded, (-1380, -460))
+        noise = hash11_socket(tree, seeded, (-1380, -460), "Hash")
         limited = shader_nodes.math(
             nodes,
             links,

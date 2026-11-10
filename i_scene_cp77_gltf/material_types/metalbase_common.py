@@ -8,17 +8,17 @@ from ..materials.blender.nodes import (
     bsdf_socket_names,
     create_node,
 )
+from ..materials.params import lookup_param
 from .bundles import (
     alpha_mask_socket,
     emissive_scale_bundle,
 )
 from .mat_common import (
     MaterialTypeBase,
-    create_scene_time_value,
-    lookup_param,
     param_color,
     param_float,
     param_vector,
+    scene_time_socket,
     unwrap_param,
 )
 from .normal_math import (
@@ -135,9 +135,6 @@ class MetalBaseCore(MaterialTypeBase):
         elif offset is not None:
             CurMat.links.new(offset, mapping.inputs["Location"])
         return mapping
-
-    def _time(self, CurMat, location, label="Time"):
-        return create_scene_time_value(CurMat, location[0], location[1], label=label)
 
     def _texture(
         self, CurMat, data, key, location, uv=None, *, non_color=False, label=None
@@ -547,8 +544,8 @@ def uv_panning_offset(
     speed_y = param_float(data, y_key, core.uv_panning_speed_y_default)
     if speed_x == 0.0 and speed_y == 0.0:
         return None
-    time = core._time(
-        CurMat, (location[0] - 200, location[1] - 120), label="UV Panning Time"
+    time = scene_time_socket(
+        CurMat.nodes, (location[0] - 200, location[1] - 120), "UV Panning Time"
     )
     offset = shader_nodes.vector_math(
         CurMat.nodes,
@@ -559,15 +556,15 @@ def uv_panning_offset(
         hide=True,
     ).node
     offset.inputs["Vector"].default_value = (speed_x, speed_y, 0.0)
-    CurMat.links.new(time.outputs["Value"], offset.inputs["Scale"])
+    CurMat.links.new(time, offset.inputs["Scale"])
     return offset.outputs["Vector"]
 
 
 def tiling_and_scrolling(core, CurMat, data, key, location, label):
     """Vector4 parameter carrying XY tiling and ZW scroll velocity"""
     vector = param_vector(data, key, (1.0, 1.0, 0.0, 0.0))
-    time = core._time(
-        CurMat, (location[0] - 400, location[1] - 120), label=f"{label} Time"
+    time = scene_time_socket(
+        CurMat.nodes, (location[0] - 400, location[1] - 120), f"{label} Time"
     )
     offset = shader_nodes.vector_math(
         CurMat.nodes,
@@ -578,7 +575,7 @@ def tiling_and_scrolling(core, CurMat, data, key, location, label):
         hide=True,
     ).node
     offset.inputs["Vector"].default_value = (vector[2], vector[3], 0.0)
-    CurMat.links.new(time.outputs["Value"], offset.inputs["Scale"])
+    CurMat.links.new(time, offset.inputs["Scale"])
     return core._uv_scale_offset(
         CurMat, (vector[0], vector[1]), offset.outputs["Vector"], location, label
     )

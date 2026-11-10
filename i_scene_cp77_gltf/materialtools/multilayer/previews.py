@@ -18,8 +18,8 @@ from ...core.notifications import report
 from ...material_types.graph import add_bundle_items
 from ...material_types.mat_common import find_input
 from ...material_types.multilayered import LAYER_BUNDLE_ITEMS
+from ...material_types.normal_math import vector_normal_z_node
 from ...materials.blender.nodes import (
-    CreateCalculateVecNormalZ,
     configure_tangent_normal_map,
 )
 from ..common.access import (
@@ -506,8 +506,8 @@ def _template_preview_group():
     add_bundle_items(separate, LAYER_BUNDLE_ITEMS)
     links.new(group_input.outputs["Layer"], separate.inputs["Bundle"])
 
-    rebuild = CreateCalculateVecNormalZ(
-        group, -260, -220, "CP77 MLTemplate Preview Normal"
+    rebuild = vector_normal_z_node(
+        group, (-260, -220), "CP77 MLTemplate Preview Normal"
     )
     normal_map = configure_tangent_normal_map(nodes.new("ShaderNodeNormalMap"))
     normal_map.location = (0, -220)

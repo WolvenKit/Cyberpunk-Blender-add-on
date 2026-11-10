@@ -2,10 +2,10 @@ from ..blender import shader_nodes
 from .graph import mix_color_socket, set_transparent, value_socket, white_noise_socket
 from .mat_common import (
     MaterialTypeBase,
-    create_scene_time_value,
     find_input,
     new_labeled_node,
     param_float,
+    scene_time_socket,
 )
 
 TEMPLATE = "base\\fx\\_shaders\\crystal_dome.mt"
@@ -26,7 +26,7 @@ _CHANNEL_RATES = (5.646, 5.986, 6.351)
 _CHANNEL_SEEDS = (0.0, 0.1565, 0.1357)
 
 
-def _quantised_time(nodes, links, time_socket, rate, location):
+def quantised_time(nodes, links, time_socket, rate, location, *, fract=True):
     """Quantize scene time to the requested update rate"""
     scaled = shader_nodes.math(
         nodes,
@@ -54,6 +54,8 @@ def _quantised_time(nodes, links, time_socket, rate, location):
         name=f"Step / {rate}",
         location=(location[0] + 340, location[1]),
     )
+    if not fract:
+        return divided
     return shader_nodes.math(
         nodes,
         links,
@@ -94,7 +96,7 @@ class CrystalDome(MaterialTypeBase):
         uv_y = split.outputs["Y"]
 
         # Quantise time to five steps per second.
-        time_step = _quantised_time(nodes, links, time_socket, 5.0, (-2420, 140))
+        time_step = quantised_time(nodes, links, time_socket, 5.0, (-2420, 140))
 
         offset_x = shader_nodes.math(
             nodes,
@@ -276,7 +278,7 @@ class CrystalDome(MaterialTypeBase):
         keys = []
         for index, (rate, seed) in enumerate(zip(_CHANNEL_RATES, _CHANNEL_SEEDS)):
             base = floor_doubled if index == 2 else floor_division
-            step = _quantised_time(
+            step = quantised_time(
                 nodes, links, time_socket, rate, (470, -300 - index * 130)
             )
             combined = shader_nodes.math(
@@ -463,8 +465,9 @@ class CrystalDome(MaterialTypeBase):
         links = tree.links
         nodes.clear()
 
-        time = create_scene_time_value(tree, -2600, 760, "CP77 Crystal Dome Time")
-        time_socket = time.outputs["Value"]
+        time_socket = scene_time_socket(
+            tree.nodes, (-2600, 760), "CP77 Crystal Dome Time"
+        )
         param0, param1 = self._runtime_params(nodes)
 
         division, time_step = self._scanline_coordinate(

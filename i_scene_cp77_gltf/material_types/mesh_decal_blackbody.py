@@ -17,9 +17,7 @@ from .graph import (
 )
 from .mat_common import (
     MaterialTypeBase,
-    coerce_texture_path,
     find_input,
-    lookup_param,
     material_property_socket,
     new_labeled_node,
     param_float,
@@ -31,8 +29,9 @@ _DEFAULTS = contract_defaults(TEMPLATE)
 
 
 class MeshDecalBlackbody(MaterialTypeBase):
-    def _texture_path(self, data, key):
-        return coerce_texture_path(lookup_param(data, key, _DEFAULTS.get(key, "")))
+    texture_defaults = {
+        key: value for key, value in _DEFAULTS.items() if isinstance(value, str)
+    }
 
     def _texture(self, nodes, links, data, key, location, uv):
         image = self._load_relative_image(

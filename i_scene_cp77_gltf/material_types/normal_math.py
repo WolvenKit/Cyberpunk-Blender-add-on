@@ -1,5 +1,6 @@
 from ..blender import shader_nodes
-from ..materials.blender.nodes import configure_tangent_normal_map
+from ..materials.blender.images import imageFromRelPath
+from ..materials.blender.nodes import configure_tangent_normal_map, create_node
 from .mat_common import (
     add_group_node,
     find_input,
@@ -12,140 +13,186 @@ from .mat_common import (
 _GROUP_NAME = "CP77 DirectX Tangent Normal v1"
 
 
-def _build_decode_group(group):
-    nodes = group.nodes
-    links = group.links
-    group_in = nodes.new("NodeGroupInput")
-    group_in.location = (-980, 0)
-    group_out = nodes.new("NodeGroupOutput")
-    group_out.location = (760, 0)
+def _normal_z_builder(*, color_input, strength, input_name, color_output):
+    def build(group):
+        nodes = group.nodes
+        links = group.links
+        group_in = nodes.new("NodeGroupInput")
+        group_in.location = (-980, 0)
+        group_out = nodes.new("NodeGroupOutput")
+        group_out.location = (760, 0)
+        source = group_in.outputs[input_name]
 
-    encoded = group_in.outputs["Encoded"]
-    strength = group_in.outputs["Strength"]
+        if color_input:
+            split = new_labeled_node(
+                nodes, "ShaderNodeSeparateColor", "Encoded RG", (-800, 0)
+            )
+            split.mode = "RGB"
+            links.new(source, split.inputs["Color"])
 
-    split = new_labeled_node(nodes, "ShaderNodeSeparateColor", "Encoded RG", (-800, 0))
-    split.mode = "RGB"
-    links.new(encoded, split.inputs["Color"])
+            x2 = shader_nodes.math(
+                nodes, links, "MULTIPLY", name="R x 2", location=(-620, 120)
+            ).node
+            shader_nodes.socket_by_identifier(
+                x2.inputs, "Value_001"
+            ).default_value = 2.0
+            links.new(split.outputs["Red"], x2.inputs["Value"])
+            x_node = shader_nodes.math(
+                nodes, links, "SUBTRACT", name="X = 2R - 1", location=(-460, 120)
+            ).node
+            shader_nodes.socket_by_identifier(
+                x_node.inputs, "Value_001"
+            ).default_value = 1.0
+            links.new(x2.outputs["Value"], x_node.inputs["Value"])
+            x = x_node.outputs["Value"]
 
-    x2 = shader_nodes.math(
-        nodes, links, "MULTIPLY", name="R x 2", location=(-620, 120)
-    ).node
-    shader_nodes.socket_by_identifier(x2.inputs, "Value_001").default_value = 2.0
-    links.new(split.outputs["Red"], x2.inputs["Value"])
-    x = shader_nodes.math(
-        nodes, links, "SUBTRACT", name="X = 2R - 1", location=(-460, 120)
-    ).node
-    shader_nodes.socket_by_identifier(x.inputs, "Value_001").default_value = 1.0
-    links.new(x2.outputs["Value"], x.inputs["Value"])
+            y2 = shader_nodes.math(
+                nodes, links, "MULTIPLY", name="G x 2", location=(-620, -40)
+            ).node
+            shader_nodes.socket_by_identifier(
+                y2.inputs, "Value_001"
+            ).default_value = 2.0
+            links.new(split.outputs["Green"], y2.inputs["Value"])
+            y_dx_node = shader_nodes.math(
+                nodes, links, "SUBTRACT", name="Ydx = 2G - 1", location=(-460, -40)
+            ).node
+            shader_nodes.socket_by_identifier(
+                y_dx_node.inputs, "Value_001"
+            ).default_value = 1.0
+            links.new(y2.outputs["Value"], y_dx_node.inputs["Value"])
+            y_dx = y_dx_node.outputs["Value"]
 
-    y2 = shader_nodes.math(
-        nodes, links, "MULTIPLY", name="G x 2", location=(-620, -40)
-    ).node
-    shader_nodes.socket_by_identifier(y2.inputs, "Value_001").default_value = 2.0
-    links.new(split.outputs["Green"], y2.inputs["Value"])
-    y_dx = shader_nodes.math(
-        nodes, links, "SUBTRACT", name="Ydx = 2G - 1", location=(-460, -40)
-    ).node
-    shader_nodes.socket_by_identifier(y_dx.inputs, "Value_001").default_value = 1.0
-    links.new(y2.outputs["Value"], y_dx.inputs["Value"])
+            x_sq = shader_nodes.math(
+                nodes, links, "MULTIPLY", name="X²", location=(-280, 160)
+            ).node
+            links.new(x, x_sq.inputs["Value"])
+            links.new(x, shader_nodes.socket_by_identifier(x_sq.inputs, "Value_001"))
+            y_sq = shader_nodes.math(
+                nodes, links, "MULTIPLY", name="Y²", location=(-280, 40)
+            ).node
+            links.new(y_dx, y_sq.inputs["Value"])
+            links.new(y_dx, shader_nodes.socket_by_identifier(y_sq.inputs, "Value_001"))
+            sum_sq = shader_nodes.math(
+                nodes, links, "ADD", name="X² + Y²", location=(-100, 100)
+            ).node
+            links.new(x_sq.outputs["Value"], sum_sq.inputs["Value"])
+            links.new(
+                y_sq.outputs["Value"],
+                shader_nodes.socket_by_identifier(sum_sq.inputs, "Value_001"),
+            )
+            length_sq = sum_sq.outputs["Value"]
+        else:
+            split = new_labeled_node(
+                nodes, "ShaderNodeSeparateXYZ", "Vector XY", (-800, 0)
+            )
+            links.new(source, split.inputs["Vector"])
+            x = split.outputs["X"]
+            y_dx = split.outputs["Y"]
+            dot = shader_nodes.vector_math(
+                nodes, links, "DOT_PRODUCT", name="Length²", location=(-100, 100)
+            ).node
+            links.new(source, dot.inputs["Vector"])
+            links.new(
+                source, shader_nodes.socket_by_identifier(dot.inputs, "Vector_001")
+            )
+            length_sq = dot.outputs["Value"]
 
-    x_sq = shader_nodes.math(
-        nodes, links, "MULTIPLY", name="X²", location=(-280, 160)
-    ).node
-    links.new(x.outputs["Value"], x_sq.inputs["Value"])
-    links.new(
-        x.outputs["Value"], shader_nodes.socket_by_identifier(x_sq.inputs, "Value_001")
-    )
-    y_sq = shader_nodes.math(
-        nodes, links, "MULTIPLY", name="Y²", location=(-280, 40)
-    ).node
-    links.new(y_dx.outputs["Value"], y_sq.inputs["Value"])
-    links.new(
-        y_dx.outputs["Value"],
-        shader_nodes.socket_by_identifier(y_sq.inputs, "Value_001"),
-    )
-    sum_sq = shader_nodes.math(
-        nodes, links, "ADD", name="X² + Y²", location=(-100, 100)
-    ).node
-    links.new(x_sq.outputs["Value"], sum_sq.inputs["Value"])
-    links.new(
-        y_sq.outputs["Value"],
-        shader_nodes.socket_by_identifier(sum_sq.inputs, "Value_001"),
-    )
-    z_sq = shader_nodes.math(
-        nodes, links, "SUBTRACT", name="1 - X² - Y²", location=(80, 100)
-    ).node
-    z_sq.inputs["Value"].default_value = 1.0
-    links.new(
-        sum_sq.outputs["Value"],
-        shader_nodes.socket_by_identifier(z_sq.inputs, "Value_001"),
-    )
-    safe_z_sq = shader_nodes.math(
-        nodes, links, "MAXIMUM", name="max(Z², 0)", location=(240, 100)
-    ).node
-    shader_nodes.socket_by_identifier(safe_z_sq.inputs, "Value_001").default_value = 0.0
-    links.new(z_sq.outputs["Value"], safe_z_sq.inputs["Value"])
-    z = shader_nodes.math(
-        nodes, links, "SQRT", name="Reconstruct Z", location=(400, 100)
-    ).node
-    links.new(safe_z_sq.outputs["Value"], z.inputs["Value"])
+        z_sq = shader_nodes.math(
+            nodes, links, "SUBTRACT", name="1 - X² - Y²", location=(80, 100)
+        ).node
+        z_sq.inputs["Value"].default_value = 1.0
+        links.new(
+            length_sq, shader_nodes.socket_by_identifier(z_sq.inputs, "Value_001")
+        )
+        safe_z_sq = shader_nodes.math(
+            nodes, links, "MAXIMUM", name="max(Z², 0)", location=(240, 100)
+        ).node
+        shader_nodes.socket_by_identifier(
+            safe_z_sq.inputs, "Value_001"
+        ).default_value = 0.0
+        links.new(z_sq.outputs["Value"], safe_z_sq.inputs["Value"])
+        z = shader_nodes.math(
+            nodes, links, "SQRT", name="Reconstruct Z", location=(400, 100)
+        ).node
+        links.new(safe_z_sq.outputs["Value"], z.inputs["Value"])
 
-    y_blender = shader_nodes.math(
-        nodes, links, "MULTIPLY", name="DirectX Y → Blender Y", location=(-100, -100)
-    ).node
-    shader_nodes.socket_by_identifier(
-        y_blender.inputs, "Value_001"
-    ).default_value = -1.0
-    links.new(y_dx.outputs["Value"], y_blender.inputs["Value"])
+        y_blender = shader_nodes.math(
+            nodes,
+            links,
+            "MULTIPLY",
+            name="DirectX Y → Blender Y",
+            location=(-100, -100),
+        ).node
+        shader_nodes.socket_by_identifier(
+            y_blender.inputs, "Value_001"
+        ).default_value = -1.0
+        links.new(y_dx, y_blender.inputs["Value"])
 
-    x_strength = shader_nodes.math(
-        nodes, links, "MULTIPLY", name="X x Strength", location=(80, -120)
-    ).node
-    links.new(x.outputs["Value"], x_strength.inputs["Value"])
-    links.new(
-        strength, shader_nodes.socket_by_identifier(x_strength.inputs, "Value_001")
-    )
-    y_strength = shader_nodes.math(
-        nodes, links, "MULTIPLY", name="Y x Strength", location=(80, -240)
-    ).node
-    links.new(y_blender.outputs["Value"], y_strength.inputs["Value"])
-    links.new(
-        strength, shader_nodes.socket_by_identifier(y_strength.inputs, "Value_001")
-    )
+        tangent_x, tangent_y = x, y_blender.outputs["Value"]
+        if strength:
+            amount = group_in.outputs["Strength"]
+            x_strength = shader_nodes.math(
+                nodes, links, "MULTIPLY", name="X x Strength", location=(80, -120)
+            ).node
+            links.new(x, x_strength.inputs["Value"])
+            links.new(
+                amount,
+                shader_nodes.socket_by_identifier(x_strength.inputs, "Value_001"),
+            )
+            y_strength = shader_nodes.math(
+                nodes, links, "MULTIPLY", name="Y x Strength", location=(80, -240)
+            ).node
+            links.new(tangent_y, y_strength.inputs["Value"])
+            links.new(
+                amount,
+                shader_nodes.socket_by_identifier(y_strength.inputs, "Value_001"),
+            )
+            tangent_x, tangent_y = (
+                x_strength.outputs["Value"],
+                y_strength.outputs["Value"],
+            )
 
-    tangent = new_labeled_node(
-        nodes, "ShaderNodeCombineXYZ", "Strength-adjusted Tangent", (260, -140)
-    )
-    links.new(x_strength.outputs["Value"], tangent.inputs["X"])
-    links.new(y_strength.outputs["Value"], tangent.inputs["Y"])
-    links.new(z.outputs["Value"], tangent.inputs["Z"])
+        tangent = new_labeled_node(
+            nodes, "ShaderNodeCombineXYZ", "Strength-adjusted Tangent", (260, -140)
+        )
+        links.new(tangent_x, tangent.inputs["X"])
+        links.new(tangent_y, tangent.inputs["Y"])
+        links.new(z.outputs["Value"], tangent.inputs["Z"])
+        result = tangent.outputs["Vector"]
 
-    normalize = shader_nodes.vector_math(
-        nodes, links, "NORMALIZE", name="Normalize Tangent", location=(440, -120)
-    ).node
-    links.new(tangent.outputs["Vector"], normalize.inputs["Vector"])
+        if strength:
+            normalize = shader_nodes.vector_math(
+                nodes,
+                links,
+                "NORMALIZE",
+                name="Normalize Tangent",
+                location=(440, -120),
+            ).node
+            links.new(result, normalize.inputs["Vector"])
+            result = normalize.outputs["Vector"]
+            links.new(result, group_out.inputs["Tangent"])
 
-    encode = shader_nodes.vector_math(
-        nodes,
-        links,
-        "MULTIPLY_ADD",
-        name="Encode for Blender Normal Map",
-        location=(600, -120),
-    ).node
-    shader_nodes.socket_by_identifier(encode.inputs, "Vector_001").default_value = (
-        0.5,
-        0.5,
-        0.5,
-    )
-    shader_nodes.socket_by_identifier(encode.inputs, "Vector_002").default_value = (
-        0.5,
-        0.5,
-        0.5,
-    )
-    links.new(normalize.outputs["Vector"], encode.inputs["Vector"])
+        encode = shader_nodes.vector_math(
+            nodes,
+            links,
+            "MULTIPLY_ADD",
+            name="Encode for Blender Normal Map",
+            location=(600, -120),
+        ).node
+        shader_nodes.socket_by_identifier(encode.inputs, "Vector_001").default_value = (
+            0.5,
+            0.5,
+            0.5,
+        )
+        shader_nodes.socket_by_identifier(encode.inputs, "Vector_002").default_value = (
+            0.5,
+            0.5,
+            0.5,
+        )
+        links.new(result, encode.inputs["Vector"])
+        links.new(encode.outputs["Vector"], group_out.inputs[color_output])
 
-    links.new(normalize.outputs["Vector"], group_out.inputs["Tangent"])
-    links.new(encode.outputs["Vector"], group_out.inputs["Color"])
+    return build
 
 
 def cp77_directx_normal_group():
@@ -153,8 +200,52 @@ def cp77_directx_normal_group():
         _GROUP_NAME,
         (("NodeSocketColor", "Encoded"), ("NodeSocketFloat", "Strength")),
         (("NodeSocketVector", "Tangent"), ("NodeSocketColor", "Color")),
-        _build_decode_group,
+        _normal_z_builder(
+            color_input=True,
+            strength=True,
+            input_name="Encoded",
+            color_output="Color",
+        ),
     )
+
+
+def _normal_z_node(tree, group, location, name):
+    node = tree.nodes.new("ShaderNodeGroup")
+    node.location = location
+    node.hide = True
+    node.node_tree = group
+    node.name = name
+    return node
+
+
+def rebuild_normal_z_node(tree, location, name="Rebuild Normal Z"):
+    group = get_or_build_node_group(
+        "Rebuild Normal Z v2",
+        (("NodeSocketColor", "Image"),),
+        (("NodeSocketColor", "Image"),),
+        _normal_z_builder(
+            color_input=True,
+            strength=False,
+            input_name="Image",
+            color_output="Image",
+        ),
+    )
+    return _normal_z_node(tree, group, location, name)
+
+
+def vector_normal_z_node(tree, location, name="Calculate Vectorized Normal Z"):
+    group = get_or_build_node_group(
+        "Calculate Vectorized Normal Z v2",
+        (("NodeSocketVector", "Image"),),
+        (("NodeSocketColor", "Image"),),
+        _normal_z_builder(
+            color_input=False,
+            strength=False,
+            input_name="Image",
+            color_output="Image",
+        ),
+    )
+    return _normal_z_node(tree, group, location, name)
 
 
 def decode_cp77_normal(
@@ -399,3 +490,29 @@ def directx_tangent_to_normal_map(
         location=(location[0] + 720, location[1]),
         label=label,
     )
+
+
+def create_normal_map_rel(
+    curMat, rel_path, x, y, label, image_format, depot_path, proj_path
+):
+    """Create the depot-relative normal-map graph"""
+    nMap = configure_tangent_normal_map(curMat.nodes.new("ShaderNodeNormalMap"))
+    nMap.location = (x, y)
+    nMap.hide = True
+
+    if rel_path:
+        img = imageFromRelPath(
+            rel_path,
+            image_format,
+            isNormal=True,
+            DepotPath=depot_path,
+            ProjPath=proj_path,
+        )
+        img_node = create_node(
+            curMat.nodes, "ShaderNodeTexImage", (x - 400, y), label=label, image=img
+        )
+        rebuild = rebuild_normal_z_node(curMat, (x - 150, y), label + " Rebuilt")
+        curMat.links.new(img_node.outputs["Color"], rebuild.inputs["Image"])
+        curMat.links.new(rebuild.outputs["Image"], nMap.inputs["Color"])
+
+    return nMap

@@ -4,12 +4,12 @@ from .graph import color_channel_socket, mix_color_socket, set_transparent
 from .mat_common import (
     MaterialTypeBase,
     create_relative_texture_node,
-    create_scene_time_value,
     find_input,
     new_labeled_node,
     param_color,
     param_float,
     param_vector,
+    scene_time_socket,
 )
 from .normal_math import decode_cp77_normal, tangent_to_normal_map
 
@@ -61,7 +61,7 @@ class TransparentLiquid(MaterialTypeBase):
         base_uv = new_labeled_node(
             nodes, "ShaderNodeTexCoord", "Liquid UV", (-1500, 520)
         ).outputs.get("UV")
-        time = create_scene_time_value(tree, -1340, -60, "Liquid Time").outputs["Value"]
+        time = scene_time_socket(tree.nodes, (-1340, -60), "Liquid Time")
         distort_uv = _animated_uv(
             tree,
             param_vector(data, "DistortTilingAndScrolling", (0.0, 0.0, 0.0, 0.0)),

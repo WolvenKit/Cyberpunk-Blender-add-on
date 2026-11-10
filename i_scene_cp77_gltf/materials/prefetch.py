@@ -4,30 +4,9 @@ from ..assetio.catalog import ResourceKind
 from ..assetio.paths import LocalPath, is_local_absolute
 from ..assetio.resolver import resolve_asset_path
 from ..core.log import debug_exception, get_logger
+from .params import coerce_texture_path, lookup_param
 
 _LOG = get_logger(__name__)
-
-
-def _cased(data, key, default=None):
-    if not isinstance(data, dict):
-        return default
-    folded = str(key).casefold()
-    for name, value in data.items():
-        if str(name).casefold() == folded:
-            return value
-    return default
-
-
-def _depot_path_value(data, key, default=None):
-    value = _cased(data, key, default)
-    if not isinstance(value, dict):
-        return value
-    depot = value.get("DepotPath")
-    if isinstance(depot, dict):
-        return depot.get("$value", default)
-    if depot is not None:
-        return depot
-    return value.get("$value", default)
 
 
 def _json_reference(reference):
@@ -124,8 +103,8 @@ def prefetch_multilayer_documents(
             material = materials[material_index]
         except (IndexError, TypeError):
             continue
-        data = _cased(material, "Data", {})
-        setup_reference = _depot_path_value(data, "MultilayerSetup")
+        data = lookup_param(material, "Data", {})
+        setup_reference = coerce_texture_path(lookup_param(data, "MultilayerSetup"))
         if not setup_reference:
             continue
         reference_key = _json_reference(setup_reference)
@@ -138,7 +117,7 @@ def prefetch_multilayer_documents(
         path = resolved_setups[reference_key]
         if not path:
             continue
-        mask_reference = _depot_path_value(data, "MultilayerMask")
+        mask_reference = coerce_texture_path(lookup_param(data, "MultilayerMask"))
         request = (path, str(mask_reference or ""))
         if request not in seen_requests:
             seen_requests.add(request)
@@ -172,10 +151,10 @@ def prefetch_multilayer_documents(
         if document is None:
             continue
         stats["setup_documents"] += 1
-        layers = _cased(document.root, "layers", ()) or ()
+        layers = lookup_param(document.root, "layers", ()) or ()
         setup_layer_counts[LocalPath.from_value(path).key] = len(layers)
         for layer in layers:
-            material_reference = _depot_path_value(layer, "material")
+            material_reference = coerce_texture_path(lookup_param(layer, "material"))
             if not material_reference:
                 continue
             reference_key = _json_reference(material_reference)

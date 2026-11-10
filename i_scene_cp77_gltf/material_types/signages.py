@@ -1,4 +1,5 @@
 from ..blender import shader_nodes
+from .emissive_common import EmissiveSlotsMixin
 from .graph import (
     combine_color_socket,
     mix_color_socket,
@@ -7,12 +8,12 @@ from .graph import (
 )
 from .mat_common import (
     MaterialTypeBase,
-    create_scene_time_value,
     find_input,
     new_labeled_node,
     param_color,
     param_float,
     param_vector,
+    scene_time_socket,
     write_slot_values,
 )
 
@@ -70,7 +71,7 @@ def held_color(color):
     return (color[0] * scale, color[1] * scale, color[2] * scale, color[3]), value
 
 
-class Signages(MaterialTypeBase):
+class Signages(EmissiveSlotsMixin, MaterialTypeBase):
     texture_defaults = {
         "MainTexture": "base\\fx\\textures\\other\\plazma_mask.xbm",
         "NoiseTexture": "base\\fx\\_textures\\masks\\noise\\fx_organic_noise_01_d.xbm",
@@ -171,10 +172,6 @@ class Signages(MaterialTypeBase):
             values["Fade Start"] = 1.0 - param_float(data, "FresnelAmount", 0.0)
         return values
 
-    def apply_structure_values(self, Data, Mat, slots):
-        data = Data if isinstance(Data, dict) else {}
-        self._write_values(Mat, data, slots)
-
     def _write_values(self, Mat, data, slots):
         nodes = Mat.node_tree.nodes
         write_slot_values(nodes, slots, self._values(data))
@@ -183,14 +180,6 @@ class Signages(MaterialTypeBase):
                 node = nodes[node_name]
                 if node.image is not image:
                     node.image = image
-
-    def _slot(self, slot, node, socket=None):
-        self.structure_slots[slot] = (node.name, socket)
-
-    def _value(self, nodes, slot, location):
-        node = new_labeled_node(nodes, "ShaderNodeValue", slot, location)
-        self._slot(slot, node)
-        return node.outputs["Value"]
 
     def _rgb(self, nodes, slot, location):
         node = new_labeled_node(nodes, "ShaderNodeRGB", slot, location)
@@ -374,7 +363,7 @@ class Signages(MaterialTypeBase):
     def _blink(self, tree, images):
         """The noise texture read along its U by scene time, stepped"""
         nodes, links = tree.nodes, tree.links
-        time = create_scene_time_value(tree, -2020, -620, "CP77 Signage Time")
+        time = scene_time_socket(tree.nodes, (-2020, -620), "CP77 Signage Time")
         travel = shader_nodes.math(
             nodes,
             links,
@@ -383,7 +372,7 @@ class Signages(MaterialTypeBase):
                 nodes,
                 links,
                 "MULTIPLY",
-                time.outputs["Value"],
+                time,
                 self._value(nodes, "BlinkingSpeed", (-2020, -760)),
                 name="Time x BlinkingSpeed",
                 location=(-1840, -620),

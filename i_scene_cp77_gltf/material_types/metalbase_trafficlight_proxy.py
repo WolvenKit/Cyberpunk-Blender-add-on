@@ -3,7 +3,7 @@ import math
 from ..blender import shader_nodes
 from ..materials.blender.nodes import CreateShaderNodeValue, create_node
 from .bundles import peak_color_socket, scalar_lerp_socket
-from .mat_common import param_float
+from .mat_common import param_float, scene_time_socket
 from .metalbase_common import (
     COLUMN_ADJUST,
     COLUMN_COMBINE,
@@ -402,7 +402,7 @@ class MetalBaseTrafficLightProxy(MetalBaseCore):
         tree.links.new(peak, is_light_test.inputs["Value"])
         is_light = is_light_test.outputs["Value"]
 
-        time = self._time(tree, (COLUMN_TEXTURE, -1260), label="Traffic Time")
+        time = scene_time_socket(tree.nodes, (COLUMN_TEXTURE, -1260), "Traffic Time")
         speed = param_float(data, "TrafficSpeed", 0.5)
         speed_node = shader_nodes.math(
             tree.nodes,
@@ -415,7 +415,7 @@ class MetalBaseTrafficLightProxy(MetalBaseCore):
         shader_nodes.socket_by_identifier(
             speed_node.inputs, "Value_001"
         ).default_value = speed
-        tree.links.new(time.outputs["Value"], speed_node.inputs["Value"])
+        tree.links.new(time, speed_node.inputs["Value"])
         phase, color_variation, random_brightness = self._object_randoms(tree, data)
         animated_time = shader_nodes.math(
             tree.nodes,

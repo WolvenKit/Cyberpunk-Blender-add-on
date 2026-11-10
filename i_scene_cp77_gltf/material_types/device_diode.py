@@ -1,21 +1,21 @@
 from ..assetio.paths import backslash_depot_key, split_source_raw_root
 from ..bartmoss.scalar import clamp01
 from ..blender import shader_nodes
+from ..materials.params import lookup_param
 from .bundles import (
     direct_ev_strength_socket,
     emissive_scale_bundle,
-    four_way_color_socket,
+    four_way_socket,
 )
 from .graph import color_channel_socket, mix_color_socket, set_alpha_clip, value_socket
 from .mat_common import (
     MaterialTypeBase,
-    create_scene_time_value,
     find_input,
-    lookup_param,
     new_labeled_node,
     param_color,
     param_float,
     param_texture_path,
+    scene_time_socket,
 )
 from .normal_math import decode_cp77_normal, tangent_to_normal_map
 
@@ -255,7 +255,7 @@ class DeviceDiode(MaterialTypeBase):
             channel="Red",
             mode="RGB",
         )
-        time = create_scene_time_value(tree, -1500, -600, "Time").outputs["Value"]
+        time = scene_time_socket(tree.nodes, (-1500, -600), "Time")
         speed = _param_float(data, "BlinkingSpeed", defaults)
         phase = shader_nodes.math(
             nodes,
@@ -396,8 +396,8 @@ class DeviceDiode(MaterialTypeBase):
                 _param_color(data, f"EmissiveColor{number}", defaults)
                 for number in range(1, 5)
             ]
-            emissive_color = four_way_color_socket(
-                tree, index, colors, (160, -1450), "Emissive Color"
+            emissive_color = four_way_socket(
+                tree, index, colors, (160, -1450), "Emissive Color", kind="RGBA"
             )
         else:
             emissive_color = self._two_colors(nodes, links, data, defaults, time)

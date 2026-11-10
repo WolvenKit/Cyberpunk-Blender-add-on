@@ -31,7 +31,6 @@ from ..materials.blender.multilayer import (
     sync_hidden_layer_links,
 )
 from ..materials.blender.nodes import (
-    CreateCalculateVecNormalZ,
     configure_tangent_normal_map,
     create_node,
     createOverrideTable,
@@ -39,6 +38,7 @@ from ..materials.blender.nodes import (
 )
 from ..materials.blender.profiling import begin_material_phase, end_material_phase
 from ..materials.cache_identity import filtered_material_data_identity
+from ..materials.params import coerce_texture_path
 from ..materials.resources import load_material_document
 from .graph import add_bundle_items, combine_bundle_node, separate_bundle_node
 from .mat_common import (
@@ -48,6 +48,7 @@ from .mat_common import (
     param_texture_path,
     param_vector,
 )
+from .normal_math import vector_normal_z_node
 
 _LOG = get_logger(__name__)
 
@@ -1394,7 +1395,7 @@ def ml_surface_node_group():
     normal_add = shader_nodes.vector_math(
         surface.nodes, surface.links, "ADD", location=(-700, 0), hide=True
     ).node
-    normal_rebuild = CreateCalculateVecNormalZ(surface, -500, 0)
+    normal_rebuild = vector_normal_z_node(surface, (-500, 0))
     normal_map = configure_tangent_normal_map(
         create_node(surface.nodes, "ShaderNodeNormalMap", (-500, -300))
     )
@@ -1504,27 +1505,27 @@ class Multilayered(MaterialTypeBase):
                 return existing
 
         CT = imageFromRelPath(
-            matTemplateObj["colorTexture"]["DepotPath"]["$value"],
+            coerce_texture_path(matTemplateObj.get("colorTexture")),
             self.image_format,
             DepotPath=self.BasePath,
             ProjPath=self.ProjPath,
         )
         NT = imageFromRelPath(
-            matTemplateObj["normalTexture"]["DepotPath"]["$value"],
+            coerce_texture_path(matTemplateObj.get("normalTexture")),
             self.image_format,
             isNormal=True,
             DepotPath=self.BasePath,
             ProjPath=self.ProjPath,
         )
         RT = imageFromRelPath(
-            matTemplateObj["roughnessTexture"]["DepotPath"]["$value"],
+            coerce_texture_path(matTemplateObj.get("roughnessTexture")),
             self.image_format,
             isNormal=True,
             DepotPath=self.BasePath,
             ProjPath=self.ProjPath,
         )
         MT = imageFromRelPath(
-            matTemplateObj["metalnessTexture"]["DepotPath"]["$value"],
+            coerce_texture_path(matTemplateObj.get("metalnessTexture")),
             self.image_format,
             isNormal=True,
             DepotPath=self.BasePath,
