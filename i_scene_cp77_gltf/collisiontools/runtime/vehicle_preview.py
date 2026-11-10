@@ -7,6 +7,7 @@ from time import perf_counter
 from typing import Any
 
 import bpy
+from bpy.app.handlers import persistent
 from mathutils import Matrix, Vector
 
 from ...bartmoss.vehicle import STANDARD_GRAVITY, fixed_step_count
@@ -110,7 +111,21 @@ def clear_vehicle_runtime(scene=None, restore=False):
             _restore_state(state)
 
 
+def _cancel_live_updates(scene=None):
+    pointers = tuple(_LIVE_UPDATE_TIMERS) if scene is None else (scene.as_pointer(),)
+    for pointer in pointers:
+        callback = _LIVE_UPDATE_TIMERS.pop(pointer, None)
+        if callback is not None and bpy.app.timers.is_registered(callback):
+            bpy.app.timers.unregister(callback)
+
+
+@persistent
+def forget_logged_bridge_builds(*_args):
+    _LOGGED_BRIDGE_BUILDS.clear()
+
+
 def invalidate_vehicle_runtime_state(scene=None, *, restore=False):
+    _cancel_live_updates(scene)
     clear_vehicle_runtime(scene, restore=restore)
     scenes = tuple(getattr(bpy.data, "scenes", ())) if scene is None else (scene,)
     for current in scenes:

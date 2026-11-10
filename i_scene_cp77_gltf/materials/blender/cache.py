@@ -110,8 +110,10 @@ def _lookup_cached(cache, signature):
     if material is None:
         return None
 
-    cache.pop(signature, None)
     _MATERIAL_CACHE_STATS["stale"] += 1
+    for each in (_MATERIAL_CACHE, _MATERIAL_PROTOTYPE_CACHE):
+        for dead in [key for key, value in each.items() if not rna_is_live(value)]:
+            del each[dead]
     _MATERIAL_CACHE_INDEXED = False
     _ensure_material_cache_indexed()
     material = cache.get(signature)

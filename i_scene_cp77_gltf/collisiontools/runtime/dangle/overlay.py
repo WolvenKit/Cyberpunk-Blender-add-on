@@ -173,12 +173,14 @@ class DangleDrawCache:
         self.batches = {}
         self.matrix_world = Matrix.Identity(4)
         self.simulator = None
+        self._built = None
 
     def update(self, sim):
         # Keep only the live simulator reference. Dynamic GPU geometry is built
         # from the final post-solver pose in draw(), after Blender has evaluated
         # the pose-bone writes for the current simulation step.
         self.simulator = sim
+        self._built = None
 
     @staticmethod
     def _live_bone_matrix(sim, bone_index):
@@ -195,8 +197,6 @@ class DangleDrawCache:
         if sim is None or sim.system.num_particles == 0:
             return
         system = sim.system
-        # The simulator's model space follows the armature's matrix_world, not its evaluated matrix.
-        self.matrix_world = sim.arm_obj.matrix_world.copy()
         live_matrices = {}
 
         def live_bone_matrix(bone_index):
@@ -296,11 +296,22 @@ class DangleDrawCache:
                 self.batches[name] = batch
 
     def draw(self):
-        # Resolve coordinates from the live simulator immediately before draw.
-        # Timer/depsgraph ordering may update pose matrices after the simulation
-        # step callback, so cached world/model-space GPU batches are not stable.
-        if self.simulator is not None:
-            self._rebuild(self.simulator)
+        sim = self.simulator
+        if sim is not None:
+            # The simulator's model space follows the armature's matrix_world, not its evaluated matrix.
+            self.matrix_world = sim.arm_obj.matrix_world.copy()
+            state = sim.state
+            built = (
+                sim.step_count,
+                state.show_global_constraints,
+                state.show_global_velocity,
+                state.show_global_capsules,
+                state.show_global_body_shapes,
+                state.show_global_cones,
+            )
+            if built != self._built:
+                self._rebuild(sim)
+                self._built = built
         if not self.batches:
             return
         with line_drawing(depth_test="LESS_EQUAL"), gpu.matrix.push_pop():
@@ -463,7 +474,7 @@ def _draw_static_rig(arm, st):
 
 
 @persistent
-def _invalidate_static_draw_cache(_scene=None, depsgraph=None):
+def invalidate_static_draw_cache(_scene=None, depsgraph=None):
     if depsgraph is None:
         _STATIC_DRAW_CACHE.clear()
         return
@@ -522,12 +533,6 @@ def register_global_handler():
         _GLOBAL_HANDLER = bpy.types.SpaceView3D.draw_handler_add(
             _master_draw_callback, (), "WINDOW", "POST_VIEW"
         )
-    handlers = bpy.app.handlers.depsgraph_update_post
-    if _invalidate_static_draw_cache not in handlers:
-        handlers.append(_invalidate_static_draw_cache)
-    load_handlers = bpy.app.handlers.load_pre
-    if _invalidate_static_draw_cache not in load_handlers:
-        load_handlers.append(_invalidate_static_draw_cache)
 
 
 def unregister_all():
@@ -535,11 +540,5 @@ def unregister_all():
     if _GLOBAL_HANDLER:
         bpy.types.SpaceView3D.draw_handler_remove(_GLOBAL_HANDLER, "WINDOW")
         _GLOBAL_HANDLER = None
-    handlers = bpy.app.handlers.depsgraph_update_post
-    if _invalidate_static_draw_cache in handlers:
-        handlers.remove(_invalidate_static_draw_cache)
-    load_handlers = bpy.app.handlers.load_pre
-    if _invalidate_static_draw_cache in load_handlers:
-        load_handlers.remove(_invalidate_static_draw_cache)
     _DRAW_CACHES.clear()
     _STATIC_DRAW_CACHE.clear()

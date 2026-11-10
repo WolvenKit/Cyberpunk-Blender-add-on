@@ -13,6 +13,7 @@ from ...physics.runtime.cloth_provider import (
     refresh_cloth_substep,
     set_active_cloth_state,
 )
+from .overlay import mark_overlay_dirty
 from .vehicle_preview import (
     _flush_vehicle_live_updates_for_scene,
     apply_vehicle_inputs,
@@ -98,6 +99,7 @@ def apply_actor_poses(context, poses):
         else:
             item.obj_ref.matrix_world = world_matrix
         updated += 1
+    mark_overlay_dirty()
     return updated
 
 

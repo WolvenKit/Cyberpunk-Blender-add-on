@@ -57,10 +57,36 @@ def id_property(owner, name, default=None):
         return default
 
 
+_ROOT_NODES: dict[int, tuple[int, str]] = {}
+
+
+def _is_root_node(node):
+    if (
+        id_property(node, ROOT_ROLE_PROPERTY) == ROOT_ROLE
+        or node.name == ROOT_NODE_NAME
+    ):
+        return True
+    inputs = getattr(node, "inputs", None)
+    return inputs is not None and inputs.get("Layer 1") is not None
+
+
 def _find_root_node(node_tree):
     nodes = getattr(node_tree, "nodes", None) if node_tree is not None else None
     if nodes is None:
         return None
+    key, count = node_tree.as_pointer(), len(nodes)
+    cached = _ROOT_NODES.get(key)
+    if cached is not None and cached[0] == count:
+        node = nodes.get(cached[1])
+        if node is not None and _is_root_node(node):
+            return node
+    node = _scan_root_node(nodes)
+    if node is not None:
+        _ROOT_NODES[key] = (count, node.name)
+    return node
+
+
+def _scan_root_node(nodes):
     for node in tuple(nodes):
         if id_property(node, ROOT_ROLE_PROPERTY) == ROOT_ROLE:
             return node

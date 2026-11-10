@@ -200,22 +200,18 @@ def safe_mode_switch(target_mode: str):
         return
 
     if not bpy.context.active_object:
-        if bpy.context.selected_objects:
-            bpy.context.view_layer.objects.active = bpy.context.selected_objects[0]
-        else:
-            mesh = bpy.data.meshes.new("TempModeSwitch")
-            temp = bpy.data.objects.new("TempModeSwitch", mesh)
-            try:
-                bpy.context.scene.collection.objects.link(temp)
-                bpy.context.view_layer.objects.active = temp
-                require_finished(
-                    bpy.ops.object.mode_set(mode=target_mode),
-                    f"The switch to {target_mode} mode",
-                )
-            finally:
-                bpy.data.objects.remove(temp, do_unlink=True)
-                bpy.data.meshes.remove(mesh)
+        view_layer = bpy.context.view_layer
+        selected = bpy.context.selected_objects
+        candidate = (
+            selected[0]
+            if selected
+            else next(
+                (obj for obj in view_layer.objects if obj.mode != target_mode), None
+            )
+        )
+        if candidate is None:
             return
+        view_layer.objects.active = candidate
 
     try:
         result = bpy.ops.object.mode_set(mode=target_mode)

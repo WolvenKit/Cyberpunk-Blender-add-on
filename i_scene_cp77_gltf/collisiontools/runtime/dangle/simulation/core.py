@@ -82,6 +82,7 @@ class DyngSimulator:
         graph_tree=None,
     ):
         self.arm_obj = rig_obj
+        self.step_count = 0
         # With a graph, the whole graph plays on the rig through the graph's own preview settings.
         self.graph_tree = graph_tree
         self.state = (
@@ -722,6 +723,7 @@ class DyngSimulator:
             self.system.initialize_node_forces(node_index, external_ms, gravity_ms)
 
     def restore_upstream_pose(self, *, discard_partial_output=False):
+        self.step_count += 1
         if discard_partial_output:
             # Failed-step writes are output, not subsequent animation or user input.
             self.capture_output_pose()
@@ -883,6 +885,7 @@ class DyngSimulator:
         runtime = getattr(self, "animgraph_runtime", None)
         if not self.execution_plan and not (runtime is not None and runtime.structured):
             return
+        self.step_count += 1
 
         input_frame = None
         upstream_changed = False

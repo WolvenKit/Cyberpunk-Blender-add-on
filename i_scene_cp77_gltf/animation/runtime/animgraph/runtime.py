@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import deque
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from time import perf_counter
@@ -121,6 +122,41 @@ class OperationBinding:
     required_tracks: frozenset[str]
 
 
+def _parsed_preview_features(raw: str) -> dict[tuple[str, str], Any]:
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError(f"AnimGraph preview feature JSON is invalid: {exc}") from exc
+    if not isinstance(value, Mapping):
+        raise ValueError("AnimGraph preview feature JSON must be an object")
+    result: dict[tuple[str, str], Any] = {}
+    for feature, properties in value.items():
+        if isinstance(properties, Mapping):
+            for property_name, property_value in properties.items():
+                result[(str(feature), str(property_name))] = property_value
+            continue
+        text = str(feature)
+        if "/" in text:
+            feature_name, property_name = text.split("/", 1)
+            result[(feature_name, property_name)] = properties
+    return result
+
+
+def _program_node_diagnostic(entry) -> dict[str, Any] | None:
+    if entry is None:
+        return None
+    program_node, additive_branch = entry
+    return {
+        "kind": str(getattr(program_node, "kind", "") or ""),
+        "node_type": str(getattr(program_node, "node_type", "") or ""),
+        "handle": normalized_source_handle(getattr(program_node, "handle", "")),
+        "path": str(getattr(program_node, "path", "") or ""),
+        "additive_branch": bool(additive_branch),
+    }
+
+
 class AnimGraphRuntime:
     def __init__(
         self,
@@ -215,6 +251,9 @@ class AnimGraphRuntime:
         self._missing_active_animations_logged: set[tuple[str, str]] = set()
         self._external_events_this_frame: frozenset[str] = frozenset()
         self._preview_feature_cache: dict[tuple[str, str], Any] | None = None
+        self._preview_feature_text: str | None = None
+        self._preview_features: dict[tuple[str, str], Any] = {}
+        self._program_steps: dict[int, tuple[Any, Any, str]] = {}
         self._current_raw_dt = 0.0
         self._current_graph_dt = 0.0
         self._shared_meta_binding = None
@@ -244,8 +283,8 @@ class AnimGraphRuntime:
         ) = None
         self._missing_blink_animations: set[str] = set()
         self._source_action_types_logged: set[tuple] = set()
-        self._execution_trace: list[dict[str, Any]] = []
-        self._last_program_node: dict[str, Any] | None = None
+        self._execution_trace: deque[tuple[Any, bool]] = deque(maxlen=32)
+        self._last_program_node: tuple[Any, bool] | None = None
         self._inertialization_states: dict[str, Any] = {}
         # (frame, duration) of the latest inertialization request; read by Inertialization nodes.
         self._inertialization_request: tuple[int, float] = (-1, 0.0)
@@ -772,6 +811,14 @@ class AnimGraphRuntime:
             stack.extend(program_node.children)
         self._stack_transform_names.discard("")
         self._stack_track_names.discard("")
+        self._program_steps = {
+            id(node): (
+                node,
+                graph_node_handler(node.kind),
+                normalized_source_handle(node.handle),
+            )
+            for node in nodes
+        }
         self._compile_meta_rig_ownership()
         self._compile_shared_meta_pose_binding(nodes)
         if any(
@@ -1886,27 +1933,10 @@ class AnimGraphRuntime:
         if self._preview_feature_cache is not None:
             return self._preview_feature_cache
         raw = self.host.preview_features_json().strip()
-        if not raw:
-            self._preview_feature_cache = dict(self._internal_graph_inputs)
-            return self._preview_feature_cache
-        try:
-            value = json.loads(raw)
-        except (TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise ValueError(
-                f"AnimGraph preview feature JSON is invalid: {exc}"
-            ) from exc
-        if not isinstance(value, Mapping):
-            raise ValueError("AnimGraph preview feature JSON must be an object")
-        result: dict[tuple[str, str], Any] = {}
-        for feature, properties in value.items():
-            if isinstance(properties, Mapping):
-                for property_name, property_value in properties.items():
-                    result[(str(feature), str(property_name))] = property_value
-                continue
-            text = str(feature)
-            if "/" in text:
-                feature_name, property_name = text.split("/", 1)
-                result[(feature_name, property_name)] = properties
+        if raw != self._preview_feature_text:
+            self._preview_features = _parsed_preview_features(raw)
+            self._preview_feature_text = raw
+        result = dict(self._preview_features)
         result.update(self._internal_graph_inputs)
         self._preview_feature_cache = result
         return result
@@ -3279,6 +3309,17 @@ class AnimGraphRuntime:
             raise ValueError(f"unsupported static AnimGraph command {kind}")
         return frame
 
+    def _program_step(self, program_node) -> tuple[Any, Any, str]:
+        entry = self._program_steps.get(id(program_node))
+        if entry is None or entry[0] is not program_node:
+            entry = (
+                program_node,
+                graph_node_handler(program_node.kind),
+                normalized_source_handle(program_node.handle),
+            )
+            self._program_steps[id(program_node)] = entry
+        return entry
+
     def _execute_program(
         self,
         program_node,
@@ -3290,20 +3331,11 @@ class AnimGraphRuntime:
         input_frame,
         additive_branch=False,
     ):
-        current_node = {
-            "kind": str(getattr(program_node, "kind", "") or ""),
-            "node_type": str(getattr(program_node, "node_type", "") or ""),
-            "handle": normalized_source_handle(getattr(program_node, "handle", "")),
-            "path": str(getattr(program_node, "path", "") or ""),
-            "additive_branch": bool(additive_branch),
-        }
-        self._last_program_node = current_node
-        if current_node["handle"]:
-            self._ran_handles.add(current_node["handle"])
-        trace = self._execution_trace
-        trace.append(current_node)
-        if len(trace) > 32:
-            del trace[:-32]
+        _node, handler, handle = self._program_step(program_node)
+        self._last_program_node = (program_node, bool(additive_branch))
+        if handle:
+            self._ran_handles.add(handle)
+        self._execution_trace.append(self._last_program_node)
         base_cache_key = (
             program_node.handle or f"{program_node.kind}:{program_node.path}"
         )
@@ -3311,20 +3343,21 @@ class AnimGraphRuntime:
         if cache_key in frame_cache:
             return frame_cache[cache_key]
         kind = program_node.kind
-        handler = graph_node_handler(kind)
-        step = ExecutionStep(
-            program_node,
-            raw_dt,
-            time_dilation,
-            skip_physics,
-            operation_callback,
-            frame_cache,
-            input_frame,
-            additive_branch,
-            cache_key,
-        )
         if handler is not None and not handler.after_child:
-            return handler.execute(self, step)
+            return handler.execute(
+                self,
+                ExecutionStep(
+                    program_node,
+                    raw_dt,
+                    time_dilation,
+                    skip_physics,
+                    operation_callback,
+                    frame_cache,
+                    input_frame,
+                    additive_branch,
+                    cache_key,
+                ),
+            )
 
         child = (
             self._execute_program(
@@ -3340,10 +3373,23 @@ class AnimGraphRuntime:
             if program_node.children
             else input_frame
         )
-        handle = normalized_source_handle(program_node.handle)
         if handler is not None:
-            step.child, step.handle = child, handle
-            return handler.execute(self, step)
+            return handler.execute(
+                self,
+                ExecutionStep(
+                    program_node,
+                    raw_dt,
+                    time_dilation,
+                    skip_physics,
+                    operation_callback,
+                    frame_cache,
+                    input_frame,
+                    additive_branch,
+                    cache_key,
+                    child,
+                    handle,
+                ),
+            )
         if kind == "POSE_OP" and handle in self._pure_pose_handles:
             node_started = perf_counter()
             result = self._execute_pure_pose_op(program_node, child)
@@ -3481,7 +3527,7 @@ class AnimGraphRuntime:
                 "features=%r state_machines=%r pending_states=%r transition_delay=%r switches=%r error=%s",
                 self.host.name,
                 self.host.settings.graph_path,
-                self._last_program_node,
+                _program_node_diagnostic(self._last_program_node),
                 float(raw_dt),
                 float(time_dilation),
                 bool(skip_physics),
@@ -3496,7 +3542,7 @@ class AnimGraphRuntime:
             )
             _LOG.error(
                 "AnimGraph runtime execution trace: %r",
-                tuple(self._execution_trace),
+                tuple(map(_program_node_diagnostic, self._execution_trace)),
             )
             self._meta_parent_frame_current = None
             raise

@@ -105,50 +105,15 @@ def _validate_parent_indices(names: tuple[str, ...], parents: tuple[int, ...]) -
             )
 
 
-def build_skeleton_export_binding(
-    armature, action=None, *, source_rig_path: str = ""
-) -> SkeletonExportBinding:
-    if armature is None or getattr(armature, "type", None) != "ARMATURE":
-        raise DirectAnimationExportError(
-            "Animation export requires one armature object."
-        )
-    contract = rig_space_contract(armature)
-    if contract != RIG_SPACE_CONTRACT_CURRENT:
-        raise DirectAnimationExportError(
-            "The selected armature was not imported with the supported read_rig coordinate contract."
-        )
+@dataclass(frozen=True)
+class _Skeleton:
+    target_names: tuple[str, ...]
+    target_bones: tuple[Any, ...]
+    derived_parents: tuple[int, ...]
+    rest_model_blender: np.ndarray
 
-    action_binding = resolve_action_binding(action, armature)
-    selected_source = (
-        load_animation_rig_export_source(source_rig_path) if source_rig_path else None
-    )
-    action_skin_snapshot = (
-        load_json_snapshot(action, SKIN_EXTRAS_SNAPSHOT_KEY)
-        if action is not None
-        else {}
-    )
-    selected_skin = selected_source.skin_extras if selected_source is not None else {}
-    action_matches_selected = bool(
-        selected_source is not None
-        and _action_matches_selected_source(
-            armature,
-            action_skin_snapshot,
-            selected_source,
-        )
-    )
-    if action_matches_selected:
-        snapshot = copy.deepcopy(action_skin_snapshot)
-    else:
-        snapshot = selected_skin if selected_source is not None else action_binding.skin
-    source_names_value = _sequence_plain(snapshot.get("boneNames"))
-    if not source_names_value:
-        raise DirectAnimationExportError(
-            "The rig manifest has no animation skin boneNames. Import an .anims.glb first or provide rig source metadata."
-        )
-    source_names = tuple(str(name) for name in source_names_value)
-    if len(set(source_names)) != len(source_names):
-        raise DirectAnimationExportError("Animation skin boneNames must be unique.")
 
+def _resolve_skeleton(armature, source_names: tuple[str, ...]) -> _Skeleton:
     target_names = []
     target_bones = []
     used_targets = set()
@@ -194,6 +159,80 @@ def build_skeleton_export_binding(
             target_names,
         )
     )
+    return _Skeleton(
+        target_names,
+        target_bones,
+        derived_parents,
+        rest_model_matrices(target_bones),
+    )
+
+
+class _BindingSession:
+    def __init__(self, armature, source_rig_path: str):
+        self.armature = armature
+        self.source_rig_path = source_rig_path
+        self._skeletons: dict[tuple[str, ...], _Skeleton] = {}
+
+    def selected_source(self):
+        if not self.source_rig_path:
+            return None
+        return load_animation_rig_export_source(self.source_rig_path)
+
+    def skeleton(self, source_names: tuple[str, ...]) -> _Skeleton:
+        skeleton = self._skeletons.get(source_names)
+        if skeleton is None:
+            skeleton = _resolve_skeleton(self.armature, source_names)
+            self._skeletons[source_names] = skeleton
+        return skeleton
+
+
+def build_skeleton_export_binding(
+    armature, action=None, *, source_rig_path: str = "", session=None
+) -> SkeletonExportBinding:
+    if armature is None or getattr(armature, "type", None) != "ARMATURE":
+        raise DirectAnimationExportError(
+            "Animation export requires one armature object."
+        )
+    contract = rig_space_contract(armature)
+    if contract != RIG_SPACE_CONTRACT_CURRENT:
+        raise DirectAnimationExportError(
+            "The selected armature was not imported with the supported read_rig coordinate contract."
+        )
+
+    session = session or _BindingSession(armature, source_rig_path)
+    action_binding = resolve_action_binding(action, armature)
+    selected_source = session.selected_source()
+    action_skin_snapshot = (
+        load_json_snapshot(action, SKIN_EXTRAS_SNAPSHOT_KEY)
+        if action is not None
+        else {}
+    )
+    selected_skin = selected_source.skin_extras if selected_source is not None else {}
+    action_matches_selected = bool(
+        selected_source is not None
+        and _action_matches_selected_source(
+            armature,
+            action_skin_snapshot,
+            selected_source,
+        )
+    )
+    if action_matches_selected:
+        snapshot = copy.deepcopy(action_skin_snapshot)
+    else:
+        snapshot = selected_skin if selected_source is not None else action_binding.skin
+    source_names_value = _sequence_plain(snapshot.get("boneNames"))
+    if not source_names_value:
+        raise DirectAnimationExportError(
+            "The rig manifest has no animation skin boneNames. Import an .anims.glb first or provide rig source metadata."
+        )
+    source_names = tuple(str(name) for name in source_names_value)
+    if len(set(source_names)) != len(source_names):
+        raise DirectAnimationExportError("Animation skin boneNames must be unique.")
+
+    skeleton = session.skeleton(source_names)
+    target_names = skeleton.target_names
+    target_bones = skeleton.target_bones
+    derived_parents = skeleton.derived_parents
 
     parents_value = _sequence_plain(snapshot.get("boneParentIndexes"))
     if parents_value and len(parents_value) == len(source_names):
@@ -284,7 +323,7 @@ def build_skeleton_export_binding(
             rest_relative_blender = selected_rest
             uses_source_rest_snapshot = True
     # The rest bases the animation import binds against: matrix_local without its float32 scale and shear noise.
-    rest_model_blender = rest_model_matrices(target_bones)
+    rest_model_blender = skeleton.rest_model_blender
     if rest_relative_blender is None:
         model_matrices = rest_model_blender
         rest_relative_blender = model_matrices_to_local(model_matrices, parent_indices)
@@ -879,14 +918,15 @@ def _bindings_match(left, right) -> bool:
     )
 
 
-def _binding_for_action(armature, action, *, source_rig_path: str = ""):
+def _binding_for_action(armature, action, session):
+    source_rig_path = session.source_rig_path
     binding = build_skeleton_export_binding(
-        armature, action=action, source_rig_path=source_rig_path
+        armature, action=action, source_rig_path=source_rig_path, session=session
     )
     if source_rig_path:
         action_skin = load_json_snapshot(action, SKIN_EXTRAS_SNAPSHOT_KEY)
         if action_skin:
-            selected_source = load_animation_rig_export_source(source_rig_path)
+            selected_source = session.selected_source()
             if not _action_matches_selected_source(
                 armature,
                 action_skin,
@@ -925,6 +965,7 @@ def _action_bindings_for_export(
 ):
     animation_data = getattr(armature, "animation_data", None)
     active_action = getattr(animation_data, "action", None)
+    session = _BindingSession(armature, source_rig_path)
 
     if active_action_only:
         if active_action is None:
@@ -934,9 +975,7 @@ def _action_bindings_for_export(
         return [
             (
                 active_action,
-                _binding_for_action(
-                    armature, active_action, source_rig_path=source_rig_path
-                ),
+                _binding_for_action(armature, active_action, session),
             )
         ]
 
@@ -955,9 +994,7 @@ def _action_bindings_for_export(
                 missing.append(name)
                 continue
             try:
-                binding = _binding_for_action(
-                    armature, action, source_rig_path=source_rig_path
-                )
+                binding = _binding_for_action(armature, action, session)
             except DirectAnimationExportError:
                 incompatible.append(name)
                 continue
@@ -976,9 +1013,7 @@ def _action_bindings_for_export(
     compatible = []
     for action in bpy.data.actions:
         try:
-            binding = _binding_for_action(
-                armature, action, source_rig_path=source_rig_path
-            )
+            binding = _binding_for_action(armature, action, session)
         except DirectAnimationExportError:
             continue
         compatible.append((action, binding))

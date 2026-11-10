@@ -520,6 +520,8 @@ class CP77GLBExport(ExportValidationProperties, Operator, ExportHelper):
     action_index: IntProperty(default=0, options={"SKIP_SAVE"})
     action_list_error: StringProperty(default="", options={"HIDDEN", "SKIP_SAVE"})
     action_list_rig_path: StringProperty(default="", options={"HIDDEN", "SKIP_SAVE"})
+    _scope_key = None
+    _scope_meshes = ()
 
     def _requires_source_rig_selection(self):
         return len(self.rig_items) > 1
@@ -594,18 +596,29 @@ class CP77GLBExport(ExportValidationProperties, Operator, ExportHelper):
         self.check(context)
         return ExportHelper.invoke(self, context, event)
 
-    def check(self, context):
-        """Keep the file selector synchronized with the selected export format"""
-        meshes = (
-            resolve_mesh_export_scope(
+    def _export_meshes(self, context):
+        limit_selected = getattr(self, "limit_selected", True)
+        export_visible = getattr(self, "export_visible", False)
+        key = (
+            tuple(sorted(obj.name for obj in getattr(context, "selected_objects", ()))),
+            len(context.view_layer.objects),
+            getattr(getattr(context, "collection", None), "name", ""),
+            limit_selected,
+            export_visible,
+        )
+        if key != self._scope_key:
+            self._scope_meshes = resolve_mesh_export_scope(
                 context,
-                limit_selected=getattr(self, "limit_selected", True),
-                export_visible=getattr(self, "export_visible", False),
+                limit_selected=limit_selected,
+                export_visible=export_visible,
                 excluded_objects=collect_excluded_objects(),
             ).meshes
-            if not self.export_poses
-            else ()
-        )
+            self._scope_key = key
+        return self._scope_meshes
+
+    def check(self, context):
+        """Keep the file selector synchronized with the selected export format"""
+        meshes = self._export_meshes(context) if not self.export_poses else ()
         morph_export = mesh_glb_path("export.glb", meshes).endswith(".morphtarget.glb")
         extension = (
             ".anims.glb"

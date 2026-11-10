@@ -149,35 +149,37 @@ def reset_native_scene(bridge):
     bridge.reset()
 
 
+def _stop_native(bridge, finish):
+    if hasattr(bridge, "nvcloth_is_initialized") and hasattr(
+        bridge, "nvcloth_shutdown"
+    ):
+        if bridge.nvcloth_is_initialized():
+            bridge.nvcloth_shutdown()
+    if hasattr(bridge, "is_initialized") and hasattr(bridge, finish):
+        if bridge.is_initialized():
+            getattr(bridge, finish)()
+
+
 def invalidate_physx_runtime():
     bridge = _BRIDGE
     active_owner = bridge_owned_by_extension()
-    _raise_cleanup_failures(
-        _cleanup_runtime_clients(
-            bridge if active_owner else None, all_owners=active_owner
-        )
+    errors = _cleanup_runtime_clients(
+        bridge if active_owner else None, all_owners=active_owner
     )
-    if bridge is not None and active_owner:
-        if hasattr(bridge, "nvcloth_is_initialized") and hasattr(
-            bridge, "nvcloth_shutdown"
-        ):
-            if bridge.nvcloth_is_initialized():
-                bridge.nvcloth_shutdown()
-        if hasattr(bridge, "is_initialized") and hasattr(bridge, "reset"):
-            if bridge.is_initialized():
-                bridge.reset()
-
-    invalidate_cloth_object_cache()
-    still_initialized = (
-        bool(bridge.is_initialized())
-        if bridge is not None and active_owner and hasattr(bridge, "is_initialized")
-        else False
-    )
-    _mark_scene_runtime_stale(initialized=still_initialized)
-    if active_owner:
-        package = sys.modules.get(_NATIVE_PACKAGE_NAME)
-        if package is not None:
-            package._cp77_runtime_active_owner = None
+    still_initialized = False
+    try:
+        if bridge is not None and active_owner:
+            _stop_native(bridge, "reset")
+            if hasattr(bridge, "is_initialized"):
+                still_initialized = bool(bridge.is_initialized())
+    finally:
+        invalidate_cloth_object_cache()
+        _mark_scene_runtime_stale(initialized=still_initialized)
+        if active_owner:
+            package = sys.modules.get(_NATIVE_PACKAGE_NAME)
+            if package is not None:
+                package._cp77_runtime_active_owner = None
+    _raise_cleanup_failures(errors)
 
 
 def _native_dir():
@@ -212,6 +214,7 @@ def _set_unavailable(reason, path="", *, error=None):
         PhysXCapabilityState.UNAVAILABLE,
         str(reason),
         os.fspath(path) if path else "",
+        isinstance(error, OSError),
     )
     exc_info = (type(error), error, error.__traceback__) if error is not None else None
     _LOG.warning(
@@ -263,8 +266,10 @@ def _release_native_runtime():
     return was_active, not bool(owners)
 
 
-def initialize_physx_capability():
+def initialize_physx_capability(*, retry_transient=False):
     global _CAPABILITY, _BRIDGE, _DLL_DIRECTORY_HANDLE
+    if retry_transient and _CAPABILITY.transient:
+        _CAPABILITY = PhysXCapability(PhysXCapabilityState.UNINITIALIZED)
     if _CAPABILITY.state is not PhysXCapabilityState.UNINITIALIZED:
         return _CAPABILITY
     if os.name != "nt":
@@ -358,16 +363,16 @@ def initialize_physx_capability():
         return _set_unavailable(error, bridge_path, error=error)
 
 
-def require_bridge():
-    capability = initialize_physx_capability()
+def require_bridge(*, retry_transient=False):
+    capability = initialize_physx_capability(retry_transient=retry_transient)
     if capability.state is not PhysXCapabilityState.AVAILABLE or _BRIDGE is None:
         raise RuntimeError(capability.reason or "PhysX bridge is unavailable")
     _claim_native_runtime()
     return _BRIDGE
 
 
-def initialized_bridge():
-    bridge = require_bridge()
+def initialized_bridge(*, retry_transient=False):
+    bridge = require_bridge(retry_transient=retry_transient)
     initialized = (
         bool(bridge.is_initialized()) if hasattr(bridge, "is_initialized") else False
     )
@@ -381,30 +386,24 @@ def shutdown_physx_capability():
     global _CAPABILITY, _BRIDGE
     bridge = _BRIDGE
     active_owner = bridge_owned_by_extension()
-    _raise_cleanup_failures(
-        _cleanup_runtime_clients(
-            bridge if active_owner else None, all_owners=active_owner
+    errors = _cleanup_runtime_clients(
+        bridge if active_owner else None, all_owners=active_owner
+    )
+    try:
+        if bridge is not None and active_owner:
+            _stop_native(bridge, "shutdown")
+        _mark_scene_runtime_stale(initialized=False)
+    finally:
+        unregister_runtime_cleanup_client(
+            "_capability_scene_state", _shared_runtime_invalidated
         )
-    )
-    if bridge is not None and active_owner:
-        if hasattr(bridge, "nvcloth_is_initialized") and hasattr(
-            bridge, "nvcloth_shutdown"
-        ):
-            if bridge.nvcloth_is_initialized():
-                bridge.nvcloth_shutdown()
-        if hasattr(bridge, "is_initialized") and hasattr(bridge, "shutdown"):
-            if bridge.is_initialized():
-                bridge.shutdown()
-    _mark_scene_runtime_stale(initialized=False)
-    unregister_runtime_cleanup_client(
-        "_capability_scene_state", _shared_runtime_invalidated
-    )
-    _was_active, last_owner = _release_native_runtime()
-    if last_owner:
-        sys.modules.pop(_NATIVE_MODULE_NAME, None)
-        sys.modules.pop(_NATIVE_PACKAGE_NAME, None)
-    _BRIDGE = None
-    _release_native_resources()
-    if last_owner:
-        release_native_runtime_copies()
-    _CAPABILITY = PhysXCapability(PhysXCapabilityState.UNINITIALIZED)
+        _was_active, last_owner = _release_native_runtime()
+        if last_owner:
+            sys.modules.pop(_NATIVE_MODULE_NAME, None)
+            sys.modules.pop(_NATIVE_PACKAGE_NAME, None)
+        _BRIDGE = None
+        _release_native_resources()
+        if last_owner:
+            release_native_runtime_copies()
+        _CAPABILITY = PhysXCapability(PhysXCapabilityState.UNINITIALIZED)
+    _raise_cleanup_failures(errors)

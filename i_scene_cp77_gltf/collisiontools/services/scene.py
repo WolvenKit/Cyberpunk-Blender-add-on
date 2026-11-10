@@ -106,7 +106,7 @@ def _ensure_preview_ground(context):
 
 def initialize_scene(context, add_ground=True):
     try:
-        require_initialized_bridge(context)
+        require_initialized_bridge(context, retry_transient=True)
         if add_ground:
             _ensure_preview_ground(context)
     except ImportError as error:
@@ -151,7 +151,7 @@ def build_scene(context):
 
     bridge = None
     try:
-        bridge = require_initialized_bridge(context)
+        bridge = require_initialized_bridge(context, retry_transient=True)
         reset_vehicle_preview(context, restore=True)
         refresh_cloth_object_cache(context)
         restore_scene_cloths_for_rebuild(context)

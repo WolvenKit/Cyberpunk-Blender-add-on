@@ -9,6 +9,7 @@ from ...bartmoss.wireframes import (
     wheel_wireframe,
 )
 from ...blender.gpu_overlay import line_drawing, uniform_color_shader
+from ...blender.identity import rna_identity
 from ...blender.physics.cooked_shapes import decode_cooked_geometry
 from ...blender.physics.vehicle_geometry import basis_matrix
 from ...core.log import get_logger, log_once
@@ -19,6 +20,9 @@ _LOG = get_logger(__name__)
 
 _handle = None
 _cooked_line_cache = {}
+_dirty = True
+_built_scene = None
+_batch = None
 LINE_COLOR = (0.0, 1.0, 0.0, 1.0)
 
 
@@ -281,28 +285,41 @@ def _build_visualization_data(context):
     return all_verts, all_indices
 
 
-def _draw_lines(shader, vertices, indices, color):
-    if not vertices or not indices:
-        return
-    batch = batch_for_shader(shader, "LINES", {"pos": vertices}, indices=indices)
-    shader.bind()
-    shader.uniform_float("color", color)
-    shader.uniform_float(
-        "ModelViewProjectionMatrix", bpy.context.region_data.perspective_matrix
-    )
-    batch.draw(shader)
+def mark_overlay_dirty():
+    global _dirty
+    _dirty = True
+
+
+def _overlay_batch(context, shader):
+    global _dirty, _built_scene, _batch
+    scene = rna_identity(context.scene)
+    if _dirty or scene != _built_scene:
+        vertices, indices = _build_visualization_data(context)
+        _batch = (
+            batch_for_shader(shader, "LINES", {"pos": vertices}, indices=indices)
+            if vertices and indices
+            else None
+        )
+        _built_scene, _dirty = scene, False
+    return _batch
 
 
 def _draw_callback():
-    scene = bpy.context.scene
-    if not scene.physx.viz_enabled:
+    context = bpy.context
+    if not context.scene.physx.viz_enabled:
         return
-
-    # World-space vertices are rebuilt on every draw so the overlay follows moving transforms.
-    all_verts, all_indices = _build_visualization_data(bpy.context)
     try:
+        shader = uniform_color_shader()
+        batch = _overlay_batch(context, shader)
+        if batch is None:
+            return
         with line_drawing():
-            _draw_lines(uniform_color_shader(), all_verts, all_indices, LINE_COLOR)
+            shader.bind()
+            shader.uniform_float("color", LINE_COLOR)
+            shader.uniform_float(
+                "ModelViewProjectionMatrix", context.region_data.perspective_matrix
+            )
+            batch.draw(shader)
     except (ReferenceError, RuntimeError, TypeError, ValueError) as error:
         log_once(
             _LOG,
@@ -323,11 +340,13 @@ def register_viz():
 
 
 def unregister_viz():
-    global _handle
+    global _handle, _batch
     if _handle is not None:
         try:
             bpy.types.SpaceView3D.draw_handler_remove(_handle, "WINDOW")
         except (ReferenceError, RuntimeError, TypeError, ValueError):
             pass
     _handle = None
+    _batch = None
+    mark_overlay_dirty()
     _cooked_line_cache.clear()

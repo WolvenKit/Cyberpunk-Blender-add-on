@@ -193,15 +193,15 @@ class CP77_PT_PanelProps(PropertyGroup):
         default="ANIMATION",
     )
 
-    def get_meshtab_items(self, context):
-        return [
+    meshtab: EnumProperty(
+        items=(
             ("UTILITIES", "Utilities", ""),
             ("MODELLING", "Modelling", ""),
             ("CHARACTERS", "Characters", ""),
             ("CLOTH", "Garment", "Garment setup, pinning, simulation, and bake tools"),
-        ]
-
-    meshtab: EnumProperty(items=get_meshtab_items, name="Mesh Tab")
+        ),
+        name="Mesh Tab",
+    )
 
 
 registration_classes = get_classes(sys.modules[__name__])

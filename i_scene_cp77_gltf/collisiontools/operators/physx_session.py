@@ -73,6 +73,7 @@ class PHYSX_OT_sim_step(bpy.types.Operator):
     cursor_radius: bpy.props.FloatProperty(name="Cursor Radius", default=1.0)
 
     _timer = None
+    _bridge = None
     _cursor_handle = "0"
     _window_manager = None
     _scene = None
@@ -88,6 +89,7 @@ class PHYSX_OT_sim_step(bpy.types.Operator):
         result = start_simulation(context)
         if not result.ok:
             return finish_operator(self, result)
+        self._bridge = require_bridge()
         self._window_manager = context.window_manager
         self._scene = context.scene
         self._session_key = id(self)
@@ -105,7 +107,9 @@ class PHYSX_OT_sim_step(bpy.types.Operator):
         if not context.scene.physx.sim_running or event.type in {"ESC", "RIGHTMOUSE"}:
             return self.cancel(context)
         try:
-            bridge = require_bridge()
+            if event.type != "MOUSEMOVE":
+                self._bridge = require_bridge()
+            bridge = self._bridge
             if handle_vehicle_event(context, event):
                 return {"RUNNING_MODAL"}
             self._cursor_handle = update_manipulator(
@@ -150,6 +154,7 @@ class PHYSX_OT_sim_step(bpy.types.Operator):
             self._session_key = None
         self._window_manager = None
         self._scene = None
+        self._bridge = None
 
     def cancel(self, context):
         self._shutdown_session(context)
