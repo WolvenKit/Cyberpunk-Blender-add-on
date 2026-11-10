@@ -1020,9 +1020,18 @@ class BlenderImportTransaction(DatablockImportTransaction):
             return RollbackReport()
         _force_object_mode()
         report = super().rollback_to(ImportSavepoint(0, 0))
-        self._restore_existing_state()
+        steps = [("existing state", self._restore_existing_state)]
         if self._context_snapshot is not None:
-            self._context_snapshot.restore()
+            steps.append(("context", self._context_snapshot.restore))
+        failures = []
+        for label, restore in steps:
+            try:
+                restore()
+            except Exception as error:
+                _LOG.warning(
+                    "Import rollback could not restore the %s", label, exc_info=True
+                )
+                failures.append((label, str(error)))
         self._created.clear()
         self._created_values.clear()
         self._mutations.clear()
@@ -1030,7 +1039,14 @@ class BlenderImportTransaction(DatablockImportTransaction):
         self._commit_cleanup.clear()
         self._finalizers.clear()
         self._closed = True
-        return report
+        if not failures:
+            return report
+        return RollbackReport(
+            report.removed,
+            report.restored,
+            report.failures + tuple(failures),
+            report.leaked,
+        )
 
     def _restore_existing_state(self):
         for state in (*self._collections, *self._scene_roots):
