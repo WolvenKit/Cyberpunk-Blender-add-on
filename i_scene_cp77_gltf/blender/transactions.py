@@ -776,7 +776,7 @@ def _run_rollback_hooks(removed_types):
     for name, hook in tuple(_ROLLBACK_HOOKS.items()):
         try:
             hook(frozenset(removed_types))
-        except RuntimeError:
+        except Exception:
             debug_exception(_LOG, "Rollback hook %s failed", name)
 
 
