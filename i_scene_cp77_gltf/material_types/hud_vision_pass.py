@@ -16,7 +16,6 @@ from .overlay_common import (
     control,
     split_vector,
 )
-
 from .overlay_common import material_cache_identity as material_cache_identity
 
 
