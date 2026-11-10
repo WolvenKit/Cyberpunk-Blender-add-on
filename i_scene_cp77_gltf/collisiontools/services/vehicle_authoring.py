@@ -19,11 +19,7 @@ from ...blender.physics.vehicle_geometry import (
     vehicle_frame_world,
 )
 from ...blender.selection import selected_meshes
-from ...physics.domain.vehicle.gears import (
-    PHYSX_MAX_FORWARD_GEARS,
-    collection_gears,
-    validate_gears,
-)
+from ...physics.domain.vehicle.gears import PHYSX_MAX_FORWARD_GEARS
 from ...physics.domain.vehicle.tweakxl import build_tweakxl_yaml
 from ...physics.services.vehicle_tweaks import project_resources_root
 from ..blender.vehicle_authoring_state import (
@@ -34,6 +30,7 @@ from ..blender.vehicle_gears import (
     ensure_gear_collection,
     populate_default_gear_collection,
     populate_gear_collection,
+    validated_gears,
 )
 from ..blender.vehicle_validation import resolved_game_config
 from ..runtime.vehicle_preview import queue_vehicle_live_update
@@ -245,7 +242,7 @@ def add_vehicle_gear(vehicle):
             else {}
         )
         ensure_gear_collection(vehicle, config)
-        gears = validate_gears(collection_gears(vehicle), vehicle=vehicle)
+        gears = validated_gears(vehicle)
         if len(gears) - 1 >= PHYSX_MAX_FORWARD_GEARS:
             raise ValueError(
                 f"PhysX supports at most {PHYSX_MAX_FORWARD_GEARS} forward gears"
@@ -291,7 +288,7 @@ def remove_vehicle_gear(vehicle):
             raise ValueError("Reverse gear cannot be removed")
         vehicle.gears.remove(index)
         vehicle.gear_index = min(index, len(vehicle.gears) - 1)
-        validate_gears(collection_gears(vehicle), vehicle=vehicle)
+        validated_gears(vehicle)
         queue_vehicle_live_update(vehicle.id_data)
     except Exception as error:
         return OperationResult.cancelled(str(error), error=error)
@@ -315,7 +312,7 @@ def move_vehicle_gear(vehicle, direction):
             return OperationResult.finished("Gear is already at the end of the gearbox")
         vehicle.gears.move(index, target)
         vehicle.gear_index = target
-        validate_gears(collection_gears(vehicle), vehicle=vehicle)
+        validated_gears(vehicle)
         queue_vehicle_live_update(vehicle.id_data)
     except Exception as error:
         return OperationResult.cancelled(str(error), error=error)

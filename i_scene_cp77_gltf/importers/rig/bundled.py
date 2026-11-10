@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from ...animation.domain.rig.assembly import merge_rig_datas
-from ...animation.services.rig.parser import parse_rig_payload
+from ...animation.domain.rig.parsing import parse_rig_payload
 from ...assetio.metarig_bundle import read_metarig_bundle
 from ...assetio.paths import local_path_key
 from ...assetio.values import json_array

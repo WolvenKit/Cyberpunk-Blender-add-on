@@ -6,6 +6,7 @@ from ..blender.animgraph.node_types import (
     REDengine_AnimGraphContainer,
     REDengine_AnimGraphNode_Generic,
 )
+from ..blender.animgraph.preview_sessions import session_results
 from ..blender.animgraph.preview_settings import PREVIEW_SETTINGS_CLASSES
 from ..blender.animgraph.properties import (
     REDengine_AnimArrayElement,
@@ -37,7 +38,6 @@ from ..blender.animgraph.sockets import (
     REDengine_AnimGraphSocket_Vector,
 )
 from ..blender.animgraph.tree import REDengine_AnimGraphTree
-from ..collisiontools.runtime.dangle.preview import session_results
 from ..core.log import get_logger
 from ..core.registration import RegistrationLedger
 from .operators.actions import ACTION_OPERATOR_CLASSES

@@ -1,16 +1,11 @@
 from __future__ import annotations
 
-import os
 from collections.abc import Iterable
-from functools import cache, lru_cache
+from functools import cache
 from typing import Any
 
-from .....assetio.documents import load_json_payload
-from .....core.log import debug_exception, get_logger
 from ..constants import ANIM_NODE_PREFIX, LINK_TYPES
 from . import overrides
-
-_LOG = get_logger(__name__)
 
 OUTPUT_PARENT_KIND = {
     "animAnimNode_FloatValue": "animFloatLink",
@@ -80,27 +75,25 @@ DEFAULT_FLOAT_CURVE = {
 }
 
 
-def _metadata_path() -> str:
-    return os.path.join(os.path.dirname(__file__), "newanimnodes.json")
+_SCHEMA_RECORDS: dict[str, dict] = dict(overrides.records())
 
 
-@lru_cache(maxsize=1)
-def _records() -> tuple[dict[str, dict], bool]:
-    path = _metadata_path()
-    rows = []
-    if os.path.exists(path):
-        try:
-            rows = load_json_payload(path)
-        except Exception:
-            debug_exception(_LOG, "AnimGraph RTTI metadata load details")
-            rows = []
+def install_records(rows) -> None:
     by_name = {}
     for row in rows if isinstance(rows, list) else []:
         name = row.get("name") if isinstance(row, dict) else None
         if isinstance(name, str) and name:
             by_name[name] = row
     by_name.update(overrides.records())
-    return by_name, bool(by_name)
+    _SCHEMA_RECORDS.clear()
+    _SCHEMA_RECORDS.update(by_name)
+    _NODE_CLASS_CACHE.clear()
+    _all_properties.cache_clear()
+    _declaration_order.cache_clear()
+
+
+def _records() -> tuple[dict[str, dict], bool]:
+    return _SCHEMA_RECORDS, bool(_SCHEMA_RECORDS)
 
 
 def has_metadata() -> bool:

@@ -14,19 +14,15 @@ def _finite(value, label):
     return result
 
 
-def driven_wheel_radius(vehicle):
-    front = max(float(vehicle.front_axle.tire_radius), 1.0e-6)
-    rear = max(float(vehicle.rear_axle.tire_radius), 1.0e-6)
-    if getattr(vehicle, "vehicle_kind", "CAR") == "BIKE":
-        front_drive = bool(vehicle.wheel_role_front.is_drive)
-        rear_drive = bool(vehicle.wheel_role_back.is_drive)
+def driven_wheel_radius(gearbox):
+    front = max(float(gearbox.front_tire_radius), 1.0e-6)
+    rear = max(float(gearbox.rear_tire_radius), 1.0e-6)
+    wheels = gearbox.drive_wheels
+    if gearbox.bike:
+        front_drive, rear_drive = bool(wheels[0]), bool(wheels[1])
     else:
-        front_drive = bool(
-            vehicle.wheel_role_lf.is_drive or vehicle.wheel_role_rf.is_drive
-        )
-        rear_drive = bool(
-            vehicle.wheel_role_lb.is_drive or vehicle.wheel_role_rb.is_drive
-        )
+        front_drive = bool(wheels[0] or wheels[1])
+        rear_drive = bool(wheels[2] or wheels[3])
     if front_drive and rear_drive:
         return 0.5 * (front + rear)
     if front_drive:
@@ -59,10 +55,10 @@ def speed_for_ratio(ratio, max_engine_rpm, driven_radius):
     return rpm * (2.0 * math.pi / 60.0) * radius / ratio
 
 
-def effective_gear_ratio(vehicle, gear, index):
+def effective_gear_ratio(gearbox, gear, index):
     if float(gear.max_speed) > 0.0:
         return _ratio_for(
-            gear.max_speed, gear.max_engine_rpm, driven_wheel_radius(vehicle), index
+            gear.max_speed, gear.max_engine_rpm, driven_wheel_radius(gearbox), index
         )
     ratio = _finite(gear.ratio, f"gear {index} ratio")
     if index == 0 and ratio >= 0.0:
@@ -72,7 +68,7 @@ def effective_gear_ratio(vehicle, gear, index):
     return ratio
 
 
-def validate_gears(gears, *, max_forward_gears=PHYSX_MAX_FORWARD_GEARS, vehicle=None):
+def validate_gears(gears, *, max_forward_gears=PHYSX_MAX_FORWARD_GEARS, gearbox=None):
     gears = tuple(gears)
     if len(gears) < 2:
         raise ValueError("Gearbox must contain reverse and at least one forward gear")
@@ -88,8 +84,8 @@ def validate_gears(gears, *, max_forward_gears=PHYSX_MAX_FORWARD_GEARS, vehicle=
         min_speed = _finite(gear.min_speed, f"gear {index} minSpeed")
         max_speed = _finite(gear.max_speed, f"gear {index} maxSpeed")
         ratio = (
-            effective_gear_ratio(vehicle, gear, index)
-            if vehicle is not None
+            effective_gear_ratio(gearbox, gear, index)
+            if gearbox is not None
             else _finite(gear.ratio, f"gear {index} ratio")
         )
         if index == 0 and ratio >= 0.0:
@@ -198,25 +194,10 @@ def gears_from_config(config, driven_radius=None):
     return validate_gears(result)
 
 
-def collection_gears(vehicle):
-    return tuple(
-        VehicleGear(
-            ratio=float(item.ratio),
-            min_speed=float(getattr(item, "min_speed", 0.0)),
-            max_speed=float(getattr(item, "max_speed", 0.0)),
-            torque_multiplier=float(item.torque_multiplier),
-            min_engine_rpm=float(item.min_engine_rpm),
-            max_engine_rpm=float(item.max_engine_rpm),
-            source_record=str(item.source_record or ""),
-        )
-        for item in vehicle.gears
-    )
-
-
-def default_gears(vehicle):
-    max_rpm = float(vehicle.engine_max_omega) * 60.0 / (2.0 * math.pi)
+def default_gears(gearbox):
+    max_rpm = float(gearbox.engine_max_omega) * 60.0 / (2.0 * math.pi)
     max_rpm = max(max_rpm, 1000.0)
-    radius = driven_wheel_radius(vehicle)
+    radius = driven_wheel_radius(gearbox)
     ratios = (-3.20, 3.20, 2.10, 1.52, 1.18, 0.96, 0.80)
     result = []
     for index, ratio in enumerate(ratios):
@@ -241,21 +222,21 @@ def default_gears(vehicle):
     return validate_gears(result)
 
 
-def native_gear_payload(vehicle, *, max_forward_gears=PHYSX_MAX_FORWARD_GEARS):
+def native_gear_payload(gearbox, *, max_forward_gears=PHYSX_MAX_FORWARD_GEARS):
     gears = validate_gears(
-        collection_gears(vehicle),
+        gearbox.gears,
         max_forward_gears=max_forward_gears,
-        vehicle=vehicle,
+        gearbox=gearbox,
     )
-    max_engine_rpm = float(vehicle.engine_max_omega) * 60.0 / (2.0 * math.pi)
+    max_engine_rpm = float(gearbox.engine_max_omega) * 60.0 / (2.0 * math.pi)
     if not math.isfinite(max_engine_rpm) or max_engine_rpm <= 0.0:
         raise ValueError("Engine maximum omega must resolve to a positive RPM")
-    final_scale = float(vehicle.final_gear_torque_decimation)
+    final_scale = float(gearbox.final_gear_torque_decimation)
     if not math.isfinite(final_scale) or final_scale < 0.0:
         raise ValueError("Final gear torque scale must be finite and nonnegative")
 
     ratios = [
-        effective_gear_ratio(vehicle, gear, index) for index, gear in enumerate(gears)
+        effective_gear_ratio(gearbox, gear, index) for index, gear in enumerate(gears)
     ]
     multipliers = [float(gear.torque_multiplier) for gear in gears]
     multipliers[-1] *= final_scale
@@ -270,19 +251,9 @@ def native_gear_payload(vehicle, *, max_forward_gears=PHYSX_MAX_FORWARD_GEARS):
             )
         up.append(up_ratio)
         down.append(down_ratio)
-    driven_indices = []
-    if getattr(vehicle, "vehicle_kind", "CAR") == "BIKE":
-        roles = (vehicle.wheel_role_front, vehicle.wheel_role_back)
-    else:
-        roles = (
-            vehicle.wheel_role_lf,
-            vehicle.wheel_role_rf,
-            vehicle.wheel_role_lb,
-            vehicle.wheel_role_rb,
-        )
-    for index, role in enumerate(roles):
-        if bool(role.is_drive):
-            driven_indices.append(index)
+    driven_indices = [
+        index for index, drive in enumerate(gearbox.drive_wheels) if drive
+    ]
     if not driven_indices:
         raise ValueError("At least one wheel must be configured as a drive wheel")
 
@@ -300,17 +271,17 @@ def native_gear_payload(vehicle, *, max_forward_gears=PHYSX_MAX_FORWARD_GEARS):
 
 
 def config_with_authored_gears(
-    vehicle, config, *, max_forward_gears=PHYSX_MAX_FORWARD_GEARS
+    gearbox, config, *, max_forward_gears=PHYSX_MAX_FORWARD_GEARS
 ):
     result = dict(config)
     gears = validate_gears(
-        collection_gears(vehicle),
+        gearbox.gears,
         max_forward_gears=max_forward_gears,
-        vehicle=vehicle,
+        gearbox=gearbox,
     )
     result["gears"] = [
         {
-            "ratio": effective_gear_ratio(vehicle, gear, index),
+            "ratio": effective_gear_ratio(gearbox, gear, index),
             "min_speed": float(gear.min_speed),
             "max_speed": float(gear.max_speed),
             "torque_multiplier": float(gear.torque_multiplier),
@@ -320,8 +291,8 @@ def config_with_authored_gears(
         }
         for index, gear in enumerate(gears)
     ]
-    result["final_gear_torque_decimation"] = float(vehicle.final_gear_torque_decimation)
-    result.update(native_gear_payload(vehicle, max_forward_gears=max_forward_gears))
+    result["final_gear_torque_decimation"] = float(gearbox.final_gear_torque_decimation)
+    result.update(native_gear_payload(gearbox, max_forward_gears=max_forward_gears))
     return result
 
 

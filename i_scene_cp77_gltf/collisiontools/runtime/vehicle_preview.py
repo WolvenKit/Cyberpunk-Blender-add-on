@@ -22,11 +22,6 @@ from ...blender.physics.vehicle_geometry import (
 )
 from ...blender.physics.vehicle_phys import adopt_loaded_vehicle_phys
 from ...core.log import get_logger
-from ...physics.domain.vehicle.gears import (
-    PHYSX_MAX_FORWARD_GEARS,
-    collection_gears,
-    validate_gears,
-)
 from ...physics.model.vehicle.timing import VEHICLE_FIXED_TIME_STEP
 from ...physics.runtime.bridge_contract import validate_vehicle_bridge_contract
 from ..blender.vehicle_authoring_state import (
@@ -38,6 +33,7 @@ from ..blender.vehicle_config import (
     vehicle_config,
     vehicle_live_dynamics_config,
 )
+from ..blender.vehicle_gears import validated_gears
 from ..blender.vehicle_rig import (
     capture_vehicle_rig,
     pose_vehicle_rig,
@@ -718,11 +714,7 @@ def _build_native_vehicle(scene, bridge, state, *, dynamic_state=None):
     rebuilding = dynamic_state is not None
     build_info = validate_vehicle_bridge_contract(bridge)
     _log_bridge_build_info(build_info)
-    validate_gears(
-        collection_gears(vehicle),
-        max_forward_gears=PHYSX_MAX_FORWARD_GEARS,
-        vehicle=vehicle,
-    )
+    validated_gears(vehicle)
 
     is_bike = getattr(vehicle, "vehicle_kind", "CAR") == "BIKE"
     if is_bike:

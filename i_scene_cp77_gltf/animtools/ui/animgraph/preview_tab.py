@@ -1,7 +1,7 @@
 import bpy
 
+from ....blender.animgraph.preview_sessions import graph_tree_previewing
 from ....blender.animgraph.rig_binding import binding_tree
-from ....collisiontools.runtime.dangle.preview import graph_tree_previewing
 from ...operators.animgraph.context import animgraph_editor_poll
 
 

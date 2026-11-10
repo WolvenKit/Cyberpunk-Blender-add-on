@@ -6,12 +6,13 @@ from ...blender.operator_results import (
     finish_operator,
 )
 from ...blender.physics.cooked_shapes import import_cooked_shape, import_native_scene
-from ...blender.physics.resources import import_phys, import_phys_to_actor
+from ...blender.physics.resources import import_phys_resource
 from ...core.notifications import import_operation
 from ...exporters.collision.heightfield import export_selected_heightfields
 from ...exporters.collision.physx_actor import export_actor_item_to_phys
 from ...exporters.collision.physx_binary import export_cooked_shape, export_native_scene
 from ...physics.domain.resource_paths import normalize_phys_json_path
+from ..services.phys_files import import_phys_to_actor, load_phys
 
 
 def _export_actor(actor, filepath):
@@ -20,7 +21,9 @@ def _export_actor(actor, filepath):
 
 
 def _import_phys(context, filepath):
-    actor_count, shape_count = import_phys(filepath, context=context)
+    actor_count, shape_count = import_phys_resource(
+        load_phys(filepath), context=context
+    )
     if not actor_count or not shape_count:
         return OperationResult.cancelled("No supported physics actors were imported.")
     context.scene.physx.ui_tab = "ACTORS"

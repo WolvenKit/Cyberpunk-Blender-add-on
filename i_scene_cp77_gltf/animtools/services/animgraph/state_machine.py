@@ -5,9 +5,9 @@ from functools import partial
 import bpy
 
 from ....blender.animgraph import sm_edit, sm_overlay, sm_sockets
+from ....blender.animgraph.preview_sessions import stop_graph_preview
 from ....blender.operator_results import OperationResult
 from ....blender.transactions import track_node_tree, transactional
-from ....collisiontools.runtime.dangle.preview import stop_graph_preview
 
 _LISTED_LIMIT = 12
 

@@ -3,6 +3,11 @@ import time
 import bpy
 
 from ...animation.model.animgraph.constants import ANIMGRAPH_TREE_ID
+from ...blender.animgraph.preview_sessions import (
+    register_preview_session,
+    stop_orphaned_previews,
+    unregister_preview_session,
+)
 from ...blender.animgraph.results_overlay import redraw_editors
 from ...blender.animgraph.rig_binding import binding_tree, bound_armature
 from ...blender.operator_results import OperationResult, finish_operator
@@ -16,13 +21,10 @@ from ..runtime.dangle.preview import (
     prepare_preview,
     refresh_graph_inputs,
     refresh_preview_inputs,
-    register_preview_session,
     step_preview,
-    stop_orphaned_previews,
     stop_preview,
     toggle_graph_tag,
     toggle_preview_tag,
-    unregister_preview_session,
 )
 
 _LOG = get_logger(__name__)

@@ -586,7 +586,9 @@ class CP77EntityImport(Operator, ImportHelper):
             categories=entity_dialog.CATEGORIES,
             choices=entity_dialog.ENTITY_CHOICES,
         )
-        entity_dialog.remember_state(get_addon_preferences(context), state)
+        if entity_dialog.remember_state(get_addon_preferences(context), state):
+            # Blender writes dirty preferences on quit, so the choices survive a restart.
+            context.preferences.is_dirty = True
 
         if state.materials:
             for message in (
@@ -847,7 +849,8 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
             categories=sector_dialog.CATEGORIES,
             choices=SECTOR_CHOICES,
         )
-        sector_dialog.remember_state(get_addon_preferences(context), state)
+        if sector_dialog.remember_state(get_addon_preferences(context), state):
+            context.preferences.is_dirty = True
         options = state.options(remap_depot=context.scene.cp77_panel_props.remap_depot)
         if options.with_materials and (warning := opengl_shader_warning()):
             report(self, "WARNING", warning, logger=_LOG)

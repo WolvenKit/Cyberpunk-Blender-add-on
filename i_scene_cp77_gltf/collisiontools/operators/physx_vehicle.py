@@ -9,6 +9,7 @@ from ...blender.physics.vehicle_phys import load_vehicle_phys, vehicle_phys_pref
 from ...core.log import debug_exception, get_logger, log_once
 from ...core.notifications import import_operation, report
 from ..blender.vehicle_config import validate_vehicle
+from ..services.phys_files import load_phys
 from ..services.scene import build_vehicle_preview, reset_vehicle_session
 from ..services.vehicle import (
     autofit_vehicle_configuration,
@@ -316,7 +317,10 @@ class PHYSX_OT_vehicle_load_game_data(bpy.types.Operator):
                     ),
                 )
             load_vehicle_phys(
-                context, rig, filepath, target_collection=missing.get("collection")
+                context,
+                rig,
+                load_phys(filepath),
+                target_collection=missing.get("collection"),
             )
         except Exception as error:
             return finish_operator(

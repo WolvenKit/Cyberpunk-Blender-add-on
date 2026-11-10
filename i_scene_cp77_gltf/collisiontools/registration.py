@@ -2,6 +2,7 @@ import bpy
 
 from ..blender.animgraph import presenters as animgraph_presenters
 from ..blender.animgraph.dangle_editor import project_imported_dangle_node
+from ..blender.animgraph.preview_sessions import stop_active_previews
 from ..blender.animgraph.tree import (
     register_tree_change_hook,
     unregister_tree_change_hook,
@@ -29,7 +30,6 @@ from .runtime.dangle.overlay import (
     register_global_handler,
     unregister_all,
 )
-from .runtime.dangle.preview import stop_active_previews
 from .runtime.dangle.rigs import clear_dangle_rigs
 from .runtime.overlay import mark_overlay_dirty, register_viz, unregister_viz
 from .runtime.simulation import stop_active_simulations

@@ -2,13 +2,11 @@ import json
 
 from mathutils import Matrix, Vector
 
-from ...assetio.documents import DocumentSession
 from ...assetio.transform_values import vector3_from_data
 from ...assetio.values import cname_value, resolve_handle_reference
 from ...core.log import get_logger, operation
 from ...physics.domain.mass import positive_mass
 from ...physics.model.resource import PhysicsResource
-from ...physics.services.repository import PhysicsRepository
 from ..naming import fit_id_name
 from ..red_transforms import red_quaternion
 from .actors import (
@@ -238,34 +236,7 @@ def import_phys_resource(
     return actor_count, shape_count
 
 
-def import_phys(
-    filepath,
-    rig=None,
-    chassis_z=None,
-    target_collection=None,
-    actor_matrix=None,
-    context=None,
-):
-    with DocumentSession() as documents:
-        resource = PhysicsRepository(documents).load(filepath, required=True)
-    return import_phys_resource(
-        resource,
-        rig=rig,
-        chassis_z=chassis_z,
-        target_collection=target_collection,
-        actor_matrix=actor_matrix,
-        context=context,
-    )
-
-
-def import_phys_to_actor(filepath, target_obj, context):
-    try:
-        with DocumentSession() as documents:
-            resource = PhysicsRepository(documents).load(filepath, required=True)
-    except Exception as error:
-        _LOG.error("Unable to read physics resource: %s", error, exc_info=True)
-        return False
-
+def import_phys_resource_to_actor(resource, target_obj, context):
     if not resource.bodies:
         _LOG.error("Physics resource contains no bodies")
         return False
@@ -328,7 +299,7 @@ def import_phys_to_actor(filepath, target_obj, context):
             _LOG.warning("Unable to import %s: %s", collider_type, error, exc_info=True)
 
     if not imported:
-        _LOG.warning("No supported shapes were imported from %s", filepath)
+        _LOG.warning("No supported shapes were imported from %s", resource.source_path)
         return False
 
     scene_physx = getattr(context.scene, "physx", None)

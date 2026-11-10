@@ -5,8 +5,8 @@ import bpy
 
 from ...animation.domain.facial.validation import validate_setup
 from ...animation.model.facial.setup import TrackSegments
+from ...animation.model.rig.data import RigParseMode
 from ...animation.services.facial.repository import FacialRepository
-from ...animation.services.rig.parser import RigParseMode
 from ...assetio.cache import store_bounded
 from ...assetio.documents import DocumentSession, FileIdentity
 from ...assetio.paths import local_path_key
