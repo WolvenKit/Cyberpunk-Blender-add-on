@@ -12,6 +12,13 @@ from ...blender.context import (
 from ...blender.mesh import is_mesh
 from ...blender.operator_results import OperationResult, require_finished
 from ...blender.selection import select_objects
+from ...blender.transactions import (
+    remove_datablock_on_commit,
+    snapshot_datablocks,
+    track_created_since,
+    track_mesh_object,
+    transactional,
+)
 from ...core.log import get_logger
 from ..model import shared_mesh_refusal
 from ..ownership import is_owned, owned_source, tag_owned
@@ -158,6 +165,7 @@ def _restore_face_materials(mesh):
     mesh.attributes.remove(attribute)
 
 
+@transactional("Safe split")
 def safe_split(context):
     obj = context.active_object
     if not obj or not is_mesh(obj):
@@ -173,6 +181,8 @@ def safe_split(context):
         # The joined mesh is edited alone: separating splits every mesh in Edit Mode, and what it leaves selected are
         # the pieces.
         select_objects(obj, context=context)
+        track_mesh_object(obj)
+        before = snapshot_datablocks()
         safe_mode_switch("EDIT")
         # Selected in Edit Mode: Blender 5.0.0 can crash writing edge selection through the mesh data.
         require_finished(
@@ -182,6 +192,7 @@ def safe_split(context):
             bpy.ops.mesh.separate(type="MATERIAL"), "Separate mesh by material"
         )
         safe_mode_switch("OBJECT")
+        track_created_since(before)
         outputs = tuple(context.selected_objects)
         restored = 0
         warnings = []
@@ -197,7 +208,7 @@ def safe_split(context):
                     continue
                 original_name = owned_source(marker)
                 _restore_original_materials(new_obj, marker)
-                bpy.data.materials.remove(marker)
+                remove_datablock_on_commit("materials", marker)
                 if original_name:
                     names.append((new_obj, original_name))
                 restored += 1

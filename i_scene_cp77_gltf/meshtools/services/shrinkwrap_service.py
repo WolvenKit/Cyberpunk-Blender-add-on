@@ -10,6 +10,11 @@ from ...blender.context import (
 from ...blender.identity import real_users
 from ...blender.operator_results import OperationResult, require_finished
 from ...blender.shapekeys import has_shape_keys, shape_key_by_name
+from ...blender.transactions import (
+    track_mesh_object,
+    track_new_modifier,
+    transactional,
+)
 from ...core.log import get_logger
 from ...gltf.garment_support import GARMENT_SUPPORT_MORPH
 from ..model import ShrinkwrapRequest
@@ -19,6 +24,7 @@ from .shapekey_service import key_coordinates, move_with_basis, rest_shape
 _LOG = get_logger(__name__)
 
 
+@transactional("Shrinkwrap")
 def add_shrinkwrap(context, request: ShrinkwrapRequest):
     targets = get_collection_children(request.target_collection_name, "MESH")
     if targets is None:
@@ -66,7 +72,9 @@ def add_shrinkwrap(context, request: ShrinkwrapRequest):
                 changed += 1
                 continue
 
+            track_mesh_object(obj)
             modifier = obj.modifiers.new(name=key_name, type="SHRINKWRAP")
+            track_new_modifier(obj, modifier)
             if request.vertex_group:
                 modifier.vertex_group = request.vertex_group
             if request.as_garment_support:

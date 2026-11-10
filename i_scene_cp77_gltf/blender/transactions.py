@@ -679,27 +679,60 @@ def track_mesh_object(obj, *, label="mesh object"):
     transaction = current_import_transaction()
     if transaction is None or obj is None or obj.type != "MESH":
         return transaction
-    mesh = obj.data
-    name = mesh.name
     matrix = obj.matrix_basis.copy()
+
+    def restore_transform():
+        if rna_is_live(obj):
+            obj.matrix_basis = matrix
+
+    transaction.track_mutation(
+        ("object_transform", rna_identity(obj)), restore_transform, label=label
+    )
+    mesh = obj.data
+    key = ("mesh_data", rna_identity(mesh))
+    if transaction.tracks_mutation(key):
+        return transaction
+    name = mesh.name
     backup = mesh.copy()
 
-    def restore():
-        edited = obj.data
-        if edited is not backup:
-            edited.user_remap(backup)
-            if edited.users == 0:
-                bpy.data.meshes.remove(edited)
+    def restore_mesh():
+        if rna_is_live(mesh):
+            mesh.user_remap(backup)
+            bpy.data.meshes.remove(mesh)
         backup.name = name
-        obj.matrix_basis = matrix
 
     def discard_backup():
         if rna_is_live(backup):
             bpy.data.meshes.remove(backup)
 
-    transaction.track_mutation(("mesh_object", rna_identity(obj)), restore, label=label)
+    transaction.track_mutation(key, restore_mesh, label=label)
     transaction.defer_commit_cleanup(discard_backup)
     return transaction
+
+
+def track_new_modifier(obj, modifier, *, label="modifier"):
+    name = modifier.name
+
+    def restore():
+        added = obj.modifiers.get(name) if rna_is_live(obj) else None
+        if added is not None:
+            obj.modifiers.remove(added)
+
+    return track_mutation(("modifier", rna_identity(obj), name), restore, label=label)
+
+
+def remove_datablock_on_commit(collection_name, value):
+    transaction = current_import_transaction()
+    collection = getattr(bpy.data, collection_name)
+    if transaction is None:
+        collection.remove(value)
+        return
+
+    def remove():
+        if rna_is_live(value):
+            collection.remove(value)
+
+    transaction.defer_commit_cleanup(remove)
 
 
 def track_created_since(snapshot):
@@ -847,6 +880,9 @@ class DatablockImportTransaction:
             return
         self._mutation_keys.add(key)
         self._mutations.append(_MutationEntry(key, str(label), restore, verify))
+
+    def tracks_mutation(self, key):
+        return key in self._mutation_keys
 
     def defer_commit_cleanup(self, callback):
         """Release superseded data only after rollback no longer needs it"""

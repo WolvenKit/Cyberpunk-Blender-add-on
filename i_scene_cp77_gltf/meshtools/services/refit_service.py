@@ -10,6 +10,13 @@ from ...blender.context import (
 from ...blender.operator_results import OperationResult
 from ...blender.selection import selected_meshes
 from ...blender.shapekeys import has_shape_keys
+from ...blender.transactions import (
+    snapshot_datablocks,
+    track_created_since,
+    track_mesh_object,
+    track_new_modifier,
+    transactional,
+)
 from ...core.log import get_logger
 from ...gltf.garment_support import GARMENT_SUPPORT_MORPH
 from ..model import AutofitRequest
@@ -97,6 +104,7 @@ def resolve_refit_selection(context):
     return refitters, addons
 
 
+@transactional("Autofit")
 def run_autofit(context, request: AutofitRequest):
     try:
         target_body_path = resolve_refitter(request.base_choice)
@@ -152,6 +160,7 @@ def _run_autofit(
     if not selected:
         return OperationResult.cancelled("No meshes selected.")
 
+    before = snapshot_datablocks()
     collection = context.scene.collection.children.get("Refitters")
     if collection is None:
         collection = bpy.data.collections.new("Refitters")
@@ -186,6 +195,7 @@ def _run_autofit(
             )
             if addon_lattice:
                 addon_lattice["refitter_addon_type"] = addon_target_body_name
+    track_created_since(before)
 
     modified = 0
     refitted = set()
@@ -199,7 +209,9 @@ def _run_autofit(
             mod.type == "LATTICE" and mod.object == main_lattice
             for mod in mesh.modifiers
         ):
+            track_mesh_object(mesh)
             modifier = mesh.modifiers.new(main_lattice.name, "LATTICE")
+            track_new_modifier(mesh, modifier)
             modifier.object = main_lattice
             _deform_before_armature(mesh, modifier)
             added.append(modifier.name)
@@ -207,7 +219,9 @@ def _run_autofit(
             mod.type == "LATTICE" and mod.object == addon_lattice
             for mod in mesh.modifiers
         ):
+            track_mesh_object(mesh)
             modifier = mesh.modifiers.new(addon_lattice.name, "LATTICE")
+            track_new_modifier(mesh, modifier)
             modifier.object = addon_lattice
             _deform_before_armature(mesh, modifier)
             added.append(modifier.name)
