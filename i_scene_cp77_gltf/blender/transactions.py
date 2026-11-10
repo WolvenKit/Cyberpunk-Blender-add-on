@@ -675,6 +675,33 @@ def track_object_state(obj, *, label="object state"):
     return transaction
 
 
+def track_mesh_object(obj, *, label="mesh object"):
+    transaction = current_import_transaction()
+    if transaction is None or obj is None or obj.type != "MESH":
+        return transaction
+    mesh = obj.data
+    name = mesh.name
+    matrix = obj.matrix_basis.copy()
+    backup = mesh.copy()
+
+    def restore():
+        edited = obj.data
+        if edited is not backup:
+            edited.user_remap(backup)
+            if edited.users == 0:
+                bpy.data.meshes.remove(edited)
+        backup.name = name
+        obj.matrix_basis = matrix
+
+    def discard_backup():
+        if rna_is_live(backup):
+            bpy.data.meshes.remove(backup)
+
+    transaction.track_mutation(("mesh_object", rna_identity(obj)), restore, label=label)
+    transaction.defer_commit_cleanup(discard_backup)
+    return transaction
+
+
 def track_created_since(snapshot):
     """Track every datablock missing from a snapshot_datablocks() result as created"""
     transaction = current_import_transaction()

@@ -9,6 +9,7 @@ from ...blender.context import (
 )
 from ...blender.operator_results import OperationResult, require_finished
 from ...blender.selection import select_objects, selected_meshes
+from ...blender.transactions import track_mesh_object, transactional
 from ...core.log import get_logger
 from ..model import shared_mesh_refusal
 
@@ -49,6 +50,7 @@ def _world_face_normal(obj, index):
     ).normalized()
 
 
+@transactional("Mesh mirror")
 def mirror_selected_meshes_x(context):
     selected = selected_meshes(context)
     if not selected:
@@ -62,6 +64,7 @@ def mirror_selected_meshes_x(context):
         safe_mode_switch("OBJECT")
         count = 0
         for obj in selected:
+            track_mesh_object(obj)
             select_objects(obj, context=context, reveal=True)
             face = _largest_face(obj.data)
             expected = None
