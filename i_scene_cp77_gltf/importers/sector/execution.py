@@ -1159,15 +1159,16 @@ def _variant_lookup(variant_indices, node_data_count):
     )
 
 
-def _is_sector_collection(collection):
+def _collection_flag(collection, key):
     try:
-        return bool(collection.get("cp77_sector_path"))
+        return bool(collection.get(key))
     except (AttributeError, ReferenceError, TypeError) as error:
         log_once(
             _LOG,
             "DEBUG",
-            ("_is_sector_collection", type(error).__name__),
-            "is sector collection: fell back after %s",
+            ("_collection_flag", key, type(error).__name__),
+            "collection flag %s: fell back after %s",
+            key,
             error,
             exc_info=True,
         )
@@ -1176,7 +1177,11 @@ def _is_sector_collection(collection):
 
 def _sector_content_tree(root):
     """Collections owned by root"""
-    stack = [child for child in root.children if not _is_sector_collection(child)]
+    stack = [
+        child
+        for child in root.children
+        if not _collection_flag(child, "cp77_sector_path")
+    ]
     seen = set()
     while stack:
         collection = stack.pop()
@@ -1186,7 +1191,9 @@ def _sector_content_tree(root):
         seen.add(identity)
         yield collection
         stack.extend(
-            child for child in collection.children if not _is_sector_collection(child)
+            child
+            for child in collection.children
+            if not _collection_flag(child, "cp77_sector_path")
         )
 
 
@@ -1389,21 +1396,6 @@ def _relink_sector_light_channels(
     return channel_summary
 
 
-def _is_light_link_collection(collection):
-    try:
-        return bool(collection.get("cp77_light_link_scope"))
-    except (AttributeError, ReferenceError, TypeError) as error:
-        log_once(
-            _LOG,
-            "DEBUG",
-            ("_is_light_link_collection", type(error).__name__),
-            "is light link collection: fell back after %s",
-            error,
-            exc_info=True,
-        )
-        return False
-
-
 def _restore_replaced_names(renamed):
     indexes = {}
     for datablock, original in renamed:
@@ -1540,7 +1532,8 @@ def _remove_replaced_sector_content(replaced):
         for obj in objects
         if rna_is_live(obj)
         and all(
-            rna_identity(owner) in doomed_ids or _is_light_link_collection(owner)
+            rna_identity(owner) in doomed_ids
+            or _collection_flag(owner, "cp77_light_link_scope")
             for owner in owners.get(rna_identity(obj), ())
         )
     ]
@@ -1596,7 +1589,7 @@ def _detach_sector_content(sector_collection, replaced):
     top_children = tuple(
         child
         for child in sector_collection.children
-        if not _is_sector_collection(child)
+        if not _collection_flag(child, "cp77_sector_path")
     )
     top_objects = tuple(sector_collection.objects)
     if not top_children and not top_objects:
@@ -1932,7 +1925,7 @@ def _organize_sector_placements(
             semantic_name in protected
             or collection.name in protected
             or collection is variant_root
-            or _is_sector_collection(collection)
+            or _collection_flag(collection, "cp77_sector_path")
         ):
             continue
         target = destination(collection)

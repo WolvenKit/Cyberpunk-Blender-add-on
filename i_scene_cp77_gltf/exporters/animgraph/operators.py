@@ -6,6 +6,7 @@ import bpy
 
 from ...animation.model.animgraph.constants import ANIMGRAPH_TREE_ID
 from ...assetio import animgraph_json as json_io
+from ...assetio.paths import animgraph_json_path
 from ...blender.context import node_editor_tree
 from ...core.log import get_logger
 from ...core.notifications import report
@@ -38,6 +39,15 @@ def _write_text_block(
         except (AttributeError, RuntimeError) as error:
             _LOG.debug("Clipboard unavailable: %s", error)
     return text
+
+
+class AnimGraphExportPath:
+    def check(self, context):
+        normalized = animgraph_json_path(self.filepath)
+        if normalized != self.filepath:
+            self.filepath = normalized
+            return True
+        return False
 
 
 class REDENGINE_OT_encode_rootchunk_json(bpy.types.Operator):

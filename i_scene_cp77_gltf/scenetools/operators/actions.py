@@ -3,8 +3,7 @@ from __future__ import annotations
 from bpy.props import FloatProperty
 from bpy.types import Operator
 
-from ...core.log import get_logger
-from ...core.notifications import report
+from ...blender.operator_results import OperationResult, execute_operation
 from ..application.execution import (
     bake_environment,
     center_weather,
@@ -13,7 +12,27 @@ from ..application.execution import (
 )
 from ..runtime.ownership import scene_has_owned_runtime
 
-_LOG = get_logger(__name__)
+
+def _setup(context):
+    return OperationResult.finished(f"CP77 environment: {setup_environment(context)}")
+
+
+def _center_weather(context):
+    source = center_weather(context)
+    settings = context.scene.cp77_scene_tools
+    if settings.weather_follow_scene_camera:
+        settings.weather_follow_scene_camera = False
+    return OperationResult.finished(
+        f"Weather preview centered on {source.lower().replace('_', ' ')}"
+    )
+
+
+def _bake(context):
+    return OperationResult.finished(bake_environment(context))
+
+
+def _clear_bake(context):
+    return OperationResult.finished(clear_bake(context))
 
 
 class CP77_OT_SceneEnvironmentSetup(Operator):
@@ -22,19 +41,7 @@ class CP77_OT_SceneEnvironmentSetup(Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        try:
-            status = setup_environment(context)
-        except Exception as error:
-            report(
-                self,
-                "ERROR",
-                f"SceneTools setup failed: {error}",
-                logger=_LOG,
-                error=error,
-            )
-            return {"CANCELLED"}
-        report(self, "INFO", f"CP77 environment: {status}", logger=_LOG)
-        return {"FINISHED"}
+        return execute_operation(self, "SceneTools setup", _setup, context)
 
 
 class CP77_OT_SceneWeatherCenterView(Operator):
@@ -43,27 +50,7 @@ class CP77_OT_SceneWeatherCenterView(Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        try:
-            source = center_weather(context)
-        except Exception as error:
-            report(
-                self,
-                "ERROR",
-                f"Weather centering failed: {error}",
-                logger=_LOG,
-                error=error,
-            )
-            return {"CANCELLED"}
-        settings = context.scene.cp77_scene_tools
-        if settings.weather_follow_scene_camera:
-            settings.weather_follow_scene_camera = False
-        report(
-            self,
-            "INFO",
-            f"Weather preview centered on {source.lower().replace('_', ' ')}",
-            logger=_LOG,
-        )
-        return {"FINISHED"}
+        return execute_operation(self, "Weather centering", _center_weather, context)
 
 
 class CP77_OT_SceneTimeNudge(Operator):
@@ -90,19 +77,7 @@ class CP77_OT_SceneEnvironmentBake(Operator):
         return scene is not None and scene_has_owned_runtime(scene)
 
     def execute(self, context):
-        try:
-            status = bake_environment(context)
-        except Exception as error:
-            report(
-                self,
-                "ERROR",
-                f"Environment bake failed: {error}",
-                logger=_LOG,
-                error=error,
-            )
-            return {"CANCELLED"}
-        report(self, "INFO", status, logger=_LOG)
-        return {"FINISHED"}
+        return execute_operation(self, "Environment bake", _bake, context)
 
 
 class CP77_OT_SceneEnvironmentClearBake(Operator):
@@ -116,19 +91,7 @@ class CP77_OT_SceneEnvironmentClearBake(Operator):
         return scene is not None and scene_has_owned_runtime(scene)
 
     def execute(self, context):
-        try:
-            status = clear_bake(context)
-        except Exception as error:
-            report(
-                self,
-                "ERROR",
-                f"Clear environment bake failed: {error}",
-                logger=_LOG,
-                error=error,
-            )
-            return {"CANCELLED"}
-        report(self, "INFO", status, logger=_LOG)
-        return {"FINISHED"}
+        return execute_operation(self, "Clear environment bake", _clear_bake, context)
 
 
 ENVIRONMENT_OPERATOR_CLASSES = (

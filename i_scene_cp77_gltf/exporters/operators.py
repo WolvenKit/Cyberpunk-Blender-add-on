@@ -130,79 +130,8 @@ def _draw_mesh_validation_options(layout, operator):
         fixes.prop(operator, "fix_limit_influences")
 
 
-class CP77RigJSONExport(Operator, ExportHelper):
-    bl_idname = "export_scene.cp77_rig_export"
-    bl_label = "Export Rig Updates to JSON for Cyberpunk"
-    # The export leaves edit or pose mode for the write, which commits pending edit-mode bone changes.
-    bl_options = {"REGISTER", "UNDO"}
-    bl_description = "Export changes to Rigs exported from JSON back to JSON"
-    filename_ext = ".rig.json"
-    filter_glob: StringProperty(default="*.rig.json", options={"HIDDEN"})
-
-    def execute(self, context):
-        return execute_operation(
-            self, "Rig export", export_active_rig, context, self.filepath
-        )
-
-    def check(self, context):
-        # Ensure the file path ends with the correct extension
-        if not self.filepath.endswith(self.filename_ext):
-            self.filepath += self.filename_ext
-        return True
-
-
-class CP77StreamingSectorExport(Operator, ExportHelper):
-    bl_idname = "export_scene.cp77_sector"
-    bl_label = "Export Sector Updates for Cyberpunk"
-    bl_options = {"REGISTER"}
-    bl_description = "Export changes to Sectors back to project"
-    filename_ext = ".cpmodproj"
-    filter_glob: StringProperty(default="*.cpmodproj", options={"HIDDEN"})
-
-    def draw(self, context):
-        props = context.scene.cp77_panel_props
-        layout = self.layout
-        layout.prop(props, "axl_yaml")
-        layout.prop(props, "include_heightfields")
-
-    def execute(self, context):
-        props = context.scene.cp77_panel_props
-        return execute_operation(
-            self,
-            "Sector export",
-            export_project_sectors,
-            self.filepath,
-            props.axl_yaml,
-            include_heightfields=props.include_heightfields,
-        )
-
-
-class CP77CollectionExport(Operator, ExportHelper):
-    bl_idname = "export_scene.cp77_collection_glb"
-    bl_label = "Export for Cyberpunk"
-    bl_options = {"REGISTER"}
-    bl_description = "Export to GLB with optimized settings for use with Wolvenkit for Cyberpunk 2077"
-    filename_ext = ".glb"
-
-    directory: StringProperty(  # pyright: ignore[reportInvalidTypeForm]
-        name="Export Folder",
-        description="Folder where GLB files will be saved",
-        subtype="DIR_PATH",
-        default="",
-    )
-
-    only_visible: BoolProperty(  # pyright: ignore[reportInvalidTypeForm]
-        name="Only Visible",
-        default=False,
-        description="Check this to export only collections that are currently visible in view port",
-    )
-
-    is_skinned: BoolProperty(  # pyright: ignore[reportInvalidTypeForm]
-        name="Skinned Mesh",
-        default=True,
-        description="Ensure armatures and vert groups are exported.",
-    )
-    try_fix: BoolProperty(  # pyright: ignore[reportInvalidTypeForm]
+class ExportValidationProperties:
+    try_fix: BoolProperty(
         name="Try Fix",
         default=False,
         description="Enable selected repairs on temporary export copies",
@@ -256,6 +185,80 @@ class CP77CollectionExport(Operator, ExportHelper):
         default=False,
         description="Keep each vertex's 8 strongest bone influences on the temporary export copy and normalize "
         "them. This changes how those vertices deform",
+    )
+
+
+class CP77RigJSONExport(Operator, ExportHelper):
+    bl_idname = "export_scene.cp77_rig_export"
+    bl_label = "Export Rig Updates to JSON for Cyberpunk"
+    # The export leaves edit or pose mode for the write, which commits pending edit-mode bone changes.
+    bl_options = {"REGISTER", "UNDO"}
+    bl_description = "Export changes to Rigs exported from JSON back to JSON"
+    filename_ext = ".rig.json"
+    filter_glob: StringProperty(default="*.rig.json", options={"HIDDEN"})
+
+    def execute(self, context):
+        return execute_operation(
+            self, "Rig export", export_active_rig, context, self.filepath
+        )
+
+    def check(self, context):
+        # Ensure the file path ends with the correct extension
+        if not self.filepath.endswith(self.filename_ext):
+            self.filepath += self.filename_ext
+        return True
+
+
+class CP77StreamingSectorExport(Operator, ExportHelper):
+    bl_idname = "export_scene.cp77_sector"
+    bl_label = "Export Sector Updates for Cyberpunk"
+    bl_options = {"REGISTER"}
+    bl_description = "Export changes to Sectors back to project"
+    filename_ext = ".cpmodproj"
+    filter_glob: StringProperty(default="*.cpmodproj", options={"HIDDEN"})
+
+    def draw(self, context):
+        props = context.scene.cp77_panel_props
+        layout = self.layout
+        layout.prop(props, "axl_yaml")
+        layout.prop(props, "include_heightfields")
+
+    def execute(self, context):
+        props = context.scene.cp77_panel_props
+        return execute_operation(
+            self,
+            "Sector export",
+            export_project_sectors,
+            self.filepath,
+            props.axl_yaml,
+            include_heightfields=props.include_heightfields,
+        )
+
+
+class CP77CollectionExport(ExportValidationProperties, Operator, ExportHelper):
+    bl_idname = "export_scene.cp77_collection_glb"
+    bl_label = "Export for Cyberpunk"
+    bl_options = {"REGISTER"}
+    bl_description = "Export to GLB with optimized settings for use with Wolvenkit for Cyberpunk 2077"
+    filename_ext = ".glb"
+
+    directory: StringProperty(  # pyright: ignore[reportInvalidTypeForm]
+        name="Export Folder",
+        description="Folder where GLB files will be saved",
+        subtype="DIR_PATH",
+        default="",
+    )
+
+    only_visible: BoolProperty(  # pyright: ignore[reportInvalidTypeForm]
+        name="Only Visible",
+        default=False,
+        description="Check this to export only collections that are currently visible in view port",
+    )
+
+    is_skinned: BoolProperty(  # pyright: ignore[reportInvalidTypeForm]
+        name="Skinned Mesh",
+        default=True,
+        description="Ensure armatures and vert groups are exported.",
     )
 
     export_poses: BoolProperty(  # pyright: ignore[reportInvalidTypeForm]
@@ -450,7 +453,7 @@ class CP77_OT_set_action_export_selection(Operator):
         return {"FINISHED"}
 
 
-class CP77GLBExport(Operator, ExportHelper):
+class CP77GLBExport(ExportValidationProperties, Operator, ExportHelper):
     bl_idname = "export_scene.cp77_glb"
     bl_label = "Export for Cyberpunk"
     bl_options = {"REGISTER"}
@@ -471,61 +474,6 @@ class CP77GLBExport(Operator, ExportHelper):
         name="Skinned Mesh",
         default=True,
         description="Ensure armatures and vert groups are exported.",
-    )
-    try_fix: BoolProperty(
-        name="Try Fix",
-        default=False,
-        description="Enable selected repairs on temporary export copies",
-    )
-
-    advanced_validation: BoolProperty(
-        name="Additional Validation",
-        default=False,
-        description="Enable optional UV, degeneracy, weight and unused-bone checks",
-    )
-    check_missing_uv: BoolProperty(name="Require Active UV Layer", default=True)
-    check_degenerate_faces: BoolProperty(name="Check Degenerate Faces", default=True)
-    check_degenerate_uvs: BoolProperty(name="Check Degenerate UVs", default=False)
-    check_unweighted_vertices: BoolProperty(
-        name="Check Unweighted Vertices", default=True
-    )
-    check_unused_bones: BoolProperty(
-        name="Check Bones Without Vertex Groups",
-        default=False,
-        description="Check the armature against the union of vertex groups on exported submeshes",
-    )
-    fix_remove_unmatched_vertex_groups: BoolProperty(
-        name="Remove Vertex Groups Without Bones",
-        default=True,
-    )
-    fix_apply_autofitter_shape_keys: BoolProperty(
-        name="Bake Autofitter Shape Keys",
-        default=False,
-        description="Bake Autofitter keys at their current values into temporary export copies",
-    )
-    fix_add_missing_uv: BoolProperty(name="Add Missing UV Layer", default=True)
-    fix_dissolve_degenerate_faces: BoolProperty(
-        name="Dissolve Degenerate Faces/Vertices",
-        default=True,
-    )
-    fix_dissolve_degenerate_uvs: BoolProperty(
-        name="Dissolve UV-Degenerate Faces/Vertices",
-        default=False,
-    )
-    fix_assign_unweighted_vertices: BoolProperty(
-        name="Assign Unweighted Vertices to Root",
-        default=False,
-    )
-    fix_remove_unused_bones: BoolProperty(
-        name="Remove Bones Without Vertex Groups",
-        default=False,
-        description="Create a temporary armature, remove unmatched bones and reparent retained descendants",
-    )
-    fix_limit_influences: BoolProperty(
-        name="Limit Bone Influences",
-        default=False,
-        description="Keep each vertex's 8 strongest bone influences on the temporary export copy and normalize "
-        "them. This changes how those vertices deform",
     )
 
     export_poses: BoolProperty(

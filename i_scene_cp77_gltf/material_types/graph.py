@@ -12,6 +12,7 @@ from ..blender.identity import rna_identity
 from ..blender.mesh import TANGENT_SIGN_ATTRIBUTE, TANGENT_SIGN_VALID_ATTRIBUTE
 from ..blender.shader_nodes import assign_socket, mix_color_sockets
 from ..core.log import get_logger, log_once
+from ..materials.blender.nodes import create_node
 from .mat_common import find_input, get_or_build_node_group, new_labeled_node
 
 _LOG = get_logger(__name__)
@@ -23,6 +24,15 @@ def fract_socket(tree, source, location, label):
     ).node
     tree.links.new(source, node.inputs["Value"])
     return node.outputs["Value"]
+
+
+def combine_xyz_socket(tree, x, y, z=None, location=(0, 0), label="Vector"):
+    node = create_node(tree.nodes, "ShaderNodeCombineXYZ", location, label=label)
+    tree.links.new(x, node.inputs["X"])
+    tree.links.new(y, node.inputs["Y"])
+    if z is not None:
+        tree.links.new(z, node.inputs["Z"])
+    return node.outputs["Vector"]
 
 
 def add_bundle_items(node, items):

@@ -6,9 +6,10 @@ from .base import PoseOpHandler, resolve_bones, resolve_tracks
 
 class TwistConstraintHandler(PoseOpHandler):
     node_types = ("animAnimNode_TwistConstraint",)
+    bone_fields = ("transformA", "transformB")
 
     def map_data(self, context, program_node, node_type, data):
-        resolve_bones(context, data, ("transformA", "transformB"))
+        data = super().map_data(context, program_node, node_type, data)
         outputs = []
         for raw in data.get("outputs", ()):
             item = dict(raw)

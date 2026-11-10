@@ -79,27 +79,20 @@ class SectorNodeHandlerRegistry:
                 self._assign_role(binding, "placement_handler", handler)
         return handler
 
-    def register_dependencies(self, handler, *node_types):
-        if not callable(getattr(handler, "collect_dependencies", None)):
-            raise TypeError(f"{type(handler).__name__} has no collect_dependencies()")
+    def _register_role(self, handler, node_types, method, role):
+        if not callable(getattr(handler, method, None)):
+            raise TypeError(f"{type(handler).__name__} has no {method}()")
         for node_type in node_types:
-            self._assign_role(
-                self._binding(node_type),
-                "dependency_handler",
-                handler,
-            )
+            self._assign_role(self._binding(node_type), role, handler)
         return handler
 
+    def register_dependencies(self, handler, *node_types):
+        return self._register_role(
+            handler, node_types, "collect_dependencies", "dependency_handler"
+        )
+
     def register_placement(self, handler, *node_types):
-        if not callable(getattr(handler, "place", None)):
-            raise TypeError(f"{type(handler).__name__} has no place()")
-        for node_type in node_types:
-            self._assign_role(
-                self._binding(node_type),
-                "placement_handler",
-                handler,
-            )
-        return handler
+        return self._register_role(handler, node_types, "place", "placement_handler")
 
     def get(self, node_type):
         return self._bindings.get(str(node_type))

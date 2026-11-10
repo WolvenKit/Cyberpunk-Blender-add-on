@@ -374,7 +374,16 @@ class CP77MlSetupRelocateMesh(Operator):
         return {"RUNNING_MODAL"}
 
 
-class CP77_OT_LoadMaterialTemplate(Operator):
+class _DepotFileBrowser:
+    def invoke(self, context, _event):
+        depot_root = ensure_material_depot_path(context)
+        if depot_root and os.path.isdir(depot_root):
+            self.filepath = os.path.join(depot_root, "")
+        context.window_manager.fileselect_add(self)
+        return {"RUNNING_MODAL"}
+
+
+class CP77_OT_LoadMaterialTemplate(_DepotFileBrowser, Operator):
     bl_idname = "cp77.load_material_template"
     bl_label = "Load Material Template"
     bl_description = "Create a Blender material from an exported Cyberpunk .mt template"
@@ -385,13 +394,6 @@ class CP77_OT_LoadMaterialTemplate(Operator):
         default=f"*{MATERIAL_TEMPLATE_EXTENSION};*{MATERIAL_TEMPLATE_COOKED_EXTENSION}",
         options={"HIDDEN"},
     )
-
-    def invoke(self, context, _event):
-        depot_root = ensure_material_depot_path(context)
-        if depot_root and os.path.isdir(depot_root):
-            self.filepath = os.path.join(depot_root, "")
-        context.window_manager.fileselect_add(self)
-        return {"RUNNING_MODAL"}
 
     @import_operation
     def execute(self, context):
@@ -422,7 +424,7 @@ class CP77_OT_LoadMaterialTemplate(Operator):
             return {"CANCELLED"}
 
 
-class CP77_OT_LoadMultilayerTemplate(Operator):
+class CP77_OT_LoadMultilayerTemplate(_DepotFileBrowser, Operator):
     bl_idname = "cp77.load_multilayer_template"
     bl_label = "Add Multilayer Template"
     bl_description = (
@@ -434,13 +436,6 @@ class CP77_OT_LoadMultilayerTemplate(Operator):
     filter_glob: StringProperty(
         default=f"*{MULTILAYER_TEMPLATE_EXTENSION}", options={"HIDDEN"}
     )
-
-    def invoke(self, context, _event):
-        root = ensure_material_depot_path(context)
-        if root and os.path.isdir(root):
-            self.filepath = os.path.join(root, "")
-        context.window_manager.fileselect_add(self)
-        return {"RUNNING_MODAL"}
 
     @import_operation
     def execute(self, context):

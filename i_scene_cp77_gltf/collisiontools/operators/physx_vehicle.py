@@ -1,6 +1,10 @@
 import bpy
 
-from ...blender.operator_results import OperationResult, finish_operator
+from ...blender.operator_results import (
+    OperationResult,
+    execute_operation,
+    finish_operator,
+)
 from ...blender.physics.vehicle_phys import load_vehicle_phys, vehicle_phys_preflight
 from ...core.log import debug_exception, get_logger, log_once
 from ...core.notifications import import_operation, report
@@ -88,20 +92,31 @@ class PHYSX_OT_vehicle_setup_manual(bpy.types.Operator):
         return finish_operator(self, setup_vehicle_manual(context))
 
 
+def _refresh_bike(vehicle):
+    refresh_bike(vehicle)
+    return OperationResult.finished("Bike geometry refreshed")
+
+
+def _validate_vehicle(context):
+    vehicle = context.scene.physx_vehicle
+    try:
+        _store_validation_state(vehicle)
+    except Exception as error:
+        vehicle.validation_state = "ERROR"
+        vehicle.validation_errors = str(error)
+        vehicle.validation_warnings = ""
+        raise
+    return validate_vehicle_configuration(context)
+
+
 class PHYSX_OT_vehicle_autofit(bpy.types.Operator):
     bl_idname = "physx.vehicle_autofit"
     bl_label = "Refresh and Fit"
 
     def execute(self, context):
         if context.scene.physx_vehicle.vehicle_kind == "BIKE":
-            try:
-                refresh_bike(context.scene.physx_vehicle)
-            except Exception as error:
-                return finish_operator(
-                    self, OperationResult.cancelled(str(error), error=error)
-                )
-            return finish_operator(
-                self, OperationResult.finished("Bike geometry refreshed")
+            return execute_operation(
+                self, "Bike refresh", _refresh_bike, context.scene.physx_vehicle
             )
         return finish_operator(self, autofit_vehicle_configuration(context))
 
@@ -236,17 +251,7 @@ class PHYSX_OT_vehicle_validate(bpy.types.Operator):
     bl_description = "Run production validation and keep the result visible in the vehicle authoring workspace"
 
     def execute(self, context):
-        vehicle = context.scene.physx_vehicle
-        try:
-            _store_validation_state(vehicle)
-        except Exception as error:
-            vehicle.validation_state = "ERROR"
-            vehicle.validation_errors = str(error)
-            vehicle.validation_warnings = ""
-            return finish_operator(
-                self, OperationResult.cancelled(str(error), error=error)
-            )
-        return finish_operator(self, validate_vehicle_configuration(context))
+        return execute_operation(self, "Vehicle validation", _validate_vehicle, context)
 
 
 class PHYSX_OT_vehicle_load_game_data(bpy.types.Operator):

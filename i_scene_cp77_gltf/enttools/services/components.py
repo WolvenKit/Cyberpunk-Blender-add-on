@@ -51,6 +51,19 @@ class EditError(RuntimeError):
     """An edit that cannot be applied"""
 
 
+def _track_new_component(collection, index, name, kind):
+    def forget():
+        components = collection.cp77_entity_state.components
+        if len(components) > index and components[index].name == name:
+            components.remove(index)
+
+    track_mutation(
+        (kind, rna_identity(collection), name),
+        forget,
+        label="Entity component",
+    )
+
+
 def _live_items(state):
     return [item for item in state.components if not item.removed]
 
@@ -431,18 +444,7 @@ def add_component(collection, objects, *, name: str) -> OperationResult:
         item.skin_target = (
             template.skin_target if item.type_key in SKINNED_TYPES else ""
         )
-    index = len(state.components) - 1
-
-    def forget():
-        components = collection.cp77_entity_state.components
-        if len(components) > index and components[index].name == name:
-            components.remove(index)
-
-    track_mutation(
-        ("enttools-added", rna_identity(collection), name),
-        forget,
-        label="Entity component",
-    )
+    _track_new_component(collection, len(state.components) - 1, name, "enttools-added")
     for obj in meshes:
         obj[COMPONENT_NAME_KEY] = name
     try:
@@ -605,17 +607,8 @@ def duplicate_component(collection, index: int, *, name: str) -> OperationResult
             source.mesh if mesh != source.mesh else ""
         )
         item.mesh_collection, item.mesh_collection_name = holder, holder.name
-    added = len(state.components) - 1
-
-    def forget():
-        components = collection.cp77_entity_state.components
-        if len(components) > added and components[added].name == name:
-            components.remove(added)
-
-    track_mutation(
-        ("enttools-duplicated", rna_identity(collection), name),
-        forget,
-        label="Entity component",
+    _track_new_component(
+        collection, len(state.components) - 1, name, "enttools-duplicated"
     )
     remember_applied(item)
     return OperationResult.finished(f"Duplicated {source.name} as {name}.")

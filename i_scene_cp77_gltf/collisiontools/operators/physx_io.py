@@ -1,6 +1,10 @@
 import bpy
 
-from ...blender.operator_results import OperationResult, finish_operator
+from ...blender.operator_results import (
+    OperationResult,
+    execute_operation,
+    finish_operator,
+)
 from ...blender.physics.cooked_shapes import import_cooked_shape, import_native_scene
 from ...blender.physics.resources import import_phys, import_phys_to_actor
 from ...core.notifications import import_operation
@@ -8,6 +12,64 @@ from ...exporters.collision.heightfield import export_selected_heightfields
 from ...exporters.collision.physx_actor import export_actor_item_to_phys
 from ...exporters.collision.physx_binary import export_cooked_shape, export_native_scene
 from ...physics.domain.resource_paths import normalize_phys_json_path
+
+
+def _export_actor(actor, filepath):
+    export_actor_item_to_phys(actor, filepath)
+    return OperationResult.finished(f"Exported: {actor.obj_ref.name}")
+
+
+def _import_phys(context, filepath):
+    actor_count, shape_count = import_phys(filepath, context=context)
+    if not actor_count or not shape_count:
+        return OperationResult.cancelled("No supported physics actors were imported.")
+    context.scene.physx.ui_tab = "ACTORS"
+    return OperationResult.finished(
+        f"Imported {actor_count} .phys actor(s) with {shape_count} shape(s)"
+    )
+
+
+def _choose_target_object(filepath):
+    result = bpy.ops.physx.confirm_import_to_actor("INVOKE_DEFAULT", filepath=filepath)
+    return (
+        OperationResult.cancelled()
+        if "CANCELLED" in result
+        else OperationResult.finished()
+    )
+
+
+def _export_heightfields(context, filepath):
+    count, written = export_selected_heightfields(context, filepath)
+    return OperationResult.finished(
+        f"Exported {count} heightfield shape(s) to {written}"
+    )
+
+
+def _active_shape(context):
+    obj = context.object
+    if not obj or not obj.physx.shapes:
+        return None
+    return obj.physx.shapes[obj.physx.shape_index]
+
+
+def _save_cooked(shape, filepath):
+    byte_count = export_cooked_shape(shape, filepath)
+    return OperationResult.finished(f"Saved cooked geometry: {byte_count} bytes")
+
+
+def _load_cooked(shape, filepath):
+    byte_count = import_cooked_shape(shape, filepath)
+    return OperationResult.finished(f"Loaded cooked geometry: {byte_count} bytes")
+
+
+def _export_scene(context, filepath):
+    export_native_scene(filepath, context)
+    return OperationResult.finished(f"Scene Exported to {filepath}")
+
+
+def _import_scene(context, filepath):
+    import_native_scene(filepath, context)
+    return OperationResult.finished("Scene Imported successfully")
 
 
 class PHYSX_OT_export_phys(bpy.types.Operator):
@@ -42,14 +104,8 @@ class PHYSX_OT_export_phys(bpy.types.Operator):
             return finish_operator(
                 self, OperationResult.cancelled("Actor object is missing.")
             )
-        try:
-            export_actor_item_to_phys(actor, self.filepath)
-        except Exception as error:
-            return finish_operator(
-                self, OperationResult.cancelled(str(error), error=error)
-            )
-        return finish_operator(
-            self, OperationResult.finished(f"Exported: {actor.obj_ref.name}")
+        return execute_operation(
+            self, ".phys export", _export_actor, actor, self.filepath
         )
 
     def invoke(self, context, event):
@@ -75,23 +131,8 @@ class PHYSX_OT_import_phys(bpy.types.Operator):
 
     @import_operation
     def execute(self, context):
-        try:
-            actor_count, shape_count = import_phys(self.filepath, context=context)
-        except Exception as error:
-            return finish_operator(
-                self, OperationResult.cancelled(str(error), error=error)
-            )
-        if not actor_count or not shape_count:
-            return finish_operator(
-                self,
-                OperationResult.cancelled("No supported physics actors were imported."),
-            )
-        context.scene.physx.ui_tab = "ACTORS"
-        return finish_operator(
-            self,
-            OperationResult.finished(
-                f"Imported {actor_count} .phys actor(s) with {shape_count} shape(s)"
-            ),
+        return execute_operation(
+            self, ".phys import", _import_phys, context, self.filepath
         )
 
     def invoke(self, context, event):
@@ -151,15 +192,9 @@ class PHYSX_OT_import_phys_to_actor(bpy.types.Operator):
 
     @import_operation
     def execute(self, context):
-        try:
-            result = bpy.ops.physx.confirm_import_to_actor(
-                "INVOKE_DEFAULT", filepath=self.filepath
-            )
-        except RuntimeError as error:
-            return finish_operator(
-                self, OperationResult.cancelled(str(error), error=error)
-            )
-        return {"CANCELLED"} if "CANCELLED" in result else {"FINISHED"}
+        return execute_operation(
+            self, "Attaching .phys", _choose_target_object, self.filepath
+        )
 
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
@@ -178,17 +213,8 @@ class PHYSX_OT_export_heightfields(bpy.types.Operator):
     )
 
     def execute(self, context):
-        try:
-            count, filepath = export_selected_heightfields(context, self.filepath)
-        except Exception as error:
-            return finish_operator(
-                self, OperationResult.cancelled(str(error), error=error)
-            )
-        return finish_operator(
-            self,
-            OperationResult.finished(
-                f"Exported {count} heightfield shape(s) to {filepath}"
-            ),
+        return execute_operation(
+            self, "Heightfield export", _export_heightfields, context, self.filepath
         )
 
     def invoke(self, context, event):
@@ -204,18 +230,11 @@ class PHYSX_OT_save_cooked(bpy.types.Operator):
     filepath: bpy.props.StringProperty(subtype="FILE_PATH")
 
     def execute(self, context):
-        obj = context.object
-        if not obj or not obj.physx.shapes:
+        shape = _active_shape(context)
+        if shape is None:
             return {"CANCELLED"}
-        shape = obj.physx.shapes[obj.physx.shape_index]
-        try:
-            byte_count = export_cooked_shape(shape, self.filepath)
-        except Exception as error:
-            return finish_operator(
-                self, OperationResult.cancelled(str(error), error=error)
-            )
-        return finish_operator(
-            self, OperationResult.finished(f"Saved cooked geometry: {byte_count} bytes")
+        return execute_operation(
+            self, "Cooked geometry export", _save_cooked, shape, self.filepath
         )
 
     def invoke(self, context, event):
@@ -234,19 +253,11 @@ class PHYSX_OT_load_cooked(bpy.types.Operator):
 
     @import_operation
     def execute(self, context):
-        obj = context.object
-        if not obj or not obj.physx.shapes:
+        shape = _active_shape(context)
+        if shape is None:
             return {"CANCELLED"}
-        shape = obj.physx.shapes[obj.physx.shape_index]
-        try:
-            byte_count = import_cooked_shape(shape, self.filepath)
-        except Exception as error:
-            return finish_operator(
-                self, OperationResult.cancelled(str(error), error=error)
-            )
-        return finish_operator(
-            self,
-            OperationResult.finished(f"Loaded cooked geometry: {byte_count} bytes"),
+        return execute_operation(
+            self, "Cooked geometry import", _load_cooked, shape, self.filepath
         )
 
     def invoke(self, context, event):
@@ -261,14 +272,8 @@ class PHYSX_OT_export_scene(bpy.types.Operator):
     filepath: bpy.props.StringProperty(subtype="FILE_PATH")
 
     def execute(self, context):
-        try:
-            export_native_scene(self.filepath, context)
-        except Exception as error:
-            return finish_operator(
-                self, OperationResult.cancelled(str(error), error=error)
-            )
-        return finish_operator(
-            self, OperationResult.finished(f"Scene Exported to {self.filepath}")
+        return execute_operation(
+            self, "Binary scene export", _export_scene, context, self.filepath
         )
 
     def invoke(self, context, event):
@@ -284,14 +289,8 @@ class PHYSX_OT_import_scene(bpy.types.Operator):
 
     @import_operation
     def execute(self, context):
-        try:
-            import_native_scene(self.filepath, context)
-        except Exception as error:
-            return finish_operator(
-                self, OperationResult.cancelled(str(error), error=error)
-            )
-        return finish_operator(
-            self, OperationResult.finished("Scene Imported successfully")
+        return execute_operation(
+            self, "Binary scene import", _import_scene, context, self.filepath
         )
 
     def invoke(self, context, event):

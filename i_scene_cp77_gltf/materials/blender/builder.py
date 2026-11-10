@@ -93,28 +93,16 @@ def _record_material_organization_phases(timings):
         _MATERIAL_ORGANIZATION_PHASE_TIMINGS[str(name)] += max(0.0, float(seconds))
 
 
-def _record_material_handler_timing(name, template_path, seconds):
+def _record_material_timing(tables, name, template_path, seconds):
     elapsed = max(0.0, float(seconds))
     handler_name = str(name or "<unknown>")
-    values = _MATERIAL_HANDLER_TIMINGS[handler_name]
-    values[0] += elapsed
-    values[1] += 1
-    template_key = f"{handler_name}:{template_path or '<unknown>'!s}"
-    values = _MATERIAL_TEMPLATE_TIMINGS[template_key]
-    values[0] += elapsed
-    values[1] += 1
-
-
-def _record_material_organization_timing(name, template_path, seconds):
-    elapsed = max(0.0, float(seconds))
-    handler_name = str(name or "<unknown>")
-    values = _MATERIAL_HANDLER_ORGANIZATION_TIMINGS[handler_name]
-    values[0] += elapsed
-    values[1] += 1
-    template_key = f"{handler_name}:{template_path or '<unknown>'!s}"
-    values = _MATERIAL_TEMPLATE_ORGANIZATION_TIMINGS[template_key]
-    values[0] += elapsed
-    values[1] += 1
+    handler_table, template_table = tables
+    for values in (
+        handler_table[handler_name],
+        template_table[f"{handler_name}:{template_path or '<unknown>'!s}"],
+    ):
+        values[0] += elapsed
+        values[1] += 1
 
 
 _BUNDLING_FAILED = {}
@@ -544,7 +532,8 @@ class MaterialBuilder:
             )
             self._remove_failed_material(material)
             return None
-        _record_material_handler_timing(
+        _record_material_timing(
+            (_MATERIAL_HANDLER_TIMINGS, _MATERIAL_TEMPLATE_TIMINGS),
             f"{type(handler).__name__} (shape copy)",
             raw_material.get("MaterialTemplate", ""),
             time.perf_counter() - started,
@@ -644,7 +633,8 @@ class MaterialBuilder:
                     instance.create(create_data, bpyMat)
                     bundled = _bundle_surface_links(bpyMat)
             finally:
-                _record_material_handler_timing(
+                _record_material_timing(
+                    (_MATERIAL_HANDLER_TIMINGS, _MATERIAL_TEMPLATE_TIMINGS),
                     handler_name,
                     template_path,
                     time.perf_counter() - coarse_handler_started,
@@ -667,7 +657,11 @@ class MaterialBuilder:
                 _record_material_organization_phases(
                     organization_stats.get("timings", {})
                 )
-                _record_material_organization_timing(
+                _record_material_timing(
+                    (
+                        _MATERIAL_HANDLER_ORGANIZATION_TIMINGS,
+                        _MATERIAL_TEMPLATE_ORGANIZATION_TIMINGS,
+                    ),
                     handler_name,
                     template_path,
                     time.perf_counter() - coarse_organization_started,

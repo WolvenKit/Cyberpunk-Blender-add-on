@@ -116,12 +116,17 @@ class PoseNodeHandler:
     """Plans and evaluates one pose-processing node type inside a preview chain"""
 
     label = ""
+    red_type = ""
 
     def spec(self, node, tree):
         raise NotImplementedError
 
+    def handler_bone_names(self, data, red_type=None) -> set[str]:
+        handler = POSE_OP_HANDLERS.get(red_type or self.red_type)
+        return {text(data, key) for key in getattr(handler, "bone_fields", ())}
+
     def bone_names(self, spec) -> set[str]:
-        return set()
+        return self.handler_bone_names(spec.data)
 
     def optional_bone_names(self, spec) -> set[str]:
         return set()

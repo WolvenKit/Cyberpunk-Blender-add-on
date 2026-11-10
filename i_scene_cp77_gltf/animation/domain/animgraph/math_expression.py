@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
+from ....bartmoss.quaternion import axis_angle_scalar_xyzw
 from ....bartmoss.scalar import all_finite
+from ....bartmoss.vector3 import cross3, dot3, length3
+from ....redSpace.euler import euler_from_xyzw, xyzw_from_euler
 from ...model.animgraph.indices import index_name
 from ...model.animgraph.math_expression import (
     expression_payload,
@@ -157,33 +160,14 @@ def _vector_div(vector, scalar):
     )
 
 
-def _dot(left, right):
-    a, b = as_vector(left), as_vector(right)
-    return a.x * b.x + a.y * b.y + a.z * b.z
-
-
-def _cross(left, right):
-    a, b = as_vector(left), as_vector(right)
-    return _Vec4(
-        a.y * b.z - a.z * b.y,
-        a.z * b.x - a.x * b.z,
-        a.x * b.y - a.y * b.x,
-        1.0,
-    )
-
-
 def _length_sq(value):
-    v = as_vector(value)
-    return v.x * v.x + v.y * v.y + v.z * v.z
-
-
-def _length(value):
-    return math.sqrt(_length_sq(value))
+    v = as_vector(value).tuple()
+    return dot3(v, v)
 
 
 def _norm(value):
     v = as_vector(value)
-    magnitude = _length(v)
+    magnitude = length3(v.tuple())
     if magnitude == 0.0:
         return v
     return _Vec4(v.x / magnitude, v.y / magnitude, v.z / magnitude, v.w)
@@ -254,65 +238,22 @@ def _compare(left, right, operation):
 
 
 def _axis_angle(axis, angle_degrees):
-    vector = as_vector(axis)
-    half = math.radians(as_scalar(angle_degrees)) * 0.5
-    sine = math.sin(half)
-    return _Quat(vector.x * sine, vector.y * sine, vector.z * sine, math.cos(half))
-
-
-def _axis_quaternion(axis, angle_degrees):
-    half = math.radians(as_scalar(angle_degrees)) * 0.5
-    sine = math.sin(half)
-    x, y, z = axis
-    return _Quat(x * sine, y * sine, z * sine, math.cos(half))
+    return _Quat(
+        *axis_angle_scalar_xyzw(
+            as_vector(axis).tuple()[:3], math.radians(as_scalar(angle_degrees))
+        )
+    )
 
 
 def _rot_euler(roll_degrees, pitch_degrees, yaw_degrees):
-    roll = _axis_quaternion((0.0, 1.0, 0.0), roll_degrees)
-    pitch = _axis_quaternion((1.0, 0.0, 0.0), pitch_degrees)
-    yaw = _axis_quaternion((0.0, 0.0, 1.0), yaw_degrees)
-    return yaw * pitch * roll
-
-
-def _quat_pitch(value):
-    q = as_quaternion(value)
-    y2, z2 = q.y * q.y, q.z * q.z
-    unit_length = q.w * q.w + q.x * q.x + y2 + z2
-    wxyz = q.w * q.x + q.y * q.z
-    eps = 0.001
-    if wxyz > (0.5 - eps) * unit_length:
-        return 90.0
-    if wxyz < (-0.5 + eps) * unit_length:
-        return -90.0
-    return math.degrees(math.asin(2.0 * wxyz / unit_length))
-
-
-def _quat_yaw(value):
-    q = as_quaternion(value)
-    x2, z2 = q.x * q.x, q.z * q.z
-    unit_length = q.w * q.w + x2 + q.y * q.y + z2
-    wxyz = q.w * q.x + q.y * q.z
-    eps = 0.001
-    if wxyz > (0.5 - eps) * unit_length:
-        return math.degrees(2.0 * math.atan2(q.y, q.w))
-    if wxyz < (-0.5 + eps) * unit_length:
-        return math.degrees(-2.0 * math.atan2(q.y, q.w))
-    return math.degrees(
-        math.atan2(2.0 * (q.w * q.z - q.x * q.y), 1.0 - 2.0 * (z2 + x2))
+    rotation = xyzw_from_euler(
+        as_scalar(pitch_degrees), as_scalar(roll_degrees), as_scalar(yaw_degrees)
     )
+    return _Quat(*(float(component) for component in rotation))
 
 
-def _quat_roll(value):
-    q = as_quaternion(value)
-    x2, y2 = q.x * q.x, q.y * q.y
-    unit_length = q.w * q.w + x2 + y2 + q.z * q.z
-    wxyz = q.w * q.x + q.y * q.z
-    eps = 0.001
-    if wxyz > (0.5 - eps) * unit_length or wxyz < (-0.5 + eps) * unit_length:
-        return 0.0
-    return math.degrees(
-        math.atan2(2.0 * (q.w * q.y - q.x * q.z), 1.0 - 2.0 * (y2 + x2))
-    )
+def _euler(value):
+    return euler_from_xyzw(as_quaternion(value).tuple())
 
 
 def _degrees_sin(value):
@@ -418,9 +359,18 @@ _OPERATORS = {
         VECTOR,
         lambda scalar, vector: _vector_div(vector, scalar),
     ),
-    _operator_key("dot", VECTOR, VECTOR): (SCALAR, _dot),
-    _operator_key("cross", VECTOR, VECTOR): (VECTOR, _cross),
-    _operator_key("length", VECTOR): (SCALAR, _length),
+    _operator_key("dot", VECTOR, VECTOR): (
+        SCALAR,
+        lambda a, b: dot3(as_vector(a).tuple(), as_vector(b).tuple()),
+    ),
+    _operator_key("cross", VECTOR, VECTOR): (
+        VECTOR,
+        lambda a, b: _Vec4(*cross3(as_vector(a).tuple(), as_vector(b).tuple())),
+    ),
+    _operator_key("length", VECTOR): (
+        SCALAR,
+        lambda v: length3(as_vector(v).tuple()),
+    ),
     _operator_key("lengthSq", VECTOR): (SCALAR, _length_sq),
     _operator_key("norm", VECTOR): (VECTOR, _norm),
     _operator_key("lerp", VECTOR, VECTOR, SCALAR): (VECTOR, _lerp),
@@ -453,9 +403,9 @@ _OPERATORS = {
     _operator_key("getZ", VECTOR): (SCALAR, lambda v: as_vector(v).z),
     _operator_key("Rot", VECTOR, SCALAR): (QUATERNION, _axis_angle),
     _operator_key("Rot", SCALAR, SCALAR, SCALAR): (QUATERNION, _rot_euler),
-    _operator_key("getRoll", QUATERNION): (SCALAR, _quat_roll),
-    _operator_key("getPitch", QUATERNION): (SCALAR, _quat_pitch),
-    _operator_key("getYaw", QUATERNION): (SCALAR, _quat_yaw),
+    _operator_key("getRoll", QUATERNION): (SCALAR, lambda q: _euler(q)[1]),
+    _operator_key("getPitch", QUATERNION): (SCALAR, lambda q: _euler(q)[0]),
+    _operator_key("getYaw", QUATERNION): (SCALAR, lambda q: _euler(q)[2]),
     _operator_key("&", SCALAR, SCALAR): (SCALAR, _logical_and),
     _operator_key("|", SCALAR, SCALAR): (SCALAR, _logical_or),
     _operator_key("xor", SCALAR, SCALAR): (SCALAR, _logical_xor),
