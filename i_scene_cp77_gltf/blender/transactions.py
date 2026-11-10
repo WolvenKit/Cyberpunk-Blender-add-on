@@ -722,6 +722,51 @@ def track_new_modifier(obj, modifier, *, label="modifier"):
     return track_mutation(("modifier", rna_identity(obj), name), restore, label=label)
 
 
+def _reachable_node_groups(tree):
+    found, seen, pending = [], set(), [tree]
+    while pending:
+        current = pending.pop(0)
+        for node in current.nodes:
+            group = getattr(node, "node_tree", None)
+            if group is not None and rna_identity(group) not in seen:
+                seen.add(rna_identity(group))
+                found.append(group)
+                pending.append(group)
+    return found
+
+
+def track_node_tree(tree, *, before_restore=None, label="node tree"):
+    transaction = current_import_transaction()
+    if transaction is None or tree is None:
+        return
+    key = ("node_tree", rna_identity(tree))
+    if transaction.tracks_mutation(key):
+        return
+    snapshot = tree.copy()
+    transaction.keep_datablock("node_groups", snapshot)
+    name = tree.name
+
+    def restore():
+        if before_restore is not None:
+            before_restore()
+        if rna_is_live(tree):
+            tree.user_remap(snapshot)
+            bpy.data.node_groups.remove(tree)
+        snapshot.name = name
+
+    def drop_snapshot():
+        if not rna_is_live(snapshot):
+            return
+        reachable = _reachable_node_groups(snapshot)
+        bpy.data.node_groups.remove(snapshot)
+        for group in reachable:
+            if rna_is_live(group) and group.users == 0:
+                bpy.data.node_groups.remove(group)
+
+    transaction.track_mutation(key, restore, label=label)
+    transaction.defer_commit_cleanup(drop_snapshot)
+
+
 def remove_datablock_on_commit(collection_name, value):
     transaction = current_import_transaction()
     collection = getattr(bpy.data, collection_name)
@@ -884,6 +929,10 @@ class DatablockImportTransaction:
 
     def tracks_mutation(self, key):
         return key in self._mutation_keys
+
+    def keep_datablock(self, collection_name, value):
+        kept = self._snapshot.get(collection_name, frozenset()) | {rna_identity(value)}
+        self._snapshot = {**self._snapshot, collection_name: kept}
 
     def defer_commit_cleanup(self, callback):
         """Release superseded data only after rollback no longer needs it"""

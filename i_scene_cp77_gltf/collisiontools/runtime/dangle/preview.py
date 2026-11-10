@@ -386,14 +386,23 @@ def unregister_preview_session(key):
         )
 
 
-def stop_orphaned_previews():
-    """Stop every whole-graph preview whose graph tree no longer exists"""
+def _stop_graph_sessions(matches):
     for key, tree_name in tuple(_SESSION_GRAPHS.items()):
-        if tree_name not in bpy.data.node_groups:
+        if matches(tree_name):
             stop_callback = _ACTIVE_PREVIEW_SESSIONS.get(key)
             if stop_callback is not None:
                 stop_callback(None, False)
             unregister_preview_session(key)
+
+
+def stop_orphaned_previews():
+    """Stop every whole-graph preview whose graph tree no longer exists"""
+    _stop_graph_sessions(lambda tree_name: tree_name not in bpy.data.node_groups)
+
+
+def stop_graph_preview(graph_tree):
+    name = binding_tree(graph_tree).name
+    _stop_graph_sessions(lambda tree_name: tree_name == name)
 
 
 def graph_runtime(graph_tree):

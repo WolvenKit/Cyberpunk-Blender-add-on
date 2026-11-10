@@ -1,5 +1,8 @@
 import bpy
 
+from .identity import rna_identity, rna_is_live
+from .transactions import track_mutation
+
 
 def _find_layer_collection_by_name(name, collection):
     if collection.name == name:
@@ -25,6 +28,53 @@ def selected_meshes(context=None, *, include_active=False):
     return [active] if getattr(active, "type", None) == "MESH" else []
 
 
+def _attribute_restore(owner, attribute, value):
+    def restore():
+        if rna_is_live(owner):
+            setattr(owner, attribute, value)
+
+    return restore
+
+
+def _layer_restore(view_layer, collection, attribute, value):
+    def restore():
+        if not (rna_is_live(view_layer) and rna_is_live(collection)):
+            return
+        found = _find_layer_collection_by_name(
+            collection.name, view_layer.layer_collection
+        )
+        if found is not None:
+            setattr(found, attribute, value)
+
+    return restore
+
+
+def _hide_restore(obj, view_layer):
+    def restore():
+        if rna_is_live(obj) and rna_is_live(view_layer):
+            obj.hide_set(True, view_layer=view_layer)
+
+    return restore
+
+
+def _clear_flag(owner, attribute, restore):
+    if getattr(owner, attribute):
+        track_mutation((attribute, rna_identity(owner)), restore, label=attribute)
+        setattr(owner, attribute, False)
+
+
+def _clear_id_flag(owner, attribute):
+    _clear_flag(owner, attribute, _attribute_restore(owner, attribute, True))
+
+
+def _clear_layer_flag(view_layer, layer_collection, attribute):
+    _clear_flag(
+        layer_collection,
+        attribute,
+        _layer_restore(view_layer, layer_collection.collection, attribute, True),
+    )
+
+
 def set_active_collection(collection, context=None):
     context = context or bpy.context
     found = _find_layer_collection_by_name(
@@ -33,22 +83,23 @@ def set_active_collection(collection, context=None):
     if found is None:
         return False
 
-    collection.hide_viewport = False
-    found.hide_viewport = False
-    collection.hide_select = False
+    _clear_id_flag(collection, "hide_viewport")
+    _clear_layer_flag(context.view_layer, found, "hide_viewport")
+    _clear_id_flag(collection, "hide_select")
     context.view_layer.active_layer_collection = found
     return True
 
 
-def _reveal_object_collection(layer_collection, obj):
+def _reveal_object_collection(view_layer, layer_collection, obj):
     """Reveal one collection path containing the object in the current view layer"""
     if obj.name in layer_collection.collection.objects or any(
-        _reveal_object_collection(child, obj) for child in layer_collection.children
+        _reveal_object_collection(view_layer, child, obj)
+        for child in layer_collection.children
     ):
-        layer_collection.exclude = False
-        layer_collection.hide_viewport = False
-        layer_collection.collection.hide_viewport = False
-        layer_collection.collection.hide_select = False
+        _clear_layer_flag(view_layer, layer_collection, "exclude")
+        _clear_layer_flag(view_layer, layer_collection, "hide_viewport")
+        _clear_id_flag(layer_collection.collection, "hide_viewport")
+        _clear_id_flag(layer_collection.collection, "hide_select")
         return True
     return False
 
@@ -77,9 +128,11 @@ def select_objects(
             continue
 
         if reveal:
-            _reveal_object_collection(context.view_layer.layer_collection, obj)
-            obj.hide_viewport = False
-            obj.hide_select = False
+            _reveal_object_collection(
+                context.view_layer, context.view_layer.layer_collection, obj
+            )
+            _clear_id_flag(obj, "hide_viewport")
+            _clear_id_flag(obj, "hide_select")
         resolved.append(obj)
 
     if reveal and resolved:
@@ -92,7 +145,12 @@ def select_objects(
             raise ValueError(
                 f"Object '{obj.name}' is not linked to the active view layer"
             )
-        if reveal:
+        if reveal and obj.hide_get(view_layer=context.view_layer):
+            track_mutation(
+                ("hide_get", rna_identity(obj), rna_identity(context.view_layer)),
+                _hide_restore(obj, context.view_layer),
+                label="object hide",
+            )
             obj.hide_set(False, view_layer=context.view_layer)
 
     if clear:

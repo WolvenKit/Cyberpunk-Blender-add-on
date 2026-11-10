@@ -11,6 +11,7 @@ from ...assetio.catalog import (
 from ...assetio.index import IndexPolicy
 from ...assetio.paths import LocalPath
 from ...bartmoss.scalar import clamp_scalar
+from ...blender.transactions import transactional
 from ...core.log import debug_exception, get_logger
 from ...material_types.vehicle_decal_dirt import prepare_vehicle_dirt_mesh
 from ...materials.blender.builder import MaterialBuilder
@@ -78,6 +79,7 @@ def _session_root_for_file(filepath, preferred_root=""):
     return LocalPath.from_value(os.path.dirname(path)).value
 
 
+@transactional("Material template creation")
 def create_material_from_template(context, template_json, depot_root=""):
     session_root = _session_root_for_file(template_json, depot_root)
     request = MaterialToolsRequest(

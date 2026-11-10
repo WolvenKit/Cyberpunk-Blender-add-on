@@ -917,10 +917,11 @@ def export_armature_to_rig_json(
     arm_obj, filepath: str, pose_target: str = "IMPORTED"
 ) -> dict:
     previous_mode = getattr(arm_obj, "mode", "OBJECT")
-    mode_changed = False
-    if arm_obj is getattr(bpy.context, "object", None) and previous_mode != "OBJECT":
+    mode_changed = previous_mode != "OBJECT" and (
+        previous_mode == "EDIT" or arm_obj is getattr(bpy.context, "object", None)
+    )
+    if mode_changed:
         safe_mode_switch("OBJECT")
-        mode_changed = True
     try:
         document, summary = build_rig_json_from_armature(arm_obj, pose_target)
     finally:

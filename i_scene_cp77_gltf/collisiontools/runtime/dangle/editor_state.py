@@ -1013,7 +1013,7 @@ def _serialize_shape(shape):
     }
 
 
-def _serialize_editor_state(addon_state):
+def serialize_editor_state(addon_state):
     arm_obj = getattr(addon_state, "id_data", None)
     data = {
         "format": EDITOR_FORMAT,
@@ -1584,6 +1584,11 @@ def _parse_editor_state(data, addon_state):
     return len(addon_state.dangle_nodes)
 
 
+def restore_editor_state(addon_state, backup):
+    _clear_addon_state(addon_state)
+    _parse_editor_state(backup, addon_state)
+
+
 def import_chains_data(data, addon_state):
     is_wolvenkit = (
         isinstance(data, dict)
@@ -1593,7 +1598,7 @@ def import_chains_data(data, addon_state):
     if not is_wolvenkit:
         raise ValueError("Expected a WolvenKit animgraph JSON export")
 
-    backup = _serialize_editor_state(addon_state)
+    backup = serialize_editor_state(addon_state)
     _clear_addon_state(addon_state)
     try:
         count = _parse_wolvenkit_animgraph(data, addon_state)
@@ -1604,6 +1609,5 @@ def import_chains_data(data, addon_state):
             raise ValueError(space_errors[0])
         return count
     except Exception:
-        _clear_addon_state(addon_state)
-        _parse_editor_state(backup, addon_state)
+        restore_editor_state(addon_state, backup)
         raise

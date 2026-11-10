@@ -9,6 +9,7 @@ from ...blender.identity import rna_identity
 from ...blender.mesh_source import base_mesh, mesh_source
 from ...blender.operator_results import OperationResult
 from ...blender.transactions import (
+    remove_datablock_on_commit,
     track_collection_state,
     track_created_datablock,
     track_mutation,
@@ -387,10 +388,28 @@ def _owned_elsewhere(objects) -> str:
     return ""
 
 
+def _relink(obj, owners):
+    def relink():
+        for owner in owners:
+            if obj.name not in owner.objects:
+                owner.objects.link(obj)
+
+    return relink
+
+
 def _delete_objects(objects) -> None:
     for obj in objects:
-        if bpy.data.objects.get(obj.name) == obj:
-            bpy.data.objects.remove(obj, do_unlink=True)
+        if bpy.data.objects.get(obj.name) != obj:
+            continue
+        owners = tuple(obj.users_collection)
+        for owner in owners:
+            owner.objects.unlink(obj)
+        track_mutation(
+            ("enttools-unlinked", rna_identity(obj)),
+            _relink(obj, owners),
+            label="Entity component object",
+        )
+        remove_datablock_on_commit("objects", obj)
 
 
 @transactional("Add entity component")
@@ -528,7 +547,7 @@ def replace_mesh(context, collection, index: int, objects) -> OperationResult:
         and not old_holder.all_objects
         and not old_holder.children
     ):
-        bpy.data.collections.remove(old_holder)
+        remove_datablock_on_commit("collections", old_holder)
     remember_applied(item)
     return OperationResult.finished(f"Replaced the mesh of {item.name}.")
 
