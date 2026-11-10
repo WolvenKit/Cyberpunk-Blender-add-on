@@ -960,13 +960,15 @@ class DatablockImportTransaction:
     def commit(self):
         self._run_finalizers()
         for callback in self._commit_cleanup:
-            callback()
+            try:
+                callback()
+            except Exception as error:
+                _LOG.exception("Import commit cleanup failed: %s", error)
         self._commit_cleanup.clear()
         self._created.clear()
         self._created_values.clear()
         self._mutations.clear()
         self._mutation_keys.clear()
-        self._commit_cleanup.clear()
         self._closed = True
 
 
