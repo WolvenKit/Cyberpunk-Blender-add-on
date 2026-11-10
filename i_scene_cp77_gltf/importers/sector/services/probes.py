@@ -145,6 +145,6 @@ class ReflectionProbeService:
             volumeChannels=str(data.get("volumeChannels", "0")),
         )
 
-        scene = getattr(bpy.context, "scene", None)
+        scene = getattr(self.session.blender_context, "scene", None)
         if scene is not None:
             register_reflection_probe(scene, obj)

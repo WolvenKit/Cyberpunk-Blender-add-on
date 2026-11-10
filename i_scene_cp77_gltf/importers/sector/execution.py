@@ -2225,6 +2225,7 @@ def _import_sectors_transactional(
                         options,
                         force_refresh=force_refresh,
                         depot_root=depot_root,
+                        blender_context=bpy.context,
                     ) as session:
                         progress.set(5.0, "Planning sectors", force=True)
                         result = _import_sectors(

@@ -4,7 +4,11 @@ from ...assetio.paths import depot_path_key
 from ...assetio.values import coerce_int
 from ...bartmoss.scalar import clamp_scalar
 from ...core.log import get_logger, log_once
-from ...materials.blender.multilayer import find_override_palette, linked_source
+from ...materials.blender.multilayer import (
+    MAX_LAYERS,
+    find_override_palette,
+    linked_source,
+)
 from ..application.model import (
     MaterialToolState,
     TemplateState,
@@ -13,7 +17,6 @@ from ..common.constants import (
     BASE_MATERIAL_ROLE,
     GROUP_INPUT_ROLE,
     LAYER_INTERNAL_ROLE_PROPERTY,
-    MAX_LAYERS,
     MICROBLEND_ROLE,
     ROOT_NODE_NAME,
     ROOT_ROLE,

@@ -1,8 +1,6 @@
 import os
 from collections import Counter
 
-import bpy
-
 from ...assetio.archive_xl import archive_xl_document, serialize_archive_xl
 from ...assetio.atomic import atomic_write_many
 from ...assetio.documents import DocumentSession
@@ -86,14 +84,13 @@ def _written_sectors(scene, placements, parsed, layout, include_heightfields):
     return written, warnings
 
 
-def _export(filename, use_yaml, include_heightfields):
+def _export(scene, filename, use_yaml, include_heightfields):
     """Write the scene's sector edits for the project filename"""
     if not os.path.isdir(os.path.dirname(filename)):
         raise FileNotFoundError(
             f"Project path does not exist: {os.path.dirname(filename)}"
         )
     layout = cpmodproj_layout(filename)
-    scene = bpy.context.scene
     placements = ScenePlacements(scene)
     with DocumentSession() as documents:
         repository = SectorSourceRepository(documents)
@@ -144,11 +141,13 @@ def _export(filename, use_yaml, include_heightfields):
 
 
 def export_project_sectors(
-    filename, use_yaml, *, include_heightfields=False
+    scene, filename, use_yaml, *, include_heightfields=False
 ) -> OperationResult:
     """Write the project's sector edits and new sectors, writing nothing on failure"""
     try:
-        paths, sectors, warnings = _export(filename, use_yaml, include_heightfields)
+        paths, sectors, warnings = _export(
+            scene, filename, use_yaml, include_heightfields
+        )
     except Exception as error:
         # The log keeps the traceback; the author is shown the message alone.
         return OperationResult.cancelled(f"Sector export failed: {error}", error=error)

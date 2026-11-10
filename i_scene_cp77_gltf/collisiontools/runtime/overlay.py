@@ -8,6 +8,7 @@ from ...bartmoss.wireframes import (
     sphere_wireframe,
     wheel_wireframe,
 )
+from ...blender.context import with_context
 from ...blender.gpu_overlay import line_drawing, uniform_color_shader
 from ...blender.identity import rna_identity
 from ...blender.physics.cooked_shapes import decode_cooked_geometry
@@ -304,8 +305,7 @@ def _overlay_batch(context, shader):
     return _batch
 
 
-def _draw_callback():
-    context = bpy.context
+def _draw_callback(context):
     if not context.scene.physx.viz_enabled:
         return
     try:
@@ -335,7 +335,7 @@ def register_viz():
     if _handle is not None:
         unregister_viz()
     _handle = bpy.types.SpaceView3D.draw_handler_add(
-        _draw_callback, (), "WINDOW", "POST_VIEW"
+        with_context(_draw_callback), (), "WINDOW", "POST_VIEW"
     )
 
 

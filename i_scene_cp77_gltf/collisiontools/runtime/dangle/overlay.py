@@ -15,6 +15,7 @@ from ....bartmoss.wireframes import (
     two_sided_ellipsoid_wireframe,
 )
 from ....blender.armature_bones import resolve_pose_bone
+from ....blender.context import with_context
 from ....blender.gpu_overlay import line_drawing, uniform_color_shader
 from ....core.log import get_logger, log_once
 from .simulation import collision, spaces, spring
@@ -493,19 +494,19 @@ def invalidate_static_draw_cache(_scene=None, depsgraph=None):
                 return
 
 
-def _dangle_overlays_enabled():
-    scene = getattr(bpy.context, "scene", None)
+def _dangle_overlays_enabled(context):
+    scene = getattr(context, "scene", None)
     physics = getattr(scene, "physx", None) if scene is not None else None
     return bool(physics and physics.viz_enabled)
 
 
-def _master_draw_callback():
-    if not _dangle_overlays_enabled():
+def _master_draw_callback(context):
+    if not _dangle_overlays_enabled(context):
         return
     try:
         for cache in tuple(_DRAW_CACHES.values()):
             cache.draw()
-        arm = bpy.context.object
+        arm = context.object
         if arm and arm.type == "ARMATURE" and arm.dangle_state.is_dangle_rig:
             if not arm.dangle_state.is_playing and not spaces.armature_space_errors(
                 arm
@@ -531,7 +532,7 @@ def register_global_handler():
     global _GLOBAL_HANDLER
     if _GLOBAL_HANDLER is None:
         _GLOBAL_HANDLER = bpy.types.SpaceView3D.draw_handler_add(
-            _master_draw_callback, (), "WINDOW", "POST_VIEW"
+            with_context(_master_draw_callback), (), "WINDOW", "POST_VIEW"
         )
 
 

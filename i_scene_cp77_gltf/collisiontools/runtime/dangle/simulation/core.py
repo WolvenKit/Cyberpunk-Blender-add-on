@@ -80,8 +80,10 @@ class DyngSimulator:
         source_payload=None,
         view_layer_update=None,
         graph_tree=None,
+        scene=None,
     ):
         self.arm_obj = rig_obj
+        self.scene = scene
         self.step_count = 0
         # With a graph, the whole graph plays on the rig through the graph's own preview settings.
         self.graph_tree = graph_tree

@@ -13,8 +13,9 @@ import bpy
 from ...assetio.paths import depot_path_key
 from ...assetio.resolver import full_suffix, resolve_rooted_path
 from ...assetio.values import coerce_float
+from ...blender.operator_results import OperationResult
 from ...blender.transactions import new_tracked_datablock, track_mutation
-from ...core.log import get_logger
+from ...core.log import debug_exception, get_logger
 from ...core.notifications import report
 from ..resources import load_material_document
 from .nodes import createOverrideTable
@@ -635,6 +636,7 @@ def layer_nodes(nodes, root, layer_count, include_disconnected):
 # A layer above the base with zero opacity adds nothing to the surface. Blender 5.3 leaves such layers out when it
 # compiles a material; earlier versions evaluate every layer, so there the link of each hidden layer into the multilayer
 # surface is muted. A muted link stays in the tree, so the panel and the exporters still find the layer through it.
+MAX_LAYERS = 20
 _MUTES_HIDDEN_LAYERS = bpy.app.version < (5, 3, 0)
 
 
@@ -695,17 +697,16 @@ def _layer_template_path(layer):
     return str(template_tree.get("cp77_ml_template", layer.get("cp77_ml_template", "")))
 
 
-def cp77_mlsetup_generateoverrides(
-    self, context, objs=None, include_disconnected=False
-):
-    objects = tuple(objs or getattr(context, "selected_objects", ()) or ())
+def generate_override_palettes(objects, *, include_disconnected=False):
+    objects = tuple(objects or ())
     if not objects:
-        report(
-            self, "WARNING", "No objects selected for override rebuild.", logger=_LOG
+        return OperationResult.cancelled(
+            "No objects selected for override rebuild.", "WARNING"
         )
-        return {"CANCELLED"}
-    generated = 0
-    with override_palette_batch_scope(self):
+    warnings = []
+    rebuilt = []
+    layers = 0
+    with override_palette_batch_scope():
         for obj in objects:
             material = getattr(obj, "active_material", None)
             node_tree = (
@@ -715,12 +716,7 @@ def cp77_mlsetup_generateoverrides(
                 continue
             root = multilayer_root(node_tree.nodes)
             if root is None:
-                report(
-                    self,
-                    "WARNING",
-                    f"Multilayer root node not found on {material.name}.",
-                    logger=_LOG,
-                )
+                warnings.append(f"Multilayer root node not found on {material.name}.")
                 continue
             project_path = material.get("cp77_project_path")
             depot_path = material.get("DepotPath")
@@ -728,17 +724,12 @@ def cp77_mlsetup_generateoverrides(
             for index, layer in layer_nodes(
                 node_tree.nodes,
                 root,
-                20,
+                MAX_LAYERS,
                 include_disconnected,
             ):
                 template_path = _layer_template_path(layer)
                 if not template_path:
-                    report(
-                        self,
-                        "WARNING",
-                        f"Layer {index + 1} has no MLTemplate metadata.",
-                        logger=_LOG,
-                    )
+                    warnings.append(f"Layer {index + 1} has no MLTemplate metadata.")
                     continue
                 try:
                     template_json = _load_rooted_json(
@@ -751,21 +742,21 @@ def cp77_mlsetup_generateoverrides(
                     )
                     queue_override_palette(template_path, override_table)
                 except (FileNotFoundError, KeyError, TypeError, ValueError) as error:
-                    report(
-                        self,
-                        "WARNING",
-                        f"Layer {index + 1} template could not be loaded: {error}",
-                        logger=_LOG,
-                        error=error,
+                    debug_exception(
+                        _LOG, "Layer %d template could not be loaded", index + 1
+                    )
+                    warnings.append(
+                        f"Layer {index + 1} template could not be loaded: {error}"
                     )
                     continue
                 object_generated += 1
             if object_generated:
-                generated += object_generated
-                report(
-                    self,
-                    "INFO",
-                    f"Rebuilt override palettes for {material.name} on {obj.name} ({object_generated} layers).",
-                    logger=_LOG,
+                layers += object_generated
+                rebuilt.append(
+                    f"Rebuilt override palettes for {material.name} on {obj.name} ({object_generated} layers)."
                 )
-    return {"FINISHED"} if generated else {"CANCELLED"}
+    if not layers:
+        return OperationResult(
+            False, "No override palettes were rebuilt.", "WARNING", tuple(warnings)
+        )
+    return OperationResult.finished(" ".join(rebuilt), warnings=warnings, layers=layers)

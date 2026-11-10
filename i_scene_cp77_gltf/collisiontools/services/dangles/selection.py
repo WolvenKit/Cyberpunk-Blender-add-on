@@ -6,7 +6,7 @@ from ....blender.armature_bones import (
     resolve_bone_name,
     resolve_pose_bone,
 )
-from ....blender.context import tag_view3d_redraw
+from ....blender.context import tag_view3d_redraw, with_context
 from ....blender.identity import rna_identity
 from ....core.log import get_logger
 
@@ -50,29 +50,28 @@ def _posed_dangle_rig(obj):
     )
 
 
-def ensure_polling():
-    if _posed_dangle_rig(getattr(bpy.context, "active_object", None)):
-        if not bpy.app.timers.is_registered(poll_selection):
-            bpy.app.timers.register(poll_selection, first_interval=_POLL_INTERVAL)
+def ensure_polling(context):
+    if _posed_dangle_rig(getattr(context, "active_object", None)):
+        if not bpy.app.timers.is_registered(SELECTION_POLL):
+            bpy.app.timers.register(SELECTION_POLL, first_interval=_POLL_INTERVAL)
 
 
 def stop_polling():
-    if bpy.app.timers.is_registered(poll_selection):
-        bpy.app.timers.unregister(poll_selection)
+    if bpy.app.timers.is_registered(SELECTION_POLL):
+        bpy.app.timers.unregister(SELECTION_POLL)
 
 
-def poll_selection():
+def poll_selection(context):
     global SYNC_LOCK, _LAST_ACTIVE
     if SYNC_LOCK:
         return _POLL_INTERVAL
 
-    ctx = bpy.context
-    obj = getattr(ctx, "active_object", None)
+    obj = getattr(context, "active_object", None)
     if not _posed_dangle_rig(obj):
         _LAST_ACTIVE = (None, None)
         return None
 
-    active_pb = getattr(ctx, "active_pose_bone", None)
+    active_pb = getattr(context, "active_pose_bone", None)
     if active_pb is None or active_pb.id_data is not obj:
         _LAST_ACTIVE = (rna_identity(obj), None)
         return _POLL_INTERVAL
@@ -101,6 +100,9 @@ def poll_selection():
     finally:
         SYNC_LOCK = False
     return _POLL_INTERVAL
+
+
+SELECTION_POLL = with_context(poll_selection)
 
 
 def on_active_chain_update(self, context):

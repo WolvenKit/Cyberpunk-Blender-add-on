@@ -63,17 +63,14 @@ class StaticLightingService:
             "flicker": 0.0,
         }
 
-    def finalize_environment_registry(self, scene=None):
+    def finalize_environment_registry(self, scene):
         objects = tuple(obj for obj in self._registry_objects if obj is not None)
         self._registry_objects.clear()
         if not objects:
             return 0
         started = time.perf_counter()
         try:
-            return register_environment_lights(
-                scene if scene is not None else getattr(bpy.context, "scene", None),
-                objects,
-            )
+            return register_environment_lights(scene, objects)
         finally:
             self._registry_flush_seconds += time.perf_counter() - started
             self._registry_flushes += 1

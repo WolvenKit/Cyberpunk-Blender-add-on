@@ -14,7 +14,6 @@ from bpy_extras.io_utils import ExportHelper
 
 from ..animation.domain.clip.root_motion import ROOT_MOTION_EXPORT_ITEMS
 from ..assetio.paths import safe_file_stem
-from ..blender.gltf_exclusions import collect_excluded_objects
 from ..blender.mesh_validation import MeshValidationOptions
 from ..blender.operator_results import execute_operation
 from ..core.log import get_logger, log_once
@@ -31,10 +30,10 @@ from .materials.multilayer_mask import cp77_mlmask_export
 from .materials.multilayer_setup import cp77_mlsetup_export
 from .materials.project_paths import default_project_output, replace_depot_suffix
 from .mesh.orchestration import export_cyberpunk_collections_glb, export_cyberpunk_glb
-from .mesh.scope import resolve_mesh_export_scope
 from .mesh.writer import mesh_glb_path
 from .rig.writer import export_active_rig
 from .sector.execution import export_project_sectors
+from .services.scope import export_results_message, export_scope
 
 _LOG = get_logger(__name__)
 
@@ -229,6 +228,7 @@ class CP77StreamingSectorExport(Operator, ExportHelper):
             self,
             "Sector export",
             export_project_sectors,
+            context.scene,
             self.filepath,
             props.axl_yaml,
             include_heightfields=props.include_heightfields,
@@ -310,36 +310,6 @@ class CP77CollectionExport(ExportValidationProperties, Operator, ExportHelper):
         row.prop(self, "apply_transform")
         row.prop(self, "apply_modifiers")
 
-    def format_export_results_detailed(self, export_status, directory):
-        exported = []
-        export_skipped = []
-        notes = []
-
-        for name, error, warnings in export_status:
-            if error:
-                export_skipped.append((name, error))
-            else:
-                exported.append(name)
-                notes.extend(f"{name}: {warning}" for warning in warnings)
-
-        parts = [f"exported to {directory}:"]
-        if exported:
-            parts.append("  " + "\n  ".join([f"✓ {name}" for name in exported]))
-        else:
-            parts.append("  (no successful exports)")
-
-        if export_skipped:
-            parts.append("export skipped or failed:")
-            parts.append(
-                "  "
-                + "\n  ".join([f"✗ {name}: {error}" for name, error in export_skipped])
-            )
-        if notes:
-            parts.append("notes:")
-            parts.append("  " + "\n  ".join(notes))
-
-        return "\n".join(parts)
-
     def execute(self, context):
         # A script may set only filepath; the files then go beside it rather than into Blender's working directory.
         directory = self.directory or os.path.dirname(self.filepath)
@@ -368,7 +338,7 @@ class CP77CollectionExport(ExportValidationProperties, Operator, ExportHelper):
         report(
             self,
             "INFO",
-            self.format_export_results_detailed(export_status, directory),
+            export_results_message(export_status, directory),
             logger=_LOG,
         )
         if not any(error is None for _, error, _warnings in export_status):
@@ -520,8 +490,7 @@ class CP77GLBExport(ExportValidationProperties, Operator, ExportHelper):
     action_index: IntProperty(default=0, options={"SKIP_SAVE"})
     action_list_error: StringProperty(default="", options={"HIDDEN", "SKIP_SAVE"})
     action_list_rig_path: StringProperty(default="", options={"HIDDEN", "SKIP_SAVE"})
-    _scope_key = None
-    _scope_meshes = ()
+    _scope = (None, ())
 
     def _requires_source_rig_selection(self):
         return len(self.rig_items) > 1
@@ -597,24 +566,13 @@ class CP77GLBExport(ExportValidationProperties, Operator, ExportHelper):
         return ExportHelper.invoke(self, context, event)
 
     def _export_meshes(self, context):
-        limit_selected = getattr(self, "limit_selected", True)
-        export_visible = getattr(self, "export_visible", False)
-        key = (
-            tuple(sorted(obj.name for obj in getattr(context, "selected_objects", ()))),
-            len(context.view_layer.objects),
-            getattr(getattr(context, "collection", None), "name", ""),
-            limit_selected,
-            export_visible,
+        self._scope = export_scope(
+            context,
+            limit_selected=getattr(self, "limit_selected", True),
+            export_visible=getattr(self, "export_visible", False),
+            previous=self._scope,
         )
-        if key != self._scope_key:
-            self._scope_meshes = resolve_mesh_export_scope(
-                context,
-                limit_selected=limit_selected,
-                export_visible=export_visible,
-                excluded_objects=collect_excluded_objects(),
-            ).meshes
-            self._scope_key = key
-        return self._scope_meshes
+        return self._scope[1]
 
     def check(self, context):
         """Keep the file selector synchronized with the selected export format"""

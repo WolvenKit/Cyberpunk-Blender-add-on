@@ -16,7 +16,7 @@ from ...bartmoss.vehicle import (
     static_wheel_loads,
 )
 from ...bartmoss.wireframes import box_wireframe, coil_wireframe, ring_wireframe
-from ...blender.context import tag_view3d_redraw
+from ...blender.context import tag_view3d_redraw, with_context
 from ...blender.gpu_overlay import line_drawing, uniform_color_shader
 from ...blender.physics.vehicle_geometry import vehicle_actor_world
 from ...core.log import get_logger, log_once
@@ -263,8 +263,7 @@ def _build_guides(context):
 _frame_guides = {}
 
 
-def _draw_view():
-    context = bpy.context
+def _draw_view(context):
     try:
         layers, labels = _build_guides(context)
     except Exception as error:
@@ -296,11 +295,10 @@ def _draw_view():
             batch.draw(shader)
 
 
-def _draw_labels():
+def _draw_labels(context):
     labels = _frame_guides.get("labels")
     if not labels:
         return
-    context = bpy.context
     region = context.region
     view = context.region_data
     font = 0
@@ -323,10 +321,10 @@ def register_vehicle_guides():
     global _view_handle, _pixel_handle
     unregister_vehicle_guides()
     _view_handle = bpy.types.SpaceView3D.draw_handler_add(
-        _draw_view, (), "WINDOW", "POST_VIEW"
+        with_context(_draw_view), (), "WINDOW", "POST_VIEW"
     )
     _pixel_handle = bpy.types.SpaceView3D.draw_handler_add(
-        _draw_labels, (), "WINDOW", "POST_PIXEL"
+        with_context(_draw_labels), (), "WINDOW", "POST_PIXEL"
     )
 
 

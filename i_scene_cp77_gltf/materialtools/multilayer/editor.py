@@ -6,6 +6,7 @@ from ...blender.transactions import track_created_datablock
 from ...core.log import debug_exception, get_logger, log_once
 from ...core.notifications import report
 from ...material_types.multilayered import Multilayered
+from ...materials.blender.images import DEFAULT_IMAGE_FORMAT
 from ...materials.blender.multilayer import sync_hidden_layer_links
 from ..common.access import node_input
 from ..common.constants import (
@@ -598,7 +599,7 @@ def apply_template_to_shader(owner, context, palette=None):
     if group is None and state.valid_layer:
         try:
             project_root = str(state.material.get("cp77_project_path", "") or "")
-            runtime = Multilayered(depot_root, "png", project_root)
+            runtime = Multilayered(depot_root, DEFAULT_IMAGE_FORMAT, project_root)
             group = runtime.ensure_template_group(template_path)
         except Exception as error:
             report(

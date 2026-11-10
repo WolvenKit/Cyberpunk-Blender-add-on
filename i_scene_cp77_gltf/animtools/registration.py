@@ -40,6 +40,7 @@ from ..blender.animgraph.sockets import (
 from ..blender.animgraph.tree import REDengine_AnimGraphTree
 from ..core.log import get_logger
 from ..core.registration import RegistrationLedger
+from .handlers import callbacks
 from .operators.actions import ACTION_OPERATOR_CLASSES
 from .operators.animgraph.add_node import REDENGINE_OT_add_node
 from .operators.animgraph.curve import CURVE_OPERATOR_CLASSES
@@ -66,7 +67,6 @@ from .operators.rig import RIG_OPERATOR_CLASSES
 from .operators.rigify import RIGIFY_OPERATOR_CLASSES
 from .operators.root_motion import ROOT_MOTION_OPERATOR_CLASSES
 from .operators.workspace import WORKSPACE_OPERATOR_CLASSES
-from .runtime import callbacks
 from .ui import playback
 from .ui.action_list import CP77_UL_AdditiveAnimList, CP77_UL_AnimList, CP77_UL_ClipList
 from .ui.animgraph import (

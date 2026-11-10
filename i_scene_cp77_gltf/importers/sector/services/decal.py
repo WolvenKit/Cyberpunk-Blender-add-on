@@ -34,6 +34,7 @@ from ....materials.blender.cache import (
     _record_prototype_hit,
     rename_cached_material,
 )
+from ....materials.blender.images import DEFAULT_IMAGE_FORMAT
 from ....materials.blender.profiling import (
     detailed_material_profiling_requested,
     finish_material_profiling,
@@ -536,7 +537,7 @@ class DecalService:
             builder = MaterialBuilder(
                 document,
                 self.session.raw_root,
-                "png",
+                DEFAULT_IMAGE_FORMAT,
                 self.session.raw_root,
             )
             builder_identity = self._builder_cache_identity(
@@ -751,6 +752,7 @@ class DecalService:
             collection,
             pending,
             self.composite_material_cache,
+            context=self.session.blender_context,
             output_collection=output_collection,
         )
         summary["projectors"] = projector_count

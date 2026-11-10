@@ -542,18 +542,11 @@ def toggle_preview_tag(context, tag):
 
 
 def _timeline_playback_active() -> bool:
-    context = getattr(bpy, "context", None)
-    screen = getattr(context, "screen", None)
-    if screen is not None and bool(getattr(screen, "is_animation_playing", False)):
-        return True
-    window_manager = getattr(context, "window_manager", None)
-    for window in getattr(window_manager, "windows", ()) or ():
-        candidate = getattr(window, "screen", None)
-        if candidate is not None and bool(
-            getattr(candidate, "is_animation_playing", False)
-        ):
-            return True
-    return False
+    return any(
+        bool(getattr(getattr(window, "screen", None), "is_animation_playing", False))
+        for window_manager in bpy.data.window_managers
+        for window in window_manager.windows
+    )
 
 
 def _register_frame_change_capture(simulator):
@@ -746,6 +739,7 @@ def prepare_preview(context, graph_tree=None):
                 getattr(context, "view_layer", None), "update", None
             ),
             graph_tree=binding_tree(graph_tree) if graph_tree is not None else None,
+            scene=getattr(context, "scene", None),
         )
     except Exception as error:
         _log_graph_preview_context(

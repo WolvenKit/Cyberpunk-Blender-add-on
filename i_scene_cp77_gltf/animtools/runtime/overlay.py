@@ -1,7 +1,7 @@
 import bpy
 from gpu_extras.batch import batch_for_shader
 
-from ...blender.context import tag_view3d_redraw
+from ...blender.context import tag_view3d_redraw, with_context
 from ...blender.gpu_overlay import line_drawing, uniform_color_shader
 
 _handle = None
@@ -40,11 +40,11 @@ def invalidate_frame() -> None:
         _mark_dirty()
 
 
-def _ensure_batch(armature):
+def _ensure_batch(context, armature):
     global _batch, _dirty
     if not _dirty and _batch is not None:
         return _batch
-    coords = collect_lines_world(armature)
+    coords = collect_lines_world(context, armature)
     if not coords:
         _batch = None
         _dirty = False
@@ -54,11 +54,11 @@ def _ensure_batch(armature):
     return _batch
 
 
-def draw_bone_lines(arm_obj_name):
+def draw_bone_lines(context, arm_obj_name):
     arm_obj = bpy.data.objects.get(arm_obj_name)
     if not arm_obj:
         return
-    batch = _ensure_batch(arm_obj)
+    batch = _ensure_batch(context, arm_obj)
     if batch is None:
         return
     shader = uniform_color_shader()
@@ -68,11 +68,11 @@ def draw_bone_lines(arm_obj_name):
         batch.draw(shader)
 
 
-def collect_lines_world(arm_obj) -> list:
+def collect_lines_world(context, arm_obj) -> list:
     coords = []
     if not arm_obj or arm_obj.type != "ARMATURE":
         return coords
-    depsgraph = bpy.context.evaluated_depsgraph_get()
+    depsgraph = context.evaluated_depsgraph_get()
     arm_eval = arm_obj.evaluated_get(depsgraph)
     mw = arm_eval.matrix_world
     for pose_bone in arm_eval.pose.bones:
@@ -93,7 +93,7 @@ def start(armature) -> bool:
     _armature_name = armature.name
     _dirty = True
     _handle = bpy.types.SpaceView3D.draw_handler_add(
-        draw_bone_lines, (_armature_name,), "WINDOW", "POST_VIEW"
+        with_context(draw_bone_lines), (_armature_name,), "WINDOW", "POST_VIEW"
     )
     tag_view3d_redraw()
     return True

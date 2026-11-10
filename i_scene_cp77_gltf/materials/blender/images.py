@@ -18,6 +18,7 @@ from .helper_caches import register_helper_cache
 from .profiling import begin_material_phase, end_material_phase
 
 _LOG = get_logger(__name__)
+DEFAULT_IMAGE_FORMAT = "png"
 
 _image_load_failures = {}
 _image_failure_captures = []
@@ -468,7 +469,9 @@ def _resolve_embedded_image(reference, image_format, roots):
     return None
 
 
-def resolve_relative_image_path(ImgPath, image_format="png", DepotPath="", ProjPath=""):
+def resolve_relative_image_path(
+    ImgPath, image_format=DEFAULT_IMAGE_FORMAT, DepotPath="", ProjPath=""
+):
     """Resolve a relative image through the asset index, then among the textures meshes embed"""
     if isinstance(ImgPath, float) or isinstance(ProjPath, float):
         return None
@@ -480,7 +483,11 @@ def resolve_relative_image_path(ImgPath, image_format="png", DepotPath="", ProjP
 
 
 def imageFromRelPath(
-    ImgPath, image_format="png", isNormal=False, DepotPath="", ProjPath=""
+    ImgPath,
+    image_format=DEFAULT_IMAGE_FORMAT,
+    isNormal=False,
+    DepotPath="",
+    ProjPath="",
 ):
     DepotPath = DepotPath.replace("\\", os.sep)
     ProjPath = ProjPath.replace("\\", os.sep)

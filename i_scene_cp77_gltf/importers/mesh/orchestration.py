@@ -48,6 +48,7 @@ from ...materials.blender.cache import (
     warm_material_cache_index,
 )
 from ...materials.blender.images import (
+    DEFAULT_IMAGE_FORMAT,
     begin_image_failure_capture,
     end_image_failure_capture,
     image_load_failure_message,
@@ -914,7 +915,7 @@ def ensure_collection_material_coverage(
     appearances,
     *,
     remap_depot=False,
-    image_format="png",
+    image_format=DEFAULT_IMAGE_FORMAT,
     document_session=None,
     material_resources=None,
     timing=None,
@@ -1181,7 +1182,7 @@ def import_cyberpunk_glb(
     with_materials=False,
     remap_depot=False,
     exclude_unused_mats=True,
-    image_format="png",
+    image_format=DEFAULT_IMAGE_FORMAT,
     hide_armatures=True,
     import_garmentsupport=False,
     appearances=None,

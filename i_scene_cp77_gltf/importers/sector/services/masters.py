@@ -779,7 +779,9 @@ class EntityMasterService:
         master_options.tag(collection)
         if master_options.colliders:
             # Masters are only copied: the PhysX tools work on the placed copies.
-            unregister_actors(tuple(collection.all_objects), bpy.context)
+            unregister_actors(
+                tuple(collection.all_objects), self.session.blender_context
+            )
         collection["cp77_sector_entity_master_signature"] = signature
         self._invalidate_scene_index()
         return collection

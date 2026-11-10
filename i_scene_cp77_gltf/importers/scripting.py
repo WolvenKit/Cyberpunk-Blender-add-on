@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import bpy
 
+from ..materials.blender.images import DEFAULT_IMAGE_FORMAT
 from .common.results import ImportResult
 from .entity.execution import import_entity
 from .entity.options import EntityImportRequest
@@ -28,7 +29,7 @@ def import_glb_for_script(
     *,
     appearances=("default",),
     with_materials=False,
-    image_format="png",
+    image_format=DEFAULT_IMAGE_FORMAT,
     hide_armatures=True,
     import_garmentsupport=True,
     import_tracks=True,

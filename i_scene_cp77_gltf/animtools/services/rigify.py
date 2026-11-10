@@ -412,7 +412,7 @@ def bake_to_rigify(context, source, rig, request: RigifyBakeRequest) -> Operatio
             if _active_action(rig) is not None:
                 rig.animation_data.action = None
             _enter_pose_mode(context, rig)
-            solver = control_bake.ControlSolver.compile(source, rig)
+            solver = control_bake.ControlSolver.compile(source, rig, context.view_layer)
             samples = sample_pose_bones(
                 context.scene,
                 rig,

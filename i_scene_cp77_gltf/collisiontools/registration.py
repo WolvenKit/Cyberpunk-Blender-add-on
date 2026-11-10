@@ -69,7 +69,7 @@ def _depsgraph_update_handler(_scene, depsgraph):
         ):
             clear_property_item_caches()
             caches_cleared = True
-    selection.ensure_polling()
+    selection.ensure_polling(bpy.context)
 
 
 @bpy.app.handlers.persistent

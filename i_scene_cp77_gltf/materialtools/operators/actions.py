@@ -8,7 +8,7 @@ from bpy.props import (
 )
 from bpy.types import Operator
 
-from ...blender.operator_results import execute_operation
+from ...blender.operator_results import execute_operation, finish_operator
 from ...blender.transactions import (
     DatablockImportTransaction,
     rollback_report_message,
@@ -81,24 +81,18 @@ def _rollback_operator_transaction(owner, transaction, message):
 def _run_override_generation(owner, callback):
     transaction = DatablockImportTransaction()
     try:
-        with transaction.scope():
+        with (
+            transaction.scope(),
+            multilayer_service.override_palette_batch_scope(owner),
+        ):
             result = callback()
-        if not isinstance(result, set):
-            report(
-                owner,
-                "ERROR",
-                "Override generation returned an invalid operator status.",
-                logger=_LOG,
-            )
-            return _rollback_operator_transaction(
-                owner, transaction, "Override generation failed"
-            )
-        if "FINISHED" not in result:
+        if not result.ok:
+            finish_operator(owner, result)
             return _rollback_operator_transaction(
                 owner, transaction, "Override generation was cancelled"
             )
         transaction.commit()
-        return result
+        return finish_operator(owner, result)
     except Exception as error:
         report(
             owner,
@@ -167,7 +161,9 @@ class CP77MlSetupGenerateOverrides(Operator):
     def execute(self, context):
         result = _run_override_generation(
             self,
-            lambda: multilayer_service.cp77_mlsetup_generateoverrides(self, context),
+            lambda: multilayer_service.generate_override_palettes(
+                getattr(context, "selected_objects", ())
+            ),
         )
         clear_palette_caches()
         synchronize_panel(context)
@@ -186,11 +182,8 @@ class CP77MlSetupGenerateOverridesDisconnected(Operator):
     def execute(self, context):
         result = _run_override_generation(
             self,
-            lambda: multilayer_service.cp77_mlsetup_generateoverrides(
-                self,
-                context,
-                objs=(context.active_object,),
-                include_disconnected=True,
+            lambda: multilayer_service.generate_override_palettes(
+                (context.active_object,), include_disconnected=True
             ),
         )
         clear_palette_caches()

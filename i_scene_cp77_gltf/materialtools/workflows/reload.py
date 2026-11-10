@@ -12,6 +12,7 @@ from ...blender.transactions import (
 )
 from ...material_types.multilayered import fresh_multilayer_runtime
 from ...materials.blender.builder import MaterialBuilder
+from ...materials.blender.images import DEFAULT_IMAGE_FORMAT
 from ...materials.blender.metadata import apply_material_metadata, material_metadata
 from ...materials.repository import MaterialRepository, MaterialResourceRepository
 from ...materials.resources import material_resource_scope
@@ -110,9 +111,9 @@ def reload_materials(context):
             mats = list(bundle.materials)
             with material_resource_scope(material_resources):
                 image_format = str(
-                    active_material.get("cp77_image_format", "") or "png"
+                    active_material.get("cp77_image_format", "") or DEFAULT_IMAGE_FORMAT
                 )
-                builder = MaterialBuilder(mats, depot_path, image_format, base_path)
+                builder = MaterialBuilder(None, depot_path, image_format, base_path)
                 source_name = orig_mat_name
                 source_index = next(
                     (

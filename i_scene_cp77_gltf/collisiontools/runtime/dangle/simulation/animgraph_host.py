@@ -320,7 +320,7 @@ class DangleAnimGraphHost:
         return qs_from_matrix(basis)
 
     def additive_storage_mode(self) -> str:
-        scene = getattr(bpy.context, "scene", None)
+        scene = getattr(self.simulator, "scene", None)
         settings = (
             getattr(scene, "cp77_additive_preview", None) if scene is not None else None
         )

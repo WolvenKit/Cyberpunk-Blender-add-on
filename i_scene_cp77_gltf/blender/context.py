@@ -1,3 +1,4 @@
+import functools
 from contextlib import contextmanager
 from contextvars import ContextVar
 
@@ -8,6 +9,14 @@ from .identity import rna_is_live
 from .operator_results import require_finished
 
 _LOG = get_logger(__name__)
+
+
+def with_context(callback):
+    @functools.wraps(callback)
+    def call(*args):
+        return callback(bpy.context, *args)
+
+    return call
 
 
 _MODE_MAP = {
