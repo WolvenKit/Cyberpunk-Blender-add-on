@@ -1,3 +1,4 @@
+import dataclasses
 import os
 import sys
 
@@ -757,6 +758,15 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
         default="ADD_MISSING",
         options={"SKIP_SAVE"},
     )
+    sector_filter: StringProperty(
+        name="Only Sectors",
+        description=(
+            "Optional. Import only these sectors, separated by commas, spaces or new lines. Use exact names "
+            "(exterior_17_-55_2_0) or wildcards (exterior_17_-55_*, interior_*_-109_*). Leave empty to import every sector in the project"
+        ),
+        default="",
+        options={"SKIP_SAVE"},
+    )
     collections: EnumProperty(
         name="Collections",
         items=(
@@ -792,6 +802,7 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
         box = layout.box()
         box.label(text="Import")
         column = box.column()
+        column.prop(self, "sector_filter")
         column.prop(self, "existing_sectors")
         column.prop(self, "collections")
         column.prop(self, "decal_mode")
@@ -844,6 +855,8 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
         )
         sector_dialog.remember_state(get_addon_preferences(context), state)
         options = state.options(remap_depot=context.scene.cp77_panel_props.remap_depot)
+        if self.sector_filter.strip():
+            options = dataclasses.replace(options, sector_filter=self.sector_filter)
         if options.with_materials and (warning := opengl_shader_warning()):
             report(self, "WARNING", warning, logger=_LOG)
         _LOG.debug("Sector import requested: %s", self.filepath)

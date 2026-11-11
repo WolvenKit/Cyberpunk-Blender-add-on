@@ -16,6 +16,7 @@ from ...materials.resources import material_resource_scope
 from ...meshes.repository import MeshRepository
 from ..common.cache import acquire_material_cache, release_material_cache
 from ..entity.repository import EntityRepository
+from .options import sector_matches_filter
 from .planner import compile_sector_plan
 from .repository import SectorRepository
 from .services.acoustics import AcousticSectorService
@@ -295,6 +296,7 @@ class SectorImportSession:
             for path in sorted(self.files.sectors)
             if absolute_local_path_key(path) != project_key
             and "sim_" not in os.path.basename(path).casefold()
+            and sector_matches_filter(path, self.options.sector_filter)
         )
         self.caches.sector_paths = cached
         return cached

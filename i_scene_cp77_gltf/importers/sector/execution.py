@@ -2321,13 +2321,18 @@ def _import_sectors(session, *, progress=NO_PROGRESS):
     progress.set(5.0, "Planning sectors", force=True)
     planned_sectors = session.planned_sectors()
     if not planned_sectors:
-        return ImportResult(
-            failures=(
+        if options.sector_filter:
+            problem = (
+                "No streaming sector under "
+                f"{session.raw_root} matches the 'Only Sectors' filter "
+                f"({', '.join(options.sector_filter)}); nothing was imported"
+            )
+        else:
+            problem = (
                 "No streaming sectors were found under "
-                f"{session.raw_root}; nothing was imported",
-            ),
-            label="sector import",
-        )
+                f"{session.raw_root}; nothing was imported"
+            )
+        return ImportResult(failures=(problem,), label="sector import")
     _set_sector_view_clip(options.scale_factor)
 
     warnings = []
