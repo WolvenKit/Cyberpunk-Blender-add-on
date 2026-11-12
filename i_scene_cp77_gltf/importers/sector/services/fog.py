@@ -122,7 +122,8 @@ def _unit_box_mesh(name):
 
 def configure_fog_volume_object(obj, data, source_kind="sector"):
     parameters = fog_volume_parameters(data, source_kind)
-    obj.display_type = "TEXTURED"
+    # Wire, so the box does not hide the scene inside it in the viewport; renders still use the volume material.
+    obj.display_type = "WIRE"
     obj.show_wire = True
     obj.color = parameters["color"]
     obj.hide_viewport = not parameters["enabled"]
