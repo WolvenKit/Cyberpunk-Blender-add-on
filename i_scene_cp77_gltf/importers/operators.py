@@ -883,12 +883,15 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
         return result.blender_status
 
 
-# One toggle button per category and one tick per choice, labelled as the dialog model names them.
+# One toggle button per category and one tick per choice, labelled and described as the sector dialog model names them.
 CP77StreamingSectorImport.__annotations__.update(
     {
         **{
             category_property(category): BoolProperty(
-                name=category.label, default=False, options={"SKIP_SAVE"}
+                name=category.label,
+                default=False,
+                options={"SKIP_SAVE"},
+                description=sector_dialog.CATEGORY_DESCRIPTIONS[category.name],
             )
             for category in sector_dialog.CATEGORIES
         },
@@ -897,6 +900,7 @@ CP77StreamingSectorImport.__annotations__.update(
                 name=label,
                 default=choice in sector_dialog.STARTING_CHOICES,
                 options={"SKIP_SAVE"},
+                description=sector_dialog.CHOICE_DESCRIPTIONS[choice],
             )
             for choice, label in sector_dialog.CHOICE_LABELS.items()
         },
