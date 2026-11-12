@@ -587,7 +587,7 @@ def _light_bounds(obj):
     )
 
 
-def _children_of(lights):
+def children_of(lights):
     """Each light's children by pointer, gathered in one pass"""
     wanted = {light.as_pointer() for light in lights}
     children = {}
@@ -697,7 +697,7 @@ def relink_light(light, scope_collection):
         scope_collection["cp77_light_link_collections"] = json.dumps(
             [*names, target.name], separators=(",", ":")
         )
-    _assign_receiver_collection(light, target, _children_of((light,)))
+    _assign_receiver_collection(light, target, children_of((light,)))
 
 
 def rebuild_light_channel_links(
@@ -742,7 +742,7 @@ def rebuild_light_channel_links(
         receiver["cp77_light_receiver_mask"] = int(mask)
 
     receivers_finished = time.perf_counter()
-    children = _children_of(lights)
+    children = children_of(lights)
     _clear_old_link_collections(scope_collection, lights, children)
     clear_finished = time.perf_counter()
     collections = {}
