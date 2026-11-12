@@ -176,6 +176,8 @@ class EntityImportSession:
             )
         elif self.manage_master_visibility:
             track_collection_state(masters, label="MasterInstances")
+        # Instances render regardless; this only stops the masters themselves rendering.
+        masters.hide_render = True
         if self.manage_master_visibility:
             track_collection_state(scene_collection, label="scene collection")
         if (

@@ -2396,6 +2396,8 @@ def _import_sectors(session, *, progress=NO_PROGRESS):
     else:
         track_collection_state(masters, label="MasterInstances")
     masters.hide_viewport = False
+    # Instances render regardless; this only stops the masters themselves rendering.
+    masters.hide_render = True
     session.masters = masters
 
     master_started = time.perf_counter()
