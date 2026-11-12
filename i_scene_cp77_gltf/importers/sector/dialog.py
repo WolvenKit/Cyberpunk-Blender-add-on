@@ -92,6 +92,62 @@ CHOICE_LABELS = {
     "acoustic_data": "Acoustic Data",
 }
 
+# Tooltips: what each button and tick places and how it shows in Blender, as the placement handlers build it.
+CATEGORY_DESCRIPTIONS = {
+    "lighting": (
+        "Sector and entity lights, light channels, reflection probes and GI markers. Lights are Blender lights, "
+        "probes are sphere light probes, channel volumes and GI markers are wireframes"
+    ),
+    "foliage": "worldFoliageNode grass, bushes and trees, one instance per foliage population entry",
+    "effects": "Particle and effect positions as small wire sphere empties; the effects themselves are not built",
+    "fog": "Fog volumes as boxes with a volume scatter material, which renders as haze",
+    "screens": "The ink widgets of entities placed in the sector, bound to their screen meshes",
+    "collisions": (
+        "PhysX collision actors: empties whose shapes are drawn as viewport lines by the collision overlay. "
+        "They are not meshes and do not render"
+    ),
+    "gameplay": (
+        "Occluders, areas, triggers, boundaries, splines, spawners and markers. Occluders are ordinary solid "
+        "meshes laid over the real geometry; the rest are wireframes, empties and curves"
+    ),
+    "audio": "Sound emitters as sphere empties and acoustic sectors as 32 m wireframe boxes",
+}
+CHOICE_DESCRIPTIONS = {
+    "sector_lights": "Import worldStaticLightNode as Blender lights, with their IES profiles",
+    "entity_lights": "Import the light components of entities placed in the sector",
+    "light_linking": "Link lights to meshes through their light channels; drops the channel volume objects afterwards",
+    "light_channel_volumes": "Keep the light channel volumes as wireframes hidden from renders",
+    "reflection_probes": "Import worldReflectionProbeNode as Blender sphere light probes",
+    "gi_data": "Import worldGINode as wire cube empties and worldGISpaceNode as wireframes; also keeps GI helper meshes",
+    "foliage": "Import worldFoliageNode grass, bushes and trees as instances of their meshes",
+    "effects": "Import worldStaticParticleNode and worldEffectNode as wire sphere empties at the effect positions",
+    "fog": "Import worldStaticFogVolumeNode as boxes with a volume scatter material",
+    "screens": "Import the WorldWidgetComponent ink widgets of placed entities and bind them to their meshes",
+    "world_collisions": "Import worldCollisionNode as collision actors drawn as viewport lines; not rendered",
+    "entity_colliders": "Import the collider components of placed entities as collision actors",
+    "terrain_heightfields": "Import worldTerrainCollisionNode heightfields as collision actors, overlay drawing off",
+    "foliage_destruction": "Import worldFoliageDestructionNode as box collision actors; needs Foliage switched on",
+    "occluders": (
+        "Import worldStaticOccluderMeshNode and worldInstancedOccluderNode, the game's occlusion meshes, as "
+        "ordinary solid meshes. They sit over the real geometry and hide it"
+    ),
+    "entity_occluders": (
+        "Import the entStaticOccluderMeshComponent meshes of placed entities as solid meshes over the real ones"
+    ),
+    "ambient_areas": "Import worldAmbientAreaNode outlines as wireframe volumes",
+    "interior_areas": "Import worldInteriorAreaNode outlines as wireframe volumes",
+    "interior_maps": "Import worldInteriorMapNode as wire cube empties, with its map packed as a greyscale image",
+    "world_boundaries": "Import gameWorldBoundaryNode outlines as wireframe volumes",
+    "triggers": "Import worldTriggerAreaNode and gameKillTriggerNode outlines as wireframe volumes",
+    "splines": "Import worldSplineNode and worldSpeedSplineNode as curves",
+    "ai_spawners": "Import worldAISpotNode as cone empties and worldPopulationSpawnerNode as axes empties",
+    "smart_objects": "Import worldSmartObjectNode and worldCompiledSmartObjectsNode as empties, with their workspots",
+    "gps_markers": "Import worldStaticGpsLocationEntranceMarkerNode as arrow empties",
+    "minimap": "Import MinimapDataNode bounds as wireframe boxes",
+    "sound_emitters": "Import worldStaticSoundEmitterNode as sphere empties sized to their radius",
+    "acoustic_data": "Import worldAcousticSectorNode as 32 m wireframe boxes",
+}
+
 # The ticks a category brings the first time it is switched on.
 STARTING_CHOICES = frozenset(
     {
