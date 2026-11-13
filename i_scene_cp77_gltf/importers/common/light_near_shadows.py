@@ -2,8 +2,8 @@
 
 Game lights often sit inside their lamp head (housing, lens). The game's local shadows ignore
 geometry that close to the light, but Blender traces it, so the light stays dark. Each light
-gets a shadow-link blocker collection that excludes the objects whose surface is within
-NEAR_PLANE of it; those objects still shadow every other light.
+that casts shadows gets a shadow-link blocker collection that excludes the fixture-sized
+objects whose surface is within NEAR_PLANE of it; those objects still shadow every other light.
 """
 
 from __future__ import annotations
@@ -21,6 +21,9 @@ _LOG = get_logger(__name__)
 
 # Assumed, not read from the game: covers lamp housings (~3.5 cm) and lenses (~8.5 cm) around the light.
 NEAR_PLANE = 0.15
+# Assumed: an object reaching further than this from the light is scenery (roof, wall, decal sheet), not
+# its fixture, and keeps shadowing it. Shadow linking is per object, so a large object cannot be clipped.
+FIXTURE_RANGE = 1.0
 
 
 def _mesh_parts(obj):
@@ -52,14 +55,29 @@ def _near_objects(scoped, lights):
 
     near = {}
     for obj in scoped:
-        for mesh_obj, matrix in _mesh_parts(obj):
-            if not mesh_obj.data or not mesh_obj.data.polygons:
-                continue
-            corners = [matrix @ Vector(corner) for corner in mesh_obj.bound_box]
+        parts = [
+            (
+                mesh_obj,
+                matrix,
+                [matrix @ Vector(corner) for corner in mesh_obj.bound_box],
+            )
+            for mesh_obj, matrix in _mesh_parts(obj)
+            if mesh_obj.data and mesh_obj.data.polygons
+        ]
+        reach = {}
+        for mesh_obj, matrix, corners in parts:
             centre = sum(corners, Vector()) / len(corners)
             radius = max((corner - centre).length for corner in corners) + NEAR_PLANE
             inverse = matrix.inverted_safe()
             for point, index, _distance in tree.find_range(centre, radius):
+                if index not in reach:
+                    reach[index] = max(
+                        (corner - point).length
+                        for _part, _matrix, part_corners in parts
+                        for corner in part_corners
+                    )
+                if reach[index] > FIXTURE_RANGE:
+                    continue
                 hit, location, _normal, _index = mesh_obj.closest_point_on_mesh(
                     inverse @ point
                 )
@@ -79,18 +97,30 @@ def _new_blocker_collection(scope_collection, excluded, serial):
     return collection
 
 
+def _casts_shadows(light, children):
+    """Whether the light or one of its capsule/proxy sample lights casts shadows"""
+    return light.data.use_shadow or any(
+        child.type == "LIGHT"
+        and child.get("cp77_light_proxy", False)
+        and child.data.use_shadow
+        for child in children.get(light.as_pointer(), ())
+    )
+
+
 def unblock_near_geometry(scope_collection):
-    """Give each light in scope a blocker collection that leaves out its own fixture"""
+    """Give each shadow-casting light in scope a blocker collection that leaves out its own fixture"""
     scoped = tuple(scope_collection.all_objects)
     lights = [
         obj
         for obj in scoped
         if obj.type == "LIGHT" and not obj.get("cp77_light_proxy", False)
     ]
+    children = children_of(lights)
+    # A light that casts no shadows has nothing to unblock.
+    lights = [light for light in lights if _casts_shadows(light, children)]
     if not lights:
         return
 
-    children = children_of(lights)
     collections = {}
     linked = 0
     for index, objects in _near_objects(scoped, lights).items():
