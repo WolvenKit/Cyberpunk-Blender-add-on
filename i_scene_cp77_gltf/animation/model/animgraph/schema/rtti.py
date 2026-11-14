@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..constants import ANIM_NODE_PREFIX
-from . import enums, registry
+from . import defaults, enums, registry
 from .type_utils import unwrap_indirect_type
 
 VARIADIC_AUTHORING_SEED = 2
@@ -107,17 +107,6 @@ def input_socket_definitions(
     return tuple(defs)
 
 
-def enum_default(enum_type: str) -> str:
-    opts = enums.options(enum_type, include_sentinel=False)
-    if not opts:
-        return ""
-    return sorted(opts.items(), key=lambda kv: int(kv[1]))[0][0]
-
-
-def _default_for_array() -> list:
-    return []
-
-
 def property_kind_from_type(
     type_name: str,
     *,
@@ -125,7 +114,7 @@ def property_kind_from_type(
     parent_type: str = "",
     json_path: str = "",
     value: Any = None,
-) -> tuple[str, Any, str, str, bool, str]:
+) -> tuple[str, str, str, bool, str]:
     """Return editable property metadata for a REDengine type string"""
     t = str(type_name or "")
     enum_type = enums.resolve_enum_type(
@@ -139,7 +128,6 @@ def property_kind_from_type(
         is_flags = enums.is_flags(enum_type)
         return (
             ("FLAGS_ENUM" if is_flags else "ENUM"),
-            enum_default(enum_type),
             t or enum_type,
             enum_type,
             is_flags,
@@ -147,74 +135,50 @@ def property_kind_from_type(
         )
     if t.startswith("array:"):
         inner = t[len("array:") :]
-        return "ARRAY", _default_for_array(), t, "", False, inner
+        return "ARRAY", t, "", False, inner
     if t in {"Bool"}:
-        return "BOOL", False, t, "", False, ""
+        return "BOOL", t, "", False, ""
     if t in {"Int8", "Int16", "Int32", "Int64"}:
-        return "INT", 0, t, "", False, ""
+        return "INT", t, "", False, ""
     if t in {"Uint8", "Uint16", "Uint32", "Uint64"}:
-        return "UINT", 0, t, "", False, ""
+        return "UINT", t, "", False, ""
     if t in {"Float", "Double"}:
-        return "FLOAT", 0.0, t, "", False, ""
+        return "FLOAT", t, "", False, ""
     if t == "String":
-        return "STRING", "", t, "", False, ""
+        return "STRING", t, "", False, ""
     if t == "CName":
-        return "CNAME", "None", t, "", False, ""
+        return "CNAME", t, "", False, ""
     if t == "animTransformIndex":
-        return "TRANSFORM_INDEX", "None", t, "", False, ""
+        return "TRANSFORM_INDEX", t, "", False, ""
     if t == "animNamedTrackIndex":
-        return "NAMED_TRACK_INDEX", "None", t, "", False, ""
+        return "NAMED_TRACK_INDEX", t, "", False, ""
     if t == "animVisualTagCondition":
-        return "VISUAL_TAG_CONDITION", "None", t, "", False, ""
+        return "VISUAL_TAG_CONDITION", t, "", False, ""
     if t == "animFloatClamp":
-        return "FLOAT_CLAMP", (0.0, 1.0), t, "", False, ""
+        return "FLOAT_CLAMP", t, "", False, ""
     if t == "Vector2":
-        return "VECTOR2", (0.0, 0.0), t, "", False, ""
+        return "VECTOR2", t, "", False, ""
     if t in {"Vector3", "EulerAngles"}:
-        return "VECTOR3", (0.0, 0.0, 0.0), t, "", False, ""
+        return "VECTOR3", t, "", False, ""
     if t == "Vector4":
-        return "VECTOR4", (0.0, 0.0, 0.0, 0.0), t, "", False, ""
+        return "VECTOR4", t, "", False, ""
     if t == "Quaternion":
-        return "QUATERNION", (0.0, 0.0, 0.0, 1.0), t, "", False, ""
+        return "QUATERNION", t, "", False, ""
     if t == "QsTransform":
-        return (
-            "QSTRANSFORM",
-            {
-                "$type": "QsTransform",
-                "Rotation": {
-                    "$type": "Quaternion",
-                    "i": 0.0,
-                    "j": 0.0,
-                    "k": 0.0,
-                    "r": 1.0,
-                },
-                "Scale": {"$type": "Vector4", "X": 1.0, "Y": 1.0, "Z": 1.0, "W": 1.0},
-                "Translation": {
-                    "$type": "Vector4",
-                    "X": 0.0,
-                    "Y": 0.0,
-                    "Z": 0.0,
-                    "W": 1.0,
-                },
-            },
-            t,
-            "",
-            False,
-            "",
-        )
+        return "QSTRANSFORM", t, "", False, ""
     if t == "curveData:Float":
-        return "CURVE_FLOAT", registry.DEFAULT_FLOAT_CURVE, t, "", False, ""
+        return "CURVE_FLOAT", t, "", False, ""
     if t.startswith("handle:") or t.startswith("rRef:"):
         inner = unwrap_indirect_type(t)
         if registry.has_class(inner) and not registry.is_node_class(inner):
-            return "HANDLE_STRUCT", {}, t, "", False, inner
-        return "RAW_JSON", None, t, "", False, inner
+            return "HANDLE_STRUCT", t, "", False, inner
+        return "RAW_JSON", t, "", False, inner
     if not t:
-        return "RAW_JSON", None, t, "", False, ""
+        return "RAW_JSON", t, "", False, ""
     if registry.has_class(t) and not registry.is_node_class(t):
-        return "STRUCT", {}, t, "", False, t
+        return "STRUCT", t, "", False, t
 
-    return "RAW_JSON", {}, t, "", False, ""
+    return "RAW_JSON", t, "", False, ""
 
 
 def property_definitions(name_or_short: str) -> tuple[PropertyDef, ...]:
@@ -229,13 +193,18 @@ def property_definitions(name_or_short: str) -> tuple[PropertyDef, ...]:
         is_link = registry.is_link_type(ptype)
         if hidden or is_link:
             continue
-        kind, default, red_type_hint, enum_type, is_flags, element_type = (
+        kind, red_type_hint, enum_type, is_flags, element_type = (
             property_kind_from_type(
                 ptype, field_name=name, parent_type=red_type, json_path=name, value=None
             )
         )
-        if "default" in prop:
-            default = prop.get("default")
+        default = (
+            prop["default"]
+            if "default" in prop
+            else defaults.schema_default_value(
+                ptype, field_name=name, parent_type=red_type
+            )
+        )
         defs.append(
             PropertyDef(
                 name=name,

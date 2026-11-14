@@ -20,6 +20,7 @@ from ...core.log import debug_exception, get_logger
 from .nodes import json_idprop, runtime_node
 from .paths import iter_exportable_input_sockets, json_path_get, link_source_handle
 from .tree_state import root_tree
+from .values import bools_as_ints
 
 _LOG = get_logger(__name__)
 
@@ -335,7 +336,7 @@ def export_reversal_audit_for_payload(
                     and int(bool(expected)) == actual
                 ):
                     counters["propertiesRoundtripped"] += 1
-                elif not _json_equal(expected, actual):
+                elif not _json_equal(bools_as_ints(expected), actual):
                     counters["propertiesValueMismatched"] += 1
                     block(
                         f"encoded property value mismatch: {handle}.{path}",

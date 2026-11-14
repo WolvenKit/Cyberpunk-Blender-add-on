@@ -224,6 +224,7 @@ class AnimGraphRuntime:
         self.structured = False
         self.program = None
         self._linear_program: tuple[Any, ...] = ()
+        self._linear_handles: frozenset[str] = frozenset()
         self._input_capture_bones: tuple[str, ...] = ()
         self._nodes = host.nodes_by_handle()
         self._pose_plans: dict[str, Any] = {}
@@ -1115,6 +1116,13 @@ class AnimGraphRuntime:
         dangle_handles, drag_handles = self._compile_pose_bridge(plan.root)
         self.required_bones.update(self.host.with_ancestor_bones(self.required_bones))
         self._linear_program = self._build_linear_program(plan.root)
+        self._linear_handles = frozenset(
+            handle
+            for handle in (
+                normalized_source_handle(node.handle) for node in self._linear_program
+            )
+            if handle
+        )
         self._compile_input_capture()
         self.structured = True
         self._log_structured_compile(plan.root, dangle_handles, drag_handles)
@@ -3523,6 +3531,7 @@ class AnimGraphRuntime:
         try:
             if self._linear_program:
                 output = self._execute_linear_program(input_frame)
+                self._ran_handles.update(self._linear_handles)
                 self._last_frames = {}
             else:
                 frame_cache = {}

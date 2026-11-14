@@ -20,7 +20,7 @@ from ...animation.domain.rig.metadata import (
 from ...animation.domain.rig.naming import blender_bone_name
 from ...animation.services.rig.repository import rig_source_document
 from ...assetio.atomic import atomic_write_text
-from ...assetio.paths import strip_json_suffix
+from ...assetio.paths import archive_file_name_for, strip_json_suffix
 from ...assetio.rig_documents import minimal_rig_document
 from ...assetio.transform_values import quaternion_wxyz_from_wkit, vector3_from_data
 from ...assetio.values import cname_entry, cname_texts
@@ -886,6 +886,11 @@ def export_armature_to_rig_json(
     filepath = os.path.abspath(filepath)
     if not filepath.lower().endswith(".rig.json"):
         filepath += ".rig.json"
+    header = document.get("Header")
+    if isinstance(header, dict) and header.get("ArchiveFileName"):
+        header["ArchiveFileName"] = archive_file_name_for(
+            header["ArchiveFileName"], filepath
+        )
     directory = os.path.dirname(filepath)
     if directory:
         os.makedirs(directory, exist_ok=True)

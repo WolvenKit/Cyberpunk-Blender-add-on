@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+import copy
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
+from ....assetio.values import cname_entry, float32_entry
 from ....bartmoss.quaternion import axis_angle_scalar_xyzw
 from ....bartmoss.scalar import all_finite
 from ....bartmoss.vector3 import cross3, dot3, length3
 from ....redSpace.euler import euler_from_xyzw, xyzw_from_euler
 from ...model.animgraph.indices import index_name
 from ...model.animgraph.math_expression import (
+    SOCKET_ARRAYS,
     expression_payload,
     expression_string_value,
 )
@@ -429,6 +432,83 @@ _OPERATORS = {
     _operator_key("=", SCALAR, SCALAR): (SCALAR, _equal),
 }
 
+_OPCODES = {
+    _operator_key("+", SCALAR, SCALAR): 0x01,
+    _operator_key("-", SCALAR, SCALAR): 0x02,
+    _operator_key("*", SCALAR, SCALAR): 0x03,
+    _operator_key("/", SCALAR, SCALAR): 0x04,
+    _operator_key("^", SCALAR, SCALAR): 0x05,
+    _operator_key("%", SCALAR, SCALAR): 0x06,
+    _operator_key("sin", SCALAR): 0x07,
+    _operator_key("cos", SCALAR): 0x08,
+    _operator_key("tan", SCALAR): 0x09,
+    _operator_key("asin", SCALAR): 0x0A,
+    _operator_key("acos", SCALAR): 0x0B,
+    _operator_key("atan", SCALAR): 0x0C,
+    _operator_key("min", SCALAR, SCALAR): 0x0E,
+    _operator_key("max", SCALAR, SCALAR): 0x0F,
+    _operator_key("log", SCALAR): 0x10,
+    _operator_key("log2", SCALAR): 0x11,
+    _operator_key("sqrt", SCALAR): 0x12,
+    _operator_key("cbrt", SCALAR): 0x13,
+    _operator_key("abs", SCALAR): 0x14,
+    _operator_key("ceil", SCALAR): 0x15,
+    _operator_key("floor", SCALAR): 0x16,
+    _operator_key("round", SCALAR): 0x17,
+    _operator_key("#NEG", SCALAR): 0x18,
+    _operator_key("clamp", SCALAR, SCALAR, SCALAR): 0x19,
+    _operator_key("sign", SCALAR): 0x1A,
+    _operator_key("Vec", SCALAR, SCALAR, SCALAR): 0x1F,
+    _operator_key("-", VECTOR, VECTOR): 0x20,
+    _operator_key("+", VECTOR, VECTOR): 0x21,
+    _operator_key("*", VECTOR, SCALAR): 0x22,
+    _operator_key("*", SCALAR, VECTOR): 0x23,
+    _operator_key("/", VECTOR, SCALAR): 0x24,
+    _operator_key("/", SCALAR, VECTOR): 0x25,
+    _operator_key("dot", VECTOR, VECTOR): 0x26,
+    _operator_key("cross", VECTOR, VECTOR): 0x27,
+    _operator_key("length", VECTOR): 0x28,
+    _operator_key("lengthSq", VECTOR): 0x29,
+    _operator_key("norm", VECTOR): 0x2A,
+    _operator_key("lerp", VECTOR, VECTOR, SCALAR): 0x2B,
+    _operator_key("setX", VECTOR, SCALAR): 0x2C,
+    _operator_key("setY", VECTOR, SCALAR): 0x2D,
+    _operator_key("setZ", VECTOR, SCALAR): 0x2E,
+    _operator_key("setXY", VECTOR, SCALAR, SCALAR): 0x2F,
+    _operator_key("setYZ", VECTOR, SCALAR, SCALAR): 0x30,
+    _operator_key("setXZ", VECTOR, SCALAR, SCALAR): 0x31,
+    _operator_key("getX", VECTOR): 0x32,
+    _operator_key("getY", VECTOR): 0x33,
+    _operator_key("getZ", VECTOR): 0x34,
+    _operator_key("Rot", VECTOR, SCALAR): 0x3D,
+    _operator_key("Rot", SCALAR, SCALAR, SCALAR): 0x3E,
+    _operator_key("getRoll", QUATERNION): 0x3F,
+    _operator_key("getPitch", QUATERNION): 0x40,
+    _operator_key("getYaw", QUATERNION): 0x41,
+    _operator_key("&", SCALAR, SCALAR): 0x80,
+    _operator_key("|", SCALAR, SCALAR): 0x81,
+    _operator_key("xor", SCALAR, SCALAR): 0x82,
+    _operator_key("!", SCALAR): 0x83,
+    _operator_key(">", SCALAR, SCALAR): 0x84,
+    _operator_key("greater_or_equal", SCALAR, SCALAR): 0x85,
+    _operator_key("<", SCALAR, SCALAR): 0x86,
+    _operator_key("less_or_equal", SCALAR, SCALAR): 0x87,
+    _operator_key("=", SCALAR, SCALAR): 0x88,
+}
+_VALUE_TYPE_CODES = {SCALAR: 1, VECTOR: 2, QUATERNION: 3}
+_OPERATOR_TOKEN = 0x80000000
+_VARIABLE_TOKEN = 0x8000
+SOCKET_ARRAY_BY_KIND = {
+    SCALAR: "floatSockets",
+    VECTOR: "vectorSockets",
+    QUATERNION: "quaternionSockets",
+}
+_NODE_RETURN_KINDS = {
+    "animAnimNode_MathExpressionFloat": SCALAR,
+    "animAnimNode_MathExpressionVector": VECTOR,
+    "animAnimNode_MathExpressionQuaternion": QUATERNION,
+}
+
 
 @dataclass(frozen=True)
 class _LexToken:
@@ -641,7 +721,8 @@ def _bind_program(formula, rpn):
         argument_types = tuple(type_stack[-token.argc :]) if token.argc else ()
         if token.argc:
             del type_stack[-token.argc :]
-        operator = _OPERATORS.get(_operator_key(token.name, *argument_types))
+        key = _operator_key(token.name, *argument_types)
+        operator = _OPERATORS.get(key)
         if operator is None:
             rendered = ", ".join(argument_types) or "no arguments"
             raise MathExpressionError(
@@ -650,7 +731,10 @@ def _bind_program(formula, rpn):
         return_type, function = operator
         type_stack.append(return_type)
         instructions.append(
-            _Instruction("operator", (token.name, token.argc, return_type, function))
+            _Instruction(
+                "operator",
+                (token.name, token.argc, return_type, function, _OPCODES[key]),
+            )
         )
     if len(type_stack) != 1:
         raise MathExpressionError(
@@ -687,7 +771,7 @@ class ExpressionProgram:
                         )
                     stack.append(value)
                     continue
-                _name, argc, return_type, function = instruction.value
+                _name, argc, return_type, function, _opcode = instruction.value
                 if argc > len(stack):
                     raise MathExpressionError(
                         f"MathExpression {self.formula!r} execution stack underflow"
@@ -751,6 +835,113 @@ def compile_expression(formula: str) -> ExpressionProgram:
 
 
 @dataclass(frozen=True)
+class EncodedExpression:
+    token_data: tuple[int, ...]
+    values_data: tuple[int | float, ...]
+    return_var_type: int
+    variables: tuple[ExpressionVariable, ...]
+
+
+def encode_expression(formula: str) -> EncodedExpression:
+    program = compile_expression(formula)
+    tokens, values = [], []
+    for instruction in program.instructions:
+        if instruction.kind == "constant":
+            tokens.append(_VALUE_TYPE_CODES[SCALAR] << 24 | len(values))
+            values.append(float32_entry(instruction.value))
+        elif instruction.kind == "variable":
+            variable = instruction.value
+            tokens.append(
+                _OPERATOR_TOKEN
+                | _VALUE_TYPE_CODES[variable.kind] << 24
+                | _VARIABLE_TOKEN
+                | variable.variable_id
+            )
+        else:
+            _name, argc, return_type, _function, opcode = instruction.value
+            tokens.append(
+                _OPERATOR_TOKEN
+                | argc << 28
+                | _VALUE_TYPE_CODES[return_type] << 24
+                | opcode
+            )
+    return EncodedExpression(
+        tuple(tokens),
+        tuple(values),
+        _VALUE_TYPE_CODES[program.return_type],
+        program.variables,
+    )
+
+
+def _new_socket_entry(array_name: str) -> dict[str, Any]:
+    _label, _prefix, link_type, struct_type = SOCKET_ARRAYS[array_name]
+    entry: dict[str, Any] = {"$type": struct_type, "expressionVarId": 0}
+    if array_name == "floatSockets":
+        entry["inputFloatTrack"] = {
+            "$type": "animNamedTrackIndex",
+            "name": cname_entry("None"),
+        }
+    entry["link"] = {"$type": link_type, "node": None}
+    return entry
+
+
+def recompiled_expression_data(
+    stored: Any, formula: str, previous_formula: str, handle: str, node_type: str
+) -> tuple[dict[str, Any], dict[tuple[str, int], tuple[str, int]], EncodedExpression]:
+    encoded = encode_expression(formula)
+    expected = _NODE_RETURN_KINDS.get(node_type, SCALAR)
+    if encoded.return_var_type != _VALUE_TYPE_CODES[expected]:
+        raise MathExpressionError(
+            f"MathExpression {formula!r} does not return a {expected} for {node_type}"
+        )
+    try:
+        previous = compile_expression(previous_formula).variables
+    except MathExpressionError:
+        previous = ()
+    previous_names = {variable.variable_id: variable.name for variable in previous}
+    data = (
+        copy.deepcopy(dict(stored))
+        if isinstance(stored, Mapping)
+        else {"$type": "animMathExpressionNodeData"}
+    )
+    surviving = {}
+    for array_name in SOCKET_ARRAYS:
+        for index, entry in enumerate(data.get(array_name) or ()):
+            if isinstance(entry, Mapping):
+                name = previous_names.get(entry.get("expressionVarId"))
+                if name is not None:
+                    surviving[name] = (array_name, index, entry)
+    wrapper = data.get("expression")
+    if not isinstance(wrapper, dict):
+        wrapper = {}
+    if not wrapper.get("HandleId") and not wrapper.get("HandleRefId"):
+        wrapper["HandleId"] = handle
+    payload = wrapper.get("Data")
+    if not isinstance(payload, dict):
+        payload = {"$type": "mathExprExpression"}
+    payload["returnVarType"] = encoded.return_var_type
+    payload["tokenData"] = list(encoded.token_data)
+    payload["valuesData"] = list(encoded.values_data)
+    wrapper["Data"] = payload
+    data["expression"] = wrapper
+    arrays = {array_name: [] for array_name in SOCKET_ARRAYS}
+    moves = {}
+    for variable in encoded.variables:
+        array_name = SOCKET_ARRAY_BY_KIND[variable.kind]
+        slot = (array_name, len(arrays[array_name]))
+        old = surviving.get(variable.name)
+        if old is not None and old[0] == array_name:
+            entry = copy.deepcopy(dict(old[2]))
+            moves[slot] = (old[0], old[1])
+        else:
+            entry = _new_socket_entry(array_name)
+        entry["expressionVarId"] = variable.variable_id
+        arrays[array_name].append(entry)
+    data.update(arrays)
+    return data, moves, encoded
+
+
+@dataclass(frozen=True)
 class _UncompiledExpression:
     """An expression saved without a program, evaluating to its type's default"""
 
@@ -806,11 +997,7 @@ def compile_node_expression(node):
             )
         bindings.append(ExpressionSocketBinding(variable.name, binding_kind, socket))
     node_type = str(node.get("$type", "") or "")
-    expected_return = {
-        "animAnimNode_MathExpressionFloat": SCALAR,
-        "animAnimNode_MathExpressionVector": VECTOR,
-        "animAnimNode_MathExpressionQuaternion": QUATERNION,
-    }.get(node_type)
+    expected_return = _NODE_RETURN_KINDS.get(node_type)
     if expected_return is not None and expression.return_type != expected_return:
         raise MathExpressionError(
             f"MathExpression {expression.formula!r} returns {expression.return_type}, not {expected_return}"

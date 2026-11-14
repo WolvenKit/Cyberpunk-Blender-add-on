@@ -50,6 +50,8 @@ def _make_subtree(short: str, parent_tree=None):
 def _seed_authored_properties(node, definition: rtti.NodeDefinition) -> None:
     clear_node_properties(node)
     for prop in definition.properties:
+        if presenters.should_skip_property(definition.red_type, prop.name):
+            continue
         add_node_property(
             node,
             prop.name,

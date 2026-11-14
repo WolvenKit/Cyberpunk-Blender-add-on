@@ -9,23 +9,27 @@ from ...animation.domain.animgraph.topology import (
 )
 from ...animation.model.animgraph.constants import ANIM_NODE_PREFIX, ANIMGRAPH_TREE_ID
 from ...animation.model.animgraph.indices import cname
+from ...animation.model.animgraph.schema.defaults import (
+    schema_resource_path,
+    unresolved_default_collector,
+)
 from ...assetio.headers import (
     SUPPORTED_GAME_VERSION,
     SUPPORTED_WKIT_JSON_VERSION,
     SUPPORTED_WOLVENKIT_VERSION,
     utc_timestamp,
 )
+from ...assetio.paths import archive_file_name_for
 from ...blender.animgraph.access import get_attr, get_idprop
 from ...blender.animgraph.rig_binding import binding_tree
 from ...core.log import get_logger
 from .dangle_patch import validate_payload, write_json
-from .defaults import schema_resource_path, unresolved_default_collector
 from .handles import finalize_new_handles
 from .nodes import encode_tree_runtime_entries, json_idprop, take_unlisted_entries
 from .paths import indexed_socket_links
 from .references import normalize_inline_first_references
 from .tree_state import root_tree
-from .values import clone_json, decode_optional
+from .values import bools_as_ints, clone_json, decode_optional
 from .variables import encode_root_variables
 
 _LOG = get_logger(__name__)
@@ -300,26 +304,6 @@ def encode_rootchunk_payload(tree: bpy.types.NodeTree) -> dict[str, Any]:
     return root_chunk
 
 
-def _bools_as_ints(root: Any) -> Any:
-    """WolvenKit writes and reads CBool as 0 or 1"""
-    stack = [root]
-    while stack:
-        current = stack.pop()
-        if isinstance(current, dict):
-            for key, value in current.items():
-                if value is True or value is False:
-                    current[key] = int(value)
-                elif isinstance(value, (dict, list)):
-                    stack.append(value)
-        elif isinstance(current, list):
-            for index, value in enumerate(current):
-                if value is True or value is False:
-                    current[index] = int(value)
-                elif isinstance(value, (dict, list)):
-                    stack.append(value)
-    return root
-
-
 def encode_wolvenkit_json(tree: bpy.types.NodeTree) -> dict[str, Any]:
     root = root_tree(tree) or tree
     with unresolved_default_collector() as unresolved:
@@ -351,7 +335,7 @@ def encode_wolvenkit_json(tree: bpy.types.NodeTree) -> dict[str, Any]:
     data.setdefault("Version", 195)
     data.setdefault("BuildVersion", 0)
     data.setdefault("EmbeddedFiles", [])
-    data["RootChunk"] = _bools_as_ints(root_chunk)
+    data["RootChunk"] = bools_as_ints(root_chunk)
     payload = {"Header": header, "Data": data}
     validation = validate_payload(payload)
     if validation["errors"]:
@@ -439,4 +423,7 @@ def encode_rootchunk_summary(payload: dict[str, Any]) -> dict[str, Any]:
 def write_graph_document(path: str, tree: bpy.types.NodeTree) -> str:
     """Write the graph tree belongs to as a WolvenKit AnimGraph document at path, returning the text written"""
 
-    return write_json(path, encode_wolvenkit_json(binding_tree(tree)))
+    payload = encode_wolvenkit_json(binding_tree(tree))
+    header = payload["Header"]
+    header["ArchiveFileName"] = archive_file_name_for(header["ArchiveFileName"], path)
+    return write_json(path, payload)

@@ -377,5 +377,8 @@ CLASS_RECORDS = (
 )
 
 
+NODE_TRAILING_PROPERTIES = ({"name": "debugName", "type": "CName"},)
+
+
 def records():
     return {str(row["name"]): dict(row) for row in CLASS_RECORDS}

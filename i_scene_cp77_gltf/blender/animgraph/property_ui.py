@@ -1,10 +1,8 @@
-import json
-
-from ...animation.model.animgraph import math_expression
 from ...animation.model.animgraph.schema import enums
 from ...core.log import get_logger, log_once
 from . import curve_mapping
 from .properties import REDengine_AnimNodeProperty
+from .property_codec import property_by_key
 
 _LOG = get_logger(__name__)
 
@@ -124,13 +122,6 @@ def draw_scalar_target(target, layout, label: str):
         row.label(text=label, icon="ERROR")
 
 
-def _node_property_text(owner, key: str) -> str:
-    for prop in getattr(owner, "red_properties", ()):
-        if getattr(prop, "key", "") == key:
-            return str(getattr(prop, "string_value", "") or "")
-    return ""
-
-
 def _draw_math_expression_editor(
     owner, layout, item: REDengine_AnimNodeProperty, label: str
 ):
@@ -143,23 +134,11 @@ def _draw_math_expression_editor(
     if not item.expanded:
         return
 
-    try:
-        payload = json.loads(getattr(item, "raw_json", "") or "{}")
-    except (TypeError, ValueError):
-        payload = {}
-    expression_string = _node_property_text(owner, "expressionString")
-    parsed = (
-        math_expression.parse_expression_data(
-            payload, expression_string=expression_string
-        )
-        if math_expression is not None
-        else {}
-    )
-
-    col = box.column(align=True)
-    formula = str(parsed.get("expressionString", "") or "")
-    if formula:
-        col.label(text=f"Formula: {formula}")
+    formula = property_by_key(owner, "expressionString")
+    if formula is not None:
+        col = box.column(align=True)
+        col.enabled = formula.editable
+        col.prop(formula, "string_value", text="Formula")
 
 
 def _draw_array_editor(layout, item: REDengine_AnimNodeProperty, label: str):

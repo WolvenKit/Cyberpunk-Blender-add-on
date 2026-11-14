@@ -4,8 +4,14 @@ from typing import Any
 
 import bpy
 
+from ...animation.domain.animgraph.math_expression import recompiled_expression_data
 from ...animation.model.animgraph.constants import ANIM_NODE_PREFIX, ANIMGRAPH_TREE_ID
 from ...animation.model.animgraph.indices import cname
+from ...animation.model.animgraph.math_expression import (
+    expression_string_value,
+    socket_slot,
+)
+from ...animation.model.animgraph.schema.defaults import schema_default_data_for_type
 from ...animation.model.animgraph.sm_assembly import Assembled, AssemblyError, assemble
 from ...blender.animgraph import (
     aim_constraint,
@@ -15,10 +21,10 @@ from ...blender.animgraph import (
     sm_records,
 )
 from ...blender.animgraph.access import get_attr, get_idprop
+from ...blender.animgraph.math_expression import COMPILED_FORMULA_KEY
 from ...blender.animgraph.property_codec import encode_node_property
 from ...blender.animgraph.sm_model import new_handle_id
 from ...blender.animgraph.sm_records import ANY_RED_TYPE, ENTRY_RED_TYPE, pseudo_node
-from .defaults import schema_default_data_for_type
 from .paths import (
     encode_link_wrapper,
     ensure_list_size,
@@ -526,20 +532,6 @@ def _math_expression_payload_data(node: Any, expr: dict[str, Any]) -> dict[str, 
     return payload
 
 
-def _math_socket_path(path: str) -> tuple[str, int] | None:
-    for array_name in _MATH_EXPRESSION_SOCKET_ARRAYS:
-        prefix = f"expressionData.{array_name}["
-        if not str(path or "").startswith(prefix):
-            continue
-        rest = str(path)[len(prefix) :]
-        index_text = rest.split("]", 1)[0]
-        try:
-            return array_name, int(index_text)
-        except ValueError:
-            return None
-    return None
-
-
 def _ensure_math_socket(
     expr: dict[str, Any], array_name: str, index: int
 ) -> dict[str, Any]:
@@ -572,23 +564,33 @@ def _finalize_math_expression_data(node: Any, data: dict[str, Any]) -> None:
     """Finalize MathExpression payload structure after editable overlays"""
     if not _is_math_expression_node(node):
         return
+    formula = expression_string_value(data.get("expressionString"))
+    compiled = get_idprop(node, COMPILED_FORMULA_KEY, None)
+    moves = None
+    if compiled is not None and formula != str(compiled):
+        data["expressionData"], moves, _encoded = recompiled_expression_data(
+            data.get("expressionData"),
+            formula,
+            str(compiled),
+            str(get_idprop(node, "red_math_expression_handle", "") or "")
+            or new_handle_id(),
+            _red_type(node),
+        )
     expr = _math_expression_data(data)
-    payload = _math_expression_payload_data(node, expr)
-
-    for item in getattr(node, "red_properties", []) or []:
-        path = str(getattr(item, "json_path", "") or getattr(item, "key", "") or "")
-        if path == "expressionData.expression.Data.tokenData":
-            payload["tokenData"] = encode_node_property(item)
-        elif path == "expressionData.expression.Data.valuesData":
-            payload["valuesData"] = encode_node_property(item)
+    _math_expression_payload_data(node, expr)
 
     for sock in iter_exportable_input_sockets(node):
-        parsed = _math_socket_path(str(get_attr(sock, "red_json_path", "") or ""))
-        if parsed is None:
+        slot = socket_slot(str(get_attr(sock, "red_json_path", "") or ""))
+        if slot is None:
             continue
-        array_name, index = parsed
-        item = _ensure_math_socket(expr, array_name, index)
-        item["link"] = encode_link_wrapper(sock)
+        targets = (
+            [slot]
+            if moves is None
+            else [new for new, old in moves.items() if old == slot]
+        )
+        for array_name, index in targets:
+            item = _ensure_math_socket(expr, array_name, index)
+            item["link"] = encode_link_wrapper(sock)
 
 
 def encode_runtime_node_data(

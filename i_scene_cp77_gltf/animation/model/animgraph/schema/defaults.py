@@ -5,12 +5,12 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any
 
-from ...animation.model.animgraph.constants import ANIM_NODE_PREFIX
-from ...animation.model.animgraph.indices import cname
-from ...animation.model.animgraph.schema import enums, registry, rtti
-from ...animation.model.animgraph.schema.type_utils import unwrap_indirect_type
-from ...assetio.transform_values import encode_qs_transform, encode_wkit_quaternion
-from ...core.log import get_logger
+from .....assetio.transform_values import encode_qs_transform, encode_wkit_quaternion
+from .....core.log import get_logger
+from ..constants import ANIM_NODE_PREFIX
+from ..indices import cname
+from . import enums, registry
+from .type_utils import unwrap_indirect_type
 
 _LOG = get_logger(__name__)
 
@@ -111,6 +111,13 @@ def _default_link_wrapper(link_type: str) -> dict[str, Any]:
     return {"$type": str(link_type or "animPoseLink"), "node": None}
 
 
+def enum_default(enum_type: str) -> str:
+    opts = enums.options(enum_type, include_sentinel=False)
+    if not opts:
+        return ""
+    return sorted(opts.items(), key=lambda kv: int(kv[1]))[0][0]
+
+
 def schema_default_value(
     type_name: str, *, field_name: str = "", parent_type: str = "", _depth: int = 0
 ) -> Any:
@@ -140,7 +147,7 @@ def schema_default_value(
             value=None,
         )
         if enum_type:
-            return rtti.enum_default(enum_type)
+            return enum_default(enum_type)
     except _SCHEMA_ERRORS as error:
         _record_unresolved(t, field_name, parent_type, error)
 
@@ -181,7 +188,13 @@ def schema_default_value(
     if t == "animVisualTagCondition":
         return {"$type": "animVisualTagCondition", "visualTag": cname("None")}
     if t == "animFloatClamp":
-        return {"$type": "animFloatClamp", "min": 0.0, "max": 1.0}
+        return {
+            "$type": "animFloatClamp",
+            "useMin": 0,
+            "useMax": 0,
+            "min": -1.0,
+            "max": 1.0,
+        }
     if t == "curveData:Float":
         return json.loads(json.dumps(registry.DEFAULT_FLOAT_CURVE))
 

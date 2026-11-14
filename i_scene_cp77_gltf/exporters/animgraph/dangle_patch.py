@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import os
 from collections.abc import Iterable, Mapping, MutableMapping
 from typing import Any
 
@@ -23,7 +22,7 @@ from ...assetio.headers import (
     SUPPORTED_WOLVENKIT_VERSION,
     utc_timestamp,
 )
-from ...assetio.paths import strip_json_suffix
+from ...assetio.paths import archive_file_name_for
 from ...assetio.transform_values import encode_qs_transform
 from ...assetio.values import coerce_float, coerce_int
 from ...bartmoss.vehicle import STANDARD_GRAVITY
@@ -935,7 +934,9 @@ def patch_wolvenkit_payload(
     if update_header:
         header["ExportedDateTime"] = utc_timestamp()
         if export_path:
-            header["ArchiveFileName"] = strip_json_suffix(os.path.basename(export_path))
+            header["ArchiveFileName"] = archive_file_name_for(
+                header.get("ArchiveFileName", ""), export_path
+            )
     payload.setdefault("Data", {}).setdefault("EmbeddedFiles", [])
     original_payload.clear()
     original_payload.update(payload)

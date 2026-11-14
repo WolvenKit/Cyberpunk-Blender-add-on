@@ -425,6 +425,12 @@ def _extract_dangle_info(dangle_node, node_map):
     return (dangle_node, sim_data, bone_set, sim_type)
 
 
+def _editable_dangle(info):
+    return info is not None and (
+        bool(info[2]) or info[3] == "animDangleConstraint_SimulationDyng"
+    )
+
+
 def _make_node_label(sim_data, bone_set):
     sim_type = sim_data.get("$type")
     iters = int(_get_wk(sim_data, "solverIterations", 1))
@@ -717,6 +723,11 @@ def _parse_dangle_as_node(sim_data, addon_state, node_map, node_label):
 
             particle_lookup[b_name] = (ch_idx, len(ch.particles) - 1)
 
+    if not chain_order:
+        chain = dnode.chains.add()
+        chain.name = "Chain_1"
+        chain.solver = "DYNG"
+
     dyng_ref = _get_wk(sim_data, "dyngConstraint", {})
 
     dnode.particle_source_indices = json_io.dumps(
@@ -910,7 +921,7 @@ def _parse_wolvenkit_animgraph(data, addon_state):
         identity = f"handle:{raw_handle}"
         if node_type == "DANGLE":
             info = _extract_dangle_info(raw_node, node_map)
-            if info is None or not info[2]:
+            if not _editable_dangle(info):
                 continue
             if identity not in dangle_indices:
                 _dangle, sim_data, bone_set, _sim_type = info
@@ -944,7 +955,7 @@ def _parse_wolvenkit_animgraph(data, addon_state):
         if id(raw_node) in parsed_dangle_nodes:
             continue
         info = _extract_dangle_info(raw_node, node_map)
-        if info is None or not info[2]:
+        if not _editable_dangle(info):
             continue
         _dangle, sim_data, bone_set, _sim_type = info
         label = _make_node_label(sim_data, bone_set)

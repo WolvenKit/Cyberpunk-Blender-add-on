@@ -211,6 +211,16 @@ def strip_json_suffix(path):
     return value
 
 
+def archive_file_name_for(archive_name, export_path):
+    """archive_name naming export_path's file instead, in archive_name's path form"""
+    value = str(archive_name or "")
+    name = strip_json_suffix(ntpath.basename(str(export_path or "")))
+    folder_end = max(value.rfind("/"), value.rfind("\\")) + 1
+    if not name or value[folder_end:].casefold() == name.casefold():
+        return value
+    return value[:folder_end] + name
+
+
 def animgraph_json_path(path):
     """path ending in exactly one .animgraph.json, whatever .animgraph / .json endings it had"""
     value = strip_json_suffix(path)

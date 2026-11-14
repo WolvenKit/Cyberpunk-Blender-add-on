@@ -218,8 +218,11 @@ def _all_properties(full: str) -> tuple[dict, ...]:
     records, _ok = _records()
     props: list[dict] = []
     seen = set()
-    for cls in parent_chain(full, include_self=True):
-        rec = records.get(cls) or {}
+    chain = parent_chain(full, include_self=True)
+    declared = [records.get(cls) or {} for cls in chain]
+    if _NODE_BASE in chain:
+        declared.append({"properties": overrides.NODE_TRAILING_PROPERTIES})
+    for rec in declared:
         for prop in rec.get("properties", []) or []:
             pname = prop.get("name")
             if not pname:
