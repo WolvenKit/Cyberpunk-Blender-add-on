@@ -31,7 +31,6 @@ from ...bartmoss.hierarchy import (
     model_matrices_to_local,
     nearest_kept_ancestors,
 )
-from ...bartmoss.matrix import as_matrix_4x4
 from ...bartmoss.quaternion import normalize_sequence_xyzw
 from ...bartmoss.trs import compose_matrices, compose_matrices_wxyz, decompose_matrices
 from ...blender.action_metadata import (
@@ -41,7 +40,11 @@ from ...blender.action_metadata import (
     load_json_snapshot,
     resolve_action_binding,
 )
-from ...blender.armature import inheritance_issue, rest_model_matrices
+from ...blender.armature import (
+    BIND_PRECISION_TARGET,
+    inheritance_issue,
+    rest_model_matrices,
+)
 from ...blender.armature_bones import rig_space_contract
 from ...blender.event_storage import save_events_to_idproperty
 from ...blender.keyframes import (
@@ -65,6 +68,7 @@ from ...redSpace.transforms import blender_relative_to_gltf, skeleton_relative_t
 from .errors import DirectAnimationExportError
 
 _LOG = get_logger(__name__)
+_PARENT_RELATIVE_REST_PRECISION = 2.0 * BIND_PRECISION_TARGET
 
 
 @dataclass(frozen=True)
@@ -186,6 +190,14 @@ class _BindingSession:
         return skeleton
 
 
+def _merged_rest_where_different(selected_rest, merged_model, parent_indices):
+    merged = model_matrices_to_local(merged_model, parent_indices)
+    same = np.all(
+        np.abs(merged - selected_rest) <= _PARENT_RELATIVE_REST_PRECISION, axis=(1, 2)
+    )
+    return np.where(same[:, None, None], selected_rest, merged)
+
+
 def build_skeleton_export_binding(
     armature, action=None, *, source_rig_path: str = "", session=None
 ) -> SkeletonExportBinding:
@@ -273,29 +285,6 @@ def build_skeleton_export_binding(
                 "source-rest snapshot. Re-import the animation before exporting it from "
                 "a merged MetaRig; substituting the rig A-pose could alter keyed transforms."
             )
-    if (
-        selected_source is not None
-        and not action_skin_snapshot
-        and has_pose_payload
-        and selected_rest is not None
-    ):
-        live_model = np.asarray(
-            [as_matrix_4x4(bone.matrix_local) for bone in target_bones],
-            dtype=np.float64,
-        )
-        live_relative = model_matrices_to_local(live_model, parent_indices)
-        if not np.allclose(
-            live_relative,
-            selected_rest,
-            rtol=0.0,
-            atol=1e-7,
-        ):
-            raise DirectAnimationExportError(
-                f"Action {action.name!r} has no source-rig snapshot and its selected "
-                "constituent rig uses a different rest basis than the merged MetaRig. "
-                "Export cannot reinterpret those Blender pose keys without changing transforms."
-            )
-
     source_rest_snapshot = (
         action_source_rest(action)
         if action_matches_selected
@@ -327,6 +316,15 @@ def build_skeleton_export_binding(
     if rest_relative_blender is None:
         model_matrices = rest_model_blender
         rest_relative_blender = model_matrices_to_local(model_matrices, parent_indices)
+    elif (
+        selected_source is not None
+        and not action_skin_snapshot
+        and has_pose_payload
+        and selected_rest is not None
+    ):
+        rest_relative_blender = _merged_rest_where_different(
+            rest_relative_blender, rest_model_blender, parent_indices
+        )
 
     rest_relative_gltf = skeleton_relative_to_gltf(
         rest_relative_blender, parent_indices

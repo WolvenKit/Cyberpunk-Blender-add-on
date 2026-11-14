@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import bpy
+import numpy as np
 from mathutils import Matrix, Quaternion, Vector
 
 from ...animation.domain.rig.metadata import (
@@ -35,6 +36,7 @@ from ...redSpace.transforms import (
     red_model_transform_to_current_bone,
 )
 from .errors import RigExportError
+from .references import remap_bone_references
 
 
 def _imported_bone_matrix(bone) -> Matrix | None:
@@ -215,64 +217,6 @@ def _validate_export_topology(bone_names, parent_indices, *parallel_arrays):
             raise ValueError(
                 f"boneParentIndexes[{child_index}]={parent_index} does not precede its child."
             )
-
-
-def _remap_bone_references(
-    root: dict, source_names, export_names, source_indices, lod_ranks
-) -> None:
-    """Point the index-based bone references at the exported bone order"""
-    export_index_by_source = {
-        source_index: export_index
-        for export_index, source_index in enumerate(source_indices)
-        if source_index is not None
-    }
-
-    def exported_index(source_index: int, user: str) -> int:
-        export_index = export_index_by_source.get(source_index)
-        if export_index is None:
-            name = (
-                source_names[source_index]
-                if 0 <= source_index < len(source_names)
-                else source_index
-            )
-            raise RigExportError(
-                f"Bone '{name}' was deleted but {user} still uses it; restore the bone before exporting."
-            )
-        return export_index
-
-    for setup in root.get("ikSetups") or ():
-        data = setup.get("Data") if isinstance(setup, dict) else None
-        if not isinstance(data, dict):
-            continue
-        user = f"IK setup '{(data.get('name') or {}).get('$value', '')}'"
-        for key in ("firstBone", "secondBone", "endBone"):
-            if isinstance(data.get(key + "Idx"), int):
-                index = exported_index(data[key + "Idx"], user)
-                data[key + "Idx"] = index
-                if isinstance(data.get(key), dict):
-                    data[key]["$value"] = export_names[index]
-
-    ragdoll_names = root.get("ragdollNames") or []
-    for body, description in enumerate(root.get("ragdollDesc") or ()):
-        for side in ("Parent", "Child"):
-            source_index = description.get(f"{side}AnimIndex")
-            if not isinstance(source_index, int) or source_index < 0:
-                continue
-            index = exported_index(source_index, f"ragdoll body {body}")
-            description[f"{side}AnimIndex"] = index
-            names = ragdoll_names[body] if body < len(ragdoll_names) else None
-            if isinstance(names, dict) and isinstance(
-                names.get(f"{side}AnimName"), dict
-            ):
-                names[f"{side}AnimName"]["$value"] = export_names[index]
-
-    # Each LOD evaluates the first N bones: it keeps the source bones it had and gains the new bones ranked inside it.
-    counts = root.get("levelOfDetailStartIndices")
-    if isinstance(counts, list) and counts:
-        root["levelOfDetailStartIndices"] = [
-            sum(1 for rank in lod_ranks if rank is not None and rank < int(count))
-            for count in counts
-        ]
 
 
 def _transform_scale(transform: Any) -> Vector:
@@ -486,9 +430,12 @@ def _build_topology_export_context(arm_obj, root: dict):
     source_count = len(source_names)
     source_index_by_name = _source_name_index(source_names)
 
-    current_blender_models = (
-        [Matrix(matrix) for matrix in rest_model_matrices(bones)] if bones else []
-    )
+    blender_models = rest_model_matrices(bones) if bones else []
+    if bones and not source_count:
+        blender_models = rigid_matrices(
+            np.asarray(arm_obj.matrix_world) @ blender_models
+        )
+    current_blender_models = [Matrix(matrix) for matrix in blender_models]
 
     imported_pose_name = _resolve_rig_export_pose_target(arm_data, "IMPORTED")
     imported_local_name = (
@@ -814,19 +761,27 @@ def build_rig_json_from_armature(
         exported_name_entries.append(cname_entry(name, template))
     root["boneNames"] = exported_name_entries
     root["boneParentIndexes"] = list(topology["parent_indices"])
-    if topology_changed:
-        _remap_bone_references(
+    dropped_references = (
+        remap_bone_references(
             root,
             original_names,
+            original_parents,
             topology["bone_names"],
             topology["source_indices"],
             topology["lod_ranks"],
         )
+        if topology_changed
+        else []
+    )
 
     t_pose = _export_pose_from_context(
         topology, source_root, "boneTransforms", "referencePoseMS"
     )
-    has_a_pose = bool(source_root.get("aPoseLS")) or bool(source_root.get("aPoseMS"))
+    has_a_pose = (
+        bool(source_root.get("aPoseLS"))
+        or bool(source_root.get("aPoseMS"))
+        or not original_names
+    )
     a_pose = (
         _export_pose_from_context(topology, source_root, "aPoseLS", "aPoseMS")
         if has_a_pose or target in {"A_POSE", "ALL"}
@@ -909,6 +864,7 @@ def build_rig_json_from_armature(
             len(original_names)
             - sum(index is not None for index in topology["source_indices"]),
         ),
+        "dropped_references": dropped_references,
     }
     return document, summary
 
@@ -957,6 +913,12 @@ def export_active_rig(context, filepath: str) -> OperationResult:
         warnings.append(
             "The bone topology changed; retained non-pose metadata may need review."
         )
+    dropped = summary.get("dropped_references") or ()
+    if dropped:
+        listed = ", ".join(dropped[:5]) + (
+            f" and {len(dropped) - 5} more" if len(dropped) > 5 else ""
+        )
+        warnings.append(f"Removed with the deleted bones: {listed}.")
     if summary.get("nonuniform_scaled_edit_count"):
         warnings.append(
             "Edited bones under a nonuniform source scale were reconstructed approximately."
