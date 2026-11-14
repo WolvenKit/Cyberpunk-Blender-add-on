@@ -15,6 +15,7 @@ from ...blender.physics.vehicle_geometry import (
     entity_collection_for_object,
     object_attachment_name,
     object_targets_rig,
+    projected_bounds,
     projected_dimensions,
     vehicle_frame_world,
 )
@@ -44,6 +45,23 @@ _BIKE_SUSPENSION = {
     "front": ("suspension_front", "fork_front", "suspension_front_left"),
     "rear": ("suspension_back", "suspension_rear", "suspension_back_left"),
 }
+_WHEEL_CENTER_TOLERANCE = 0.01
+
+
+def _bike_wheel(obj, rig, rig_inverse, bones, centers, axle):
+    """The wheel obj is part of, when it hangs from a bone at that wheel's centre and is centred on its axle"""
+    attachment = bones.get(object_attachment_name(obj, rig).casefold())
+    if attachment is None:
+        return None
+    for field, center in centers.items():
+        if (attachment.head_local - center).length > _WHEEL_CENTER_TOLERANCE:
+            continue
+        low, high = projected_bounds(obj, rig_inverse)
+        offset = (low + high) * 0.5 - center
+        offset[axle] = 0.0
+        if offset.length <= _WHEEL_CENTER_TOLERANCE:
+            return field
+    return None
 
 
 def _bike_related(rig, wheel_bones):
@@ -64,9 +82,15 @@ def _bike_related(rig, wheel_bones):
     related = list(collection.all_objects) if collection is not None else direct
     related = [obj for obj in related if obj.type == "MESH"]
     groups = {"front": [], "rear": []}
-    reverse = {name.casefold(): field for field, name in wheel_bones.items()}
+    rig_inverse = rig.matrix_world.inverted_safe()
+    bones = {bone.name.casefold(): bone for bone in rig.data.bones}
+    centers = {
+        field: rig.data.bones[name].head_local for field, name in wheel_bones.items()
+    }
+    forward = _bike_frame_axis(rig, wheel_bones["front"], wheel_bones["rear"])
+    axle = 0 if forward.endswith("_Y") else 1
     for obj in related:
-        field = reverse.get(object_attachment_name(obj, rig).casefold())
+        field = _bike_wheel(obj, rig, rig_inverse, bones, centers, axle)
         if field:
             groups[field].append(obj)
     return collection, related, groups
@@ -102,8 +126,9 @@ def _bike_fit(vehicle, related=(), groups=None):
     if vehicle.source_mode == "RIG":
         front = vehicle.rig.data.bones[vehicle.bike_front_bone].head_local
         rear = vehicle.rig.data.bones[vehicle.bike_rear_bone].head_local
+        wheels = {obj.as_pointer() for group in groups.values() for obj in group}
         body = body_bounds_objects(
-            related,
+            [obj for obj in related if obj.as_pointer() not in wheels],
             vehicle.rig,
             {
                 "front": vehicle.bike_front_bone,

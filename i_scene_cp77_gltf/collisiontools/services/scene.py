@@ -23,6 +23,7 @@ from ..runtime.simulation import begin_runtime_session
 from ..runtime.vehicle_preview import build_vehicle_if_enabled, reset_vehicle_preview
 from .actors import build_authored_actors, validate_scene_actors
 from .vehicle import setup_vehicle_from_rig
+from .vehicle_authoring import refresh_bike
 
 _LOG = get_logger(__name__)
 
@@ -251,7 +252,10 @@ def build_vehicle_preview(context):
     try:
         vehicle = context.scene.physx_vehicle
         if vehicle.source_mode == "RIG" and vehicle.refresh_rig_on_build:
-            setup_vehicle_from_rig(context, vehicle.rig)
+            if vehicle.vehicle_kind == "BIKE":
+                refresh_bike(vehicle)
+            else:
+                setup_vehicle_from_rig(context, vehicle.rig)
         if not px_scene.is_initialized:
             result = initialize_scene(context, False)
             if not result.ok or not px_scene.is_initialized:
