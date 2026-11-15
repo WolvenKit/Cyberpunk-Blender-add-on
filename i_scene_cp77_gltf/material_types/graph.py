@@ -256,6 +256,23 @@ def set_transparent(material):
     )
 
 
+def set_displacement_method(material, method="BOTH"):
+    """Make the material's Displacement output move vertices ("BOTH") instead of only bending normals ("BUMP")
+
+    Blender defaults to Bump Only, which turns a vertex offset such as a decal's VertexOffsetFactor into shading noise
+    and leaves the surface where it was.
+    """
+    for holder in (material, getattr(material, "cycles", None)):
+        if holder is None or not hasattr(holder, "displacement_method"):
+            continue
+        try:
+            holder.displacement_method = method
+            return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
 def connect_math(links, node, first=None, second=None):
     if first is not None:
         assign_socket(links, first, node.inputs["Value"])

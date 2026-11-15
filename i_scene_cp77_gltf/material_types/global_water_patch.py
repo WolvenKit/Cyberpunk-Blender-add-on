@@ -14,6 +14,7 @@ from ..blender.transactions import new_tracked_datablock
 from ..core.log import get_logger
 from ..materials.blender.helper_caches import register_helper_cache
 from ..materials.resources import load_material_document
+from .graph import set_displacement_method
 from .mat_common import (
     MaterialTypeBase,
     find_input,
@@ -72,16 +73,7 @@ register_helper_cache(
 )
 
 
-def _set_displacement_method(material, method="BOTH"):
-    for holder in (material, getattr(material, "cycles", None)):
-        if holder is None or not hasattr(holder, "displacement_method"):
-            continue
-        try:
-            holder.displacement_method = method
-            return True
-        except (TypeError, ValueError):
-            continue
-    return False
+_set_displacement_method = set_displacement_method
 
 
 def _set_material_transparency(material):

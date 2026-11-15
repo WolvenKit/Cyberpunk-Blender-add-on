@@ -12,6 +12,7 @@ from .graph import (
     color_channel_socket,
     mix_color_socket,
     mix_scalar_socket,
+    set_displacement_method,
     set_transparent,
     value_socket,
 )
@@ -301,6 +302,7 @@ class MeshDecalBlackbody(MaterialTypeBase):
             links.new(
                 displacement.outputs["Displacement"], output.inputs["Displacement"]
             )
+            set_displacement_method(Mat, "BOTH")
 
         set_transparent(Mat)
         if hasattr(Mat, "use_transparency_overlap"):

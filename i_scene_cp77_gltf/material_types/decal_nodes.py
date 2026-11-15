@@ -33,6 +33,7 @@ from .graph import (
     mix_color_socket,
     mix_scalar_socket,
     rgb_socket,
+    set_displacement_method,
     value_socket,
 )
 from .mat_common import (
@@ -929,7 +930,8 @@ def _normal(
     return normal
 
 
-def _displacement(nodes, links, output, value):
+def _displacement(material, nodes, links, output, value):
+    """Lift the decal off its receiver by VertexOffsetFactor, as the game's vertex offset does"""
     if abs(float(value)) <= 1.0e-12:
         return
     node = new_labeled_node(
@@ -939,6 +941,8 @@ def _displacement(nodes, links, output, value):
     find_input(node, "Midlevel").default_value = 0.0
     find_input(node, "Scale").default_value = 1.0
     links.new(node.outputs["Displacement"], output.inputs["Displacement"])
+    # A real offset, not a bump: Bump Only would leave the decal z-fighting its receiver and speckle its shading.
+    set_displacement_method(material, "BOTH")
 
 
 def _new_graph(material, label):
@@ -2266,7 +2270,7 @@ class MeshDecal(MaterialTypeBase):
         if "emissive_subsurface" in profile.features:
             self._emissive_subsurface(data, Mat, profile, nodes, links, principled, uv)
             _displacement(
-                nodes, links, output, _float(data, profile, "VertexOffsetFactor")
+                Mat, nodes, links, output, _float(data, profile, "VertexOffsetFactor")
             )
             _set_transparent(Mat)
             return
@@ -2275,7 +2279,7 @@ class MeshDecal(MaterialTypeBase):
                 data, Mat, profile, nodes, links, principled, uv, color_override
             )
             _displacement(
-                nodes, links, output, _float(data, profile, "VertexOffsetFactor")
+                Mat, nodes, links, output, _float(data, profile, "VertexOffsetFactor")
             )
             _set_transparent(Mat)
             return
@@ -3161,7 +3165,9 @@ class MeshDecal(MaterialTypeBase):
                 ).outputs["Strength"]
                 links.new(strength, find_input(principled, "Emission Strength"))
 
-        _displacement(nodes, links, output, _float(data, profile, "VertexOffsetFactor"))
+        _displacement(
+            Mat, nodes, links, output, _float(data, profile, "VertexOffsetFactor")
+        )
         _set_transparent(Mat)
 
     def _multitint(self, data, profile, nodes, links, uv, base):
