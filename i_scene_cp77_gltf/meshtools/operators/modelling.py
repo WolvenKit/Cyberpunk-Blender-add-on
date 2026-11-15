@@ -258,9 +258,7 @@ class CP77DeleteUnusedBones(Operator):
     bl_idname = "delete_unused_bones.cp77"
     bl_parent_id = "CP77_PT_animspanel"
     bl_label = "Delete unused bones"
-    bl_description = (
-        "Delete the armature's bones that none of its child meshes carries weight on"
-    )
+    bl_description = "Delete the armature's bones that no mesh on it carries weight on"
 
     def execute(self, context):
         return finish_operator(self, delete_unused_bones(context))
@@ -269,7 +267,7 @@ class CP77DeleteUnusedBones(Operator):
 class CP77DeleteOrphanBones(Operator):
     bl_idname = "cp77.delete_orphan_bones"
     bl_label = "Delete Orphan Bones"
-    bl_description = "Remove the bones of the selected meshes' armatures that none of the selected meshes carries weight on"
+    bl_description = "Remove the bones of the selected meshes' armatures that no mesh on them carries weight on"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod

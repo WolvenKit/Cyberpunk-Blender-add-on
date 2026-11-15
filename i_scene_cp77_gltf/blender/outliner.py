@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from functools import cmp_to_key
 
 import bpy
@@ -200,11 +201,21 @@ def outliner_object_order(context, objects):
 def name_submeshes(context, objects):
     """Name objects submesh_NN_LOD_L for their Outliner position unless that reorders them, returning the old and new names changed"""
     order = outliner_object_order(context, objects)
-    changes = [
-        (obj, obj.name, submesh_name(index, lod_from_name(obj.name)))
-        for index, obj in enumerate(order)
-    ]
-    changes = [change for change in changes if change[1] != change[2]]
+    named = {obj.as_pointer() for obj in order}
+    changes = []
+    for index, obj in enumerate(order):
+        wanted = submesh_name(index, lod_from_name(obj.name))
+        if obj.name == wanted:
+            continue
+        holder = bpy.data.objects.get(wanted)
+        # Object names are file-wide: one another collection holds leaves this mesh the suffixed name it already has.
+        if (
+            holder is not None
+            and holder.as_pointer() not in named
+            and re.fullmatch(rf"{re.escape(wanted)}\.\d{{3,}}", obj.name)
+        ):
+            continue
+        changes.append((obj, obj.name, wanted))
     # The names are freed first, as one submesh may want the name another holds.
     for obj, old, _new in changes:
         obj.name = fit_id_name(f"CP77_Rename_{old}")
@@ -216,4 +227,4 @@ def name_submeshes(context, objects):
         for obj, old, _new in changes:
             obj.name = old
         return ()
-    return tuple((old, obj.name) for obj, old, _new in changes)
+    return tuple((old, obj.name) for obj, old, _new in changes if obj.name != old)

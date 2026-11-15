@@ -15,47 +15,20 @@ def draw_glb_mesh_validation(context, layout):
     if not meshes:
         column.label(text="Select one or more meshes", icon="INFO")
     column.prop(props, "is_skinned")
-    column.prop(props, "advanced_validation")
 
-    if props.advanced_validation:
-        checks = column.box().column(align=True)
-        checks.label(text="Additional Checks")
-        checks.prop(props, "check_missing_uv")
-        checks.prop(props, "check_degenerate_faces")
-        checks.prop(props, "check_degenerate_uvs")
-        if props.is_skinned:
-            checks.prop(props, "check_unweighted_vertices")
-            checks.prop(props, "check_unused_bones")
+    # One list: what a check finds, Fix repairs, along with what export always needs.
+    checks = column.box().column(align=True)
+    if props.is_skinned:
+        checks.prop(props, "check_unweighted_vertices")
+        checks.prop(props, "check_unused_bones")
+    checks.prop(props, "check_unused_vertex_groups")
+    checks.prop(props, "check_missing_uv")
+    checks.prop(props, "check_degenerate_faces")
+    checks.prop(props, "check_degenerate_uvs")
 
     row = column.row(align=True)
     row.operator("cp77.validate_glb_meshes", text="Validate", icon="VIEWZOOM")
-    row.operator("cp77.fix_glb_meshes", text="Apply Fixes", icon="MODIFIER")
-
-    repair_box = column.box()
-    header = repair_box.row(align=True)
-    header.prop(
-        props,
-        "show_fixes",
-        text="Repair Options",
-        icon="TRIA_DOWN" if props.show_fixes else "TRIA_RIGHT",
-        emboss=False,
-    )
-    if props.show_fixes:
-        fixes = repair_box.column(align=True)
-        fixes.prop(props, "fix_remove_unmatched_vertex_groups")
-        fixes.prop(props, "fix_apply_autofitter_shape_keys")
-        if props.advanced_validation:
-            if props.check_missing_uv:
-                fixes.prop(props, "fix_add_missing_uv")
-            if props.check_degenerate_faces:
-                fixes.prop(props, "fix_dissolve_degenerate_faces")
-            if props.check_degenerate_uvs:
-                fixes.prop(props, "fix_dissolve_degenerate_uvs")
-            if props.is_skinned and props.check_unused_bones:
-                fixes.prop(props, "fix_remove_unused_bones")
-        if props.is_skinned:
-            fixes.prop(props, "fix_assign_unweighted_vertices")
-            fixes.prop(props, "fix_limit_influences")
+    row.operator("cp77.fix_glb_meshes", text="Fix", icon="MODIFIER")
 
     if props.last_status and props.last_status != "PASS":
         result = box.box()

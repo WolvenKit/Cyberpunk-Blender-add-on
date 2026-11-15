@@ -5,6 +5,10 @@ import json
 from ..assetio.values import json_object
 
 _STASH = "cp77_stashed_appearances"
+# An import that brings several appearances as collections, an entity's say, tags each with its group and name.
+APPEARANCE_GROUP_KEY = "cp77_appearance_group"
+APPEARANCE_NAME_KEY = "cp77_display_appearance_name"
+APPEARANCE_DEFAULT_KEY = "cp77_appearance_default"
 _STASH_MATERIAL = "cp77_stashed_appearance_material_"
 _STASH_ORIGINAL = "cp77_stashed_appearance_original_"
 
@@ -129,8 +133,42 @@ def _appearance_objects(scene):
     ]
 
 
+def _show_collection(collection, shown):
+    if collection.hide_viewport == shown:
+        collection.hide_viewport = not shown
+    if collection.hide_render == shown:
+        collection.hide_render = not shown
+
+
+def _appearance_collection_groups(scene):
+    groups = {}
+    for collection in scene.collection.children_recursive:
+        group = collection.get(APPEARANCE_GROUP_KEY)
+        if group:
+            groups.setdefault(str(group), []).append(collection)
+    return groups.values()
+
+
+def record_collection_appearances(scene, group, collections, default):
+    """List each of an import's appearance collections among the scene's appearances by its name, showing only default"""
+    for collection in collections:
+        appearance_index(scene, str(collection.get(APPEARANCE_NAME_KEY, "")))
+        collection[APPEARANCE_GROUP_KEY] = str(group)
+        collection[APPEARANCE_DEFAULT_KEY] = collection == default
+        _show_collection(collection, collection == default)
+
+
 def display_appearance(scene, index):
-    """Show appearance index on every mesh in the scene, with the original material where it names none"""
+    """Show appearance index on every mesh and appearance collection in the scene, leaving ones without it as they are"""
+    name = scene.cp77_mesh_appearances[index].name
+    for collections in _appearance_collection_groups(scene):
+        if any(
+            collection.get(APPEARANCE_NAME_KEY) == name for collection in collections
+        ):
+            for collection in collections:
+                _show_collection(
+                    collection, collection.get(APPEARANCE_NAME_KEY) == name
+                )
     for obj in _appearance_objects(scene):
         mesh = obj.data
         for slot_index, slot in enumerate(obj.material_slots):
@@ -155,7 +193,10 @@ def assign_to_appearance(objects, index):
 
 
 def reset_to_original(scene):
-    """Give every mesh in the scene back the materials it had before any appearance was shown"""
+    """Give every mesh in the scene back the materials it had before any appearance was shown, and every import its default appearance"""
+    for collections in _appearance_collection_groups(scene):
+        for collection in collections:
+            _show_collection(collection, bool(collection.get(APPEARANCE_DEFAULT_KEY)))
     for obj in _appearance_objects(scene):
         mesh = obj.data
         for slot_index, slot in enumerate(obj.material_slots):

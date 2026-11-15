@@ -304,6 +304,14 @@ def apply_mesh_issue_fixes(mesh_object, issues):
                 )
             if normalized:
                 fixes.append(f"Normalized the weights of {normalized} vertices")
+        elif issue.issue_type == "unused_vertex_groups":
+            removed = 0
+            for name in issue.details:
+                group = mesh_object.vertex_groups.get(name)
+                if group is not None:
+                    mesh_object.vertex_groups.remove(group)
+                    removed += 1
+            fixes.append(f"Removed {removed} vertex groups without weights")
         elif issue.issue_type == "autofitter_shape_keys":
             count = apply_autofitter_shape_keys(mesh_object, issue.details)
             fixes.append(
@@ -490,7 +498,7 @@ def prepare_mesh_validation_copies(
             temp_armatures.append(replacement)
             armature_replacements[original_armature] = replacement
             fixes_applied.setdefault(original_armature.name, []).append(
-                f"Removed {len(issue.details)} bones without vertex groups and reparented retained descendants"
+                f"Removed {len(issue.details)} bones no mesh carries weight on, keeping the rest in their places"
             )
 
         if armature_replacements:

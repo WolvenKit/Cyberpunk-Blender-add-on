@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import bpy
 import numpy as np
 
 from ..bartmoss.arrays import float32_bit_keys, stable_unique_integer_rows
@@ -12,22 +13,16 @@ VERT_LIMIT = 65535
 
 @dataclass(frozen=True, slots=True)
 class MeshValidationOptions:
-    advanced_validation: bool = False
-    check_missing_uv: bool = True
-    check_degenerate_faces: bool = True
-    check_degenerate_uvs: bool = False
-    check_unweighted_vertices: bool = True
+    """The checks to run beyond the ones export needs, and whether to fix every problem found"""
+
+    check_unweighted_vertices: bool = False
     check_unused_bones: bool = False
+    check_unused_vertex_groups: bool = False
+    check_missing_uv: bool = False
+    check_degenerate_faces: bool = False
+    check_degenerate_uvs: bool = False
 
     try_fix: bool = False
-    fix_remove_unmatched_vertex_groups: bool = True
-    fix_apply_autofitter_shape_keys: bool = False
-    fix_add_missing_uv: bool = True
-    fix_dissolve_degenerate_faces: bool = True
-    fix_dissolve_degenerate_uvs: bool = False
-    fix_assign_unweighted_vertices: bool = False
-    fix_remove_unused_bones: bool = False
-    fix_limit_influences: bool = False
 
     geometry_epsilon: float = 1e-10
     uv_epsilon: float = 1e-17
@@ -317,13 +312,17 @@ def _mandatory_mesh_issues(mesh_object, is_skinned, options):
             )
         )
 
-    # A submesh with no weights at all exports without a skin; one with some needs them on every vertex.
+    # A submesh with no weights at all exports without a skin, which only the Ungrouped Vertices check reports; one
+    # with some needs them on every vertex.
     unweighted = unweighted_vertex_indices(mesh_object)
-    if 0 < len(unweighted) < len(mesh_object.data.vertices):
+    whole = len(unweighted) == len(mesh_object.data.vertices)
+    if unweighted and (options.check_unweighted_vertices or not whole):
         issues.append(
             ValidationIssue(
                 "unweighted_vertices",
-                f"'{mesh_object.name}' has {len(unweighted)} vertices without weights; every vertex of a "
+                f"'{mesh_object.name}' has no vertex weights; it would not follow the armature."
+                if whole
+                else f"'{mesh_object.name}' has {len(unweighted)} vertices without weights; every vertex of a "
                 "weighted submesh needs some.",
                 mesh_object.name,
                 details=unweighted,
@@ -332,12 +331,37 @@ def _mandatory_mesh_issues(mesh_object, is_skinned, options):
     return issues
 
 
+def _named(names, limit=8):
+    shown = ", ".join(names[:limit])
+    return f"{shown}, and {len(names) - limit} more" if len(names) > limit else shown
+
+
 def _optional_mesh_issues(mesh_object, is_skinned, options):
-    if not options.advanced_validation or not len(mesh_object.data.polygons):
+    if not len(mesh_object.data.polygons):
         return []
 
     issues = []
     mesh = mesh_object.data
+    if options.check_unused_vertex_groups and mesh_object.vertex_groups:
+        weighted = weighted_group_names(mesh_object)
+        modifier = armature_modifier(mesh_object) if is_skinned else None
+        bones = modifier.object.data.bones if modifier is not None else None
+        # A group without a bone is the required check's to report; this one reports empty groups.
+        unused = tuple(
+            group.name
+            for group in mesh_object.vertex_groups
+            if group.name not in weighted
+            and (bones is None or bones.get(group.name) is not None)
+        )
+        if unused:
+            issues.append(
+                ValidationIssue(
+                    "unused_vertex_groups",
+                    f"'{mesh_object.name}' has {len(unused)} vertex groups without weights: {_named(unused)}.",
+                    mesh_object.name,
+                    details=unused,
+                )
+            )
     if options.check_missing_uv and (
         len(mesh.uv_layers) == 0 or getattr(mesh.uv_layers, "active", None) is None
     ):
@@ -380,22 +404,6 @@ def _optional_mesh_issues(mesh_object, is_skinned, options):
                     details=indices,
                 )
             )
-
-    if (
-        is_skinned
-        and options.check_unweighted_vertices
-        and armature_modifier(mesh_object)
-    ):
-        indices = unweighted_vertex_indices(mesh_object)
-        if indices and len(indices) == len(mesh.vertices):
-            issues.append(
-                ValidationIssue(
-                    "unweighted_vertices",
-                    f"'{mesh_object.name}' has no vertex weights; it exports without a skin.",
-                    mesh_object.name,
-                    details=indices,
-                )
-            )
     return issues
 
 
@@ -408,29 +416,38 @@ def armature_groups(meshes):
     return grouped
 
 
+def rig_weighted_group_names(armature):
+    """The names of the vertex groups carrying weight on any mesh the armature deforms or parents"""
+    return {
+        name
+        for mesh_object in bpy.data.objects
+        if mesh_object.type == "MESH"
+        and (
+            getattr(armature_modifier(mesh_object), "object", None) == armature
+            or mesh_object.parent == armature
+        )
+        for name in weighted_group_names(mesh_object)
+    }
+
+
 def _unused_bone_issues(meshes, options):
-    if not options.advanced_validation or not options.check_unused_bones:
+    if not options.check_unused_bones:
         return []
     issues = []
-    for armature, bound_meshes in armature_groups(meshes).items():
-        group_names = {
-            group.name
-            for mesh_object in bound_meshes
-            for group in mesh_object.vertex_groups
-        }
+    for armature in armature_groups(meshes):
+        # Every mesh on the rig counts, not only the validated ones, so a fix keeps the bones the others use.
+        weighted = rig_weighted_group_names(armature)
         unused = tuple(
             sorted(
-                bone.name
-                for bone in armature.data.bones
-                if bone.name not in group_names
+                bone.name for bone in armature.data.bones if bone.name not in weighted
             )
         )
         if unused:
             issues.append(
                 ValidationIssue(
                     "unused_bones",
-                    f"Armature '{armature.name}' has {len(unused)} bones with no matching vertex "
-                    f"group across the validated submeshes: {', '.join(unused)}.",
+                    f"Armature '{armature.name}' has {len(unused)} bones no mesh carries weight on: "
+                    f"{_named(unused)}.",
                     armature.name,
                     details=unused,
                 )
@@ -465,16 +482,21 @@ def format_validation_issues(issues, *, heading="Mesh validation failed:"):
     return "\n".join(lines)
 
 
+FIXABLE_ISSUES = frozenset(
+    {
+        "unmatched_vertex_groups",
+        "autofitter_shape_keys",
+        "missing_uv",
+        "degenerate_faces",
+        "degenerate_uvs",
+        "unweighted_vertices",
+        "unused_bones",
+        "unused_vertex_groups",
+        "influence_limit",
+    }
+)
+
+
 def issue_fix_enabled(issue, options):
-    if not options.try_fix:
-        return False
-    return {
-        "unmatched_vertex_groups": options.fix_remove_unmatched_vertex_groups,
-        "autofitter_shape_keys": options.fix_apply_autofitter_shape_keys,
-        "missing_uv": options.fix_add_missing_uv,
-        "degenerate_faces": options.fix_dissolve_degenerate_faces,
-        "degenerate_uvs": options.fix_dissolve_degenerate_uvs,
-        "unweighted_vertices": options.fix_assign_unweighted_vertices,
-        "unused_bones": options.fix_remove_unused_bones,
-        "influence_limit": options.fix_limit_influences,
-    }.get(issue.issue_type, False)
+    """Whether a fix run repairs the issue, which is every issue a repair exists for"""
+    return options.try_fix and issue.issue_type in FIXABLE_ISSUES

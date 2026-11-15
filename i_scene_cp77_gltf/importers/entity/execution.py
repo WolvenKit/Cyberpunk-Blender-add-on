@@ -37,6 +37,10 @@ from ...blender.light_channels import (
     rebuild_light_channel_links,
     retire_light_channel_volumes,
 )
+from ...blender.mesh_appearances import (
+    APPEARANCE_NAME_KEY,
+    record_collection_appearances,
+)
 from ...blender.reflection_probe_registry import mark_registered_reflection_probes_dirty
 from ...blender.transactions import (
     BlenderImportTransaction,
@@ -548,9 +552,25 @@ def _import_appearances(run, operations, progress):
         "Importing appearance components",
         appearance_units,
     )
-    for index, appearance_plan in enumerate(appearance_plans):
+    collections = [
         _import_appearance(run, operations, index, appearance_plan, appearance_progress)
+        for index, appearance_plan in enumerate(appearance_plans)
+    ]
     appearance_progress.finish(detail="Appearances complete")
+    if len(collections) > 1:
+        # Like a mesh's appearances, only the default shows until another is displayed from the Appearances tab.
+        default = run.appearance_resolution.default_appearance
+        shown = next(
+            (
+                collection
+                for collection, plan in zip(collections, appearance_plans)
+                if default in (plan.resolved_name, plan.display_name)
+            ),
+            collections[0],
+        )
+        record_collection_appearances(
+            bpy.context.scene, run.import_id, collections, shown
+        )
 
 
 def _appearance_collection(run, index, appearance_plan):
@@ -566,7 +586,7 @@ def _appearance_collection(run, index, appearance_plan):
     run.session.register_collection(ent_coll)
     ent_coll["appearanceName"] = appearance_plan.resolved_name
     ent_coll["cp77_requested_appearance_name"] = appearance_plan.requested_name
-    ent_coll["cp77_display_appearance_name"] = display_app_name
+    ent_coll[APPEARANCE_NAME_KEY] = display_app_name
     if is_live_armature_object(run.rig):
         _record_rig_source_order(run, index, appearance_plan, ent_coll)
     return ent_coll
@@ -957,6 +977,7 @@ def _import_appearance(run, operations, index, appearance_plan, appearance_progr
         display_app_name,
         time.time() - app_start_time,
     )
+    return ent_coll
 
 
 def _run_animator_components(

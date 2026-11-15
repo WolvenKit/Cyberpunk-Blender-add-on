@@ -10,6 +10,7 @@ from ...blender.mesh_validation import (
     MeshValidationError,
     collect_mesh_validation_issues,
     format_validation_issues,
+    issue_fix_enabled,
 )
 from ...blender.operator_results import OperationResult
 from ...blender.outliner import name_submeshes
@@ -103,65 +104,78 @@ def fix_selected_meshes(context, request):
 
 def _fix_meshes(meshes, request):
     prepared = None
+    issues_found = None
+    applied = {}
+    remaining = ()
     try:
-        prepared = prepare_mesh_validation_copies(
-            meshes,
-            is_skinned=request.is_skinned,
-            options=request.options,
-            require_valid=False,
-        )
-        if not prepared.fixes_applied:
-            summary = MeshValidationSummary(
-                mesh_names=tuple(obj.name for obj in meshes),
-                issues=prepared.issues_found,
-                remaining_issues=prepared.remaining_issues,
-                report=_validation_report(
-                    prepared.remaining_issues,
-                    heading="GLB export mesh repair:",
-                ),
+        # A fix can leave a problem of its own behind, as limiting influences can empty a vertex group and orphan its
+        # bone, so Fix goes round again while there is something left to fix.
+        for _round in range(4):
+            prepared = prepare_mesh_validation_copies(
+                meshes,
+                is_skinned=request.is_skinned,
+                options=request.options,
+                require_valid=False,
             )
-            cleanup_validation_temporaries(
-                prepared.temp_objects, prepared.temp_armatures
+            if issues_found is None:
+                issues_found = prepared.issues_found
+            if not prepared.fixes_applied:
+                remaining = prepared.remaining_issues
+                cleanup_validation_temporaries(
+                    prepared.temp_objects, prepared.temp_armatures
+                )
+                prepared = None
+                break
+            committed = commit_prepared_mesh_repairs(
+                prepared,
+                is_skinned=request.is_skinned,
+                options=request.options,
             )
             prepared = None
-            if summary.remaining_issues:
+            for object_name, fixes in committed.fixes_applied:
+                applied.setdefault(object_name, []).extend(fixes)
+            remaining = committed.remaining_issues
+            if not any(
+                issue_fix_enabled(issue, request.options) for issue in remaining
+            ):
+                break
+
+        report_lines = ["GLB export mesh repair:"]
+        for object_name, fixes in applied.items():
+            report_lines.append(f"  {object_name}:")
+            report_lines.extend(f"    - {fix}" for fix in fixes)
+        if remaining:
+            report_lines.append("")
+            report_lines.append(
+                format_validation_issues(
+                    remaining,
+                    heading="Remaining validation issues:",
+                )
+            )
+        elif applied:
+            report_lines.extend(("", "All enabled validation requirements now pass."))
+        else:
+            report_lines.append("  No GLB export validation issues found.")
+
+        summary = MeshValidationSummary(
+            mesh_names=tuple(obj.name for obj in meshes),
+            issues=issues_found or (),
+            remaining_issues=remaining,
+            fixes_applied=tuple(
+                (object_name, tuple(fixes)) for object_name, fixes in applied.items()
+            ),
+            report="\n".join(report_lines),
+        )
+        if not applied:
+            if remaining:
                 return OperationResult.finished(
-                    "Validation found issues, but none of their repair options are enabled.",
+                    "Validation found problems Fix cannot repair; the report lists them.",
                     level="WARNING",
                     payload=summary,
                 )
             return OperationResult.finished(
                 "No GLB export mesh repairs were required.", payload=summary
             )
-
-        committed = commit_prepared_mesh_repairs(
-            prepared,
-            is_skinned=request.is_skinned,
-            options=request.options,
-        )
-        prepared = None
-        report_lines = ["GLB export mesh repair:"]
-        for object_name, fixes in committed.fixes_applied:
-            report_lines.append(f"  {object_name}:")
-            report_lines.extend(f"    - {fix}" for fix in fixes)
-        if committed.remaining_issues:
-            report_lines.append("")
-            report_lines.append(
-                format_validation_issues(
-                    committed.remaining_issues,
-                    heading="Remaining validation issues:",
-                )
-            )
-        else:
-            report_lines.extend(("", "All enabled validation requirements now pass."))
-
-        summary = MeshValidationSummary(
-            mesh_names=tuple(obj.name for obj in meshes),
-            issues=committed.issues_found,
-            remaining_issues=committed.remaining_issues,
-            fixes_applied=committed.fixes_applied,
-            report="\n".join(report_lines),
-        )
         message = (
             f"Applied {summary.fix_count} GLB mesh repair"
             f"{'s' if summary.fix_count != 1 else ''}."

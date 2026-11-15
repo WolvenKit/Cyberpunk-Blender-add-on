@@ -65,61 +65,34 @@ class MeshValidationProperties(bpy.types.PropertyGroup):
         description="Validate armature and vertex-group requirements used by skinned GLB export",
         default=True,
     )
-    advanced_validation: bpy.props.BoolProperty(
-        name="Additional Validation",
-        description="Enable optional UV, degeneracy, weight, and unused-bone checks",
-        default=False,
+    check_unweighted_vertices: bpy.props.BoolProperty(
+        name="Ungrouped Vertices",
+        description="Find vertices without weights; Fix gives them their nearest weighted vertex's weights",
+        default=True,
+    )
+    check_unused_bones: bpy.props.BoolProperty(
+        name="Orphan Bones",
+        description="Find armature bones no mesh carries weight on; Fix removes them",
+        default=True,
+    )
+    check_unused_vertex_groups: bpy.props.BoolProperty(
+        name="Unused Vertex Groups",
+        description="Find vertex groups without weights; Fix removes them",
+        default=True,
     )
     check_missing_uv: bpy.props.BoolProperty(
-        name="Require Active UV Layer", default=True
+        name="Missing UV Layer",
+        description="Find meshes without an active UV layer; Fix adds one",
+        default=True,
     )
     check_degenerate_faces: bpy.props.BoolProperty(
-        name="Check Degenerate Faces", default=True
+        name="Degenerate Faces",
+        description="Find faces without area; Fix dissolves them",
+        default=True,
     )
     check_degenerate_uvs: bpy.props.BoolProperty(
-        name="Check Degenerate UVs", default=False
-    )
-    check_unweighted_vertices: bpy.props.BoolProperty(
-        name="Check Submeshes Without Weights",
-        default=True,
-        description="Report skinned submeshes with no vertex weights, which export without a skin",
-    )
-    check_unused_bones: bpy.props.BoolProperty(name="Check Unused Bones", default=False)
-
-    show_fixes: bpy.props.BoolProperty(name="Repair Options", default=False)
-    fix_remove_unmatched_vertex_groups: bpy.props.BoolProperty(
-        name="Remove Groups Without Bones",
-        default=True,
-    )
-    fix_apply_autofitter_shape_keys: bpy.props.BoolProperty(
-        name="Bake Autofitter Shape Keys",
-        default=False,
-    )
-    fix_add_missing_uv: bpy.props.BoolProperty(
-        name="Add Missing UV Layer", default=True
-    )
-    fix_dissolve_degenerate_faces: bpy.props.BoolProperty(
-        name="Dissolve Degenerate Faces",
-        default=True,
-    )
-    fix_dissolve_degenerate_uvs: bpy.props.BoolProperty(
-        name="Dissolve UV-Degenerate Faces",
-        default=False,
-    )
-    fix_assign_unweighted_vertices: bpy.props.BoolProperty(
-        name="Weight Unweighted Vertices",
-        description="Weight each unweighted vertex like its nearest weighted vertex, or fully to the armature's first bone when no vertex has weights",
-        default=False,
-    )
-    fix_remove_unused_bones: bpy.props.BoolProperty(
-        name="Remove Unused Bones",
-        description="Remove bones without matching vertex groups and preserve retained bone transforms",
-        default=False,
-    )
-    fix_limit_influences: bpy.props.BoolProperty(
-        name="Limit Bone Influences",
-        description="Keep each vertex's 8 strongest bone influences and normalize them. This changes how those "
-        "vertices deform",
+        name="UV-Degenerate Faces",
+        description="Find faces without UV area; Fix dissolves them",
         default=False,
     )
 

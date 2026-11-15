@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 
 import bpy
@@ -539,6 +540,9 @@ def _apply_shapekeys_to_object(obj, payload, replace_values=True):
         if not kb:
             kb = obj.shape_key_add(name=name, from_mix=False)
         kb.data.foreach_set("co", coords[i])
+        if kb == sk.reference_key:
+            # Blender keeps the vertices equal to the reference key; Edit Mode and export read the vertices.
+            obj.data.vertices.foreach_set("co", coords[i])
         if replace_values:
             kb.value = float(values[i])
 
@@ -563,6 +567,9 @@ def _shape_key_targets(target, data):
                 return [(obj, f"sub{i}_") for i, obj in enumerate(objects)]
 
             obj_map = {obj.name: obj for obj in objects}
+            # A name another object already held comes back with Blender's numeric suffix.
+            for obj in objects:
+                obj_map.setdefault(re.sub(r"\.\d{3,}$", "", obj.name), obj)
         else:
             obj_map = {target.name: target} if target else {}
 

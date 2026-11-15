@@ -74,119 +74,71 @@ def _active_material(operator, context):
     return active_material
 
 
+_EXPORT_CHECKS = (
+    "check_unweighted_vertices",
+    "check_unused_bones",
+    "check_unused_vertex_groups",
+    "check_missing_uv",
+    "check_degenerate_faces",
+    "check_degenerate_uvs",
+)
+_SKINNED_CHECKS = frozenset({"check_unweighted_vertices", "check_unused_bones"})
+
+
 def _mesh_validation_options(operator):
     return MeshValidationOptions(
-        advanced_validation=operator.advanced_validation,
-        check_missing_uv=operator.check_missing_uv,
-        check_degenerate_faces=operator.check_degenerate_faces,
-        check_degenerate_uvs=operator.check_degenerate_uvs,
-        check_unweighted_vertices=operator.check_unweighted_vertices,
-        check_unused_bones=operator.check_unused_bones,
         try_fix=operator.try_fix,
-        fix_remove_unmatched_vertex_groups=operator.fix_remove_unmatched_vertex_groups,
-        fix_apply_autofitter_shape_keys=operator.fix_apply_autofitter_shape_keys,
-        fix_add_missing_uv=operator.fix_add_missing_uv,
-        fix_dissolve_degenerate_faces=operator.fix_dissolve_degenerate_faces,
-        fix_dissolve_degenerate_uvs=operator.fix_dissolve_degenerate_uvs,
-        fix_assign_unweighted_vertices=operator.fix_assign_unweighted_vertices,
-        fix_remove_unused_bones=operator.fix_remove_unused_bones,
-        fix_limit_influences=operator.fix_limit_influences,
+        **{name: getattr(operator, name) for name in _EXPORT_CHECKS},
     )
 
 
 def _draw_mesh_validation_options(layout, operator):
     validation_box = layout.box()
     validation_box.label(text="Mesh Validation")
-    validation_box.prop(operator, "advanced_validation")
-    if operator.advanced_validation:
-        checks = validation_box.column(align=True)
-        checks.prop(operator, "check_missing_uv")
-        checks.prop(operator, "check_degenerate_faces")
-        checks.prop(operator, "check_degenerate_uvs")
-        if operator.is_skinned:
-            checks.prop(operator, "check_unweighted_vertices")
-            checks.prop(operator, "check_unused_bones")
-
+    # One list: what a check finds, Try Fix repairs, along with what export always needs.
+    checks = validation_box.column(align=True)
+    for name in _EXPORT_CHECKS:
+        if operator.is_skinned or name not in _SKINNED_CHECKS:
+            checks.prop(operator, name)
     validation_box.prop(operator, "try_fix")
-    if not operator.try_fix:
-        return
-
-    fixes = validation_box.box()
-    fixes.label(text="Apply Fixes", icon="MODIFIER")
-    fixes.prop(operator, "fix_remove_unmatched_vertex_groups")
-    fixes.prop(operator, "fix_apply_autofitter_shape_keys")
-    if operator.advanced_validation:
-        if operator.check_missing_uv:
-            fixes.prop(operator, "fix_add_missing_uv")
-        if operator.check_degenerate_faces:
-            fixes.prop(operator, "fix_dissolve_degenerate_faces")
-        if operator.check_degenerate_uvs:
-            fixes.prop(operator, "fix_dissolve_degenerate_uvs")
-        if operator.is_skinned and operator.check_unused_bones:
-            fixes.prop(operator, "fix_remove_unused_bones")
-    if operator.is_skinned:
-        fixes.prop(operator, "fix_assign_unweighted_vertices")
-        fixes.prop(operator, "fix_limit_influences")
 
 
 class ExportValidationProperties:
     try_fix: BoolProperty(
         name="Try Fix",
         default=False,
-        description="Repair temporary export copies with the selected fixes, and name the submeshes in Blender as the export names them",
+        description="Fix every problem the checks find on temporary export copies, and name the submeshes in Blender as "
+        "the export names them",
     )
-
-    advanced_validation: BoolProperty(
-        name="Additional Validation",
-        default=False,
-        description="Enable optional UV, degeneracy, weight and unused-bone checks",
-    )
-    check_missing_uv: BoolProperty(name="Require Active UV Layer", default=True)
-    check_degenerate_faces: BoolProperty(name="Check Degenerate Faces", default=True)
-    check_degenerate_uvs: BoolProperty(name="Check Degenerate UVs", default=False)
     check_unweighted_vertices: BoolProperty(
-        name="Check Submeshes Without Weights",
-        default=True,
-        description="Report skinned submeshes with no vertex weights, which export without a skin",
+        name="Ungrouped Vertices",
+        default=False,
+        description="Find vertices without weights; Try Fix gives them their nearest weighted vertex's weights",
     )
     check_unused_bones: BoolProperty(
-        name="Check Bones Without Vertex Groups",
+        name="Orphan Bones",
         default=False,
-        description="Check the armature against the union of vertex groups on exported submeshes",
+        description="Find armature bones no mesh carries weight on; Try Fix leaves them out",
     )
-    fix_remove_unmatched_vertex_groups: BoolProperty(
-        name="Remove Vertex Groups Without Bones",
-        default=True,
-    )
-    fix_apply_autofitter_shape_keys: BoolProperty(
-        name="Bake Autofitter Shape Keys",
+    check_unused_vertex_groups: BoolProperty(
+        name="Unused Vertex Groups",
         default=False,
-        description="Bake Autofitter keys at their current values into temporary export copies",
+        description="Find vertex groups without weights; Try Fix leaves them out",
     )
-    fix_add_missing_uv: BoolProperty(name="Add Missing UV Layer", default=True)
-    fix_dissolve_degenerate_faces: BoolProperty(
-        name="Dissolve Degenerate Faces/Vertices",
-        default=True,
-    )
-    fix_dissolve_degenerate_uvs: BoolProperty(
-        name="Dissolve UV-Degenerate Faces/Vertices",
+    check_missing_uv: BoolProperty(
+        name="Missing UV Layer",
         default=False,
+        description="Find meshes without an active UV layer; Try Fix adds one",
     )
-    fix_assign_unweighted_vertices: BoolProperty(
-        name="Weight Unweighted Vertices",
+    check_degenerate_faces: BoolProperty(
+        name="Degenerate Faces",
         default=False,
-        description="Weight each unweighted vertex like its nearest weighted vertex, or fully to the armature's first bone when no vertex has weights",
+        description="Find faces without area; Try Fix dissolves them",
     )
-    fix_remove_unused_bones: BoolProperty(
-        name="Remove Bones Without Vertex Groups",
+    check_degenerate_uvs: BoolProperty(
+        name="UV-Degenerate Faces",
         default=False,
-        description="Create a temporary armature, remove unmatched bones and reparent retained descendants",
-    )
-    fix_limit_influences: BoolProperty(
-        name="Limit Bone Influences",
-        default=False,
-        description="Keep each vertex's 8 strongest bone influences on the temporary export copy and normalize "
-        "them. This changes how those vertices deform",
+        description="Find faces without UV area; Try Fix dissolves them",
     )
 
 
