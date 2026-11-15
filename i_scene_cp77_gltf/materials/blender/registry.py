@@ -876,6 +876,8 @@ REGISTRY.register(
 REGISTRY.register(
     [
         "base\\fx\\_shaders\\invisible.mt",
+        # The depth proxy of vehicle cutouts has no parameters and is never seen.
+        "base\\materials\\top_down_car_proxy_depth.mt",
     ],
     MaterialRule(
         factory=HandlerFactory("invisible", "Invisible", "bip"), no_shadows=True

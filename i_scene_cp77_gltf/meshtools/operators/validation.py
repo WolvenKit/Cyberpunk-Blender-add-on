@@ -71,7 +71,7 @@ class CP77_OT_ValidateGLBMeshes(Operator):
 class CP77_OT_FixGLBMeshes(Operator):
     bl_idname = "cp77.fix_glb_meshes"
     bl_label = "Apply Selected GLB Fixes"
-    bl_description = "Apply enabled GLB export repairs to selected source meshes; this operation is undoable"
+    bl_description = "Apply the enabled GLB export repairs to the selected meshes and name them for their submesh order; this operation is undoable"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod

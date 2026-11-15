@@ -133,7 +133,7 @@ class ExportValidationProperties:
     try_fix: BoolProperty(
         name="Try Fix",
         default=False,
-        description="Enable selected repairs on temporary export copies",
+        description="Repair temporary export copies with the selected fixes, and name the submeshes in Blender as the export names them",
     )
 
     advanced_validation: BoolProperty(

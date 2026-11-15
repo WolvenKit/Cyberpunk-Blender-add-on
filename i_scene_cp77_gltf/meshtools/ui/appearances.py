@@ -22,41 +22,28 @@ class CP77_UL_MeshAppearances(UIList):
         layout.prop(item, "name", text="", emboss=False)
 
 
-class CP77_PT_MeshAppearances(Panel):
-    bl_label = "Mesh Appearances"
-    bl_idname = "CP77_PT_MeshAppearances"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_category = "CP77 Modding"
-    bl_options = {"DEFAULT_CLOSED"}
-
-    @classmethod
-    def poll(cls, context):
-        return _meshtools_shown(context)
-
-    def draw(self, context):
-        layout = self.layout
-        scene = context.scene
-        if not len(scene.cp77_mesh_appearances):
-            layout.operator("cp77.mesh_appearance_add", icon="ADD")
-            return
-        row = layout.row()
-        row.template_list(
-            "CP77_UL_mesh_appearances",
-            "",
-            scene,
-            "cp77_mesh_appearances",
-            scene,
-            "cp77_mesh_appearance_index",
-            rows=3,
-        )
-        column = row.column(align=True)
-        column.operator("cp77.mesh_appearance_add", text="", icon="ADD")
-        column.operator("cp77.mesh_appearance_remove", text="", icon="REMOVE")
-        column = layout.column(align=True)
-        column.operator("cp77.mesh_appearance_display")
-        column.operator("cp77.mesh_appearance_assign")
-        column.operator("cp77.mesh_appearance_reset")
+def draw_appearances_tab(context, layout):
+    scene = context.scene
+    if not len(scene.cp77_mesh_appearances):
+        layout.operator("cp77.mesh_appearance_add", icon="ADD")
+        return
+    row = layout.row()
+    row.template_list(
+        "CP77_UL_mesh_appearances",
+        "",
+        scene,
+        "cp77_mesh_appearances",
+        scene,
+        "cp77_mesh_appearance_index",
+        rows=3,
+    )
+    column = row.column(align=True)
+    column.operator("cp77.mesh_appearance_add", text="", icon="ADD")
+    column.operator("cp77.mesh_appearance_remove", text="", icon="REMOVE")
+    column = layout.column(align=True)
+    column.operator("cp77.mesh_appearance_display")
+    column.operator("cp77.mesh_appearance_assign")
+    column.operator("cp77.mesh_appearance_reset")
 
 
 class CP77_PT_MeshAppearanceMaterials(Panel):

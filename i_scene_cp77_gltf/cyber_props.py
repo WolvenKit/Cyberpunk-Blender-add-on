@@ -198,7 +198,11 @@ class CP77_PT_PanelProps(PropertyGroup):
             ("UTILITIES", "Utilities", ""),
             ("MODELLING", "Modelling", ""),
             ("CHARACTERS", "Characters", ""),
-            ("CLOTH", "Garment", "Garment setup, pinning, simulation, and bake tools"),
+            (
+                "APPEARANCES",
+                "Appearances",
+                "Switch, assign and edit the meshes' appearances",
+            ),
         ),
         name="Mesh Tab",
     )

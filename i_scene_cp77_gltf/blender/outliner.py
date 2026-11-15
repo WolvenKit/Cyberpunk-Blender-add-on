@@ -4,6 +4,9 @@ from functools import cmp_to_key
 
 import bpy
 
+from ..gltf.submesh import lod_from_name, submesh_name
+from .naming import fit_id_name
+
 _DIGITS = frozenset("0123456789")
 
 
@@ -192,3 +195,25 @@ def outliner_object_order(context, objects):
         walk(view_layer.layer_collection.collection)
     ordered.extend(obj for pointer, obj in wanted.items() if pointer not in seen)
     return ordered
+
+
+def name_submeshes(context, objects):
+    """Name objects submesh_NN_LOD_L for their Outliner position unless that reorders them, returning the old and new names changed"""
+    order = outliner_object_order(context, objects)
+    changes = [
+        (obj, obj.name, submesh_name(index, lod_from_name(obj.name)))
+        for index, obj in enumerate(order)
+    ]
+    changes = [change for change in changes if change[1] != change[2]]
+    # The names are freed first, as one submesh may want the name another holds.
+    for obj, old, _new in changes:
+        obj.name = fit_id_name(f"CP77_Rename_{old}")
+    for obj, _old, new in changes:
+        obj.name = new
+    if outliner_object_order(context, objects) != order:
+        for obj, old, _new in changes:
+            obj.name = fit_id_name(f"CP77_Rename_{old}")
+        for obj, old, _new in changes:
+            obj.name = old
+        return ()
+    return tuple((old, obj.name) for obj, old, _new in changes)

@@ -1013,10 +1013,11 @@ class CP77Import(Operator, ImportHelper):
     def sync_appearance_rows(self):
         """Fill the rows when another file is chosen or its material sidecar changes"""
         chosen = self._chosen_file()
+        sidecar = material_sidecar_path(chosen) if chosen else ""
         try:
             identity = (
-                FileIdentity.from_path(material_sidecar_path(chosen)).key
-                if chosen
+                FileIdentity.from_path(sidecar).key
+                if sidecar and os.path.isfile(sidecar)
                 else None
             )
         except OSError:
@@ -1087,8 +1088,19 @@ class CP77Import(Operator, ImportHelper):
                 self, "ERROR", "Select at least one .glb or .gltf file.", logger=_LOG
             )
             return {"CANCELLED"}
-        # A file chosen without a check (a name typed and confirmed, or a scripted call) gets its rows here.
-        self.sync_appearance_rows()
+        # A file chosen without a check (a name typed and confirmed, or a scripted call) gets its rows here. A call
+        # that drew no rows keeps the All Appearances it was given.
+        drawn = getattr(self, "_appearance_identity", ("", None))[0]
+        all_appearances = self.all_appearances
+        if self.sync_appearance_rows():
+            if drawn:
+                _LOG.debug(
+                    "Appearance rows were drawn for %s but the import is of %s; its own rows are used.",
+                    drawn,
+                    self._chosen_file(),
+                )
+            else:
+                self.all_appearances = all_appearances
         chosen = self._chosen_file()
         appearances = ("default",)
         if chosen:

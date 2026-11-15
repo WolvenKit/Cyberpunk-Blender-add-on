@@ -9,7 +9,7 @@ from ...blender.gltf_exclusions import collect_excluded_objects
 from ...blender.mesh_repair import cleanup_validation_temporaries
 from ...blender.mesh_validation import MeshValidationError, MeshValidationOptions
 from ...blender.operator_results import OperationResult
-from ...blender.outliner import outliner_object_order
+from ...blender.outliner import name_submeshes, outliner_object_order
 from ...blender.selection import select_objects, set_active_collection
 from ...core.log import get_logger
 from ..animation.writer import export_animation
@@ -333,6 +333,8 @@ def export_meshes(
     validation_options = mesh_validation_options or MeshValidationOptions(
         try_fix=try_fix
     )
+    # Try Fix gives the meshes in Blender the names the export gives their GLB meshes.
+    renamed = name_submeshes(bpy.context, meshes) if validation_options.try_fix else ()
     with _prepared_meshes(meshes, is_skinned, validation_options) as validation_result:
         summary = export_mesh_glb_direct(
             filepath,
@@ -358,10 +360,16 @@ def export_meshes(
             )
 
         fix_summary = format_fix_summary(validation_result)
+        warnings = (fix_summary,) if fix_summary else ()
+        if renamed:
+            warnings += (
+                f"Renamed {len(renamed)} submeshes for their export order: "
+                + ", ".join(f"{old} → {new}" for old, new in renamed),
+            )
         return OperationResult.finished(
             f"Exported {summary['submesh_count']} submeshes ({summary['vertex_count']} vertices) to "
             f"{os.path.basename(summary['filepath'])}.",
-            warnings=(fix_summary,) if fix_summary else (),
+            warnings=warnings,
         )
 
 
