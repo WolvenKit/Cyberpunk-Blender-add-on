@@ -1,7 +1,10 @@
 import bpy
 
+from ..blender.mesh_appearances import set_use_appearance
+
 _VERTEX_GROUP_ITEMS = (("None", "None", "No vertex group"),)
 _VERTEX_GROUP_SIGNATURE = None
+_APPEARANCE_ITEMS = [("0", "", "", 0)]
 
 
 def _selected_group_signature(context):
@@ -36,10 +39,20 @@ def vertex_group_items(_owner, context):
     return _VERTEX_GROUP_ITEMS
 
 
+def appearance_items(_owner, context):
+    scene = getattr(context, "scene", None) or bpy.context.scene
+    _APPEARANCE_ITEMS[:] = [
+        (str(index), appearance.name, "", index)
+        for index, appearance in enumerate(scene.cp77_mesh_appearances)
+    ] or [("0", "", "", 0)]
+    return _APPEARANCE_ITEMS
+
+
 def clear_property_caches():
     global _VERTEX_GROUP_ITEMS, _VERTEX_GROUP_SIGNATURE
     _VERTEX_GROUP_ITEMS = (("None", "None", "No vertex group"),)
     _VERTEX_GROUP_SIGNATURE = None
+    _APPEARANCE_ITEMS[:] = [("0", "", "", 0)]
 
 
 class Vertex_Group_Properties(bpy.types.PropertyGroup):
@@ -125,3 +138,29 @@ class MeshAnalysisProperties(bpy.types.PropertyGroup):
         soft_max=4096.0,
         precision=0,
     )
+
+
+class MeshAppearance(bpy.types.PropertyGroup):
+    name: bpy.props.StringProperty(name="Name", default="appearance")
+
+
+class MeshAppearanceUse(bpy.types.PropertyGroup):
+    index: bpy.props.IntProperty(name="Appearance", min=0)
+    appearance: bpy.props.EnumProperty(
+        name="Appearance",
+        description="The appearance that shows this material in the slot",
+        items=appearance_items,
+        get=lambda self: self.index,
+        set=set_use_appearance,
+    )
+
+
+class MeshAppearanceMaterial(bpy.types.PropertyGroup):
+    slot_index: bpy.props.IntProperty(name="Material Slot", min=0)
+    material: bpy.props.PointerProperty(name="Material", type=bpy.types.Material)
+    appearances: bpy.props.CollectionProperty(type=MeshAppearanceUse)
+
+
+class MeshAppearanceOriginal(bpy.types.PropertyGroup):
+    slot_index: bpy.props.IntProperty(name="Material Slot", min=0)
+    material: bpy.props.PointerProperty(name="Material", type=bpy.types.Material)

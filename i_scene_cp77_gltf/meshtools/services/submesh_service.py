@@ -10,6 +10,10 @@ from ...blender.context import (
     store_current_context,
 )
 from ...blender.mesh import is_mesh
+from ...blender.mesh_appearances import (
+    restore_appearance_materials,
+    stash_appearance_materials,
+)
 from ...blender.operator_results import OperationResult, require_finished
 from ...blender.outliner import outliner_object_order
 from ...blender.selection import select_objects
@@ -86,9 +90,11 @@ def _temporary_submesh_material(obj, submesh_index):
 
 
 def _stage(obj, submesh_index):
-    """Give the submesh one marker material that remembers its submesh index, materials and face material indices"""
+    """Give the submesh one marker material that remembers its submesh index, materials, appearances and face material indices"""
     marker = _temporary_submesh_material(obj, submesh_index)
     mesh = obj.data
+    # The joined mesh is for sculpting; the marker keeps the submesh's appearances until Safe Split gives them back.
+    stash_appearance_materials(mesh, marker)
     if mesh.polygons:
         indices = np.empty(len(mesh.polygons), dtype=np.int32)
         mesh.polygons.foreach_get("material_index", indices)
@@ -176,6 +182,7 @@ def _restore_original_materials(obj, marker_material):
             material = bpy.data.materials.get(name) if name else None
         obj.data.materials.append(material)
     _restore_face_materials(obj.data)
+    restore_appearance_materials(obj.data, marker_material)
 
 
 def _restore_face_materials(mesh):

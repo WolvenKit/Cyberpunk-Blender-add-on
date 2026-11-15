@@ -1507,11 +1507,12 @@ def import_cyberpunk_glb(
                                     )
 
                     if appearance_variants:
-                        create_mesh_appearance_variants(
-                            result,
-                            appearances,
-                            json_apps,
-                            parent_collection=collection_parent,
+                        error_messages.extend(
+                            warning
+                            for warning in create_mesh_appearance_variants(
+                                result, appearances, json_apps
+                            )
+                            if warning not in error_messages
                         )
                         for obj in result["all_objects"]:
                             if obj.type == "MESH":
