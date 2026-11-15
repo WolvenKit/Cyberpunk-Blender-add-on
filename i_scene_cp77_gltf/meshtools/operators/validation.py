@@ -30,6 +30,7 @@ def _request(context, *, try_fix):
             fix_dissolve_degenerate_uvs=bool(props.fix_dissolve_degenerate_uvs),
             fix_assign_unweighted_vertices=bool(props.fix_assign_unweighted_vertices),
             fix_remove_unused_bones=bool(props.fix_remove_unused_bones),
+            fix_limit_influences=bool(props.fix_limit_influences),
         ),
     )
 

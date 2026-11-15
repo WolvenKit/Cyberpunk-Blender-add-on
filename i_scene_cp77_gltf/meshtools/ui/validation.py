@@ -55,6 +55,8 @@ def draw_glb_mesh_validation(context, layout):
                 fixes.prop(props, "fix_assign_unweighted_vertices")
             if props.is_skinned and props.check_unused_bones:
                 fixes.prop(props, "fix_remove_unused_bones")
+        if props.is_skinned:
+            fixes.prop(props, "fix_limit_influences")
 
     if props.last_status and props.last_status != "PASS":
         result = box.box()

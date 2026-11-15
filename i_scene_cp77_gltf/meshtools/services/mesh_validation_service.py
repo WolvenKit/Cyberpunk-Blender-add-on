@@ -1,3 +1,4 @@
+from ...blender.context import preserved_context, safe_mode_switch
 from ...blender.mesh_repair import (
     cleanup_validation_temporaries,
     commit_prepared_mesh_repairs,
@@ -27,11 +28,14 @@ def validate_selected_meshes(context, request):
     if not meshes:
         return OperationResult.cancelled("Select at least one mesh to validate.")
     try:
-        issues = collect_mesh_validation_issues(
-            meshes,
-            is_skinned=request.is_skinned,
-            options=request.options,
-        )
+        # Edit Mode keeps a mesh's corner data in the edit mesh, so its UVs and colors read as empty.
+        with preserved_context():
+            safe_mode_switch("OBJECT")
+            issues = collect_mesh_validation_issues(
+                meshes,
+                is_skinned=request.is_skinned,
+                options=request.options,
+            )
     except Exception as error:
         return OperationResult.cancelled(
             f"GLB mesh validation failed: {error}", error=error
@@ -64,7 +68,13 @@ def fix_selected_meshes(context, request):
     meshes = selected_meshes(context, include_active=True)
     if not meshes:
         return OperationResult.cancelled("Select at least one mesh to repair.")
+    # Repairs are written into the meshes, which Edit Mode would overwrite on leaving it.
+    with preserved_context():
+        safe_mode_switch("OBJECT")
+        return _fix_meshes(meshes, request)
 
+
+def _fix_meshes(meshes, request):
     prepared = None
     try:
         prepared = prepare_mesh_validation_copies(

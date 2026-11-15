@@ -180,10 +180,26 @@ def find_degenerate_uv_faces(mesh, epsilon=1e-17):
     return np.flatnonzero(counts > 0)
 
 
-def deform_group_indices(mesh_object, armature):
-    """The indices of the object's vertex groups that bind to deform bones, the only ones the skin exports"""
-    deform = {bone.name for bone in armature.data.bones if bone.use_deform}
-    return {group.index for group in mesh_object.vertex_groups if group.name in deform}
+def bone_group_indices(mesh_object, armature):
+    """The indices of the object's vertex groups named for a bone of armature, the ones the skin exports"""
+    bones = armature.data.bones
+    return {
+        group.index
+        for group in mesh_object.vertex_groups
+        if bones.get(group.name) is not None
+    }
+
+
+def weighted_group_names(mesh_object):
+    """The names of the object's vertex groups that carry weight on some vertex"""
+    weighted = set()
+    for vertex in mesh_object.data.vertices:
+        for element in vertex.groups:
+            if element.weight > SKIN_WEIGHT_EPSILON:
+                weighted.add(element.group)
+    return {
+        group.name for group in mesh_object.vertex_groups if group.index in weighted
+    }
 
 
 def crowded_vertex_indices(mesh, groups, limit=MAX_SKIN_INFLUENCES):
@@ -211,6 +227,14 @@ def unweighted_vertex_indices(mesh):
 
 
 def _mandatory_mesh_issues(mesh_object, is_skinned, options):
+    if not len(mesh_object.data.polygons):
+        return [
+            ValidationIssue(
+                "empty_mesh",
+                f"'{mesh_object.name}' has no faces; give it faces or leave it out of the export.",
+                mesh_object.name,
+            )
+        ]
     issues = []
     export_count = (
         predicted_export_vertex_count(mesh_object.data)
@@ -277,7 +301,7 @@ def _mandatory_mesh_issues(mesh_object, is_skinned, options):
         )
 
     crowded, most = crowded_vertex_indices(
-        mesh_object.data, deform_group_indices(mesh_object, modifier.object)
+        mesh_object.data, bone_group_indices(mesh_object, modifier.object)
     )
     if crowded:
         issues.append(
@@ -293,7 +317,7 @@ def _mandatory_mesh_issues(mesh_object, is_skinned, options):
 
 
 def _optional_mesh_issues(mesh_object, is_skinned, options):
-    if not options.advanced_validation:
+    if not options.advanced_validation or not len(mesh_object.data.polygons):
         return []
 
     issues = []

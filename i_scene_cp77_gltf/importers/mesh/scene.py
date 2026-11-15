@@ -46,7 +46,6 @@ from ...blender.transactions import (
 )
 from ...core.log import get_logger, is_enabled, log_once
 from ...gltf.provenance import ORIGIN_PLUGIN, mark_origin
-from ...gltf.submesh import submesh_index_from_name
 from ...redSpace.contracts import SOURCE_REST_SPACE_CONTRACT
 from ...redSpace.transforms import gltf_relative_to_blender
 from ..rig.gltf import build_rest_armature_from_binding
@@ -1060,7 +1059,7 @@ def _import_mesh_glb_impl(
 
     created = []
     audits = []
-    for fallback_index, submesh in enumerate(mesh_data.submeshes):
+    for submesh in mesh_data.submeshes:
         obj, loop_vertices = _new_submesh_object(
             submesh,
             validate_geometry=not bulk_master,
@@ -1112,9 +1111,6 @@ def _import_mesh_glb_impl(
             obj["cp77_material_name"] = submesh.material_names[appearance_index]
         obj["cp77_imported_mesh"] = True
         obj["cp77_single_material_submesh"] = True
-        obj["cp77_submesh_index"] = int(
-            submesh_index_from_name(submesh.name, fallback_index)
-        )
         if submesh.skinning_warning:
             _LOG.warning("%s", submesh.skinning_warning)
         target_collection.objects.link(obj)

@@ -4,7 +4,7 @@ import bpy
 
 from ...blender.identity import authored_material_name
 from ...blender.transactions import track_created_datablock
-from ...gltf.submesh import submesh_index_for_object
+from ...gltf.submesh import submesh_index_from_name
 from ..common.material_appearances import resolve_appearance_materials
 
 
@@ -62,10 +62,10 @@ def create_mesh_appearance_variants(
         if len(plans) > 1 or name != "default":
             collection.name = f"{source_name}@{name}"
         collection["appearance"] = name
-        for obj, submesh, table in zip(
-            objects, result["mesh_data"].submeshes, material_tables
+        for position, (obj, submesh, table) in enumerate(
+            zip(objects, result["mesh_data"].submeshes, material_tables)
         ):
-            submesh_index = submesh_index_for_object(obj, None)
+            submesh_index = submesh_index_from_name(submesh.name, position)
             if materials:
                 if submesh_index is None or submesh_index >= len(materials):
                     raise ValueError(

@@ -101,6 +101,12 @@ class MeshValidationProperties(bpy.types.PropertyGroup):
         description="Remove bones without matching vertex groups and preserve retained bone transforms",
         default=False,
     )
+    fix_limit_influences: bpy.props.BoolProperty(
+        name="Limit Bone Influences",
+        description="Keep each vertex's 8 strongest bone influences and normalize them. This changes how those "
+        "vertices deform",
+        default=False,
+    )
 
     last_status: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})
     last_report: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})

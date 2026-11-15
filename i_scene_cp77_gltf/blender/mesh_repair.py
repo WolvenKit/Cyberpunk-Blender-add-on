@@ -15,7 +15,7 @@ from .mesh_validation import (
     armature_groups,
     armature_modifier,
     collect_mesh_validation_issues,
-    deform_group_indices,
+    bone_group_indices,
     format_validation_issues,
     issue_fix_enabled,
     issues_by_object,
@@ -173,7 +173,7 @@ def assign_unweighted_vertices(mesh_object, armature, indices):
 def limit_vertex_influences(mesh_object, armature, indices, limit=MAX_SKIN_INFLUENCES):
     """Keep each listed vertex's limit strongest deform influences and normalize them"""
     groups = {group.index: group for group in mesh_object.vertex_groups}
-    deform = deform_group_indices(mesh_object, armature)
+    deform = bone_group_indices(mesh_object, armature)
     vertices = mesh_object.data.vertices
     removed = 0
     for index in indices:

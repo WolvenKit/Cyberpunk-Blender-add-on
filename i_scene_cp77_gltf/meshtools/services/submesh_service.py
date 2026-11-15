@@ -11,6 +11,7 @@ from ...blender.context import (
 )
 from ...blender.mesh import is_mesh
 from ...blender.operator_results import OperationResult, require_finished
+from ...blender.outliner import outliner_object_order
 from ...blender.selection import select_objects
 from ...blender.transactions import (
     remove_datablock_on_commit,
@@ -32,6 +33,27 @@ _SAFE_JOIN_ROLE = "SAFE_JOIN_MARKER"
 # material index while the joined mesh gives every face the marker.
 _SAFE_JOIN_SLOT = "cp77_safe_join_slot_"
 _SAFE_JOIN_FACE_MATERIALS = "cp77_safe_join_material_index"
+_SAFE_JOIN_SUBMESH_INDEX = "cp77_safe_join_submesh_index"
+
+
+def _submesh_positions(context, objects):
+    """Each object's submesh index, its Outliner position among the meshes of its collection, by object"""
+    orders = {}
+    positions = {}
+    for obj in objects:
+        collection = (
+            obj.users_collection[0]
+            if obj.users_collection
+            else context.scene.collection
+        )
+        order = orders.get(collection.as_pointer())
+        if order is None:
+            meshes = [other for other in collection.objects if other.type == "MESH"]
+            order = orders[collection.as_pointer()] = outliner_object_order(
+                context, meshes
+            )
+        positions[obj.as_pointer()] = order.index(obj)
+    return positions
 
 
 def _material_names(obj):
@@ -48,10 +70,11 @@ def is_safe_join_result(obj):
     )
 
 
-def _temporary_submesh_material(obj):
+def _temporary_submesh_material(obj, submesh_index):
     material = bpy.data.materials.new(name=f"CP77_SafeJoin_{obj.name}")
     tag_owned(material, _SAFE_JOIN_ROLE, source=obj.name)
     material.diffuse_color = (0.8, 0.8, 0.8, 1.0)
+    material[_SAFE_JOIN_SUBMESH_INDEX] = int(submesh_index)
     material[_SAFE_JOIN_METADATA] = json.dumps(
         _material_names(obj), separators=(",", ":")
     )
@@ -62,9 +85,9 @@ def _temporary_submesh_material(obj):
     return material
 
 
-def _stage(obj):
-    """Give the submesh one marker material that remembers its materials and each face's material index"""
-    marker = _temporary_submesh_material(obj)
+def _stage(obj, submesh_index):
+    """Give the submesh one marker material that remembers its submesh index, materials and face material indices"""
+    marker = _temporary_submesh_material(obj, submesh_index)
     mesh = obj.data
     if mesh.polygons:
         indices = np.empty(len(mesh.polygons), dtype=np.int32)
@@ -100,9 +123,10 @@ def safe_join(context):
     staged = []
     try:
         safe_mode_switch("OBJECT")
+        positions = _submesh_positions(context, selected)
         for obj in selected:
             try:
-                staged.append((obj, _stage(obj)))
+                staged.append((obj, _stage(obj, positions[obj.as_pointer()])))
             except Exception as error:
                 _LOG.warning(
                     "Safe-join material staging failed: object=%s error=%s",
@@ -197,6 +221,7 @@ def safe_split(context):
         restored = 0
         warnings = []
         names = []
+        indexed = []
         for new_obj in outputs:
             try:
                 marker = new_obj.data.materials[0] if new_obj.data.materials else None
@@ -207,6 +232,8 @@ def safe_split(context):
                 ):
                     continue
                 original_name = owned_source(marker)
+                if _SAFE_JOIN_SUBMESH_INDEX in marker:
+                    indexed.append((int(marker[_SAFE_JOIN_SUBMESH_INDEX]), new_obj))
                 _restore_original_materials(new_obj, marker)
                 remove_datablock_on_commit("materials", marker)
                 if original_name:
@@ -225,6 +252,11 @@ def safe_split(context):
             new_obj.name = f"CP77_SafeSplit_{new_obj.name}"
         for new_obj, original_name in names:
             new_obj.name = original_name
+        # Relinked in submesh order, the pieces keep their indices in an Outliner that lists objects as linked.
+        for _index, new_obj in sorted(indexed, key=lambda item: item[0]):
+            for collection in tuple(new_obj.users_collection):
+                collection.objects.unlink(new_obj)
+                collection.objects.link(new_obj)
         if context.mode == "OBJECT":
             select_objects(outputs, context=context)
         result = OperationResult.finished(

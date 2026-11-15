@@ -9,10 +9,12 @@ from ...blender.gltf_exclusions import collect_excluded_objects
 from ...blender.mesh_repair import cleanup_validation_temporaries
 from ...blender.mesh_validation import MeshValidationError, MeshValidationOptions
 from ...blender.operator_results import OperationResult
+from ...blender.outliner import outliner_object_order
 from ...blender.selection import select_objects, set_active_collection
 from ...core.log import get_logger
 from ..animation.writer import export_animation
 from ..common.errors import ExportError
+from .errors import DirectMeshExportError
 from .options import GlbExportOptions
 from .scope import MeshExportScope, resolve_mesh_export_scope
 from .validation import format_fix_summary, prepare_meshes_for_export
@@ -365,12 +367,21 @@ def export_meshes(
 
 @contextmanager
 def _prepared_meshes(meshes, is_skinned, validation_options):
-    """The meshes validated and prepared for export"""
+    """The meshes validated and prepared for export, in the Outliner order that numbers their submeshes"""
     validation_result = prepare_meshes_for_export(
-        meshes, is_skinned=is_skinned, options=validation_options
+        outliner_object_order(bpy.context, meshes),
+        is_skinned=is_skinned,
+        options=validation_options,
     )
     try:
         yield validation_result
+    except DirectMeshExportError as error:
+        message = str(error)
+        for original, temporary in validation_result.mesh_replacements.items():
+            message = message.replace(temporary.name, original.name)
+        if message == str(error):
+            raise
+        raise DirectMeshExportError(message) from error
     finally:
         cleanup_validation_temporaries(
             validation_result.temp_objects, validation_result.temp_armatures

@@ -633,7 +633,6 @@ def import_mats(
             ensure_metalbase_vertex_rm_attribute(mesh)
         _ensure_required_source_frame(obj, submesh)
         bind_skin_materials_for_object(obj, armature)
-        obj["cp77_submesh_index"] = int(submesh_index)
         attached_folded = {name.casefold() for name in attached if name}
         for name in raw_names:
             if name.casefold() not in attached_folded:
@@ -1093,7 +1092,6 @@ def ensure_collection_material_coverage(
         if shadow_warning:
             _LOG.warning("%s", shadow_warning)
             material_warnings.append(shadow_warning)
-        obj["cp77_submesh_index"] = int(index)
         if _object_requires_source_frame(obj) and not source_frame_attributes_available(
             obj.data
         ):
