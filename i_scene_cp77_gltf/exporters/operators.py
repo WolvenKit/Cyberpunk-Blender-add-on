@@ -122,11 +122,10 @@ def _draw_mesh_validation_options(layout, operator):
             fixes.prop(operator, "fix_dissolve_degenerate_faces")
         if operator.check_degenerate_uvs:
             fixes.prop(operator, "fix_dissolve_degenerate_uvs")
-        if operator.is_skinned and operator.check_unweighted_vertices:
-            fixes.prop(operator, "fix_assign_unweighted_vertices")
         if operator.is_skinned and operator.check_unused_bones:
             fixes.prop(operator, "fix_remove_unused_bones")
     if operator.is_skinned:
+        fixes.prop(operator, "fix_assign_unweighted_vertices")
         fixes.prop(operator, "fix_limit_influences")
 
 
@@ -146,7 +145,9 @@ class ExportValidationProperties:
     check_degenerate_faces: BoolProperty(name="Check Degenerate Faces", default=True)
     check_degenerate_uvs: BoolProperty(name="Check Degenerate UVs", default=False)
     check_unweighted_vertices: BoolProperty(
-        name="Check Unweighted Vertices", default=True
+        name="Check Submeshes Without Weights",
+        default=True,
+        description="Report skinned submeshes with no vertex weights, which export without a skin",
     )
     check_unused_bones: BoolProperty(
         name="Check Bones Without Vertex Groups",
@@ -172,8 +173,9 @@ class ExportValidationProperties:
         default=False,
     )
     fix_assign_unweighted_vertices: BoolProperty(
-        name="Assign Unweighted Vertices to Root",
+        name="Weight Unweighted Vertices",
         default=False,
+        description="Weight each unweighted vertex like its nearest weighted vertex, or fully to the armature's first bone when no vertex has weights",
     )
     fix_remove_unused_bones: BoolProperty(
         name="Remove Bones Without Vertex Groups",

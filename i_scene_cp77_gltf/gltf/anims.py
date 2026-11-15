@@ -39,7 +39,7 @@ def skin_nodes(
     missing = [index for index, transform in enumerate(transforms) if transform is None]
     if missing:
         for index, transform in zip(
-            missing, node_transforms(rest_relative[missing], matrix_fallback=False)
+            missing, node_transforms(rest_relative[missing], exact=True)
         ):
             transforms[index] = transform
     for index, name in enumerate(names):

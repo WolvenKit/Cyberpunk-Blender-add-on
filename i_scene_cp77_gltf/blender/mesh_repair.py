@@ -14,11 +14,16 @@ from .mesh_validation import (
     MeshValidationOptions,
     armature_groups,
     armature_modifier,
-    collect_mesh_validation_issues,
     bone_group_indices,
+    collect_mesh_validation_issues,
     format_validation_issues,
     issue_fix_enabled,
     issues_by_object,
+)
+from .vertex_groups import (
+    give_nearest_weights,
+    normalize_vertex_weights,
+    vertex_weights,
 )
 
 _LOG = get_logger(__name__)
@@ -73,14 +78,26 @@ def copy_mesh_object(mesh_object):
         raise
 
 
-def remove_unmatched_vertex_groups(mesh_object, names):
-    removed = 0
-    for name in names:
-        group = mesh_object.vertex_groups.get(name)
-        if group is not None:
-            mesh_object.vertex_groups.remove(group)
-            removed += 1
-    return removed
+def remove_unmatched_vertex_groups(mesh_object, names, armature):
+    """Remove the vertex groups names, weight the vertices left without bone weights like their nearest weighted vertex and normalize the ones that lost weight, returning the three counts"""
+    removed = {
+        group.index
+        for group in (mesh_object.vertex_groups.get(name) for name in names)
+        if group is not None
+    }
+    lost = [
+        index
+        for index, entries in enumerate(vertex_weights(mesh_object, removed))
+        if entries
+    ]
+    for index in sorted(removed, reverse=True):
+        mesh_object.vertex_groups.remove(mesh_object.vertex_groups[index])
+    bones = bone_group_indices(mesh_object, armature)
+    weights = vertex_weights(mesh_object, bones)
+    emptied = [index for index in lost if not weights[index]]
+    weighted = give_nearest_weights(mesh_object, emptied, bones)
+    normalized = normalize_vertex_weights(mesh_object, lost, bones)
+    return len(removed), weighted, normalized
 
 
 def apply_autofitter_shape_keys(mesh_object, names):
@@ -156,8 +173,14 @@ def dissolve_faces(mesh, degenerate_faces, uv_degenerate_faces=()):
 
 
 def assign_unweighted_vertices(mesh_object, armature, indices):
+    """Weight the vertices indices like their nearest weighted vertex, or fully to the armature's first bone when no vertex has bone weights"""
     if not indices:
         return 0
+    weighted = give_nearest_weights(
+        mesh_object, indices, bone_group_indices(mesh_object, armature)
+    )
+    if weighted:
+        return weighted
     if not armature.data.bones:
         raise MeshValidationError(
             f"Cannot assign unweighted vertices on '{mesh_object.name}': armature has no bones."
@@ -166,7 +189,7 @@ def assign_unweighted_vertices(mesh_object, armature, indices):
     group = mesh_object.vertex_groups.get(root_name) or mesh_object.vertex_groups.new(
         name=root_name
     )
-    group.add(list(indices), 0.01, "REPLACE")
+    group.add(list(indices), 1.0, "REPLACE")
     return len(indices)
 
 
@@ -271,8 +294,16 @@ def apply_mesh_issue_fixes(mesh_object, issues):
     uv_faces = set()
     for issue in issues:
         if issue.issue_type == "unmatched_vertex_groups":
-            count = remove_unmatched_vertex_groups(mesh_object, issue.details)
+            count, weighted, normalized = remove_unmatched_vertex_groups(
+                mesh_object, issue.details, modifier.object
+            )
             fixes.append(f"Removed {count} vertex groups without matching bones")
+            if weighted:
+                fixes.append(
+                    f"Weighted {weighted} vertices left without weights like their nearest weighted vertex"
+                )
+            if normalized:
+                fixes.append(f"Normalized the weights of {normalized} vertices")
         elif issue.issue_type == "autofitter_shape_keys":
             count = apply_autofitter_shape_keys(mesh_object, issue.details)
             fixes.append(
@@ -293,9 +324,7 @@ def apply_mesh_issue_fixes(mesh_object, issues):
             count = assign_unweighted_vertices(
                 mesh_object, modifier.object, issue.details
             )
-            fixes.append(
-                f"Assigned {count} unweighted vertices to '{modifier.object.data.bones[0].name}'"
-            )
+            fixes.append(f"Weighted {count} unweighted vertices")
         elif issue.issue_type == "influence_limit":
             count = limit_vertex_influences(mesh_object, modifier.object, issue.details)
             fixes.append(

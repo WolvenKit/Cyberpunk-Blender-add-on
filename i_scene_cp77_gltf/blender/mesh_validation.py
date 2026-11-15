@@ -8,7 +8,6 @@ from ..bartmoss.arrays import float32_bit_keys, stable_unique_integer_rows
 from ..gltf.mesh_contract import MAX_SKIN_INFLUENCES, SKIN_WEIGHT_EPSILON
 
 VERT_LIMIT = 65535
-WEIGHT_EPSILON = 1e-5
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,11 +217,15 @@ def crowded_vertex_indices(mesh, groups, limit=MAX_SKIN_INFLUENCES):
     return tuple(crowded), most
 
 
-def unweighted_vertex_indices(mesh):
+def unweighted_vertex_indices(mesh_object):
+    """The vertices of the object that carry no weight in any vertex group"""
+    # Reading vertex weights on a mesh without groups corrupts memory in Blender 5.0.0, so a groupless mesh is not read.
+    if not mesh_object.vertex_groups:
+        return tuple(range(len(mesh_object.data.vertices)))
     return tuple(
         vertex.index
-        for vertex in mesh.vertices
-        if not any(group.weight > WEIGHT_EPSILON for group in vertex.groups)
+        for vertex in mesh_object.data.vertices
+        if not any(group.weight > SKIN_WEIGHT_EPSILON for group in vertex.groups)
     )
 
 
@@ -313,6 +316,19 @@ def _mandatory_mesh_issues(mesh_object, is_skinned, options):
                 details=crowded,
             )
         )
+
+    # A submesh with no weights at all exports without a skin; one with some needs them on every vertex.
+    unweighted = unweighted_vertex_indices(mesh_object)
+    if 0 < len(unweighted) < len(mesh_object.data.vertices):
+        issues.append(
+            ValidationIssue(
+                "unweighted_vertices",
+                f"'{mesh_object.name}' has {len(unweighted)} vertices without weights; every vertex of a "
+                "weighted submesh needs some.",
+                mesh_object.name,
+                details=unweighted,
+            )
+        )
     return issues
 
 
@@ -370,12 +386,12 @@ def _optional_mesh_issues(mesh_object, is_skinned, options):
         and options.check_unweighted_vertices
         and armature_modifier(mesh_object)
     ):
-        indices = unweighted_vertex_indices(mesh)
-        if indices:
+        indices = unweighted_vertex_indices(mesh_object)
+        if indices and len(indices) == len(mesh.vertices):
             issues.append(
                 ValidationIssue(
                     "unweighted_vertices",
-                    f"'{mesh_object.name}' has {len(indices)} vertices without non-zero weights.",
+                    f"'{mesh_object.name}' has no vertex weights; it exports without a skin.",
                     mesh_object.name,
                     details=indices,
                 )

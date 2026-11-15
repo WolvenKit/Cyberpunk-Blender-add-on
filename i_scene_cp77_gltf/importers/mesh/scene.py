@@ -773,6 +773,7 @@ def _authoritative_source_rest_snapshot(armature, skin, global_matrices):
         "version": 2,
         "space": SOURCE_REST_SPACE_CONTRACT,
         "boneNames": list(skin.bone_names),
+        "boneParentIndexes": [int(value) for value in skin.parent_indices],
         "matrices": relative.reshape(len(relative), 16).tolist(),
     }
     target_matrices = []

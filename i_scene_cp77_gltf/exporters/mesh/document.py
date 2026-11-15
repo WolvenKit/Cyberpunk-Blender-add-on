@@ -888,7 +888,7 @@ def _topological_order(parents):
 
 
 def _imported_rest_matrices(armature, mesh_objects, joint_lists):
-    """Each imported joint's source rest and its bone's rest at import, as Blender model matrices, by joint name"""
+    """Each imported joint's source rests and its bones' rests at import, as Blender model matrices, by joint name"""
     snapshots = []
     for owner in (*mesh_objects, armature):
         snapshot = _json_property(owner, MESH_SOURCE_REST_SNAPSHOT_KEY, None)
@@ -903,10 +903,13 @@ def _imported_rest_matrices(armature, mesh_objects, joint_lists):
         ):
             continue
         names = tuple(str(name) for name in snapshot.get("boneNames", ()))
-        parents = parents_by_names.get(names)
-        if parents is None:
-            continue
         count = len(names)
+        try:
+            parents = tuple(int(value) for value in snapshot["boneParentIndexes"])
+        except (KeyError, TypeError, ValueError):
+            parents = parents_by_names.get(names)
+        if parents is None or len(parents) != count:
+            continue
         try:
             relative = np.asarray(snapshot["matrices"], dtype=np.float64).reshape(
                 count, 4, 4
@@ -920,7 +923,7 @@ def _imported_rest_matrices(armature, mesh_objects, joint_lists):
             continue
         rest = local_matrices_to_model(relative, parents, _topological_order(parents))
         for name, source, target in zip(names, rest, targets):
-            rests.setdefault(name, (source, target))
+            rests.setdefault(name, []).append((source, target))
     return rests
 
 
@@ -1011,12 +1014,17 @@ def build_mesh_skeleton_binding(armature, mesh_objects) -> SkeletonWriteBinding 
     globals_blender = []
     for name in order:
         current = as_matrix_4x4(armature.data.bones[name].matrix_local)
-        imported = rests.get(joint_names[name])
-        if imported is not None and np.allclose(
-            current, imported[1], rtol=0.0, atol=1.0e-7
-        ):
-            current = imported[0]
-        globals_blender.append(current)
+        # Meshes moved onto another armature carry rests of their own rig; only a rest whose bone is unchanged applies.
+        globals_blender.append(
+            next(
+                (
+                    source
+                    for source, target in rests.get(joint_names[name], ())
+                    if np.allclose(current, target, rtol=0.0, atol=1.0e-7)
+                ),
+                current,
+            )
+        )
     globals_gltf = blender_relative_to_gltf(
         np.asarray(globals_blender, dtype=np.float64), is_root=True
     )

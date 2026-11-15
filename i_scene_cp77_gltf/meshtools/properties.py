@@ -80,7 +80,9 @@ class MeshValidationProperties(bpy.types.PropertyGroup):
         name="Check Degenerate UVs", default=False
     )
     check_unweighted_vertices: bpy.props.BoolProperty(
-        name="Check Unweighted Vertices", default=True
+        name="Check Submeshes Without Weights",
+        default=True,
+        description="Report skinned submeshes with no vertex weights, which export without a skin",
     )
     check_unused_bones: bpy.props.BoolProperty(name="Check Unused Bones", default=False)
 
@@ -105,8 +107,8 @@ class MeshValidationProperties(bpy.types.PropertyGroup):
         default=False,
     )
     fix_assign_unweighted_vertices: bpy.props.BoolProperty(
-        name="Assign Unweighted Vertices",
-        description="Assign unweighted vertices to the armature's first bone with weight 0.01",
+        name="Weight Unweighted Vertices",
+        description="Weight each unweighted vertex like its nearest weighted vertex, or fully to the armature's first bone when no vertex has weights",
         default=False,
     )
     fix_remove_unused_bones: bpy.props.BoolProperty(

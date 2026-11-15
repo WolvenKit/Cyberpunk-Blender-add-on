@@ -1,6 +1,7 @@
 import re
 
 from ...blender.context import preserved_context, safe_mode_switch
+from ...blender.mesh_validation import weighted_group_names
 from ...blender.operator_results import OperationResult
 from ...core.log import get_logger
 
@@ -8,19 +9,21 @@ _LOG = get_logger(__name__)
 
 
 def delete_unused_bones(context):
-    """Delete the selected armature's bones that none of its child meshes has a vertex group for"""
+    """Delete the selected armature's bones that none of its child meshes carries weight on"""
     obj = context.active_object
     if not obj or obj.type != "ARMATURE":
         return OperationResult.cancelled("Active object must be an armature.")
 
-    # Collect all vertex group names from all child meshes
+    # An empty group, such as the ones Safe Join leaves every piece, keeps no bone.
     all_vertex_groups = set()
     for child in obj.children:
         if child.type == "MESH":
-            all_vertex_groups.update(vg.name for vg in child.vertex_groups)
+            all_vertex_groups.update(weighted_group_names(child))
 
     if not all_vertex_groups:
-        return OperationResult.cancelled("No vertex groups found in mesh children.")
+        return OperationResult.cancelled(
+            "The armature's child meshes carry no weights."
+        )
     if (
         context.view_layer.objects.get(obj.name) is None
         or not obj.is_editable
@@ -99,7 +102,7 @@ def delete_orphan_bones(context):
         return OperationResult.cancelled(
             "The selected meshes have no associated armature."
         )
-    group_names = {group.name for mesh in meshes for group in mesh.vertex_groups}
+    group_names = {name for mesh in meshes for name in weighted_group_names(mesh)}
     editable = []
     seen_data = set()
     skipped = 0
