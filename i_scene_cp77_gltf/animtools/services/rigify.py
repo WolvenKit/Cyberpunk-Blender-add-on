@@ -13,7 +13,11 @@ from ...blender.animation_context import (
 )
 from ...blender.bake import sample_pose_bones, write_pose_bone_samples
 from ...blender.context import preserved_context, safe_mode_switch
-from ...blender.keyframes import assign_action_with_slot
+from ...blender.keyframes import (
+    action_slot_identity,
+    assign_action_with_slot,
+    get_action_fcurves,
+)
 from ...blender.operator_results import OperationResult
 from ...blender.selection import select_objects
 from ...blender.transactions import (
@@ -216,9 +220,25 @@ def _frame_range(context, action, frame_range_source, frame_start, frame_end):
     return frame_start, frame_end
 
 
-def bake_active(
+def rigify_actions(rig) -> tuple[str, ...]:
+    """The names of the actions that key any of the Rigify rig's bones"""
+    bones = set(rig.pose.bones.keys())
+    return tuple(
+        action.name
+        for action in bpy.data.actions
+        if any(
+            curve.data_path.startswith("pose.bones[")
+            and curve.data_path.split('"')[1] in bones
+            for curve in get_action_fcurves(action, rig) or ()
+        )
+    )
+
+
+@transactional("Rigify bake")
+def bake_actions(
     context,
     *,
+    actions: tuple[str, ...],
     action_name: str,
     overwrite: bool,
     frame_range_source: str,
@@ -226,18 +246,46 @@ def bake_active(
     frame_end: int,
     step: int,
 ) -> OperationResult:
+    """Bake each named Rigify action onto the source's animation bones, the Rigify rig keeping its own action"""
     source, rig = linked_pair(context)
-    start, end = _frame_range(
-        context, _active_action(rig), frame_range_source, frame_start, frame_end
+    if source is None or rig is None:
+        return OperationResult(False, "No Rigify pair found for active object", "ERROR")
+    if not actions:
+        return OperationResult(False, "Choose at least one action to bake", "ERROR")
+    track_animation_data(rig, label="Rigify bake rig action")
+    original = _active_action(rig)
+    _identifier, original_slot = action_slot_identity(rig.animation_data)
+    baked = []
+    for name in actions:
+        action = bpy.data.actions.get(name)
+        if action is None:
+            return OperationResult(False, f"Action '{name}' no longer exists", "ERROR")
+        assign_action_with_slot(rig, action)
+        start, end = _frame_range(
+            context, action, frame_range_source, frame_start, frame_end
+        )
+        # One action takes the given name; each of several takes its own name with _baked.
+        request = RigifyBakeRequest(
+            action_name=action_name if len(actions) == 1 else "",
+            overwrite=bool(overwrite),
+            frame_start=int(start),
+            frame_end=int(end),
+            step=max(1, int(step)),
+        )
+        result = bake_to_source(context, source, rig, request)
+        if not result.ok:
+            return result
+        baked.append(result.details["action"].name)
+    if original is None:
+        rig.animation_data.action = None
+    else:
+        assign_action_with_slot(rig, original, slot_handle=original_slot)
+    return OperationResult(
+        True,
+        f"Baked {', '.join(baked)}. Turn live sync off to play "
+        f"{'it' if len(baked) == 1 else 'them'} on the Cyberpunk rig.",
+        details={"actions": tuple(baked)},
     )
-    request = RigifyBakeRequest(
-        action_name=action_name,
-        overwrite=bool(overwrite),
-        frame_start=int(start),
-        frame_end=int(end),
-        step=max(1, int(step)),
-    )
-    return bake_to_source(context, source, rig, request)
 
 
 def _enter_pose_mode(context, obj) -> None:

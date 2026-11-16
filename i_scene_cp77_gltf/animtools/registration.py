@@ -1,5 +1,5 @@
 import bpy
-from bpy.props import CollectionProperty, IntProperty, PointerProperty
+from bpy.props import CollectionProperty, FloatProperty, IntProperty, PointerProperty
 
 from ..blender.animgraph import presenters, results_overlay, sm_overlay
 from ..blender.animgraph.node_types import (
@@ -40,6 +40,7 @@ from ..blender.animgraph.sockets import (
 from ..blender.animgraph.tree import REDengine_AnimGraphTree
 from ..core.log import get_logger
 from ..core.registration import RegistrationLedger
+from .blender.rigify.switches import all_limbs_ik_fk, set_all_limbs_ik_fk
 from .handlers import callbacks
 from .operators.actions import ACTION_OPERATOR_CLASSES
 from .operators.animgraph.add_node import REDENGINE_OT_add_node
@@ -230,6 +231,19 @@ def _register_properties() -> None:
         bpy.types.Action,
         "cp77_anim_events_index",
         IntProperty(name="Active Event Index", default=0),
+    )
+    _LEDGER.add_property(
+        bpy.types.Object,
+        "cp77_rigify_ik_fk",
+        FloatProperty(
+            name="All Limbs IK-FK",
+            description="Move every limb between IK (0) and FK (1) at once; each limb's own switch stays editable",
+            min=0.0,
+            max=1.0,
+            get=all_limbs_ik_fk,
+            set=set_all_limbs_ik_fk,
+            options=set(),
+        ),
     )
 
 
