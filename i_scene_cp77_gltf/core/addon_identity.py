@@ -6,7 +6,7 @@ import bpy
 
 # The add-on's root package (this module lives one level below it), under which Blender keeps its preferences.
 ADDON_PACKAGE = __package__.rpartition(".")[0]
-RUNTIME_BUILD = (2, 5, 0)
+RUNTIME_BUILD = (2, 5, 5)
 _MANIFEST_PATH = Path(__file__).parents[1] / "blender_manifest.toml"
 
 

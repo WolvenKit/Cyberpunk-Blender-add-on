@@ -34,18 +34,6 @@ if _manifest_version != RUNTIME_BUILD:
         f"{'.'.join(map(str, _manifest_version))}"
     )
 
-bl_info = {
-    "name": "Cyberpunk 2077 IO Suite",
-    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, Doctor Presto, shotlastc, Rudolph2109, Holopointz, Peatral, John CO., Chase_81, akikoe,  sprt_, Jazza, 86maylin",
-    "version": get_addon_version(),
-    "blender": (5, 0, 0),
-    "location": "File > Import-Export",
-    "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
-    "warning": "",
-    "category": "Import-Export",
-    "doc_url": "https://github.com/WolvenKit/Cyberpunk-Blender-add-on#readme",
-    "tracker_url": "https://github.com/WolvenKit/Cyberpunk-Blender-add-on/issues/new/choose",
-}
 
 _LOG = get_logger(__name__)
 
