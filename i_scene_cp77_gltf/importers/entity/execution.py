@@ -35,6 +35,7 @@ from ..common.light_channels import (
     rebuild_light_channel_links,
     retire_light_channel_volumes,
 )
+from ..common.light_near_shadows import unblock_near_geometry
 from ..common.mesh_assets import (
     clear_submesh_index_cache,
     get_group,
@@ -1140,6 +1141,7 @@ def _import_entity_impl(request: EntityImportRequest, *, progress=NO_PROGRESS):
                             summary["lights"],
                             summary["unresolved"],
                         )
+                        unblock_near_geometry(imported_collection)
                     if not request.light_channel_volumes_kept:
                         retire_light_channel_volumes(
                             imported_collection, tuple(imported_collection.all_objects)
