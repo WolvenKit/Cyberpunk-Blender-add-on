@@ -323,3 +323,4 @@ def keep_rasters() -> None:
 def clear() -> None:
     _SCREENS.clear()
     _PLAYING.clear()
+    SCREEN_FONTS.clear()
