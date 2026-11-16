@@ -89,6 +89,8 @@ REGISTRY.register(
         "base\\materials\\multilayered_terrain.mt",
         "base\\materials\\cloth_tarps.mt",
         "base\\fx\\_shaders\\blackwall_blendable.mt",
+        # Its own parameters only move vertices with the character's velocity, which a still mesh has none of.
+        "base\\fx\\_shaders\\sandevistan_multilayer.mt",
     ],
     MaterialRule(
         factory=HandlerFactory("multilayered", "Multilayered", "bip"),
@@ -848,6 +850,13 @@ REGISTRY.register(
         preserve_render_method=True,
         semantic_cache_identity=True,
     ),
+)
+
+REGISTRY.register(
+    [
+        "base\\fx\\_shaders\\oda_helm.mt",
+    ],
+    MaterialRule(factory=HandlerFactory("oda_helm", "OdaHelm", "bip")),
 )
 
 REGISTRY.register(
