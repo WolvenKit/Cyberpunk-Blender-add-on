@@ -32,6 +32,7 @@ from ...blender.light_channels import (
     retire_light_channel_volumes,
     stored_light_channel_records,
 )
+from ...blender.light_near_shadows import unblock_near_geometry
 from ...blender.matrix import instance_matrix, object_world_matrix
 from ...blender.mesh import is_preview_only_modifier
 from ...blender.naming import fit_id_name
@@ -2388,6 +2389,8 @@ def _import_sectors(session, *, progress=NO_PROGRESS):
     else:
         track_collection_state(masters, label="MasterInstances")
     masters.hide_viewport = False
+    # Instances render regardless; this only stops the masters themselves rendering.
+    masters.hide_render = True
     session.masters = masters
 
     master_started = time.perf_counter()
@@ -2800,6 +2803,9 @@ def _import_sectors(session, *, progress=NO_PROGRESS):
                         "Sector light channels: kept %d volume(s) as records",
                         channel_summary["retired"],
                     )
+                for sector_collection in created_sector_collections:
+                    if sector_collection is not None:
+                        unblock_near_geometry(sector_collection)
                 mark_registered_reflection_probes_dirty(bpy.context.scene)
             except Exception as error:
                 message = f"Sector light-channel linking skipped: {error}"

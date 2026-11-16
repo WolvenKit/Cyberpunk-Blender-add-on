@@ -37,6 +37,7 @@ from ...blender.light_channels import (
     rebuild_light_channel_links,
     retire_light_channel_volumes,
 )
+from ...blender.light_near_shadows import unblock_near_geometry
 from ...blender.mesh_appearances import (
     APPEARANCE_NAME_KEY,
     record_collection_appearances,
@@ -1212,6 +1213,7 @@ def _link_entity_light_channels(request, session, warnings):
                     summary["lights"],
                     summary["unresolved"],
                 )
+                unblock_near_geometry(imported_collection)
             if not request.light_channel_volumes_kept:
                 retire_light_channel_volumes(
                     imported_collection, tuple(imported_collection.all_objects)
