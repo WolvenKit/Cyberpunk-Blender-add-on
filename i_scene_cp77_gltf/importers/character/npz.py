@@ -744,11 +744,19 @@ def load_base_character(context, gender, *, load_head=True, load_body=True):
     resources_dir = get_char_dir()
     resources = BASE_CHARACTERS[gender]
     warnings = []
+    # One collection holds the rig and each part's meshes, as an entity import's does.
+    character = track_created_datablock(
+        "collections",
+        bpy.data.collections.new(os.path.splitext(resources["rig"])[0]),
+    )
+    context.scene.collection.children.link(character)
 
     body_objects = []
     if load_body:
         body_path = os.path.join(resources_dir, resources["body_mesh"])
-        _coll, body_objects = load_mesh_npz(context, body_path, warnings=warnings)
+        _coll, body_objects = load_mesh_npz(
+            context, body_path, link_to_collection=character, warnings=warnings
+        )
         load_shapekeys_npz(
             body_objects, os.path.join(resources_dir, resources["body_sk"])
         )
@@ -757,12 +765,17 @@ def load_base_character(context, gender, *, load_head=True, load_body=True):
     if load_head:
         for mesh_file, sk_file in resources["head_parts"]:
             _coll, objects = load_mesh_npz(
-                context, os.path.join(resources_dir, mesh_file), warnings=warnings
+                context,
+                os.path.join(resources_dir, mesh_file),
+                link_to_collection=character,
+                warnings=warnings,
             )
             load_shapekeys_npz(objects, os.path.join(resources_dir, sk_file))
             head_objects.extend(objects)
 
-    rig = import_bundled_metarig(os.path.join(get_rig_dir(), resources["rig"]))
+    rig = import_bundled_metarig(
+        os.path.join(get_rig_dir(), resources["rig"]), collection=character
+    )
     _bind_to_rig(body_objects + head_objects, rig)
 
     props = context.scene.cp77_character_shape
