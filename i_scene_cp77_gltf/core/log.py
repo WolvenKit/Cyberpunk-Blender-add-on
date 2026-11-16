@@ -16,6 +16,8 @@ from .addon_identity import get_addon_preferences, user_config_dir
 LOGGER_NAME = "i_scene_cp77_gltf"
 TRACE = 5
 logging.addLevelName(TRACE, "TRACE")
+# A record logged with extra=FILE_ONLY reaches the log file and never the console.
+FILE_ONLY = {"cp77_file_only": True}
 _DEFAULT_LEVEL = "INFO"
 _MAX_LOG_BYTES = 8 * 1024 * 1024
 _BACKUP_COUNT = 4
@@ -591,6 +593,11 @@ def _stop_file_listener(logger=None):
     _reap_orphaned_pipelines()
 
 
+def _shown_on_console(record):
+    """Whether a record may reach the console"""
+    return not getattr(record, "cp77_file_only", False)
+
+
 class _ContextFilter(logging.Filter):
     def filter(self, record):
         name = record.name
@@ -779,6 +786,7 @@ def configure_logging(
             console_handler.cp77_owned = True
             console_handler.setLevel(console_level_value)
             console_handler.addFilter(context_filter)
+            console_handler.addFilter(_shown_on_console)
             console_handler.setFormatter(_ConsoleFormatter())
             logger.addHandler(console_handler)
 

@@ -1,6 +1,7 @@
 import bpy
 
 from ..blender.mesh_appearances import set_use_appearance
+from ..blender.mesh_validation import DEFAULT_CHECKS
 
 _VERTEX_GROUP_ITEMS = (("None", "None", "No vertex group"),)
 _VERTEX_GROUP_SIGNATURE = None
@@ -68,32 +69,32 @@ class MeshValidationProperties(bpy.types.PropertyGroup):
     check_unweighted_vertices: bpy.props.BoolProperty(
         name="Ungrouped Vertices",
         description="Find vertices without weights; Fix gives them their nearest weighted vertex's weights",
-        default=True,
+        default=DEFAULT_CHECKS["check_unweighted_vertices"],
     )
     check_unused_bones: bpy.props.BoolProperty(
         name="Orphan Bones",
         description="Find armature bones no mesh carries weight on; Fix removes them",
-        default=True,
+        default=DEFAULT_CHECKS["check_unused_bones"],
     )
     check_unused_vertex_groups: bpy.props.BoolProperty(
         name="Unused Vertex Groups",
         description="Find vertex groups without weights; Fix removes them",
-        default=True,
+        default=DEFAULT_CHECKS["check_unused_vertex_groups"],
     )
     check_missing_uv: bpy.props.BoolProperty(
         name="Missing UV Layer",
         description="Find meshes without an active UV layer; Fix adds one",
-        default=True,
+        default=DEFAULT_CHECKS["check_missing_uv"],
     )
     check_degenerate_faces: bpy.props.BoolProperty(
         name="Degenerate Faces",
         description="Find faces without area; Fix dissolves them",
-        default=True,
+        default=DEFAULT_CHECKS["check_degenerate_faces"],
     )
     check_degenerate_uvs: bpy.props.BoolProperty(
         name="UV-Degenerate Faces",
         description="Find faces without UV area; Fix dissolves them",
-        default=False,
+        default=DEFAULT_CHECKS["check_degenerate_uvs"],
     )
 
     last_status: bpy.props.StringProperty(default="", options={"SKIP_SAVE"})

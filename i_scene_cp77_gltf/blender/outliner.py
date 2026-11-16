@@ -5,8 +5,11 @@ from functools import cmp_to_key
 
 import bpy
 
+from ..core.log import FILE_ONLY, get_logger
 from ..gltf.submesh import lod_from_name, submesh_name
 from .naming import fit_id_name
+
+_LOG = get_logger(__name__)
 
 _DIGITS = frozenset("0123456789")
 
@@ -228,3 +231,14 @@ def name_submeshes(context, objects):
             obj.name = old
         return ()
     return tuple((old, obj.name) for obj, old, _new in changes if obj.name != old)
+
+
+def renamed_submeshes_note(renamed, purpose):
+    """The console's one-line note of how many submeshes were renamed, with which ones logged to the log file alone"""
+    _LOG.info(
+        "Renamed submeshes for their %s: %s",
+        purpose,
+        ", ".join(f"{old} → {new}" for old, new in renamed),
+        extra=FILE_ONLY,
+    )
+    return f"Renamed {len(renamed)} submesh{'es' if len(renamed) != 1 else ''} for their {purpose}."

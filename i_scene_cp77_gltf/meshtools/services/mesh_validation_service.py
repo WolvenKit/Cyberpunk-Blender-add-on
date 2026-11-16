@@ -13,7 +13,7 @@ from ...blender.mesh_validation import (
     issue_fix_enabled,
 )
 from ...blender.operator_results import OperationResult
-from ...blender.outliner import name_submeshes
+from ...blender.outliner import name_submeshes, renamed_submeshes_note
 from ...blender.selection import selected_meshes
 from ...core.log import get_logger
 from ..model import MeshValidationSummary
@@ -79,20 +79,13 @@ def fix_selected_meshes(context, request):
         result = _fix_meshes(meshes, request)
     if not renamed or not result.ok:
         return result
-    note = f"Renamed {len(renamed)} submeshes for their order."
+    note = renamed_submeshes_note(renamed, "order")
     summary = result.details.get("payload")
     if summary is not None:
         summary = replace(
             summary,
             mesh_names=tuple(obj.name for obj in meshes),
-            report="\n".join(
-                (
-                    summary.report,
-                    "",
-                    note,
-                    *(f"  {old} → {new}" for old, new in renamed),
-                )
-            ),
+            report="\n".join((summary.report, "", note)),
         )
     return OperationResult.finished(
         f"{result.message} {note}",

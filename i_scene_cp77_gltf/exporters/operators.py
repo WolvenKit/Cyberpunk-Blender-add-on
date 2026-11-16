@@ -14,7 +14,7 @@ from bpy_extras.io_utils import ExportHelper
 
 from ..animation.domain.clip.root_motion import ROOT_MOTION_EXPORT_ITEMS
 from ..assetio.paths import safe_file_stem
-from ..blender.mesh_validation import MeshValidationOptions
+from ..blender.mesh_validation import DEFAULT_CHECKS, MeshValidationOptions
 from ..blender.operator_results import execute_operation
 from ..core.log import get_logger, log_once
 from ..core.notifications import report
@@ -112,32 +112,32 @@ class ExportValidationProperties:
     )
     check_unweighted_vertices: BoolProperty(
         name="Ungrouped Vertices",
-        default=False,
+        default=DEFAULT_CHECKS["check_unweighted_vertices"],
         description="Find vertices without weights; Try Fix gives them their nearest weighted vertex's weights",
     )
     check_unused_bones: BoolProperty(
         name="Orphan Bones",
-        default=False,
+        default=DEFAULT_CHECKS["check_unused_bones"],
         description="Find armature bones no mesh carries weight on; Try Fix leaves them out",
     )
     check_unused_vertex_groups: BoolProperty(
         name="Unused Vertex Groups",
-        default=False,
+        default=DEFAULT_CHECKS["check_unused_vertex_groups"],
         description="Find vertex groups without weights; Try Fix leaves them out",
     )
     check_missing_uv: BoolProperty(
         name="Missing UV Layer",
-        default=False,
+        default=DEFAULT_CHECKS["check_missing_uv"],
         description="Find meshes without an active UV layer; Try Fix adds one",
     )
     check_degenerate_faces: BoolProperty(
         name="Degenerate Faces",
-        default=False,
+        default=DEFAULT_CHECKS["check_degenerate_faces"],
         description="Find faces without area; Try Fix dissolves them",
     )
     check_degenerate_uvs: BoolProperty(
         name="UV-Degenerate Faces",
-        default=False,
+        default=DEFAULT_CHECKS["check_degenerate_uvs"],
         description="Find faces without UV area; Try Fix dissolves them",
     )
 

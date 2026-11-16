@@ -220,6 +220,10 @@ def limit_vertex_influences(mesh_object, armature, indices, limit=MAX_SKIN_INFLU
     return removed
 
 
+def _unused_bones_fix(count):
+    return f"Removed {count} bones no mesh carries weight on, keeping the rest in their places"
+
+
 def copy_armature_without_unused_bones(armature, unused_names):
     remove_names = set(unused_names)
     keep_names = {
@@ -373,30 +377,76 @@ def _source_issue_names(issues, mesh_replacements, armature_replacements):
     return tuple(normalized)
 
 
-def _apply_followup_mesh_fixes(
+def _replace_followup_armatures(issues, export_objects, temporaries, fixes_applied):
+    """Swap each armature a fix left with unused bones for a copy without them, copying the meshes it drives first"""
+    mesh_replacements, armature_replacements, temp_objects, temp_armatures = temporaries
+    current = {
+        modifier.object.name: modifier.object
+        for modifier in map(armature_modifier, export_objects)
+        if modifier is not None and modifier.object is not None
+    }
+    source_armatures = {
+        replacement: original for original, replacement in armature_replacements.items()
+    }
+    replaced = False
+    for issue in issues:
+        armature = current.get(issue.object_name)
+        if armature is None:
+            continue
+        replacement = copy_armature_without_unused_bones(armature, issue.details)
+        temp_armatures.append(replacement)
+        original_armature = source_armatures.get(armature, armature)
+        armature_replacements[original_armature] = replacement
+        fixes_applied.setdefault(original_armature.name, []).append(
+            _unused_bones_fix(len(issue.details))
+        )
+        for index, obj in enumerate(export_objects):
+            modifier = armature_modifier(obj)
+            if modifier is None or modifier.object is not armature:
+                continue
+            if obj not in mesh_replacements.values():
+                temporary = copy_mesh_object(obj)
+                temp_objects.append(temporary)
+                mesh_replacements[obj] = temporary
+                export_objects[index] = obj = temporary
+            for each in obj.modifiers:
+                if each.type == "ARMATURE" and each.object is armature:
+                    each.object = replacement
+        replaced = True
+    return replaced
+
+
+def _apply_followup_fixes(
     export_objects,
-    mesh_replacements,
+    temporaries,
     *,
     is_skinned,
     options,
     fixes_applied,
 ):
-    source_by_temporary = {
-        temporary: original for original, temporary in mesh_replacements.items()
-    }
+    # A fix can leave a problem of its own, as limiting influences can orphan a bone, so the copies go round again.
+    mesh_replacements, armature_replacements = temporaries[:2]
     remaining = ()
     for _pass in range(3):
         remaining = collect_mesh_validation_issues(
             export_objects,
             is_skinned=is_skinned,
             options=options,
+            stand_ins={**mesh_replacements, **armature_replacements},
+        )
+        fixable = [issue for issue in remaining if issue_fix_enabled(issue, options)]
+        progressed = _replace_followup_armatures(
+            [issue for issue in fixable if issue.issue_type == "unused_bones"],
+            export_objects,
+            temporaries,
+            fixes_applied,
         )
         fixable_by_name = issues_by_object(
-            issue
-            for issue in remaining
-            if issue.issue_type != "unused_bones" and issue_fix_enabled(issue, options)
+            issue for issue in fixable if issue.issue_type != "unused_bones"
         )
-        progressed = False
+        source_by_temporary = {
+            temporary: original for original, temporary in mesh_replacements.items()
+        }
         for temporary, original in source_by_temporary.items():
             object_issues = fixable_by_name.get(temporary.name, ())
             if not object_issues:
@@ -411,6 +461,7 @@ def _apply_followup_mesh_fixes(
         export_objects,
         is_skinned=is_skinned,
         options=options,
+        stand_ins={**mesh_replacements, **armature_replacements},
     )
 
 
@@ -498,7 +549,7 @@ def prepare_mesh_validation_copies(
             temp_armatures.append(replacement)
             armature_replacements[original_armature] = replacement
             fixes_applied.setdefault(original_armature.name, []).append(
-                f"Removed {len(issue.details)} bones no mesh carries weight on, keeping the rest in their places"
+                _unused_bones_fix(len(issue.details))
             )
 
         if armature_replacements:
@@ -510,9 +561,9 @@ def prepare_mesh_validation_copies(
                     ):
                         modifier.object = armature_replacements[modifier.object]
 
-        remaining = _apply_followup_mesh_fixes(
+        remaining = _apply_followup_fixes(
             export_objects,
-            mesh_replacements,
+            (mesh_replacements, armature_replacements, temp_objects, temp_armatures),
             is_skinned=is_skinned,
             options=options,
             fixes_applied=fixes_applied,

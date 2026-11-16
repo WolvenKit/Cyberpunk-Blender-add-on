@@ -9,6 +9,15 @@ from ..bartmoss.arrays import float32_bit_keys, stable_unique_integer_rows
 from ..gltf.mesh_contract import MAX_SKIN_INFLUENCES, SKIN_WEIGHT_EPSILON
 
 VERT_LIMIT = 65535
+# The checks the Mesh Tools panel and the export dialogs start with, so Try Fix repairs what Fix does.
+DEFAULT_CHECKS = {
+    "check_unweighted_vertices": True,
+    "check_unused_bones": True,
+    "check_unused_vertex_groups": True,
+    "check_missing_uv": True,
+    "check_degenerate_faces": True,
+    "check_degenerate_uvs": False,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -416,27 +425,32 @@ def armature_groups(meshes):
     return grouped
 
 
-def rig_weighted_group_names(armature):
-    """The names of the vertex groups carrying weight on any mesh the armature deforms or parents"""
+def rig_weighted_group_names(armature, stand_ins=None):
+    """The names of the vertex groups carrying weight on any mesh the armature deforms or parents, each temporary in stand_ins counting in place of its original"""
+    stand_ins = stand_ins or {}
+    originals = {temporary: original for original, temporary in stand_ins.items()}
+    rig = originals.get(armature, armature)
+    rigs = {rig, stand_ins.get(rig, rig)}
     return {
         name
         for mesh_object in bpy.data.objects
         if mesh_object.type == "MESH"
+        and mesh_object not in stand_ins
         and (
-            getattr(armature_modifier(mesh_object), "object", None) == armature
-            or mesh_object.parent == armature
+            getattr(armature_modifier(mesh_object), "object", None) in rigs
+            or mesh_object.parent in rigs
         )
         for name in weighted_group_names(mesh_object)
     }
 
 
-def _unused_bone_issues(meshes, options):
+def _unused_bone_issues(meshes, options, stand_ins):
     if not options.check_unused_bones:
         return []
     issues = []
     for armature in armature_groups(meshes):
         # Every mesh on the rig counts, not only the validated ones, so a fix keeps the bones the others use.
-        weighted = rig_weighted_group_names(armature)
+        weighted = rig_weighted_group_names(armature, stand_ins)
         unused = tuple(
             sorted(
                 bone.name for bone in armature.data.bones if bone.name not in weighted
@@ -455,7 +469,10 @@ def _unused_bone_issues(meshes, options):
     return issues
 
 
-def collect_mesh_validation_issues(meshes, *, is_skinned=False, options=None):
+def collect_mesh_validation_issues(
+    meshes, *, is_skinned=False, options=None, stand_ins=None
+):
+    """Every issue the options check for on meshes, any temporary in stand_ins counting in place of its original"""
     options = options or MeshValidationOptions()
     meshes = tuple(meshes)
     issues = []
@@ -463,7 +480,7 @@ def collect_mesh_validation_issues(meshes, *, is_skinned=False, options=None):
         issues.extend(_mandatory_mesh_issues(mesh_object, is_skinned, options))
         issues.extend(_optional_mesh_issues(mesh_object, is_skinned, options))
     if is_skinned:
-        issues.extend(_unused_bone_issues(meshes, options))
+        issues.extend(_unused_bone_issues(meshes, options, stand_ins))
     return tuple(issues)
 
 
