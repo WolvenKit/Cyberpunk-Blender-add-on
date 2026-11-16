@@ -165,6 +165,7 @@ class GeneratedRigBuilder(RigifyStage):
         """Remove the tweak controls only deform bones follow, as the Cyberpunk rig follows the ORG bones"""
         rig = self.rig
         users = _bone_users(rig)
+        bones = rig.data.bones
         removable = {
             bone.name
             for collection in rig.data.collections_all
@@ -174,33 +175,60 @@ class GeneratedRigBuilder(RigifyStage):
         # Rigify places tweaks through mechanism bones of their own.
         removable |= {
             bone.name
-            for bone in rig.data.bones
+            for bone in bones
             if bone.name.startswith("MCH-") and "_tweak" in bone.name
         }
-        # A tweak anything but a deform bone or another removed tweak uses stays, as the torso's do for the spine.
+
+        # A deform bone stops moving once its tweaks go, so the bones hanging from it move to its ORG bone, as the
+        # palm's do from the hand's. A deform bone with no ORG bone keeps its tweaks.
+        def needed(user):
+            if user.startswith("DEF-"):
+                return f"ORG-{user[4:]}" not in bones and any(
+                    not other.startswith("DEF-") for other in users.get(user, ())
+                )
+            return user not in removable
+
+        # A tweak anything else uses stays, as the torso's do for the spine.
         while True:
             kept = {
                 name
                 for name in removable
-                if any(
-                    not user.startswith("DEF-") and user not in removable
-                    for user in users.get(name, ())
-                )
+                if any(needed(user) for user in users.get(name, ()))
             }
             if not kept:
                 break
             removable -= kept
         if not removable:
             return
+        stranded = {
+            user[4:]
+            for name in removable
+            for user in users.get(name, ())
+            if user.startswith("DEF-")
+        }
+        moved = {
+            f"DEF-{base}": f"ORG-{base}" for base in stranded if f"ORG-{base}" in bones
+        }
         for pose_bone in rig.pose.bones:
             for constraint in tuple(pose_bone.constraints):
-                if (
-                    getattr(constraint, "target", None) == rig
-                    and constraint.subtarget in removable
-                ):
+                if getattr(constraint, "target", None) != rig:
+                    continue
+                if constraint.subtarget in removable:
                     pose_bone.constraints.remove(constraint)
+                elif constraint.subtarget in moved and not pose_bone.name.startswith(
+                    "DEF-"
+                ):
+                    constraint.subtarget = moved[constraint.subtarget]
         safe_mode_switch("EDIT")
         edit_bones = rig.data.edit_bones
+        for edit_bone in edit_bones:
+            parent = edit_bone.parent
+            if (
+                parent is not None
+                and parent.name in moved
+                and not edit_bone.name.startswith("DEF-")
+            ):
+                edit_bone.parent = edit_bones[moved[parent.name]]
         for name in removable:
             edit_bone = edit_bones.get(name)
             if edit_bone is not None:
