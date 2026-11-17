@@ -1,5 +1,9 @@
 import bpy
 
+from .animation.services.animgraph.schema_loader import (
+    clear_animgraph_schema,
+    load_animgraph_schema,
+)
 from .animtools.registration import register_animtools, unregister_animtools
 from .collisiontools.registration import (
     register_collisiontools,
@@ -34,7 +38,6 @@ if _manifest_version != RUNTIME_BUILD:
         f"{'.'.join(map(str, _manifest_version))}"
     )
 
-
 _LOG = get_logger(__name__)
 
 
@@ -42,6 +45,7 @@ _REGISTRATION_STEPS = (
     (register_prefs, unregister_prefs),
     (register_notifications, unregister_notifications),
     (register_props, unregister_props),
+    (load_animgraph_schema, clear_animgraph_schema),
     (register_animtools, unregister_animtools),
     (register_collisiontools, unregister_collisiontools),
     (register_importers, unregister_importers),

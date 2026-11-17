@@ -2677,7 +2677,7 @@ class ParallaxScreenTransparent(MaterialTypeBase):
             CurMat, values["AdditiveAlphaBlend"], -2000, -1450, "AdditiveAlphaBlend"
         )
         slots["AdditiveAlphaBlend"] = (additive.name, None)
-        CurMat.nodes.remove(CurMat.nodes.get("Material Output"))
+        CurMat.nodes.remove(shader_nodes.material_output(CurMat.nodes))
         additive_surface(
             Mat, hsv.outputs["color"], mul2.outputs["Alpha"], additive.outputs["Value"]
         )

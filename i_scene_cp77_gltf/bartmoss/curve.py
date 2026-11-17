@@ -7,6 +7,34 @@ import numpy as np
 from .quaternion import normalize_sequence_xyzw
 
 
+def gaussian_smoothed(values, sigma: float) -> np.ndarray:
+    """values smoothed along their first axis by a Gaussian of sigma samples, the ends held"""
+    values = np.asarray(values, dtype=np.float64)
+    radius = int(np.ceil(3.0 * sigma))
+    kernel = np.exp(-0.5 * (np.arange(-radius, radius + 1) / sigma) ** 2)
+    kernel /= kernel.sum()
+    padded = np.pad(
+        values, [(radius, radius)] + [(0, 0)] * (values.ndim - 1), mode="edge"
+    )
+    return np.apply_along_axis(np.convolve, 0, padded, kernel, mode="valid")
+
+
+def stepped_path(points, steps, released, most_offset: float) -> np.ndarray:
+    """points taking steps in place of their own, drawn back by released and kept within most_offset of their path"""
+    points = np.asarray(points, dtype=np.float64)
+    path = points.copy()
+    offset = np.zeros(points.shape[1:])
+    for sample in range(1, len(points)):
+        offset = (offset + steps[sample] - (points[sample] - points[sample - 1])) * (
+            1.0 - released[sample]
+        )
+        length = float(np.linalg.norm(offset))
+        if length > most_offset:
+            offset *= most_offset / length
+        path[sample] = points[sample] + offset
+    return path
+
+
 def simplify_piecewise_linear(points, limit):
     values = tuple((float(x), float(y)) for x, y in points)
     if limit < 2:
