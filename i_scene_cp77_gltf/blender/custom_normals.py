@@ -41,62 +41,39 @@ def _normalized_values(normals, expected_count: int, label: str):
     return np.ascontiguousarray(values, dtype=np.float32)
 
 
-def _ensure_attribute(mesh, domain: str, label: str):
-    attributes = getattr(mesh, "attributes", None)
-    if attributes is None:
-        _LOG.warning(
-            "Skipping custom normals for %s: mesh attributes are unavailable", label
-        )
-        return None
-
-    attribute = attributes.get(CUSTOM_NORMAL_ATTRIBUTE)
-    if attribute is not None:
-        if (
-            getattr(attribute, "data_type", None) == "FLOAT_VECTOR"
-            and getattr(attribute, "domain", None) == domain
-        ):
-            return attribute
-        attributes.remove(attribute)
-
-    try:
-        return attributes.new(
-            name=CUSTOM_NORMAL_ATTRIBUTE,
-            type="FLOAT_VECTOR",
-            domain=domain,
-        )
-    except (AttributeError, RuntimeError, TypeError, ValueError) as error:
-        _LOG.warning(
-            "Unable to create custom normals for %s: %s", label, error, exc_info=True
-        )
-        return None
-
-
-def _set_custom_normal_attribute(
+def _set_custom_normals(
     mesh, normals, *, domain: str, expected_count: int, label: str
 ) -> bool:
     values = _normalized_values(normals, expected_count, label)
     if values is None:
         return False
 
-    attribute = _ensure_attribute(mesh, domain, label)
-    if attribute is None:
-        return False
-    if len(attribute.data) != expected_count:
+    # Free normals (a FLOAT_VECTOR custom_normal attribute) keep their world direction
+    # when an armature or shape key moves the surface, so posed skin shades as if it
+    # were still in the rest pose. Blender's standard custom normals are stored
+    # relative to each corner's own frame and rotate with the deformed surface.
+    attributes = getattr(mesh, "attributes", None)
+    if attributes is not None:
+        stale = attributes.get(CUSTOM_NORMAL_ATTRIBUTE)
+        if stale is not None:
+            attributes.remove(stale)
+
+    try:
+        if domain == "POINT":
+            mesh.normals_split_custom_set_from_vertices(values)
+        else:
+            mesh.normals_split_custom_set(values)
+    except (AttributeError, RuntimeError, TypeError, ValueError) as error:
         _LOG.warning(
-            "Skipping custom normals for %s: attribute has %d elements, expected %d",
-            label,
-            len(attribute.data),
-            expected_count,
+            "Unable to set custom normals for %s: %s", label, error, exc_info=True
         )
         return False
-
-    attribute.data.foreach_set("vector", values.reshape(-1))
     return True
 
 
 def set_custom_normals_from_vertices(mesh, normals, *, label: str = "mesh") -> bool:
-    """Store free custom normals on Blender's point domain"""
-    return _set_custom_normal_attribute(
+    """Store one custom normal per vertex that follows mesh deformation"""
+    return _set_custom_normals(
         mesh,
         normals,
         domain="POINT",
@@ -106,8 +83,8 @@ def set_custom_normals_from_vertices(mesh, normals, *, label: str = "mesh") -> b
 
 
 def set_custom_normals_from_corners(mesh, normals, *, label: str = "mesh") -> bool:
-    """Store free custom normals on Blender's corner domain"""
-    return _set_custom_normal_attribute(
+    """Store one custom normal per face corner that follows mesh deformation"""
+    return _set_custom_normals(
         mesh,
         normals,
         domain="CORNER",
