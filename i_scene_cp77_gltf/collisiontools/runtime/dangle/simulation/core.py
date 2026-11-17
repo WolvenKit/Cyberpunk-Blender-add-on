@@ -80,8 +80,11 @@ class DyngSimulator:
         source_payload=None,
         view_layer_update=None,
         graph_tree=None,
+        scene=None,
     ):
         self.arm_obj = rig_obj
+        self.scene = scene
+        self.step_count = 0
         # With a graph, the whole graph plays on the rig through the graph's own preview settings.
         self.graph_tree = graph_tree
         self.state = (
@@ -181,15 +184,15 @@ class DyngSimulator:
             self._append_extra_bone(drag_node.bone_name)
 
         system.allocate(len(self.bone_names))
-        self._pose_bones = [
+        self.tracked_pose_bones = [
             self.arm_obj.pose.bones.get(name) for name in self.bone_names
         ]
 
         total_tracked = len(self.bone_names)
         self._prev_bone_xform = [Matrix.Identity(4) for _ in range(total_tracked)]
-        self._cur_bone_xform = [Matrix.Identity(4) for _ in range(total_tracked)]
-        self._interp_bone_xform = [Matrix.Identity(4) for _ in range(total_tracked)]
-        self._previous_parent_xforms = {}
+        self.cur_bone_xform = [Matrix.Identity(4) for _ in range(total_tracked)]
+        self.interp_bone_xform = [Matrix.Identity(4) for _ in range(total_tracked)]
+        self.previous_parent_xforms = {}
         self._input_bone_basis = {}
         self._last_output_bone_basis = {}
         self._feedback_bone_names = set()
@@ -283,7 +286,7 @@ class DyngSimulator:
 
     def _initialize_node_input_history(self):
         self._node_input_current = [
-            [self._cur_bone_xform[int(index)].copy() for index in indices]
+            [self.cur_bone_xform[int(index)].copy() for index in indices]
             for indices in self.system.node_tracked_indices
         ]
 
@@ -291,7 +294,7 @@ class DyngSimulator:
         system = self.system
         for raw_index in system.dyng_particle_indices:
             index = int(raw_index)
-            pose_bone = self._pose_bones[index]
+            pose_bone = self.tracked_pose_bones[index]
             if pose_bone is None or not system.active_mask[index]:
                 continue
             matrix = None
@@ -299,9 +302,9 @@ class DyngSimulator:
                 matrix = model_matrices.get(self.bone_names[index])
             matrix = matrix.copy() if matrix is not None else pose_bone.matrix.copy()
             system.cur_bone_ms[index] = matrix.translation
-            self._cur_bone_xform[index] = matrix
+            self.cur_bone_xform[index] = matrix
 
-    def _sample_node_input(self, node_index, model_matrices=None):
+    def sample_node_input(self, node_index, model_matrices=None):
         system = self.system
         indices = system.node_tracked_indices[node_index]
         runtime = system.node_workspaces[node_index]
@@ -312,7 +315,7 @@ class DyngSimulator:
 
         for local_index, raw_index in enumerate(indices):
             index = int(raw_index)
-            pose_bone = self._pose_bones[index]
+            pose_bone = self.tracked_pose_bones[index]
             current_matrix = None
             if model_matrices is not None and 0 <= index < len(self.bone_names):
                 current_matrix = model_matrices.get(self.bone_names[index])
@@ -320,14 +323,14 @@ class DyngSimulator:
                 current_matrix = (
                     pose_bone.matrix.copy()
                     if pose_bone is not None
-                    else self._cur_bone_xform[index]
+                    else self.cur_bone_xform[index]
                 )
             else:
                 current_matrix = current_matrix.copy()
             previous_matrix = previous[local_index]
             current.append(current_matrix)
             self._prev_bone_xform[index] = previous_matrix
-            self._cur_bone_xform[index] = current_matrix
+            self.cur_bone_xform[index] = current_matrix
             previous_positions[local_index] = previous_matrix.translation
             current_positions[local_index] = current_matrix.translation
 
@@ -338,7 +341,7 @@ class DyngSimulator:
     def _init_state(self):
         system = self.system
         for i, p_cfg in enumerate(self.particles):
-            pb = self._pose_bones[i]
+            pb = self.tracked_pose_bones[i]
             if pb:
                 ms_head = np.array(pb.matrix.translation, dtype=np.float32)
                 system.pos_ms[i] = ms_head
@@ -375,7 +378,7 @@ class DyngSimulator:
             )
 
         for i, bn in enumerate(self.bone_names):
-            pb = self._pose_bones[i]
+            pb = self.tracked_pose_bones[i]
             if pb is None:
                 system.active_mask[i] = False
                 continue
@@ -385,8 +388,8 @@ class DyngSimulator:
             system.cur_bone_ms[i] = ms_head
             system.interp_bone_ms[i] = ms_head
             self._prev_bone_xform[i] = matrix.copy()
-            self._cur_bone_xform[i] = matrix.copy()
-            self._interp_bone_xform[i] = matrix.copy()
+            self.cur_bone_xform[i] = matrix.copy()
+            self.interp_bone_xform[i] = matrix.copy()
             if i >= system.num_particles:
                 system.pos_ms[i] = ms_head
 
@@ -577,7 +580,7 @@ class DyngSimulator:
         return changed
 
     def prepare_frame_change_upstream(self):
-        if not getattr(self, "_timeline_playing", False):
+        if not getattr(self, "timeline_playing", False):
             self._capture_upstream_pose_feedback()
             runtime = getattr(self, "animgraph_runtime", None)
             if runtime is not None and runtime.structured:
@@ -722,6 +725,7 @@ class DyngSimulator:
             self.system.initialize_node_forces(node_index, external_ms, gravity_ms)
 
     def restore_upstream_pose(self, *, discard_partial_output=False):
+        self.step_count += 1
         if discard_partial_output:
             # Failed-step writes are output, not subsequent animation or user input.
             self.capture_output_pose()
@@ -768,7 +772,7 @@ class DyngSimulator:
         for node_index, external_ms, gravity_ms in self._node_forces_ms():
             self.system.push_node_forces(node_index, external_ms, gravity_ms)
 
-    def _step_node(self, node_index, raw_dt, time_dilation, skip_physics):
+    def step_node(self, node_index, raw_dt, time_dilation, skip_physics):
         if (
             not 0 <= int(node_index) < len(self._node_bones_cached)
             or not self._node_bones_cached[int(node_index)]
@@ -833,7 +837,7 @@ class DyngSimulator:
 
     def _finish_parent_step(self, node_index, nodes):
         parent_index = int(nodes[node_index]["parent_index"])
-        self._previous_parent_xforms[node_index] = self._cur_bone_xform[
+        self.previous_parent_xforms[node_index] = self.cur_bone_xform[
             parent_index
         ].copy()
 
@@ -849,9 +853,9 @@ class DyngSimulator:
     def dyng_frame(self, node_index, progress):
         for raw_index in self.system.node_workspaces[node_index]["tracked_indices"]:
             index = int(raw_index)
-            self._interp_bone_xform[index] = interpolate_matrix_trs(
+            self.interp_bone_xform[index] = interpolate_matrix_trs(
                 self._prev_bone_xform[index],
-                self._cur_bone_xform[index],
+                self.cur_bone_xform[index],
                 progress,
             )
         return constraints.dyng_frame(self, node_index)
@@ -859,12 +863,12 @@ class DyngSimulator:
     def reset_dyng_interpolation(self, node_index):
         start, end = self.system.node_ranges[node_index]
         for index in range(start, end):
-            self._prev_bone_xform[index] = self._cur_bone_xform[index].copy()
-            self._interp_bone_xform[index] = self._cur_bone_xform[index].copy()
+            self._prev_bone_xform[index] = self.cur_bone_xform[index].copy()
+            self.interp_bone_xform[index] = self.cur_bone_xform[index].copy()
 
     def current_bone_axis(self, particle_index):
         return constraints.capsule_axis_ms(
-            self, self._cur_bone_xform[particle_index], particle_index
+            self, self.cur_bone_xform[particle_index], particle_index
         )
 
     def spring_frame(self, node_index, progress):
@@ -883,11 +887,12 @@ class DyngSimulator:
         runtime = getattr(self, "animgraph_runtime", None)
         if not self.execution_plan and not (runtime is not None and runtime.structured):
             return
+        self.step_count += 1
 
         input_frame = None
         upstream_changed = False
         if runtime is not None and runtime.structured:
-            if not getattr(self, "_timeline_playing", False):
+            if not getattr(self, "timeline_playing", False):
                 upstream_changed = bool(self._capture_upstream_pose_feedback())
                 upstream_changed = (
                     bool(runtime.capture_upstream_tracks()) or upstream_changed
@@ -898,8 +903,8 @@ class DyngSimulator:
                 for index in self.system.dyng_particle_indices
                 if (
                     0 <= int(index) < len(self.bone_names)
-                    and int(index) < len(self._pose_bones)
-                    and self._pose_bones[int(index)] is not None
+                    and int(index) < len(self.tracked_pose_bones)
+                    and self.tracked_pose_bones[int(index)] is not None
                 )
             )
             model_matrices = self.animgraph_host.frame_model_matrices(
@@ -930,10 +935,8 @@ class DyngSimulator:
                 if runtime is not None:
                     runtime.evaluate_before_operation(plan_index)
                 if operation_type == "DANGLE":
-                    self._sample_node_input(operation_index)
-                    self._step_node(
-                        operation_index, raw_dt, time_dilation, skip_physics
-                    )
+                    self.sample_node_input(operation_index)
+                    self.step_node(operation_index, raw_dt, time_dilation, skip_physics)
                 else:
                     self.drag_post.step_runtime(operation_index, raw_dt)
 

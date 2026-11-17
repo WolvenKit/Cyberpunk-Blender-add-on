@@ -4,6 +4,7 @@ from ...blender.operator_results import OperationResult
 from ...blender.physics.actors import add_shape_to_actor, create_actor_object
 from ...blender.physics.bridge_session import require_initialized_bridge
 from ...blender.physics.vehicle_geometry import vehicle_actor_world, vehicle_root
+from ...blender.physics.vehicle_phys import adopt_loaded_vehicle_phys
 from ...core.log import debug_exception, get_logger
 from ...physics.runtime.bridge import reset_native_scene
 from ...physics.runtime.cloth_provider import (
@@ -22,6 +23,7 @@ from ..runtime.simulation import begin_runtime_session
 from ..runtime.vehicle_preview import build_vehicle_if_enabled, reset_vehicle_preview
 from .actors import build_authored_actors, validate_scene_actors
 from .vehicle import setup_vehicle_from_rig
+from .vehicle_authoring import refresh_bike
 
 _LOG = get_logger(__name__)
 
@@ -106,7 +108,7 @@ def _ensure_preview_ground(context):
 
 def initialize_scene(context, add_ground=True):
     try:
-        require_initialized_bridge(context)
+        require_initialized_bridge(context, retry_transient=True)
         if add_ground:
             _ensure_preview_ground(context)
     except ImportError as error:
@@ -128,8 +130,6 @@ def validate_scene(context):
         and vehicle.source_mode == "RIG"
         and getattr(vehicle, "rig", None) is not None
     ):
-        from ...blender.physics.vehicle_phys import adopt_loaded_vehicle_phys
-
         adopt_loaded_vehicle_phys(context, vehicle.rig)
     return validate_scene_actors(
         context, vehicle_simulation_excluded_objects(context.scene)
@@ -151,7 +151,7 @@ def build_scene(context):
 
     bridge = None
     try:
-        bridge = require_initialized_bridge(context)
+        bridge = require_initialized_bridge(context, retry_transient=True)
         reset_vehicle_preview(context, restore=True)
         refresh_cloth_object_cache(context)
         restore_scene_cloths_for_rebuild(context)
@@ -252,7 +252,10 @@ def build_vehicle_preview(context):
     try:
         vehicle = context.scene.physx_vehicle
         if vehicle.source_mode == "RIG" and vehicle.refresh_rig_on_build:
-            setup_vehicle_from_rig(context, vehicle.rig)
+            if vehicle.vehicle_kind == "BIKE":
+                refresh_bike(vehicle)
+            else:
+                setup_vehicle_from_rig(context, vehicle.rig)
         if not px_scene.is_initialized:
             result = initialize_scene(context, False)
             if not result.ok or not px_scene.is_initialized:
@@ -286,8 +289,6 @@ def reset_vehicle_session(context):
 
 
 def start_simulation(context):
-    from .scene import build_scene
-
     if not context.scene.physx.scene_built:
         result = build_scene(context)
         if not result.ok:

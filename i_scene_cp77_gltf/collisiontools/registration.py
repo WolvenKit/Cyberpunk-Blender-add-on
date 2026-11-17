@@ -2,6 +2,7 @@ import bpy
 
 from ..blender.animgraph import presenters as animgraph_presenters
 from ..blender.animgraph.dangle_editor import project_imported_dangle_node
+from ..blender.animgraph.preview_sessions import stop_active_previews
 from ..blender.animgraph.tree import (
     register_tree_change_hook,
     unregister_tree_change_hook,
@@ -24,14 +25,20 @@ from .properties import (
     PhysXVehicleProperties,
     clear_property_item_caches,
 )
-from .runtime.dangle.overlay import register_global_handler, unregister_all
-from .runtime.dangle.preview import stop_active_previews
+from .runtime.dangle.overlay import (
+    invalidate_static_draw_cache,
+    register_global_handler,
+    unregister_all,
+)
 from .runtime.dangle.rigs import clear_dangle_rigs
-from .runtime.overlay import register_viz, unregister_viz
+from .runtime.overlay import mark_overlay_dirty, register_viz, unregister_viz
 from .runtime.simulation import stop_active_simulations
 from .runtime.vehicle_camera import stop_vehicle_camera
 from .runtime.vehicle_guides import register_vehicle_guides, unregister_vehicle_guides
-from .runtime.vehicle_preview import invalidate_vehicle_runtime_state
+from .runtime.vehicle_preview import (
+    forget_logged_bridge_builds,
+    invalidate_vehicle_runtime_state,
+)
 from .services.dangles import selection
 from .services.dangles.sync import cancel_pending_graph_syncs, notify_graph_tree_changed
 from .services.dangles.view import clear_view_return_states
@@ -49,40 +56,20 @@ _LOG = get_logger(__name__)
 
 
 @bpy.app.handlers.persistent
-def _depsgraph_update_handler(scene, depsgraph):
-    vehicle = getattr(scene, "physx_vehicle", None)
-    vehicle_object_ptrs = {
-        obj.as_pointer()
-        for obj in (
-            getattr(vehicle, "rig", None),
-            getattr(vehicle, "chassis", None),
-            getattr(vehicle, "front_left", None),
-            getattr(vehicle, "front_right", None),
-            getattr(vehicle, "rear_left", None),
-            getattr(vehicle, "rear_right", None),
-            getattr(vehicle, "bike_front", None),
-            getattr(vehicle, "bike_rear", None),
-        )
-        if obj is not None
-    }
+def _depsgraph_update_handler(_scene, depsgraph):
+    caches_cleared = False
     for update in depsgraph.updates:
         datablock = update.id
-        if isinstance(datablock, bpy.types.Armature):
-            clear_property_item_caches()
-            return
-        if isinstance(datablock, bpy.types.Mesh):
-            return
-        if not isinstance(datablock, bpy.types.Object):
-            continue
-        physx = getattr(datablock, "physx", None)
-        if datablock.type == "ARMATURE":
-            clear_property_item_caches()
-        if (
-            datablock.type == "ARMATURE"
-            or datablock.as_pointer() in vehicle_object_ptrs
-            or (physx is not None and len(physx.shapes) > 0)
+        is_object = isinstance(datablock, bpy.types.Object)
+        if is_object or isinstance(datablock, bpy.types.Scene):
+            mark_overlay_dirty()
+        if not caches_cleared and (
+            isinstance(datablock, bpy.types.Armature)
+            or (is_object and datablock.type == "ARMATURE")
         ):
-            return
+            clear_property_item_caches()
+            caches_cleared = True
+    selection.ensure_polling(bpy.context)
 
 
 @bpy.app.handlers.persistent
@@ -185,8 +172,16 @@ def register_collisiontools():
 
         register_global_handler()
         _LEDGER.add_cleanup("dangle draw handlers", unregister_all)
-        selection.register()
-        _LEDGER.add_cleanup("dangle selection timer", selection.unregister)
+        for handlers in (
+            bpy.app.handlers.depsgraph_update_post,
+            bpy.app.handlers.load_pre,
+        ):
+            _LEDGER.add_handler(handlers, invalidate_static_draw_cache)
+        _LEDGER.add_handler(bpy.app.handlers.load_pre, selection.reset_selection_state)
+        _LEDGER.add_cleanup("dangle selection state", selection.reset_selection_state)
+        selection.reset_selection_state()
+        _LEDGER.add_cleanup("dangle selection timer", selection.stop_polling)
+        _LEDGER.add_handler(bpy.app.handlers.load_pre, forget_logged_bridge_builds)
         register_viz()
         _LEDGER.add_cleanup("PhysX visualization", unregister_viz)
         register_vehicle_guides()

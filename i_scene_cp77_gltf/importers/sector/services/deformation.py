@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 
 import bpy
-from mathutils import Matrix, Vector
+import numpy as np
+from mathutils import Matrix
 
+from ....blender.collections import remap_copied_object_references
 from ....blender.identity import rna_identity
 from ....blender.naming import fit_id_name
-from ....blender.pose import interpolate_matrix_trs_components
 from ....blender.transactions import track_created_datablock
-from ...common.collections import remap_copied_object_references
 from ..context import DeformationDataError
 from ..objects import copy_object, new_collection, new_empty
 from .buffers import column_matrix
@@ -51,6 +50,42 @@ class DeformationPlacement:
     collection: object
     placement_root: object
     path_object: object | None
+
+
+def _coordinates(points) -> np.ndarray:
+    values = np.empty(len(points) * 3, dtype=np.float32)
+    points.foreach_get("co", values)
+    return values.reshape(-1, 3).astype(np.float64)
+
+
+def _transformed(points: np.ndarray, matrix) -> np.ndarray:
+    matrix = np.asarray(matrix, dtype=np.float64)
+    return points @ matrix[:3, :3].T + matrix[:3, 3]
+
+
+def _lerp(start: np.ndarray, end: np.ndarray, factor: np.ndarray) -> np.ndarray:
+    return start * (1.0 - factor)[:, None] + end * factor[:, None]
+
+
+def _slerp(start: np.ndarray, end: np.ndarray, factor: np.ndarray) -> np.ndarray:
+    cosine = np.sum(start * end, axis=1)
+    start = np.where((cosine < 0.0)[:, None], -start, start)
+    cosine = np.abs(cosine)
+    linear = 1.0 - cosine <= 0.0001
+    omega = np.arccos(np.clip(cosine, -1.0, 1.0))
+    sine = np.where(linear, 1.0, np.sin(omega))
+    start_weight = np.where(linear, 1.0 - factor, np.sin((1.0 - factor) * omega) / sine)
+    end_weight = np.where(linear, factor, np.sin(factor * omega) / sine)
+    return start * start_weight[:, None] + end * end_weight[:, None]
+
+
+def _rotated(quaternions: np.ndarray, vectors: np.ndarray) -> np.ndarray:
+    w, axis = quaternions[:, :1], quaternions[:, 1:]
+    return (
+        vectors * (w * w - np.sum(axis * axis, axis=1, keepdims=True))
+        + 2.0 * axis * np.sum(axis * vectors, axis=1, keepdims=True)
+        + 2.0 * w * np.cross(axis, vectors)
+    )
 
 
 class DeformationService:
@@ -146,14 +181,14 @@ class DeformationService:
         upper = float("-inf")
         vertex_count = 0
         for obj in collection.all_objects:
-            if obj.type != "MESH" or obj.data is None:
+            if obj.type != "MESH" or obj.data is None or not obj.data.vertices:
                 continue
-            source_matrix = obj.matrix_world
-            for vertex in obj.data.vertices:
-                coordinate = float((source_matrix @ vertex.co)[axis_index])
-                lower = min(lower, coordinate)
-                upper = max(upper, coordinate)
-                vertex_count += 1
+            values = _transformed(_coordinates(obj.data.vertices), obj.matrix_world)[
+                :, axis_index
+            ]
+            lower = min(lower, float(values.min()))
+            upper = max(upper, float(values.max()))
+            vertex_count += len(values)
 
         result = (lower, upper, vertex_count)
         self._bounds_cache[key] = result
@@ -240,74 +275,62 @@ class DeformationService:
         )
 
     @staticmethod
-    def interpolate_frame(frames, factor):
-        if len(frames) == 1:
-            return frames[0].decompose()
-        position = max(0.0, min(1.0, float(factor))) * (len(frames) - 1)
-        frame_index = min(
-            int(math.floor(position)),
-            len(frames) - 2,
-        )
-        blend = position - frame_index
-        return interpolate_matrix_trs_components(
-            frames[frame_index],
-            frames[frame_index + 1],
-            blend,
-        )
-
-    def deform_content_point(self, point, analysis):
+    def deform_content_points(points: np.ndarray, analysis) -> np.ndarray:
         axis_index = analysis.contract.axis_index
         axis_min = analysis.source_axis_min
         axis_max = analysis.source_axis_max
         span = axis_max - axis_min
         if abs(span) <= 1e-8:
-            return point.copy()
+            return points.copy()
 
-        coordinate = float(point[axis_index])
-        factor = (
-            (coordinate - axis_min) / span
+        coordinates = points[:, axis_index]
+        factors = (
+            (coordinates - axis_min) / span
             if analysis.contract.axis_sign > 0.0
-            else (axis_max - coordinate) / span
+            else (axis_max - coordinates) / span
         )
-        location, rotation, scale = self.interpolate_frame(
-            analysis.frames,
-            factor,
-        )
-        cross_section = point.copy()
-        cross_section[axis_index] = 0.0
-        scaled_cross_section = Vector(
-            (
-                cross_section.x * scale.x,
-                cross_section.y * scale.y,
-                cross_section.z * scale.z,
-            )
-        )
-        return location + rotation @ scaled_cross_section
+        parts = [frame.decompose() for frame in analysis.frames]
+        locations = np.array([tuple(part[0]) for part in parts], dtype=np.float64)
+        rotations = np.array([tuple(part[1]) for part in parts], dtype=np.float64)
+        scales = np.array([tuple(part[2]) for part in parts], dtype=np.float64)
+        if len(parts) == 1:
+            count = len(points)
+            location = np.repeat(locations, count, axis=0)
+            rotation = np.repeat(rotations, count, axis=0)
+            scale = np.repeat(scales, count, axis=0)
+        else:
+            positions = np.clip(factors, 0.0, 1.0) * (len(parts) - 1)
+            index = np.minimum(np.floor(positions).astype(np.int64), len(parts) - 2)
+            blend = positions - index
+            location = _lerp(locations[index], locations[index + 1], blend)
+            rotation = _slerp(rotations[index], rotations[index + 1], blend)
+            scale = _lerp(scales[index], scales[index + 1], blend)
+        cross_section = points.copy()
+        cross_section[:, axis_index] = 0.0
+        return location + _rotated(rotation, cross_section * scale)
 
     def deform_mesh_copy(self, old_obj, new_obj, analysis):
         source_matrix = old_obj.matrix_world.copy()
         inverse_source = source_matrix.inverted_safe()
 
-        def deform_coordinate(coordinate):
-            content_point = source_matrix @ coordinate
-            deformed_point = self.deform_content_point(
-                content_point,
-                analysis,
+        def deformed(points):
+            content = _transformed(_coordinates(points), source_matrix)
+            result = _transformed(
+                self.deform_content_points(content, analysis), inverse_source
             )
-            return inverse_source @ deformed_point
+            return result.astype(np.float32).reshape(-1)
 
-        shape_keys = getattr(new_obj.data, "shape_keys", None)
+        mesh = new_obj.data
+        shape_keys = getattr(mesh, "shape_keys", None)
         if shape_keys is not None and shape_keys.key_blocks:
             for key_block in shape_keys.key_blocks:
-                for point in key_block.data:
-                    point.co = deform_coordinate(point.co)
-            basis = shape_keys.key_blocks[0]
-            for vertex_index, vertex in enumerate(new_obj.data.vertices):
-                vertex.co = basis.data[vertex_index].co
-        else:
-            for vertex in new_obj.data.vertices:
-                vertex.co = deform_coordinate(vertex.co)
-        new_obj.data.update()
+                key_block.data.foreach_set("co", deformed(key_block.data))
+            basis = np.empty(len(mesh.vertices) * 3, dtype=np.float32)
+            shape_keys.key_blocks[0].data.foreach_get("co", basis)
+            mesh.vertices.foreach_set("co", basis)
+        elif mesh.vertices:
+            mesh.vertices.foreach_set("co", deformed(mesh.vertices))
+        mesh.update()
 
     @staticmethod
     def create_path(

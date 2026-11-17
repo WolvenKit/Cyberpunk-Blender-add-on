@@ -1,7 +1,7 @@
 import bpy
 from bpy.app.handlers import persistent
 
-from ...importers.character.npz import breast_shape_objects, character_objects
+from ...blender.characters import breast_shape_objects, character_objects
 
 # Which character tab sections show, and the object count and loaded parts they were found for.
 _SECTIONS = [(False, False), None]

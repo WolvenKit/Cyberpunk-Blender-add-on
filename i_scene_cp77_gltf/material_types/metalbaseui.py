@@ -180,7 +180,7 @@ class MetalBaseUI(MaterialTypeBase):
         return base_uv, part_size, texCoord
 
     def _create_scanlines(self, CurMat, Data, texCoord):
-        image = self._load_relative_image(
+        image = self.load_relative_image(
             self._texture_path(Data, "ScanlineTexture"),
             non_color=True,
             error_label="scanline",
@@ -485,7 +485,7 @@ class MetalBaseUI(MaterialTypeBase):
         contrast = param_float(Data, "DirtContrast", 1.0)
         dirt_color = param_color(Data, "DirtColor", (1.0, 1.0, 1.0, 1.0))
 
-        image = self._load_relative_image(
+        image = self.load_relative_image(
             reference,
             non_color=True,
             error_label="dirt",

@@ -6,12 +6,10 @@ from mathutils import Vector
 
 from ...blender import shader_nodes
 from ...blender.identity import rna_identity
+from ...blender.light_environment import apply_environment_to_registered_lights
+from ...blender.reflection_probe_registry import mark_registered_reflection_probes_dirty
 from ...blender.shader_nodes import assign_if_changed, new_node, set_default_if_changed
 from ...blender.transactions import track_created_datablock, track_mutation
-from ...importers.common.light_environment import apply_environment_to_registered_lights
-from ...importers.common.reflection_probe_registry import (
-    mark_registered_reflection_probes_dirty,
-)
 from ..model.sky_preview import (
     directional_light,
     exposure_scale,

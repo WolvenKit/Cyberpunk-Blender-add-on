@@ -8,6 +8,7 @@ import bpy
 from ...assetio.paths import local_path_key, strip_json_suffix
 from ...assetio.project_layout import project_layout_for
 from ...assetio.values import coerce_int
+from .errors import SectorExportError
 from .new_sectors import NEW_SECTOR_KEY, new_sector_collections
 
 _WORLD_COLLISION = "WORLD_COLLISION"
@@ -101,7 +102,7 @@ def _check_one_collection_per_sector(sectors):
     for collections in by_path.values():
         if len(collections) > 1:
             path = collections[0]["cp77_sector_path"]
-            raise ValueError(
+            raise SectorExportError(
                 f"{sector_depot_path(path) or path}: {len(collections)} sector collections were imported from this "
                 f"sector ({', '.join(collection.name for collection in collections)}); keep one before exporting."
             )
@@ -235,7 +236,7 @@ class ScenePlacements:
         ]
         if len(holding) == 1:
             return holding[0]
-        raise ValueError(
+        raise SectorExportError(
             f"{item.name} places a node of {sector_name}, a name {len(sectors)} imported sectors share "
             f"({', '.join(sector['cp77_sector_path'] for sector in sectors)}), but sits under "
             f"{'none' if not holding else 'more than one'} of them; move it back under its own sector, or into a new "

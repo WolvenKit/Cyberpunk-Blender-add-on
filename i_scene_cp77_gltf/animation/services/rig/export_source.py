@@ -13,8 +13,10 @@ from ....assetio.paths import (
     strip_json_suffix,
 )
 from ....assetio.transform_values import parse_wkit_trs
+from ....bartmoss.hierarchy import local_matrices_to_model, model_matrices_to_local
 from ....bartmoss.trs import compose_matrices_wxyz
 from ....redSpace.contracts import SOURCE_REST_SPACE_CONTRACT
+from ....redSpace.transforms import red_model_transform_to_current_bone
 from .repository import RigRepository, stored_rig_document
 
 
@@ -112,16 +114,23 @@ def _animation_rig_export_source(source_path: str) -> AnimationRigExportSource:
         len(bone_names),
         quaternion_order="wxyz",
     )
-    rest_relative = compose_matrices_wxyz(translations, rotations, scales)
-    if not np.all(np.isfinite(rest_relative)):
+    red_relative = compose_matrices_wxyz(translations, rotations, scales)
+    if not np.all(np.isfinite(red_relative)):
         raise ValueError(
             f"Selected source rig contains a non-finite rest pose: {source_path}"
         )
-    determinants = np.linalg.det(rest_relative[:, :3, :3])
+    determinants = np.linalg.det(red_relative[:, :3, :3])
     if np.any(np.abs(determinants) <= 1e-10):
         raise ValueError(
             f"Selected source rig contains a singular rest pose: {source_path}"
         )
+
+    rest_relative = model_matrices_to_local(
+        red_model_transform_to_current_bone(
+            local_matrices_to_model(red_relative, parent_indices)
+        ),
+        parent_indices,
+    )
 
     track_names = tuple(str(name) for name in rig_data.track_names)
     if len(set(track_names)) != len(track_names):

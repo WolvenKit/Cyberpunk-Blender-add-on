@@ -28,7 +28,7 @@ class OrientConstraintHandler(PoseNodeHandler):
         return NodeSpec(pure_pose_op_data(RED_TYPE, encode_node_properties(node)))
 
     def bone_names(self, spec):
-        names = {text(spec.data, "transformIndex")}
+        names = self.handler_bone_names(spec.data, RED_TYPE)
         names.update(text(entry, "transform") for entry in _inputs(spec))
         return names
 

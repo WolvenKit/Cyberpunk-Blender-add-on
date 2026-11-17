@@ -11,18 +11,16 @@ from ...blender.mesh import PREVIEW_ONLY_FLAG
 from ...blender.naming import fit_id_name
 from ...blender.transactions import track_created_datablock
 from ...core.log import get_logger, log_once
-from ...material_types.skin_regions import (
+from ..skin_regions import (
     DEFAULT_FACE_REGIONS,
     DEFAULT_FACE_REGIONSET_PATH,
     REGION_ATTRIBUTE_COUNT,
     REGIONS_PER_ATTRIBUTE,
-    evaluate_region_influences,
-    region_attribute_name,
-)
-from ...material_types.skin_wrinkles import (
     TRACK_NODE_PREFIX,
     WRINKLE_SQUASH_ATTRIBUTE,
     WRINKLE_STRETCH_ATTRIBUTE,
+    evaluate_region_influences,
+    region_attribute_name,
 )
 from .helper_caches import register_helper_cache
 

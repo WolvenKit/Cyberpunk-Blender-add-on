@@ -1,10 +1,8 @@
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 
-import bpy
 import numpy as np
 
-from ...blender.context import safe_mode_switch
-from ...blender.operator_results import require_finished
+from ...blender.context import get_safe_mode, safe_mode_switch
 from ...blender.shapekeys import has_shape_keys
 from ...core.log import get_logger
 
@@ -46,63 +44,79 @@ def move_with_basis(obj, displacement):
     obj.data.update()
 
 
-def apply_modifier_as_shapekey(context, obj, mod_name, keep_modifier=False):
-    # Preserve the outer context; nested store/restore would overwrite it.
-    view_layer = context.view_layer
-    prev_active = view_layer.objects.active
-    preselected = [o for o in view_layer.objects if o.select_get()]
-    prev_mode = getattr(prev_active, "mode", None) if prev_active else None
-    prev_hide_viewport = getattr(obj, "hide_viewport", False)
-    prev_hide = obj.hide_get()
-
-    safe_mode_switch("OBJECT")
-
-    try:
-        if prev_hide_viewport:
+@contextmanager
+def _evaluated_alone(items):
+    disabled, hidden = [], []
+    for obj, modifier in items:
+        for other in obj.modifiers:
+            if other != modifier and other.show_viewport:
+                other.show_viewport = False
+                disabled.append(other)
+        if obj.hide_viewport or obj.hide_get():
+            hidden.append((obj, obj.hide_viewport, obj.hide_get()))
             obj.hide_viewport = False
-        if prev_hide:
             obj.hide_set(False)
-
-        for o in preselected:
-            o.select_set(False)
-
-        view_layer.objects.active = obj
-        obj.select_set(True)
-
-        require_finished(
-            bpy.ops.object.modifier_apply_as_shapekey(modifier=mod_name),
-            f"Applying '{mod_name}' on {obj.name}",
-        )
-
-        if not keep_modifier and mod_name in obj.modifiers:
-            obj.modifiers.remove(obj.modifiers[mod_name])
-
+    try:
+        with ExitStack() as stack:
+            for obj, _modifier in items:
+                stack.enter_context(rest_shape(obj))
+            yield
     finally:
-        try:
-            obj.hide_viewport = prev_hide_viewport
-            obj.hide_set(prev_hide)
-        except (ReferenceError, RuntimeError) as error:
-            _LOG.warning(
-                "Failed to restore object visibility after shape-key modifier application: object=%s error=%s",
-                getattr(obj, "name", "<unknown>"),
-                error,
-                exc_info=True,
-            )
+        for other in disabled:
+            other.show_viewport = True
+        for obj, hide_viewport, hide in hidden:
+            obj.hide_viewport = hide_viewport
+            obj.hide_set(hide)
 
-        for o in view_layer.objects:
-            o.select_set(False)
-        for o in preselected:
-            o.select_set(True)
 
-        view_layer.objects.active = prev_active
-        if prev_active and prev_mode and prev_mode != "OBJECT":
+def modifier_positions(context, items):
+    results = []
+    with _evaluated_alone(items):
+        depsgraph = context.evaluated_depsgraph_get()
+        for obj, modifier in items:
+            evaluated = obj.evaluated_get(depsgraph)
+            mesh = evaluated.to_mesh()
             try:
-                safe_mode_switch(prev_mode)
+                if len(mesh.vertices) != len(obj.data.vertices):
+                    raise RuntimeError(
+                        f"{modifier.name} changed the vertex count of {obj.name}"
+                    )
+                positions = np.empty(len(mesh.vertices) * 3, dtype=np.float32)
+                mesh.vertices.foreach_get("co", positions)
+            finally:
+                evaluated.to_mesh_clear()
+            results.append(positions.reshape(-1, 3))
+    return results
+
+
+def add_positions_as_shape_key(obj, name, positions):
+    if not has_shape_keys(obj):
+        obj.shape_key_add(name="Basis", from_mix=False)
+    key = obj.shape_key_add(name=name, from_mix=False)
+    key.data.foreach_set("co", np.asarray(positions, dtype=np.float32).reshape(-1))
+    key.value = 0.0
+    obj.data.update()
+    return key
+
+
+def apply_modifier_as_shapekey(context, obj, mod_name, keep_modifier=False):
+    previous_mode = get_safe_mode()
+    safe_mode_switch("OBJECT")
+    try:
+        modifier = obj.modifiers[mod_name]
+        (positions,) = modifier_positions(context, ((obj, modifier),))
+        add_positions_as_shape_key(obj, mod_name, positions)
+        if not keep_modifier:
+            obj.modifiers.remove(modifier)
+    finally:
+        if previous_mode != "OBJECT":
+            try:
+                safe_mode_switch(previous_mode)
             except Exception as error:
                 _LOG.warning(
                     "Failed to restore mode after shape-key modifier application: object=%s mode=%s error=%s",
                     getattr(obj, "name", "<unknown>"),
-                    prev_mode,
+                    previous_mode,
                     error,
                     exc_info=True,
                 )

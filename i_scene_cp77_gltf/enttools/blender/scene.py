@@ -7,12 +7,12 @@ import bpy
 
 from ...blender.collections import collection_parent_map
 from ...entity.domain.light_zones import ZONES, zone_strength_property
+from ...entity.model.component_types import LIGHT_COMPONENT_TYPES
 from ...entity.model.import_record import (
     IMPORT_RECORD_KEY,
     ImportedAppearance,
     decode_import_record,
 )
-from ...importers.entity.policy import LIGHT_COMPONENT_TYPES
 
 COMPONENT_NAME_KEY = "componentName"
 

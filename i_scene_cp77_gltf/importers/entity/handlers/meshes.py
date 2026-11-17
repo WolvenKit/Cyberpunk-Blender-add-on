@@ -8,7 +8,7 @@ import bpy
 
 from ....blender.transactions import track_created_datablock
 from ....core.log import get_logger
-from ...common.entity_data import component_name
+from ....entity.domain.entity_data import component_name
 from ..placement_metadata import store_mesh_placement
 from ..policy import (
     APPEARANCE_PROXY_COMPONENT_TYPES,

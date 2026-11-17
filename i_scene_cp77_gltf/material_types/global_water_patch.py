@@ -796,7 +796,7 @@ class GlobalWaterPatch(MaterialTypeBase):
         self.MeshPath = MeshPath
 
     def _load_image(self, path, *, non_color=False):
-        return self._load_relative_image(
+        return self.load_relative_image(
             path,
             non_color=non_color,
             reject_suffixes=(".dtex",),

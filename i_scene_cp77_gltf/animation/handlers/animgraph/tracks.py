@@ -56,15 +56,15 @@ class AdditionalFloatTrackHandler(PoseOpHandler):
         values = {
             name: float(snapshot.value)
             for name, snapshot in op.tracks.items()
-            if bool(snapshot.existed) or name in context._stack_track_names
+            if bool(snapshot.existed) or name in context.stack_track_names
         }
         current_time = float(
-            context._additional_track_times.get(op.handle, 0.0)
-        ) + float(context._current_raw_dt)
+            context.additional_track_times.get(op.handle, 0.0)
+        ) + float(context.current_raw_dt)
         written = apply_additional_float_tracks(
             values, op.data.get("additionalTracks"), current_time
         )
-        context._additional_track_times[op.handle] = current_time
+        context.additional_track_times[op.handle] = current_time
         for name in written:
             op.track_values[name] = float(values[name])
         evaluation = PoseOpEvaluation((), tuple(written))

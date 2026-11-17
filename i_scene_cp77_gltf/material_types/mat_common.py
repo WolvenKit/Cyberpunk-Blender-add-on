@@ -64,7 +64,7 @@ class MaterialTypeBase:
             **options,
         )
 
-    def _load_relative_image(
+    def load_relative_image(
         self,
         path,
         *,
@@ -110,7 +110,7 @@ class MaterialTypeBase:
         extension=None,
         interpolation=None,
     ):
-        image = self._load_relative_image(
+        image = self.load_relative_image(
             path,
             non_color=non_color,
             error_label=error_label,

@@ -130,8 +130,15 @@ _SERVICE_ATTRIBUTES = tuple(name for name, _factory, _choices in _SERVICE_FACTOR
 
 class SectorImportSession:
     def __init__(
-        self, project_filepath, options, *, force_refresh=False, depot_root=""
+        self,
+        project_filepath,
+        options,
+        *,
+        force_refresh=False,
+        depot_root="",
+        blender_context=None,
     ):
+        self.blender_context = blender_context
         self.project_filepath = os.path.abspath(project_filepath)
         self.project_path = os.path.dirname(self.project_filepath)
         self.project_name = os.path.basename(self.project_path)

@@ -266,7 +266,9 @@ def _normalized_rows(values):
     return result
 
 
-def _collect_triangles(receivers, projector_bounds, projector_local_bounds=None):
+def _collect_triangles(
+    context, receivers, projector_bounds, projector_local_bounds=None
+):
     started = time.perf_counter()
     projector_grid = BoundsGrid(projector_bounds)
     batches_by_projector = [[] for _ in projector_bounds]
@@ -294,7 +296,7 @@ def _collect_triangles(receivers, projector_bounds, projector_local_bounds=None)
         cacheable = not _requires_evaluated_mesh(obj)
         if not cacheable:
             if depsgraph is None:
-                depsgraph = bpy.context.evaluated_depsgraph_get()
+                depsgraph = context.evaluated_depsgraph_get()
             evaluated = obj.evaluated_get(depsgraph)
             mesh = evaluated.to_mesh(
                 preserve_all_data_layers=True,
@@ -1427,6 +1429,7 @@ def project_pending_decals(
     pending,
     material_cache,
     *,
+    context,
     output_collection=None,
 ):
     if not pending:
@@ -1483,6 +1486,7 @@ def project_pending_decals(
 
     collect_started = time.perf_counter()
     triangles_by_projector, projection_metrics = _collect_triangles(
+        context,
         receivers,
         bounds,
         projector_local_bounds,

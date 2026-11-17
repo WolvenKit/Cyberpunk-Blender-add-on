@@ -10,7 +10,7 @@ from ...model.facial.constants import (
     LIPSYNC_POSE_SUFFIX,
     Envelope,
 )
-from ...model.jali.phonemes import PAUSES, VOWELS, _get_viseme
+from ...model.jali.phonemes import PAUSES, VOWELS, get_viseme
 from ...model.jali.viseme_targets import (
     VISEME_DOMINANCE,
     VISEME_TARGETS,
@@ -124,12 +124,12 @@ def _event_key(events, index) -> str:
 def _fallback_key(phoneme) -> str:
     key = _base(phoneme)
     if key not in _VISEME_ROW:
-        viseme = _get_viseme(key)
+        viseme = get_viseme(key)
         key = next(
             (
                 p
                 for p in sorted(_VISEME_ROW)
-                if p != SILENCE and _get_viseme(p) == viseme
+                if p != SILENCE and get_viseme(p) == viseme
             ),
             SILENCE,
         )

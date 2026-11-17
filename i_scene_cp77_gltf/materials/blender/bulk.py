@@ -3,6 +3,8 @@ from __future__ import annotations
 from contextlib import contextmanager
 from contextvars import ContextVar
 
+from .multilayer import override_palette_batch_scope
+
 _BULK_MATERIAL_IMPORT = ContextVar(
     "cp77_bulk_material_import",
     default=False,
@@ -19,7 +21,6 @@ def bulk_material_import_scope(enabled: bool = True, owner=None):
         if owner is None:
             yield False
             return
-        from .multilayer import override_palette_batch_scope
 
         with override_palette_batch_scope(owner):
             yield False
@@ -28,8 +29,6 @@ def bulk_material_import_scope(enabled: bool = True, owner=None):
     token = _BULK_MATERIAL_IMPORT.set(True)
     try:
         if outermost:
-            from .multilayer import override_palette_batch_scope
-
             with override_palette_batch_scope(owner):
                 yield True
         else:

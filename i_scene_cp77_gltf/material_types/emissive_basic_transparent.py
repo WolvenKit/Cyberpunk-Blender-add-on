@@ -39,7 +39,7 @@ class EmissiveBasicTransparent(MaterialTypeBase):
         diffuse_path = param_texture_path(data, "Diffuse")
         diffuse = None
         if diffuse_path:
-            image = self._load_relative_image(
+            image = self.load_relative_image(
                 diffuse_path, error_label="emissive basic transparent"
             )
             diffuse = create_node(

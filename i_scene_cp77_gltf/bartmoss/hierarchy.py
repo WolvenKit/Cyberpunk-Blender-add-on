@@ -150,3 +150,14 @@ def model_matrices_to_basis(pose_model, rest_model, parent_indices) -> np.ndarra
     rest_local = model_matrices_to_local(rest_model, parent_indices, order)
     pose_local = model_matrices_to_local(pose_model, parent_indices, order)
     return np.matmul(np.linalg.inv(rest_local), pose_local)
+
+
+def nearest_kept_ancestors(parents, kept):
+    position = {node: index for index, node in enumerate(kept)}
+    result = []
+    for node in kept:
+        parent = parents.get(node)
+        while parent is not None and parent not in position:
+            parent = parents.get(parent)
+        result.append(position.get(parent, -1))
+    return result

@@ -1,11 +1,6 @@
+from ..materials.skin_regions import WRINKLE_SQUASH_ATTRIBUTE, WRINKLE_STRETCH_ATTRIBUTE
 from .bundles import additive_normal_blend_socket
 from .mat_common import new_labeled_node
-from .skin_regions import DEFAULT_FACE_REGIONS
-
-TRACK_NODE_PREFIX = "CP77 Wrinkle Track::"
-WRINKLE_SQUASH_ATTRIBUTE = "cp77_skin_wrinkle_squash"
-WRINKLE_STRETCH_ATTRIBUTE = "cp77_skin_wrinkle_stretch"
-WRINKLE_REGION_COUNT = len(DEFAULT_FACE_REGIONS)
 
 
 def _float_attribute(tree, name, label, location):

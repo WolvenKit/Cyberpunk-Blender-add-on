@@ -7,7 +7,14 @@ from typing import Any
 from ...animation.model.animgraph import math_expression
 from ...animation.model.animgraph.constants import ANIM_NODE_PREFIX
 from ...core.log import debug_exception, get_logger, log_once
-from .property_codec import add_node_property
+from . import (
+    aim_constraint,
+    dangle_editor,
+    direct_conn,
+    point_constraint,
+    simple_bounce,
+)
+from .math_expression import COMPILED_FORMULA_KEY, DATA_KEY
 
 _LOG = get_logger(__name__)
 
@@ -362,32 +369,24 @@ def before_attach_properties(parser: Any, node: Any, data: dict) -> None:
         _attach_math_expression_payload(parser, node, data)
     elif pid == PRESENTER_DIRECT_CONN:
         try:
-            from . import direct_conn
-
             direct_conn.capture_import_state(node, data)
         except Exception:
             debug_exception(_LOG, "DirectConn import state details")
             _record_import_state_failure(parser, pid, red_type)
     elif pid == PRESENTER_SIMPLE_BOUNCE:
         try:
-            from . import simple_bounce
-
             simple_bounce.capture_import_state(node, data)
         except Exception:
             debug_exception(_LOG, "SimpleBounce import state details")
             _record_import_state_failure(parser, pid, red_type)
     elif pid == PRESENTER_POINT_CONSTRAINT:
         try:
-            from . import point_constraint
-
             point_constraint.capture_import_state(node, data)
         except Exception:
             debug_exception(_LOG, "PointConstraint import state details")
             _record_import_state_failure(parser, pid, red_type)
     elif pid == PRESENTER_AIM_CONSTRAINT:
         try:
-            from . import aim_constraint
-
             aim_constraint.capture_import_state(node, data)
         except Exception:
             debug_exception(_LOG, "AimConstraint import state details")
@@ -399,21 +398,17 @@ def seed_authored_node(node: Any, definition: Any) -> None:
     try:
         pid = configure_node(node, definition.red_type)
         if pid == PRESENTER_DIRECT_CONN:
-            from . import direct_conn
-
             direct_conn.seed_authored_state(node)
         elif pid == PRESENTER_SIMPLE_BOUNCE:
-            from . import simple_bounce
-
             simple_bounce.seed_authored_state(node)
         elif pid == PRESENTER_POINT_CONSTRAINT:
-            from . import point_constraint
-
             point_constraint.seed_authored_state(node)
         elif pid == PRESENTER_AIM_CONSTRAINT:
-            from . import aim_constraint
-
             aim_constraint.seed_authored_state(node)
+        elif pid == PRESENTER_DANGLE_RUNTIME:
+            dangle_editor.seed_authored_state(node)
+        elif pid == PRESENTER_MATH_EXPRESSION:
+            node[COMPILED_FORMULA_KEY] = ""
     except Exception:
         _LOG.debug(
             "AnimGraph authored presenter state initialization failed for %s",
@@ -457,8 +452,11 @@ def _attach_math_expression_payload(parser: Any, node: Any, data: dict) -> None:
         return
 
     try:
-        node["red_math_expression_data_json"] = json.dumps(
+        node[DATA_KEY] = json.dumps(
             expr_data, ensure_ascii=False, separators=(",", ":")
+        )
+        node[COMPILED_FORMULA_KEY] = math_expression.expression_string_value(
+            data.get("expressionString")
         )
     except (AttributeError, TypeError, ValueError):
         _LOG.debug("AnimGraph math-expression payload storage failed", exc_info=True)
@@ -477,31 +475,3 @@ def _attach_math_expression_payload(parser: Any, node: Any, data: dict) -> None:
             _LOG.debug(
                 "AnimGraph math-expression counters could not be updated", exc_info=True
             )
-
-    tokens = math_expression.token_data(expr_data)
-    if tokens:
-        add_node_property(
-            node,
-            "expressionData.expression.Data.tokenData",
-            tokens,
-            json_path="expressionData.expression.Data.tokenData",
-            label="tokenData",
-            red_type_hint="array:Uint32",
-        )
-    values = math_expression.values_data(expr_data)
-    if values:
-        hint = (
-            "array:Float"
-            if all(
-                isinstance(v, (int, float)) and not isinstance(v, bool) for v in values
-            )
-            else "array"
-        )
-        add_node_property(
-            node,
-            "expressionData.expression.Data.valuesData",
-            values,
-            json_path="expressionData.expression.Data.valuesData",
-            label="valuesData",
-            red_type_hint=hint,
-        )

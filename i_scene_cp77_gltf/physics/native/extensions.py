@@ -1,3 +1,4 @@
+import functools
 import hashlib
 import os
 import shutil
@@ -67,15 +68,25 @@ def native_runtime_root():
     return Path(base, *_RUNTIME_FOLDER)
 
 
+@functools.cache
+def _kernel32():
+    import ctypes
+
+    return ctypes.WinDLL("kernel32", use_last_error=True)
+
+
+_ERROR_ACCESS_DENIED = 5
+
+
 def _process_started(pid):
     """When the running process pid started, in 100 ns units"""
     import ctypes
     from ctypes import wintypes
 
-    kernel = ctypes.windll.kernel32
+    kernel = _kernel32()
     handle = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
     if not handle:
-        return None
+        return 0 if ctypes.get_last_error() == _ERROR_ACCESS_DENIED else None
     try:
         code = wintypes.DWORD()
         if (
@@ -132,6 +143,8 @@ def sweep_native_runtime_copies():
     """Removes the native copies of Blender processes that are no longer running"""
     try:
         folders = [entry for entry in native_runtime_root().iterdir() if entry.is_dir()]
+    except FileNotFoundError:
+        return
     except OSError:
         debug_exception(
             _LOG, "Could not list the native runtime copies; nothing is swept"
@@ -210,17 +223,46 @@ def _file_digest(path):
     try:
         with binary_reader(path) as handle:
             return hashlib.file_digest(handle, "sha256").digest()
+    except FileNotFoundError:
+        return None
     except OSError:
         debug_exception(_LOG, "Could not read %s for its digest", path)
         return None
 
 
+def _remove_copies(folder):
+    try:
+        paths = sorted(folder.iterdir())
+    except FileNotFoundError:
+        return []
+    locked = []
+    for path in paths:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            locked.append(path.name)
+    if not locked:
+        try:
+            folder.rmdir()
+        except OSError:
+            locked.append(folder.name)
+    return locked
+
+
 def release_native_runtime_copies():
     """Removes this process's native copies where nothing holds them"""
     for folder in tuple(_watched_folders):
-        shutil.rmtree(folder, ignore_errors=True)
-        if not folder.exists():
+        locked = _remove_copies(folder)
+        if not locked:
             _watched_folders.discard(folder)
+            continue
+        _LOG.info(
+            "Native runtime copies in %s stay loaded until Blender exits: %s",
+            folder,
+            ", ".join(locked),
+        )
     root = native_runtime_root()
     for folder in (root, root.parent):
         try:

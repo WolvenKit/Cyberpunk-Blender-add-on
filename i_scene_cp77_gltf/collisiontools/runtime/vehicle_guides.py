@@ -5,7 +5,6 @@ from time import perf_counter
 
 import blf
 import bpy
-import gpu
 from bpy_extras.view3d_utils import location_3d_to_region_2d
 from gpu_extras.batch import batch_for_shader
 from mathutils import Matrix, Quaternion, Vector
@@ -17,12 +16,13 @@ from ...bartmoss.vehicle import (
     static_wheel_loads,
 )
 from ...bartmoss.wireframes import box_wireframe, coil_wireframe, ring_wireframe
-from ...blender.context import tag_view3d_redraw
+from ...blender.context import tag_view3d_redraw, with_context
+from ...blender.gpu_overlay import line_drawing, uniform_color_shader
 from ...blender.physics.vehicle_geometry import vehicle_actor_world
 from ...core.log import get_logger, log_once
 from ..blender.vehicle_authoring_state import scene_gravity_magnitude
 from ..blender.vehicle_config import vehicle_live_dynamics_config
-from .vehicle_preview import _runtime
+from .vehicle_preview import vehicle_runtime_state
 
 _LOG = get_logger(__name__)
 
@@ -38,7 +38,6 @@ _CONFIG_LIFETIME = 0.2
 
 _view_handle = None
 _pixel_handle = None
-_shader = None
 _config_cache = {}
 
 
@@ -130,7 +129,7 @@ def _build_guides(context):
     if (vehicle.rig if vehicle.source_mode == "RIG" else vehicle.chassis) is None:
         return (), ()
     config = _guide_config(scene, vehicle)
-    state = _runtime(scene, create=False)
+    state = vehicle_runtime_state(scene, create=False)
     actor = vehicle_actor_world(vehicle)
     labels = []
 
@@ -264,9 +263,7 @@ def _build_guides(context):
 _frame_guides = {}
 
 
-def _draw_view():
-    global _shader
-    context = bpy.context
+def _draw_view(context):
     try:
         layers, labels = _build_guides(context)
     except Exception as error:
@@ -283,33 +280,25 @@ def _draw_view():
     _frame_guides["labels"] = labels
     if not layers:
         return
-    if _shader is None:
-        _shader = gpu.shader.from_builtin("UNIFORM_COLOR")
+    shader = uniform_color_shader()
     matrix = context.region_data.perspective_matrix
-    try:
-        gpu.state.blend_set("ALPHA")
-        gpu.state.depth_test_set("NONE")
-        gpu.state.line_width_set(2.0)
-        _shader.bind()
-        _shader.uniform_float("ModelViewProjectionMatrix", matrix)
+    with line_drawing(2.0):
+        shader.bind()
+        shader.uniform_float("ModelViewProjectionMatrix", matrix)
         for layer in layers:
             if not layer.lines:
                 continue
             batch = batch_for_shader(
-                _shader, "LINES", {"pos": layer.vertices}, indices=layer.lines
+                shader, "LINES", {"pos": layer.vertices}, indices=layer.lines
             )
-            _shader.uniform_float("color", layer.color)
-            batch.draw(_shader)
-    finally:
-        gpu.state.line_width_set(1.0)
-        gpu.state.blend_set("NONE")
+            shader.uniform_float("color", layer.color)
+            batch.draw(shader)
 
 
-def _draw_labels():
+def _draw_labels(context):
     labels = _frame_guides.get("labels")
     if not labels:
         return
-    context = bpy.context
     region = context.region
     view = context.region_data
     font = 0
@@ -332,15 +321,15 @@ def register_vehicle_guides():
     global _view_handle, _pixel_handle
     unregister_vehicle_guides()
     _view_handle = bpy.types.SpaceView3D.draw_handler_add(
-        _draw_view, (), "WINDOW", "POST_VIEW"
+        with_context(_draw_view), (), "WINDOW", "POST_VIEW"
     )
     _pixel_handle = bpy.types.SpaceView3D.draw_handler_add(
-        _draw_labels, (), "WINDOW", "POST_PIXEL"
+        with_context(_draw_labels), (), "WINDOW", "POST_PIXEL"
     )
 
 
 def unregister_vehicle_guides():
-    global _view_handle, _pixel_handle, _shader
+    global _view_handle, _pixel_handle
     for handle in (_view_handle, _pixel_handle):
         if handle is not None:
             try:
@@ -349,6 +338,5 @@ def unregister_vehicle_guides():
                 pass
     _view_handle = None
     _pixel_handle = None
-    _shader = None
     _config_cache.clear()
     _frame_guides.clear()

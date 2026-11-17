@@ -4,18 +4,22 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from ...assetio.paths import depot_path
 from ...assetio.values import collect_handle_data
+from ...blender.entity.transforms import (
+    EntityTransformResolver,
+    build_slot_owner_binding_maps,
+)
 from ...blender.physics.entity_colliders import (
     COLLIDER_COMPONENT_TYPES,
     EntityColliderImporter,
     PhysXEntityContext,
 )
 from ...blender.physics.resources import import_phys_resource
+from ...blender.physics.vehicle_phys import adopt_vehicle_phys_objects
 from ...core.log import debug_exception, get_logger
-from ..common.entity_data import component_name
-from ..common.paths import depot_path
+from ...entity.domain.entity_data import component_name
 from .context import EntityHandlerOperations
-from .transforms import EntityTransformResolver, build_slot_owner_binding_maps
 
 _LOG = get_logger(__name__)
 
@@ -227,7 +231,6 @@ class EntityCollisionService:
                 for item in runtime.blender_context.scene.physx.actors
                 if item.obj_ref is not None and item.obj_ref.as_pointer() not in before
             )
-            from ...blender.physics.vehicle_phys import adopt_vehicle_phys_objects
 
             adopt_vehicle_phys_objects(runtime.rig, created)
         except Exception:

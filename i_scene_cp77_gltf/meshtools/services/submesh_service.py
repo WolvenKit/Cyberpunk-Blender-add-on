@@ -9,14 +9,25 @@ from ...blender.context import (
     safe_mode_switch,
     store_current_context,
 )
+from ...blender.identity import rna_identity, rna_is_live
 from ...blender.mesh import is_mesh
+from ...blender.mesh_appearances import (
+    restore_appearance_materials,
+    stash_appearance_materials,
+)
+from ...blender.mesh_validation import weighted_group_names
+from ...blender.naming import fit_id_name
 from ...blender.operator_results import OperationResult, require_finished
+from ...blender.outliner import outliner_object_order
 from ...blender.selection import select_objects
 from ...blender.transactions import (
     remove_datablock_on_commit,
     snapshot_datablocks,
+    track_collection_state,
     track_created_since,
     track_mesh_object,
+    track_mutation,
+    track_object_state,
     transactional,
 )
 from ...core.log import get_logger
@@ -32,6 +43,31 @@ _SAFE_JOIN_ROLE = "SAFE_JOIN_MARKER"
 # material index while the joined mesh gives every face the marker.
 _SAFE_JOIN_SLOT = "cp77_safe_join_slot_"
 _SAFE_JOIN_FACE_MATERIALS = "cp77_safe_join_material_index"
+_SAFE_JOIN_SUBMESH_INDEX = "cp77_safe_join_submesh_index"
+# Safe Join joins copies; each submesh object waits on its marker, out of every collection, for Safe Split to give it
+# its edited geometry back with its own modifiers, rig, transform and properties.
+_SAFE_JOIN_OBJECT = "cp77_safe_join_object"
+_SAFE_JOIN_COLLECTIONS = "cp77_safe_join_collections"
+
+
+def _submesh_positions(context, objects):
+    """Each object's submesh index, its Outliner position among the meshes of its collection, by object"""
+    orders = {}
+    positions = {}
+    for obj in objects:
+        collection = (
+            obj.users_collection[0]
+            if obj.users_collection
+            else context.scene.collection
+        )
+        order = orders.get(collection.as_pointer())
+        if order is None:
+            meshes = [other for other in collection.objects if other.type == "MESH"]
+            order = orders[collection.as_pointer()] = outliner_object_order(
+                context, meshes
+            )
+        positions[obj.as_pointer()] = order.index(obj)
+    return positions
 
 
 def _material_names(obj):
@@ -48,10 +84,11 @@ def is_safe_join_result(obj):
     )
 
 
-def _temporary_submesh_material(obj):
-    material = bpy.data.materials.new(name=f"CP77_SafeJoin_{obj.name}")
-    tag_owned(material, _SAFE_JOIN_ROLE, source=obj.name)
+def _temporary_submesh_material(obj, submesh_index, source_name):
+    material = bpy.data.materials.new(name=f"CP77_SafeJoin_{source_name}")
+    tag_owned(material, _SAFE_JOIN_ROLE, source=source_name)
     material.diffuse_color = (0.8, 0.8, 0.8, 1.0)
+    material[_SAFE_JOIN_SUBMESH_INDEX] = int(submesh_index)
     material[_SAFE_JOIN_METADATA] = json.dumps(
         _material_names(obj), separators=(",", ":")
     )
@@ -62,10 +99,19 @@ def _temporary_submesh_material(obj):
     return material
 
 
-def _stage(obj):
-    """Give the submesh one marker material that remembers its materials and each face's material index"""
-    marker = _temporary_submesh_material(obj)
+def _property_value(value):
+    for convert in ("to_dict", "to_list"):
+        if hasattr(value, convert):
+            return getattr(value, convert)()
+    return value
+
+
+def _stage(obj, submesh_index, source_name):
+    """Give the submesh copy one marker material that remembers its submesh index, materials, appearances and face material indices"""
+    marker = _temporary_submesh_material(obj, submesh_index, source_name)
     mesh = obj.data
+    # The joined mesh is for sculpting; the marker keeps the submesh's appearances until Safe Split gives them back.
+    stash_appearance_materials(mesh, marker)
     if mesh.polygons:
         indices = np.empty(len(mesh.polygons), dtype=np.int32)
         mesh.polygons.foreach_get("material_index", indices)
@@ -82,6 +128,59 @@ def _stage(obj):
     return marker
 
 
+def _working_copy(obj):
+    """A copy of the submesh with a mesh of its own, linked where the submesh is, for the join to consume"""
+    copy = obj.copy()
+    copy.data = obj.data.copy()
+    for collection in obj.users_collection:
+        collection.objects.link(copy)
+    return copy
+
+
+def _set_aside(obj, marker):
+    """Keep the submesh on its marker and out of every collection while the joined copy stands in for it"""
+    marker[_SAFE_JOIN_OBJECT] = obj
+    marker[_SAFE_JOIN_COLLECTIONS] = json.dumps(
+        [collection.name for collection in obj.users_collection],
+        separators=(",", ":"),
+    )
+    for collection in tuple(obj.users_collection):
+        collection.objects.unlink(obj)
+
+
+def _collection_named(name):
+    collection = bpy.data.collections.get(name)
+    if collection is not None:
+        return collection
+    return next(
+        (
+            scene.collection
+            for scene in bpy.data.scenes
+            if scene.collection.name == name
+        ),
+        None,
+    )
+
+
+def _marker_collections(marker, fallback=()):
+    try:
+        names = json.loads(marker[_SAFE_JOIN_COLLECTIONS])
+    except (KeyError, TypeError, ValueError):
+        names = ()
+    collections = [
+        collection
+        for collection in (_collection_named(name) for name in names)
+        if collection is not None
+    ]
+    return collections or list(fallback)
+
+
+def _link(obj, collections):
+    for collection in collections:
+        if collection.objects.get(obj.name) is not obj:
+            collection.objects.link(obj)
+
+
 def safe_join(context):
     selected = [
         obj
@@ -94,49 +193,58 @@ def safe_join(context):
     refusal = shared_mesh_refusal(selected, "join")
     if refusal is not None:
         return refusal
+    active = context.view_layer.objects.active
+    if active not in selected:
+        active = selected[0]
+    ordered = [active, *(obj for obj in selected if obj != active)]
 
     store_current_context()
-    warnings = []
-    staged = []
+    restored = False
     try:
         safe_mode_switch("OBJECT")
-        for obj in selected:
-            try:
-                staged.append((obj, _stage(obj)))
-            except Exception as error:
-                _LOG.warning(
-                    "Safe-join material staging failed: object=%s error=%s",
-                    obj.name,
-                    error,
-                    exc_info=True,
-                )
-                warnings.append(f"{obj.name}: {error}")
-
-        select_objects(selected, context=context)
+        positions = _submesh_positions(context, ordered)
+        copies, staged = [], []
         try:
+            for obj in ordered:
+                copy = _working_copy(obj)
+                copies.append((copy, copy.data))
+                staged.append(
+                    (obj, _stage(copy, positions[obj.as_pointer()], obj.name))
+                )
+            for obj, marker in staged:
+                _set_aside(obj, marker)
+            select_objects([copy for copy, _mesh in copies], context=context)
             require_finished(bpy.ops.object.join(), "Join selected submeshes")
         except Exception:
-            # The submeshes are still apart: each gets its materials back.
+            # Nothing was joined: the copies go, and each submesh is back where it was.
             for obj, marker in staged:
-                _restore_original_materials(obj, marker)
+                _link(obj, _marker_collections(marker))
+            for copy, mesh in copies:
+                if rna_is_live(copy):
+                    bpy.data.objects.remove(copy)
+                if rna_is_live(mesh) and not mesh.users:
+                    bpy.data.meshes.remove(mesh)
+            for _obj, marker in staged:
                 bpy.data.materials.remove(marker)
             raise
-        result = OperationResult.finished(
-            f"Joined {len(selected)} submeshes.",
-            payload=context.view_layer.objects.active,
+        joined = context.view_layer.objects.active
+        joined.name = fit_id_name(active.name, "_joined")
+        # The join leaves the other copies' meshes without users.
+        for _copy, mesh in copies:
+            if rna_is_live(mesh) and not mesh.users:
+                bpy.data.meshes.remove(mesh)
+        restore_previous_context()
+        restored = True
+        # The submeshes the selection held are set aside, so the joined mesh takes their place in it.
+        select_objects(joined, context=context)
+        return OperationResult.finished(
+            f"Joined {len(selected)} submeshes.", payload=joined
         )
-        if warnings:
-            return OperationResult.finished(
-                result.message,
-                level="WARNING",
-                warnings=warnings,
-                payload=result.details.get("payload"),
-            )
-        return result
     except Exception as error:
         return OperationResult.cancelled(f"Safe join failed: {error}", error=error)
     finally:
-        restore_previous_context()
+        if not restored:
+            restore_previous_context()
 
 
 def _restore_original_materials(obj, marker_material):
@@ -152,6 +260,7 @@ def _restore_original_materials(obj, marker_material):
             material = bpy.data.materials.get(name) if name else None
         obj.data.materials.append(material)
     _restore_face_materials(obj.data)
+    restore_appearance_materials(obj.data, marker_material)
 
 
 def _restore_face_materials(mesh):
@@ -165,6 +274,83 @@ def _restore_face_materials(mesh):
     mesh.attributes.remove(attribute)
 
 
+def _moves_nothing(block):
+    count = len(block.data)
+    if block.relative_key == block or not count:
+        return True
+    positions = np.empty(count * 3, dtype=np.float32)
+    reference = np.empty(count * 3, dtype=np.float32)
+    block.data.foreach_get("co", positions)
+    block.relative_key.data.foreach_get("co", reference)
+    return np.allclose(positions, reference, rtol=0.0, atol=1e-6)
+
+
+def _keep_own_mesh_data(piece, original):
+    """Leave the piece only the vertex groups, shape keys, attributes and properties of the original's mesh, keeping any edited while joined"""
+    mesh = original.data
+    groups = {group.name for group in original.vertex_groups}
+    weighted = weighted_group_names(piece)
+    for group in tuple(piece.vertex_groups):
+        if group.name not in groups and group.name not in weighted:
+            piece.vertex_groups.remove(group)
+    keys = piece.data.shape_keys
+    if keys is not None:
+        own = (
+            {block.name for block in mesh.shape_keys.key_blocks}
+            if mesh.shape_keys
+            else set()
+        )
+        for block in reversed(tuple(keys.key_blocks)[1:]):
+            if block.name not in own and _moves_nothing(block):
+                piece.shape_key_remove(block)
+        if not own and len(keys.key_blocks) == 1:
+            piece.shape_key_remove(keys.key_blocks[0])
+    data = piece.data
+    for attribute in tuple(data.attributes):
+        if (
+            attribute.name not in mesh.attributes
+            and not attribute.is_internal
+            and not attribute.is_required
+        ):
+            data.attributes.remove(attribute)
+    for key in tuple(data.keys()):
+        del data[key]
+    for key, value in mesh.items():
+        data[key] = _property_value(value)
+
+
+def _return_to_original(piece, original, marker):
+    """Give the original submesh object the piece's edited geometry, in its own space, under its own mesh name"""
+    old = original.data
+    _keep_own_mesh_data(piece, original)
+    mesh = piece.data
+    # The join moved the vertices into the joined object's space; the original keeps its own transform.
+    matrix = original.matrix_world.inverted_safe() @ piece.matrix_world
+    if not np.allclose(np.array(matrix), np.eye(4), rtol=0.0, atol=1e-7):
+        mesh.transform(matrix)
+    collections = _marker_collections(marker, piece.users_collection)
+    for collection in (*collections, *piece.users_collection):
+        track_collection_state(collection)
+    track_object_state(original)
+    name = old.name
+
+    def restore_names(old=old, mesh=mesh, name=name):
+        if rna_is_live(mesh) and mesh.name == name:
+            mesh.name = fit_id_name("CP77_SafeSplit_", name)
+        if rna_is_live(old):
+            old.name = name
+
+    track_mutation(("safe_split_mesh_name", rna_identity(old)), restore_names)
+    original.data = mesh
+    old.name = fit_id_name("CP77_SafeSplit_", name)
+    mesh.name = name
+    remove_datablock_on_commit("meshes", old)
+    for collection in tuple(piece.users_collection):
+        collection.objects.unlink(piece)
+    _link(original, collections)
+    remove_datablock_on_commit("objects", piece)
+
+
 @transactional("Safe split")
 def safe_split(context):
     obj = context.active_object
@@ -176,6 +362,7 @@ def safe_split(context):
         return refusal
 
     store_current_context()
+    restored = False
     try:
         safe_mode_switch("OBJECT")
         # The joined mesh is edited alone: separating splits every mesh in Edit Mode, and what it leaves selected are
@@ -194,9 +381,10 @@ def safe_split(context):
         safe_mode_switch("OBJECT")
         track_created_since(before)
         outputs = tuple(context.selected_objects)
-        restored = 0
+        submeshes = []
         warnings = []
         names = []
+        indexed = []
         for new_obj in outputs:
             try:
                 marker = new_obj.data.materials[0] if new_obj.data.materials else None
@@ -206,12 +394,19 @@ def safe_split(context):
                     or _SAFE_JOIN_METADATA not in marker
                 ):
                     continue
-                original_name = owned_source(marker)
                 _restore_original_materials(new_obj, marker)
+                original = marker.get(_SAFE_JOIN_OBJECT)
+                if isinstance(original, bpy.types.Object):
+                    _return_to_original(new_obj, original, marker)
+                    submesh = original
+                else:
+                    submesh = new_obj
+                    if owned_source(marker):
+                        names.append((new_obj, owned_source(marker)))
+                if _SAFE_JOIN_SUBMESH_INDEX in marker:
+                    indexed.append((int(marker[_SAFE_JOIN_SUBMESH_INDEX]), submesh))
                 remove_datablock_on_commit("materials", marker)
-                if original_name:
-                    names.append((new_obj, original_name))
-                restored += 1
+                submeshes.append(submesh)
             except Exception as error:
                 _LOG.warning(
                     "Safe-split material restoration failed: object=%s error=%s",
@@ -220,22 +415,33 @@ def safe_split(context):
                     exc_info=True,
                 )
                 warnings.append(f"{new_obj.name}: {error}")
-        # The joined object still holds one submesh's name, so every name is freed before any is given back.
+        # A piece without a submesh object to return to takes its submesh's name, every name freed before any is given.
         for new_obj, _name in names:
             new_obj.name = f"CP77_SafeSplit_{new_obj.name}"
         for new_obj, original_name in names:
             new_obj.name = original_name
-        if context.mode == "OBJECT":
-            select_objects(outputs, context=context)
+        # Relinked in submesh order, the submeshes keep their indices in an Outliner that lists objects as linked.
+        for _index, submesh in sorted(indexed, key=lambda item: item[0]):
+            for collection in tuple(submesh.users_collection):
+                collection.objects.unlink(submesh)
+                collection.objects.link(submesh)
+        restore_previous_context()
+        restored = True
+        select_objects(submeshes, context=context)
         result = OperationResult.finished(
-            f"Split and restored {restored} submeshes.", payload=outputs
+            f"Split and restored {len(submeshes)} submeshes.",
+            payload=tuple(submeshes),
         )
         if warnings:
             return OperationResult.finished(
-                result.message, level="WARNING", warnings=warnings, payload=outputs
+                result.message,
+                level="WARNING",
+                warnings=warnings,
+                payload=tuple(submeshes),
             )
         return result
     except Exception as error:
         return OperationResult.cancelled(f"Safe split failed: {error}", error=error)
     finally:
-        restore_previous_context()
+        if not restored:
+            restore_previous_context()

@@ -7,31 +7,33 @@ from time import perf_counter
 from typing import Any
 
 import bpy
+from bpy.app.handlers import persistent
 from mathutils import Matrix, Vector
 
 from ...bartmoss.vehicle import STANDARD_GRAVITY, fixed_step_count
 from ...blender.identity import rna_identity
 from ...blender.physics.bridge_session import require_initialized_bridge
+from ...blender.physics.vehicle_chassis import vehicle_chassis_phys_objects
 from ...blender.physics.vehicle_geometry import (
     WHEEL_FIELDS,
     basis_matrix,
     matrix_from_pose,
     vehicle_root,
 )
+from ...blender.physics.vehicle_phys import adopt_loaded_vehicle_phys
 from ...core.log import get_logger
-from ...physics.domain.vehicle.gears import (
-    PHYSX_MAX_FORWARD_GEARS,
-    collection_gears,
-    validate_gears,
-)
 from ...physics.model.vehicle.timing import VEHICLE_FIXED_TIME_STEP
 from ...physics.runtime.bridge_contract import validate_vehicle_bridge_contract
-from ..blender.vehicle_authoring_state import scene_gravity_magnitude
+from ..blender.vehicle_authoring_state import (
+    bike_vehicle_config,
+    scene_gravity_magnitude,
+)
 from ..blender.vehicle_config import (
     validate_vehicle,
     vehicle_config,
     vehicle_live_dynamics_config,
 )
+from ..blender.vehicle_gears import validated_gears
 from ..blender.vehicle_rig import (
     capture_vehicle_rig,
     pose_vehicle_rig,
@@ -84,7 +86,7 @@ _LIVE_UPDATE_TIMERS = {}
 _RUNTIME = {}
 
 
-def _runtime(scene, create=True):
+def vehicle_runtime_state(scene, create=True):
     key = rna_identity(scene)
     state = _RUNTIME.get(key)
     if state is None and create:
@@ -110,7 +112,21 @@ def clear_vehicle_runtime(scene=None, restore=False):
             _restore_state(state)
 
 
+def _cancel_live_updates(scene=None):
+    pointers = tuple(_LIVE_UPDATE_TIMERS) if scene is None else (scene.as_pointer(),)
+    for pointer in pointers:
+        callback = _LIVE_UPDATE_TIMERS.pop(pointer, None)
+        if callback is not None and bpy.app.timers.is_registered(callback):
+            bpy.app.timers.unregister(callback)
+
+
+@persistent
+def forget_logged_bridge_builds(*_args):
+    _LOGGED_BRIDGE_BUILDS.clear()
+
+
 def invalidate_vehicle_runtime_state(scene=None, *, restore=False):
+    _cancel_live_updates(scene)
     clear_vehicle_runtime(scene, restore=restore)
     scenes = tuple(getattr(bpy.data, "scenes", ())) if scene is None else (scene,)
     for current in scenes:
@@ -505,7 +521,7 @@ def _log_wheel_telemetry(state, stats, wheel_count, *, initial=False):
     state.telemetry_lateral_force_peak = ()
 
 
-def _flush_vehicle_live_updates_for_scene(scene, bridge=None):
+def flush_vehicle_live_updates_for_scene(scene, bridge=None):
     """Applies the queued edits to the built vehicle"""
     vehicle = getattr(scene, "physx_vehicle", None)
     if vehicle is None or not vehicle.preview_built or vehicle.preview_dirty:
@@ -527,7 +543,7 @@ def _flush_vehicle_live_updates_for_scene(scene, bridge=None):
         else:
             live_config = vehicle_live_dynamics_config(vehicle)
             bridge.update_vehicle_dynamics(live_config)
-            state = _runtime(scene, create=False)
+            state = vehicle_runtime_state(scene, create=False)
             if state is not None:
                 state.max_steer = max(live_config.get("steer_angles") or (0.0,))
     except Exception as error:
@@ -576,7 +592,7 @@ def _schedule_vehicle_live_update(scene):
         if physx is not None and physx.sim_running:
             return
         try:
-            _flush_vehicle_live_updates_for_scene(target_scene)
+            flush_vehicle_live_updates_for_scene(target_scene)
         except Exception as error:
             vehicle.live_update_error = str(error)
             vehicle.preview_message = f"Live dynamics update rejected: {error}"
@@ -619,11 +635,9 @@ def build_vehicle(context, bridge=None):
         raise ValueError("; ".join(errors))
     bridge = bridge or require_initialized_bridge(context)
     if vehicle.source_mode == "RIG" and getattr(vehicle, "rig", None) is not None:
-        from ...blender.physics.vehicle_phys import adopt_loaded_vehicle_phys
-
         adopt_loaded_vehicle_phys(context, vehicle.rig)
 
-    state = _runtime(context.scene)
+    state = vehicle_runtime_state(context.scene)
     root = vehicle_root(vehicle)
     wheel_fields = _wheel_fields(vehicle)
     state.source_mode = vehicle.source_mode
@@ -676,7 +690,7 @@ def _wheel_fields(vehicle):
 
 def _rebuild_vehicle_in_place(scene, bridge):
     """Rebuilds the native vehicle where it is now, keeping its motion"""
-    state = _runtime(scene, create=False)
+    state = vehicle_runtime_state(scene, create=False)
     if state is None or state.handle <= 0 or state.chassis is None:
         raise RuntimeError("Build the vehicle preview before changing its collider")
     dynamic_state = bridge.get_vehicle_dynamic_state()
@@ -700,16 +714,10 @@ def _build_native_vehicle(scene, bridge, state, *, dynamic_state=None):
     rebuilding = dynamic_state is not None
     build_info = validate_vehicle_bridge_contract(bridge)
     _log_bridge_build_info(build_info)
-    validate_gears(
-        collection_gears(vehicle),
-        max_forward_gears=PHYSX_MAX_FORWARD_GEARS,
-        vehicle=vehicle,
-    )
+    validated_gears(vehicle)
 
     is_bike = getattr(vehicle, "vehicle_kind", "CAR") == "BIKE"
     if is_bike:
-        from ..blender.vehicle_authoring_state import bike_vehicle_config
-
         config = bike_vehicle_config(vehicle)
     else:
         config = vehicle_config(vehicle)
@@ -776,7 +784,6 @@ def _build_native_vehicle(scene, bridge, state, *, dynamic_state=None):
     state.chassis_origin_translation = Matrix.Translation(-state.chassis_shape_offset)
     state.chassis_scale = root.matrix_world.to_scale()
     state.chassis_scale_matrix = _scale_matrix(state.chassis_scale)
-    from ...blender.physics.vehicle_chassis import vehicle_chassis_phys_objects
 
     state.chassis_phys_objects = vehicle_chassis_phys_objects(
         scene, getattr(vehicle, "rig", None)
@@ -864,7 +871,7 @@ def build_vehicle_if_enabled(context, bridge):
 def vehicle_step_schedule(scene, elapsed):
     """(step count, step length) that advance a built vehicle preview by elapsed seconds"""
     vehicle = getattr(scene, "physx_vehicle", None)
-    state = _runtime(scene, create=False)
+    state = vehicle_runtime_state(scene, create=False)
     if (
         vehicle is None
         or state is None
@@ -931,7 +938,7 @@ def _sync_native_wheel_poses(state, actor_world, wheel_poses):
 
 def sync_vehicle_preview(context, bridge, poses, _dt):
     vehicle = getattr(context.scene, "physx_vehicle", None)
-    state = _runtime(context.scene, create=False)
+    state = vehicle_runtime_state(context.scene, create=False)
     if (
         vehicle is None
         or state is None

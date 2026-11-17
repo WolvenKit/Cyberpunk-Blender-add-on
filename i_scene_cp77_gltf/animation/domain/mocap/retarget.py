@@ -3,7 +3,12 @@ from __future__ import annotations
 import numpy as np
 
 from ....assetio.mocap import MocapClip
-from ....bartmoss.curve import sample_linear, sample_quaternions_xyzw
+from ....bartmoss.curve import (
+    gaussian_smoothed,
+    sample_linear,
+    sample_quaternions_xyzw,
+    stepped_path,
+)
 from ....bartmoss.geometry import signed_angles, unit_vectors, vector_angles
 from ....bartmoss.hierarchy import (
     local_matrices_to_model,
@@ -19,6 +24,7 @@ from ....bartmoss.quaternion import (
     slerp_xyzw,
     xyzw_from_matrices,
 )
+from ....bartmoss.scalar import smoothstep
 from ....bartmoss.trs import compose_matrices, compose_matrix
 from ....redSpace.transforms import mocap_model_to_red
 from ...model.mocap.clip import RetargetResult, TargetRig
@@ -38,8 +44,8 @@ TARGET_BONES = REQUIRED_BONES + tuple(
 )
 # Only the long limb bones aim at the next bone of their chain: their rest differs between skeletons by pose (arms
 # down, T-pose, arms forward, legs apart). Torso, neck, hands and feet differ by where each skeleton puts its joints,
-# so they turn from their own rest instead of copying the source's bone directions. The legs then reach for where
-# the performer's feet are from the pelvis, and the clavicles follow the game's rhythm with the upper arm.
+# so they turn from their own rest instead of copying the source's bone directions. The clavicles follow the game's
+# rhythm with the upper arm.
 _AIM_CHAINS = (
     ("Arm", "ForeArm", "Hand"),
     ("UpLeg", "Leg", "Foot"),
@@ -47,11 +53,32 @@ _AIM_CHAINS = (
 _UP = np.array((0.0, 0.0, 1.0))
 # The game rigs' elbows and knees bend only about their upper bone's local -Z, and the forearm and shin never twist.
 _HINGE = np.array((0.0, 0.0, -1.0))
-# A source limb bent further than this (degrees) shows its hinge.
+# A source limb bent further than this (degrees) shows its elbow's or knee's hinge.
 _BENT = 25.0
-# Below _STRAIGHT degrees a limb's roll is left to the calibration; from _ROLLED on its bend plane sets the roll.
-_STRAIGHT = 2.0
-_ROLLED = 12.0
+# Below _STRAIGHT degrees a limb's roll is held from the frames around it; from _ROLLED on its bend plane sets it.
+_STRAIGHT = 5.0
+_ROLLED = 15.0
+# Frames (standard deviation) over which a limb's roll is eased.
+_ROLL_SMOOTHING = 1.5
+# The feet stand on the floor where the lower foot's lowest point, ankle or toe, sits on the clip's lowest twentieth of
+# frames.
+_PLANTED = 5.0
+# Planted ankles this far (metres, at game scale) above where the source's rest pose stands mean the performer stands on
+# something, so the source's own floor is kept.
+_RAISED = 0.5
+# A foot is on the floor while its lowest point is within _GROUNDED of where it stands and off it from _LIFTED (metres).
+_GROUNDED = 0.03
+_LIFTED = 0.06
+# On the floor a foot steps as the performer's does, keeping none of a step slower than _STILL and all of one faster
+# than _MOVING (metres a second, over _SPEED_SMOOTHING frames): it stands still where theirs creeps but swivels and
+# shuffles.
+_STILL = 0.03
+_MOVING = 0.1
+_SPEED_SMOOTHING = 2.0
+# Off the floor a foot gives back this much each frame of its offset from where the performer's leg puts it, and it
+# never strays further than _MOST_STRAY (metres).
+_RELEASE = 0.25
+_MOST_STRAY = 0.03
 
 
 def _frame_times(clip, fps):
@@ -134,24 +161,25 @@ def _aims(mapping, index):
     return aims
 
 
-def _source_hinges(source, mapping):
+def _hinges(source, mapping):
     """Each upper limb joint's bend axis in its own frame, measured on the clip's bent frames"""
     bones = mapping.bones
     hinges = {}
-    for side in ("Left", "Right"):
-        for upper, lower, end in _AIM_CHAINS:
-            joints = [bones[side + bone] for bone in (upper, lower, end)]
-            first = source[:, joints[1], :3, 3] - source[:, joints[0], :3, 3]
-            second = source[:, joints[2], :3, 3] - source[:, joints[1], :3, 3]
-            bent = np.degrees(vector_angles(first, second)) > _BENT
-            if np.count_nonzero(bent) < 10:
-                continue
-            axes = unit_vectors(np.cross(first, second)[bent])
-            local = np.einsum("fji,fj->fi", source[bent, joints[0], :3, :3], axes)
-            mean = local.mean(axis=0)
-            # A source whose elbow or knee does not bend about one axis of its own frame has no hinge to match.
-            if np.linalg.norm(mean) > 0.8:
-                hinges[joints[0]] = mean / np.linalg.norm(mean)
+    for side, chain in (
+        (side, chain) for side in ("Left", "Right") for chain in _AIM_CHAINS
+    ):
+        joints = [bones[side + bone] for bone in chain]
+        first = source[:, joints[1], :3, 3] - source[:, joints[0], :3, 3]
+        second = source[:, joints[2], :3, 3] - source[:, joints[1], :3, 3]
+        bent = np.degrees(vector_angles(first, second)) > _BENT
+        if np.count_nonzero(bent) < 10:
+            continue
+        axes = unit_vectors(np.cross(first, second)[bent])
+        local = np.einsum("fji,fj->fi", source[bent, joints[0], :3, :3], axes)
+        mean = local.mean(axis=0)
+        # A source whose elbow or knee does not bend about one axis of its own frame has no hinge to match.
+        if np.linalg.norm(mean) > 0.8:
+            hinges[joints[0]] = mean / np.linalg.norm(mean)
     return hinges
 
 
@@ -185,8 +213,9 @@ def _calibration(clip, rest, positions, mapping, target, index, hinges):
             )
         inherited[joint] = correction
         if joint in hinges:
-            # Roll the limb about itself so the source's elbow or knee hinge lies on the game's. The roll only relabels
-            # the source bone's axes, so the joints below it do not take it.
+            # Roll the limb about itself so the source's elbow or knee hinge lies on the game's: the performer's own
+            # twist then turns the game's hinge as it turns theirs. The roll only relabels the source bone's axes, so
+            # the joints below it do not take it.
             wanted = unit_vectors(
                 target_positions[aims[joint][2]] - target_positions[aims[joint][1]]
             )
@@ -231,6 +260,93 @@ def _shared_deltas(keys, key_deltas, positions):
     return result
 
 
+def _soles(model, target, index):
+    """Per frame and foot, how far the foot's lowest point, ankle or toe, is above where it stands"""
+    reference = target.reference_model[:, 2, 3]
+    heights = []
+    for side in ("Left", "Right"):
+        points = [
+            index[side + bone] for bone in ("Foot", "ToeBase") if side + bone in index
+        ]
+        heights.append(np.min(model[:, points, 2, 3] - reference[points], axis=1))
+    return np.stack(heights, axis=1)
+
+
+def _hips_positions(model, source, positions, points, mapping, target, index, scale):
+    """The hips' travel that moves the hip joints as the performer's do and stands the planted feet on the floor"""
+    bones = mapping.bones
+    # The legs hang from the hip joints, so those carry the performer's travel: the game's hips sit wherever its own
+    # pelvis puts them from there.
+    source_hips = np.mean(
+        source[:, [bones[side + "UpLeg"] for side in ("Left", "Right")]][..., :3, 3],
+        axis=1,
+    )
+    hip_joints = [index[side + "UpLeg"] for side in ("Left", "Right")]
+    travel = (
+        scale * source_hips
+        - np.mean(model[:, hip_joints][..., :3, 3], axis=1)
+        + model[:, index["Hips"], :3, 3]
+    )
+    ankles = [bones[side + "Foot"] for side in ("Left", "Right")]
+    standing = float(np.mean(positions[ankles, 2])) - float(np.min(points[:, 2]))
+    planted = float(np.percentile(np.min(source[:, ankles, 2, 3], axis=1), _PLANTED))
+    if (planted - standing) * scale >= _RAISED:
+        # The source's own floor is kept: the performer's rest stance lands on the game's.
+        game_ankles = float(
+            np.mean(
+                target.reference_model[
+                    [index[side + "Foot"] for side in ("Left", "Right")], 2, 3
+                ]
+            )
+        )
+        return travel + (0.0, 0.0, game_ankles - scale * standing)
+    soles = (
+        _soles(model, target, index)
+        + (travel[:, 2] - model[:, index["Hips"], 2, 3])[:, None]
+    )
+    return travel - (0.0, 0.0, float(np.percentile(np.min(soles, axis=1), _PLANTED)))
+
+
+def _limit_feet(model, turns, target, index):
+    """Turn back any foot pointed past the line of its shin, which no ankle bends"""
+    reference = target.reference_model
+    for side in ("Left", "Right"):
+        if side + "ToeBase" not in index:
+            continue
+        shin, foot, toe = (index[side + bone] for bone in ("Leg", "Foot", "ToeBase"))
+        joints = reference[[shin, foot, toe], :3, 3]
+        lateral = np.cross(joints[1] - joints[0], joints[2] - joints[1])
+        axes = model[:, foot, :3, :3] @ unit_vectors(
+            reference[foot, :3, :3].T @ lateral
+        )
+        angles = signed_angles(
+            model[:, foot, :3, 3] - model[:, shin, :3, 3],
+            model[:, toe, :3, 3] - model[:, foot, :3, 3],
+            axes,
+        )
+        turns[foot] = axis_angle_matrices(axes, np.maximum(-angles, 0.0)) @ turns[foot]
+
+
+def _held(ankle, performer, sole, fps):
+    """An ankle path that steps as the performer's foot does while on the floor, less its creep"""
+    steps = np.diff(performer[:, :2], axis=0, prepend=performer[:1, :2])
+    kept = smoothstep(
+        _STILL,
+        _MOVING,
+        gaussian_smoothed(np.linalg.norm(steps, axis=1), _SPEED_SMOOTHING) * fps,
+    )
+    grounded = 1.0 - smoothstep(_GROUNDED, _LIFTED, sole)
+    own = np.diff(ankle[:, :2], axis=0, prepend=ankle[:1, :2])
+    held = ankle.copy()
+    held[:, :2] = stepped_path(
+        ankle[:, :2],
+        (grounded * kept)[:, None] * steps + (1.0 - grounded)[:, None] * own,
+        _RELEASE * (1.0 - grounded),
+        _MOST_STRAY,
+    )
+    return held
+
+
 def retarget(
     clip: MocapClip, mapping: SkeletonMap, target: TargetRig, fps: float
 ) -> RetargetResult:
@@ -250,7 +366,7 @@ def retarget(
     ) / _leg_length(positions, [[bones[bone] for bone in leg] for leg in legs])
 
     calibrated = _calibration(
-        clip, rest, positions, mapping, target, index, _source_hinges(source, mapping)
+        clip, rest, positions, mapping, target, index, _hinges(source, mapping)
     )
     deltas = source[..., :3, :3] @ np.swapaxes(calibrated, -1, -2)
     turns = {
@@ -282,40 +398,79 @@ def retarget(
 
     _clavicles(turns, source, rest, positions, mapping, target, index)
 
-    hips_path = source[:, hips, :3, 3]
-    rest_height = positions[hips, 2] - float(np.min(points[:, 2]))
-    hips_positions = np.column_stack(
-        (
-            scale * hips_path[:, :2],
-            target_positions[index["Hips"], 2]
-            + scale * (hips_path[:, 2] - rest_height),
-        )
+    rest_local = model_matrices_to_local(target.rest_model, target.parents)
+    order = parent_first_order(target.parents)
+    read = _read_bones(target, index)
+    partial = tuple(bone for bone in order if bone in read)
+    hips_bone = index["Hips"]
+    # The pose is built at the origin first: the hips' travel is found from it and only moves it.
+    model = _compose(
+        target, turns, hips_bone, np.zeros((len(source), 3)), rest_local, partial
     )
-
-    model = _compose(target, turns, index["Hips"], hips_positions)
-    _place_legs(model, turns, source, mapping, target, index, scale)
-    model = _compose(target, turns, index["Hips"], hips_positions)
-    _hinge_limbs(model, turns, target, index, _AIM_CHAINS)
-    model = _compose(target, turns, index["Hips"], hips_positions)
+    hips_positions = _hips_positions(
+        model, source, positions, points, mapping, target, index, scale
+    )
+    limbs = _arm_directions(model, index)
+    performer = {
+        side: scale * source[:, bones[side + "Foot"], :3, 3]
+        for side in ("Left", "Right")
+    }
+    limbs.update(_leg_directions(model, hips_positions, performer, target, index, fps))
+    _solve_limbs(model, turns, target, index, limbs)
+    _limit_feet(
+        _compose(target, turns, hips_bone, hips_positions, rest_local, partial),
+        turns,
+        target,
+        index,
+    )
     if target.body is not None:
-        clear_arms(model, turns, target.body, target.rest_model, index)
-        model = _compose(target, turns, index["Hips"], hips_positions)
-        _hinge_limbs(model, turns, target, index, _AIM_CHAINS[:1])
-        model = _compose(target, turns, index["Hips"], hips_positions)
+        model = _compose(target, turns, hips_bone, hips_positions, rest_local, partial)
+        turned = clear_arms(model, turns, target.body, target.rest_model, index)
+        if turned:
+            model = _compose(
+                target, turns, hips_bone, hips_positions, rest_local, partial
+            )
+            arms = _arm_directions(model, index)
+            _solve_limbs(
+                model,
+                turns,
+                target,
+                index,
+                {limb: arms[limb] for limb in arms if limb[0] in turned},
+            )
+    model = _compose(target, turns, hips_bone, hips_positions, rest_local, order)
     keyed = tuple(
-        bone in turns or bone == index["Hips"] for bone in range(len(target.names))
+        bone in turns or bone == hips_bone for bone in range(len(target.names))
     )
     return RetargetResult(
         frame_count=len(model), model_matrices=model, keyed=keyed, scale=scale
     )
 
 
-def _compose(target, turns, hips, hips_positions):
-    """Model matrices of the target with the turned bones' world rotations and the hips' travel"""
+def _read_bones(target, index):
+    """The bones the foot, limb and arm passes read, with the bones they hang from"""
+    wanted = {index[bone] for bone in TARGET_BONES}
+    wanted.update(
+        index[side + bone]
+        for side in ("Left", "Right")
+        for bone in ("HandMiddle1", "ToeBase")
+        if side + bone in index
+    )
+    if target.body is not None:
+        wanted.update(target.body.bones)
+    read = set()
+    for bone in wanted:
+        while bone >= 0 and bone not in read:
+            read.add(bone)
+            bone = target.parents[bone]
+    return read
+
+
+def _compose(target, turns, hips, hips_positions, rest_local, bones):
+    """Model matrices of bones, parents first, with the turned bones' world rotations and the hips' travel"""
     frame_count = len(hips_positions)
-    rest_local = model_matrices_to_local(target.rest_model, target.parents)
     model = np.empty((frame_count, len(target.names), 4, 4))
-    for bone in parent_first_order(target.parents):
+    for bone in bones:
         parent = target.parents[bone]
         pose = (
             np.repeat(target.rest_model[bone][None], frame_count, axis=0)
@@ -330,47 +485,87 @@ def _compose(target, turns, hips, hips_positions):
     return model
 
 
-def _hinge_limbs(model, turns, target, index, chains):
-    """Roll the upper limbs into the game's hinge plane and bend the lower limbs only about the hinge"""
+def _arm_directions(model, index):
+    """Per arm, the upper arm and forearm directions it holds now"""
+    chain = _AIM_CHAINS[0]
+    limbs = {}
+    for side in ("Left", "Right"):
+        shoulder, elbow, wrist = (model[:, index[side + name], :3, 3] for name in chain)
+        limbs[side, chain] = (elbow - shoulder, wrist - elbow)
+    return limbs
+
+
+def _continuous_rolls(rolls, confidence):
+    """Rolls carried on from frame to frame, held from the neighbouring frames where the bend plane cannot be seen"""
+    frames = np.arange(len(rolls))
+    sure = confidence >= 1.0
+    held = (
+        np.interp(frames, frames[sure], np.unwrap(rolls[sure]))
+        if np.any(sure)
+        else np.zeros(len(rolls))
+    )
+    # A partly bent limb leans toward its own roll, taken the short way round from the held one and eased, since a
+    # small bend's plane is mostly noise. A clearly bent limb keeps its own roll.
+    own = held + (rolls - held + np.pi) % (2.0 * np.pi) - np.pi
+    return np.where(
+        sure, own, gaussian_smoothed(held + confidence * (own - held), _ROLL_SMOOTHING)
+    )
+
+
+def _swung(rotations, axis, directions):
+    """rotations swung so their axis points along directions"""
+    return (
+        swing_matrices(
+            np.einsum("fij,j->fi", rotations, axis), unit_vectors(directions)
+        )
+        @ rotations
+    )
+
+
+def _solve_limbs(model, turns, target, index, limbs):
+    """Turn each limb's upper and lower bones along the wanted directions, bending only about the game hinge"""
     reference = target.reference_model[:, :3, :3]
     rest = target.rest_model
-    for side in ("Left", "Right"):
-        for names in chains:
-            upper, lower, end = (index[side + name] for name in names)
-            first = model[:, lower, :3, 3] - model[:, upper, :3, 3]
-            second = model[:, end, :3, 3] - model[:, lower, :3, 3]
-            along = unit_vectors(first)
-            hinge = model[:, upper, :3, :3] @ _HINGE
-            bend = np.cross(first, second)
-            bend = np.where(
-                np.sum(bend * hinge, axis=-1, keepdims=True) < 0.0, -bend, bend
-            )
-            # A nearly straight limb shows no bend plane, so its roll eases back to the calibration's.
-            weight = np.clip(
-                (np.degrees(vector_angles(first, second)) - _STRAIGHT)
-                / (_ROLLED - _STRAIGHT),
-                0.0,
-                1.0,
-            )
-            roll = axis_angle_matrices(
-                along, weight * signed_angles(hinge, bend, along)
-            )
-            turns[upper] = roll @ turns[upper]
-            upper_rotation = roll @ model[:, upper, :3, :3]
-            straight = upper_rotation @ (rest[upper, :3, :3].T @ rest[lower, :3, :3])
-            axes = upper_rotation @ _HINGE
-            local = unit_vectors((np.linalg.inv(rest[lower]) @ rest[end][:, 3])[:3])
-            pointing = np.einsum("fij,j->fi", straight, local)
-            lower_rotation = (
-                axis_angle_matrices(axes, signed_angles(pointing, second, axes))
-                @ straight
-            )
-            # Bent past _ROLLED the limb lies in its hinge plane already; below it a small swing keeps the lower limb
-            # on the performer's line.
-            reached = np.einsum("fij,j->fi", lower_rotation, local)
-            turns[lower] = (
-                swing_matrices(reached, second) @ lower_rotation @ reference[lower].T
-            )
+    for (side, names), (upper_directions, lower_directions) in limbs.items():
+        upper, lower, end = (index[side + name] for name in names)
+        upper_axis = unit_vectors((np.linalg.inv(rest[upper]) @ rest[lower][:, 3])[:3])
+        rotations = model[:, upper, :3, :3]
+        planes = signed_angles(
+            _swung(rotations, upper_axis, upper_directions) @ _HINGE,
+            unit_vectors(np.cross(upper_directions, lower_directions)),
+            unit_vectors(upper_directions),
+        )
+        # A limb bent the way its joint cannot is the performer's elbow or knee pushed past straight: it straightens,
+        # aimed where their limb ends, and keeps their twist.
+        backward = np.abs(planes) > np.pi / 2
+        reach = upper_directions + lower_directions
+        upper_directions = np.where(backward[:, None], reach, upper_directions)
+        lower_directions = np.where(backward[:, None], reach, lower_directions)
+        along = unit_vectors(upper_directions)
+        upper_rotation = _swung(rotations, upper_axis, upper_directions)
+        # The upper bone rolls its hinge onto the bend, so the bend always flexes the joint.
+        bend = np.degrees(vector_angles(upper_directions, lower_directions))
+        rolls = _continuous_rolls(
+            np.where(backward, 0.0, planes),
+            np.clip((bend - _STRAIGHT) / (_ROLLED - _STRAIGHT), 0.0, 1.0),
+        )
+        upper_rotation = axis_angle_matrices(along, rolls) @ upper_rotation
+        straight = upper_rotation @ (rest[upper, :3, :3].T @ rest[lower, :3, :3])
+        axes = upper_rotation @ _HINGE
+        local = unit_vectors((np.linalg.inv(rest[lower]) @ rest[end][:, 3])[:3])
+        pointing = np.einsum("fij,j->fi", straight, local)
+        lower_rotation = (
+            axis_angle_matrices(axes, signed_angles(pointing, lower_directions, axes))
+            @ straight
+        )
+        # Where the roll is held rather than measured, a small swing keeps the lower limb on the wanted line.
+        reached = np.einsum("fij,j->fi", lower_rotation, local)
+        turns[upper] = upper_rotation @ reference[upper].T
+        turns[lower] = (
+            swing_matrices(reached, lower_directions)
+            @ lower_rotation
+            @ reference[lower].T
+        )
 
 
 def _clavicles(turns, source, rest, positions, mapping, target, index):
@@ -417,33 +612,38 @@ def _clavicles(turns, source, rest, positions, mapping, target, index):
         )
 
 
-def _place_legs(model, turns, source, mapping, target, index, scale):
-    """Thigh and shin turns that set each foot where the performer's foot is from their pelvis, scaled"""
-    bones = mapping.bones
-    joints = source[:, :, :3, 3]
-    source_centre = (
-        joints[:, bones["LeftUpLeg"]] + joints[:, bones["RightUpLeg"]]
-    ) / 2.0
-    centre = (
-        model[:, index["LeftUpLeg"], :3, 3] + model[:, index["RightUpLeg"], :3, 3]
-    ) / 2.0
+def _leg_directions(model, hips_positions, performer, target, index, fps):
+    """Per leg, the thigh and shin directions: the performer's, turned only to stand a planted foot still"""
     rest = target.rest_model[:, :3, 3]
-    for side in ("Left", "Right"):
-        thigh, shin, foot = (index[side + bone] for bone in ("UpLeg", "Leg", "Foot"))
-        hip, knee, ankle = (model[:, bone, :3, 3] for bone in (thigh, shin, foot))
-        goal = centre + scale * (joints[:, bones[side + "Foot"]] - source_centre)
+    offset = hips_positions - model[:, index["Hips"], :3, 3]
+    soles = _soles(model, target, index) + offset[:, 2:3]
+    chain = _AIM_CHAINS[1]
+    limbs = {}
+    for column, side in enumerate(("Left", "Right")):
+        thigh, shin, foot = (index[side + bone] for bone in chain)
+        hip, knee, ankle = (
+            model[:, bone, :3, 3] + offset for bone in (thigh, shin, foot)
+        )
+        goal = _held(ankle, performer[side], soles[:, column], fps)
         thigh_length = float(np.linalg.norm(rest[shin] - rest[thigh]))
         shin_length = float(np.linalg.norm(rest[foot] - rest[shin]))
-        # The knee bends toward where the performer's knee is from their pelvis; a straight leg bends the way its own
-        # hinge lets it, toward the kneecap.
-        kneecap = unit_vectors(np.cross(knee - hip, model[:, thigh, :3, :3] @ _HINGE))
-        bend = (
-            centre
-            + scale * (joints[:, bones[side + "Leg"]] - source_centre)
-            - hip
-            + 0.02 * thigh_length * kneecap
+        # Holding the foot moves the performer's own knee only as far as the hold needs. A leg they hold straight shows
+        # no bend direction, so the hold bends it the way its own hinge lets it, toward the kneecap.
+        shown = np.clip(
+            (np.degrees(vector_angles(knee - hip, ankle - knee)) - _STRAIGHT)
+            / (_ROLLED - _STRAIGHT),
+            0.0,
+            1.0,
+        )[:, None]
+        reach = unit_vectors(ankle - hip)
+        bent = unit_vectors(
+            (knee - hip) - np.sum((knee - hip) * reach, axis=1, keepdims=True) * reach
         )
-        placed = two_bone_middle_positions(hip, goal, thigh_length, shin_length, bend)
-        swing = swing_matrices(knee - hip, placed - hip)
-        turns[thigh] = swing @ turns[thigh]
-        turns[shin] = swing_matrices(ankle - knee, goal - placed) @ turns[shin]
+        kneecap = unit_vectors(np.cross(knee - hip, model[:, thigh, :3, :3] @ _HINGE))
+        bend = shown * bent + (1.0 - shown) * kneecap
+        placed = knee + (
+            two_bone_middle_positions(hip, goal, thigh_length, shin_length, bend)
+            - two_bone_middle_positions(hip, ankle, thigh_length, shin_length, bend)
+        )
+        limbs[side, chain] = (placed - hip, goal - placed)
+    return limbs

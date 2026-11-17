@@ -7,13 +7,20 @@ class AccessorError(ValueError):
     pass
 
 
+BYTE = 5120
+UNSIGNED_BYTE = 5121
+SHORT = 5122
+UNSIGNED_SHORT = 5123
+UNSIGNED_INT = 5125
+FLOAT = 5126
+
 COMPONENT_DTYPES = {
-    5120: np.dtype("i1"),
-    5121: np.dtype("u1"),
-    5122: np.dtype("<i2"),
-    5123: np.dtype("<u2"),
-    5125: np.dtype("<u4"),
-    5126: np.dtype("<f4"),
+    BYTE: np.dtype("i1"),
+    UNSIGNED_BYTE: np.dtype("u1"),
+    SHORT: np.dtype("<i2"),
+    UNSIGNED_SHORT: np.dtype("<u2"),
+    UNSIGNED_INT: np.dtype("<u4"),
+    FLOAT: np.dtype("<f4"),
 }
 TYPE_SHAPES = {
     "SCALAR": (1, 1),
@@ -64,7 +71,7 @@ class GLTFAccessorReader:
             self._fail("Unsupported glTF accessor component type or shape.")
         normalized = accessor.get("normalized", False)
         if not isinstance(normalized, bool) or (
-            normalized and component not in (5120, 5121, 5122, 5123)
+            normalized and component not in (BYTE, UNSIGNED_BYTE, SHORT, UNSIGNED_SHORT)
         ):
             self._fail(
                 "Only signed/unsigned byte and short accessors may be normalized."
@@ -149,7 +156,7 @@ class GLTFAccessorReader:
                 self._fail("Sparse accessor count exceeds its base count.")
             indices = sparse.get("indices") or {}
             index_type = indices.get("componentType")
-            if index_type not in (5121, 5123, 5125):
+            if index_type not in (UNSIGNED_BYTE, UNSIGNED_SHORT, UNSIGNED_INT):
                 self._fail("Sparse indices require an unsigned byte, short or integer.")
             index_dtype = COMPONENT_DTYPES[index_type]
             index_values = self._view(

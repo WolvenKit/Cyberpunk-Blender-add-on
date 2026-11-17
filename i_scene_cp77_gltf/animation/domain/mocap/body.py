@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from ....assetio.mesh_npz import SkinnedMesh
+from ....bartmoss.curve import gaussian_smoothed
 from ....bartmoss.geometry import closest_point_on_segment
 from ....bartmoss.matrix import axis_angle_matrices, rotation_vectors
 from ....bartmoss.skinning import skinned_points
@@ -26,6 +27,7 @@ _UPPER = (0.85, 1.0)
 _FORE = (0.25, 0.5, 0.75, 1.0)
 # Arm segments the body file cannot measure keep these thicknesses (metres).
 _DEFAULT_RADII = (0.045, 0.035, 0.025)
+_UNTURNED = np.eye(3)
 
 
 def _limb_bones(names, parents, index, limb):
@@ -149,7 +151,7 @@ def _turn_out(points, normals, pivot, joints, segments):
     """Per-frame turns about pivot that lift the tested segments out of the body"""
     # joints[0] turns about pivot and the later joints move with it. Each segment (joint, fractions, radius) tests the
     # stretch from the joint before it (or the pivot) to that joint.
-    turn = np.repeat(np.eye(3)[None], len(pivot), axis=0)
+    turn = np.repeat(_UNTURNED[None], len(pivot), axis=0)
     radii = np.array(
         [radius for _joint, fractions, radius in segments for _fraction in fractions]
     )
@@ -190,8 +192,6 @@ def _turn_out(points, normals, pivot, joints, segments):
 
 def _smoothed(turns):
     """Turns eased in and out over neighbouring frames, never weaker than the frames' own"""
-    radius = int(np.ceil(3.0 * _SMOOTHING))
-    kernel = np.exp(-0.5 * (np.arange(-radius, radius + 1) / _SMOOTHING) ** 2)
     vectors = rotation_vectors(turns)
     # Each frame first takes the strongest turn near it, so smoothing ramps into a brief contact instead of halving it.
     reach = int(np.ceil(2.0 * _SMOOTHING))
@@ -201,21 +201,14 @@ def _smoothed(turns):
         axis=1,
     )
     strongest = np.argmax(np.linalg.norm(windows, axis=2), axis=1)
-    vectors = np.pad(
-        windows[np.arange(len(vectors)), strongest],
-        ((radius, radius), (0, 0)),
-        mode="edge",
-    )
-    kernel /= kernel.sum()
-    smoothed = np.stack(
-        [np.convolve(vectors[:, axis], kernel, mode="valid") for axis in range(3)],
-        axis=1,
+    smoothed = gaussian_smoothed(
+        windows[np.arange(len(vectors)), strongest], _SMOOTHING
     )
     return axis_angle_matrices(smoothed, np.linalg.norm(smoothed, axis=1))
 
 
-def clear_arms(model, turns, body: TargetBody, rest_model, index) -> None:
-    """Turn the upper arms and forearms out of the torso on the frames they would pass into it"""
+def clear_arms(model, turns, body: TargetBody, rest_model, index) -> set[str]:
+    """Turn the upper arms and forearms out of the torso on the frames they would pass into it, and name the sides"""
     bones = list(body.bones)
     inverse_rest = np.linalg.inv(rest_model[bones])
     upper, fore, hand = body.arm_radii
@@ -258,8 +251,13 @@ def clear_arms(model, turns, body: TargetBody, rest_model, index) -> None:
                 (hand_joint + shift, knuckle + shift),
                 ((0, _FORE, fore), (1, (1.0,), hand)),
             )
+    turned = set()
     for side, (upper_turns, fore_turns) in corrections.items():
+        if np.all(upper_turns == _UNTURNED) and np.all(fore_turns == _UNTURNED):
+            continue
+        turned.add(side)
         for bone, correction in (("Arm", upper_turns), ("ForeArm", fore_turns)):
             turns[index[side + bone]] = (
                 _smoothed(correction) @ turns[index[side + bone]]
             )
+    return turned

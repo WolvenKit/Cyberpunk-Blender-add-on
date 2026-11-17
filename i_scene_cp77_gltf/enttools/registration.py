@@ -1,6 +1,8 @@
 import bpy
 
 from ..core.registration import RegistrationLedger
+from .handlers.selection_sync import on_depsgraph_update, reset_selection_sync
+from .handlers.ui_refresh import cancel_refresh
 from .operators import ENTITY_OPERATOR_CLASSES
 from .properties import (
     ENTITY_PROPERTY_CLASSES,
@@ -9,9 +11,8 @@ from .properties import (
 )
 from .runtime.documents import clear_source_documents
 from .runtime.scene_cache import clear_entity_caches
-from .runtime.selection_sync import on_depsgraph_update, reset_selection_sync
-from .runtime.ui_refresh import cancel_refresh
 from .ui import ENTITY_UI_CLASSES
+from .ui.lists import forget_list_depths
 
 _CLASSES = (*ENTITY_PROPERTY_CLASSES, *ENTITY_OPERATOR_CLASSES, *ENTITY_UI_CLASSES)
 _LEDGER = RegistrationLedger("enttools")
@@ -34,6 +35,8 @@ def register_enttools():
         )
         _LEDGER.add_handler(bpy.app.handlers.depsgraph_update_post, on_depsgraph_update)
         _LEDGER.add_handler(bpy.app.handlers.load_pre, reset_selection_sync)
+        _LEDGER.add_handler(bpy.app.handlers.load_pre, forget_list_depths)
+        _LEDGER.add_cleanup("component list depths", forget_list_depths)
         for handlers in (
             bpy.app.handlers.load_pre,
             bpy.app.handlers.undo_post,

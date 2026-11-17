@@ -24,3 +24,15 @@ _KEYS_BY_TYPE = {red_type: key for key, red_type in MESH_TYPES.items()}
 def type_key(red_type: str) -> str | None:
     """The mesh type key of a component $type, or None for components that are not meshes"""
     return _KEYS_BY_TYPE.get(str(red_type or ""))
+
+
+LIGHT_COMPONENT_TYPES = frozenset(
+    {
+        "entLightComponent",
+        "vehicleLightComponent",
+        "gameLightComponent",
+    }
+)
+
+
+COMPONENT_TAG_KEY = "cp77_entity_component"

@@ -290,7 +290,7 @@ def create_cp77_normal_texture(
     path = resolver(data, key) if callable(resolver) else param_texture_path(data, key)
     if not path:
         return None
-    image = owner._load_relative_image(path, non_color=True, error_label=key)
+    image = owner.load_relative_image(path, non_color=True, error_label=key)
     if image is None:
         return None
     texture = new_labeled_node(tree.nodes, "ShaderNodeTexImage", label or key, location)

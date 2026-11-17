@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Iterable
 from typing import Any
 
@@ -11,9 +10,10 @@ from ...animation.domain.animgraph.variable import (
     rig_float_value,
 )
 from ...animation.model.animgraph.constants import ANIM_NODE_PREFIX, ANIMGRAPH_TREE_ID
-from ...assetio.values import cname_text, coerce_float, coerce_int
+from ...assetio.values import cname_text, coerce_float, coerce_int, json_text
 from ...core.log import get_logger, log_once
 from .property_codec import encode_node_property, property_by_key
+from .rig_binding import bound_armature, root_tree_for
 
 _LOG = get_logger(__name__)
 
@@ -120,13 +120,6 @@ def variable_range_text(var: Any) -> str:
     return f"{float(var.min_float):g} .. {float(var.max_float):g}"
 
 
-def _json_text(value: Any) -> str:
-    try:
-        return json.dumps(value, ensure_ascii=False, sort_keys=True)
-    except (TypeError, ValueError):
-        return "" if value is None else str(value)
-
-
 def set_variable_from_json(
     slot: Any, var_type: str, inner: dict, entry: dict, array_name: str = ""
 ) -> None:
@@ -138,9 +131,9 @@ def set_variable_from_json(
     slot.name = cname_text(inner.get("name")) or "<unnamed>"
     slot.bound_name = slot.name
     slot.enable_debug = bool(inner.get("enableDebug"))
-    slot.raw_json = _json_text(entry)
-    slot.default_json = _json_text(inner.get("default"))
-    slot.current_json = _json_text(inner.get("value"))
+    slot.raw_json = json_text(entry)
+    slot.default_json = json_text(inner.get("default"))
+    slot.current_json = json_text(inner.get("value"))
 
     default = inner.get("default")
     value = inner.get("value")
@@ -184,35 +177,10 @@ def sync_variable_summary(slot: Any) -> None:
         slot.default_value = variable_value_text(slot, current=False)
         slot.current_value = variable_value_text(slot, current=True)
         if str(getattr(slot, "var_type", "")) == "Float":
-            slot.default_json = _json_text(float(slot.default_float))
-            slot.current_json = _json_text(float(slot.current_float))
+            slot.default_json = json_text(float(slot.default_float))
+            slot.current_json = json_text(float(slot.current_float))
     except (AttributeError, TypeError, ValueError, OverflowError):
         _LOG.debug("AnimGraph variable summary synchronization failed", exc_info=True)
-
-
-def root_tree_for(tree: bpy.types.NodeTree | None) -> bpy.types.NodeTree | None:
-    if tree is None:
-        return None
-    if getattr(tree, "bl_idname", "") != ANIMGRAPH_TREE_ID:
-        return None
-    parent_name = ""
-    try:
-        parent_name = str(tree.get("red_parent_graph", ""))
-    except (AttributeError, TypeError) as error:
-        log_once(
-            _LOG,
-            "DEBUG",
-            ("root_tree_for", type(error).__name__),
-            "root tree for: fell back after %s",
-            error,
-            exc_info=True,
-        )
-        parent_name = ""
-    if parent_name:
-        parent = bpy.data.node_groups.get(parent_name)
-        if parent is not None and getattr(parent, "bl_idname", "") == ANIMGRAPH_TREE_ID:
-            return parent
-    return tree
 
 
 def related_trees(root_tree: bpy.types.NodeTree) -> list[bpy.types.NodeTree]:
@@ -282,10 +250,8 @@ def set_node_variable_name(node: bpy.types.Node, new_name: str) -> None:
         return
     try:
         item.string_value = str(new_name)
-        item.raw_json = json.dumps(
-            {"$type": "CName", "$storage": "string", "$value": str(new_name)},
-            ensure_ascii=False,
-            sort_keys=True,
+        item.raw_json = json_text(
+            {"$type": "CName", "$storage": "string", "$value": str(new_name)}
         )
     except (AttributeError, TypeError, ValueError):
         _LOG.debug("AnimGraph variable-name update failed", exc_info=True)
@@ -345,7 +311,6 @@ def _set_node_binding(
 def bound_float_property(node):
     if variable_type_for_node(node) != "Float":
         return None
-    from .rig_binding import bound_armature
 
     armature = bound_armature(getattr(node, "id_data", None))
     name = node_variable_name(node)
@@ -355,8 +320,6 @@ def bound_float_property(node):
 
 
 def float_variable_value(tree, name):
-    from .rig_binding import bound_armature
-
     root = root_tree_for(tree) or tree
     return resolve_float_variable(
         name, getattr(root, "variables", ()), bound_armature(root)

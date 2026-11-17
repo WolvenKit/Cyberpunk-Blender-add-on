@@ -1,17 +1,11 @@
 import os
 
 from ...assetio.paths import depot_path_key, local_path_key
+from ...entity.model.component_types import LIGHT_COMPONENT_TYPES
 
 NON_VISUAL_MESH_COMPONENT_TYPES = frozenset({"entVisualControllerComponent"})
 STATIC_OCCLUDER_COMPONENT_TYPES = frozenset({"entStaticOccluderMeshComponent"})
 APPEARANCE_PROXY_COMPONENT_TYPES = frozenset({"entAppearanceProxyMeshComponent"})
-LIGHT_COMPONENT_TYPES = frozenset(
-    {
-        "entLightComponent",
-        "vehicleLightComponent",
-        "gameLightComponent",
-    }
-)
 LIGHT_CHANNEL_COMPONENT_TYPES = frozenset({"entLightChannelComponent"})
 SHADOW_MESH_SUFFIX = "_shadow.mesh"
 

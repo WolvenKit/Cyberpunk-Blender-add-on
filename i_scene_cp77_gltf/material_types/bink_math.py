@@ -18,7 +18,7 @@ def _plane(owner, tree, data, key, y, uv=None, *, extension="REPEAT"):
     path = param_texture_path(data, key)
     if not path:
         return None
-    image = owner._load_relative_image(path, non_color=True, error_label=key)
+    image = owner.load_relative_image(path, non_color=True, error_label=key)
     if image is None:
         return None
     texture = create_node(

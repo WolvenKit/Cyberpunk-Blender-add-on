@@ -4,7 +4,7 @@ from ....animation.model.animgraph import sm_conditions
 from ....animation.model.animgraph.constants import ANIMGRAPH_TREE_ID
 from ....blender.animgraph import sm_edit, sm_records, sm_sockets
 from ....blender.animgraph.property_ui import draw_scalar_target
-from ....blender.animgraph.sm_records import ENTRY_RED_TYPE, _pseudo_node
+from ....blender.animgraph.sm_records import ENTRY_RED_TYPE, pseudo_node
 from ....core.log import get_logger, log_once
 from ...runtime import read_models
 from ...services.animgraph.state_machine import context_state_machine
@@ -380,7 +380,7 @@ class REDENGINE_PT_sm_states(bpy.types.Panel):
 
         _draw_import_notes(layout, sm)
 
-        entry = _pseudo_node(sm.node_tree, ENTRY_RED_TYPE)
+        entry = pseudo_node(sm.node_tree, ENTRY_RED_TYPE)
         rec = sm_edit.default_row(entry)
         if rec is None:
             layout.label(text="This state machine has no Entry node", icon="ERROR")

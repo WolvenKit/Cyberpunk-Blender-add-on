@@ -185,7 +185,7 @@ def build_vehicle_dirt_alpha(owner, tree, data, defaults, coverage):
     if opacity <= 0.0:
         return coverage
     path = param_texture_path(data, "DirtMap") or defaults.get("DirtMap", "")
-    image = owner._load_relative_image(path, non_color=True, error_label="vehicle dirt")
+    image = owner.load_relative_image(path, non_color=True, error_label="vehicle dirt")
     if image is None or image_is_placeholder(image):
         return coverage
     offsets = param_vector(

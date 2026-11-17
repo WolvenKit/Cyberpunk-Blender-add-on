@@ -8,8 +8,7 @@ from ....bartmoss.quaternion import axis_angle_scalar_xyzw, multiply_scalar_xyzw
 from ....bartmoss.scalar import lerp, linear_step_scalar, smoothstep_scalar
 from ....bartmoss.vector3 import add3, length3, lerp3, midpoint3, scale3, sub3
 from ...model.animgraph.indices import index_name
-from .ik import solve_ik2
-from .pose_space import frame_model_transform
+from .ik import bone_model_transform, solve_ik2
 from .topology import has_link
 
 MIN_REASONABLE_SCALE = 0.6
@@ -94,12 +93,10 @@ def evaluate_foot_step_scaling(
 
     cache: dict = {}
 
-    def model(name: str) -> QsTransform:
-        if not name:
-            return QsTransform.identity()
-        return frame_model_transform(name, pose, parent_map, model_space, cache)
-
-    hip_ms, left_ms, right_ms = model(hip), model(left), model(right)
+    hip_ms, left_ms, right_ms = (
+        bone_model_transform(pose, parent_map, name, model_space, cache)
+        for name in (hip, left, right)
+    )
     root = midpoint3(left_ms.translation, right_ms.translation)
     initial_hip = _relative(hip_ms, root)
     initial_left = _relative(left_ms, root).translation
@@ -173,7 +170,12 @@ def evaluate_foot_step_scaling(
     solutions = []
     # The legs' first-bone parent follows the hips' move, by the offset of the left leg for both legs;
     # on rigs where both legs hang from the hips the two offsets are equal.
-    offset = relative_to(hip_ms, model(_leg_chain(left, parent_map)[0]))
+    offset = relative_to(
+        hip_ms,
+        bone_model_transform(
+            pose, parent_map, _leg_chain(left, parent_map)[0], model_space, cache
+        ),
+    )
     for foot, target in ((left, feet[0]), (right, feet[1])):
         _first_parent, first, second, end = _leg_chain(foot, parent_map)
         if not all(name in pose for name in (first, second, end)):

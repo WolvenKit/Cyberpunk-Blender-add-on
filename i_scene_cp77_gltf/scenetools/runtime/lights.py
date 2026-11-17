@@ -7,6 +7,14 @@ import bpy
 from bpy.app.handlers import persistent
 
 from ...blender.identity import rna_is_live
+from ...blender.vehicle_light_preview import is_vehicle_light_object
+from ...entity.domain.light_channel_semantics import (
+    LC_CHANNEL1,
+    LC_CHANNEL_WORLD,
+    LC_CHARACTER,
+    decode_light_channel,
+    mapped_light_channel,
+)
 from ...entity.domain.light_zones import (
     ZONES,
     zone_light_type_property,
@@ -20,15 +28,7 @@ from ...entity.domain.lights import (
     vehicle_light_groups,
     vehicle_light_types,
 )
-from ...importers.common.light_channel_semantics import (
-    LC_CHANNEL1,
-    LC_CHANNEL_WORLD,
-    LC_CHARACTER,
-    decode_light_channel,
-    mapped_light_channel,
-)
-from ...importers.common.vehicle_light_preview import is_vehicle_light_object
-from ...importers.entity.policy import LIGHT_COMPONENT_TYPES
+from ...entity.model.component_types import LIGHT_COMPONENT_TYPES
 from .sectors import scene_sectors
 from .vehicle_lights import vehicle_light_collections
 

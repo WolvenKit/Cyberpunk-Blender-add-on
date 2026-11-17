@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from ....assetio.paths import depot_path_from_value
+from ....assetio.sector_model import PROXY_PHASE, STANDARD_PHASE, ImportDependency
 from ....assetio.values import nested_dict
-from ...common.paths import depot_path_from_value
-from ..model import PROXY_PHASE, STANDARD_PHASE, ImportDependency
 from ..options import ENTITY_NODE_TYPES, PROXY_NODE_TYPES
 from ..registry import NODE_HANDLERS
 

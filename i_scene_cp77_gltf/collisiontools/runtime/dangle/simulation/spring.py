@@ -14,7 +14,7 @@ def compile_spring_nodes(sim):
         "SPRING"
     ):
         sim.system.spring_nodes[node_index] = spring_node(start, parent_index)
-        sim._previous_parent_xforms[node_index] = Matrix.Identity(4)
+        sim.previous_parent_xforms[node_index] = Matrix.Identity(4)
 
 
 def spring_params(particle):
@@ -44,7 +44,7 @@ def _ellipsoid_rotation(parent_xform, orientation_degrees, arm_obj):
 
 def _parent_xforms(sim, node_index):
     parent_index = int(sim.system.spring_nodes[node_index]["parent_index"])
-    return sim._previous_parent_xforms[node_index], sim._cur_bone_xform[parent_index]
+    return sim.previous_parent_xforms[node_index], sim.cur_bone_xform[parent_index]
 
 
 def spring_frame(sim, node_index, progress):

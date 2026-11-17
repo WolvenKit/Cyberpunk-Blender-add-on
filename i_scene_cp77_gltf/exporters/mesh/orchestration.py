@@ -9,10 +9,17 @@ from ...blender.gltf_exclusions import collect_excluded_objects
 from ...blender.mesh_repair import cleanup_validation_temporaries
 from ...blender.mesh_validation import MeshValidationError, MeshValidationOptions
 from ...blender.operator_results import OperationResult
+from ...blender.outliner import (
+    name_submeshes,
+    outliner_object_order,
+    renamed_submeshes_note,
+)
 from ...blender.selection import select_objects, set_active_collection
 from ...core.log import get_logger
 from ..animation.writer import export_animation
 from ..common.errors import ExportError
+from .errors import DirectMeshExportError
+from .options import GlbExportOptions
 from .scope import MeshExportScope, resolve_mesh_export_scope
 from .validation import format_fix_summary, prepare_meshes_for_export
 from .writer import export_mesh_glb_direct, mesh_glb_payload
@@ -155,19 +162,21 @@ def export_cyberpunk_collections_glb(
                     result = export_cyberpunk_glb(
                         context,
                         collection_path,
-                        export_poses=export_poses,
-                        export_visible=False,
-                        limit_selected=True,
-                        is_skinned=is_skinned,
-                        try_fix=try_fix,
-                        apply_transform=apply_transform,
-                        export_tracks=export_tracks,
-                        root_motion=root_motion,
-                        apply_modifiers=apply_modifiers,
-                        called_from_loop=True,
-                        mesh_validation_options=mesh_validation_options,
-                        mesh_scope=MeshExportScope(meshes, "collection"),
-                        excluded_objects=excluded_objects,
+                        GlbExportOptions(
+                            export_poses=export_poses,
+                            export_visible=False,
+                            limit_selected=True,
+                            is_skinned=is_skinned,
+                            try_fix=try_fix,
+                            apply_transform=apply_transform,
+                            export_tracks=export_tracks,
+                            root_motion=root_motion,
+                            apply_modifiers=apply_modifiers,
+                            called_from_loop=True,
+                            mesh_validation_options=mesh_validation_options,
+                            mesh_scope=MeshExportScope(meshes, "collection"),
+                            excluded_objects=excluded_objects,
+                        ),
                     )
                     if result.ok:
                         exported.append((collection.name, None, result.warnings))
@@ -195,26 +204,23 @@ def export_cyberpunk_collections_glb(
     return exported
 
 
-def export_cyberpunk_glb(
-    context,
-    filepath,
-    export_poses=False,
-    export_visible=False,
-    limit_selected=True,
-    is_skinned=True,
-    try_fix=False,
-    apply_transform=True,
-    export_tracks=False,
-    apply_modifiers=True,
-    called_from_loop=False,
-    selected_action_names=None,
-    mesh_validation_options=None,
-    mesh_scope=None,
-    excluded_objects=None,
-    root_motion="CLIP",
-    source_rig_path="",
-):
+def export_cyberpunk_glb(context, filepath, options):
     """Write the selected meshes, or the selected MetaRig's animations, as one Cyberpunk GLB"""
+    export_poses = options.export_poses
+    export_visible = options.export_visible
+    limit_selected = options.limit_selected
+    is_skinned = options.is_skinned
+    try_fix = options.try_fix
+    apply_transform = options.apply_transform
+    export_tracks = options.export_tracks
+    apply_modifiers = options.apply_modifiers
+    called_from_loop = options.called_from_loop
+    selected_action_names = options.selected_action_names
+    mesh_validation_options = options.mesh_validation_options
+    mesh_scope = options.mesh_scope
+    excluded_objects = options.excluded_objects
+    root_motion = options.root_motion
+    source_rig_path = options.source_rig_path
     snapshot = None if called_from_loop else BlenderContextSnapshot().store()
     selected_objects = tuple(context.selected_objects)
     try:
@@ -331,6 +337,8 @@ def export_meshes(
     validation_options = mesh_validation_options or MeshValidationOptions(
         try_fix=try_fix
     )
+    # Try Fix gives the meshes in Blender the names the export gives their GLB meshes.
+    renamed = name_submeshes(bpy.context, meshes) if validation_options.try_fix else ()
     with _prepared_meshes(meshes, is_skinned, validation_options) as validation_result:
         summary = export_mesh_glb_direct(
             filepath,
@@ -356,21 +364,33 @@ def export_meshes(
             )
 
         fix_summary = format_fix_summary(validation_result)
+        warnings = (fix_summary,) if fix_summary else ()
+        if renamed:
+            warnings += (renamed_submeshes_note(renamed, "export order"),)
         return OperationResult.finished(
             f"Exported {summary['submesh_count']} submeshes ({summary['vertex_count']} vertices) to "
             f"{os.path.basename(summary['filepath'])}.",
-            warnings=(fix_summary,) if fix_summary else (),
+            warnings=warnings,
         )
 
 
 @contextmanager
 def _prepared_meshes(meshes, is_skinned, validation_options):
-    """The meshes validated and prepared for export"""
+    """The meshes validated and prepared for export, in the Outliner order that numbers their submeshes"""
     validation_result = prepare_meshes_for_export(
-        meshes, is_skinned=is_skinned, options=validation_options
+        outliner_object_order(bpy.context, meshes),
+        is_skinned=is_skinned,
+        options=validation_options,
     )
     try:
         yield validation_result
+    except DirectMeshExportError as error:
+        message = str(error)
+        for original, temporary in validation_result.mesh_replacements.items():
+            message = message.replace(temporary.name, original.name)
+        if message == str(error):
+            raise
+        raise DirectMeshExportError(message) from error
     finally:
         cleanup_validation_temporaries(
             validation_result.temp_objects, validation_result.temp_armatures

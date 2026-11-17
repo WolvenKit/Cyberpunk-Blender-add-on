@@ -1,5 +1,3 @@
-from functools import cache
-
 import bpy
 
 from ....animation.model.animgraph.constants import ANIMGRAPH_TREE_ID
@@ -7,7 +5,7 @@ from ....animation.model.animgraph.schema import registry
 from ....blender.animgraph.categories import ADD_MENU_GROUPS, add_menu_types
 
 
-@cache
+@registry.schema_cache
 def _menu_types() -> dict:
     return add_menu_types(registry.all_node_short_names(), registry.output_kind)
 

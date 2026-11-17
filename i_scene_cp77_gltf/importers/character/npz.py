@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 
 import bpy
@@ -15,7 +16,15 @@ from ...assetio.mesh_npz import (
     require_indices,
 )
 from ...assetio.resources import BASE_CHARACTERS, get_char_dir, get_rig_dir
+from ...blender.characters import (
+    BREAST_KEYS,
+    CHARACTER_LOAD_KEY,
+    CHARACTER_ROLE_KEY,
+    breast_shape_objects,
+    character_objects,
+)
 from ...blender.custom_normals import set_custom_normals_from_corners
+from ...blender.entity.skinning import bind_skinned_objects_to_rig
 from ...blender.identity import rna_is_live
 from ...blender.transactions import (
     track_created_datablock,
@@ -24,16 +33,12 @@ from ...blender.transactions import (
 )
 from ...core.log import get_logger
 from ...core.notifications import import_operation, report
-from ..entity.skinning import bind_skinned_objects_to_rig
+from ...materials.blender.skin_runtime import bind_skin_materials_for_object
 from ..rig.bundled import import_bundled_metarig
 
 _LOG = get_logger(__name__)
 
 MAGIC_SK = b"SKNZ"
-
-# Loaded character parts carry their role and the load they came from, so the shape sliders find them after a rename.
-CHARACTER_ROLE_KEY = "cp77_character_role"
-CHARACTER_LOAD_KEY = "cp77_character_load"
 
 
 _HEAD_FEATURES = {
@@ -43,42 +48,6 @@ _HEAD_FEATURES = {
     "jaw": ("4", "jaw", 25),
     "ears": ("5", "ear", 25),
 }
-
-_BREAST_KEYS = {
-    1: "t0_000_wa_base__full_breast_small_breast",
-    2: "t0_000_wa_base__full_breast_big_breast",
-}
-
-_ROLE_FIELDS = {
-    "HEAD": ("head_mesh_names", "head_load_token"),
-    "BODY": ("body_mesh_name", "body_load_token"),
-}
-
-
-def character_objects(props, role):
-    """The loaded objects of role"""
-    names_field, token_field = _ROLE_FIELDS[role]
-    names = [name for name in getattr(props, names_field).split(";") if name]
-    token = getattr(props, token_field)
-
-    def belongs(obj):
-        return not token or (
-            obj.get(CHARACTER_LOAD_KEY) == token and obj.get(CHARACTER_ROLE_KEY) == role
-        )
-
-    found = [
-        obj
-        for obj in (bpy.data.objects.get(name) for name in names)
-        if obj is not None and belongs(obj)
-    ]
-    if token and len(found) < len(names):
-        found = [
-            obj
-            for obj in bpy.data.objects
-            if obj.get(CHARACTER_LOAD_KEY) == token
-            and obj.get(CHARACTER_ROLE_KEY) == role
-        ]
-    return found
 
 
 def _get_max_feature_variant(props, feature_attr):
@@ -143,19 +112,6 @@ def _update_head_feature(props, feature_attr):
         props.is_updating = False
 
 
-def breast_shape_objects(props):
-    """The loaded body submeshes that carry breast shape keys"""
-    return [
-        obj
-        for obj in character_objects(props, "BODY")
-        if obj.type == "MESH"
-        and obj.data.shape_keys
-        and any(
-            name in obj.data.shape_keys.key_blocks for name in _BREAST_KEYS.values()
-        )
-    ]
-
-
 def _update_body_breasts(props):
     """Toggles breast shape keys on the body meshes and cycles slider values if out of range"""
     if getattr(props, "is_updating", False):
@@ -169,7 +125,7 @@ def _update_body_breasts(props):
 
         present = [
             k
-            for k, name in _BREAST_KEYS.items()
+            for k, name in BREAST_KEYS.items()
             if any(name in body.data.shape_keys.key_blocks for body in bodies)
         ]
         max_val = max(present) if present else 0
@@ -179,7 +135,7 @@ def _update_body_breasts(props):
             val = new_val
 
         for body in bodies:
-            for k_val, key_name in _BREAST_KEYS.items():
+            for k_val, key_name in BREAST_KEYS.items():
                 kb = body.data.shape_keys.key_blocks.get(key_name)
                 if kb:
                     kb.value = 1.0 if val == k_val else 0.0
@@ -584,6 +540,9 @@ def _apply_shapekeys_to_object(obj, payload, replace_values=True):
         if not kb:
             kb = obj.shape_key_add(name=name, from_mix=False)
         kb.data.foreach_set("co", coords[i])
+        if kb == sk.reference_key:
+            # Blender keeps the vertices equal to the reference key; Edit Mode and export read the vertices.
+            obj.data.vertices.foreach_set("co", coords[i])
         if replace_values:
             kb.value = float(values[i])
 
@@ -608,6 +567,9 @@ def _shape_key_targets(target, data):
                 return [(obj, f"sub{i}_") for i, obj in enumerate(objects)]
 
             obj_map = {obj.name: obj for obj in objects}
+            # A name another object already held comes back with Blender's numeric suffix.
+            for obj in objects:
+                obj_map.setdefault(re.sub(r"\.\d{3,}$", "", obj.name), obj)
         else:
             obj_map = {target.name: target} if target else {}
 
@@ -771,7 +733,9 @@ def _bind_to_rig(objects, rig):
     """Deform the character's meshes with rig as skinned meshes are bound to a MetaRig"""
     for obj in objects:
         obj.modifiers.new("Armature", "ARMATURE").object = rig
-    bind_skinned_objects_to_rig(objects, rig)
+    bind_skinned_objects_to_rig(
+        objects, rig, bind_materials=bind_skin_materials_for_object
+    )
 
 
 @transactional("Load Base Character")
@@ -780,11 +744,19 @@ def load_base_character(context, gender, *, load_head=True, load_body=True):
     resources_dir = get_char_dir()
     resources = BASE_CHARACTERS[gender]
     warnings = []
+    # One collection holds the rig and each part's meshes, as an entity import's does.
+    character = track_created_datablock(
+        "collections",
+        bpy.data.collections.new(os.path.splitext(resources["rig"])[0]),
+    )
+    context.scene.collection.children.link(character)
 
     body_objects = []
     if load_body:
         body_path = os.path.join(resources_dir, resources["body_mesh"])
-        _coll, body_objects = load_mesh_npz(context, body_path, warnings=warnings)
+        _coll, body_objects = load_mesh_npz(
+            context, body_path, link_to_collection=character, warnings=warnings
+        )
         load_shapekeys_npz(
             body_objects, os.path.join(resources_dir, resources["body_sk"])
         )
@@ -793,12 +765,17 @@ def load_base_character(context, gender, *, load_head=True, load_body=True):
     if load_head:
         for mesh_file, sk_file in resources["head_parts"]:
             _coll, objects = load_mesh_npz(
-                context, os.path.join(resources_dir, mesh_file), warnings=warnings
+                context,
+                os.path.join(resources_dir, mesh_file),
+                link_to_collection=character,
+                warnings=warnings,
             )
             load_shapekeys_npz(objects, os.path.join(resources_dir, sk_file))
             head_objects.extend(objects)
 
-    rig = import_bundled_metarig(os.path.join(get_rig_dir(), resources["rig"]))
+    rig = import_bundled_metarig(
+        os.path.join(get_rig_dir(), resources["rig"]), collection=character
+    )
     _bind_to_rig(body_objects + head_objects, rig)
 
     props = context.scene.cp77_character_shape

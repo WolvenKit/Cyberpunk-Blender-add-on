@@ -28,13 +28,13 @@ class InertializationHandler(GraphNodeHandler):
     ) -> BranchFrame:
         handle = normalized_source_handle(program_node.handle)
         data = program_node.data
-        state = context._inertialization_states.get(handle)
+        state = context.inertialization_states.get(handle)
         if state is None:
-            state = context._inertialization_states[handle] = (
+            state = context.inertialization_states[handle] = (
                 inertialization.InertializationState()
             )
-        frame, duration = context._inertialization_request
-        inertialization.update(state, dt, frame == context._perf_frames, duration)
+        frame, duration = context.inertialization_request
+        inertialization.update(state, dt, frame == context.perf_frames, duration)
         names = list(child.pose)
         bone_cap = int(data.get("transformsCountUpperBound", 0) or 0)
         names = names[:bone_cap] if bone_cap > 0 else names

@@ -29,8 +29,8 @@ from ...bartmoss.hierarchy import (
     bone_basis_corrections,
     local_matrices_to_model,
     model_matrices_to_local,
+    nearest_kept_ancestors,
 )
-from ...bartmoss.matrix import as_matrix_4x4
 from ...bartmoss.quaternion import normalize_sequence_xyzw
 from ...bartmoss.trs import compose_matrices, compose_matrices_wxyz, decompose_matrices
 from ...blender.action_metadata import (
@@ -40,7 +40,11 @@ from ...blender.action_metadata import (
     load_json_snapshot,
     resolve_action_binding,
 )
-from ...blender.armature import inheritance_issue, rest_model_matrices
+from ...blender.armature import (
+    BIND_PRECISION_TARGET,
+    inheritance_issue,
+    rest_model_matrices,
+)
 from ...blender.armature_bones import rig_space_contract
 from ...blender.event_storage import save_events_to_idproperty
 from ...blender.keyframes import (
@@ -64,6 +68,7 @@ from ...redSpace.transforms import blender_relative_to_gltf, skeleton_relative_t
 from .errors import DirectAnimationExportError
 
 _LOG = get_logger(__name__)
+_PARENT_RELATIVE_REST_PRECISION = 2.0 * BIND_PRECISION_TARGET
 
 
 @dataclass(frozen=True)
@@ -104,61 +109,15 @@ def _validate_parent_indices(names: tuple[str, ...], parents: tuple[int, ...]) -
             )
 
 
-def _derive_parent_indices(target_bones: tuple[Any, ...]) -> tuple[int, ...]:
-    index_by_name = {bone.name: index for index, bone in enumerate(target_bones)}
-    parents = []
-    for bone in target_bones:
-        parent = bone.parent
-        while parent is not None and parent.name not in index_by_name:
-            parent = parent.parent
-        parents.append(index_by_name.get(parent.name, -1) if parent is not None else -1)
-    return tuple(parents)
+@dataclass(frozen=True)
+class _Skeleton:
+    target_names: tuple[str, ...]
+    target_bones: tuple[Any, ...]
+    derived_parents: tuple[int, ...]
+    rest_model_blender: np.ndarray
 
 
-def build_skeleton_export_binding(
-    armature, action=None, *, source_rig_path: str = ""
-) -> SkeletonExportBinding:
-    if armature is None or getattr(armature, "type", None) != "ARMATURE":
-        raise DirectAnimationExportError(
-            "Animation export requires one armature object."
-        )
-    contract = rig_space_contract(armature)
-    if contract != RIG_SPACE_CONTRACT_CURRENT:
-        raise DirectAnimationExportError(
-            "The selected armature was not imported with the supported read_rig coordinate contract."
-        )
-
-    action_binding = resolve_action_binding(action, armature)
-    selected_source = (
-        load_animation_rig_export_source(source_rig_path) if source_rig_path else None
-    )
-    action_skin_snapshot = (
-        load_json_snapshot(action, SKIN_EXTRAS_SNAPSHOT_KEY)
-        if action is not None
-        else {}
-    )
-    selected_skin = selected_source.skin_extras if selected_source is not None else {}
-    action_matches_selected = bool(
-        selected_source is not None
-        and _action_matches_selected_source(
-            armature,
-            action_skin_snapshot,
-            selected_source,
-        )
-    )
-    if action_matches_selected:
-        snapshot = copy.deepcopy(action_skin_snapshot)
-    else:
-        snapshot = selected_skin if selected_source is not None else action_binding.skin
-    source_names_value = _sequence_plain(snapshot.get("boneNames"))
-    if not source_names_value:
-        raise DirectAnimationExportError(
-            "The rig manifest has no animation skin boneNames. Import an .anims.glb first or provide rig source metadata."
-        )
-    source_names = tuple(str(name) for name in source_names_value)
-    if len(set(source_names)) != len(source_names):
-        raise DirectAnimationExportError("Animation skin boneNames must be unique.")
-
+def _resolve_skeleton(armature, source_names: tuple[str, ...]) -> _Skeleton:
     target_names = []
     target_bones = []
     used_targets = set()
@@ -195,6 +154,97 @@ def build_skeleton_export_binding(
         target_bones.append(bone)
     target_names = tuple(target_names)
     target_bones = tuple(target_bones)
+    derived_parents = tuple(
+        nearest_kept_ancestors(
+            {
+                bone.name: bone.parent.name if bone.parent is not None else None
+                for bone in armature.data.bones
+            },
+            target_names,
+        )
+    )
+    return _Skeleton(
+        target_names,
+        target_bones,
+        derived_parents,
+        rest_model_matrices(target_bones),
+    )
+
+
+class _BindingSession:
+    def __init__(self, armature, source_rig_path: str):
+        self.armature = armature
+        self.source_rig_path = source_rig_path
+        self._skeletons: dict[tuple[str, ...], _Skeleton] = {}
+
+    def selected_source(self):
+        if not self.source_rig_path:
+            return None
+        return load_animation_rig_export_source(self.source_rig_path)
+
+    def skeleton(self, source_names: tuple[str, ...]) -> _Skeleton:
+        skeleton = self._skeletons.get(source_names)
+        if skeleton is None:
+            skeleton = _resolve_skeleton(self.armature, source_names)
+            self._skeletons[source_names] = skeleton
+        return skeleton
+
+
+def _merged_rest_where_different(selected_rest, merged_model, parent_indices):
+    merged = model_matrices_to_local(merged_model, parent_indices)
+    same = np.all(
+        np.abs(merged - selected_rest) <= _PARENT_RELATIVE_REST_PRECISION, axis=(1, 2)
+    )
+    return np.where(same[:, None, None], selected_rest, merged)
+
+
+def build_skeleton_export_binding(
+    armature, action=None, *, source_rig_path: str = "", session=None
+) -> SkeletonExportBinding:
+    if armature is None or getattr(armature, "type", None) != "ARMATURE":
+        raise DirectAnimationExportError(
+            "Animation export requires one armature object."
+        )
+    contract = rig_space_contract(armature)
+    if contract != RIG_SPACE_CONTRACT_CURRENT:
+        raise DirectAnimationExportError(
+            "The selected armature was not imported with the supported read_rig coordinate contract."
+        )
+
+    session = session or _BindingSession(armature, source_rig_path)
+    action_binding = resolve_action_binding(action, armature)
+    selected_source = session.selected_source()
+    action_skin_snapshot = (
+        load_json_snapshot(action, SKIN_EXTRAS_SNAPSHOT_KEY)
+        if action is not None
+        else {}
+    )
+    selected_skin = selected_source.skin_extras if selected_source is not None else {}
+    action_matches_selected = bool(
+        selected_source is not None
+        and _action_matches_selected_source(
+            armature,
+            action_skin_snapshot,
+            selected_source,
+        )
+    )
+    if action_matches_selected:
+        snapshot = copy.deepcopy(action_skin_snapshot)
+    else:
+        snapshot = selected_skin if selected_source is not None else action_binding.skin
+    source_names_value = _sequence_plain(snapshot.get("boneNames"))
+    if not source_names_value:
+        raise DirectAnimationExportError(
+            "The rig manifest has no animation skin boneNames. Import an .anims.glb first or provide rig source metadata."
+        )
+    source_names = tuple(str(name) for name in source_names_value)
+    if len(set(source_names)) != len(source_names):
+        raise DirectAnimationExportError("Animation skin boneNames must be unique.")
+
+    skeleton = session.skeleton(source_names)
+    target_names = skeleton.target_names
+    target_bones = skeleton.target_bones
+    derived_parents = skeleton.derived_parents
 
     parents_value = _sequence_plain(snapshot.get("boneParentIndexes"))
     if parents_value and len(parents_value) == len(source_names):
@@ -204,13 +254,13 @@ def build_skeleton_export_binding(
         except DirectAnimationExportError:
             if selected_source is not None:
                 raise
-            parent_indices = _derive_parent_indices(target_bones)
+            parent_indices = derived_parents
     elif selected_source is not None:
         raise DirectAnimationExportError(
             "The selected source rig/action has no complete boneParentIndexes table."
         )
     else:
-        parent_indices = _derive_parent_indices(target_bones)
+        parent_indices = derived_parents
     _validate_parent_indices(source_names, parent_indices)
 
     selected_rest = (
@@ -235,29 +285,6 @@ def build_skeleton_export_binding(
                 "source-rest snapshot. Re-import the animation before exporting it from "
                 "a merged MetaRig; substituting the rig A-pose could alter keyed transforms."
             )
-    if (
-        selected_source is not None
-        and not action_skin_snapshot
-        and has_pose_payload
-        and selected_rest is not None
-    ):
-        live_model = np.asarray(
-            [as_matrix_4x4(bone.matrix_local) for bone in target_bones],
-            dtype=np.float64,
-        )
-        live_relative = model_matrices_to_local(live_model, parent_indices)
-        if not np.allclose(
-            live_relative,
-            selected_rest,
-            rtol=0.0,
-            atol=1e-7,
-        ):
-            raise DirectAnimationExportError(
-                f"Action {action.name!r} has no source-rig snapshot and its selected "
-                "constituent rig uses a different rest basis than the merged MetaRig. "
-                "Export cannot reinterpret those Blender pose keys without changing transforms."
-            )
-
     source_rest_snapshot = (
         action_source_rest(action)
         if action_matches_selected
@@ -285,10 +312,19 @@ def build_skeleton_export_binding(
             rest_relative_blender = selected_rest
             uses_source_rest_snapshot = True
     # The rest bases the animation import binds against: matrix_local without its float32 scale and shear noise.
-    rest_model_blender = rest_model_matrices(target_bones)
+    rest_model_blender = skeleton.rest_model_blender
     if rest_relative_blender is None:
         model_matrices = rest_model_blender
         rest_relative_blender = model_matrices_to_local(model_matrices, parent_indices)
+    elif (
+        selected_source is not None
+        and not action_skin_snapshot
+        and has_pose_payload
+        and selected_rest is not None
+    ):
+        rest_relative_blender = _merged_rest_where_different(
+            rest_relative_blender, rest_model_blender, parent_indices
+        )
 
     rest_relative_gltf = skeleton_relative_to_gltf(
         rest_relative_blender, parent_indices
@@ -880,14 +916,15 @@ def _bindings_match(left, right) -> bool:
     )
 
 
-def _binding_for_action(armature, action, *, source_rig_path: str = ""):
+def _binding_for_action(armature, action, session):
+    source_rig_path = session.source_rig_path
     binding = build_skeleton_export_binding(
-        armature, action=action, source_rig_path=source_rig_path
+        armature, action=action, source_rig_path=source_rig_path, session=session
     )
     if source_rig_path:
         action_skin = load_json_snapshot(action, SKIN_EXTRAS_SNAPSHOT_KEY)
         if action_skin:
-            selected_source = load_animation_rig_export_source(source_rig_path)
+            selected_source = session.selected_source()
             if not _action_matches_selected_source(
                 armature,
                 action_skin,
@@ -926,6 +963,7 @@ def _action_bindings_for_export(
 ):
     animation_data = getattr(armature, "animation_data", None)
     active_action = getattr(animation_data, "action", None)
+    session = _BindingSession(armature, source_rig_path)
 
     if active_action_only:
         if active_action is None:
@@ -935,9 +973,7 @@ def _action_bindings_for_export(
         return [
             (
                 active_action,
-                _binding_for_action(
-                    armature, active_action, source_rig_path=source_rig_path
-                ),
+                _binding_for_action(armature, active_action, session),
             )
         ]
 
@@ -956,9 +992,7 @@ def _action_bindings_for_export(
                 missing.append(name)
                 continue
             try:
-                binding = _binding_for_action(
-                    armature, action, source_rig_path=source_rig_path
-                )
+                binding = _binding_for_action(armature, action, session)
             except DirectAnimationExportError:
                 incompatible.append(name)
                 continue
@@ -977,9 +1011,7 @@ def _action_bindings_for_export(
     compatible = []
     for action in bpy.data.actions:
         try:
-            binding = _binding_for_action(
-                armature, action, source_rig_path=source_rig_path
-            )
+            binding = _binding_for_action(armature, action, session)
         except DirectAnimationExportError:
             continue
         compatible.append((action, binding))
@@ -1163,6 +1195,7 @@ def build_animation_document(
     duration_frames = _animation_duration_frames(action, extras, action_start)
     _validate_track_times(action, extras, duration_frames)
     channel_payloads: list[dict] = []
+    rest_holds: list[dict] = []
 
     for joint_index, target_name in enumerate(binding.target_names):
         pose_bone = armature.pose.bones.get(target_name)
@@ -1186,6 +1219,14 @@ def build_animation_document(
             ("rotation", "rotation_quaternion", 4),
             ("scale", "scale", 3),
         )
+        rest_translation, rest_rotation, rest_scale = decompose_matrices(
+            binding.rest_relative_gltf[joint_index].reshape(1, 4, 4)
+        )
+        rest = {
+            "translation": rest_translation[0],
+            "rotation": rest_rotation[0],
+            "scale": rest_scale[0],
+        }
         for gltf_path, blender_property, width in property_specs:
             source_payload = _unchanged_source_channel(
                 source_channels.get((joint_index, gltf_path)),
@@ -1229,24 +1270,27 @@ def build_animation_document(
                 frame_start=action_start,
                 frame_end=action_start + duration_frames,
             )
-            if sampling is None:
-                continue
-            frames, interpolation = sampling
-            basis = _basis_at_frames(curve_map, paths, frames)
-            values = _source_property_values(binding, joint_index, basis, gltf_path)
-            rest_translation, rest_rotation, rest_scale = decompose_matrices(
-                binding.rest_relative_gltf[joint_index].reshape(1, 4, 4)
-            )
-            default = {
-                "translation": rest_translation[0],
-                "rotation": rest_rotation[0],
-                "scale": rest_scale[0],
-            }[gltf_path]
-            if _values_are_default(
+            values = None
+            if sampling is not None:
+                frames, interpolation = sampling
+                basis = _basis_at_frames(curve_map, paths, frames)
+                values = _source_property_values(binding, joint_index, basis, gltf_path)
+            if values is None or _values_are_default(
                 values,
-                default,
+                rest[gltf_path],
                 quaternion=(gltf_path == "rotation"),
             ):
+
+                if gltf_path != "scale":
+                    rest_holds.append(
+                        {
+                            "joint_index": joint_index,
+                            "path": gltf_path,
+                            "interpolation": "STEP",
+                            "times": np.zeros(1, dtype=np.float64),
+                            "values": rest[gltf_path].reshape(1, -1),
+                        }
+                    )
                 continue
 
             try:
@@ -1297,6 +1341,10 @@ def build_animation_document(
     except ValueError as error:
         raise DirectAnimationExportError(f"Action {action.name!r}: {error}") from error
     _append_duration_hold(channel_payloads, binding, duration_frames)
+    keyed = {(payload["joint_index"], payload["path"]) for payload in channel_payloads}
+    channel_payloads.extend(
+        hold for hold in rest_holds if (hold["joint_index"], hold["path"]) not in keyed
+    )
     samplers, channels = animation_channels(channel_payloads, builder)
 
     return {
@@ -1358,7 +1406,7 @@ def build_direct_animation_glb(
         binding.source_names,
         binding.parent_indices,
         binding.rest_relative_gltf,
-        binding.rest_global_gltf,
+        np.linalg.inv(binding.rest_global_gltf),
         binding.skin_extras,
         builder,
         authored_transforms=binding.authored_node_transforms,

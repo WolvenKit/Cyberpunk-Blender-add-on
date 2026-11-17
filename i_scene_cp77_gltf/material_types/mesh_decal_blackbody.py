@@ -35,7 +35,7 @@ class MeshDecalBlackbody(MaterialTypeBase):
     }
 
     def _texture(self, nodes, links, data, key, location, uv):
-        image = self._load_relative_image(
+        image = self.load_relative_image(
             self._texture_path(data, key),
             non_color=True,
             error_label="mesh decal blackbody",
