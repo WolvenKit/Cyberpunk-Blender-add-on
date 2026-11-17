@@ -7,7 +7,7 @@ import numpy as np
 
 from ...assetio.values import coerce_int
 from ...bartmoss.geometry import isolate_repeated_triangle_faces
-from ...gltf.accessors import GLTFAccessorReader
+from ...gltf.accessors import FLOAT, GLTFAccessorReader
 from ...gltf.container import GLBContainerError, read_gltf_container
 from ...gltf.garment_support import (
     GARMENT_SUPPORT_MORPH,
@@ -183,7 +183,7 @@ def _decode_inverse_bind_matrices(reader, skin, joint_count):
     layout = reader.accessors[accessor]
     if (
         layout.get("type") != "MAT4"
-        or layout.get("componentType") != 5126
+        or layout.get("componentType") != FLOAT
         or layout.get("normalized", False)
         or raw.shape != (joint_count, 16)
     ):
@@ -371,7 +371,7 @@ def _decode_morph_targets(
             accessor = reader.accessors[accessor_index]
             if (
                 values.shape != (vertex_count, 3)
-                or accessor.get("componentType") != 5126
+                or accessor.get("componentType") != FLOAT
                 or accessor.get("normalized", False)
                 or not np.all(np.isfinite(values))
             ):

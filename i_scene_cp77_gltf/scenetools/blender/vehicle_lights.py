@@ -1,18 +1,18 @@
 from __future__ import annotations
 
+from ...blender.light_channels import rebuild_light_channel_links
 from ...blender.light_preview import BASE_ENERGY_KEY, PREVIEW_AVAILABLE_KEY, set_zone_on
+from ...blender.vehicle_light_preview import (
+    apply_high_beam_geometry,
+    restore_base_geometry,
+    set_light_energy_animation_muted,
+)
 from ...entity.domain.lights import (
     HIGH_BEAM_STRENGTH,
     VEHICLE_GROUP_TYPES,
     VehicleLightGroup,
     high_beam_energy,
     vehicle_light_lit,
-)
-from ...importers.common.light_channels import rebuild_light_channel_links
-from ...importers.common.vehicle_light_preview import (
-    apply_high_beam_geometry,
-    restore_base_geometry,
-    set_light_energy_animation_muted,
 )
 
 _HIGH_BEAM = VEHICLE_GROUP_TYPES[VehicleLightGroup.HIGH_BEAM]

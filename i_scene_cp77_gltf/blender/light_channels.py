@@ -7,14 +7,12 @@ import bpy
 from mathutils import Matrix, Vector
 from mathutils.geometry import intersect_ray_tri
 
-from ...assetio.paths import depot_path_key
-from ...assetio.values import json_array
-from ...bartmoss.clipping import bounds_intersect
-from ...bartmoss.geometry import aabb_sample_points, point_in_aabb, sphere_aabb
-from ...blender.naming import fit_id_name
-from ...blender.transactions import track_created_datablock
-from ...core.log import debug_exception, get_logger, log_once
-from .light_channel_semantics import (
+from ..assetio.paths import depot_path_key
+from ..assetio.values import json_array
+from ..bartmoss.clipping import bounds_intersect
+from ..bartmoss.geometry import aabb_sample_points, point_in_aabb, sphere_aabb
+from ..core.log import debug_exception, get_logger, log_once
+from ..entity.domain.light_channel_semantics import (
     LC_CHANNEL_WORLD,
     LC_CHARACTER,
     LC_PLAYER,
@@ -24,6 +22,8 @@ from .light_channel_semantics import (
     effective_component_light_channel,
     mapped_light_channel,
 )
+from .naming import fit_id_name
+from .transactions import track_created_datablock
 
 _LOG = get_logger(__name__)
 

@@ -11,7 +11,7 @@ from ...physics.domain.resource_paths import phys_resource_matches
 from ...physics.domain.vehicle.game_data import entity_vehicle_data
 from ..collections import collection_parent_map
 from ..red_transforms import transform_matrix
-from .resources import import_phys
+from .resources import import_phys_resource
 from .vehicle_chassis import VEHICLE_CHASSIS_SOURCE_KIND, vehicle_chassis_phys_objects
 from .vehicle_geometry import entity_collection_for_object, object_targets_rig
 
@@ -133,7 +133,7 @@ def vehicle_phys_preflight(context, rig):
     }
 
 
-def load_vehicle_phys(context, rig, filepath, target_collection=None):
+def load_vehicle_phys(context, rig, resource, target_collection=None):
     before = {
         item.obj_ref.as_pointer()
         for item in context.scene.physx.actors
@@ -164,8 +164,8 @@ def load_vehicle_phys(context, rig, filepath, target_collection=None):
         )
         if target_collection is None:
             target_collection = collection
-    actor_count, shape_count = import_phys(
-        filepath,
+    actor_count, shape_count = import_phys_resource(
+        resource,
         rig=rig,
         target_collection=target_collection,
         actor_matrix=actor_matrix,

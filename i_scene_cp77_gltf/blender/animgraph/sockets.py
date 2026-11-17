@@ -141,7 +141,7 @@ def bind_input_socket(
     )
 
 
-def _metadata_annotations():
+def metadata_annotations():
     return {
         "red_socket_role": bpy.props.EnumProperty(
             name="Socket Role",
@@ -214,7 +214,7 @@ class REDengine_AnimGraphSocket_Pose(bpy.types.NodeSocket):
     bl_idname = "REDengine_AnimGraphSocket_Pose"
     bl_label = "Pose Socket"
     color = (1.0, 1.0, 1.0, 1.0)
-    __annotations__ = _metadata_annotations()
+    __annotations__ = metadata_annotations()
 
     def draw(self, context, layout, node, text):
         layout.label(text=text)
@@ -227,7 +227,7 @@ class REDengine_AnimGraphSocket_Float(bpy.types.NodeSocket):
     bl_idname = "REDengine_AnimGraphSocket_Float"
     bl_label = "Float Socket"
     color = (0.25, 0.85, 0.25, 1.0)
-    __annotations__ = _metadata_annotations()
+    __annotations__ = metadata_annotations()
 
     def draw(self, context, layout, node, text):
         layout.label(text=text)
@@ -240,7 +240,7 @@ class REDengine_AnimGraphSocket_Vector(bpy.types.NodeSocket):
     bl_idname = "REDengine_AnimGraphSocket_Vector"
     bl_label = "Vector Socket"
     color = (0.2, 0.45, 1.0, 1.0)
-    __annotations__ = _metadata_annotations()
+    __annotations__ = metadata_annotations()
 
     def draw(self, context, layout, node, text):
         layout.label(text=text)
@@ -253,7 +253,7 @@ class REDengine_AnimGraphSocket_Int(bpy.types.NodeSocket):
     bl_idname = "REDengine_AnimGraphSocket_Int"
     bl_label = "Int Socket"
     color = (0.1, 0.9, 0.9, 1.0)
-    __annotations__ = _metadata_annotations()
+    __annotations__ = metadata_annotations()
 
     def draw(self, context, layout, node, text):
         layout.label(text=text)
@@ -266,7 +266,7 @@ class REDengine_AnimGraphSocket_Bool(bpy.types.NodeSocket):
     bl_idname = "REDengine_AnimGraphSocket_Bool"
     bl_label = "Bool Socket"
     color = (0.55, 0.0, 0.0, 1.0)
-    __annotations__ = _metadata_annotations()
+    __annotations__ = metadata_annotations()
 
     def draw(self, context, layout, node, text):
         layout.label(text=text)
@@ -279,7 +279,7 @@ class REDengine_AnimGraphSocket_Quaternion(bpy.types.NodeSocket):
     bl_idname = "REDengine_AnimGraphSocket_Quaternion"
     bl_label = "Quaternion Socket"
     color = (0.75, 0.65, 0.0, 1.0)
-    __annotations__ = _metadata_annotations()
+    __annotations__ = metadata_annotations()
 
     def draw(self, context, layout, node, text):
         layout.label(text=text)
@@ -292,7 +292,7 @@ class REDengine_AnimGraphSocket_Transform(bpy.types.NodeSocket):
     bl_idname = "REDengine_AnimGraphSocket_Transform"
     bl_label = "Transform Socket"
     color = (0.9, 0.1, 0.9, 1.0)
-    __annotations__ = _metadata_annotations()
+    __annotations__ = metadata_annotations()
 
     def draw(self, context, layout, node, text):
         layout.label(text=text)
@@ -305,7 +305,7 @@ class REDengine_AnimGraphSocket_Editor(bpy.types.NodeSocket):
     bl_idname = "REDengine_AnimGraphSocket_Editor"
     bl_label = "Editor Socket"
     color = (0.55, 0.55, 0.55, 1.0)
-    __annotations__ = _metadata_annotations()
+    __annotations__ = metadata_annotations()
 
     def draw(self, context, layout, node, text):
         layout.label(text=text)
@@ -318,37 +318,10 @@ class REDengine_AnimGraphSocket_Transition(bpy.types.NodeSocket):
     bl_idname = "REDengine_AnimGraphSocket_Transition"
     bl_label = "Transition Socket"
     color = (0.9, 0.5, 0.1, 1.0)
-    __annotations__ = _metadata_annotations()
+    __annotations__ = metadata_annotations()
 
     def draw(self, context, layout, node, text):
         layout.label(text=text)
-
-    def draw_color(self, context, node):
-        return self.color
-
-
-def _transition_out_annotations():
-    annotations = _metadata_annotations()
-    annotations["red_row_index"] = bpy.props.IntProperty(
-        name="Row Index",
-        description="Index of the transition record this row shows; -1 for the new-transition row",
-        default=-1,
-    )
-    return annotations
-
-
-class REDengine_AnimGraphSocket_TransitionOut(bpy.types.NodeSocket):
-    """One transition row of a state-machine node (see sm_sockets)"""
-
-    bl_idname = "REDengine_AnimGraphSocket_TransitionOut"
-    bl_label = "Transition Row"
-    color = (0.9, 0.5, 0.1, 1.0)
-    __annotations__ = _transition_out_annotations()
-
-    def draw(self, context, layout, node, text):
-        from .sm_sockets import draw_row
-
-        draw_row(self, context, layout, node, text)
 
     def draw_color(self, context, node):
         return self.color

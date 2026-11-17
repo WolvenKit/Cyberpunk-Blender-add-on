@@ -1,9 +1,10 @@
 import bpy
 
-from . import sm_records
+from . import sm_links, sm_records
 from .preview_settings import REDengine_GraphPreviewSettings
 from .properties import REDengine_AnimFeature, REDengine_AnimVariable
 from .rig_binding import armature_poll
+from .variables import bind_all_variables
 
 # Callbacks run on every AnimGraph tree update; tool layers register theirs when they register.
 _TREE_CHANGE_HOOKS = []
@@ -20,8 +21,6 @@ def unregister_tree_change_hook(callback) -> None:
 
 
 def _on_bound_armature_updated(tree, context):
-    from .variables import bind_all_variables
-
     bind_all_variables(tree)
 
 
@@ -100,9 +99,6 @@ class REDengine_AnimGraphTree(bpy.types.NodeTree):
     )
 
     def update(self):
-        # sm_links reaches this module through sm_overlay, so it is imported here.
-        from . import sm_links
-
         sm_records.bump_graph_generation()
         try:
             sm_links.schedule_consume(self)

@@ -22,7 +22,7 @@ class EmissiveControl(MaterialTypeBase):
         path = param_texture_path(data, key)
         if not path:
             return
-        image = self._load_relative_image(
+        image = self.load_relative_image(
             path, non_color=True, error_label="emissive control"
         )
         node = create_node(
@@ -50,7 +50,7 @@ class EmissiveControl(MaterialTypeBase):
         path = param_texture_path(data, "BaseColor")
         if not path:
             return None
-        image = self._load_relative_image(path, error_label="emissive control")
+        image = self.load_relative_image(path, error_label="emissive control")
         return create_node(
             CurMat.nodes,
             "ShaderNodeTexImage",
@@ -93,7 +93,7 @@ class EmissiveControl(MaterialTypeBase):
         path = param_texture_path(data, "Emissive")
         if not path:
             return scaled_color, False
-        image = self._load_relative_image(
+        image = self.load_relative_image(
             path, non_color=True, error_label="emissive control"
         )
         if image is None:

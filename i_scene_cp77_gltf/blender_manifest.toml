@@ -1,13 +1,16 @@
 schema_version = "1.0.0"
 
 id = "i_scene_cp77_gltf"
-version = "2.5.0"
+version = "2.5.5"
 name = "Cyberpunk 2077 IO Suite"
 tagline = "Import and export Cyberpunk 2077 assets with WolvenKit"
 maintainer = "Red Modding Organization"
+# authors: HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, Doctor Presto,
+# shotlastc, Rudolph2109, Holopointz, Peatral,  John CO., Chase_81, akikoe,  sprt_, Jazza, 86maylin
+    
 type = "add-on"
 
-website = "https://github.com/WolvenKit/Cyberpunk-Blender-add-on"
+website = "https://wiki.redmodding.org/cyberpunk-2077-modding/for-mod-creators-theory/modding-tools/wolvenkit-blender-io-suite"
 tags = ["Import-Export", "Material", "Animation", "Mesh"]
 
 blender_version_min = "5.0.0"

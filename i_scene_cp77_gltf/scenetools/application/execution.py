@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from ...bartmoss.celestial import DAY_HOURS
+from ...blender.light_environment import rebuild_environment_light_registry
 from ...core.log import get_logger
-from ...importers.common.light_environment import rebuild_environment_light_registry
 from ..blender.clouds import (
     clear_cloud_preview_animation,
     cloud_keyframe_targets,

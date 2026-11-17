@@ -10,7 +10,7 @@ def skin_nodes(
     names,
     parent_indices,
     rest_relative,
-    rest_global,
+    inverse_bind,
     skin_extras,
     builder,
     *,
@@ -18,7 +18,7 @@ def skin_nodes(
 ):
     """The skin's joint nodes under an Armature node, and the skin"""
     inverse_bind_accessor = builder.add_float_accessor(
-        np.linalg.inv(rest_global),
+        inverse_bind,
         "MAT4",
         name="Bind Matrices",
         matrix_column_major=True,
@@ -39,7 +39,7 @@ def skin_nodes(
     missing = [index for index, transform in enumerate(transforms) if transform is None]
     if missing:
         for index, transform in zip(
-            missing, node_transforms(rest_relative[missing], matrix_fallback=False)
+            missing, node_transforms(rest_relative[missing], exact=True)
         ):
             transforms[index] = transform
     for index, name in enumerate(names):

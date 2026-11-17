@@ -55,7 +55,7 @@ class SwitchHandler(GraphNodeHandler):
             )
             selected = selected_input_index(weight, count)
         if step.program_node.data.get("pushDataByTag"):
-            context._data_flow[step.program_node.data["pushDataByTag"]] = (
+            context.data_flow[step.program_node.data["pushDataByTag"]] = (
                 context.values.linked("float", step.handle, "weightNode", 0.0)
                 if step.program_node.data.get("hasWeightNode")
                 else 0.0
@@ -64,18 +64,18 @@ class SwitchHandler(GraphNodeHandler):
             result = (
                 identity_frame(step.input_frame)
                 if step.additive_branch
-                else context._reference_frame(step.input_frame)
+                else context.reference_frame(step.input_frame)
             )
             step.frame_cache[step.cache_key] = result
             return result
-        previous = context._switch_selected.get(step.handle)
+        previous = context.switch_selected.get(step.handle)
         duration = float(step.program_node.data.get("blendTime", 0.0))
         if step.program_node.data.get("canRequestInertialization"):
             if previous is not None and previous != selected:
-                context._request_inertialization(duration)
+                context.request_inertialization(duration)
             duration = 0.0
-        blends = context._switch_blends
-        active_inputs = context._switch_active
+        blends = context.switch_blends
+        active_inputs = context.switch_active
         prior = (
             (
                 previous,
@@ -86,7 +86,7 @@ class SwitchHandler(GraphNodeHandler):
             else None
         )
         if previous != selected:
-            context._switch_selected[step.handle] = selected
+            context.switch_selected[step.handle] = selected
             if previous is not None and duration > 0.0:
                 blends[step.handle] = previous, duration
             else:
@@ -114,10 +114,10 @@ class SwitchHandler(GraphNodeHandler):
         if activated and prior is not None and prior[2]:
             progress = self._switch_prior_progress(context, step.program_node, *prior)
         for branch in activated:
-            context._reset_branch_activation(step.program_node.children[branch])
+            context.reset_branch_activation(step.program_node.children[branch])
         if progress is not None:
             for branch in sorted(activated):
-                context._sync_branch(step.program_node.children[branch], progress)
+                context.sync_branch(step.program_node.children[branch], progress)
         active_inputs[step.handle] = active
         if step.program_node.data.get("timeWarping") and len(active) == 2:
             warp_time(context, step, ((source, 1.0 - alpha), (selected, alpha)))
@@ -139,5 +139,5 @@ class SwitchHandler(GraphNodeHandler):
         for index, weight in switch_state_weights(
             float(program_node.data.get("blendTime", 0.0)), selected, blend, active
         ):
-            context._gather_sync_entries(program_node.children[index], weight, entries)
+            context.gather_sync_entries(program_node.children[index], weight, entries)
         return sync_source(entries, program_node.data.get("syncMethod"))

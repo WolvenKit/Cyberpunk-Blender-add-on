@@ -435,3 +435,9 @@ def evaluate_region_influences(uv):
         computed[parts] = region
         result[:, region_index] = region
     return result
+
+
+TRACK_NODE_PREFIX = "CP77 Wrinkle Track::"
+WRINKLE_SQUASH_ATTRIBUTE = "cp77_skin_wrinkle_squash"
+WRINKLE_STRETCH_ATTRIBUTE = "cp77_skin_wrinkle_stretch"
+WRINKLE_REGION_COUNT = len(DEFAULT_FACE_REGIONS)

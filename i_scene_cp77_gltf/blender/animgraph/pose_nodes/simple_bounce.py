@@ -5,7 +5,13 @@ from ....animation.model.animgraph import simple_bounce
 from ...action_metadata import armature_track_names
 from .. import rig_binding
 from .. import simple_bounce as simple_bounce_adapter
-from .base import NodeEvaluation, NodeSpec, PoseNodeHandler, check_schema, text
+from .base import (
+    NodeEvaluation,
+    NodeSpec,
+    PoseNodeHandler,
+    check_schema,
+    text,
+)
 from .registry import register_pose_node_handler
 
 
@@ -21,7 +27,7 @@ class SimpleBounceHandler(PoseNodeHandler):
 
     def bone_names(self, spec):
         data = spec.data
-        names = {text(data, "startTransform"), text(data, "endTransform")}
+        names = self.handler_bone_names(data, simple_bounce.RED_TYPE)
         for output in data.get("transformOutputs", ()) or ():
             names.add(text(output, "targetTransform"))
             parent = text(output, "parentTransform")

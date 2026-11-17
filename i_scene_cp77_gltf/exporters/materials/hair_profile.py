@@ -8,6 +8,7 @@ from ...assetio.diagnostics import IssueSeverity
 from ...assetio.documents import load_json_payload
 from ...assetio.headers import cr2w_header
 from ...assetio.paths import backslash_depot_key
+from ...assetio.resources import get_resources_dir
 from ...assetio.validation import ValidationProfile, validate_payload
 from ...bartmoss.scalar import clamp01, linear_channel_to_srgb
 from ...blender.operator_results import OperationResult
@@ -17,6 +18,7 @@ from ...materials.hair_profile_contract import (
     decode_source_entries,
     source_entries_property,
 )
+from ..common.errors import ExportError
 
 _LOG = get_logger(__name__)
 
@@ -38,7 +40,7 @@ _GRADIENT_NODE_IDENTITIES = {
 }
 
 
-class HairProfileExportError(RuntimeError):
+class HairProfileExportError(ExportError):
     pass
 
 
@@ -238,11 +240,8 @@ def cp77_hp_export(context, filepath):
             "Select an object with an active Cyberpunk hair material."
         )
 
-    script_directory = os.path.dirname(os.path.abspath(__file__))
-    template_hp_file = os.path.normpath(
-        os.path.join(
-            script_directory, "..", "..", "resources", "hair_profile_template.hp.json"
-        )
+    template_hp_file = os.path.join(
+        get_resources_dir(), "hair_profile_template.hp.json"
     )
     template_payload = load_json_payload(template_hp_file)
     if not isinstance(template_payload, dict):

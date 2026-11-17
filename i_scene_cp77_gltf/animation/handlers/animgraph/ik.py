@@ -105,7 +105,7 @@ class Ik2ConstraintHandler(PoseOpHandler):
                 and channel.get("$type")
                 == "animAnimNodeSourceChannel_ReferenceTransformVector"
             ):
-                reference_ms = context._reference_model_pose(op.child)
+                reference_ms = context.reference_model_pose(op.child)
             try:
                 channels.append(
                     evaluate_vector(

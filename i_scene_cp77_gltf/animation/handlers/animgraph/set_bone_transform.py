@@ -38,7 +38,7 @@ class SetBoneTransformHandler(PoseOpHandler):
             {}
             if op.child.model_space
             and bool(op.data.get("_allFastModelSourceOffset", False))
-            else context._reference_model_pose(op.child)
+            else context.reference_model_pose(op.child)
         )
         evaluation = evaluate_set_bone_transform(
             op.pose,

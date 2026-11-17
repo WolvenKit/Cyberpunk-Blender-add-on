@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import copy
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from math import isfinite
 
+import bmesh
 import bpy
 import numpy as np
 
@@ -31,7 +32,11 @@ from ...blender.mesh import (
     shading_signature,
     source_vertex_indices,
 )
-from ...blender.mesh_validation import VERT_LIMIT, _loop_vertex_indices
+from ...blender.mesh_validation import (
+    VERT_LIMIT,
+    loop_vertex_indices,
+    weighted_group_names,
+)
 from ...blender.morphs import (
     evaluated_morph_frame,
     mesh_corner_frame,
@@ -41,9 +46,10 @@ from ...blender.morphs import (
     source_position_only_morphs,
 )
 from ...core.log import get_logger, log_once
+from ...gltf.accessors import UNSIGNED_BYTE, UNSIGNED_INT, UNSIGNED_SHORT
+from ...gltf.anims import skin_nodes
 from ...gltf.builder import GLBBuilder
 from ...gltf.channels import assign_attribute_channels, named_channel
-from ...gltf.extras import skin_extras_for_export
 from ...gltf.garment_support import (
     GARMENT_CAP_ATTRIBUTE,
     GARMENT_SUPPORT_MORPH,
@@ -62,7 +68,7 @@ from ...gltf.mesh_contract import (
 )
 from ...gltf.nodes import node_transforms
 from ...gltf.provenance import DIRECT_MESH_GENERATOR
-from ...gltf.submesh import ordered_submesh_objects, submesh_index_for_object
+from ...gltf.submesh import lod_from_name, submesh_name
 from ...redSpace.contracts import SOURCE_REST_SPACE_CONTRACT
 from ...redSpace.tangent import convert_wolvenkit_tangent_sign
 from ...redSpace.transforms import (
@@ -152,6 +158,52 @@ def _mesh_normals(mesh):
     values = np.empty(len(mesh.loops) * 3, dtype=np.float32)
     corner_normals.foreach_get("vector", values)
     return values.reshape(-1, 3), False
+
+
+def _has_ngons(mesh):
+    sizes = np.empty(len(mesh.polygons), dtype=np.int32)
+    mesh.polygons.foreach_get("loop_total", sizes)
+    return bool(np.any(sizes > 4))
+
+
+def _triangulate_ngons(mesh):
+    """Split the faces of more than four corners into triangles, which tangents can be computed for"""
+    if not _has_ngons(mesh):
+        return
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(mesh)
+        bmesh.ops.triangulate(
+            bm, faces=[face for face in bm.faces if len(face.verts) > 4]
+        )
+        bm.to_mesh(mesh)
+    finally:
+        bm.free()
+
+
+def _fill_missing_tangents(tangents, signs, normals, label):
+    """The corners MikkTSpace gave no tangent, where faces or UVs have no area, given one perpendicular to their normal"""
+    if tangents is None or normals is None:
+        return tangents, signs
+    missing = np.einsum("ij,ij->i", tangents, tangents) <= 1e-12
+    if not np.any(missing):
+        return tangents, signs
+    tangents, signs = tangents.copy(), signs.copy()
+    normal = normals[missing].astype(np.float64)
+    axis = np.zeros_like(normal)
+    axis[:, 0] = 1.0
+    axis[np.abs(normal[:, 0]) > 0.9] = (0.0, 1.0, 0.0)
+    fallback = np.cross(normal, axis)
+    fallback /= np.maximum(np.linalg.norm(fallback, axis=1, keepdims=True), 1e-12)
+    tangents[missing] = fallback
+    signs[missing] = 1.0
+    _LOG.warning(
+        "%r: %d corners on faces or UVs without area have no tangent; they export one along the surface, "
+        "so normal maps may shade them differently",
+        label,
+        int(np.count_nonzero(missing)),
+    )
+    return tangents, signs
 
 
 def _corner_tangents(mesh, uv_name: str | None):
@@ -393,7 +445,7 @@ def _morph_deltas_through_modifiers(
     blocks = _export_shape_keys(obj, export_garment_morph=export_garment_morph)
     if not blocks:
         return [], [], []
-    base_loops = _loop_vertex_indices(base_mesh)
+    base_loops = loop_vertex_indices(base_mesh)
     base_totals = np.empty(len(base_mesh.polygons), dtype=np.int32)
     base_mesh.polygons.foreach_get("loop_total", base_totals)
     base_normals, base_tangents, base_signs = mesh_corner_frame(base_mesh, uv_name)
@@ -407,7 +459,7 @@ def _morph_deltas_through_modifiers(
     basis_key_normals = np.asarray(
         key_blocks[0].normals_split_get(), dtype=np.float32
     ).reshape(-1, 3)
-    raw_loops = _loop_vertex_indices(obj.data)
+    raw_loops = loop_vertex_indices(obj.data)
     raw_geometry_signature, raw_frame_signature = geometry_and_tangent_frame_signatures(
         obj.data, uv_name=uv_name
     )
@@ -574,11 +626,16 @@ class _EvaluationTarget:
         if not self.apply_modifiers:
             self.object = source
             self.mesh = source.data
+            if _has_ngons(source.data):
+                self.mesh = source.data.copy()
+                self._owns_mesh = True
+                _triangulate_ngons(self.mesh)
             return self
 
         try:
             self.object = source.copy()
             self._copied_mesh = source.data.copy()
+            _triangulate_ngons(self._copied_mesh)
             self.object.data = self._copied_mesh
             self.object.animation_data_clear()
             keys = self.object.data.shape_keys
@@ -608,6 +665,7 @@ class _EvaluationTarget:
                 )
                 self.mesh = evaluated_mesh.copy()
                 self._owns_mesh = True
+                _triangulate_ngons(self.mesh)
             finally:
                 evaluated.to_mesh_clear()
             self.depsgraph = depsgraph
@@ -733,9 +791,9 @@ def _vertex_group_influences(
         names = ", ".join(sorted(weighted_drops)[:16])
         raise DirectMeshExportError(
             f"{object_name!r} carries weight on {len(weighted_drops)} vertex group(s) "
-            f"that bind to no deform bone: {names}. Enable Deform on the matching bones "
-            "or remove the weights; exporting would renormalize the remaining "
-            "influences and change the deformation."
+            f"with no bone in the armature: {names}. Add the bones or remove the groups "
+            "(Try Fix > Remove Vertex Groups Without Bones); exporting would renormalize "
+            "the remaining influences and change the deformation."
         )
     return _pack_influences(vertex_ids, joint_ids, weights, vertex_count, object_name)
 
@@ -763,28 +821,6 @@ def _armature_of(obj):
     return None
 
 
-def _deform_bone_order(armature):
-    """Depth-first ordering of deform bones, parents ahead of children"""
-    ordered = []
-    parents = []
-    index_of = {}
-
-    def visit(bone, parent_index):
-        current = parent_index
-        if bone.use_deform:
-            current = len(ordered)
-            index_of[bone.name] = current
-            ordered.append(bone)
-            parents.append(parent_index)
-        for child in bone.children:
-            visit(child, current)
-
-    for bone in armature.data.bones:
-        if bone.parent is None:
-            visit(bone, -1)
-    return ordered, parents, index_of
-
-
 def _snapshot_source_bone_names(armature) -> tuple[str, ...]:
     """Read the source joint order the direct mesh importer stored on the armature"""
     raw = armature.get(MESH_SOURCE_REST_SNAPSHOT_KEY)
@@ -794,7 +830,7 @@ def _snapshot_source_bone_names(armature) -> tuple[str, ...]:
         payload = json.loads(raw) if isinstance(raw, str) else dict(raw)
     except (TypeError, ValueError):
         _LOG.warning(
-            "%s: source rest snapshot is unreadable; falling back to the deform bone hierarchy.",
+            "%s: source rest snapshot is unreadable; falling back to the bone hierarchy.",
             armature.name,
             exc_info=True,
         )
@@ -812,171 +848,186 @@ def _resolve_target_bone_name(armature, source_name):
     return mapped if bones.get(mapped) is not None else None
 
 
-def _binding_from_source_names(
-    armature,
-    source_names,
-    source_parent_indices=None,
-):
-    """Build the joint list in source order, keyed to this armature's bones"""
-    target_names = []
-    bones = []
-    used = {}
-    for source_name in source_names:
-        target_name = _resolve_target_bone_name(armature, source_name)
-        if target_name is None:
-            raise DirectMeshExportError(
-                f"Armature {armature.name!r} is missing source joint {source_name!r} "
-                f"(also tried {merged_bone_name(source_name)!r})."
-            )
-        if target_name in used:
-            raise DirectMeshExportError(
-                f"Source joints {used[target_name]!r} and {source_name!r} both resolve "
-                f"to bone {target_name!r}."
-            )
-        used[target_name] = source_name
-        target_names.append(target_name)
-        bones.append(armature.data.bones[target_name])
+def _imported_joint_lists(armature, mesh_objects):
+    """The joint lists the meshes were imported with, (names, parent indices or None), or the armature's own"""
+    lists = []
+    for obj in mesh_objects:
+        binding = _json_property(obj, SOURCE_SKIN_BINDING_KEY, None)
+        if isinstance(binding, dict) and binding.get("boneNames"):
+            names = tuple(str(name) for name in binding["boneNames"])
+            parents = binding.get("boneParentIndexes")
+            if not isinstance(parents, list) or len(parents) != len(names):
+                parents = None
+            else:
+                parents = tuple(int(value) for value in parents)
+            if (names, parents) not in lists:
+                lists.append((names, parents))
+    if not lists:
+        names = _snapshot_source_bone_names(armature)
+        if names:
+            lists.append((names, None))
+    return lists
 
-    index_of_target = {name: index for index, name in enumerate(target_names)}
-    if source_parent_indices is not None:
+
+def _topological_order(parents):
+    """Indices of a joint list with every parent ahead of its children"""
+    order, placed = [], set()
+
+    def place(index, path=()):
+        if index in placed or index in path:
+            return
+        parent = parents[index]
+        if 0 <= parent < len(parents):
+            place(parent, (*path, index))
+        placed.add(index)
+        order.append(index)
+
+    for index in range(len(parents)):
+        place(index)
+    return order
+
+
+def _imported_rest_matrices(armature, mesh_objects, joint_lists):
+    """Each imported joint's source rests and its bones' rests at import, as Blender model matrices, by joint name"""
+    snapshots = []
+    for owner in (*mesh_objects, armature):
+        snapshot = _json_property(owner, MESH_SOURCE_REST_SNAPSHOT_KEY, None)
+        if isinstance(snapshot, dict) and snapshot not in snapshots:
+            snapshots.append(snapshot)
+    parents_by_names = {names: parents for names, parents in joint_lists if parents}
+    rests = {}
+    for snapshot in snapshots:
+        if (
+            snapshot.get("version") != 2
+            or snapshot.get("space") != SOURCE_REST_SPACE_CONTRACT
+        ):
+            continue
+        names = tuple(str(name) for name in snapshot.get("boneNames", ()))
+        count = len(names)
         try:
-            parent_indices = [int(value) for value in source_parent_indices]
-        except (TypeError, ValueError) as error:
-            raise DirectMeshExportError(
-                "The imported mesh skin binding contains invalid parent indices."
-            ) from error
-        if len(parent_indices) != len(source_names):
-            raise DirectMeshExportError(
-                "The imported mesh skin binding parent count does not match its joints."
+            parents = tuple(int(value) for value in snapshot["boneParentIndexes"])
+        except (KeyError, TypeError, ValueError):
+            parents = parents_by_names.get(names)
+        if parents is None or len(parents) != count:
+            continue
+        try:
+            relative = np.asarray(snapshot["matrices"], dtype=np.float64).reshape(
+                count, 4, 4
             )
-    else:
-        parent_indices = []
-        for bone in bones:
-            parent = bone.parent
-            while parent is not None and parent.name not in index_of_target:
-                parent = parent.parent
-            parent_indices.append(
-                -1 if parent is None else index_of_target[parent.name]
+            targets = np.asarray(snapshot["targetMatrices"], dtype=np.float64).reshape(
+                count, 4, 4
             )
-
-    for index, parent_index in enumerate(parent_indices):
-        if parent_index < -1 or parent_index >= index:
-            raise DirectMeshExportError(
-                f"Invalid source parent index {parent_index} for joint "
-                f"{source_names[index]!r}."
-            )
-    return tuple(source_names), tuple(parent_indices), bones, index_of_target
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not (np.all(np.isfinite(relative)) and np.all(np.isfinite(targets))):
+            continue
+        rest = local_matrices_to_model(relative, parents, _topological_order(parents))
+        for name, source, target in zip(names, rest, targets):
+            rests.setdefault(name, []).append((source, target))
+    return rests
 
 
-def _source_rest_globals_if_untouched(
-    armature,
-    source_names,
-    parent_indices,
-    bones,
-    source_rest_snapshot=None,
-):
-    snapshot = (
-        source_rest_snapshot
-        if isinstance(source_rest_snapshot, dict)
-        else _json_property(armature, MESH_SOURCE_REST_SNAPSHOT_KEY, None)
+def _joint_order(armature, joint_names, joint_lists):
+    """The weighted bones in their imported order, then the armature's, each after the nearest weighted ancestor"""
+    initial = []
+    for names, _parents in joint_lists:
+        for name in names:
+            bone = _resolve_target_bone_name(armature, name)
+            if bone in joint_names and bone not in initial:
+                initial.append(bone)
+                joint_names[bone] = name
+    initial.extend(
+        bone.name
+        for bone in armature.data.bones
+        if bone.name in joint_names and bone.name not in initial
     )
-    if not isinstance(snapshot, dict):
-        return None
-    if snapshot.get("version") != 2:
-        raise DirectMeshExportError(
-            "This mesh has an unsupported source-rest snapshot. Re-import it before export."
-        )
-    if snapshot.get("space") != SOURCE_REST_SPACE_CONTRACT:
-        return None
-    snapshot_names = tuple(str(name) for name in snapshot.get("boneNames", ()))
-    if snapshot_names != tuple(source_names):
-        return None
+    bone_parents = {
+        bone.name: bone.parent.name if bone.parent is not None else None
+        for bone in armature.data.bones
+    }
 
-    count = len(source_names)
-    try:
-        relative = np.asarray(snapshot.get("matrices"), dtype=np.float64).reshape(
-            count, 4, 4
-        )
-    except (TypeError, ValueError):
-        return None
-    if not np.all(np.isfinite(relative)):
-        return None
+    def kept_parent(name):
+        parent = bone_parents.get(name)
+        while parent is not None and parent not in joint_names:
+            parent = bone_parents.get(parent)
+        return parent
 
-    source_globals = local_matrices_to_model(relative, parent_indices, range(count))
+    order, placed = [], set()
 
-    current_globals = np.asarray(
-        [as_matrix_4x4(bone.matrix_local) for bone in bones],
-        dtype=np.float64,
+    def place(name):
+        if name in placed:
+            return
+        parent = kept_parent(name)
+        if parent is not None:
+            place(parent)
+        placed.add(name)
+        order.append(name)
+
+    for name in initial:
+        place(name)
+    index_of = {name: index for index, name in enumerate(order)}
+    parents = tuple(
+        -1 if kept_parent(name) is None else index_of[kept_parent(name)]
+        for name in order
     )
-    try:
-        imported_targets = np.asarray(
-            snapshot["targetMatrices"], dtype=np.float64
-        ).reshape(count, 4, 4)
-    except (KeyError, TypeError, ValueError) as error:
-        raise DirectMeshExportError(
-            "The mesh source-rest snapshot has no valid imported rest fingerprint. Re-import it before export."
-        ) from error
-    if not np.all(np.isfinite(imported_targets)):
-        raise DirectMeshExportError(
-            "The mesh source-rest fingerprint contains non-finite matrices. Re-import it before export."
-        )
-    if not np.allclose(current_globals, imported_targets, rtol=0.0, atol=1.0e-7):
-        return None
-    return source_globals
+    return order, parents
 
 
-def build_mesh_skeleton_binding(
-    armature,
-    source_skin_extras=None,
-    source_skin_binding=None,
-    source_rest_snapshot=None,
-) -> SkeletonWriteBinding:
-    """Rebuild the glTF skin from an armature's rest pose"""
+def _joint_skin_extras(mesh_objects, bone_names, parent_indices):
+    """The imported skin extras of the first mesh that has them, its joint lists matching the export, or None"""
+    for obj in mesh_objects:
+        extras = _json_property(obj, SOURCE_SKIN_EXTRAS_KEY, None)
+        if isinstance(extras, dict):
+            extras = copy.deepcopy(extras)
+            if "boneNames" in extras:
+                extras["boneNames"] = list(bone_names)
+            if "boneParentIndexes" in extras:
+                extras["boneParentIndexes"] = list(parent_indices)
+            return extras
+    return None
+
+
+def build_mesh_skeleton_binding(armature, mesh_objects) -> SkeletonWriteBinding | None:
+    """The glTF skin of the armature bones the meshes carry weight on, in their imported order, or None"""
     if armature is None or getattr(armature, "type", None) != "ARMATURE":
         raise DirectMeshExportError("Skinned mesh export requires an armature object.")
 
-    source_skin_binding = (
-        source_skin_binding if isinstance(source_skin_binding, dict) else {}
-    )
-    source_names = tuple(
-        str(name) for name in (source_skin_binding.get("boneNames") or ())
-    )
-    source_parent_indices = source_skin_binding.get("boneParentIndexes")
-    if not source_names:
-        source_names = _snapshot_source_bone_names(armature)
-        source_parent_indices = None
-    if source_names:
-        bone_names, parent_indices, bones, group_to_joint = _binding_from_source_names(
-            armature,
-            source_names,
-            source_parent_indices=source_parent_indices,
-        )
-    else:
-        bones, parent_list, index_of = _deform_bone_order(armature)
-        if not bones:
-            raise DirectMeshExportError(
-                f"Armature {armature.name!r} exposes no deform bones to bind against."
-            )
-        bone_names = tuple(bone.name for bone in bones)
-        parent_indices = tuple(int(value) for value in parent_list)
-        group_to_joint = index_of
+    group_bones = {}
+    joint_names = {}
+    for obj in mesh_objects:
+        for group in obj.vertex_groups:
+            bone = _resolve_target_bone_name(armature, group.name)
+            if bone is not None:
+                group_bones[group.name] = bone
+        for name in weighted_group_names(obj):
+            bone = group_bones.get(name)
+            if bone is not None:
+                joint_names.setdefault(bone, name)
+    if not joint_names:
+        return None
 
-    source_globals_blender = _source_rest_globals_if_untouched(
-        armature,
-        bone_names,
-        parent_indices,
-        bones,
-        source_rest_snapshot=source_rest_snapshot,
-    )
-    globals_blender = (
-        source_globals_blender
-        if source_globals_blender is not None
-        else np.asarray(
-            [as_matrix_4x4(bone.matrix_local) for bone in bones],
-            dtype=np.float64,
+    joint_lists = _imported_joint_lists(armature, mesh_objects)
+    order, parent_indices = _joint_order(armature, joint_names, joint_lists)
+    bone_names = tuple(joint_names[name] for name in order)
+
+    rests = _imported_rest_matrices(armature, mesh_objects, joint_lists)
+    globals_blender = []
+    for name in order:
+        current = as_matrix_4x4(armature.data.bones[name].matrix_local)
+        # Meshes moved onto another armature carry rests of their own rig; only a rest whose bone is unchanged applies.
+        globals_blender.append(
+            next(
+                (
+                    source
+                    for source, target in rests.get(joint_names[name], ())
+                    if np.allclose(current, target, rtol=0.0, atol=1.0e-7)
+                ),
+                current,
+            )
         )
+    globals_gltf = blender_relative_to_gltf(
+        np.asarray(globals_blender, dtype=np.float64), is_root=True
     )
-    globals_gltf = blender_relative_to_gltf(globals_blender, is_root=True)
 
     try:
         inverse_bind = np.linalg.inv(globals_gltf)
@@ -990,14 +1041,19 @@ def build_mesh_skeleton_binding(
     children = np.flatnonzero(parents >= 0)
     node_local[children] = inverse_bind[parents[children]] @ globals_gltf[children]
 
+    index_of = {name: index for index, name in enumerate(order)}
     return SkeletonWriteBinding(
         bone_names=bone_names,
         parent_indices=parent_indices,
         node_local_gltf=node_local,
         inverse_bind_gltf=inverse_bind,
-        group_to_joint=dict(group_to_joint),
+        group_to_joint={
+            group: index_of[bone]
+            for group, bone in group_bones.items()
+            if bone in index_of
+        },
         rig_path=str(armature.get("rigPath", "") or ""),
-        skin_extras=copy.deepcopy(source_skin_extras),
+        skin_extras=_joint_skin_extras(mesh_objects, bone_names, parent_indices),
     )
 
 
@@ -1123,7 +1179,7 @@ def build_export_submesh(
                 f"{obj.name!r} uses multiple material regions; separate them into individual submesh objects before exporting."
             )
 
-        loop_vertices = _loop_vertex_indices(mesh)
+        loop_vertices = loop_vertex_indices(mesh)
         triangles_loops = _triangle_loops(mesh)
         uv_layers = _uv_loop_layers(mesh)
         tangent_uv_name = next(
@@ -1194,6 +1250,14 @@ def build_export_submesh(
             tangent_signs = np.ascontiguousarray(source_tangent_signs[loop_vertices])
         else:
             tangents, tangent_signs = _corner_tangents(mesh, tangent_uv_name)
+            tangents, tangent_signs = _fill_missing_tangents(
+                tangents,
+                tangent_signs,
+                None
+                if normals is None
+                else (normals[loop_vertices] if normals_per_vertex else normals),
+                obj.name,
+            )
 
         color_loops = [
             (channel, _color_loop_values(attribute, loop_vertices))
@@ -1549,7 +1613,7 @@ def _write_primitive(builder: GLBBuilder, submesh: ExportSubmesh) -> dict:
         attributes[name.upper()] = builder.add_normalized_accessor(
             color,
             "VEC4",
-            5121,
+            UNSIGNED_BYTE,
             name=f"{submesh.name}/{name.upper()}",
             target=_ARRAY_BUFFER,
         )
@@ -1560,7 +1624,7 @@ def _write_primitive(builder: GLBBuilder, submesh: ExportSubmesh) -> dict:
             attributes[JOINT_ATTRIBUTES[block]] = builder.add_integer_accessor(
                 submesh.joint_indices[:, span],
                 "VEC4",
-                5123,
+                UNSIGNED_SHORT,
                 name=f"{submesh.name}/{JOINT_ATTRIBUTES[block]}",
                 target=_ARRAY_BUFFER,
                 include_bounds=True,
@@ -1573,7 +1637,7 @@ def _write_primitive(builder: GLBBuilder, submesh: ExportSubmesh) -> dict:
                 include_bounds=False,
             )
 
-    component_type = 5125 if vertex_count > VERT_LIMIT else 5123
+    component_type = UNSIGNED_INT if vertex_count > VERT_LIMIT else UNSIGNED_SHORT
     primitive = {
         "attributes": attributes,
         "indices": builder.add_integer_accessor(
@@ -1629,21 +1693,6 @@ def _write_primitive(builder: GLBBuilder, submesh: ExportSubmesh) -> dict:
     return primitive
 
 
-def _shared_json_property(objects, key, default=None):
-    resolved = []
-    for obj in objects:
-        if _source_property_owner(obj, key) is None:
-            continue
-        value = _json_property(obj, key, default)
-        if not resolved:
-            resolved.append(value)
-        elif value != resolved[0]:
-            raise DirectMeshExportError(
-                f"Selected objects do not share the same {key!r} source metadata."
-            )
-    return resolved[0] if resolved else default
-
-
 def build_direct_mesh_glb(
     objects,
     *,
@@ -1656,31 +1705,20 @@ def build_direct_mesh_glb(
     export_garment_attributes: bool = True,
     ensure_garment_attributes: bool = False,
 ):
-    """Assemble the glTF document and BIN payload for a set of submesh objects"""
-    mesh_objects = ordered_submesh_objects(obj for obj in objects if obj.type == "MESH")
+    """Assemble the glTF document and BIN payload for a set of submesh objects, each the submesh of its position"""
+    mesh_objects = [obj for obj in objects if obj.type == "MESH"]
     if not mesh_objects:
         raise DirectMeshExportError("No mesh objects were supplied for export.")
 
-    seen_submesh_indices = {}
+    variants = {}
     for obj in mesh_objects:
-        submesh_index = submesh_index_for_object(obj, None)
-        if submesh_index is None:
+        if not obj.get("cp77_linked_variant_data"):
             continue
-        previous = seen_submesh_indices.get(submesh_index)
-        if previous is not None and previous.data == obj.data:
+        previous = variants.setdefault(obj.data.as_pointer(), obj)
+        if previous is not obj:
             raise DirectMeshExportError(
-                f"{previous.name!r} and {obj.name!r} share submesh {submesh_index}. Export one appearance at a time or export its collections separately."
+                f"{previous.name!r} and {obj.name!r} are appearances of one submesh. Export one appearance at a time or export its collections separately."
             )
-        if previous is not None:
-            _LOG.warning(
-                "Submesh index %d is shared by %r and %r; "
-                "preserving their stable relative order.",
-                submesh_index,
-                previous.name,
-                obj.name,
-            )
-        else:
-            seen_submesh_indices[submesh_index] = obj
 
     armatures = {
         found.name: found
@@ -1699,40 +1737,8 @@ def build_direct_mesh_glb(
     )
     if not is_skinned:
         resolved_armature = None
-    source_skin_extras = (
-        _shared_json_property(
-            mesh_objects,
-            SOURCE_SKIN_EXTRAS_KEY,
-            None,
-        )
-        if resolved_armature is not None
-        else None
-    )
-    source_skin_binding = (
-        _shared_json_property(
-            mesh_objects,
-            SOURCE_SKIN_BINDING_KEY,
-            None,
-        )
-        if resolved_armature is not None
-        else None
-    )
-    source_rest_snapshot = (
-        _shared_json_property(
-            mesh_objects,
-            MESH_SOURCE_REST_SNAPSHOT_KEY,
-            None,
-        )
-        if resolved_armature is not None
-        else None
-    )
     binding = (
-        build_mesh_skeleton_binding(
-            resolved_armature,
-            source_skin_extras=source_skin_extras,
-            source_skin_binding=source_skin_binding,
-            source_rest_snapshot=source_rest_snapshot,
-        )
+        build_mesh_skeleton_binding(resolved_armature, mesh_objects)
         if resolved_armature is not None
         else None
     )
@@ -1758,6 +1764,10 @@ def build_direct_mesh_glb(
                     "%r has no vertex weights; exported as a static submesh without a skin.",
                     submesh.name,
                 )
+    submeshes = [
+        replace(submesh, name=submesh_name(index, lod_from_name(obj.name)))
+        for index, (obj, submesh) in enumerate(zip(mesh_objects, submeshes))
+    ]
     return assemble_mesh_document(submeshes, binding)
 
 
@@ -1769,38 +1779,8 @@ def assemble_mesh_document(
     builder = GLBBuilder(error_type=DirectMeshExportError)
     nodes = []
     skin = None
-    joint_offset = 0
 
     if binding is not None:
-        inverse_bind_accessor = builder.add_float_accessor(
-            binding.inverse_bind_gltf,
-            "MAT4",
-            name="Bind Matrices",
-            matrix_column_major=True,
-            include_bounds=False,
-        )
-        child_lists = [[] for _ in binding.bone_names]
-        root_indices = []
-        for index, parent_index in enumerate(binding.parent_indices):
-            if parent_index < 0:
-                root_indices.append(index)
-            else:
-                child_lists[parent_index].append(index)
-
-        nodes.append(
-            {"name": "Armature", "children": [index + 1 for index in root_indices]}
-        )
-        joint_offset = 1
-        transforms = node_transforms(binding.node_local_gltf)
-        for index, bone_name in enumerate(binding.bone_names):
-            node = {"name": bone_name}
-            node.update(transforms[index])
-            if child_lists[index]:
-                node["children"] = [
-                    child + joint_offset for child in child_lists[index]
-                ]
-            nodes.append(node)
-
         skin_extras = (
             copy.deepcopy(binding.skin_extras)
             if binding.skin_extras is not None
@@ -1810,15 +1790,15 @@ def assemble_mesh_document(
                 "boneParentIndexes": list(binding.parent_indices),
             }
         )
-        skin_extras = skin_extras_for_export(skin_extras)
-        skin = {
-            "name": "Armature",
-            "inverseBindMatrices": inverse_bind_accessor,
-            "joints": [
-                index + joint_offset for index in range(len(binding.bone_names))
-            ],
-            "extras": skin_extras,
-        }
+        nodes, skin = skin_nodes(
+            binding.bone_names,
+            binding.parent_indices,
+            binding.node_local_gltf,
+            binding.inverse_bind_gltf,
+            skin_extras,
+            builder,
+            authored_transforms=node_transforms(binding.node_local_gltf),
+        )
 
     meshes = []
     expected_morph_names = None

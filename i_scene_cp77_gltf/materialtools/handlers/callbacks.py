@@ -4,11 +4,9 @@ from bpy.app.handlers import persistent
 from ...core.log import get_logger, log_once
 from ...materials.blender.cache import clear_material_cache
 from ...materials.blender.images import clear_image_load_failures
-from ..common.sync import (
-    material_sync_guard,
-    material_syncing,
-)
+from ..common.sync import material_sync_guard, material_syncing
 from ..depot.state import clear_depot_state_cache
+from ..depot.thumbnails import clear_thumbnails
 from ..multilayer.editor import (
     apply_color_to_shader,
     apply_layer_opacity,
@@ -18,16 +16,11 @@ from ..multilayer.editor import (
     synchronize_panel,
     update_context_tracking,
 )
-from ..multilayer.palette import (
-    clear_palette_caches,
-    override_enum_items,
-)
+from ..multilayer.palette import clear_palette_caches, override_enum_items
 from ..multilayer.previews import set_shared_preview
 from ..multilayer.state import resolve_material_state
-from ..painting.masks import (
-    activate_selected_mask,
-    toggle_texture_paint,
-)
+from ..painting.masks import activate_selected_mask, toggle_texture_paint
+from ..painting.surface import restore_surface_paint
 
 _LOG = get_logger(__name__)
 
@@ -387,9 +380,6 @@ def stop_timers():
 
 
 def clear_material_runtime_caches():
-    from ..depot.thumbnails import clear_thumbnails
-    from ..painting.surface import restore_surface_paint
-
     restore_surface_paint(bpy.context)
     clear_thumbnails()
     clear_material_cache(

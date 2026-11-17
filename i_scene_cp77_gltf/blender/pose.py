@@ -11,6 +11,7 @@ from ..bartmoss.qs_transform import QsTransform
 from ..bartmoss.quaternion import wxyz_from_xyzw
 from ..redSpace.contracts import RIG_SPACE_CONTRACT_CURRENT
 from ..redSpace.transforms import red_additive_to_rig_contract
+from .animation_context import track_pose
 from .armature_bones import resolve_pose_bone
 
 
@@ -80,6 +81,7 @@ def model_matrix_to_basis(pose_bone, desired_matrix, parent_matrix=None):
 
 def apply_model_space_matrix(pose_bone, matrix, parent_matrix=None):
     """Pose a bone so its model-space matrix becomes matrix, given its parent's model-space matrix"""
+    track_pose(pose_bone.id_data)
     basis = model_matrix_to_basis(pose_bone, matrix, parent_matrix)
     if basis is None:
         pose_bone.matrix = matrix
@@ -89,6 +91,8 @@ def apply_model_space_matrix(pose_bone, matrix, parent_matrix=None):
 
 def apply_model_space_matrices(pose_bones, matrices):
     """Pose bones to model-space matrices keyed by bone name"""
+    if pose_bones:
+        track_pose(pose_bones[0].id_data)
     parent_matrices = []
     for pose_bone in pose_bones:
         parent = pose_bone.parent
@@ -139,6 +143,7 @@ def apply_bound_red_local_deltas(
     translations,
     collection_indices=None,
 ) -> int:
+    track_pose(arm_obj)
     contract = str(
         getattr(arm_obj, "data", {}).get(
             "cp77_rig_space_contract",
@@ -261,6 +266,7 @@ def apply_engine_pose(
     transforms: Mapping[str, QsTransform],
     reference_pose_ls: Mapping[str, QsTransform],
 ) -> int:
+    track_pose(armature)
     written = 0
     for name, transform in transforms.items():
         pose_bone = resolve_pose_bone(armature, name)
@@ -284,6 +290,7 @@ def qs_from_pose_bone(pose_bone: Any) -> QsTransform:
 
 
 def apply_qs_to_pose_bone(pose_bone: Any, transform: QsTransform) -> None:
+    track_pose(pose_bone.id_data)
     x, y, z, w = transform.rotation_xyzw
     pose_bone.matrix_basis = Matrix.LocRotScale(
         Vector(transform.translation),
@@ -428,6 +435,7 @@ def insert_channel_keys(context: Any, channels, frame: float) -> int:
 
 def reset_pose_bones(armature: Any, names: Iterable[str] | None = None) -> None:
     """Return pose bones (all of them by default) to their rest transform"""
+    track_pose(armature)
     bones = armature.pose.bones
     if names is None:
         for pose_bone in bones:

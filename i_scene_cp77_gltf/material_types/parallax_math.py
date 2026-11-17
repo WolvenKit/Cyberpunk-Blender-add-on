@@ -903,7 +903,7 @@ def parallax_uv(
     if not path or strength <= 0.0:
         return uv
 
-    image = owner._load_relative_image(path, non_color=True, error_label=height_key)
+    image = owner.load_relative_image(path, non_color=True, error_label=height_key)
     if image is None:
         return uv
 

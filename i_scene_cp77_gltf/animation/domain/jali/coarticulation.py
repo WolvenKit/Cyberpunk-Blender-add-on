@@ -12,7 +12,7 @@ from ...model.jali.phonemes import (
     SIBILANTS,
     TONGUE_ONLY,
     VOWELS,
-    _get_viseme,
+    get_viseme,
 )
 
 
@@ -100,7 +100,7 @@ class CoarticulationEngine:
     def _merge_duplicates(events: list[PhonemeEvent]):
         merged = []
         for event in events:
-            if merged and _get_viseme(merged[-1].phoneme) == _get_viseme(event.phoneme):
+            if merged and get_viseme(merged[-1].phoneme) == get_viseme(event.phoneme):
                 merged[-1].end = event.end
                 merged[-1].original_end = event.original_end
             else:

@@ -961,7 +961,7 @@ class InteriorParallaxCore(MaterialTypeBase):
         path = self._texture_path(data, key)
         if not path:
             return None
-        image = self._load_relative_image(path, non_color=non_color, error_label=key)
+        image = self.load_relative_image(path, non_color=non_color, error_label=key)
         if image is None:
             return None
         node = create_node(

@@ -216,7 +216,12 @@ def _clip_glb(name, armature, target, result, skin) -> bytes:
     ]
     builder = GLBBuilder(error_type=MocapTargetError)
     nodes, skin_node = skin_nodes(
-        joints, parents, rest, local_matrices_to_model(rest, parents), skin, builder
+        joints,
+        parents,
+        rest,
+        np.linalg.inv(local_matrices_to_model(rest, parents)),
+        skin,
+        builder,
     )
     samplers, channels = animation_channels(payloads, builder)
     extras = copy.deepcopy(ACTION_DEFAULTS)

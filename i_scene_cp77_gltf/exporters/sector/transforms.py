@@ -1,13 +1,9 @@
 from mathutils import Matrix, Vector
 
 from ...assetio.transform_values import quaternion_ijkr_from_wxyz
+from ...assetio.values import nine_digit_float
 from ...bartmoss.matrix import placements_near, transfer_matrix_delta
 from ...blender.matrix import matrix_from_flat, object_world_matrix
-
-
-def _number(value):
-    """A float32 value to the nine digits that keep it exact"""
-    return float(f"{value:.9g}")
 
 
 def _recorded_matrix(obj):
@@ -62,9 +58,10 @@ def transform_values(matrix):
     """(position, orientation i/j/k/r, scale) of a world matrix, as ArchiveXL writes them"""
     location, rotation, scale = matrix.decompose()
     return (
-        tuple(_number(value) for value in location),
+        tuple(nine_digit_float(value) for value in location),
         tuple(
-            _number(value) for value in quaternion_ijkr_from_wxyz(rotation.normalized())
+            nine_digit_float(value)
+            for value in quaternion_ijkr_from_wxyz(rotation.normalized())
         ),
-        tuple(_number(value) for value in scale),
+        tuple(nine_digit_float(value) for value in scale),
     )

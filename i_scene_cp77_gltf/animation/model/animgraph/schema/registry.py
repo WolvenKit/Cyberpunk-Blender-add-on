@@ -1,16 +1,11 @@
 from __future__ import annotations
 
-import os
 from collections.abc import Iterable
-from functools import cache, lru_cache
+from functools import cache
 from typing import Any
 
-from .....assetio.documents import load_json_payload
-from .....core.log import debug_exception, get_logger
 from ..constants import ANIM_NODE_PREFIX, LINK_TYPES
 from . import overrides
-
-_LOG = get_logger(__name__)
 
 OUTPUT_PARENT_KIND = {
     "animAnimNode_FloatValue": "animFloatLink",
@@ -80,27 +75,32 @@ DEFAULT_FLOAT_CURVE = {
 }
 
 
-def _metadata_path() -> str:
-    return os.path.join(os.path.dirname(__file__), "newanimnodes.json")
+_SCHEMA_RECORDS: dict[str, dict] = dict(overrides.records())
+_SCHEMA_CACHES: list = []
 
 
-@lru_cache(maxsize=1)
-def _records() -> tuple[dict[str, dict], bool]:
-    path = _metadata_path()
-    rows = []
-    if os.path.exists(path):
-        try:
-            rows = load_json_payload(path)
-        except Exception:
-            debug_exception(_LOG, "AnimGraph RTTI metadata load details")
-            rows = []
+def schema_cache(function):
+    cached = cache(function)
+    _SCHEMA_CACHES.append(cached)
+    return cached
+
+
+def install_records(rows) -> None:
     by_name = {}
     for row in rows if isinstance(rows, list) else []:
         name = row.get("name") if isinstance(row, dict) else None
         if isinstance(name, str) and name:
             by_name[name] = row
     by_name.update(overrides.records())
-    return by_name, bool(by_name)
+    _SCHEMA_RECORDS.clear()
+    _SCHEMA_RECORDS.update(by_name)
+    _NODE_CLASS_CACHE.clear()
+    for cached in _SCHEMA_CACHES:
+        cached.cache_clear()
+
+
+def _records() -> tuple[dict[str, dict], bool]:
+    return _SCHEMA_RECORDS, bool(_SCHEMA_RECORDS)
 
 
 def has_metadata() -> bool:
@@ -213,13 +213,16 @@ def all_properties(name_or_short: str) -> tuple[dict, ...]:
     return _all_properties(full_name(name_or_short))
 
 
-@cache
+@schema_cache
 def _all_properties(full: str) -> tuple[dict, ...]:
     records, _ok = _records()
     props: list[dict] = []
     seen = set()
-    for cls in parent_chain(full, include_self=True):
-        rec = records.get(cls) or {}
+    chain = parent_chain(full, include_self=True)
+    declared = [records.get(cls) or {} for cls in chain]
+    if _NODE_BASE in chain:
+        declared.append({"properties": overrides.NODE_TRAILING_PROPERTIES})
+    for rec in declared:
         for prop in rec.get("properties", []) or []:
             pname = prop.get("name")
             if not pname:
@@ -252,7 +255,7 @@ def ordered_field_names(name_or_short: str, actual_keys: Iterable[str]) -> list[
     return sorted(keys, key=lambda key: (order.get(key, 10_000), input_order[key]))
 
 
-@cache
+@schema_cache
 def _declaration_order(full: str) -> dict[str, int]:
     return {str(p.get("name")): i for i, p in enumerate(_all_properties(full))}
 

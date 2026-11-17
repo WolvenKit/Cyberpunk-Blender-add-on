@@ -34,7 +34,7 @@ from ...blender.mesh import (
     shading_signature,
     store_source_vertex_indices,
 )
-from ...blender.mesh_validation import _loop_vertex_indices
+from ...blender.mesh_validation import loop_vertex_indices
 from ...blender.morphs import store_source_morph_shading
 from ...blender.transactions import (
     DatablockImportTransaction,
@@ -46,10 +46,10 @@ from ...blender.transactions import (
 )
 from ...core.log import get_logger, is_enabled, log_once
 from ...gltf.provenance import ORIGIN_PLUGIN, mark_origin
-from ...gltf.submesh import submesh_index_from_name
 from ...redSpace.contracts import SOURCE_REST_SPACE_CONTRACT
 from ...redSpace.transforms import gltf_relative_to_blender
 from ..rig.gltf import build_rest_armature_from_binding
+from ..rig.reader import set_armature_model_space_matrices
 from .document import (
     BIND_MATRIX_TOLERANCE,
     DirectMeshData,
@@ -115,7 +115,7 @@ def _build_mesh_geometry(
             )
 
     loop_vertices = (
-        _loop_vertex_indices(mesh)
+        loop_vertex_indices(mesh)
         if geometry_changed or len(mesh.loops) != loop_count
         else triangles.reshape(-1)
     )
@@ -706,8 +706,6 @@ def _set_created_armature_bind_pose(armature, skin, expected_matrices):
     if maximum <= BIND_MATRIX_TOLERANCE:
         return maximum, False
 
-    from ..rig.reader import set_armature_model_space_matrices
-
     target_names = []
     for source_name in skin.bone_names:
         target_name = _resolve_target_bone_name(armature, source_name)
@@ -775,6 +773,7 @@ def _authoritative_source_rest_snapshot(armature, skin, global_matrices):
         "version": 2,
         "space": SOURCE_REST_SPACE_CONTRACT,
         "boneNames": list(skin.bone_names),
+        "boneParentIndexes": [int(value) for value in skin.parent_indices],
         "matrices": relative.reshape(len(relative), 16).tolist(),
     }
     target_matrices = []
@@ -1061,7 +1060,7 @@ def _import_mesh_glb_impl(
 
     created = []
     audits = []
-    for fallback_index, submesh in enumerate(mesh_data.submeshes):
+    for submesh in mesh_data.submeshes:
         obj, loop_vertices = _new_submesh_object(
             submesh,
             validate_geometry=not bulk_master,
@@ -1084,7 +1083,7 @@ def _import_mesh_glb_impl(
                 resolved_armature,
             )
             if topology_rebuilt:
-                loop_vertices = _loop_vertex_indices(obj.data)
+                loop_vertices = loop_vertex_indices(obj.data)
             modifier = obj.modifiers.new(name="Armature", type="ARMATURE")
             modifier.object = resolved_armature
 
@@ -1113,9 +1112,6 @@ def _import_mesh_glb_impl(
             obj["cp77_material_name"] = submesh.material_names[appearance_index]
         obj["cp77_imported_mesh"] = True
         obj["cp77_single_material_submesh"] = True
-        obj["cp77_submesh_index"] = int(
-            submesh_index_from_name(submesh.name, fallback_index)
-        )
         if submesh.skinning_warning:
             _LOG.warning("%s", submesh.skinning_warning)
         target_collection.objects.link(obj)

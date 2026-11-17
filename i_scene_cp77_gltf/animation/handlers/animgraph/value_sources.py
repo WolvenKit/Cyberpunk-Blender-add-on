@@ -187,12 +187,11 @@ class WrapperValueHandler(ValueNodeHandler):
 
     def evaluate(self, graph, node, key, visiting):
         names = tuple(cname_text(name) for name in node.get("wrapperNames", ()) or ())
-        # Wrapper activation is represented by a declared preview variable.
-        declared = frozenset(str(item.name) for item in graph.inputs.graph_variables())
+        wrappers = graph.inputs.wrapper_variables()
         operation = str(node.get("logicOp", "AGLO_Or")).split("::")[-1]
         if operation not in {"AGLO_Or", "AGLO_And"}:
             raise ValueError(f"Unsupported WrapperValue logic operation {operation}")
-        present = [name in declared for name in names if name]
+        present = [name in wrappers for name in names if name]
         enabled = bool(names) and (
             any(present) if operation == "AGLO_Or" else all(present)
         )

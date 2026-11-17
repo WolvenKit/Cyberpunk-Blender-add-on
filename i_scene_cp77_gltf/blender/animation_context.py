@@ -10,7 +10,12 @@ from .keyframes import (
     capture_fcurves,
     restore_fcurves,
 )
-from .transactions import restore_id_properties, snapshot_id_properties, track_mutation
+from .transactions import (
+    current_import_transaction,
+    restore_id_properties,
+    snapshot_id_properties,
+    track_mutation,
+)
 
 _LOG = get_logger(__name__)
 
@@ -135,7 +140,11 @@ def track_animation_data(obj, *, label="animation data"):
 
 def track_pose(armature, *, label="pose"):
     """Restore rotation modes and basis transforms of every pose bone when the transaction rolls back"""
-    if armature is None or armature.pose is None:
+    transaction = current_import_transaction()
+    if transaction is None or armature is None or armature.pose is None:
+        return
+    key = ("pose", rna_identity(armature))
+    if transaction.tracks_mutation(key):
         return
     state = tuple(
         (bone.name, bone.rotation_mode, bone.matrix_basis.copy())
@@ -153,7 +162,7 @@ def track_pose(armature, *, label="pose"):
                 bone.matrix_basis = matrix
         armature.update_tag(refresh={"DATA"})
 
-    track_mutation(("pose", rna_identity(armature)), restore, label=label)
+    transaction.track_mutation(key, restore, label=label)
 
 
 def track_scene_frames(scene, *, label="scene frames"):

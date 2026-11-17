@@ -3,7 +3,9 @@ from __future__ import annotations
 import bpy
 
 from ...animation.domain.clip.bake import frame_sequence
+from ...animation.domain.rigify.mapping import FORWARD_CONSTRAINT
 from ...animation.model.clip.bones import ANIMATION_BONE_SET
+from ...blender.action_metadata import ensure_action_defaults
 from ...blender.animation_context import (
     active_armature,
     track_animation_data,
@@ -13,8 +15,13 @@ from ...blender.animation_context import (
 )
 from ...blender.bake import sample_pose_bones, write_pose_bone_samples
 from ...blender.context import preserved_context, safe_mode_switch
-from ...blender.keyframes import assign_action_with_slot
+from ...blender.keyframes import (
+    action_slot_identity,
+    assign_action_with_slot,
+    get_action_fcurves,
+)
 from ...blender.operator_results import OperationResult
+from ...blender.pose import reset_pose_bones
 from ...blender.selection import select_objects
 from ...blender.transactions import (
     new_tracked_datablock,
@@ -216,9 +223,25 @@ def _frame_range(context, action, frame_range_source, frame_start, frame_end):
     return frame_start, frame_end
 
 
-def bake_active(
+def rigify_actions(rig) -> tuple[str, ...]:
+    """The names of the actions that key any of the Rigify rig's bones"""
+    bones = set(rig.pose.bones.keys())
+    return tuple(
+        action.name
+        for action in bpy.data.actions
+        if any(
+            curve.data_path.startswith("pose.bones[")
+            and curve.data_path.split('"')[1] in bones
+            for curve in get_action_fcurves(action, rig) or ()
+        )
+    )
+
+
+@transactional("Rigify bake")
+def bake_actions(
     context,
     *,
+    actions: tuple[str, ...],
     action_name: str,
     overwrite: bool,
     frame_range_source: str,
@@ -226,18 +249,46 @@ def bake_active(
     frame_end: int,
     step: int,
 ) -> OperationResult:
+    """Bake each named Rigify action onto the source's animation bones, the Rigify rig keeping its own action"""
     source, rig = linked_pair(context)
-    start, end = _frame_range(
-        context, _active_action(rig), frame_range_source, frame_start, frame_end
+    if source is None or rig is None:
+        return OperationResult(False, "No Rigify pair found for active object", "ERROR")
+    if not actions:
+        return OperationResult(False, "Choose at least one action to bake", "ERROR")
+    track_animation_data(rig, label="Rigify bake rig action")
+    original = _active_action(rig)
+    _identifier, original_slot = action_slot_identity(rig.animation_data)
+    baked = []
+    for name in actions:
+        action = bpy.data.actions.get(name)
+        if action is None:
+            return OperationResult(False, f"Action '{name}' no longer exists", "ERROR")
+        assign_action_with_slot(rig, action)
+        start, end = _frame_range(
+            context, action, frame_range_source, frame_start, frame_end
+        )
+        # One action takes the given name; each of several takes its own name with _baked.
+        request = RigifyBakeRequest(
+            action_name=action_name if len(actions) == 1 else "",
+            overwrite=bool(overwrite),
+            frame_start=int(start),
+            frame_end=int(end),
+            step=max(1, int(step)),
+        )
+        result = bake_to_source(context, source, rig, request)
+        if not result.ok:
+            return result
+        baked.append(result.details["action"].name)
+    if original is None:
+        rig.animation_data.action = None
+    else:
+        assign_action_with_slot(rig, original, slot_handle=original_slot)
+    return OperationResult(
+        True,
+        f"Baked {', '.join(baked)}. Turn live sync off to play "
+        f"{'it' if len(baked) == 1 else 'them'} on the Cyberpunk rig.",
+        details={"actions": tuple(baked)},
     )
-    request = RigifyBakeRequest(
-        action_name=action_name,
-        overwrite=bool(overwrite),
-        frame_start=int(start),
-        frame_end=int(end),
-        step=max(1, int(step)),
-    )
-    return bake_to_source(context, source, rig, request)
 
 
 def _enter_pose_mode(context, obj) -> None:
@@ -300,12 +351,24 @@ def bake_to_source(context, source, rig, request: RigifyBakeRequest) -> Operatio
 
     target_action = new_tracked_datablock("actions", action_name)
     target_action.use_fake_user = True
+    ensure_action_defaults(target_action)
+    # Root holds its rest and the hips carry the travel, as in a game clip exported with Bake Into Pose.
+    target_action["rootMotionType"] = "None"
     frames = frame_sequence(request.frame_start, request.frame_end, request.step)
     try:
         with preserved_context():
             following = sync_enabled(source)
             if not following:
                 _bind_follow(source, rig)
+            # A bone the Rigify rig does not drive holds its rest, not the pose the Cyberpunk rig last showed.
+            reset_pose_bones(
+                source,
+                [
+                    name
+                    for name in present_bones
+                    if source.pose.bones[name].constraints.get(FORWARD_CONSTRAINT) is None
+                ],
+            )
             _enter_pose_mode(context, source)
             assign_action_with_slot(source, target_action)
             # Each frame's followed pose goes into the basis, which the sampler reads.
@@ -316,12 +379,14 @@ def bake_to_source(context, source, rig, request: RigifyBakeRequest) -> Operatio
                 frames,
                 before_sample=lambda _frame: forward.apply_follow_pose(source),
             )
+            # The follow turns and moves the bones but never scales them, and game clips carry no scale.
             write_pose_bone_samples(
                 target_action,
                 source,
                 frames,
                 samples,
                 interpolation="BEZIER",
+                include_scale=False,
             )
             if not following:
                 forward.clear_forward_constraints(source)
@@ -412,7 +477,7 @@ def bake_to_rigify(context, source, rig, request: RigifyBakeRequest) -> Operatio
             if _active_action(rig) is not None:
                 rig.animation_data.action = None
             _enter_pose_mode(context, rig)
-            solver = control_bake.ControlSolver.compile(source, rig)
+            solver = control_bake.ControlSolver.compile(source, rig, context.view_layer)
             samples = sample_pose_bones(
                 context.scene,
                 rig,

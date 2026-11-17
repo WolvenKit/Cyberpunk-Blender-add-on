@@ -14,6 +14,7 @@ from ...assetio.transform_values import world_transform_entry
 from ...assetio.values import coerce_int, json_array
 from ...blender.matrix import object_world_matrix
 from ..sector.transforms import transform_values
+from .errors import CollisionExportError
 
 # The streaming distance of each of the twelve terrain collision entries of the 121 game sectors, which a heightfield
 # cooked here, with no entry of its own to copy it from, takes.
@@ -65,7 +66,7 @@ def _shape_world_matrix(obj, shape):
         undo = Vector(tuple(1.0 / value if value else 1.0 for value in obj.scale))
         world = world @ Matrix.Diagonal(undo).to_4x4()
     if any(abs(value - 1.0) > _SCALE_TOLERANCE for value in world.to_scale()):
-        raise ValueError(
+        raise CollisionExportError(
             f"{obj.name} is scaled; heightfield collisions cannot be scaled, apply or clear its scale."
         )
     return world @ (
@@ -87,7 +88,7 @@ def terrain_collision_node(obj, shape):
     try:
         rows, columns = heightfield_grid(shape.cooked_data)
     except ValueError as error:
-        raise ValueError(f"{obj.name}: {error}; cook it again.") from error
+        raise CollisionExportError(f"{obj.name}: {error}; cook it again.") from error
     node = copy.deepcopy(_node_template())
     data = node["Data"]
     data["debugName"]["$value"] = shape.name or obj.name
@@ -124,7 +125,9 @@ def export_selected_heightfields(context, filepath):
         for shape in cooked_heightfield_shapes(obj)
     ]
     if not records:
-        raise ValueError("No selected canonical PhysX HEIGHTFIELD shapes are cooked")
+        raise CollisionExportError(
+            "No selected canonical PhysX HEIGHTFIELD shapes are cooked"
+        )
 
     if not filepath.lower().endswith(".streamingsector.json"):
         filepath += ".streamingsector.json"

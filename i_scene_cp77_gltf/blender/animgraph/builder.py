@@ -1,20 +1,14 @@
-import uuid
-
 from ...animation.model.animgraph.constants import CONTAINER_OUTPUT_NAME, LINK_SOCKET
 from ...animation.model.animgraph.schema import rtti
 from ...core.log import get_logger, log_once
 from . import categories, presenters, sm_records
 from .categories import NODE_CATEGORY_COLORS
 from .property_codec import add_node_property, clear_node_properties
+from .sm_model import new_handle_id
 from .sockets import bind_input_socket, bind_red_socket
 from .tree_ops import ensure_socket, new_graph_node, new_graph_tree, new_socket
 
 _LOG = get_logger(__name__)
-
-
-def new_handle_id():
-    """Placeholder id unique across sessions"""
-    return f"new:{uuid.uuid4().hex}"
 
 
 def _unique_input_caption(node, base: str) -> str:
@@ -56,6 +50,8 @@ def _make_subtree(short: str, parent_tree=None):
 def _seed_authored_properties(node, definition: rtti.NodeDefinition) -> None:
     clear_node_properties(node)
     for prop in definition.properties:
+        if presenters.should_skip_property(definition.red_type, prop.name):
+            continue
         add_node_property(
             node,
             prop.name,

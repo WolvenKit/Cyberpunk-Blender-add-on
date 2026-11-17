@@ -7,6 +7,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from ....assetio.values import nine_digit_float
 from .sm_conditions import build_condition
 
 LISTS = ("transitions", "globalTransitions", "conditionalEntries")
@@ -52,15 +53,10 @@ def float32_equal(a: float, b: float) -> bool:
     return _float32_bytes(a) == _float32_bytes(b)
 
 
-def tidy_float(value: float) -> float:
-    """value with at most 9 significant digits, which keep every float32 exactly"""
-    return float(f"{float(value):.9g}")
-
-
 def tidy_floats(value: Any) -> Any:
-    """value with tidy_float applied to every float in it"""
+    """value with nine_digit_float applied to every float in it"""
     if isinstance(value, float):
-        return tidy_float(value)
+        return nine_digit_float(value)
     if isinstance(value, dict):
         return {key: tidy_floats(item) for key, item in value.items()}
     if isinstance(value, list):

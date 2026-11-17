@@ -5,11 +5,11 @@ import numpy as np
 from mathutils import Matrix, Quaternion, Vector
 
 from ...animation.domain.rig.naming import merged_bone_name
+from ...assetio.paths import depot_path
 from ...assetio.values import cname_value, resolve_handle_reference
-from ...blender.red_transforms import transform_matrix
 from ...core.log import get_logger, log_once
-from ..common.entity_data import build_component_lookup, component_name
-from ..common.paths import depot_path
+from ...entity.domain.entity_data import build_component_lookup, component_name
+from ..red_transforms import transform_matrix
 
 _LOG = get_logger(__name__)
 
@@ -102,7 +102,7 @@ def _rig_bone_matrices(rig_j):
     return matrices
 
 
-def _rig_json_model_space_matrices(rig_j):
+def rig_json_model_space_matrices(rig_j):
     if type(rig_j) is not dict:
         return ()
     cache_key = id(rig_j)
@@ -118,14 +118,14 @@ def _rig_json_model_space_matrices(rig_j):
     return matrices
 
 
-def _rig_json_bone_matrix_array(rig_j):
+def rig_json_bone_matrix_array(rig_j):
     if type(rig_j) is not dict:
         return np.empty((0, 4, 4), dtype=np.float64)
     cache_key = id(rig_j)
     cached = _RIG_BONE_MATRIX_ARRAY_CACHE.get(cache_key)
     if cached is not None and cached[0] is rig_j:
         return cached[1]
-    matrices = _rig_json_model_space_matrices(rig_j)
+    matrices = rig_json_model_space_matrices(rig_j)
     array = np.asarray(matrices, dtype=np.float64)
     if not matrices:
         array = np.empty((0, 4, 4), dtype=np.float64)

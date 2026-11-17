@@ -13,6 +13,7 @@ import bpy
 from ...assetio.catalog import ResourceKind
 from ...assetio.paths import local_path_key, material_sidecar_path
 from ...assetio.values import json_array
+from ...blender.collections import preserve_world_parent, remap_copied_object_references
 from ...blender.identity import authored_material_name, rna_is_live
 from ...blender.naming import fit_id_name
 from ...blender.transactions import (
@@ -21,7 +22,7 @@ from ...blender.transactions import (
     track_created_datablock,
 )
 from ...core.log import debug_exception, get_logger, is_enabled, log_once
-from ...gltf.submesh import submesh_index_from_name
+from ...gltf.submesh import submesh_index_for_object
 from ...materials.blender.builder import (
     material_handler_timing_stats,
     material_organization_phase_timing_stats,
@@ -44,6 +45,7 @@ from ...meshes.repository import (
     is_physical_scene,
 )
 from ..mesh.document import decode_mesh_glb
+from ..mesh.options import GlbImportOptions
 from ..mesh.orchestration import (
     ensure_collection_material_coverage,
     import_cyberpunk_glb,
@@ -52,11 +54,7 @@ from .cache import (
     acquire_material_cache,
     release_material_cache,
 )
-from .collections import (
-    link_collection_once,
-    preserve_world_parent,
-    remap_copied_object_references,
-)
+from .collections import link_collection_once
 from .material_appearances import (
     is_source_default_appearance,
     resolve_appearance_materials,
@@ -98,60 +96,8 @@ def _copy_object_for_transaction(source_obj, *, copy_data=True):
     return obj
 
 
-@lru_cache(maxsize=4096)
-def _submesh_index_from_names(object_name, material_names):
-    index = submesh_index_from_name(object_name, None)
-    if index is not None:
-        return index
-    for material_name in material_names:
-        index = submesh_index_from_name(material_name, None)
-        if index is not None:
-            return index
-    return None
-
-
 def clear_submesh_index_cache():
-    _submesh_index_from_names.cache_clear()
     _JSON_APPS_CACHE.clear()
-
-
-def submesh_index_for_object(obj):
-    try:
-        explicit_index = int(obj.get("cp77_submesh_index", -1))
-    except (AttributeError, ReferenceError, TypeError, ValueError) as error:
-        log_once(
-            _LOG,
-            "DEBUG",
-            ("submesh_index_for_object 1", type(error).__name__),
-            "submesh index for object: fell back after %s",
-            error,
-            exc_info=True,
-        )
-        explicit_index = -1
-    if explicit_index >= 0:
-        return explicit_index
-
-    try:
-        object_name = str(getattr(obj, "name", "") or "")
-        data = getattr(obj, "data", None)
-        materials = getattr(data, "materials", ()) if data is not None else ()
-        material_names = tuple(
-            str(getattr(material, "name", "") or "")
-            for material in materials
-            if material is not None
-        )
-    except (AttributeError, ReferenceError, RuntimeError, TypeError) as error:
-        log_once(
-            _LOG,
-            "DEBUG",
-            ("submesh_index_for_object 2", type(error).__name__),
-            "submesh index for object: fell back after %s",
-            error,
-            exc_info=True,
-        )
-        object_name = str(getattr(obj, "name", "") or "")
-        material_names = ()
-    return _submesh_index_from_names(object_name, material_names)
 
 
 def _appearance_name(mesh_appearance):
@@ -1649,20 +1595,25 @@ def meshes_from_mesheswapps(
                 import_started = time.perf_counter()
                 import_cpu_started = time.process_time()
                 imported_results = import_cyberpunk_glb(
-                    with_materials=with_mats,
-                    remap_depot=props.remap_depot,
-                    filepath=meshpath,
-                    appearances=apps,
+                    bpy.context,
+                    meshpath,
+                    GlbImportOptions(
+                        with_materials=with_mats,
+                        remap_depot=props.remap_depot,
+                        import_garmentsupport=False,
+                        appearances=tuple(apps or ()),
+                        import_tracks=False,
+                        bulk_import=True,
+                        collection_name=groupname,
+                        select_objects=False,
+                        appearance_variants=False,
+                    ),
                     document_session=document_session,
                     material_resources=material_resources,
                     transaction=transaction,
-                    bulk_import=True,
                     collection_parent=Masters,
-                    collection_name=groupname,
-                    select_objects=False,
                     decoded_mesh_data=decoded_mesh_data,
                     timing=debug_timings,
-                    appearance_variants=False,
                 )
                 import_elapsed += time.perf_counter() - import_started
                 import_cpu_elapsed += time.process_time() - import_cpu_started

@@ -2,6 +2,7 @@ import bpy
 
 from ...animation.model.animgraph.schema import enums
 from ...core.log import debug_exception, get_logger
+from . import math_expression, variables
 
 _LOG = get_logger(__name__)
 
@@ -56,8 +57,6 @@ NODE_VALUE_KIND_ITEMS = (
 
 def _on_anim_variable_updated(self, context):
     try:
-        from . import variables
-
         variables.propagate_variable_to_nodes(self)
     except Exception:
         _LOG.error("AnimGraph variable value update failed", exc_info=True)
@@ -84,6 +83,11 @@ def _on_enum_choice_updated(self, context):
             self.enum_raw_value = str(value)
     except Exception:
         _LOG.error("AnimGraph enum choice update failed", exc_info=True)
+
+
+def _on_string_value_updated(self, context):
+    if self.key == math_expression.FORMULA_KEY:
+        math_expression.formula_edited(self)
 
 
 class REDengine_AnimCurvePoint(bpy.types.PropertyGroup):
@@ -154,7 +158,9 @@ class REDengine_AnimNodeProperty(bpy.types.PropertyGroup):
     bool_value: bpy.props.BoolProperty(name="Value")
     int_value: bpy.props.IntProperty(name="Value")
     float_value: bpy.props.FloatProperty(name="Value")
-    string_value: bpy.props.StringProperty(name="Value")
+    string_value: bpy.props.StringProperty(
+        name="Value", update=_on_string_value_updated
+    )
     enum_type: bpy.props.StringProperty(name="Enum Type")
     enum_choice: bpy.props.EnumProperty(
         name="Value", items=_enum_choice_items, update=_on_enum_choice_updated

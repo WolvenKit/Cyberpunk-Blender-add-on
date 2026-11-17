@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from ...blender.mesh import export_signature
 from ...blender.mesh_source import IMPORT_SIGNATURE_KEY
+from ...entity.model.component_types import COMPONENT_TAG_KEY
 from ...entity.model.import_record import (
     IMPORT_RECORD_KEY,
     ImportedAppearance,
     encode_import_record,
 )
-
-COMPONENT_TAG_KEY = "cp77_entity_component"
 
 
 def _component_collections(collection):

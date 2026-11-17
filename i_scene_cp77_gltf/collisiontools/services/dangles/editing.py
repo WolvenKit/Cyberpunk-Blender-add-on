@@ -2,42 +2,39 @@ from functools import wraps
 
 from ....animation.model.animgraph.handles import normalized_source_handle
 from ....blender.operator_results import OperationResult
-from ....core.log import debug_exception, get_logger
+from ....core.log import get_logger
 from ...blender.dangle_context import (
     get_active_chain,
     get_active_dangle_node,
     get_active_rig,
 )
+from ...runtime.dangle.editor_state import (
+    restore_editor_state,
+    serialize_editor_state,
+)
+from .sync import sync_editor_to_graph
 
 _LOG = get_logger(__name__)
 
 
+def _linked_to_graph(rig):
+    state = getattr(rig, "dangle_state", None)
+    return bool(
+        str(getattr(state, "animgraph_source_text", "") or "")
+        and str(getattr(state, "animgraph_tree_name", "") or "")
+    )
+
+
 def _sync_rig_if_linked(rig, context, result, *, removed_handles=()):
-    if not result.ok or rig is None:
-        return result
-    state = rig.dangle_state
-    if not str(getattr(state, "animgraph_source_text", "") or ""):
-        return result
-    if not str(getattr(state, "animgraph_tree_name", "") or ""):
+    if not result.ok or rig is None or not _linked_to_graph(rig):
         return result
     try:
-        from ...blender.dangle_source import load_source_payload
-        from .sync import sync_editor_to_graph
-
         sync_editor_to_graph(
             rig,
             context,
             removed_handles=tuple(removed_handles),
         )
     except Exception as exc:
-        try:
-            from ...runtime.dangle.editor_state import import_chains_data
-
-            import_chains_data(load_source_payload(rig), state)
-        except Exception:
-            debug_exception(
-                _LOG, "Could not reload the Dangle chains from the linked AnimGraph"
-            )
         return OperationResult.cancelled(
             f"Dangle edit could not synchronize with Graph View: {exc}", error=exc
         )
@@ -63,7 +60,15 @@ def _waits_for_preview(edit):
             return OperationResult.cancelled(
                 "Stop Dangle preview before adding or removing items."
             )
-        return edit(context, *args, **kwargs)
+        backup = (
+            serialize_editor_state(rig.dangle_state)
+            if rig is not None and _linked_to_graph(rig)
+            else None
+        )
+        result = edit(context, *args, **kwargs)
+        if backup is not None and not result.ok and result.error is not None:
+            restore_editor_state(rig.dangle_state, backup)
+        return result
 
     return guarded
 

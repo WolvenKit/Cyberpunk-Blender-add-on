@@ -174,6 +174,7 @@ def rebuild(context) -> OperationResult:
     return OperationResult(True, f"Facial session rebuilt for '{armature.name}'")
 
 
+@transactional("Facial pose reset")
 def reset_neutral(context) -> OperationResult:
     armature = active_armature(context)
     if armature is None:
@@ -181,6 +182,7 @@ def reset_neutral(context) -> OperationResult:
     failure = _enter_pose_mode(armature)
     if failure is not None:
         return failure
+    track_pose(armature, label="facial neutral pose")
     reset_pose_bones(armature)
     armature.update_tag(refresh={"DATA"})
     context.view_layer.update()
@@ -316,6 +318,7 @@ def bake(context, request: FacialBakeRequest) -> OperationResult:
     )
 
 
+@transactional("Facial animation clear")
 def clear_animation(context) -> OperationResult:
     """Remove what a facial bake keys from the rig's own slot of its Action"""
     armature = active_armature(context)
@@ -326,6 +329,7 @@ def clear_animation(context) -> OperationResult:
     if current is None:
         return OperationResult(False, "Load rig + facialsetup first.", "ERROR")
     paths = _facial_pose_paths(armature, current)
+    track_action_curves(action, armature, paths, label="facial animation clear")
     count = remove_fcurves(action, armature, lambda curve: curve.data_path in paths)
     return OperationResult(True, f"Cleared {count} F-curves.", details={"count": count})
 

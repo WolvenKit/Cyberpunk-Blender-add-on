@@ -11,7 +11,7 @@ class StackHandler(GraphNodeHandler):
 
     def execute(self, context, step):
         node_started = perf_counter()
-        result = context._execute_stack_node(step.program_node, step.child)
-        context._perf_stack += perf_counter() - node_started
+        result = context.execute_stack_node(step.program_node, step.child)
+        context.perf_stack += perf_counter() - node_started
         step.frame_cache[step.cache_key] = result
         return result

@@ -1,5 +1,11 @@
-from bpy.props import BoolProperty, EnumProperty, IntProperty, StringProperty
-from bpy.types import Operator
+from bpy.props import (
+    BoolProperty,
+    CollectionProperty,
+    EnumProperty,
+    IntProperty,
+    StringProperty,
+)
+from bpy.types import Operator, PropertyGroup
 
 from ...blender.operator_results import execute_operation
 from ...core.log import get_logger
@@ -112,6 +118,9 @@ class _RigifyBakeOperator:
     def draw_header(self, layout, source, rig):
         pass
 
+    def names_one_action(self):
+        return True
+
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
@@ -119,7 +128,8 @@ class _RigifyBakeOperator:
         if source is not None and rig is not None:
             self.draw_header(layout, source, rig)
             layout.separator()
-        layout.prop(self, "action_name")
+        if self.names_one_action():
+            layout.prop(self, "action_name")
         layout.prop(self, "overwrite")
         layout.separator()
         layout.prop(self, "frame_range_source")
@@ -144,25 +154,77 @@ class _RigifyBakeOperator:
         )
 
 
+def _rigify_rig_action(context):
+    """The active pair's Rigify rig and the action it plays"""
+    _source, rig = rigify.linked_pair(context)
+    animation_data = rig.animation_data if rig is not None else None
+    return rig, animation_data.action if animation_data is not None else None
+
+
+class CP77RigifyBakeAction(PropertyGroup):
+    action_name: StringProperty(name="Action")
+    bake: BoolProperty(name="Bake", default=False)
+
+
 class CP77_OT_BakeRigifyToSource(_RigifyBakeOperator, Operator):
     bl_idname = "cp77.bake_rigify_to_source"
     bl_label = "Bake Rigify to Cyberpunk"
-    bl_description = "Bake the Rigify rig's action onto the Cyberpunk rig's animation bones, ready for export"
+    bl_description = (
+        "Bake the ticked Rigify actions onto the Cyberpunk rig's animation bones, each as its own action ready "
+        "for export"
+    )
     bl_options = {"REGISTER", "UNDO"}
 
+    actions: CollectionProperty(type=CP77RigifyBakeAction, options={"SKIP_SAVE"})
+
     defaults = staticmethod(rigify.bake_defaults)
-    baker = staticmethod(rigify.bake_active)
     label = "Rigify bake"
+
+    def invoke(self, context, event):
+        rig, active = _rigify_rig_action(context)
+        self.actions.clear()
+        for name in rigify.rigify_actions(rig) if rig is not None else ():
+            item = self.actions.add()
+            item.action_name = name
+            item.bake = active is not None and name == active.name
+        return super().invoke(context, event)
+
+    def _chosen(self):
+        return tuple(item.action_name for item in self.actions if item.bake)
+
+    def names_one_action(self):
+        return len(self._chosen()) <= 1
 
     def draw_header(self, layout, source, rig):
         col = layout.column(align=True)
         col.enabled = False
-        action = rig.animation_data.action if rig.animation_data else None
-        col.label(
-            text=f"From: {rig.name} → {action.name if action else '—'}",
-            icon="ARMATURE_DATA",
-        )
+        col.label(text=f"From: {rig.name}", icon="ARMATURE_DATA")
         col.label(text=f"Onto: {source.name}", icon="OUTLINER_OB_ARMATURE")
+        if self.actions:
+            box = layout.box()
+            box.label(text="Actions (several bake as <action>_baked)")
+            column = box.column(align=True)
+            for item in self.actions:
+                column.prop(item, "bake", text=item.action_name, icon="ACTION")
+
+    def execute(self, context):
+        actions = self._chosen()
+        if not actions:
+            _rig, active = _rigify_rig_action(context)
+            actions = (active.name,) if active is not None else ()
+        return execute_operation(
+            self,
+            self.label,
+            rigify.bake_actions,
+            context,
+            actions=actions,
+            action_name=self.action_name,
+            overwrite=self.overwrite,
+            frame_range_source=self.frame_range_source,
+            frame_start=self.frame_start,
+            frame_end=self.frame_end,
+            step=self.step,
+        )
 
 
 class CP77_OT_BakeSourceToRigify(_RigifyBakeOperator, Operator):
@@ -187,6 +249,7 @@ class CP77_OT_BakeSourceToRigify(_RigifyBakeOperator, Operator):
 
 
 RIGIFY_OPERATOR_CLASSES = (
+    CP77RigifyBakeAction,
     CP77ToRigify,
     CP77_OT_SetRigifyLiveSync,
     CP77_OT_ActivateLinkedRig,

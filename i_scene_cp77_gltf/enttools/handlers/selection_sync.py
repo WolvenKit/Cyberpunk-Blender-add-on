@@ -1,25 +1,16 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
-
 import bpy
 from bpy.app.handlers import persistent
 
 from ...core.log import debug_exception, get_logger
+from ..runtime.updates import reset_syncing, selection_syncing, syncing
+from ..services.components import separate_renamed_meshes
+from ..services.selection import follow_active_object
 
 _LOG = get_logger(__name__)
-_STATE = {"syncing": 0, "last_active": None}
+_STATE = {"last_active": None}
 _PENDING = {"scheduled": False, "separate": False, "follow": False}
-
-
-@contextmanager
-def syncing():
-    """Selection changes made by the tool itself"""
-    _STATE["syncing"] += 1
-    try:
-        yield
-    finally:
-        _STATE["syncing"] -= 1
 
 
 def _active_pointer(context):
@@ -42,8 +33,6 @@ def _run_pending():
     context = bpy.context
     if separate:
         try:
-            from ..services.components import separate_renamed_meshes
-
             with syncing():
                 separate_renamed_meshes()
         except Exception:
@@ -53,8 +42,6 @@ def _run_pending():
             )
     if follow and getattr(context.scene, "cp77_entity_tools", None) is not None:
         try:
-            from ..services.selection import follow_active_object
-
             follow_active_object(context)
         except Exception:
             debug_exception(_LOG, "Entity selection sync skipped")
@@ -63,13 +50,13 @@ def _run_pending():
 @persistent
 def on_depsgraph_update(scene, depsgraph=None):
     context = bpy.context
-    if _collections_changed(depsgraph) and not _STATE["syncing"]:
+    if _collections_changed(depsgraph) and not selection_syncing():
         _PENDING["separate"] = True
     pointer = _active_pointer(context)
     if pointer != _STATE["last_active"]:
         _STATE["last_active"] = pointer
         if (
-            not _STATE["syncing"]
+            not selection_syncing()
             and getattr(context.scene, "cp77_entity_tools", None) is not None
         ):
             _PENDING["follow"] = True
@@ -83,5 +70,5 @@ def reset_selection_sync(_unused=None):
     if bpy.app.timers.is_registered(_run_pending):
         bpy.app.timers.unregister(_run_pending)
     _PENDING.update(scheduled=False, separate=False, follow=False)
-    _STATE["syncing"] = 0
+    reset_syncing()
     _STATE["last_active"] = None

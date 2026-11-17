@@ -1,32 +1,12 @@
 from __future__ import annotations
 
-import json
-
-from ...assetio.values import json_array
-from ...core.log import get_logger, log_once
+from ..core.log import get_logger, log_once
+from .scene_registry import store_names, stored_names
 
 _LOG = get_logger(__name__)
 
 _REGISTRY_KEY = "cp77_reflection_probe_registry"
 _GENERATION_KEY = "cp77_reflection_probe_generation"
-
-
-def _registry_names(scene):
-    return [
-        str(value)
-        for value in json_array(
-            scene.get(_REGISTRY_KEY, "") if scene is not None else ""
-        )
-        if value
-    ]
-
-
-def _store_names(scene, names):
-    if scene is None:
-        return
-    encoded = json.dumps(list(dict.fromkeys(names)), separators=(",", ":"))
-    if str(scene.get(_REGISTRY_KEY, "") or "") != encoded:
-        scene[_REGISTRY_KEY] = encoded
 
 
 def is_reflection_probe(obj):
@@ -36,15 +16,15 @@ def is_reflection_probe(obj):
 def register_reflection_probe(scene, obj):
     if scene is None or not is_reflection_probe(obj):
         return False
-    names = _registry_names(scene)
+    names = stored_names(scene, _REGISTRY_KEY)
     if obj.name not in names:
         names.append(obj.name)
-        _store_names(scene, names)
+        store_names(scene, _REGISTRY_KEY, names)
     return True
 
 
 def registered_reflection_probes(scene):
-    names = _registry_names(scene)
+    names = stored_names(scene, _REGISTRY_KEY)
     valid = []
     probes = []
     for name in names:
@@ -54,7 +34,7 @@ def registered_reflection_probes(scene):
         valid.append(name)
         probes.append(obj)
     if valid != names:
-        _store_names(scene, valid)
+        store_names(scene, _REGISTRY_KEY, valid)
     return tuple(probes)
 
 

@@ -10,15 +10,14 @@ from ...assetio.streaming_sector import collision_actor_scale, collision_actor_s
 from ...assetio.transform_values import vector3_from_data, world_position_from_data
 from ...assetio.values import cname_value, coerce_int, nested_dict
 from ...bartmoss.matrix import scale_in_frame
-from ...core.log import debug_exception, get_logger
-from ...physics.model.materials import is_known_physics_material
+from ...core.log import debug_exception, get_logger, log_once
+from ...physics.model.materials import resolve_physics_material
 from ..naming import fit_id_name
 from ..red_transforms import red_quaternion, transform_scale
 from .actors import add_shape_to_actor, create_actor_object
 from .objects import update_collision_bits
 
 _LOG = get_logger(__name__)
-_WARNED_UNKNOWN_PHYSMATS = set()
 _DEFAULT_PHYSMAT = {"$type": "CName", "$storage": "string", "$value": "Default"}
 # A cooked collision shape's geometry class and the shape kind it holds.
 _COOKED_SHAPE_KINDS = {
@@ -74,17 +73,19 @@ def _source_actor(obj, *, kind, sector, node_data_index, actor_index):
 def _material(material):
     if material is None:
         return dict(_DEFAULT_PHYSMAT)
+    source = material
     if isinstance(material, dict):
-        token = str(cname_value(material, "Default") or "Default")
-        if (
-            not is_known_physics_material(token)
-            and token not in _WARNED_UNKNOWN_PHYSMATS
-        ):
-            _WARNED_UNKNOWN_PHYSMATS.add(token)
-            _LOG.warning(
-                "Unresolved physics material CName %s; retaining source token and using Default PhysX coefficients",
-                token,
-            )
+        source = cname_value(material, "Default")
+    name, known = resolve_physics_material(source)
+    if not known:
+        log_once(
+            _LOG,
+            "WARNING",
+            ("unknown physics material", name),
+            "Unresolved physics material CName %s; retaining source token and using Default PhysX coefficients",
+            name,
+        )
+    if isinstance(material, dict):
         return material
     return {"$type": "CName", "$storage": "string", "$value": str(material)}
 

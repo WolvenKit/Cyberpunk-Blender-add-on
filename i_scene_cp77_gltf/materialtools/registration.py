@@ -2,9 +2,7 @@ import bpy
 
 from ..core.registration import RegistrationLedger
 from .depot.state import clear_depot_state_cache
-from .multilayer.editor import reset_runtime_state
-from .operators.actions import MATERIAL_OPERATOR_CLASSES
-from .runtime.callbacks import (
+from .handlers.callbacks import (
     clear_material_runtime_caches,
     clear_msgbus,
     load_post_handler,
@@ -13,6 +11,8 @@ from .runtime.callbacks import (
     subscribe_all,
     trigger_update_on_undo,
 )
+from .multilayer.editor import reset_runtime_state
+from .operators.actions import MATERIAL_OPERATOR_CLASSES
 from .ui.panels import MATERIAL_UI_CLASSES
 from .ui.properties import CP77MlPropertyGroup
 

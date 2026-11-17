@@ -5,7 +5,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..bartmoss.hierarchy import local_matrices_to_model, parent_first_order
+from ..bartmoss.hierarchy import (
+    local_matrices_to_model,
+    nearest_kept_ancestors,
+    parent_first_order,
+)
 from ..bartmoss.trs import compose_matrices
 from .nodes import node_trs
 
@@ -210,15 +214,10 @@ def build_skeleton_binding(
         )
 
     parents = hierarchy.parents
-    joint_lookup = {
-        node_index: joint_index for joint_index, node_index in enumerate(joints)
-    }
-    source_parents = []
-    for node_index in joints:
-        parent_node = parents[node_index]
-        while parent_node >= 0 and parent_node not in joint_lookup:
-            parent_node = parents[parent_node]
-        source_parents.append(joint_lookup.get(parent_node, -1))
+    source_parents = nearest_kept_ancestors(
+        {node: parent if parent >= 0 else None for node, parent in enumerate(parents)},
+        joints,
+    )
 
     extra_parents = extras.get("boneParentIndexes")
     if extra_parents is not None:

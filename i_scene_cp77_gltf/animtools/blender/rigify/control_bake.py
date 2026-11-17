@@ -3,7 +3,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-import bpy
 from mathutils import Matrix
 
 from ....animation.domain.rigify.mapping import (
@@ -48,11 +47,12 @@ def _rigid(matrix):
 
 
 class ControlSolver:
-    def __init__(self, source, rig, bindings, switches):
+    def __init__(self, source, rig, bindings, switches, view_layer):
         self.source = source
         self.rig = rig
         self.bindings = bindings
         self.switches = switches
+        self.view_layer = view_layer
         self.levels = sorted({binding.depth for binding in bindings})
         self.control_names = tuple(
             dict.fromkeys(
@@ -62,7 +62,7 @@ class ControlSolver:
         )
 
     @classmethod
-    def compile(cls, source, rig):
+    def compile(cls, source, rig, view_layer):
         """Bind each mapped source bone to the control that drives its ORG bone"""
         switches = []
         for pose_bone in rig.pose.bones:
@@ -70,7 +70,7 @@ class ControlSolver:
             if LIMB_SWITCH_PROPERTY in pose_bone:
                 pose_bone[LIMB_SWITCH_PROPERTY] = LIMB_SWITCH_FK
                 switches.append(pose_bone.name)
-        bpy.context.view_layer.update()
+        view_layer.update()
         rig_eval = evaluated_object(rig, current_depsgraph())
         names = set(rig.pose.bones.keys())
         bindings = []
@@ -97,7 +97,7 @@ class ControlSolver:
                     _world_pose(rig, rig_eval.pose.bones[org]).copy(),
                 )
             )
-        return cls(source, rig, tuple(bindings), tuple(switches))
+        return cls(source, rig, tuple(bindings), tuple(switches), view_layer)
 
     def _source_delta(self, source_eval, source_name):
         pose_bone = source_eval.pose.bones[source_name]
@@ -120,7 +120,7 @@ class ControlSolver:
 
     def solve(self, *, tolerance=1.0e-3, max_passes=12):
         """Pose the bound controls from the source's current pose"""
-        view_layer = bpy.context.view_layer
+        view_layer = self.view_layer
         source_eval = evaluated_object(self.source, current_depsgraph())
         rig_inverse = safe_matrix_inverse(self.rig.matrix_world)
         targets = {

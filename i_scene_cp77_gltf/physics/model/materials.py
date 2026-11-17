@@ -1300,16 +1300,16 @@ def resolve_physics_material_name(value, default="Default"):
     return default
 
 
-def is_known_physics_material(value):
+def resolve_physics_material(value):
     token = str(value or "").strip()
-    return bool(
-        token
-        and (
-            token in PHYSICS_MATERIALS_BY_NAME
-            or token in _PHYSICS_MATERIAL_ALIASES
-            or token in _PHYSICS_MATERIALS_BY_HASH
-        )
+    if not token:
+        return "Default", True
+    known = (
+        token in PHYSICS_MATERIALS_BY_NAME
+        or token in _PHYSICS_MATERIAL_ALIASES
+        or token in _PHYSICS_MATERIALS_BY_HASH
     )
+    return token, known
 
 
 def get_physics_material(name, default="Default"):

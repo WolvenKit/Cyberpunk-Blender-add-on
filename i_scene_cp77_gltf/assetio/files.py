@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import os
 import struct
 from contextlib import contextmanager
@@ -16,6 +17,12 @@ def file_size(path) -> int:
 def binary_reader(path):
     with open(os.fspath(path), "rb") as stream:
         yield stream
+
+
+def rename_file(source, target) -> None:
+    if os.path.exists(target):
+        raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), target)
+    os.rename(source, target)
 
 
 def read_bytes(path) -> bytes:

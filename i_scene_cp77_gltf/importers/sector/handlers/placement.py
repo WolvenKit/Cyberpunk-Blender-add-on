@@ -6,6 +6,7 @@ import time
 
 import bpy
 
+from ....assetio.sector_model import PROXY_PHASE, STANDARD_PHASE
 from ....assetio.values import cname_text, nested_value
 from ....bartmoss.matrix import flatten_matrix
 from ....blender.naming import fit_id_name
@@ -17,7 +18,6 @@ from ..context import (
     FoliageResourceError,
     SectorContentError,
 )
-from ..model import PROXY_PHASE, STANDARD_PHASE
 from ..objects import (
     animate_rotation_root,
     assign_id_properties,

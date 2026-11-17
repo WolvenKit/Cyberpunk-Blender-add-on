@@ -89,6 +89,8 @@ REGISTRY.register(
         "base\\materials\\multilayered_terrain.mt",
         "base\\materials\\cloth_tarps.mt",
         "base\\fx\\_shaders\\blackwall_blendable.mt",
+        # Its own parameters only move vertices with the character's velocity, which a still mesh has none of.
+        "base\\fx\\_shaders\\sandevistan_multilayer.mt",
     ],
     MaterialRule(
         factory=HandlerFactory("multilayered", "Multilayered", "bip"),
@@ -852,6 +854,13 @@ REGISTRY.register(
 
 REGISTRY.register(
     [
+        "base\\fx\\_shaders\\oda_helm.mt",
+    ],
+    MaterialRule(factory=HandlerFactory("oda_helm", "OdaHelm", "bip")),
+)
+
+REGISTRY.register(
+    [
         "base\\fx\\shaders\\water_plane.mt",
     ],
     MaterialRule(
@@ -876,6 +885,8 @@ REGISTRY.register(
 REGISTRY.register(
     [
         "base\\fx\\_shaders\\invisible.mt",
+        # The depth proxy of vehicle cutouts has no parameters and is never seen.
+        "base\\materials\\top_down_car_proxy_depth.mt",
     ],
     MaterialRule(
         factory=HandlerFactory("invisible", "Invisible", "bip"), no_shadows=True

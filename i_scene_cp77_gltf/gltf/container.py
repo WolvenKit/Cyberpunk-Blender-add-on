@@ -304,9 +304,9 @@ def encode_glb(document: dict, binary: bytes) -> bytes:
         total_length += 8 + len(padded_binary)
 
     output = bytearray(struct.pack("<4sII", b"glTF", 2, total_length))
-    output.extend(struct.pack("<II", len(json_payload), 0x4E4F534A))
+    output.extend(struct.pack("<II", len(json_payload), JSON_CHUNK))
     output.extend(json_payload)
     if padded_binary:
-        output.extend(struct.pack("<II", len(padded_binary), 0x004E4942))
+        output.extend(struct.pack("<II", len(padded_binary), BIN_CHUNK))
         output.extend(padded_binary)
     return bytes(output)

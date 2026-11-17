@@ -1,6 +1,6 @@
 import bpy
 
-from ....animation.model.animgraph.constants import ANIMGRAPH_TREE_ID
+from ...operators.animgraph.context import animgraph_editor_poll
 from ...runtime import read_models
 
 
@@ -13,11 +13,7 @@ class REDENGINE_PT_graph_validator(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        space = context.space_data
-        if space is None or space.type != "NODE_EDITOR":
-            return False
-        tree = space.node_tree
-        return tree is not None and tree.bl_idname == ANIMGRAPH_TREE_ID
+        return animgraph_editor_poll(context)
 
     def draw(self, context):
         layout = self.layout

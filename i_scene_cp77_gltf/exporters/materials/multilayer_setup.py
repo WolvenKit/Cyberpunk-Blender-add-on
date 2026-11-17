@@ -12,9 +12,9 @@ from ...assetio.values import cname_entry, resource_path_entry
 from ...blender.operator_results import OperationResult
 from ...core.log import get_logger, log_once
 from ...materials.blender.multilayer import (
-    _layer_template_path,
-    _load_rooted_json,
-    _role_node,
+    layer_template_path,
+    load_rooted_json,
+    role_node,
     layer_nodes,
     multilayer_root,
 )
@@ -129,7 +129,7 @@ def _microblend_path(layer):
     layer_tree = getattr(layer, "node_tree", None)
     if layer_tree is None:
         return ""
-    node = _role_node(getattr(layer_tree, "nodes", None), "microblend", "Image Texture")
+    node = role_node(getattr(layer_tree, "nodes", None), "microblend", "Image Texture")
     image = getattr(node, "image", None) if node is not None else None
     filepath = getattr(image, "filepath", "") if image is not None else ""
     if not filepath:
@@ -215,7 +215,7 @@ def _template_state(template_states, template_path, project_path, depot_path):
     if state is not None:
         return state
     template_json = copy.deepcopy(
-        _load_rooted_json(template_path + ".json", project_path, depot_path)
+        load_rooted_json(template_path + ".json", project_path, depot_path)
     )
     template_data = template_json["Data"]["RootChunk"]
     state = {
@@ -255,7 +255,7 @@ def _resolve_layer_override(
 
 def _read_setup(setup_path, project_path, depot_path):
     mlsetup = copy.deepcopy(
-        _load_rooted_json(str(setup_path) + ".json", project_path, depot_path)
+        load_rooted_json(str(setup_path) + ".json", project_path, depot_path)
     )
     root_chunk = mlsetup["Data"]["RootChunk"]
     json_layers = root_chunk.get("layers")
@@ -267,7 +267,7 @@ def _read_setup(setup_path, project_path, depot_path):
 
 
 def _layer_values(layer):
-    template_path = _layer_template_path(layer)
+    template_path = layer_template_path(layer)
     if not template_path:
         raise KeyError("MLTemplate metadata")
     values = {
