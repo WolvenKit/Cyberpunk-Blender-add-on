@@ -33,7 +33,8 @@ from ...assetio.streaming_sector import (
 from ...assetio.transform_values import vector3_from_data
 from ...assetio.values import nested_dict, resource_path_text
 from ...bartmoss.matrix import box_around, scale_shears
-from ...blender.matrix import instance_matrix, object_world_matrix
+from ...blender.matrix import instance_matrix
+from ...blender.world_origin import game_world_matrix
 from ...entity.domain.lights import edited_light_data
 from ...importers.sector.model import ParsedSector
 from ..collision.heightfield import (
@@ -263,7 +264,7 @@ def _collision_copy(obj, record, source, instance, node):
         scale = tuple(
             value * factor for value, factor in zip(scale or (1.0, 1.0, 1.0), change)
         )
-    position, orientation, _scale = transform_values(object_world_matrix(obj))
+    position, orientation, _scale = transform_values(game_world_matrix(obj))
     half = vector3_from_data(node.data.get("extents"), (0.0, 0.0, 0.0))
     bounds = instance_matrix(instance) @ Matrix.Diagonal(Vector(half)).to_4x4()
     centre, extents = box_around(
@@ -309,13 +310,13 @@ def _copied_node(obj, record, sources):
     if kind == "element" and node.node_type == _INSTANCED_MESH:
         data, matrix = (
             plain_node_data(_STATIC_MESH, node.data),
-            object_world_matrix(obj),
+            game_world_matrix(obj),
         )
     elif kind == "element" and node.node_type == _DESTRUCTIBLE:
         # The copy holds the one instance where its entry stands.
         data = sources.standalone(obj, source, node)
         data["instanceTransforms"] = [copy.deepcopy(_IDENTITY_TRANSFORM)]
-        matrix = object_world_matrix(obj)
+        matrix = game_world_matrix(obj)
     else:
         data, matrix = (
             _plain_data(obj, node, source, sources),

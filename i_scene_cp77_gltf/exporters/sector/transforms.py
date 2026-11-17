@@ -2,7 +2,8 @@ from mathutils import Matrix, Vector
 
 from ...assetio.transform_values import quaternion_ijkr_from_wxyz
 from ...bartmoss.matrix import placements_near, transfer_matrix_delta
-from ...blender.matrix import matrix_from_flat, object_world_matrix
+from ...blender.matrix import matrix_from_flat
+from ...blender.world_origin import game_world_matrix
 
 
 def _number(value):
@@ -16,11 +17,11 @@ def _recorded_matrix(obj):
 
 
 def moved_matrix(obj):
-    """The world matrix obj has now when it moved since import, else None"""
+    """The game-space world matrix obj has now when it moved since import, else None"""
     recorded = _recorded_matrix(obj)
     if recorded is None:
         return None
-    now = object_world_matrix(obj)
+    now = game_world_matrix(obj)
     return None if placements_near(now, recorded) else now
 
 
@@ -36,7 +37,7 @@ def scale_change(obj):
     recorded = _recorded_matrix(obj)
     if recorded is None:
         return None
-    now, then = object_world_matrix(obj).to_scale(), recorded.to_scale()
+    now, then = game_world_matrix(obj).to_scale(), recorded.to_scale()
     if scales_near(now, then):
         return None
     return Vector(
@@ -47,7 +48,7 @@ def scale_change(obj):
 def placement_matrix(obj, placed):
     """Where the world matrix placed lands for obj"""
     recorded = _recorded_matrix(obj)
-    now = object_world_matrix(obj)
+    now = game_world_matrix(obj)
     if recorded is None:
         return now
     return Matrix(transfer_matrix_delta(now, recorded, placed).tolist())

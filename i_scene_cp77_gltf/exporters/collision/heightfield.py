@@ -12,7 +12,7 @@ from ...assetio.resources import get_resources_dir
 from ...assetio.streaming_sector import node_instance_entry, streaming_sector_document
 from ...assetio.transform_values import world_transform_entry
 from ...assetio.values import coerce_int, json_array
-from ...blender.matrix import object_world_matrix
+from ...blender.world_origin import game_world_matrix
 from ..sector.transforms import transform_values
 
 # The streaming distance of each of the twelve terrain collision entries of the 121 game sectors, which a heightfield
@@ -60,7 +60,7 @@ def _geometry_holds_scale(obj):
 
 def _shape_world_matrix(obj, shape):
     """The world matrix of shape, a rigid one"""
-    world = object_world_matrix(obj)
+    world = game_world_matrix(obj)
     if _geometry_holds_scale(obj):
         undo = Vector(tuple(1.0 / value if value else 1.0 for value in obj.scale))
         world = world @ Matrix.Diagonal(undo).to_4x4()
