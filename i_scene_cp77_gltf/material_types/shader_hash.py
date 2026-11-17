@@ -4,7 +4,7 @@ from ..blender import shader_nodes
 from ..blender.transactions import track_created_datablock
 from ..materials.blender.nodes import create_node
 from .bundles import material_bundle_node
-from .graph import fract_socket
+from .graph import combine_xyz_socket, fract_socket
 from .mat_common import get_or_build_node_group
 
 # The offset and scale of the shader hash the game's materials use.
@@ -12,15 +12,6 @@ HASH_OFFSET = 33.33
 HASH_SCALE = 0.1031
 HASH_SCALE3 = (0.1031, 0.1030, 0.0973)
 HASH_SCALE4 = (*HASH_SCALE3, 0.1099)
-
-
-def _combine(tree, x, y, z, location, label):
-    node = create_node(tree.nodes, "ShaderNodeCombineXYZ", location, label=label)
-    tree.links.new(x, node.inputs["X"])
-    tree.links.new(y, node.inputs["Y"])
-    if z is not None:
-        tree.links.new(z, node.inputs["Z"])
-    return node.outputs["Vector"]
 
 
 def _scrambled_nodes(tree, p3, scale, location, label):
@@ -48,7 +39,7 @@ def _scrambled_nodes(tree, p3, scale, location, label):
         tree.nodes, "ShaderNodeSeparateXYZ", (x0 + 340, y0), label=f"{label} p3"
     )
     tree.links.new(frac.outputs["Vector"], split.inputs["Vector"])
-    permute = _combine(
+    permute = combine_xyz_socket(
         tree,
         split.outputs["Y"],
         split.outputs["Z"],
@@ -82,7 +73,7 @@ def _scrambled_nodes(tree, p3, scale, location, label):
         shader_nodes.socket_by_identifier(dot.inputs, "Vector_001"),
     )
     dot_value = dot.outputs["Value"]
-    dot_vec = _combine(
+    dot_vec = combine_xyz_socket(
         tree, dot_value, dot_value, dot_value, (x0 + 1020, y0 - 80), f"{label} dot.xxx"
     )
     scrambled = shader_nodes.vector_math(
@@ -220,7 +211,7 @@ def _build_hash12_nodes(tree, vector, location, label):
         tree.nodes, "ShaderNodeSeparateXYZ", location, label=f"{label} input"
     )
     tree.links.new(vector, split.inputs["Vector"])
-    p3 = _combine(
+    p3 = combine_xyz_socket(
         tree,
         split.outputs["X"],
         split.outputs["Y"],
@@ -234,13 +225,15 @@ def _build_hash12_nodes(tree, vector, location, label):
 def _build_hash2_nodes(tree, source, mode, location, label):
     x0, y0 = location
     if mode == "21":
-        p3 = _combine(tree, source, source, source, location, f"{label} p.xxx")
+        p3 = combine_xyz_socket(
+            tree, source, source, source, location, f"{label} p.xxx"
+        )
     elif mode == "22":
         split = create_node(
             tree.nodes, "ShaderNodeSeparateXYZ", location, label=f"{label} input"
         )
         tree.links.new(source, split.inputs["Vector"])
-        p3 = _combine(
+        p3 = combine_xyz_socket(
             tree,
             split.outputs["X"],
             split.outputs["Y"],
@@ -267,7 +260,7 @@ def _build_hash2_nodes(tree, source, mode, location, label):
         (x0 + 1870, y0 - 90),
         f"{label}.y",
     )
-    return _combine(tree, out_x, out_y, None, (x0 + 2380, y0), label)
+    return combine_xyz_socket(tree, out_x, out_y, None, (x0 + 2380, y0), label)
 
 
 def _build_hash43_nodes(tree, vector, location, label):

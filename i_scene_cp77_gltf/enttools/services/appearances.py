@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import bpy
 
-from ...blender.collections import collection_parent_map
+from ...blender.collections import collection_parent_map, remap_copied_object_references
 from ...blender.identity import rna_identity
 from ...blender.import_hooks import after_import, before_import
 from ...blender.operator_results import OperationResult
@@ -13,7 +13,8 @@ from ...blender.transactions import (
     transactional,
 )
 from ...entity.model.import_record import IMPORT_RECORD_KEY
-from ...importers.common.collections import remap_copied_object_references
+from ...importers.entity.execution import import_entity
+from ...importers.entity.options import EntityImportRequest
 from ..blender import mesh_appearance
 from ..blender.rigs import reconcile_appearance_rig
 from ..blender.scene import appearance_record, component_objects, holds_imported_lights
@@ -135,9 +136,6 @@ def switch_appearance(context, import_id: str, appearance: str) -> OperationResu
         None,
     )
     if target is None:
-        from ...importers.entity.execution import import_entity
-        from ...importers.entity.options import EntityImportRequest
-
         record = appearance_record(collections[0])
         parents = collection_parent_map().get(collections[0].as_pointer(), ())
         imported = []

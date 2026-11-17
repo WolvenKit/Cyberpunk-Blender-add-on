@@ -4,12 +4,11 @@ import bpy
 
 from ...blender.selection import select_objects
 from ...core.log import get_logger
-from ...core.notifications import show_message
 from ...entity.domain.document import attach_targets, rig_targets
 from ..blender.scene import appearance_record, component_for_object, component_objects
 from ..blender.state import ensure_appearance_state, load_documents
 from ..runtime.scene_cache import entity_index
-from ..runtime.updates import suspended
+from ..runtime.updates import suspended, syncing
 
 _LOG = get_logger(__name__)
 NOT_IMPORTED = "+"
@@ -109,70 +108,8 @@ def select_component_objects(context) -> None:
         return
     objects = component_objects(collection, item.name)
     if objects:
-        from ..runtime.selection_sync import syncing
-
         with syncing():
             select_objects(list(objects), context=context)
-
-
-def tools_changed(context, field: str) -> None:
-    tools = context.scene.cp77_entity_tools
-    if field == "entity":
-        choices = appearance_choices(tools.entity)
-        with suspended():
-            if choices:
-                tools.appearance = choices[0][0]
-            tools.component_index = 0
-        refresh_choices(context)
-    elif field == "appearance":
-        if tools.appearance.startswith(NOT_IMPORTED):
-            from .appearances import switch_appearance
-
-            result = switch_appearance(
-                context, tools.entity, tools.appearance[len(NOT_IMPORTED) :]
-            )
-        else:
-            collection = current_collection(context)
-            from .appearances import switch_appearance
-
-            result = (
-                switch_appearance(
-                    context, tools.entity, ensure_appearance_state(collection).name
-                )
-                if collection
-                else None
-            )
-        if result is not None and not result.ok:
-            show_message(result.message, severity="ERROR", logger=_LOG)
-        with suspended():
-            tools.component_index = 0
-        refresh_choices(context)
-    elif field == "component_index":
-        refresh_choices(context)
-        select_component_objects(context)
-    elif field == "issue_index":
-        if not 0 <= tools.issue_index < len(tools.issues):
-            return
-        issue = tools.issues[tools.issue_index]
-        for collection in entity_index().collections(tools.entity):
-            state = ensure_appearance_state(collection)
-            if state.name != issue.appearance:
-                continue
-            index = next(
-                (
-                    i
-                    for i, item in enumerate(state.components)
-                    if item.name == issue.component
-                ),
-                None,
-            )
-            with suspended():
-                tools.appearance = collection.name
-                if index is not None:
-                    tools.component_index = index
-            refresh_choices(context)
-            select_component_objects(context)
-            return
 
 
 def follow_active_object(context) -> bool:

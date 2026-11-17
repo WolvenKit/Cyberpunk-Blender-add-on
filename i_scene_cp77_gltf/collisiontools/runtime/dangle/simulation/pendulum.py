@@ -27,7 +27,7 @@ def compile_pendulum_nodes(sim):
         sim.system.pendulum_nodes[node_index] = pendulum_node(
             start, parent_index, axis_length
         )
-        sim._previous_parent_xforms[node_index] = Matrix.Identity(4)
+        sim.previous_parent_xforms[node_index] = Matrix.Identity(4)
 
 
 def pendulum_params(particle):
@@ -74,8 +74,8 @@ def _node_inputs(sim, node_index):
     particle = sim.particles[int(runtime["particle_index"])]
     return (
         particle,
-        sim._previous_parent_xforms[node_index],
-        sim._cur_bone_xform[int(runtime["parent_index"])],
+        sim.previous_parent_xforms[node_index],
+        sim.cur_bone_xform[int(runtime["parent_index"])],
     )
 
 

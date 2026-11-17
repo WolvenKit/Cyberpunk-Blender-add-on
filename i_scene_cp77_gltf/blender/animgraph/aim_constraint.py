@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import copy
-import json
 from typing import Any
 
 from ...animation.model.animgraph import aim_constraint, indices
 from ...animation.model.animgraph.indices import index_name
 from ...animation.model.animgraph.source_channels import STATIC_VECTOR_TYPE
-from ...assetio.values import handle_id
+from ...assetio.values import handle_id, json_array, json_object, json_text
 from ...core.log import get_logger, log_once
 from .access import (
     get_attr,
@@ -27,14 +26,6 @@ UP_SOURCE_KEY = "red_aim_constraint_up_transform_json"
 UP_TYPE_KEY = "red_aim_constraint_up_transform_type"
 
 
-def _load_json_idprop(node: Any, key: str, default):
-    try:
-        value = json.loads(str(get_idprop(node, key, "") or ""))
-    except (TypeError, ValueError):
-        return copy.deepcopy(default)
-    return value
-
-
 def capture_import_state(node: Any, data: dict) -> None:
     node_type = str((data or {}).get("$type", "") or "")
     legacy_targets = (
@@ -51,16 +42,8 @@ def capture_import_state(node: Any, data: dict) -> None:
     if node_type != aim_constraint.RED_TYPE:
         return
     try:
-        node[LEGACY_TARGETS_KEY] = json.dumps(
-            legacy_targets,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
-        node[UP_SOURCE_KEY] = json.dumps(
-            up_wrapper,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
+        node[LEGACY_TARGETS_KEY] = json_text(legacy_targets, sort_keys=False)
+        node[UP_SOURCE_KEY] = json_text(up_wrapper, sort_keys=False)
         node[UP_TYPE_KEY] = aim_constraint.up_channel_type(up_wrapper)
         payload = aim_constraint.up_channel_data(up_wrapper)
         names = aim_constraint.up_transform_names(up_wrapper)
@@ -117,11 +100,7 @@ def seed_authored_state(node: Any) -> None:
     }
     try:
         node[LEGACY_TARGETS_KEY] = "[]"
-        node[UP_SOURCE_KEY] = json.dumps(
-            up_wrapper,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
+        node[UP_SOURCE_KEY] = json_text(up_wrapper, sort_keys=False)
         node[UP_TYPE_KEY] = aim_constraint.TRANSFORM_VECTOR_TYPE
         node.red_aim_up_transform = ""
         node.red_aim_up_anchor_transform = ""
@@ -146,8 +125,7 @@ def seed_authored_state(node: Any) -> None:
 
 
 def _up_wrapper(node: Any) -> dict | None:
-    original = _load_json_idprop(node, UP_SOURCE_KEY, None)
-    wrapper = copy.deepcopy(original) if isinstance(original, dict) else {}
+    wrapper = json_object(get_idprop(node, UP_SOURCE_KEY, ""))
     payload = copied_wrapper_data(wrapper)
     channel_type = str(
         getattr(node, "red_aim_up_channel_type", "")
@@ -206,8 +184,7 @@ def canonicalize_node_data(node: Any, data: dict) -> dict:
     target = node_property_string(node, "targetTransform")
     out["targetTransform"] = indices.transform_index(target)
     # A resaved constraint aims at targetTransform; the legacy array goes back as it was imported.
-    legacy = _load_json_idprop(node, LEGACY_TARGETS_KEY, [])
-    out["targetTransforms"] = legacy if isinstance(legacy, list) else []
+    out["targetTransforms"] = json_array(get_idprop(node, LEGACY_TARGETS_KEY, ""))
     out["upTransform"] = _up_wrapper(node)
     out["areSourceChannelsResaved"] = 1
     return aim_constraint.canonicalize_for_export(out)

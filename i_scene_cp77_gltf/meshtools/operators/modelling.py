@@ -236,6 +236,9 @@ class CP77RotateObj(Operator):
 class CP77_OT_MirrorVertexGroups(Operator):
     bl_idname = "cp77.mirror_vertex_groups"
     bl_label = "Mirror vertex groups"
+    bl_description = (
+        "Swap the left and right names of the selected meshes' vertex groups"
+    )
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -255,9 +258,7 @@ class CP77DeleteUnusedBones(Operator):
     bl_idname = "delete_unused_bones.cp77"
     bl_parent_id = "CP77_PT_animspanel"
     bl_label = "Delete unused bones"
-    bl_description = (
-        "Delete all bones that aren't used by meshes parented to the armature"
-    )
+    bl_description = "Delete the armature's bones that no mesh on it carries weight on"
 
     def execute(self, context):
         return finish_operator(self, delete_unused_bones(context))
@@ -266,7 +267,7 @@ class CP77DeleteUnusedBones(Operator):
 class CP77DeleteOrphanBones(Operator):
     bl_idname = "cp77.delete_orphan_bones"
     bl_label = "Delete Orphan Bones"
-    bl_description = "Remove bones from associated armatures unless their exact name matches a vertex group in any selected mesh"
+    bl_description = "Remove the bones of the selected meshes' armatures that no mesh on them carries weight on"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod

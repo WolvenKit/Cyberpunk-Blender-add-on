@@ -11,7 +11,7 @@ from .normal_math import create_cp77_normal_texture
 from .window_parallax_source import build_window_parallax_coordinates, color_overlay_uv
 
 
-def _replicate(tree, value, location, label):
+def replicate_to_vector(tree, value, location, label):
     node = create_node(tree.nodes, "ShaderNodeCombineXYZ", location, label=label)
     for name in ("X", "Y", "Z"):
         tree.links.new(value, node.inputs[name])
@@ -366,7 +366,9 @@ class WindowParallaxInterior(InteriorParallaxCore):
                 (20, 500),
             )
 
-        interp_rgb = _replicate(tree, coords.room_interp, (20, 620), "roomInterp.xxx")
+        interp_rgb = replicate_to_vector(
+            tree, coords.room_interp, (20, 620), "roomInterp.xxx"
+        )
         depth_color = mix_color_socket(
             tree.nodes,
             tree.links,

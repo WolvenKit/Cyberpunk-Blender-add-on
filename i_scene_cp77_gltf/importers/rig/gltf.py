@@ -5,6 +5,7 @@ import os
 import numpy as np
 
 from ...animation.model.clip.metadata import SOURCE_REST_SNAPSHOT_KEY
+from ...animation.model.rig.data import RigData
 from ...bartmoss.quaternion import wxyz_from_xyzw
 from ...bartmoss.trs import decompose_matrices
 from ...blender.action_metadata import apply_skin_extras, store_json_snapshot
@@ -20,6 +21,7 @@ from ...gltf.skeleton import (
 )
 from ...redSpace.contracts import SOURCE_REST_SPACE_CONTRACT
 from ...redSpace.transforms import gltf_matrix_to_red, gltf_rest_relative_to_blender
+from .reader import create_armature_from_rig_data
 
 
 def import_gltf_rig(filepath):
@@ -108,8 +110,6 @@ def build_rest_armature_from_binding(
 ):
     """Construct a rig-import-compatible armature from an anims GLB rest pose"""
     # Armature construction stays owned by the importer rig domain.
-    from ...animation.model.rig.data import RigData
-    from .reader import create_armature_from_rig_data
 
     skin_extras = binding.skin_extras or {}
     bone_transforms, translations, rotations_xyzw, scales = _rest_local_trs_red(

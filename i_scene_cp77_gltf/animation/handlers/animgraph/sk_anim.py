@@ -8,7 +8,7 @@ class SkAnimHandler(GraphNodeHandler):
 
     def execute(self, context, step):
         if step.program_node.children:
-            result = context._execute_one_shot(
+            result = context.execute_one_shot(
                 step.program_node,
                 step.raw_dt,
                 step.time_dilation,
@@ -20,7 +20,7 @@ class SkAnimHandler(GraphNodeHandler):
             )
             step.frame_cache[step.cache_key] = result
             return result
-        result = context._sample_source_action(
+        result = context.sample_source_action(
             step.program_node,
             step.input_frame,
             additive_branch=bool(step.additive_branch),

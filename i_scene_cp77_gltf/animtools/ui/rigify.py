@@ -12,6 +12,7 @@ from ...blender.animation_context import active_armature
 from ...core.log import get_logger, log_once
 from ..blender.rigify.forward import forward_sync_enabled
 from ..blender.rigify.pairing import find_pair, rig_id, rig_ui_operator
+from ..blender.rigify.switches import limb_switch_bones
 
 _LOG = get_logger(__name__)
 
@@ -214,6 +215,8 @@ def draw_rigify_controls(layout, context) -> None:
                 exc_info=True,
             )
 
+        if limb_switch_bones(rig):
+            box.prop(rig, "cp77_rigify_ik_fk", slider=True)
         if not selected:
             box.label(text="Select a control bone")
         else:

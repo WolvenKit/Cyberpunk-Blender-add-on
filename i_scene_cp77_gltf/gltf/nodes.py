@@ -61,8 +61,8 @@ def node_matrix(node):
     return compose_matrix(translation, rotation, scale)
 
 
-def node_transforms(matrices, *, matrix_fallback=True):
-    """Serialize independent node transforms in one batch without quaternion sign coupling"""
+def node_transforms(matrices, *, exact=False):
+    """Serialize independent node transforms as TRS in one batch without quaternion sign coupling, raising when exact and one is not TRS"""
     values = np.asarray(matrices, dtype=np.float64)
     if values.ndim != 3 or values.shape[1:] != (4, 4):
         raise ValueError("Node transforms require an array of 4x4 matrices.")
@@ -83,21 +83,19 @@ def node_transforms(matrices, *, matrix_fallback=True):
     representable = np.all(
         np.isclose(reconstructed, selected, rtol=0, atol=1e-6), axis=(1, 2)
     )
-    representable &= np.all(np.abs(scales) > 1e-12, axis=1)
-    if matrix_fallback:
-        representable &= np.linalg.det(selected[:, :3, :3]) > 0
-    elif not np.all(representable):
+    singular = ~np.all(np.abs(scales) > 1e-12, axis=1)
+    if np.any(singular) or (exact and not np.all(representable)):
         raise ValueError(
             "Animated node rest transforms must be representable by non-singular TRS."
+            if exact
+            else "Node transforms must be non-singular."
         )
     translated = ~np.all(np.isclose(translations, 0, atol=1e-8), axis=1)
     rotated = ~np.all(np.isclose(rotations, (0, 0, 0, 1), atol=1e-8), axis=1)
     scaled = ~np.all(np.isclose(scales, 1, atol=1e-8), axis=1)
+    # WolvenKit reads node transforms as TRS only, so float noise or shear a TRS cannot hold is dropped.
     for row, index in enumerate(indices):
         node = result[index]
-        if not representable[row]:
-            node["matrix"] = selected[row].T.reshape(-1).tolist()
-            continue
         if translated[row]:
             node["translation"] = translations[row].tolist()
         if rotated[row]:

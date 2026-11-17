@@ -6,9 +6,10 @@ from .base import PoseOpHandler, resolve_bones, resolve_tracks
 
 class SimpleBounceHandler(PoseOpHandler):
     node_types = ("animAnimNode_SimpleBounce",)
+    bone_fields = ("startTransform", "endTransform")
 
     def map_data(self, context, program_node, node_type, data):
-        resolve_bones(context, data, ("startTransform", "endTransform"))
+        data = super().map_data(context, program_node, node_type, data)
         outputs = []
         for raw in data.get("transformOutputs", ()):
             item = dict(raw)

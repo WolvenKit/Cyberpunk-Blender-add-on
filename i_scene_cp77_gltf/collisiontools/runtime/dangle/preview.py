@@ -4,25 +4,39 @@ import time
 
 import bpy
 
-from ....animation.model.animgraph.constants import ANIMGRAPH_TREE_ID
+from ....animation.domain.animgraph.animation_scope import (
+    available_animation_names,
+    graph_animation_names,
+)
+from ....animation.domain.animgraph.math_expression import MathExpressionError
+from ....animation.domain.animgraph.topology import (
+    handle_index,
+    resolve,
+    static_condition_result,
+    static_switch_branch,
+)
+from ....animation.runtime.animgraph.linked_forces import LinkedForcePreview
+from ....blender.animgraph.preview_sessions import (
+    graph_tree_previewing,
+    preview_stop_callback,
+    stop_active_previews,
+)
 from ....blender.animgraph.preview_settings import adopt_dangle_settings
-from ....blender.animgraph.results_overlay import redraw_editors
 from ....blender.animgraph.rig_binding import binding_tree, bound_armature
 from ....blender.animgraph.source import load_graph_payload
-from ....blender.context import tag_view3d_redraw
+from ....blender.context import safe_mode_switch, tag_view3d_redraw
 from ....blender.operator_results import OperationResult
-from ....core.log import debug_exception, get_logger, log_once
+from ....blender.rig_metadata import source_rig_part_bindings
+from ....core.log import debug_exception, get_logger
+from ....gltf.provenance import SOURCE_PATH_KEY
 from ...blender.dangle_context import get_active_rig
+from ...blender.dangle_source import load_source_payload
+from .editor_state import refresh_graph_operations
 from .graph_state import GraphPreviewState
-from .overlay import _DRAW_CACHES, update_draw_cache
+from .overlay import DRAW_CACHES, update_draw_cache
 from .simulation import core, solvers, spaces
 
 SUPPORTED_PREVIEW_SOLVERS = {"DYNG", "PBD", "SPRING", "PENDULUM"}
-_ACTIVE_PREVIEW_SESSIONS = {}
-# Session key -> name of the graph tree a whole-graph preview plays, so a preview stops when its graph goes.
-_SESSION_GRAPHS = {}
-# Session key -> the simulator a whole-graph preview steps, for the graph editor's results and viewed node.
-_SESSION_SIMULATORS = {}
 
 
 _LOG = get_logger(__name__)
@@ -41,18 +55,6 @@ def _graph_preview_snapshot(rig, source_payload=None, *, errors=()):
     root_handle = ""
     if isinstance(source_payload, dict):
         try:
-            from ....animation.domain.animgraph.animation_scope import (
-                available_animation_names,
-                graph_animation_names,
-            )
-            from ....animation.domain.animgraph.topology import (
-                handle_index,
-                resolve,
-                static_condition_result,
-                static_switch_branch,
-            )
-            from ....gltf.provenance import SOURCE_PATH_KEY
-
             actions = getattr(getattr(bpy, "data", None), "actions", None)
             graph_names = graph_animation_names(source_payload)
             available = available_animation_names(
@@ -99,7 +101,6 @@ def _graph_preview_snapshot(rig, source_payload=None, *, errors=()):
                 )
                 if str(tag or "") and str(tag) != "None"
             )
-            from ....blender.rig_metadata import source_rig_part_bindings
 
             metarig_part_bindings = source_rig_part_bindings(rig)
             for handle, node in sorted(index.items(), key=lambda item: item[0]):
@@ -357,103 +358,8 @@ def _log_graph_preview_context(level, stage, rig, source_payload=None, *, errors
         _LOG.exception("AnimGraph preview diagnostic capture failed: stage=%s", stage)
 
 
-def _session_key(rig):
-    try:
-        return int(rig.as_pointer())
-    except (ReferenceError, AttributeError) as error:
-        log_once(
-            _LOG,
-            "DEBUG",
-            ("_session_key", type(error).__name__),
-            "session key: fell back after %s",
-            error,
-            exc_info=True,
-        )
-        return None
-
-
-def register_preview_session(rig, stop_callback, graph_tree=None, simulator=None):
-    key = _session_key(rig)
-    if key is not None:
-        _ACTIVE_PREVIEW_SESSIONS[key] = stop_callback
-        if graph_tree is not None:
-            _SESSION_GRAPHS[key] = binding_tree(graph_tree).name
-            _SESSION_SIMULATORS[key] = simulator
-    return key
-
-
-def _end_graph_session(tree_name, simulator) -> None:
-    """A stopped graph preview shows the final pose again, and its results leave the graph editor"""
-    runtime = getattr(simulator, "animgraph_runtime", None)
-    if runtime is not None:
-        runtime.view_handle = None
-    tree = bpy.data.node_groups.get(tree_name) if tree_name else None
-    if getattr(tree, "bl_idname", "") == ANIMGRAPH_TREE_ID:
-        tree.red_preview.view_handle = ""
-        redraw_editors(bpy.context.window_manager, tree_name)
-
-
-def unregister_preview_session(key):
-    if key is not None:
-        _ACTIVE_PREVIEW_SESSIONS.pop(key, None)
-        _end_graph_session(
-            _SESSION_GRAPHS.pop(key, None), _SESSION_SIMULATORS.pop(key, None)
-        )
-
-
-def stop_orphaned_previews():
-    """Stop every whole-graph preview whose graph tree no longer exists"""
-    for key, tree_name in tuple(_SESSION_GRAPHS.items()):
-        if tree_name not in bpy.data.node_groups:
-            stop_callback = _ACTIVE_PREVIEW_SESSIONS.get(key)
-            if stop_callback is not None:
-                stop_callback(None, False)
-            unregister_preview_session(key)
-
-
-def graph_runtime(graph_tree):
-    """The AnimGraph runtime of the whole-graph preview playing graph_tree, else None"""
-    name = binding_tree(graph_tree).name
-    for key, tree_name in _SESSION_GRAPHS.items():
-        if tree_name == name:
-            return getattr(_SESSION_SIMULATORS.get(key), "animgraph_runtime", None)
-    return None
-
-
-def session_results(graph_tree):
-    runtime = graph_runtime(graph_tree)
-    return runtime.results() if runtime is not None else None
-
-
-def set_view_handle(graph_tree, handle) -> None:
-    """Show the pose node handle produces on the rig, or the final pose again for an empty handle"""
-    runtime = graph_runtime(graph_tree)
-    if runtime is not None:
-        runtime.view_handle = handle or None
-    binding_tree(graph_tree).red_preview.view_handle = handle or ""
-
-
-def preview_running(rig) -> bool:
-    key = _session_key(rig)
-    return key is not None and key in _ACTIVE_PREVIEW_SESSIONS
-
-
-def stop_active_previews():
-    failures = []
-    for stop_callback in tuple(_ACTIVE_PREVIEW_SESSIONS.values()):
-        try:
-            stop_callback()
-        except Exception as error:
-            debug_exception(_LOG, "Could not stop an active Dangle preview")
-            failures.append(error)
-    _ACTIVE_PREVIEW_SESSIONS.clear()
-    if failures:
-        raise RuntimeError("; ".join(str(error) for error in failures))
-
-
 def stop_preview(context, rig, restore_pose=True):
-    key = _session_key(rig)
-    stop_callback = _ACTIVE_PREVIEW_SESSIONS.get(key) if key is not None else None
+    stop_callback = preview_stop_callback(rig)
     if stop_callback is not None:
         stop_callback(context, restore_pose)
         return True
@@ -506,8 +412,8 @@ def disable_rig(context):
     if rig is None:
         return OperationResult.cancelled("No active Dangle rig selected.", "WARNING")
     stop_preview(context, rig, restore_pose=True)
-    _DRAW_CACHES.pop(f"{rig.as_pointer()}", None)
-    _DRAW_CACHES.pop(rig.name, None)
+    DRAW_CACHES.pop(f"{rig.as_pointer()}", None)
+    DRAW_CACHES.pop(rig.name, None)
     state = rig.dangle_state
     state.dangle_nodes.clear()
     state.collision_shapes.clear()
@@ -520,7 +426,6 @@ def disable_rig(context):
 
 def refresh_graph_state(state, payload):
     """Read the graph's conditions, named inputs and dangle operations into state, keeping solver edits"""
-    from .editor_state import refresh_graph_operations
 
     rig = getattr(state, "id_data", None)
     try:
@@ -539,8 +444,6 @@ def refresh_graph_state(state, payload):
 
 
 def _refresh_graph_inputs(rig):
-    from ...blender.dangle_source import load_source_payload
-
     return refresh_graph_state(rig.dangle_state, load_source_payload(rig))
 
 
@@ -584,11 +487,6 @@ def toggle_graph_tag(graph_tree, tag):
         tags.append(tag)
     settings.visual_tags = ", ".join(tags)
     return OperationResult.finished()
-
-
-def graph_tree_previewing(graph_tree) -> bool:
-    name = binding_tree(graph_tree).name
-    return name in _SESSION_GRAPHS.values()
 
 
 def refresh_preview_inputs(context):
@@ -644,29 +542,22 @@ def toggle_preview_tag(context, tag):
 
 
 def _timeline_playback_active() -> bool:
-    context = getattr(bpy, "context", None)
-    screen = getattr(context, "screen", None)
-    if screen is not None and bool(getattr(screen, "is_animation_playing", False)):
-        return True
-    window_manager = getattr(context, "window_manager", None)
-    for window in getattr(window_manager, "windows", ()) or ():
-        candidate = getattr(window, "screen", None)
-        if candidate is not None and bool(
-            getattr(candidate, "is_animation_playing", False)
-        ):
-            return True
-    return False
+    return any(
+        bool(getattr(getattr(window, "screen", None), "is_animation_playing", False))
+        for window_manager in bpy.data.window_managers
+        for window in window_manager.windows
+    )
 
 
 def _register_frame_change_capture(simulator):
-    existing = getattr(simulator, "_frame_change_capture_handlers", None)
+    existing = getattr(simulator, "frame_change_capture_handlers", None)
     if existing is not None:
         return
 
     def _prepare_before_animation(_scene, _depsgraph=None):
         try:
             if getattr(getattr(simulator, "state", None), "is_playing", False):
-                simulator._timeline_playing = _timeline_playback_active()
+                simulator.timeline_playing = _timeline_playback_active()
                 simulator.prepare_frame_change_upstream()
         except ReferenceError:
             return
@@ -682,7 +573,7 @@ def _register_frame_change_capture(simulator):
         except Exception:
             _LOG.exception("Dangle frame-change upstream capture failed")
 
-    simulator._frame_change_capture_handlers = (
+    simulator.frame_change_capture_handlers = (
         _prepare_before_animation,
         _capture_after_animation,
     )
@@ -693,7 +584,7 @@ def _register_frame_change_capture(simulator):
 def _unregister_frame_change_capture(simulator):
     if simulator is None:
         return
-    handlers = getattr(simulator, "_frame_change_capture_handlers", None)
+    handlers = getattr(simulator, "frame_change_capture_handlers", None)
     if handlers is None:
         return
     pre_handler, post_handler = handlers
@@ -705,7 +596,7 @@ def _unregister_frame_change_capture(simulator):
         bpy.app.handlers.frame_change_post.remove(post_handler)
     except ValueError:
         pass
-    simulator._frame_change_capture_handlers = None
+    simulator.frame_change_capture_handlers = None
 
 
 def _enter_pose_mode(context, rig) -> bool:
@@ -714,7 +605,7 @@ def _enter_pose_mode(context, rig) -> bool:
     try:
         context.view_layer.objects.active = rig
         rig.select_set(True)
-        bpy.ops.object.mode_set(mode="POSE")
+        safe_mode_switch("POSE")
     except (RuntimeError, ReferenceError):
         return False
     return rig.mode == "POSE"
@@ -811,10 +702,6 @@ def prepare_preview(context, graph_tree=None):
                 return OperationResult.cancelled(
                     "Linked external force requires the imported AnimGraph source."
                 )
-            from ....animation.domain.animgraph.math_expression import (
-                MathExpressionError,
-            )
-            from ....animation.runtime.animgraph.linked_forces import LinkedForcePreview
 
             try:
                 linked_runtime = LinkedForcePreview(source_payload, linked)
@@ -852,6 +739,7 @@ def prepare_preview(context, graph_tree=None):
                 getattr(context, "view_layer", None), "update", None
             ),
             graph_tree=binding_tree(graph_tree) if graph_tree is not None else None,
+            scene=getattr(context, "scene", None),
         )
     except Exception as error:
         _log_graph_preview_context(
@@ -879,7 +767,8 @@ def prepare_preview(context, graph_tree=None):
 
 
 def step_preview(context, simulator, cache_key, dt):
-    simulator._timeline_playing = _timeline_playback_active()
+    simulator.scene = context.scene
+    simulator.timeline_playing = _timeline_playback_active()
     solvers.update_simulation(simulator, min(dt, 0.1), time_dilation=1.0)
     draw_started = time.perf_counter()
     update_draw_cache(cache_key, simulator)
@@ -923,5 +812,5 @@ def finalize_preview(context, rig, simulator, cache_key, restore_pose=True):
     except ReferenceError:
         pass
     if cache_key is not None:
-        _DRAW_CACHES.pop(cache_key, None)
+        DRAW_CACHES.pop(cache_key, None)
     tag_view3d_redraw(context)

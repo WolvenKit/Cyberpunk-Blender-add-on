@@ -1,10 +1,15 @@
 import bpy
 
-from ...blender.operator_results import OperationResult, finish_operator
+from ...blender.operator_results import (
+    OperationResult,
+    execute_operation,
+    finish_operator,
+)
 from ...blender.physics.vehicle_phys import load_vehicle_phys, vehicle_phys_preflight
 from ...core.log import debug_exception, get_logger, log_once
 from ...core.notifications import import_operation, report
 from ..blender.vehicle_config import validate_vehicle
+from ..services.phys_files import load_phys
 from ..services.scene import build_vehicle_preview, reset_vehicle_session
 from ..services.vehicle import (
     autofit_vehicle_configuration,
@@ -88,20 +93,31 @@ class PHYSX_OT_vehicle_setup_manual(bpy.types.Operator):
         return finish_operator(self, setup_vehicle_manual(context))
 
 
+def _refresh_bike(vehicle):
+    refresh_bike(vehicle)
+    return OperationResult.finished("Bike geometry refreshed")
+
+
+def _validate_vehicle(context):
+    vehicle = context.scene.physx_vehicle
+    try:
+        _store_validation_state(vehicle)
+    except Exception as error:
+        vehicle.validation_state = "ERROR"
+        vehicle.validation_errors = str(error)
+        vehicle.validation_warnings = ""
+        raise
+    return validate_vehicle_configuration(context)
+
+
 class PHYSX_OT_vehicle_autofit(bpy.types.Operator):
     bl_idname = "physx.vehicle_autofit"
     bl_label = "Refresh and Fit"
 
     def execute(self, context):
         if context.scene.physx_vehicle.vehicle_kind == "BIKE":
-            try:
-                refresh_bike(context.scene.physx_vehicle)
-            except Exception as error:
-                return finish_operator(
-                    self, OperationResult.cancelled(str(error), error=error)
-                )
-            return finish_operator(
-                self, OperationResult.finished("Bike geometry refreshed")
+            return execute_operation(
+                self, "Bike refresh", _refresh_bike, context.scene.physx_vehicle
             )
         return finish_operator(self, autofit_vehicle_configuration(context))
 
@@ -236,17 +252,7 @@ class PHYSX_OT_vehicle_validate(bpy.types.Operator):
     bl_description = "Run production validation and keep the result visible in the vehicle authoring workspace"
 
     def execute(self, context):
-        vehicle = context.scene.physx_vehicle
-        try:
-            _store_validation_state(vehicle)
-        except Exception as error:
-            vehicle.validation_state = "ERROR"
-            vehicle.validation_errors = str(error)
-            vehicle.validation_warnings = ""
-            return finish_operator(
-                self, OperationResult.cancelled(str(error), error=error)
-            )
-        return finish_operator(self, validate_vehicle_configuration(context))
+        return execute_operation(self, "Vehicle validation", _validate_vehicle, context)
 
 
 class PHYSX_OT_vehicle_load_game_data(bpy.types.Operator):
@@ -259,11 +265,6 @@ class PHYSX_OT_vehicle_load_game_data(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     filepath: bpy.props.StringProperty(subtype="FILE_PATH")
-    filename_ext = ".phys.json"
-    filter_glob: bpy.props.StringProperty(default="*.phys.json", options={"HIDDEN"})
-    handling_loaded: bpy.props.BoolProperty(
-        default=False, options={"HIDDEN", "SKIP_SAVE"}
-    )
 
     @classmethod
     def poll(cls, context):
@@ -274,12 +275,7 @@ class PHYSX_OT_vehicle_load_game_data(bpy.types.Operator):
             and vehicle.rig.type == "ARMATURE"
         )
 
-    def _load_handling(self, context):
-        result = resolve_vehicle_data(context)
-        self.handling_loaded = result.ok
-        return result
-
-    def _finish(self, context, collision):
+    def _finish(self, context, collision, missing=None):
         vehicle = context.scene.physx_vehicle
         name = vehicle.game_data_record.rsplit(".", 1)[-1] or "the vehicle"
         message = f"Loaded {name}" + (
@@ -289,14 +285,21 @@ class PHYSX_OT_vehicle_load_game_data(bpy.types.Operator):
         for warning in vehicle.game_data_warnings.splitlines():
             if warning:
                 report(self, "WARNING", warning, logger=_LOG)
+        if missing is not None:
+            report(
+                self,
+                "WARNING",
+                f"Chassis collision not loaded: {missing['depot_path']} is not exported "
+                "to the project or the Resource Root, so the preview uses the default box collider",
+                logger=_LOG,
+            )
         return {"FINISHED"}
 
     @import_operation
     def execute(self, context):
-        if not self.handling_loaded:
-            result = self._load_handling(context)
-            if not result.ok:
-                return finish_operator(self, result)
+        result = resolve_vehicle_data(context)
+        if not result.ok:
+            return finish_operator(self, result)
         rig = context.scene.physx_vehicle.rig
         try:
             missing = vehicle_phys_preflight(context, rig)
@@ -304,38 +307,18 @@ class PHYSX_OT_vehicle_load_game_data(bpy.types.Operator):
                 return self._finish(context, False)
             filepath = self.filepath or missing.get("local_path", "")
             if not filepath:
-                return finish_operator(
-                    self,
-                    OperationResult.cancelled(
-                        "Choose the chassis .phys.json the vehicle uses"
-                    ),
-                )
+                return self._finish(context, False, missing)
             load_vehicle_phys(
-                context, rig, filepath, target_collection=missing.get("collection")
+                context,
+                rig,
+                load_phys(filepath),
+                target_collection=missing.get("collection"),
             )
         except Exception as error:
             return finish_operator(
                 self, OperationResult.cancelled(str(error), error=error)
             )
         return self._finish(context, True)
-
-    def invoke(self, context, event):
-        result = self._load_handling(context)
-        if not result.ok:
-            return finish_operator(self, result)
-        try:
-            missing = vehicle_phys_preflight(context, context.scene.physx_vehicle.rig)
-        except Exception as error:
-            return finish_operator(
-                self, OperationResult.cancelled(str(error), error=error)
-            )
-        if missing is None or missing.get("local_path"):
-            return self.execute(context)
-        depot_path = str(missing.get("depot_path", "") or "").replace("\\", "/")
-        if depot_path:
-            self.filepath = depot_path.rsplit("/", 1)[-1] + ".json"
-        context.window_manager.fileselect_add(self)
-        return {"RUNNING_MODAL"}
 
 
 class PHYSX_OT_vehicle_clear_data(bpy.types.Operator):

@@ -33,9 +33,9 @@ def warp_time(context, step, inputs) -> None:
     """Time warping"""
     entries: list[SyncEntry] = []
     for index, weight in inputs:
-        context._gather_sync_entries(step.program_node.children[index], weight, entries)
+        context.gather_sync_entries(step.program_node.children[index], weight, entries)
     mean_duration = sum(entry.weight * entry.duration for entry in entries)
-    warpers = context._time_warp_progress
+    warpers = context.time_warp_progress
     progress = float(warpers.get(step.handle, 0.0))
     if mean_duration != 0.0:
         progress = math.fmod(
@@ -45,7 +45,7 @@ def warp_time(context, step, inputs) -> None:
         )
     warpers[step.handle] = progress
     for index, _weight in inputs:
-        context._sync_branch(step.program_node.children[index], progress)
+        context.sync_branch(step.program_node.children[index], progress)
 
 
 class BlendMaskDynamicHandler(GraphNodeHandler):
@@ -62,26 +62,26 @@ class BlendMaskDynamicHandler(GraphNodeHandler):
             if data["hasWeight"]
             else 0.0
         )
-        context._blend_weights[step.handle] = (1.0 - weight, weight)
+        context.blend_weights[step.handle] = (1.0 - weight, weight)
         mask_index = (
             context.values.link(
-                "int", context._source_index.get(step.handle, {}), None, "mask", set()
+                "int", context.source_index.get(step.handle, {}), None, "mask", set()
             )
             if data["hasMask"]
             else -1
         )
         masks = data["masks"]
         active = weight > 0.01 and 0 <= mask_index < len(masks)
-        states = context._mask_blend_active
+        states = context.mask_blend_active
         if active and not states.get(step.handle, False):
-            context._reset_branch_activation(step.program_node.children[1])
+            context.reset_branch_activation(step.program_node.children[1])
         states[step.handle] = active
         base = execute_child(context, step, 0)
         if not active:
             step.frame_cache[step.cache_key] = base
             return base
         blend = execute_child(context, step, 1)
-        part = context._rig_part_mask(masks[mask_index])
+        part = context.rig_part_mask(masks[mask_index])
         if part is None:
             step.frame_cache[step.cache_key] = base
             return base
@@ -133,8 +133,8 @@ class BlendMultipleHandler(GraphNodeHandler):
             for index, enabled in ((first, alpha < 1.0), (second, alpha > 0.0))
             if index >= 0 and enabled
         )
-        selections = context._blend_multiple_selection
-        states = context._blend_multiple_active
+        selections = context.blend_multiple_selection
+        states = context.blend_multiple_active
         previous_active = states.get(step.handle, frozenset())
         activated = active - previous_active
         sync_method = data.get("syncMethod")
@@ -143,28 +143,26 @@ class BlendMultipleHandler(GraphNodeHandler):
             # Progress is gathered from the previous selection before inputs change, then each
             # new input is synced to it.
             entries: list[SyncEntry] = []
-            context._gather_sync_entries(step.program_node, 1.0, entries)
+            context.gather_sync_entries(step.program_node, 1.0, entries)
             source = sync_source(entries, sync_method)
         selections[step.handle] = (first, second, alpha)
         weights = [0.0] * len(step.program_node.children)
         for index, share in ((first, 1.0 - alpha), (second, alpha)):
             if 0 <= index < len(weights):
                 weights[index] += share
-        context._blend_weights[step.handle] = tuple(weights)
+        context.blend_weights[step.handle] = tuple(weights)
         for index in sorted(activated):
-            context._reset_branch_activation(step.program_node.children[index])
+            context.reset_branch_activation(step.program_node.children[index])
         if source is not None:
             for index in sorted(activated):
-                context._sync_branch(step.program_node.children[index], source)
+                context.sync_branch(step.program_node.children[index], source)
         elif (
             sync_method and not previous_active and first in active and second in active
         ):
             # On activation the second input is synced to the freshly activated first one.
             entries = []
-            context._gather_sync_entries(
-                step.program_node.children[first], 1.0, entries
-            )
-            context._sync_branch(
+            context.gather_sync_entries(step.program_node.children[first], 1.0, entries)
+            context.sync_branch(
                 step.program_node.children[second], sync_source(entries, sync_method)
             )
         states[step.handle] = active
@@ -177,7 +175,7 @@ class BlendMultipleHandler(GraphNodeHandler):
             result = (
                 identity_frame(step.input_frame)
                 if step.additive_branch
-                else context._reference_frame(step.input_frame)
+                else context.reference_frame(step.input_frame)
             )
         elif first in frames and second in frames:
             result = interpolate_frames(frames[first], frames[second], alpha)
@@ -199,31 +197,31 @@ class BlendTwoHandler(GraphNodeHandler):
             minimum,
             maximum,
         )
-        context._blend_weights[step.handle] = (1.0 - weight, weight)
+        context.blend_weights[step.handle] = (1.0 - weight, weight)
         active = blend_two_inputs(weight)
-        previous = context._blend_two_active.get(step.handle, frozenset())
+        previous = context.blend_two_active.get(step.handle, frozenset())
         activated = active - previous
         sync_method = data.get("syncMethod")
         source = None
         if sync_method and activated and previous:
             # Progress is gathered from the inputs as they played before this frame's weight.
             entries: list[SyncEntry] = []
-            context._gather_sync_entries(step.program_node, 1.0, entries)
+            context.gather_sync_entries(step.program_node, 1.0, entries)
             source = sync_source(entries, sync_method)
         for index in sorted(activated):
-            context._reset_branch_activation(step.program_node.children[index])
+            context.reset_branch_activation(step.program_node.children[index])
         if source is not None:
             for index in sorted(activated):
-                context._sync_branch(step.program_node.children[index], source)
+                context.sync_branch(step.program_node.children[index], source)
         elif sync_method and not previous and len(active) == 2:
             # Both inputs start together: the second is synced to the first.
             entries = []
-            context._gather_sync_entries(step.program_node.children[0], 1.0, entries)
-            context._sync_branch(
+            context.gather_sync_entries(step.program_node.children[0], 1.0, entries)
+            context.sync_branch(
                 step.program_node.children[1], sync_source(entries, sync_method)
             )
-        context._blend_two_active[step.handle] = active
-        context._blend_two_weight[step.handle] = weight
+        context.blend_two_active[step.handle] = active
+        context.blend_two_weight[step.handle] = weight
         if data.get("timeWarping") and len(active) == 2:
             warp_time(context, step, ((0, 1.0 - weight), (1, weight)))
         frames = {
@@ -248,13 +246,13 @@ class BlendOverrideHandler(GraphNodeHandler):
         step.handle = normalized_source_handle(step.program_node.handle)
         blend_started = perf_counter()
         control = self._blend_control(context, step.handle)
-        context._blend_weights[step.handle] = (1.0 - control, control)
-        was_active = bool(context._blend_active.get(step.handle, False))
+        context.blend_weights[step.handle] = (1.0 - control, control)
+        was_active = bool(context.blend_active.get(step.handle, False))
         active, activated, deactivated = blend_activation_transition(
             was_active, control
         )
         if activated:
-            context._reset_branch_activation(step.program_node.children[1])
+            context.reset_branch_activation(step.program_node.children[1])
             _LOG.debug(
                 "BlendOverride %s override branch activated at weight %.6f",
                 step.handle,
@@ -266,12 +264,12 @@ class BlendOverrideHandler(GraphNodeHandler):
                 step.handle,
                 control,
             )
-        context._blend_active[step.handle] = active
+        context.blend_active[step.handle] = active
         if not active:
-            context._perf_blend += perf_counter() - blend_started
+            context.perf_blend += perf_counter() - blend_started
             step.frame_cache[step.cache_key] = base
             return base
-        context._perf_blend += perf_counter() - blend_started
+        context.perf_blend += perf_counter() - blend_started
         override = execute_child(context, step, 1)
         blend_started = perf_counter()
         if scope_signature(base) != scope_signature(override):
@@ -285,10 +283,10 @@ class BlendOverrideHandler(GraphNodeHandler):
         base_pose = dict(base.pose)
         base_tracks = {name: snap.value for name, snap in base.tracks.items()}
         override_tracks = {name: snap.value for name, snap in override.tracks.items()}
-        blend_settings = context._blend_data[step.handle]
+        blend_settings = context.blend_data[step.handle]
         if blend_settings.get("blendMethod") == "Mask":
             # The blend method runs first with the control value, then the node's own bone list and tracks.
-            part = context._rig_part_mask(blend_settings.get("maskName", ""))
+            part = context.rig_part_mask(blend_settings.get("maskName", ""))
             if part is not None:
                 apply_mask_blend(
                     base_pose,
@@ -304,7 +302,7 @@ class BlendOverrideHandler(GraphNodeHandler):
             override.pose,
             base_tracks,
             override_tracks,
-            context._blend_data[step.handle],
+            context.blend_data[step.handle],
             control,
             parent_map=base.parent_map,
         )
@@ -326,7 +324,7 @@ class BlendOverrideHandler(GraphNodeHandler):
             base.model_space,
             ik_targets=base.ik_targets,
         )
-        context._perf_blend += perf_counter() - blend_started
+        context.perf_blend += perf_counter() - blend_started
         step.frame_cache[step.cache_key] = result
         return result
 
@@ -342,26 +340,26 @@ class BlendAdditiveHandler(GraphNodeHandler):
     def execute(self, context, step):
         base = execute_child(context, step, 0)
         step.handle = normalized_source_handle(step.program_node.handle)
-        data = context._additive_data[step.handle]
+        data = context.additive_data[step.handle]
         blend_started = perf_counter()
-        control = context._additive_control(step.handle, data)
+        control = context.additive_control(step.handle, data)
         previous_track = str(data.get("previousFrameWeightTrack", "") or "")
         if previous_track:
             snapshot = base.tracks.get(previous_track)
             if snapshot is not None and snapshot.existed:
-                context._additive_previous_track_values[step.handle] = float(
+                context.additive_previous_track_values[step.handle] = float(
                     snapshot.value
                 )
         weight = final_additive_weight(
             control, data.get("biasValue", 0.0), data.get("scaleValue", 1.0)
         )
-        context._blend_weights[step.handle] = (1.0, weight)
-        was_active = bool(context._additive_active.get(step.handle, False))
+        context.blend_weights[step.handle] = (1.0, weight)
+        was_active = bool(context.additive_active.get(step.handle, False))
         active, activated, deactivated = additive_activation_transition(
             was_active, weight
         )
         if activated:
-            context._reset_branch_activation(step.program_node.children[1])
+            context.reset_branch_activation(step.program_node.children[1])
             _LOG.debug(
                 "BlendAdditive %s additive branch activated at weight %.6f",
                 step.handle,
@@ -373,12 +371,12 @@ class BlendAdditiveHandler(GraphNodeHandler):
                 step.handle,
                 weight,
             )
-        context._additive_active[step.handle] = active
+        context.additive_active[step.handle] = active
         if not active:
-            context._perf_blend += perf_counter() - blend_started
+            context.perf_blend += perf_counter() - blend_started
             step.frame_cache[step.cache_key] = base
             return base
-        context._perf_blend += perf_counter() - blend_started
+        context.perf_blend += perf_counter() - blend_started
         additive = execute_child(context, step, 1, additive_branch=True)
         blend_started = perf_counter()
         if scope_signature(base) != scope_signature(additive):
@@ -400,7 +398,7 @@ class BlendAdditiveHandler(GraphNodeHandler):
             weight=weight,
             additive_type=data.get("additiveType", "AGAT_Local"),
             blend_tracks=data.get("blendTracks", "AGBT_Add"),
-            mask_weights=context._additive_masks.get(step.handle),
+            mask_weights=context.additive_masks.get(step.handle),
         )
         tracks = dict(base.tracks)
         for name in evaluation.tracks_written:
@@ -420,6 +418,6 @@ class BlendAdditiveHandler(GraphNodeHandler):
             base.model_space,
             ik_targets=base.ik_targets,
         )
-        context._perf_blend += perf_counter() - blend_started
+        context.perf_blend += perf_counter() - blend_started
         step.frame_cache[step.cache_key] = result
         return result

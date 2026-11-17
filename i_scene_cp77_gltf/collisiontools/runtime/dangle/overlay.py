@@ -15,11 +15,13 @@ from ....bartmoss.wireframes import (
     two_sided_ellipsoid_wireframe,
 )
 from ....blender.armature_bones import resolve_pose_bone
+from ....blender.context import with_context
+from ....blender.gpu_overlay import line_drawing, uniform_color_shader
 from ....core.log import get_logger, log_once
 from .simulation import collision, spaces, spring
 
 _GLOBAL_HANDLER = None
-_DRAW_CACHES = {}
+DRAW_CACHES = {}
 _STATIC_DRAW_CACHE = {}
 _LOG = get_logger(__name__)
 
@@ -168,25 +170,27 @@ def _iter_authored_shapes(state):
 
 class DangleDrawCache:
     def __init__(self):
-        self.shader = gpu.shader.from_builtin("UNIFORM_COLOR")
+        self.shader = uniform_color_shader()
         self.batches = {}
         self.matrix_world = Matrix.Identity(4)
         self.simulator = None
+        self._built = None
 
     def update(self, sim):
         # Keep only the live simulator reference. Dynamic GPU geometry is built
         # from the final post-solver pose in draw(), after Blender has evaluated
         # the pose-bone writes for the current simulation step.
         self.simulator = sim
+        self._built = None
 
     @staticmethod
     def _live_bone_matrix(sim, bone_index):
-        if 0 <= int(bone_index) < len(sim._pose_bones):
-            pose_bone = sim._pose_bones[int(bone_index)]
+        if 0 <= int(bone_index) < len(sim.tracked_pose_bones):
+            pose_bone = sim.tracked_pose_bones[int(bone_index)]
             if pose_bone is not None:
                 return pose_bone.matrix.copy()
-        if 0 <= int(bone_index) < len(sim._interp_bone_xform):
-            return sim._interp_bone_xform[int(bone_index)].copy()
+        if 0 <= int(bone_index) < len(sim.interp_bone_xform):
+            return sim.interp_bone_xform[int(bone_index)].copy()
         return Matrix.Identity(4)
 
     def _rebuild(self, sim):
@@ -194,8 +198,6 @@ class DangleDrawCache:
         if sim is None or sim.system.num_particles == 0:
             return
         system = sim.system
-        # The simulator's model space follows the armature's matrix_world, not its evaluated matrix.
-        self.matrix_world = sim.arm_obj.matrix_world.copy()
         live_matrices = {}
 
         def live_bone_matrix(bone_index):
@@ -295,35 +297,34 @@ class DangleDrawCache:
                 self.batches[name] = batch
 
     def draw(self):
-        # Resolve coordinates from the live simulator immediately before draw.
-        # Timer/depsgraph ordering may update pose matrices after the simulation
-        # step callback, so cached world/model-space GPU batches are not stable.
-        if self.simulator is not None:
-            self._rebuild(self.simulator)
+        sim = self.simulator
+        if sim is not None:
+            # The simulator's model space follows the armature's matrix_world, not its evaluated matrix.
+            self.matrix_world = sim.arm_obj.matrix_world.copy()
+            state = sim.state
+            built = (
+                sim.step_count,
+                state.show_global_constraints,
+                state.show_global_velocity,
+                state.show_global_capsules,
+                state.show_global_body_shapes,
+                state.show_global_cones,
+            )
+            if built != self._built:
+                self._rebuild(sim)
+                self._built = built
         if not self.batches:
             return
-        pushed = False
-        try:
-            gpu.state.blend_set("ALPHA")
-            gpu.state.depth_test_set("LESS_EQUAL")
-            gpu.matrix.push()
-            pushed = True
+        with line_drawing(depth_test="LESS_EQUAL"), gpu.matrix.push_pop():
             gpu.matrix.multiply_matrix(self.matrix_world)
             self.shader.bind()
             for name, batch in self.batches.items():
                 self.shader.uniform_float("color", _COLORS[name])
                 batch.draw(self.shader)
-        finally:
-            if pushed:
-                gpu.matrix.pop()
-            gpu.state.depth_test_set("NONE")
-            gpu.state.blend_set("NONE")
-            gpu.state.line_width_set(1.0)
-            gpu.state.point_size_set(1.0)
 
 
 def _build_static_rig_batches(arm, st):
-    shader = gpu.shader.from_builtin("UNIFORM_COLOR")
+    shader = uniform_color_shader()
     draw_items = []
     mw = arm.matrix_world
 
@@ -466,22 +467,15 @@ def _draw_static_rig(arm, st):
         _STATIC_DRAW_CACHE.clear()
         _STATIC_DRAW_CACHE[key] = cached
     shader, draw_items = cached
-    try:
-        gpu.state.blend_set("ALPHA")
-        gpu.state.depth_test_set("LESS_EQUAL")
+    with line_drawing(depth_test="LESS_EQUAL"):
         shader.bind()
         for batch, color in draw_items:
             shader.uniform_float("color", color)
             batch.draw(shader)
-    finally:
-        gpu.state.depth_test_set("NONE")
-        gpu.state.blend_set("NONE")
-        gpu.state.line_width_set(1.0)
-        gpu.state.point_size_set(1.0)
 
 
 @persistent
-def _invalidate_static_draw_cache(_scene=None, depsgraph=None):
+def invalidate_static_draw_cache(_scene=None, depsgraph=None):
     if depsgraph is None:
         _STATIC_DRAW_CACHE.clear()
         return
@@ -500,19 +494,19 @@ def _invalidate_static_draw_cache(_scene=None, depsgraph=None):
                 return
 
 
-def _dangle_overlays_enabled():
-    scene = getattr(bpy.context, "scene", None)
+def _dangle_overlays_enabled(context):
+    scene = getattr(context, "scene", None)
     physics = getattr(scene, "physx", None) if scene is not None else None
     return bool(physics and physics.viz_enabled)
 
 
-def _master_draw_callback():
-    if not _dangle_overlays_enabled():
+def _master_draw_callback(context):
+    if not _dangle_overlays_enabled(context):
         return
     try:
-        for cache in tuple(_DRAW_CACHES.values()):
+        for cache in tuple(DRAW_CACHES.values()):
             cache.draw()
-        arm = bpy.context.object
+        arm = context.object
         if arm and arm.type == "ARMATURE" and arm.dangle_state.is_dangle_rig:
             if not arm.dangle_state.is_playing and not spaces.armature_space_errors(
                 arm
@@ -526,31 +520,20 @@ def _master_draw_callback():
             "Dangle viewport draw failed: %s",
             error,
         )
-    finally:
-        gpu.state.depth_test_set("NONE")
-        gpu.state.blend_set("NONE")
-        gpu.state.line_width_set(1.0)
-        gpu.state.point_size_set(1.0)
 
 
 def update_draw_cache(rig_id: str, sim):
-    if rig_id not in _DRAW_CACHES:
-        _DRAW_CACHES[rig_id] = DangleDrawCache()
-    _DRAW_CACHES[rig_id].update(sim)
+    if rig_id not in DRAW_CACHES:
+        DRAW_CACHES[rig_id] = DangleDrawCache()
+    DRAW_CACHES[rig_id].update(sim)
 
 
 def register_global_handler():
     global _GLOBAL_HANDLER
     if _GLOBAL_HANDLER is None:
         _GLOBAL_HANDLER = bpy.types.SpaceView3D.draw_handler_add(
-            _master_draw_callback, (), "WINDOW", "POST_VIEW"
+            with_context(_master_draw_callback), (), "WINDOW", "POST_VIEW"
         )
-    handlers = bpy.app.handlers.depsgraph_update_post
-    if _invalidate_static_draw_cache not in handlers:
-        handlers.append(_invalidate_static_draw_cache)
-    load_handlers = bpy.app.handlers.load_pre
-    if _invalidate_static_draw_cache not in load_handlers:
-        load_handlers.append(_invalidate_static_draw_cache)
 
 
 def unregister_all():
@@ -558,11 +541,5 @@ def unregister_all():
     if _GLOBAL_HANDLER:
         bpy.types.SpaceView3D.draw_handler_remove(_GLOBAL_HANDLER, "WINDOW")
         _GLOBAL_HANDLER = None
-    handlers = bpy.app.handlers.depsgraph_update_post
-    if _invalidate_static_draw_cache in handlers:
-        handlers.remove(_invalidate_static_draw_cache)
-    load_handlers = bpy.app.handlers.load_pre
-    if _invalidate_static_draw_cache in load_handlers:
-        load_handlers.remove(_invalidate_static_draw_cache)
-    _DRAW_CACHES.clear()
+    DRAW_CACHES.clear()
     _STATIC_DRAW_CACHE.clear()

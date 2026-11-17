@@ -11,10 +11,10 @@ class FacialMixerHandler(GraphNodeHandler):
     def execute(self, context, step):
         result = execute_first_child(context, step)
         step.handle = normalized_source_handle(step.program_node.handle)
-        state = context._facial_mixer_states.setdefault(step.handle, FacialMixerState())
-        result = context._advance_facial_mixer_frame(
+        state = context.facial_mixer_states.setdefault(step.handle, FacialMixerState())
+        result = context.advance_facial_mixer_frame(
             state,
-            context._facial_mixer_data.get(step.handle, dict(step.program_node.data)),
+            context.facial_mixer_data.get(step.handle, dict(step.program_node.data)),
             result,
             float(step.raw_dt) * float(step.time_dilation),
         )

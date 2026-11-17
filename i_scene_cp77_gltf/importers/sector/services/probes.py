@@ -3,12 +3,12 @@ from __future__ import annotations
 import bpy
 from mathutils import Matrix, Vector
 
+from ....assetio.paths import depot_path
 from ....assetio.transform_values import vector3_from_data
 from ....assetio.values import coerce_float
 from ....blender.naming import fit_id_name
+from ....blender.reflection_probe_registry import register_reflection_probe
 from ....blender.transactions import track_created_datablock
-from ...common.paths import depot_path
-from ...common.reflection_probe_registry import register_reflection_probe
 from ...common.reflection_probe_semantics import (
     scalar_edge_falloff,
     source_bool,
@@ -145,6 +145,6 @@ class ReflectionProbeService:
             volumeChannels=str(data.get("volumeChannels", "0")),
         )
 
-        scene = getattr(bpy.context, "scene", None)
+        scene = getattr(self.session.blender_context, "scene", None)
         if scene is not None:
             register_reflection_probe(scene, obj)

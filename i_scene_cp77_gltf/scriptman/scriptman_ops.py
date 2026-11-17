@@ -6,6 +6,7 @@ from bpy.props import StringProperty
 from bpy.types import Operator
 
 from ..assetio.atomic import atomic_write_text
+from ..assetio.files import rename_file
 from ..core.log import get_logger
 from ..core.notifications import report
 from ..core.registration import get_classes
@@ -81,7 +82,17 @@ class CP77LoadScript(Operator):
 
             if os.path.exists(script_path):
                 if not os.path.exists(new_script_path):
-                    os.rename(script_path, new_script_path)
+                    try:
+                        rename_file(script_path, new_script_path)
+                    except OSError as error:
+                        report(
+                            self,
+                            "ERROR",
+                            f"Could not rename '{script_name}': {error}",
+                            logger=_LOG,
+                            error=error,
+                        )
+                        return {"CANCELLED"}
                     follow_renamed_script(script_path, new_script_path)
                     report(
                         self,
@@ -172,7 +183,17 @@ class CP77DeleteScript(Operator):
             return {"CANCELLED"}
 
         if os.path.exists(script_path):
-            os.remove(script_path)
+            try:
+                os.remove(script_path)
+            except OSError as error:
+                report(
+                    self,
+                    "ERROR",
+                    f"Could not delete '{self.script_file}': {error}",
+                    logger=_LOG,
+                    error=error,
+                )
+                return {"CANCELLED"}
             forget_deleted_script(script_path)
             return {"FINISHED"}
         report(self, "ERROR", f"Script not found: {self.script_file}", logger=_LOG)

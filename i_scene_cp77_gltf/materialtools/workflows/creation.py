@@ -15,13 +15,14 @@ from ...blender.transactions import new_tracked_datablock, track_mutation, trans
 from ...core.log import get_logger, log_once
 from ...core.notifications import report
 from ...materials.blender.builder import MaterialBuilder
+from ...materials.blender.images import DEFAULT_IMAGE_FORMAT
+from ...materials.blender.multilayer import MAX_LAYERS
 from ..application.options import (
     MATERIAL_TOOL_RESOURCE_EXTENSIONS,
     MaterialToolsRequest,
 )
 from ..application.session import MaterialToolsSession
 from ..common.access import active_mesh
-from ..common.constants import MAX_LAYERS
 from ..multilayer.editor import synchronize_panel
 from ..painting.masks import generate_mask_images
 
@@ -69,7 +70,7 @@ def _default_material():
         # The build reads the filled-out setup in place of the bundled one.
         session.material_resources.provide(setup, _default_setup(setup))
         materials = (raw_material,)
-        material = MaterialBuilder(materials, defaults, "png", "").create(
+        material = MaterialBuilder(None, defaults, DEFAULT_IMAGE_FORMAT, "").create(
             materials, 0, force_rebuild=True
         )
     if material is None:

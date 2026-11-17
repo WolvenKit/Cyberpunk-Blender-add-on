@@ -249,7 +249,7 @@ _TEMPLATE_DEFAULTS = {
 
 
 # Fallback for templates without an explicit defaults table.
-_SCALAR_DEFAULTS = {
+SCALAR_DEFAULTS = {
     "Opacity": 1.0,
     "OpacityBackFace": 0.0,
     "TintFromVertexPaint": 0.0,
@@ -315,7 +315,7 @@ _TEMPLATE_DEFAULTS_NORMALIZED = {
 def template_defaults(template):
     """Authored .mt values for one template, falling back to the shared table"""
     return _TEMPLATE_DEFAULTS_NORMALIZED.get(
-        backslash_depot_key(template), _SCALAR_DEFAULTS
+        backslash_depot_key(template), SCALAR_DEFAULTS
     )
 
 
@@ -357,9 +357,7 @@ class Glass(MaterialTypeBase):
         )
         if not path:
             return None
-        image = self._load_relative_image(
-            path, non_color=non_color, error_label="glass"
-        )
+        image = self.load_relative_image(path, non_color=non_color, error_label="glass")
         if image is None:
             return None
 
@@ -581,7 +579,7 @@ class Glass(MaterialTypeBase):
             return param_float(
                 data,
                 key,
-                defaults.get(key, defaults.get(name, _SCALAR_DEFAULTS.get(name, 0.0))),
+                defaults.get(key, defaults.get(name, SCALAR_DEFAULTS.get(name, 0.0))),
             )
 
         def scalar(name):

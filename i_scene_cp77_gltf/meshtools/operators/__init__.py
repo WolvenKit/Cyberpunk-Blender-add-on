@@ -1,3 +1,14 @@
+from .appearances import (
+    CP77_OT_MeshAppearanceAdd,
+    CP77_OT_MeshAppearanceAssign,
+    CP77_OT_MeshAppearanceDisplay,
+    CP77_OT_MeshAppearanceMaterialAdd,
+    CP77_OT_MeshAppearanceMaterialRemove,
+    CP77_OT_MeshAppearanceRemove,
+    CP77_OT_MeshAppearanceReset,
+    CP77_OT_MeshAppearanceUseAdd,
+    CP77_OT_MeshAppearanceUseRemove,
+)
 from .modelling import (
     CP77_OT_MirrorVertexGroups,
     CP77_OT_MirrorXAxis,
@@ -44,4 +55,13 @@ MESH_OPERATOR_CLASSES = (
     CP77_OT_MirrorXAxis,
     CP77DeleteUnusedBones,
     CP77DeleteOrphanBones,
+    CP77_OT_MeshAppearanceAdd,
+    CP77_OT_MeshAppearanceRemove,
+    CP77_OT_MeshAppearanceDisplay,
+    CP77_OT_MeshAppearanceAssign,
+    CP77_OT_MeshAppearanceReset,
+    CP77_OT_MeshAppearanceMaterialAdd,
+    CP77_OT_MeshAppearanceMaterialRemove,
+    CP77_OT_MeshAppearanceUseAdd,
+    CP77_OT_MeshAppearanceUseRemove,
 )

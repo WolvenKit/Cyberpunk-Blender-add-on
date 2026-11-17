@@ -2,14 +2,14 @@ import bpy
 
 from ....animation.model.animgraph.constants import ANIMGRAPH_TREE_ID
 from ....animation.model.animgraph.handles import normalized_source_handle
-from ....blender.animgraph.results_overlay import POSE_SOCKET_ID
-from ....blender.animgraph.rig_binding import binding_tree
-from ....blender.context import node_editor_tree
-from ....collisiontools.runtime.dangle.preview import (
+from ....blender.animgraph.preview_sessions import (
     graph_runtime,
     graph_tree_previewing,
     set_view_handle,
 )
+from ....blender.animgraph.results_overlay import POSE_SOCKET_ID
+from ....blender.animgraph.rig_binding import binding_tree
+from ....blender.context import node_editor_tree
 from ....core.log import get_logger
 from ....core.notifications import report
 

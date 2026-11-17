@@ -1,7 +1,7 @@
 import os
 
 from ...assetio.documents import DocumentLoadError
-from ...importers.sector.parser import parse_sector_document
+from ...assetio.sector_parser import parse_sector_document
 
 
 class SectorSourceRepository:

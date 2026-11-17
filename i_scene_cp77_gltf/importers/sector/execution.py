@@ -12,15 +12,32 @@ from functools import partial
 import bpy
 from mathutils import Matrix, Quaternion, Vector
 
-from ...assetio.paths import local_path_key, same_local_path
+from ...assetio.paths import depot_path, local_path_key, same_local_path
+from ...assetio.sector_model import PlacedContent
 from ...assetio.streaming_sector import COOKED_PLAIN_TYPES
 from ...assetio.values import cname_text, coerce_int, json_array
 from ...bartmoss.matrix import flatten_matrix, matrix_is_identity
+from ...blender.entity.transforms import (
+    clear_pending_child_of_inverse_requests,
+    flush_pending_child_of_inverse_requests,
+    pending_child_of_inverse_count,
+    request_child_of_inverse,
+)
 from ...blender.identity import rna_identity, rna_is_live
+from ...blender.ink import screens as ink_screens
+from ...blender.light_channels import (
+    clear_light_channel_records,
+    is_light_channel_volume,
+    rebuild_light_channel_links,
+    retire_light_channel_volumes,
+    stored_light_channel_records,
+)
+from ...blender.light_near_shadows import unblock_near_geometry
 from ...blender.matrix import instance_matrix, object_world_matrix
 from ...blender.mesh import is_preview_only_modifier
 from ...blender.naming import fit_id_name
 from ...blender.physics.actors import prune_actor_registry
+from ...blender.reflection_probe_registry import mark_registered_reflection_probes_dirty
 from ...blender.shader_nodes import remove_unused_shading
 from ...blender.transactions import (
     BlenderImportTransaction,
@@ -54,31 +71,14 @@ from ...materials.blender.profiling import (
     material_profile_total,
 )
 from ..common.cache import acquire_material_cache, release_material_cache
-from ..common.light_channels import (
-    clear_light_channel_records,
-    is_light_channel_volume,
-    rebuild_light_channel_links,
-    retire_light_channel_volumes,
-    stored_light_channel_records,
-)
-from ..common.light_near_shadows import unblock_near_geometry
-from ..common.paths import depot_path
 from ..common.progress import NO_PROGRESS, BlenderImportProgress
-from ..common.reflection_probe_registry import mark_registered_reflection_probes_dirty
 from ..common.results import ImportResult, unique_messages
-from ..entity.transforms import (
-    clear_pending_child_of_inverse_requests,
-    flush_pending_child_of_inverse_requests,
-    pending_child_of_inverse_count,
-    request_child_of_inverse,
-)
 from .context import (
     SectorContentError,
     SectorExecutionContext,
     SectorNodeContext,
     SectorPlacementOperations,
 )
-from .model import PlacedContent
 from .objects import (
     NodePropertyAssigner,
     assign_id_properties,
@@ -1061,8 +1061,6 @@ def _copy_collection_tree_with_placement_root(
     _remap_blueprint_references(copy_map, blueprint)
 
     if blueprint.animated_widget_roots:
-        from ...blender.ink import screens as ink_screens
-
         for source_root in blueprint.animated_widget_roots:
             copied_root = copy_map.get(source_root)
             if copied_root is not None:
@@ -1159,15 +1157,16 @@ def _variant_lookup(variant_indices, node_data_count):
     )
 
 
-def _is_sector_collection(collection):
+def _collection_flag(collection, key):
     try:
-        return bool(collection.get("cp77_sector_path"))
+        return bool(collection.get(key))
     except (AttributeError, ReferenceError, TypeError) as error:
         log_once(
             _LOG,
             "DEBUG",
-            ("_is_sector_collection", type(error).__name__),
-            "is sector collection: fell back after %s",
+            ("_collection_flag", key, type(error).__name__),
+            "collection flag %s: fell back after %s",
+            key,
             error,
             exc_info=True,
         )
@@ -1176,7 +1175,11 @@ def _is_sector_collection(collection):
 
 def _sector_content_tree(root):
     """Collections owned by root"""
-    stack = [child for child in root.children if not _is_sector_collection(child)]
+    stack = [
+        child
+        for child in root.children
+        if not _collection_flag(child, "cp77_sector_path")
+    ]
     seen = set()
     while stack:
         collection = stack.pop()
@@ -1186,7 +1189,9 @@ def _sector_content_tree(root):
         seen.add(identity)
         yield collection
         stack.extend(
-            child for child in collection.children if not _is_sector_collection(child)
+            child
+            for child in collection.children
+            if not _collection_flag(child, "cp77_sector_path")
         )
 
 
@@ -1389,21 +1394,6 @@ def _relink_sector_light_channels(
     return channel_summary
 
 
-def _is_light_link_collection(collection):
-    try:
-        return bool(collection.get("cp77_light_link_scope"))
-    except (AttributeError, ReferenceError, TypeError) as error:
-        log_once(
-            _LOG,
-            "DEBUG",
-            ("_is_light_link_collection", type(error).__name__),
-            "is light link collection: fell back after %s",
-            error,
-            exc_info=True,
-        )
-        return False
-
-
 def _restore_replaced_names(renamed):
     indexes = {}
     for datablock, original in renamed:
@@ -1540,7 +1530,8 @@ def _remove_replaced_sector_content(replaced):
         for obj in objects
         if rna_is_live(obj)
         and all(
-            rna_identity(owner) in doomed_ids or _is_light_link_collection(owner)
+            rna_identity(owner) in doomed_ids
+            or _collection_flag(owner, "cp77_light_link_scope")
             for owner in owners.get(rna_identity(obj), ())
         )
     ]
@@ -1596,7 +1587,7 @@ def _detach_sector_content(sector_collection, replaced):
     top_children = tuple(
         child
         for child in sector_collection.children
-        if not _is_sector_collection(child)
+        if not _collection_flag(child, "cp77_sector_path")
     )
     top_objects = tuple(sector_collection.objects)
     if not top_children and not top_objects:
@@ -1932,7 +1923,7 @@ def _organize_sector_placements(
             semantic_name in protected
             or collection.name in protected
             or collection is variant_root
-            or _is_sector_collection(collection)
+            or _collection_flag(collection, "cp77_sector_path")
         ):
             continue
         target = destination(collection)
@@ -2235,6 +2226,7 @@ def _import_sectors_transactional(
                         options,
                         force_refresh=force_refresh,
                         depot_root=depot_root,
+                        blender_context=bpy.context,
                     ) as session:
                         progress.set(5.0, "Planning sectors", force=True)
                         result = _import_sectors(

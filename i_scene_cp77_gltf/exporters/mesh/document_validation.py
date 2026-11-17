@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ...gltf.accessors import GLTFAccessorReader
+from ...gltf.accessors import COMPONENT_DTYPES, FLOAT, GLTFAccessorReader
 from ...gltf.container import (
     GLBContainer,
     GLBContainerError,
@@ -56,7 +56,7 @@ def validate_direct_mesh_document(document: dict, binary: bytes) -> dict:
             )
 
     widths = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}
-    sizes = {5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4}
+    sizes = {component: dtype.itemsize for component, dtype in COMPONENT_DTYPES.items()}
     for index, accessor in enumerate(accessors):
         width = widths.get(accessor.get("type"))
         size = sizes.get(int(accessor.get("componentType", 0)))
@@ -253,7 +253,7 @@ def validate_direct_mesh_document(document: dict, binary: bytes) -> dict:
                 layout = accessors[int(target_accessor)]
                 if (
                     layout.get("type") != "VEC3"
-                    or layout.get("componentType") != 5126
+                    or layout.get("componentType") != FLOAT
                     or int(layout.get("count", -1)) != vertex_count
                 ):
                     raise DirectMeshExportError(

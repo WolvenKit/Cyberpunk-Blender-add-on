@@ -57,15 +57,11 @@ def skinned_points(
     blended = np.einsum(
         "nk,fkij->fnij", weights, np.asarray(bone_matrices, dtype=np.float64)
     )
-    posed = (
-        np.einsum(
-            "fnij,nj->fni", blended[..., :3, :3], np.asarray(points, dtype=np.float64)
-        )
-        + blended[..., :3, 3]
-    )
-    turned = np.einsum(
-        "fnij,nj->fni", blended[..., :3, :3], np.asarray(normals, dtype=np.float64)
-    )
+    rotations = blended[..., :3, :3]
+    posed = (rotations @ np.asarray(points, dtype=np.float64)[:, :, None])[
+        ..., 0
+    ] + blended[..., :3, 3]
+    turned = (rotations @ np.asarray(normals, dtype=np.float64)[:, :, None])[..., 0]
     return posed, turned / np.maximum(
         np.linalg.norm(turned, axis=-1, keepdims=True), 1e-15
     )

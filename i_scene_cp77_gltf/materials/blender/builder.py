@@ -13,35 +13,35 @@ from ...blender.shader_nodes import outputs_detached
 from ...blender.transactions import track_created_datablock
 from ...core.addon_identity import get_addon_preferences, get_addon_version
 from ...core.log import get_logger, log_once
-from ...material_types.graph import (
-    bundle_principled_surface_links,
-    organize_material_graph,
-    organize_material_groups,
-)
 from ..parser import base_material_path
 from .cache import (
-    _MATERIAL_CACHE,
-    _MATERIAL_CACHE_STATS,
-    _MATERIAL_PROTOTYPE_CACHE,
-    _cache_material,
-    _invalidate_material_signature,
-    _lookup_cached,
-    _raw_material_digests,
-    _record_exact_hit,
-    _record_prototype_hit,
+    MATERIAL_CACHE,
+    MATERIAL_CACHE_STATS,
+    MATERIAL_PROTOTYPE_CACHE,
+    cache_material,
+    invalidate_material_signature,
+    lookup_cached,
+    raw_material_digests,
+    record_exact_hit,
+    record_prototype_hit,
     record_structure_copy,
     remember_structure,
     structure_sharing_active,
     structure_snapshot,
 )
 from .images import embedded_textures_of, record_material_placeholders
+from .layout import (
+    bundle_principled_surface_links,
+    organize_material_graph,
+    organize_material_groups,
+)
 from .profiling import (
     begin_material_phase,
     end_material_phase,
     finish_material_build,
     start_material_build,
 )
-from .registry import DECAL_REGISTRY, REGISTRY
+from .registry import DECAL_REGISTRY, REGISTRY, HandlerFactory
 
 _LOG = get_logger(__name__)
 
@@ -93,28 +93,16 @@ def _record_material_organization_phases(timings):
         _MATERIAL_ORGANIZATION_PHASE_TIMINGS[str(name)] += max(0.0, float(seconds))
 
 
-def _record_material_handler_timing(name, template_path, seconds):
+def _record_material_timing(tables, name, template_path, seconds):
     elapsed = max(0.0, float(seconds))
     handler_name = str(name or "<unknown>")
-    values = _MATERIAL_HANDLER_TIMINGS[handler_name]
-    values[0] += elapsed
-    values[1] += 1
-    template_key = f"{handler_name}:{template_path or '<unknown>'!s}"
-    values = _MATERIAL_TEMPLATE_TIMINGS[template_key]
-    values[0] += elapsed
-    values[1] += 1
-
-
-def _record_material_organization_timing(name, template_path, seconds):
-    elapsed = max(0.0, float(seconds))
-    handler_name = str(name or "<unknown>")
-    values = _MATERIAL_HANDLER_ORGANIZATION_TIMINGS[handler_name]
-    values[0] += elapsed
-    values[1] += 1
-    template_key = f"{handler_name}:{template_path or '<unknown>'!s}"
-    values = _MATERIAL_TEMPLATE_ORGANIZATION_TIMINGS[template_key]
-    values[0] += elapsed
-    values[1] += 1
+    handler_table, template_table = tables
+    for values in (
+        handler_table[handler_name],
+        template_table[f"{handler_name}:{template_path or '<unknown>'!s}"],
+    ):
+        values[0] += elapsed
+        values[1] += 1
 
 
 _BUNDLING_FAILED = {}
@@ -259,7 +247,7 @@ class MaterialBuilder:
         raw_identity = id(raw_material)
         raw_digests = self._raw_digest_cache.get(raw_identity)
         if raw_digests is None or raw_digests[0] is not raw_material:
-            exact_digest, prototype_digest = _raw_material_digests(raw_material)
+            exact_digest, prototype_digest = raw_material_digests(raw_material)
             raw_digests = (raw_material, exact_digest, prototype_digest)
             self._raw_digest_cache[raw_identity] = raw_digests
 
@@ -317,14 +305,14 @@ class MaterialBuilder:
         if identity is raw_material:
             return identity
 
-        _MATERIAL_CACHE_STATS["semantic_identities"] += 1
+        MATERIAL_CACHE_STATS["semantic_identities"] += 1
         raw_data = raw_material.get("Data")
         identity_data = identity.get("Data") if isinstance(identity, dict) else None
         if isinstance(raw_data, dict) and isinstance(identity_data, dict):
             trimmed = max(0, len(raw_data) - len(identity_data))
             if trimmed:
-                _MATERIAL_CACHE_STATS["semantic_reduced_materials"] += 1
-                _MATERIAL_CACHE_STATS["semantic_trimmed_keys"] += trimmed
+                MATERIAL_CACHE_STATS["semantic_reduced_materials"] += 1
+                MATERIAL_CACHE_STATS["semantic_trimmed_keys"] += trimmed
         return identity
 
     def material_signature(self, raw_material):
@@ -355,13 +343,13 @@ class MaterialBuilder:
             try:
                 raw_material = mats[index]
                 signature = self.material_signature(raw_material)
-                if _lookup_cached(_MATERIAL_CACHE, signature) is not None:
+                if lookup_cached(MATERIAL_CACHE, signature) is not None:
                     continue
                 prototype_signature = self.material_prototype_signature(raw_material)
                 if prototype_signature in pending_prototypes:
                     continue
                 if (
-                    _lookup_cached(_MATERIAL_PROTOTYPE_CACHE, prototype_signature)
+                    lookup_cached(MATERIAL_PROTOTYPE_CACHE, prototype_signature)
                     is not None
                 ):
                     continue
@@ -426,7 +414,7 @@ class MaterialBuilder:
                     label=getattr(bpyMat, "name", name),
                 )
 
-    def _remove_failed_material(self, material):
+    def remove_failed_material(self, material):
         try:
             if (
                 bpy.data.materials.get(material.name) is material
@@ -440,7 +428,7 @@ class MaterialBuilder:
         archive_name = self.obj.get("Header", {}).get("ArchiveFileName")
         return os.path.basename(archive_name) if archive_name else "decal_material"
 
-    def _set_material_source_properties(
+    def set_material_source_properties(
         self,
         bpyMat,
         raw_material,
@@ -476,7 +464,7 @@ class MaterialBuilder:
             _refresh_copied_tree(material)
             material.name = raw_material["Name"]
             self._clear_source_metadata(material)
-            self._set_material_source_properties(
+            self.set_material_source_properties(
                 material,
                 raw_material,
             )
@@ -528,7 +516,7 @@ class MaterialBuilder:
         material = track_created_datablock("materials", snapshot.copy())
         try:
             material.name = raw_material["Name"]
-            self._set_material_source_properties(material, raw_material)
+            self.set_material_source_properties(material, raw_material)
             with outputs_detached(material.node_tree):
                 handler.apply_structure_values(raw_material["Data"], material, slots)
                 organize_material_groups(material)
@@ -542,9 +530,10 @@ class MaterialBuilder:
                 raw_material.get("Name", ""),
                 exc_info=True,
             )
-            self._remove_failed_material(material)
+            self.remove_failed_material(material)
             return None
-        _record_material_handler_timing(
+        _record_material_timing(
+            (_MATERIAL_HANDLER_TIMINGS, _MATERIAL_TEMPLATE_TIMINGS),
             f"{type(handler).__name__} (shape copy)",
             raw_material.get("MaterialTemplate", ""),
             time.perf_counter() - started,
@@ -644,7 +633,8 @@ class MaterialBuilder:
                     instance.create(create_data, bpyMat)
                     bundled = _bundle_surface_links(bpyMat)
             finally:
-                _record_material_handler_timing(
+                _record_material_timing(
+                    (_MATERIAL_HANDLER_TIMINGS, _MATERIAL_TEMPLATE_TIMINGS),
                     handler_name,
                     template_path,
                     time.perf_counter() - coarse_handler_started,
@@ -667,7 +657,11 @@ class MaterialBuilder:
                 _record_material_organization_phases(
                     organization_stats.get("timings", {})
                 )
-                _record_material_organization_timing(
+                _record_material_timing(
+                    (
+                        _MATERIAL_HANDLER_ORGANIZATION_TIMINGS,
+                        _MATERIAL_TEMPLATE_ORGANIZATION_TIMINGS,
+                    ),
                     handler_name,
                     template_path,
                     time.perf_counter() - coarse_organization_started,
@@ -774,24 +768,24 @@ class MaterialBuilder:
             lookup_started = begin_material_phase()
             cached = prototype = None
             try:
-                cached = _lookup_cached(_MATERIAL_CACHE, signature)
+                cached = lookup_cached(MATERIAL_CACHE, signature)
                 if cached is not None:
-                    _record_exact_hit()
+                    record_exact_hit()
                     record_material_placeholders(cached)
                     return cached
 
-                prototype = _lookup_cached(
-                    _MATERIAL_PROTOTYPE_CACHE,
+                prototype = lookup_cached(
+                    MATERIAL_PROTOTYPE_CACHE,
                     prototype_signature,
                 )
                 if prototype is not None:
-                    _record_prototype_hit()
+                    record_prototype_hit()
                     record_material_placeholders(prototype)
                     material = self._clone_material(
                         prototype,
                         rawMat,
                     )
-                    material = _cache_material(
+                    material = cache_material(
                         signature,
                         prototype_signature,
                         material,
@@ -812,10 +806,10 @@ class MaterialBuilder:
                         },
                     )
         else:
-            _MATERIAL_CACHE_STATS["forced_rebuilds"] += 1
-            _invalidate_material_signature(signature)
+            MATERIAL_CACHE_STATS["forced_rebuilds"] += 1
+            invalidate_material_signature(signature)
 
-        _MATERIAL_CACHE_STATS["misses"] += 1
+        MATERIAL_CACHE_STATS["misses"] += 1
         handler = rule.factory(self, rawMat) if rule is not None else None
         structure_key = None
         if handler is not None and not force_rebuild and structure_sharing_active():
@@ -826,14 +820,14 @@ class MaterialBuilder:
             if entry is not None:
                 copied = self._copy_structure(entry, handler, rawMat)
                 if copied is not None:
-                    return _cache_material(
+                    return cache_material(
                         signature, prototype_signature, copied, cloned=True
                     )
         bpyMat = self._new_material(rawMat["Name"])
         try:
             metadata_started = begin_material_phase()
             try:
-                self._set_material_source_properties(
+                self.set_material_source_properties(
                     bpyMat,
                     rawMat,
                 )
@@ -859,32 +853,28 @@ class MaterialBuilder:
             ):
                 if structure_key is not None:
                     remember_structure(structure_key, bpyMat, handler.structure_slots)
-                return _cache_material(
+                return cache_material(
                     signature,
                     prototype_signature,
                     bpyMat,
                 )
 
             if self.experimental_features:
-                from ...material_types.unknown import unknownMaterial
-
-                unknown = unknownMaterial(
-                    self.BasePath,
-                    self.image_format,
-                    self.ProjPath,
+                unknown = HandlerFactory("unknown", "unknownMaterial", "bip")(
+                    self, rawMat
                 )
                 unknown.create(rawMat["Data"], bpyMat)
 
             _organize_material_graph(bpyMat)
             _set_dithered_render_method(bpyMat)
             bpyMat["cp77_no_shadows"] = False
-            return _cache_material(
+            return cache_material(
                 signature,
                 prototype_signature,
                 bpyMat,
             )
         except Exception:
-            self._remove_failed_material(bpyMat)
+            self.remove_failed_material(bpyMat)
             raise
 
     def createdecal(
@@ -916,9 +906,9 @@ class MaterialBuilder:
             lookup_started = begin_material_phase()
             cached = None
             try:
-                cached = _lookup_cached(_MATERIAL_CACHE, signature)
+                cached = lookup_cached(MATERIAL_CACHE, signature)
                 if cached is not None:
-                    _record_exact_hit()
+                    record_exact_hit()
                     record_material_placeholders(cached)
                     return cached
             finally:
@@ -933,15 +923,15 @@ class MaterialBuilder:
                         },
                     )
         else:
-            _MATERIAL_CACHE_STATS["forced_rebuilds"] += 1
-            _invalidate_material_signature(signature)
+            MATERIAL_CACHE_STATS["forced_rebuilds"] += 1
+            invalidate_material_signature(signature)
 
-        _MATERIAL_CACHE_STATS["misses"] += 1
+        MATERIAL_CACHE_STATS["misses"] += 1
         bpyMat = self._new_material(self.archive_material_name())
         try:
             metadata_started = begin_material_phase()
             try:
-                self._set_material_source_properties(
+                self.set_material_source_properties(
                     bpyMat,
                     {},
                     include_template=False,
@@ -969,11 +959,11 @@ class MaterialBuilder:
                 _LOG.warning("Unhandled decal - missing baseMaterial DepotPath")
                 _organize_material_graph(bpyMat)
                 _set_dithered_render_method(bpyMat)
-            return _cache_material(
+            return cache_material(
                 signature,
                 signature,
                 bpyMat,
             )
         except Exception:
-            self._remove_failed_material(bpyMat)
+            self.remove_failed_material(bpyMat)
             raise

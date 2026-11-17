@@ -21,6 +21,9 @@ class _ForceInputs:
     def external_events(self) -> frozenset[str]:
         return frozenset()
 
+    def wrapper_variables(self) -> frozenset[str]:
+        return frozenset()
+
     def anim_end_events(self) -> frozenset[str]:
         return frozenset()
 

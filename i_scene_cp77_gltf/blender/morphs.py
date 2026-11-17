@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import json
-
 import bpy
 import numpy as np
 
+from ..assetio.values import json_object, json_text
 from .custom_normals import set_custom_normals_from_corners
-from .mesh import _mesh_signature
+from .mesh import mesh_signature
 
 _SOURCE_MORPH_SHADING = "cp77_source_morph_shading"
 
@@ -14,7 +13,7 @@ _SOURCE_MORPH_SHADING = "cp77_source_morph_shading"
 def _key_signature(key):
     points = np.empty(len(key.data) * 3, dtype=np.float32)
     key.data.foreach_get("co", points)
-    return _mesh_signature(b"CP77Morph", points)
+    return mesh_signature(b"CP77Morph", points)
 
 
 def store_source_morph_shading(
@@ -45,7 +44,7 @@ def store_source_morph_shading(
             )
             record[semantic] = attribute.name
         records[key.name] = record
-    obj.data[_SOURCE_MORPH_SHADING] = json.dumps(records, separators=(",", ":"))
+    obj.data[_SOURCE_MORPH_SHADING] = json_text(records)
 
 
 def source_morph_positions(obj):
@@ -53,7 +52,7 @@ def source_morph_positions(obj):
     keys = obj.data.shape_keys
     if keys is None:
         return {}
-    records = json.loads(str(obj.data.get(_SOURCE_MORPH_SHADING, "{}")))
+    records = json_object(obj.data.get(_SOURCE_MORPH_SHADING))
     basis_signature = _key_signature(keys.key_blocks[0])
     result = {}
     for key in tuple(keys.key_blocks)[1:]:
@@ -80,7 +79,7 @@ def source_morph_positions(obj):
 
 def source_position_only_morphs(obj):
     """Names of the shape keys imported from source targets that carried positions but no shading deltas"""
-    records = json.loads(str(obj.data.get(_SOURCE_MORPH_SHADING, "{}")))
+    records = json_object(obj.data.get(_SOURCE_MORPH_SHADING))
     return {
         name
         for name, record in records.items()
@@ -90,7 +89,7 @@ def source_position_only_morphs(obj):
 
 def source_morph_shading(obj, loop_vertices):
     """Recover untouched source deltas using the current key coordinates as evidence"""
-    records = json.loads(str(obj.data.get(_SOURCE_MORPH_SHADING, "{}")))
+    records = json_object(obj.data.get(_SOURCE_MORPH_SHADING))
     keys = obj.data.shape_keys
     result = {}
     if keys is None:

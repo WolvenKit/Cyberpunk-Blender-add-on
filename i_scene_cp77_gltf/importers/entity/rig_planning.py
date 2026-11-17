@@ -5,10 +5,9 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from ...animation.domain.rig.ordering import promote_rig_base
-from ...assetio.paths import depot_path_key
+from ...assetio.paths import depot_path, depot_path_key
 from ...assetio.values import cname_value, resolve_component_handle_data
-from ..common.entity_data import component_name
-from ..common.paths import depot_path
+from ...entity.domain.entity_data import component_name
 
 
 def animated_component_control_target(

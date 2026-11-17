@@ -353,7 +353,7 @@ def _decode_struct_fields_into(
         stype, _sdata = _known_struct_payload(v, hint)
         if stype:
             continue
-        f = _add_array_field(element, key, v, red_type_hint=hint)
+        f = add_array_field(element, key, v, red_type_hint=hint)
         if f is not None:
             decoded += 1
 
@@ -744,7 +744,7 @@ def clear_node_properties(owner: Any) -> None:
         props.clear()
 
 
-def _add_array_field(
+def add_array_field(
     element: Any,
     key: str,
     value: Any,
@@ -829,7 +829,7 @@ def _decode_struct_element(element: Any, value: dict, element_type: str) -> bool
             continue
         if hint and not _is_simple_type_hint(hint):
             continue
-        f = _add_array_field(element, key, v, red_type_hint=hint)
+        f = add_array_field(element, key, v, red_type_hint=hint)
         if f is not None:
             decoded += 1
     element.summary = _element_summary(element)
@@ -858,7 +858,7 @@ def _set_array_from_json(item: Any, value: Any, red_type_hint: str = "") -> bool
         )
 
         if item.array_element_type and _is_simple_type_hint(item.array_element_type):
-            f = _add_array_field(
+            f = add_array_field(
                 element,
                 "value",
                 element_value,
@@ -871,7 +871,7 @@ def _set_array_from_json(item: Any, value: Any, red_type_hint: str = "") -> bool
                 continue
 
         if not isinstance(element_value, dict):
-            f = _add_array_field(
+            f = add_array_field(
                 element,
                 "value",
                 element_value,
@@ -886,7 +886,7 @@ def _set_array_from_json(item: Any, value: Any, red_type_hint: str = "") -> bool
         if isinstance(element_value, dict):
             etype = str(element_value.get("$type") or item.array_element_type or "")
             if etype == "QsTransform" or _is_qstransform(element_value):
-                f = _add_array_field(
+                f = add_array_field(
                     element,
                     "value",
                     element_value,

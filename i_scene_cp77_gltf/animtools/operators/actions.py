@@ -92,6 +92,10 @@ class CP77Animset(Operator):
 class CP77Keyframe(Operator):
     bl_idname = "insert_keyframe.cp77"
     bl_label = "Keyframe Pose"
+    bl_description = (
+        "Key the selected bones, or every bone when none is selected, with the switches of the Rigify limbs they "
+        "move; a rig following its Rigify rig keys the pose it follows"
+    )
     bl_options = {"REGISTER", "UNDO"}
 
     def invoke(self, context, event):
@@ -108,11 +112,9 @@ class CP77Keyframe(Operator):
 
     def draw(self, context):
         layout = self.layout
-        props = context.scene.cp77_panel_props
-        row = layout.row(align=True)
-        row.label(text="Key every bone on each frame")
-        row = layout.row(align=True)
-        row.prop(props, "frameall", text="")
+        layout.prop(
+            context.scene.cp77_panel_props, "frameall", text="Every Frame of the Action"
+        )
 
 
 class CP77ResetArmature(Operator):

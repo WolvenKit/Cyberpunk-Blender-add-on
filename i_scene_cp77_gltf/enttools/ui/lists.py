@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from bpy.app.handlers import persistent
 from bpy.types import UIList
 
 TYPE_ICONS = {
@@ -11,6 +12,11 @@ TYPE_ICONS = {
 }
 # Each component list's row depths by its appearance state's pointer, found by its last filter_items.
 _DEPTHS: dict[int, list[int]] = {}
+
+
+@persistent
+def forget_list_depths(*_args):
+    _DEPTHS.clear()
 
 
 def _depth(item, by_name) -> int:

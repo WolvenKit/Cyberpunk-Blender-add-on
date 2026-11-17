@@ -5,6 +5,7 @@ import bpy
 from ...animation.model.animgraph.constants import ANIM_NODE_PREFIX
 from ...bartmoss.graph_layout import LayoutItem, layout_graph
 from ...core.log import get_logger, log_once
+from .sm_sockets import is_state_machine, row_text
 
 _LOG = get_logger(__name__)
 
@@ -84,8 +85,6 @@ def _transition_row_width(node: bpy.types.Node) -> float:
     if not records:
         return 0.0
     try:
-        from .sm_sockets import is_state_machine, row_text
-
         if is_state_machine(node):
             return 0.0  # its rows are shown in the sidebar only
         longest = max(len(row_text(node, index)[0]) for index in range(len(records)))

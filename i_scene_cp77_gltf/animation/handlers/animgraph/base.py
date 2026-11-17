@@ -92,7 +92,7 @@ def execute_child(
     context, step: ExecutionStep, index: int, *, additive_branch=None
 ) -> BranchFrame:
     """The program node's child index executed with the step's inputs"""
-    return context._execute_program(
+    return context.execute_program(
         step.program_node.children[index],
         step.raw_dt,
         step.time_dilation,

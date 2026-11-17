@@ -3,6 +3,7 @@ from bpy.types import Panel
 from ...blender.workspace import is_animation_workspace
 from ...core.addon_identity import get_addon_preferences
 from ...core.log import get_logger
+from .appearances import draw_appearances_tab
 from .tabs import (
     draw_characters_tab,
     draw_modelling_tab,
@@ -58,8 +59,8 @@ class CP77_PT_MeshTools(Panel):
                 draw_modelling_tab(context, layout, has_mesh, has_meshes)
             elif props.meshtab == "CHARACTERS":
                 draw_characters_tab(context, layout)
-            elif props.meshtab == "CLOTH":
-                layout.label(text="Install the Garment extension")
+            elif props.meshtab == "APPEARANCES":
+                draw_appearances_tab(context, layout)
         except Exception as error:
             _LOG.error("Mesh Tools panel draw failed: %s", error, exc_info=True)
             layout.label(text=f"Mesh Tools UI error: {error}", icon="ERROR")

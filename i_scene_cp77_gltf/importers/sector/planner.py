@@ -3,14 +3,15 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import replace
 
-from .handlers import register_default_handlers
-from .model import (
+from ...assetio.sector_model import (
     PROXY_PHASE,
     STANDARD_PHASE,
     NodeCategory,
     PlannedSector,
     SectorNodePlan,
 )
+from .handlers import register_default_handlers
+from .options import classify_node_type
 from .registry import NODE_HANDLERS
 
 register_default_handlers()
@@ -37,7 +38,9 @@ def compile_sector_plan(parsed_sector, options, registry=NODE_HANDLERS):
             binding.placement_phase
             if binding is not None
             else (
-                PROXY_PHASE if node.category is NodeCategory.PROXY else STANDARD_PHASE
+                PROXY_PHASE
+                if classify_node_type(node.node_type) is NodeCategory.PROXY
+                else STANDARD_PHASE
             )
         )
         dependencies = (

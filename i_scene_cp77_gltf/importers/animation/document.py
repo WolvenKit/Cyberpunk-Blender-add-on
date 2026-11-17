@@ -71,7 +71,7 @@ from ...blender.transactions import (
     track_created_datablock,
 )
 from ...core.log import get_logger
-from ...gltf.accessors import GLTFAccessorReader
+from ...gltf.accessors import FLOAT, GLTFAccessorReader
 from ...gltf.container import GLBContainer, GLBContainerError, read_gltf_container
 from ...gltf.mesh_contract import validate_direct_extensions
 from ...gltf.provenance import (
@@ -298,7 +298,7 @@ def _parse_gltf_channel(
         )
         if (
             input_layout.get("type") != "SCALAR"
-            or input_layout.get("componentType") != 5126
+            or input_layout.get("componentType") != FLOAT
         ):
             raise DirectAnimationImportError(
                 "Animation input keys must use FLOAT SCALAR seconds."
@@ -306,7 +306,7 @@ def _parse_gltf_channel(
         expected_type = "VEC4" if path == "rotation" else "VEC3"
         if (
             output_layout.get("type") != expected_type
-            or output_layout.get("componentType") != 5126
+            or output_layout.get("componentType") != FLOAT
         ):
             raise DirectAnimationImportError(
                 f"Animation {path} output must use FLOAT {expected_type} values."

@@ -4,6 +4,7 @@ import bpy
 
 from ..blender import shader_nodes
 from ..blender.transactions import new_tracked_datablock
+from ..materials.blender.layout import combine_bundle_node, separate_bundle_node
 from ..materials.blender.nodes import (
     CreateShaderNodeRGB,
     CreateShaderNodeValue,
@@ -11,12 +12,7 @@ from ..materials.blender.nodes import (
     createLerpGroup,
     createVecLerpGroup,
 )
-from .graph import (
-    combine_bundle_node,
-    cp77_bitangent_socket,
-    cp77_uv_tangent_node,
-    separate_bundle_node,
-)
+from .graph import cp77_bitangent_socket, cp77_uv_tangent_node
 from .mat_common import (
     MaterialTypeBase,
     add_group_node,
@@ -2681,7 +2677,7 @@ class ParallaxScreenTransparent(MaterialTypeBase):
             CurMat, values["AdditiveAlphaBlend"], -2000, -1450, "AdditiveAlphaBlend"
         )
         slots["AdditiveAlphaBlend"] = (additive.name, None)
-        CurMat.nodes.remove(CurMat.nodes.get("Material Output"))
+        CurMat.nodes.remove(shader_nodes.material_output(CurMat.nodes))
         additive_surface(
             Mat, hsv.outputs["color"], mul2.outputs["Alpha"], additive.outputs["Value"]
         )
