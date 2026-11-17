@@ -166,6 +166,7 @@ SECTOR_IMPORT_SETTINGS = (
     "materials",
     "proxies",
     "refresh_index",
+    "recentre",
     "decal_mode",
     "existing_sectors",
     "collections",
@@ -177,6 +178,7 @@ class DialogState:
     materials: bool
     proxies: bool
     refresh_index: bool
+    recentre: bool
     decal_mode: str
     existing_sectors: str
     collections: str
@@ -189,6 +191,7 @@ class DialogState:
             materials=True,
             proxies=False,
             refresh_index=False,
+            recentre=True,
             decal_mode="CONFORMAL",
             existing_sectors="ADD_MISSING",
             collections="SOURCE_NODES",
@@ -205,7 +208,7 @@ class DialogState:
         return dialog_model.read_memory(
             text,
             cls.default(),
-            flags=("materials", "proxies", "refresh_index"),
+            flags=("materials", "proxies", "refresh_index", "recentre"),
             names={
                 "decal_mode": DECAL_MODES,
                 "existing_sectors": EXISTING_SECTOR_MODES,
