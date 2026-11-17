@@ -1195,6 +1195,7 @@ def build_animation_document(
     duration_frames = _animation_duration_frames(action, extras, action_start)
     _validate_track_times(action, extras, duration_frames)
     channel_payloads: list[dict] = []
+    rest_holds: list[dict] = []
 
     for joint_index, target_name in enumerate(binding.target_names):
         pose_bone = armature.pose.bones.get(target_name)
@@ -1218,6 +1219,14 @@ def build_animation_document(
             ("rotation", "rotation_quaternion", 4),
             ("scale", "scale", 3),
         )
+        rest_translation, rest_rotation, rest_scale = decompose_matrices(
+            binding.rest_relative_gltf[joint_index].reshape(1, 4, 4)
+        )
+        rest = {
+            "translation": rest_translation[0],
+            "rotation": rest_rotation[0],
+            "scale": rest_scale[0],
+        }
         for gltf_path, blender_property, width in property_specs:
             source_payload = _unchanged_source_channel(
                 source_channels.get((joint_index, gltf_path)),
@@ -1261,24 +1270,27 @@ def build_animation_document(
                 frame_start=action_start,
                 frame_end=action_start + duration_frames,
             )
-            if sampling is None:
-                continue
-            frames, interpolation = sampling
-            basis = _basis_at_frames(curve_map, paths, frames)
-            values = _source_property_values(binding, joint_index, basis, gltf_path)
-            rest_translation, rest_rotation, rest_scale = decompose_matrices(
-                binding.rest_relative_gltf[joint_index].reshape(1, 4, 4)
-            )
-            default = {
-                "translation": rest_translation[0],
-                "rotation": rest_rotation[0],
-                "scale": rest_scale[0],
-            }[gltf_path]
-            if _values_are_default(
+            values = None
+            if sampling is not None:
+                frames, interpolation = sampling
+                basis = _basis_at_frames(curve_map, paths, frames)
+                values = _source_property_values(binding, joint_index, basis, gltf_path)
+            if values is None or _values_are_default(
                 values,
-                default,
+                rest[gltf_path],
                 quaternion=(gltf_path == "rotation"),
             ):
+
+                if gltf_path != "scale":
+                    rest_holds.append(
+                        {
+                            "joint_index": joint_index,
+                            "path": gltf_path,
+                            "interpolation": "STEP",
+                            "times": np.zeros(1, dtype=np.float64),
+                            "values": rest[gltf_path].reshape(1, -1),
+                        }
+                    )
                 continue
 
             try:
@@ -1329,6 +1341,10 @@ def build_animation_document(
     except ValueError as error:
         raise DirectAnimationExportError(f"Action {action.name!r}: {error}") from error
     _append_duration_hold(channel_payloads, binding, duration_frames)
+    keyed = {(payload["joint_index"], payload["path"]) for payload in channel_payloads}
+    channel_payloads.extend(
+        hold for hold in rest_holds if (hold["joint_index"], hold["path"]) not in keyed
+    )
     samplers, channels = animation_channels(channel_payloads, builder)
 
     return {

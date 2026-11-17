@@ -3,7 +3,9 @@ from __future__ import annotations
 import bpy
 
 from ...animation.domain.clip.bake import frame_sequence
+from ...animation.domain.rigify.mapping import FORWARD_CONSTRAINT
 from ...animation.model.clip.bones import ANIMATION_BONE_SET
+from ...blender.action_metadata import ensure_action_defaults
 from ...blender.animation_context import (
     active_armature,
     track_animation_data,
@@ -19,6 +21,7 @@ from ...blender.keyframes import (
     get_action_fcurves,
 )
 from ...blender.operator_results import OperationResult
+from ...blender.pose import reset_pose_bones
 from ...blender.selection import select_objects
 from ...blender.transactions import (
     new_tracked_datablock,
@@ -348,12 +351,24 @@ def bake_to_source(context, source, rig, request: RigifyBakeRequest) -> Operatio
 
     target_action = new_tracked_datablock("actions", action_name)
     target_action.use_fake_user = True
+    ensure_action_defaults(target_action)
+    # Root holds its rest and the hips carry the travel, as in a game clip exported with Bake Into Pose.
+    target_action["rootMotionType"] = "None"
     frames = frame_sequence(request.frame_start, request.frame_end, request.step)
     try:
         with preserved_context():
             following = sync_enabled(source)
             if not following:
                 _bind_follow(source, rig)
+            # A bone the Rigify rig does not drive holds its rest, not the pose the Cyberpunk rig last showed.
+            reset_pose_bones(
+                source,
+                [
+                    name
+                    for name in present_bones
+                    if source.pose.bones[name].constraints.get(FORWARD_CONSTRAINT) is None
+                ],
+            )
             _enter_pose_mode(context, source)
             assign_action_with_slot(source, target_action)
             # Each frame's followed pose goes into the basis, which the sampler reads.
@@ -364,12 +379,14 @@ def bake_to_source(context, source, rig, request: RigifyBakeRequest) -> Operatio
                 frames,
                 before_sample=lambda _frame: forward.apply_follow_pose(source),
             )
+            # The follow turns and moves the bones but never scales them, and game clips carry no scale.
             write_pose_bone_samples(
                 target_action,
                 source,
                 frames,
                 samples,
                 interpolation="BEZIER",
+                include_scale=False,
             )
             if not following:
                 forward.clear_forward_constraints(source)
