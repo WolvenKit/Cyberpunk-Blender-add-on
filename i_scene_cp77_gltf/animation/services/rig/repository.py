@@ -7,7 +7,8 @@ from ....assetio.documents import DocumentSession
 from ....assetio.paths import is_local_absolute, local_path_key
 from ....assetio.repository import ResourceLoadError, ResourceRepository
 from ....core.log import debug_exception, get_logger
-from .parser import RigParseMode, RigParseOptions, parse_rig_document, parse_rig_payload
+from ...domain.rig.parsing import RigParseOptions, parse_rig_payload
+from ...model.rig.data import RigParseMode
 
 RIG_PARSER_REVISION = 1
 _LOG = get_logger(__name__)
@@ -40,12 +41,16 @@ def stored_rig_document(reference):
     return provider(value)
 
 
+def _parse_rig_document(document, *, options=None):
+    return parse_rig_payload(document.payload, document.source.value, options=options)
+
+
 class RigRepository(ResourceRepository):
     def __init__(self, documents, *, asset_index=None):
         super().__init__(
             documents,
             resource_kind=ResourceKind.RIG,
-            parser=parse_rig_document,
+            parser=_parse_rig_document,
             parser_revision=RIG_PARSER_REVISION,
             asset_index=asset_index,
             export_suffix=".rig.json",

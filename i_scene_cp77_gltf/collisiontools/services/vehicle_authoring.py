@@ -15,15 +15,12 @@ from ...blender.physics.vehicle_geometry import (
     entity_collection_for_object,
     object_attachment_name,
     object_targets_rig,
+    projected_bounds,
     projected_dimensions,
     vehicle_frame_world,
 )
 from ...blender.selection import selected_meshes
-from ...physics.domain.vehicle.gears import (
-    PHYSX_MAX_FORWARD_GEARS,
-    collection_gears,
-    validate_gears,
-)
+from ...physics.domain.vehicle.gears import PHYSX_MAX_FORWARD_GEARS
 from ...physics.domain.vehicle.tweakxl import build_tweakxl_yaml
 from ...physics.services.vehicle_tweaks import project_resources_root
 from ..blender.vehicle_authoring_state import (
@@ -34,6 +31,7 @@ from ..blender.vehicle_gears import (
     ensure_gear_collection,
     populate_default_gear_collection,
     populate_gear_collection,
+    validated_gears,
 )
 from ..blender.vehicle_validation import resolved_game_config
 from ..runtime.vehicle_preview import queue_vehicle_live_update
@@ -47,6 +45,23 @@ _BIKE_SUSPENSION = {
     "front": ("suspension_front", "fork_front", "suspension_front_left"),
     "rear": ("suspension_back", "suspension_rear", "suspension_back_left"),
 }
+_WHEEL_CENTER_TOLERANCE = 0.01
+
+
+def _bike_wheel(obj, rig, rig_inverse, bones, centers, axle):
+    """The wheel obj is part of, when it hangs from a bone at that wheel's centre and is centred on its axle"""
+    attachment = bones.get(object_attachment_name(obj, rig).casefold())
+    if attachment is None:
+        return None
+    for field, center in centers.items():
+        if (attachment.head_local - center).length > _WHEEL_CENTER_TOLERANCE:
+            continue
+        low, high = projected_bounds(obj, rig_inverse)
+        offset = (low + high) * 0.5 - center
+        offset[axle] = 0.0
+        if offset.length <= _WHEEL_CENTER_TOLERANCE:
+            return field
+    return None
 
 
 def _bike_related(rig, wheel_bones):
@@ -67,9 +82,15 @@ def _bike_related(rig, wheel_bones):
     related = list(collection.all_objects) if collection is not None else direct
     related = [obj for obj in related if obj.type == "MESH"]
     groups = {"front": [], "rear": []}
-    reverse = {name.casefold(): field for field, name in wheel_bones.items()}
+    rig_inverse = rig.matrix_world.inverted_safe()
+    bones = {bone.name.casefold(): bone for bone in rig.data.bones}
+    centers = {
+        field: rig.data.bones[name].head_local for field, name in wheel_bones.items()
+    }
+    forward = _bike_frame_axis(rig, wheel_bones["front"], wheel_bones["rear"])
+    axle = 0 if forward.endswith("_Y") else 1
     for obj in related:
-        field = reverse.get(object_attachment_name(obj, rig).casefold())
+        field = _bike_wheel(obj, rig, rig_inverse, bones, centers, axle)
         if field:
             groups[field].append(obj)
     return collection, related, groups
@@ -105,8 +126,9 @@ def _bike_fit(vehicle, related=(), groups=None):
     if vehicle.source_mode == "RIG":
         front = vehicle.rig.data.bones[vehicle.bike_front_bone].head_local
         rear = vehicle.rig.data.bones[vehicle.bike_rear_bone].head_local
+        wheels = {obj.as_pointer() for group in groups.values() for obj in group}
         body = body_bounds_objects(
-            related,
+            [obj for obj in related if obj.as_pointer() not in wheels],
             vehicle.rig,
             {
                 "front": vehicle.bike_front_bone,
@@ -245,7 +267,7 @@ def add_vehicle_gear(vehicle):
             else {}
         )
         ensure_gear_collection(vehicle, config)
-        gears = validate_gears(collection_gears(vehicle), vehicle=vehicle)
+        gears = validated_gears(vehicle)
         if len(gears) - 1 >= PHYSX_MAX_FORWARD_GEARS:
             raise ValueError(
                 f"PhysX supports at most {PHYSX_MAX_FORWARD_GEARS} forward gears"
@@ -291,7 +313,7 @@ def remove_vehicle_gear(vehicle):
             raise ValueError("Reverse gear cannot be removed")
         vehicle.gears.remove(index)
         vehicle.gear_index = min(index, len(vehicle.gears) - 1)
-        validate_gears(collection_gears(vehicle), vehicle=vehicle)
+        validated_gears(vehicle)
         queue_vehicle_live_update(vehicle.id_data)
     except Exception as error:
         return OperationResult.cancelled(str(error), error=error)
@@ -315,7 +337,7 @@ def move_vehicle_gear(vehicle, direction):
             return OperationResult.finished("Gear is already at the end of the gearbox")
         vehicle.gears.move(index, target)
         vehicle.gear_index = target
-        validate_gears(collection_gears(vehicle), vehicle=vehicle)
+        validated_gears(vehicle)
         queue_vehicle_live_update(vehicle.id_data)
     except Exception as error:
         return OperationResult.cancelled(str(error), error=error)

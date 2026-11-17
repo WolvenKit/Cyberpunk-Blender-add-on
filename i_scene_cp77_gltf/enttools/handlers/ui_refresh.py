@@ -3,7 +3,9 @@ from __future__ import annotations
 import bpy
 
 from ...core.log import get_logger
-from .updates import suspended
+from ..blender.state import ensure_appearance_state
+from ..runtime.updates import suspended
+from ..services.selection import current_collection, refresh_choices
 
 _LOG = get_logger(__name__)
 _PENDING = {"scheduled": False}
@@ -17,9 +19,6 @@ def _refresh():
     _PENDING["scheduled"] = False
     context = bpy.context
     try:
-        from ..blender.state import ensure_appearance_state
-        from ..services.selection import current_collection, refresh_choices
-
         collection = current_collection(context)
         if collection is not None:
             ensure_appearance_state(collection)

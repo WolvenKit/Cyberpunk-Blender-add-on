@@ -5,7 +5,7 @@ from ...core.log import get_logger
 from ...core.notifications import report
 from ...physics.runtime.bridge import require_bridge
 from ..runtime.simulation import (
-    _ACTIVE_SIM_SESSIONS,
+    ACTIVE_SIM_SESSIONS,
     end_runtime_session,
     register_simulation_session,
     remove_manipulator,
@@ -73,6 +73,7 @@ class PHYSX_OT_sim_step(bpy.types.Operator):
     cursor_radius: bpy.props.FloatProperty(name="Cursor Radius", default=1.0)
 
     _timer = None
+    _bridge = None
     _cursor_handle = "0"
     _window_manager = None
     _scene = None
@@ -88,6 +89,7 @@ class PHYSX_OT_sim_step(bpy.types.Operator):
         result = start_simulation(context)
         if not result.ok:
             return finish_operator(self, result)
+        self._bridge = require_bridge()
         self._window_manager = context.window_manager
         self._scene = context.scene
         self._session_key = id(self)
@@ -105,7 +107,9 @@ class PHYSX_OT_sim_step(bpy.types.Operator):
         if not context.scene.physx.sim_running or event.type in {"ESC", "RIGHTMOUSE"}:
             return self.cancel(context)
         try:
-            bridge = require_bridge()
+            if event.type != "MOUSEMOVE":
+                self._bridge = require_bridge()
+            bridge = self._bridge
             if handle_vehicle_event(context, event):
                 return {"RUNNING_MODAL"}
             self._cursor_handle = update_manipulator(
@@ -146,10 +150,11 @@ class PHYSX_OT_sim_step(bpy.types.Operator):
         remove_manipulator(self._cursor_handle)
         self._cursor_handle = "0"
         if self._session_key is not None:
-            _ACTIVE_SIM_SESSIONS.pop(self._session_key, None)
+            ACTIVE_SIM_SESSIONS.pop(self._session_key, None)
             self._session_key = None
         self._window_manager = None
         self._scene = None
+        self._bridge = None
 
     def cancel(self, context):
         self._shutdown_session(context)

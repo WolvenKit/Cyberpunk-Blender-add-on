@@ -1,7 +1,7 @@
-import bpy
 import numpy as np
 
-from ...blender.operator_results import OperationResult, require_finished
+from ...blender.context import safe_mode_switch
+from ...blender.operator_results import OperationResult
 from ...blender.selection import selected_meshes
 from ...core.log import get_logger
 from ..vertex_color_presets import get_color_presets, save_presets
@@ -88,10 +88,7 @@ def apply_vertex_color_preset(context, name):
     rgba = np.asarray((list(color) + [1.0])[:4], dtype=np.float32)
     original_mode = context.mode
     try:
-        if original_mode != "OBJECT":
-            require_finished(
-                bpy.ops.object.mode_set(mode="OBJECT"), "The switch to Object Mode"
-            )
+        safe_mode_switch("OBJECT")
         changed = 0
         for obj in selected:
             mesh = obj.data
@@ -113,12 +110,7 @@ def apply_vertex_color_preset(context, name):
     finally:
         if original_mode != "OBJECT":
             try:
-                require_finished(
-                    bpy.ops.object.mode_set(
-                        mode="EDIT" if original_mode == "EDIT_MESH" else original_mode
-                    ),
-                    f"The restoration of {original_mode} mode",
-                )
+                safe_mode_switch(original_mode)
             except RuntimeError as error:
                 _LOG.warning(
                     "Could not restore mode after applying vertex-color preset: mode=%s error=%s",

@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-from functools import lru_cache
-from pathlib import Path
-
 import numpy as np
 
-from ....assetio.arrays import read_npz_arrays
 from ....core.log import debug_exception, get_logger
 from ...model.jali.events import PhonemeEvent
 from .capability import call, dependency_status, g2p_en, parselmouth
@@ -16,8 +12,6 @@ _LOG = get_logger(__name__)
 # Forced alignment: a small frame classifier (log-mel context window -> phoneme posteriors)
 # trained on phoneme segments aligned to the game's own lipsync clips, decoded with a
 # duration-explicit Viterbi over the g2p phoneme sequence with optional pauses between words.
-ALIGNER_MODEL_PATH = Path(__file__).with_name("aligner_model.npz")
-
 HOP = 0.01
 WIN = 0.025
 N_MEL = 26
@@ -120,12 +114,8 @@ def state_key(phone: str, k: int, n_sub: int) -> str:
     return phone if (phone == "SIL" or n_sub == 1) else f"{phone}#{k}"
 
 
-@lru_cache(maxsize=4)
-def load_aligner_model(path: str = "") -> dict | None:
-    """The acoustic model, or None if it is missing or unreadable"""
-    raw = read_npz_arrays(Path(path) if path else ALIGNER_MODEL_PATH)
-    if raw is None:
-        return None
+def aligner_model_from_arrays(raw) -> dict:
+    """The acoustic model the arrays of an aligner model file hold"""
     layers = []
     while f"W{len(layers)}" in raw:
         i = len(layers)
@@ -309,7 +299,7 @@ def viterbi_align(
 
 
 class TranscriptAligner:
-    def __init__(self, audio_path: str, transcript: str, method: str = "auto"):
+    def __init__(self, audio_path: str, transcript: str, model, method: str = "auto"):
         """method is 'auto', 'forced' or 'legacy'"""
         if not dependency_status().parselmouth:
             raise ImportError("parselmouth is required")
@@ -318,6 +308,7 @@ class TranscriptAligner:
         self.audio_path = audio_path
         self.transcript = transcript
         self.method = method
+        self.model = model
         self.method_used = ""
         self.g2p = g2p_en.G2p()
         self.vowels = {
@@ -344,7 +335,7 @@ class TranscriptAligner:
         sound = parselmouth.Sound(self.audio_path)
         self.duration = sound.get_total_duration()
         if self.method != "legacy":
-            model = load_aligner_model()
+            model = self.model
             if model is not None:
                 try:
                     events = self._align_forced(sound, model)
@@ -358,14 +349,9 @@ class TranscriptAligner:
                         "Forced alignment failed (%s); using legacy timing", error
                     )
             elif self.method == "forced":
-                raise FileNotFoundError(
-                    f"aligner model not found: {ALIGNER_MODEL_PATH}"
-                )
+                raise FileNotFoundError("aligner model not found")
             else:
-                _LOG.warning(
-                    "Aligner model missing (%s); using legacy timing",
-                    ALIGNER_MODEL_PATH,
-                )
+                _LOG.warning("Aligner model missing; using legacy timing")
         self.method_used = "legacy"
         return self._align_legacy(sound)
 

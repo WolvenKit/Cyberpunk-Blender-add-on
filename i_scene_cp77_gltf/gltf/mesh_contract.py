@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from .accessors import FLOAT, UNSIGNED_BYTE, UNSIGNED_INT, UNSIGNED_SHORT
+
 WOLVENKIT_SKIN_SETS = 2
 WOLVENKIT_UV_SETS = 2
 # Four joints per skin set.
@@ -39,7 +41,7 @@ def validate_primitive_accessors(accessors, primitive):
             expected = "VEC4" if name == "TANGENT" else "VEC3"
             if (
                 shape != expected
-                or component != 5126
+                or component != FLOAT
                 or accessor.get("normalized", False)
             ):
                 raise ValueError(
@@ -52,10 +54,14 @@ def validate_primitive_accessors(accessors, primitive):
             if semantic in {"JOINTS", "WEIGHTS"}:
                 if shape != "VEC4":
                     raise ValueError(f"{name} must use a VEC4 accessor.")
-                allowed = (5121, 5123) if semantic == "JOINTS" else (5121, 5123, 5126)
+                allowed = (
+                    (UNSIGNED_BYTE, UNSIGNED_SHORT)
+                    if semantic == "JOINTS"
+                    else (UNSIGNED_BYTE, UNSIGNED_SHORT, FLOAT)
+                )
                 if component not in allowed or bool(
                     accessor.get("normalized", False)
-                ) != (semantic == "WEIGHTS" and component != 5126):
+                ) != (semantic == "WEIGHTS" and component != FLOAT):
                     raise ValueError(
                         f"{name} has an invalid component type or normalization."
                     )
@@ -68,9 +74,9 @@ def validate_primitive_accessors(accessors, primitive):
                     ("VEC2",) if semantic == "TEXCOORD" else ("VEC3", "VEC4")
                 ):
                     raise ValueError(f"{name} has an invalid vector shape.")
-                if component not in (5121, 5123, 5126) or bool(
+                if component not in (UNSIGNED_BYTE, UNSIGNED_SHORT, FLOAT) or bool(
                     accessor.get("normalized", False)
-                ) != (component != 5126):
+                ) != (component != FLOAT):
                     raise ValueError(
                         f"{name} has an invalid component type or normalization."
                     )
@@ -85,7 +91,8 @@ def validate_primitive_accessors(accessors, primitive):
         accessor = accessors[index]
         if (
             accessor.get("type") != "SCALAR"
-            or accessor.get("componentType") not in (5121, 5123, 5125)
+            or accessor.get("componentType")
+            not in (UNSIGNED_BYTE, UNSIGNED_SHORT, UNSIGNED_INT)
             or accessor.get("normalized", False)
         ):
             raise ValueError(

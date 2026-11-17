@@ -8,7 +8,7 @@ class TrajectoryFromMetaPoseHandler(GraphNodeHandler):
 
     def execute(self, context, step):
         step.child = execute_first_child(context, step)
-        result = context._execute_trajectory_from_meta_pose_frame(
+        result = context.execute_trajectory_from_meta_pose_frame(
             step.program_node, step.child, step.input_frame
         )
         step.frame_cache[step.cache_key] = result

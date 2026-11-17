@@ -24,6 +24,11 @@ from ..blender.transactions import new_tracked_datablock, track_created_databloc
 from ..core.log import debug_exception, get_logger
 from ..materials.blender.helper_caches import register_helper_cache
 from ..materials.blender.images import imageFromPath, imageFromRelPath
+from ..materials.blender.layout import (
+    add_bundle_items,
+    combine_bundle_node,
+    separate_bundle_node,
+)
 from ..materials.blender.multilayer import (
     clear_override_palette_cache,
     override_palette_stats,
@@ -40,7 +45,6 @@ from ..materials.blender.profiling import begin_material_phase, end_material_pha
 from ..materials.cache_identity import filtered_material_data_identity
 from ..materials.params import coerce_texture_path
 from ..materials.resources import load_material_document
-from .graph import add_bundle_items, combine_bundle_node, separate_bundle_node
 from .mat_common import (
     MaterialTypeBase,
     find_input,

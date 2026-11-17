@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from .model import PlannedSector, SectorNodePlan
+from ...assetio.sector_model import PlannedSector, SectorNodePlan
 
 
 class SectorPlacementError(RuntimeError):

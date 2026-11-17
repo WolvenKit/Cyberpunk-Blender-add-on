@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from functools import partial
+
 import bpy
 
 from ....blender.animgraph import sm_edit, sm_overlay, sm_sockets
+from ....blender.animgraph.preview_sessions import stop_graph_preview
 from ....blender.operator_results import OperationResult
+from ....blender.transactions import track_node_tree, transactional
 
 _LISTED_LIMIT = 12
 
@@ -94,8 +98,18 @@ def missing_state_message(sm, index: int) -> str:
     return "\n".join(lines)
 
 
+def _track_graph(owner) -> None:
+    tree = getattr(owner, "id_data", None)
+    track_node_tree(tree, before_restore=partial(stop_graph_preview, tree))
+    inner = getattr(owner, "node_tree", None)
+    if inner is not None:
+        track_node_tree(inner, before_restore=partial(stop_graph_preview, inner))
+
+
+@transactional("State machine edit")
 def apply_edit(function, *args) -> OperationResult:
     """Run one sm_edit change, turning its validation errors into a cancelled result"""
+    _track_graph(args[0])
     try:
         function(*args)
     except (ValueError, IndexError) as exc:
@@ -124,10 +138,14 @@ def transition_description(node, index: int) -> str:
     return sm_sockets.row_text(node, index)[1]
 
 
+@transactional("Delete state")
 def delete_selected_state(sm) -> OperationResult:
     index = sm.red_sm_states_index
     state = sm_edit.state_for_ref(sm, index)
     missing = "" if state is not None else sm_edit.missing_state_handle(sm, index)
+    if state is None and not missing:
+        return OperationResult.cancelled("No state selected", "ERROR_INVALID_CONTEXT")
+    _track_graph(sm)
     try:
         if state is not None:
             deleted = sm_edit.delete_state(sm, state)
@@ -141,4 +159,3 @@ def delete_selected_state(sm) -> OperationResult:
             )
     except (ValueError, IndexError) as exc:
         return OperationResult.cancelled(str(exc), error=exc)
-    return OperationResult.cancelled("No state selected", "ERROR_INVALID_CONTEXT")

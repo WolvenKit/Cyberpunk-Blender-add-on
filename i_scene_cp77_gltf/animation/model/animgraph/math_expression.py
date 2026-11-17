@@ -137,6 +137,19 @@ def socket_caption(array_name: str, index: int, socket_data: Any = None) -> str:
     return f"{prefix}{_socket_var_id(socket_data, index)}"
 
 
+def socket_slot(path: str) -> tuple[str, int] | None:
+    for array_name in SOCKET_ARRAYS:
+        prefix = f"expressionData.{array_name}["
+        if not str(path or "").startswith(prefix):
+            continue
+        index_text = str(path)[len(prefix) :].split("]", 1)[0]
+        try:
+            return array_name, int(index_text)
+        except ValueError:
+            return None
+    return None
+
+
 def handle_id_of(wrapper: Any) -> str:
     if not isinstance(wrapper, dict):
         return ""

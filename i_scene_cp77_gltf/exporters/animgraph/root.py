@@ -9,22 +9,27 @@ from ...animation.domain.animgraph.topology import (
 )
 from ...animation.model.animgraph.constants import ANIM_NODE_PREFIX, ANIMGRAPH_TREE_ID
 from ...animation.model.animgraph.indices import cname
+from ...animation.model.animgraph.schema.defaults import (
+    schema_resource_path,
+    unresolved_default_collector,
+)
 from ...assetio.headers import (
     SUPPORTED_GAME_VERSION,
     SUPPORTED_WKIT_JSON_VERSION,
     SUPPORTED_WOLVENKIT_VERSION,
     utc_timestamp,
 )
+from ...assetio.paths import archive_file_name_for
 from ...blender.animgraph.access import get_attr, get_idprop
+from ...blender.animgraph.rig_binding import binding_tree
 from ...core.log import get_logger
 from .dangle_patch import validate_payload, write_json
-from .defaults import _schema_resource_path, unresolved_default_collector
 from .handles import finalize_new_handles
-from .nodes import _encode_tree_runtime_entries, _json_idprop, take_unlisted_entries
+from .nodes import encode_tree_runtime_entries, json_idprop, take_unlisted_entries
 from .paths import indexed_socket_links
 from .references import normalize_inline_first_references
 from .tree_state import root_tree
-from .values import clone_json, decode_optional
+from .values import bools_as_ints, clone_json, decode_optional
 from .variables import encode_root_variables
 
 _LOG = get_logger(__name__)
@@ -62,7 +67,7 @@ def _require_source_metadata(root: bpy.types.NodeTree, key: str) -> Any:
 
 def _source_root_output_spec(root: bpy.types.NodeTree) -> dict[str, Any]:
     _require_source_metadata(root, "red_root_output_json")
-    spec = _json_idprop(root, "red_root_output_json", None)
+    spec = json_idprop(root, "red_root_output_json", None)
     if not isinstance(spec, dict):
         raise ValueError("invalid required source metadata: red_root_output_json")
     return spec
@@ -102,7 +107,7 @@ def _source_ordered_root_entries(
         encoded_order.append(handle)
 
     _require_source_metadata(root, "red_root_nodes_order_json")
-    specs_raw = _json_idprop(root, "red_root_nodes_order_json", None)
+    specs_raw = json_idprop(root, "red_root_nodes_order_json", None)
     if not isinstance(specs_raw, list):
         raise ValueError("invalid required source metadata: red_root_nodes_order_json")
     specs = specs_raw
@@ -155,7 +160,7 @@ def _source_ordered_root_entries(
                 h = str(spec or "")
             if h:
                 source_known_handles.add(h)
-        refs_raw = _json_idprop(root, "red_nodes_to_init_refs_json", [])
+        refs_raw = json_idprop(root, "red_nodes_to_init_refs_json", [])
         if isinstance(refs_raw, list):
             source_known_handles.update(str(value) for value in refs_raw if value)
         source_known_handles.add(_root_handle(root))
@@ -207,7 +212,7 @@ def _default_root_chunk_scalars(
         "jsonFilesDirectory": "",
         "nodesToInit": [],
         "oneFrameToggle": 0,
-        "staticCommandsRig": {"DepotPath": _schema_resource_path(), "Flags": "Default"},
+        "staticCommandsRig": {"DepotPath": schema_resource_path(), "Flags": "Default"},
         "timeDeltaMultiplier": 1,
         "useAnimCommands": 0,
         "useAnimCommandsForCrowd": 0,
@@ -215,7 +220,7 @@ def _default_root_chunk_scalars(
         "useLunaticMode": 0,
     }
     _require_source_metadata(root, "red_rootchunk_scalars_json")
-    scalars = _json_idprop(root, "red_rootchunk_scalars_json", None)
+    scalars = json_idprop(root, "red_rootchunk_scalars_json", None)
     if not isinstance(scalars, dict):
         raise ValueError("invalid required source metadata: red_rootchunk_scalars_json")
     for key, value in scalars.items():
@@ -243,7 +248,7 @@ def encode_root_node(
 ) -> dict[str, Any]:
     root_handle = _root_handle(root)
     _require_source_metadata(root, "red_root_data_fields_json")
-    root_fields = _json_idprop(root, "red_root_data_fields_json", None)
+    root_fields = json_idprop(root, "red_root_data_fields_json", None)
     if not isinstance(root_fields, dict):
         raise ValueError("invalid required source metadata: red_root_data_fields_json")
     root_data = dict(root_fields)
@@ -275,9 +280,7 @@ def encode_rootchunk_payload(tree: bpy.types.NodeTree) -> dict[str, Any]:
 
     take_unlisted_entries()
     with indexed_socket_links():
-        entries = _encode_tree_runtime_entries(
-            root, embed_containers=True, _stack=set()
-        )
+        entries = encode_tree_runtime_entries(root, embed_containers=True, _stack=set())
         root_entry = encode_root_node(root, entries)
     ref_style = normalize_inline_first_references(
         root_entry, entries + take_unlisted_entries()
@@ -299,26 +302,6 @@ def encode_rootchunk_payload(tree: bpy.types.NodeTree) -> dict[str, Any]:
         }
     root_chunk["variables"] = encode_root_variables(root)
     return root_chunk
-
-
-def _bools_as_ints(root: Any) -> Any:
-    """WolvenKit writes and reads CBool as 0 or 1"""
-    stack = [root]
-    while stack:
-        current = stack.pop()
-        if isinstance(current, dict):
-            for key, value in current.items():
-                if value is True or value is False:
-                    current[key] = int(value)
-                elif isinstance(value, (dict, list)):
-                    stack.append(value)
-        elif isinstance(current, list):
-            for index, value in enumerate(current):
-                if value is True or value is False:
-                    current[index] = int(value)
-                elif isinstance(value, (dict, list)):
-                    stack.append(value)
-    return root
 
 
 def encode_wolvenkit_json(tree: bpy.types.NodeTree) -> dict[str, Any]:
@@ -352,7 +335,7 @@ def encode_wolvenkit_json(tree: bpy.types.NodeTree) -> dict[str, Any]:
     data.setdefault("Version", 195)
     data.setdefault("BuildVersion", 0)
     data.setdefault("EmbeddedFiles", [])
-    data["RootChunk"] = _bools_as_ints(root_chunk)
+    data["RootChunk"] = bools_as_ints(root_chunk)
     payload = {"Header": header, "Data": data}
     validation = validate_payload(payload)
     if validation["errors"]:
@@ -439,6 +422,8 @@ def encode_rootchunk_summary(payload: dict[str, Any]) -> dict[str, Any]:
 
 def write_graph_document(path: str, tree: bpy.types.NodeTree) -> str:
     """Write the graph tree belongs to as a WolvenKit AnimGraph document at path, returning the text written"""
-    from ...blender.animgraph.rig_binding import binding_tree
 
-    return write_json(path, encode_wolvenkit_json(binding_tree(tree)))
+    payload = encode_wolvenkit_json(binding_tree(tree))
+    header = payload["Header"]
+    header["ArchiveFileName"] = archive_file_name_for(header["ArchiveFileName"], path)
+    return write_json(path, payload)

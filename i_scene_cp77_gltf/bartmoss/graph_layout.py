@@ -656,32 +656,25 @@ def _barycenter(node, neighbours, ref_pos, layer_order_index):
     return sum(values) / len(values) if values else float(layer_order_index[node])
 
 
+def _barycenter_sweep(layers, keys, neighbours, step) -> None:
+    for key in keys:
+        ref = layers.get(key - step)
+        if not ref:
+            continue
+        ref_pos = {node: i for i, node in enumerate(ref)}
+        layer_order_index = {node: i for i, node in enumerate(layers[key])}
+        layers[key].sort(
+            key=lambda n: (
+                _barycenter(n, neighbours, ref_pos, layer_order_index),
+                layer_order_index[n],
+            )
+        )
+
+
 def _barycenter_order_layers(layers, keys, pred, succ) -> None:
     for _ in range(6):
-        for key in keys[1:]:
-            ref = layers.get(key - 1)
-            if not ref:
-                continue
-            ref_pos = {node: i for i, node in enumerate(ref)}
-            layer_order_index = {node: i for i, node in enumerate(layers[key])}
-            layers[key].sort(
-                key=lambda n: (
-                    _barycenter(n, pred, ref_pos, layer_order_index),
-                    layer_order_index[n],
-                )
-            )
-        for key in reversed(keys[:-1]):
-            ref = layers.get(key + 1)
-            if not ref:
-                continue
-            ref_pos = {node: i for i, node in enumerate(ref)}
-            layer_order_index = {node: i for i, node in enumerate(layers[key])}
-            layers[key].sort(
-                key=lambda n: (
-                    _barycenter(n, succ, ref_pos, layer_order_index),
-                    layer_order_index[n],
-                )
-            )
+        _barycenter_sweep(layers, keys[1:], pred, 1)
+        _barycenter_sweep(layers, reversed(keys[:-1]), succ, -1)
 
 
 def _layout_singleton_grid_packed(

@@ -1,7 +1,7 @@
 from types import MappingProxyType
 
 from ...assetio.values import cname_value
-from ..common.entity_data import component_name
+from ...entity.domain.entity_data import component_name
 from .model import ParsedEntity
 
 

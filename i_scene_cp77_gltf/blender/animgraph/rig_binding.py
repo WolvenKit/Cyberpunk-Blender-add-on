@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+import bpy
+
+from ...animation.model.animgraph.constants import ANIMGRAPH_TREE_ID
 from ...core.log import get_logger, log_once
 from ..animation_context import active_armature
 from ..armature_bones import armature_bone_names, armature_bone_parent_map
@@ -17,9 +20,7 @@ def binding_tree(tree: Any):
     if tree is None:
         return None
     try:
-        from . import variables
-
-        return variables.root_tree_for(tree) or tree
+        return root_tree_for(tree) or tree
     except (AttributeError, ReferenceError, RuntimeError, TypeError) as error:
         log_once(
             _LOG,
@@ -67,3 +68,28 @@ def bound_rig_parent_map(tree: Any, context: Any = None) -> dict[str, str]:
 
 def armature_rig_parent_map(armature: Any) -> dict[str, str]:
     return armature_bone_parent_map(armature) if armature is not None else {}
+
+
+def root_tree_for(tree: bpy.types.NodeTree | None) -> bpy.types.NodeTree | None:
+    if tree is None:
+        return None
+    if getattr(tree, "bl_idname", "") != ANIMGRAPH_TREE_ID:
+        return None
+    parent_name = ""
+    try:
+        parent_name = str(tree.get("red_parent_graph", ""))
+    except (AttributeError, TypeError) as error:
+        log_once(
+            _LOG,
+            "DEBUG",
+            ("root_tree_for", type(error).__name__),
+            "root tree for: fell back after %s",
+            error,
+            exc_info=True,
+        )
+        parent_name = ""
+    if parent_name:
+        parent = bpy.data.node_groups.get(parent_name)
+        if parent is not None and getattr(parent, "bl_idname", "") == ANIMGRAPH_TREE_ID:
+            return parent
+    return tree

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import bpy
 
+from ....assetio.paths import depot_path
 from ....blender.naming import fit_id_name
 from ....blender.transactions import track_created_datablock
-from ...common.paths import depot_path
 
 
 class AcousticSectorService:

@@ -14,8 +14,10 @@ from bpy.props import (
 from bpy.types import PropertyGroup
 
 from ..entity.model.component_types import MESH_TYPES, TYPE_LABELS
+from .handlers.property_updates import field_changed, tools_changed
 from .runtime.scene_cache import entity_index
 from .runtime.updates import updates_suspended
+from .services.selection import appearance_choices
 
 TYPE_ITEMS = tuple((key, TYPE_LABELS[key], MESH_TYPES[key]) for key in MESH_TYPES)
 
@@ -24,8 +26,6 @@ def _field_changed(field):
     def update(self, context):
         if updates_suspended():
             return
-        from .services.components import field_changed
-
         field_changed(context, self, field)
 
     return update
@@ -35,8 +35,6 @@ def _tools_changed(field):
     def update(self, context):
         if updates_suspended():
             return
-        from .services.selection import tools_changed
-
         tools_changed(context, field)
 
     return update
@@ -74,8 +72,6 @@ def _entity_items(self, context):
 
 
 def _appearance_items(self, context):
-    from .services.selection import appearance_choices
-
     return _cached_items(self, "appearance", appearance_choices(self.entity))
 
 

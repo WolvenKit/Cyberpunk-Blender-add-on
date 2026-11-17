@@ -4,6 +4,7 @@ import bpy
 
 from ..blender import shader_nodes
 from ..blender.transactions import new_tracked_datablock
+from ..materials.blender.layout import combine_bundle_node, separate_bundle_node
 from ..materials.blender.nodes import (
     CreateShaderNodeValue,
     bsdf_socket_names,
@@ -12,12 +13,7 @@ from ..materials.blender.nodes import (
     createVecLerpGroup,
 )
 from ..materials.cache_identity import filtered_material_data_identity
-from .graph import (
-    combine_bundle_node,
-    cp77_bitangent_socket,
-    cp77_uv_tangent_node,
-    separate_bundle_node,
-)
+from .graph import cp77_bitangent_socket, cp77_uv_tangent_node
 from .mat_common import (
     MaterialTypeBase,
     add_group_node,

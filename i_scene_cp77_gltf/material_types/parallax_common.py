@@ -147,10 +147,11 @@ def _build_camera_forward_vector(tree, *, location=(-1850, 250)):
     """Create a frame-constant world-space camera-forward vector"""
     nodes, links = tree.nodes, tree.links
 
-    source = new_labeled_node(nodes, "ShaderNodeCombineXYZ", "Camera -Z", location)
+    # Blender's shading camera space looks along +Z.
+    source = new_labeled_node(nodes, "ShaderNodeCombineXYZ", "Camera +Z", location)
     source.inputs["X"].default_value = 0.0
     source.inputs["Y"].default_value = 0.0
-    source.inputs["Z"].default_value = -1.0
+    source.inputs["Z"].default_value = 1.0
 
     transform = new_labeled_node(
         nodes,

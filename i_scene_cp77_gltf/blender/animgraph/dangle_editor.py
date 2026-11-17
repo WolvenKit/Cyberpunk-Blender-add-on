@@ -7,6 +7,7 @@ from typing import Any
 
 import bpy
 
+from ...animation.model.animgraph import dangle
 from ...animation.model.dangle.editor import (
     bone_name,
     clean_name,
@@ -19,9 +20,12 @@ from ...animation.model.dangle.editor import (
     strand_and_index,
     strand_sort_key,
 )
+from ...assetio import animgraph_json as json_io
 from ...core.log import get_logger
 from .categories import NODE_CATEGORY_COLORS
+from .owned_handles import allocate_owned_handle_ids
 from .property_codec import add_node_property, clear_node_properties
+from .rig_binding import binding_tree
 from .sockets import bind_red_socket
 from .tree_ops import link_sockets, new_editor_node, new_graph_tree, new_socket
 
@@ -807,6 +811,16 @@ def create_dangle_editor_subgraphs(
 
     _layout_shapes(shape_nodes, collector)
     return (len(particle_nodes), constraint_edges, len(shapes))
+
+
+def seed_authored_state(node: bpy.types.Node) -> None:
+    wrapper = dangle.authored_simulation(*allocate_owned_handle_ids(node, 2))
+    node["red_preserved_export_fields_json"] = json_io.dumps(
+        {"dangleConstraint": wrapper}, indent=None
+    )
+    create_dangle_editor_subgraphs(
+        binding_tree(node.id_data), node, node.red_handle_id, wrapper
+    )
 
 
 def project_imported_dangle_node(parser, node, handle_id: str, data: dict):

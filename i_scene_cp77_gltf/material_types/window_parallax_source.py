@@ -9,7 +9,12 @@ from ..blender.mesh import (
 )
 from ..materials.blender.nodes import create_node
 from .bundles import material_bundle_node
-from .graph import cp77_bitangent_socket, cp77_uv_tangent_node, fract_socket
+from .graph import (
+    combine_xyz_socket,
+    cp77_bitangent_socket,
+    cp77_uv_tangent_node,
+    fract_socket,
+)
 from .mat_common import get_or_build_node_group, param_float, param_vector
 from .shader_hash import hash2_socket, hash11_socket, hash12_socket
 
@@ -31,15 +36,6 @@ class WindowParallaxCoordinates:
     room_on_random: object
     view_angle: object
     object_pivot: object
-
-
-def _combine(tree, x, y, z=None, location=(0, 0), label="Vector"):
-    node = create_node(tree.nodes, "ShaderNodeCombineXYZ", location, label=label)
-    tree.links.new(x, node.inputs["X"])
-    tree.links.new(y, node.inputs["Y"])
-    if z is not None:
-        tree.links.new(z, node.inputs["Z"])
-    return node.outputs["Vector"]
 
 
 def _build_source_basis_nodes(tree, location=(-4200, 700)):
@@ -495,7 +491,7 @@ def _build_source_basis_nodes(tree, location=(-4200, 700)):
             axis, shader_nodes.socket_by_identifier(dot.inputs, "Vector_001")
         )
         tan_components.append(dot.outputs["Value"])
-    tan_pos = _combine(
+    tan_pos = combine_xyz_socket(
         tree,
         *tan_components,
         location=(location[0] + 1780, location[1]),
@@ -517,7 +513,7 @@ def _build_source_basis_nodes(tree, location=(-4200, 700)):
             axis, shader_nodes.socket_by_identifier(dot.inputs, "Vector_001")
         )
         view_components.append(dot.outputs["Value"])
-    view_dir = _combine(
+    view_dir = combine_xyz_socket(
         tree,
         *view_components,
         location=(location[0] + 1780, location[1] - 840),
@@ -955,7 +951,7 @@ def _build_room_state_nodes(
         (location[0] + 2640, location[1] - 120),
         "roomUV.y",
     )
-    room_uv = _combine(
+    room_uv = combine_xyz_socket(
         tree, room_x, room_y, location=(location[0] + 2810, location[1]), label="roomUV"
     )
 
@@ -1088,7 +1084,7 @@ def _build_room_state_nodes(
         my_y_q.outputs["Value"],
         shader_nodes.socket_by_identifier(seed_y.inputs, "Value_001"),
     )
-    seed_input = _combine(
+    seed_input = combine_xyz_socket(
         tree,
         seed_x.outputs["Value"],
         seed_y.outputs["Value"],
@@ -1306,7 +1302,7 @@ def _room_pos(tree, room_uv, location):
         label="roomPos.z = -1",
     )
     z_value.outputs["Value"].default_value = -1.0
-    return _combine(
+    return combine_xyz_socket(
         tree,
         x.outputs["Value"],
         y.outputs["Value"],
@@ -1357,7 +1353,7 @@ def _eye_vector(tree, components, z_scale, location, label):
         hide=True,
     ).node
     tree.links.new(source_z, z.inputs["Value"])
-    return _combine(
+    return combine_xyz_socket(
         tree,
         x,
         y,
@@ -1740,7 +1736,7 @@ def _build_mapped_uv_nodes(tree, hit, interp, near_scale, far_scale, location, l
         shader_nodes.socket_by_identifier(node.inputs, "Value_002").default_value = 0.5
     tree.links.new(x.outputs["Value"], x01.inputs["Value"])
     tree.links.new(y.outputs["Value"], y01.inputs["Value"])
-    return _combine(
+    return combine_xyz_socket(
         tree,
         x01.outputs["Value"],
         y01.outputs["Value"],
@@ -1877,7 +1873,7 @@ def _flip_room_uv(tree, uv, random, location):
         weighted.outputs["Value"],
         shader_nodes.socket_by_identifier(x.inputs, "Value_001"),
     )
-    return _combine(
+    return combine_xyz_socket(
         tree,
         x.outputs["Value"],
         split.outputs["Y"],
@@ -2042,7 +2038,7 @@ def _build_atlas_uv_nodes(tree, uv, index_x, index_y, columns, rows, location, l
         iv.outputs["Value"],
         shader_nodes.socket_by_identifier(out_v.inputs, "Value_001"),
     )
-    return _combine(
+    return combine_xyz_socket(
         tree,
         out_u.outputs["Value"],
         out_v.outputs["Value"],
@@ -2533,7 +2529,7 @@ def color_overlay_uv(tree, object_pivot, location=(-800, -900)):
         ).node
         tree.links.new(origin.outputs["Value"], normalized.inputs["Value"])
         outputs.append(normalized.outputs["Value"])
-    return _combine(
+    return combine_xyz_socket(
         tree,
         outputs[0],
         outputs[1],

@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import json
 
-from ...physics.domain.vehicle.gears import collection_gears, validate_gears
-from .vehicle_gears import ensure_gear_collection
+from .vehicle_gears import ensure_gear_collection, validated_gears
 
 
 def resolved_game_config(vehicle):
@@ -31,7 +30,7 @@ def validate_authoring_state(vehicle):
             errors.append(str(error))
     try:
         ensure_gear_collection(vehicle, game_config)
-        validate_gears(collection_gears(vehicle), vehicle=vehicle)
+        validated_gears(vehicle)
     except ValueError as error:
         errors.append(str(error))
     return errors, warnings, game_config

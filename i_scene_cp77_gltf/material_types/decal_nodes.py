@@ -97,7 +97,7 @@ def _store_profile(material, profile):
     )
 
 
-def _set_transparent(material):
+def set_transparent(material):
     for name, value in (
         ("surface_render_method", "BLENDED"),
         ("use_backface_culling", False),
@@ -276,7 +276,7 @@ def _resolved_texture_path(data, profile, name):
     return str(path) if path else None
 
 
-def _texture(
+def decal_texture(
     owner,
     nodes,
     links,
@@ -292,7 +292,7 @@ def _texture(
     path = _resolved_texture_path(data, profile, name)
     if not path:
         return None
-    image = owner._load_relative_image(
+    image = owner.load_relative_image(
         path,
         non_color=non_color,
         error_label=name if profile is None else profile.name,
@@ -306,7 +306,7 @@ def _texture(
     return node
 
 
-def _red(nodes, links, source, name, location):
+def red_channel(nodes, links, source, name, location):
     separate = new_labeled_node(nodes, "ShaderNodeSeparateColor", name, location)
     separate.mode = "RGB"
     links.new(source, find_input(separate, "Color"))
@@ -346,7 +346,7 @@ def _secondary_diffuse_alpha_socket(
             0.0,
             location,
         )
-    return _red(
+    return red_channel(
         nodes,
         links,
         texture.outputs["Color"],
@@ -698,7 +698,7 @@ def _projected_half_texel(owner, data, profile):
     )
     path = _resolved_texture_path(data, profile, texture_key)
     if path:
-        image = owner._load_relative_image(
+        image = owner.load_relative_image(
             path,
             non_color=(
                 texture_key in {"EmissiveMask", "RoughnessTexture"}
@@ -821,7 +821,7 @@ def _normal(
             label="NormalTexture",
         )
 
-    image = owner._load_relative_image(
+    image = owner.load_relative_image(
         normal_path,
         non_color=True,
         error_label="NormalTexture",
@@ -859,7 +859,7 @@ def _normal(
             raw_default = profile.defaults.get("NormalsBlendingModeAlpha")
             alpha_path = unwrap_param(raw_default) if raw_default is not None else None
         if alpha_path:
-            alpha_image = owner._load_relative_image(
+            alpha_image = owner.load_relative_image(
                 alpha_path,
                 non_color=True,
                 error_label="NormalsBlendingModeAlpha",
@@ -874,7 +874,7 @@ def _normal(
                 alpha_texture.image = alpha_image
                 alpha_texture.extension = "REPEAT"
                 links.new(uv, find_input(alpha_texture, "Vector"))
-                alpha = _red(
+                alpha = red_channel(
                     nodes,
                     links,
                     alpha_texture.outputs["Color"],
@@ -941,7 +941,7 @@ def _displacement(nodes, links, output, value):
     links.new(node.outputs["Displacement"], output.inputs["Displacement"])
 
 
-def _new_graph(material, label):
+def new_material_graph(material, label):
     material.use_nodes = True
     tree = material.node_tree
     tree.nodes.clear()
@@ -956,7 +956,7 @@ def _new_graph(material, label):
 
 
 def _gradient_color(owner, nodes, links, data, profile, diffuse_texture, location):
-    raw_position = _red(
+    raw_position = red_channel(
         nodes,
         links,
         diffuse_texture.outputs["Color"],
@@ -978,7 +978,7 @@ def _gradient_color(owner, nodes, links, data, profile, diffuse_texture, locatio
     )
     links.new(position, coordinate.inputs["X"])
     coordinate.inputs["Y"].default_value = 0.5
-    gradient = _texture(
+    gradient = decal_texture(
         owner,
         nodes,
         links,
@@ -1023,7 +1023,7 @@ def _multiply_mask(nodes, links, coverage, mask, name, location):
         links,
         "MULTIPLY",
         coverage,
-        _red(
+        red_channel(
             nodes,
             links,
             mask.outputs["Color"],
@@ -1055,7 +1055,7 @@ class ProjectedDecal(MaterialTypeBase):
         _store_profile(Mat, profile)
         normal_blending_mode = int(data.get("normalBlendingMode", 0) or 0)
         Mat["normalBlendingMode"] = normal_blending_mode
-        tree, _, principled = _new_graph(Mat, profile.name)
+        tree, _, principled = new_material_graph(Mat, profile.name)
         nodes, links = tree.nodes, tree.links
         (
             color_override,
@@ -1082,7 +1082,7 @@ class ProjectedDecal(MaterialTypeBase):
                 decal_alpha,
                 emissive_scale,
             )
-            _set_transparent(Mat)
+            set_transparent(Mat)
             return
         if "terrain" in profile.features:
             alpha = self._build_terrain(
@@ -1105,14 +1105,14 @@ class ProjectedDecal(MaterialTypeBase):
                 location=(1320, -340),
             )
             links.new(alpha, find_input(principled, "Alpha"))
-            _set_transparent(Mat)
+            set_transparent(Mat)
             return
 
         colorless_pass = profile.name == "decal_roughness_only"
         diffuse = (
             None
             if colorless_pass
-            else _texture(
+            else decal_texture(
                 self,
                 nodes,
                 links,
@@ -1181,7 +1181,7 @@ class ProjectedDecal(MaterialTypeBase):
         mask_path = param_texture_path(data, "MaskTexture")
         mask_is_explicit = bool(mask_path)
         mask = (
-            _texture(
+            decal_texture(
                 self,
                 nodes,
                 links,
@@ -1225,7 +1225,7 @@ class ProjectedDecal(MaterialTypeBase):
                     (-900, 420),
                 )
             if diffuse_as_mask:
-                texture_alpha = _red(
+                texture_alpha = red_channel(
                     nodes,
                     links,
                     diffuse.outputs["Color"],
@@ -1391,7 +1391,7 @@ class ProjectedDecal(MaterialTypeBase):
                 location=(1260, -100),
             )
         elif "roughness" in profile.features:
-            roughness = _texture(
+            roughness = decal_texture(
                 self,
                 nodes,
                 links,
@@ -1403,7 +1403,7 @@ class ProjectedDecal(MaterialTypeBase):
                 non_color=True,
             )
             sample = (
-                _red(
+                red_channel(
                     nodes,
                     links,
                     roughness.outputs["Color"],
@@ -1473,7 +1473,7 @@ class ProjectedDecal(MaterialTypeBase):
                 )
                 links.new(preview, find_input(principled, "Base Color"))
         if "metalness" in profile.features:
-            metalness = _texture(
+            metalness = decal_texture(
                 self,
                 nodes,
                 links,
@@ -1485,7 +1485,7 @@ class ProjectedDecal(MaterialTypeBase):
                 non_color=True,
             )
             sample = (
-                _red(
+                red_channel(
                     nodes,
                     links,
                     metalness.outputs["Color"],
@@ -1554,7 +1554,7 @@ class ProjectedDecal(MaterialTypeBase):
             location=(1500, 260),
         )
         links.new(preview_alpha, find_input(principled, "Alpha"))
-        _set_transparent(Mat)
+        set_transparent(Mat)
 
     def _emission(
         self,
@@ -1575,7 +1575,7 @@ class ProjectedDecal(MaterialTypeBase):
         emissive = None
         strength_mask = None
         if "emissive_color" in profile.features:
-            texture = _texture(
+            texture = decal_texture(
                 self, nodes, links, data, profile, "Emissive", (-320, 1020), uv
             )
             if texture:
@@ -1601,7 +1601,7 @@ class ProjectedDecal(MaterialTypeBase):
                     location=(220, 860),
                 )
         elif "emissive_only" in profile.features:
-            texture = _texture(
+            texture = decal_texture(
                 self,
                 nodes,
                 links,
@@ -1616,7 +1616,7 @@ class ProjectedDecal(MaterialTypeBase):
                 emissive = rgb_socket(
                     nodes, "Emissive White", (1.0, 1.0, 1.0, 1.0), (0, 1100)
                 )
-                strength_mask = _red(
+                strength_mask = red_channel(
                     nodes, links, texture.outputs["Color"], "EmissiveMask.r", (0, 940)
                 )
         elif "emissive_gradient" in profile.features and gradient_position is not None:
@@ -1625,7 +1625,7 @@ class ProjectedDecal(MaterialTypeBase):
             )
             links.new(gradient_position, coordinate.inputs["X"])
             coordinate.inputs["Y"].default_value = 0.5
-            gradient = _texture(
+            gradient = decal_texture(
                 self,
                 nodes,
                 links,
@@ -1639,7 +1639,7 @@ class ProjectedDecal(MaterialTypeBase):
             )
             if gradient:
                 emissive = base_color
-                strength_mask = _red(
+                strength_mask = red_channel(
                     nodes,
                     links,
                     gradient.outputs["Color"],
@@ -1761,7 +1761,7 @@ class ProjectedDecal(MaterialTypeBase):
         return strength_mask
 
     def _tint3(self, data, profile, nodes, links, uv, base):
-        mask = _texture(
+        mask = decal_texture(
             self,
             nodes,
             links,
@@ -1915,7 +1915,7 @@ class ProjectedDecal(MaterialTypeBase):
         decal_alpha,
         emissive_scale,
     ):
-        base = _texture(
+        base = decal_texture(
             self, nodes, links, data, profile, "BaseColor", (-1260, 620), uv
         )
         color = (
@@ -1992,7 +1992,7 @@ class ProjectedDecal(MaterialTypeBase):
             ("Roughness", "Roughness", 0.5),
             ("Metalness", "Metallic", 0.0),
         ):
-            texture = _texture(
+            texture = decal_texture(
                 self,
                 nodes,
                 links,
@@ -2004,7 +2004,7 @@ class ProjectedDecal(MaterialTypeBase):
                 non_color=True,
             )
             sample = (
-                _red(
+                red_channel(
                     nodes,
                     links,
                     texture.outputs["Color"],
@@ -2111,7 +2111,7 @@ class ProjectedDecal(MaterialTypeBase):
         roughness_override,
     ):
         base_data = {**data, "DiffuseTexture": lookup_param(data, "BaseColor")}
-        base = _texture(
+        base = decal_texture(
             self, nodes, links, base_data, profile, "DiffuseTexture", (-1260, 620), uv
         )
         color = (
@@ -2142,7 +2142,7 @@ class ProjectedDecal(MaterialTypeBase):
         )
         links.new(color, find_input(principled, "Base Color"))
         rough_data = {**data, "RoughnessTexture": lookup_param(data, "Roughness")}
-        rough = _texture(
+        rough = decal_texture(
             self,
             nodes,
             links,
@@ -2154,7 +2154,7 @@ class ProjectedDecal(MaterialTypeBase):
             non_color=True,
         )
         if rough:
-            value = _red(
+            value = red_channel(
                 nodes, links, rough.outputs["Color"], "Terrain Roughness", (-1000, -140)
             )
             value = shader_nodes.math(
@@ -2177,7 +2177,7 @@ class ProjectedDecal(MaterialTypeBase):
                 profile.defaults.get("AlphaMask"),
             ),
         }
-        mask = _texture(
+        mask = decal_texture(
             self,
             nodes,
             links,
@@ -2193,7 +2193,7 @@ class ProjectedDecal(MaterialTypeBase):
                 nodes, "Terrain Decal Alpha Fallback", 0.0, (1260, -420)
             )
 
-        alpha = _red(
+        alpha = red_channel(
             nodes, links, mask.outputs["Color"], "Terrain AlphaMask.r", (-1000, -420)
         )
         black = _float(data, profile, "AlphaMaskBlackPoint", 0.0)
@@ -2249,7 +2249,7 @@ class MeshDecal(MaterialTypeBase):
             and "vehicle" not in profile.features
             and "NormalsBlendingModeAlpha" in contract_records(material_template)
         )
-        tree, output, principled = _new_graph(Mat, profile.name)
+        tree, output, principled = new_material_graph(Mat, profile.name)
         nodes, links = tree.nodes, tree.links
         color_override, roughness_override, _decal_alpha, _emissive_scale = (
             _instance_overrides(nodes)
@@ -2268,7 +2268,7 @@ class MeshDecal(MaterialTypeBase):
             _displacement(
                 nodes, links, output, _float(data, profile, "VertexOffsetFactor")
             )
-            _set_transparent(Mat)
+            set_transparent(Mat)
             return
         if "emissive" in profile.features:
             self._emissive(
@@ -2277,10 +2277,10 @@ class MeshDecal(MaterialTypeBase):
             _displacement(
                 nodes, links, output, _float(data, profile, "VertexOffsetFactor")
             )
-            _set_transparent(Mat)
+            set_transparent(Mat)
             return
 
-        diffuse = _texture(
+        diffuse = decal_texture(
             self,
             nodes,
             links,
@@ -2347,7 +2347,7 @@ class MeshDecal(MaterialTypeBase):
             texture_alpha = raw_diffuse_alpha
             use_gradient = clamp01(_float(data, profile, "UseGradientMap"))
             if use_gradient > 1.0e-8:
-                gradient = _texture(
+                gradient = decal_texture(
                     self,
                     nodes,
                     links,
@@ -2359,7 +2359,7 @@ class MeshDecal(MaterialTypeBase):
                     extension="EXTEND",
                 )
                 if gradient:
-                    position = _red(
+                    position = red_channel(
                         nodes,
                         links,
                         diffuse.outputs["Color"],
@@ -2387,7 +2387,7 @@ class MeshDecal(MaterialTypeBase):
                         (-120, 920),
                     )
                     gradient_coverage = gradient.outputs["Alpha"]
-                    vehicle_mask = _texture(
+                    vehicle_mask = decal_texture(
                         self,
                         nodes,
                         links,
@@ -2399,7 +2399,7 @@ class MeshDecal(MaterialTypeBase):
                         non_color=True,
                     )
                     if vehicle_mask is not None:
-                        vehicle_mask_red = _red(
+                        vehicle_mask_red = red_channel(
                             nodes,
                             links,
                             vehicle_mask.outputs["Color"],
@@ -2439,7 +2439,7 @@ class MeshDecal(MaterialTypeBase):
 
         mask = None
         if "vehicle" not in profile.features:
-            mask = _texture(
+            mask = decal_texture(
                 self,
                 nodes,
                 links,
@@ -2451,7 +2451,7 @@ class MeshDecal(MaterialTypeBase):
                 non_color=True,
             )
         if mask is not None:
-            mask_red = _red(
+            mask_red = red_channel(
                 nodes,
                 links,
                 mask.outputs["Color"],
@@ -2554,7 +2554,7 @@ class MeshDecal(MaterialTypeBase):
                     name="Secondary Mask UV Scale",
                     location=(-1420, 200),
                 )
-            secondary = _texture(
+            secondary = decal_texture(
                 self,
                 nodes,
                 links,
@@ -2566,7 +2566,7 @@ class MeshDecal(MaterialTypeBase):
                 non_color=True,
             )
             if secondary:
-                secondary_mask = _red(
+                secondary_mask = red_channel(
                     nodes,
                     links,
                     secondary.outputs["Color"],
@@ -2632,7 +2632,7 @@ class MeshDecal(MaterialTypeBase):
 
         growth_mask = None
         if "revealed" in profile.features:
-            flow = _texture(
+            flow = decal_texture(
                 self,
                 nodes,
                 links,
@@ -2644,7 +2644,7 @@ class MeshDecal(MaterialTypeBase):
                 non_color=True,
             )
             if flow:
-                flow_alpha = _red(
+                flow_alpha = red_channel(
                     nodes, links, flow.outputs["Color"], "FlowTexture.r", (-500, -40)
                 )
                 growth_time = material_property_socket(
@@ -2826,7 +2826,7 @@ class MeshDecal(MaterialTypeBase):
                 and "vehicle" not in profile.features
                 and _float(data, profile, "UseNormalAlphaTex") >= 0.5
             ):
-                normal_alpha_tex = _texture(
+                normal_alpha_tex = decal_texture(
                     self,
                     nodes,
                     links,
@@ -2838,7 +2838,7 @@ class MeshDecal(MaterialTypeBase):
                     non_color=True,
                 )
                 if normal_alpha_tex:
-                    normal_alpha = _red(
+                    normal_alpha = red_channel(
                         nodes,
                         links,
                         normal_alpha_tex.outputs["Color"],
@@ -2922,7 +2922,7 @@ class MeshDecal(MaterialTypeBase):
             not mesh_decal_parallax or abs(material_alpha_value) > 1.0e-8
         )
         if "roughness" in profile.features and material_channels_active:
-            roughness = _texture(
+            roughness = decal_texture(
                 self,
                 nodes,
                 links,
@@ -2934,7 +2934,7 @@ class MeshDecal(MaterialTypeBase):
                 non_color=True,
             )
             rough_sample = (
-                _red(
+                red_channel(
                     nodes,
                     links,
                     roughness.outputs["Color"],
@@ -2975,7 +2975,7 @@ class MeshDecal(MaterialTypeBase):
             )
             links.new(rough, find_input(principled, "Roughness"))
         if "metalness" in profile.features and material_channels_active:
-            metalness = _texture(
+            metalness = decal_texture(
                 self,
                 nodes,
                 links,
@@ -2987,7 +2987,7 @@ class MeshDecal(MaterialTypeBase):
                 non_color=True,
             )
             metal_sample = (
-                _red(
+                red_channel(
                     nodes,
                     links,
                     metalness.outputs["Color"],
@@ -3099,7 +3099,7 @@ class MeshDecal(MaterialTypeBase):
             )
             links.new(gradient_position, coordinate.inputs["X"])
             coordinate.inputs["Y"].default_value = 0.5
-            gradient = _texture(
+            gradient = decal_texture(
                 self,
                 nodes,
                 links,
@@ -3113,7 +3113,7 @@ class MeshDecal(MaterialTypeBase):
             )
             if gradient:
                 links.new(color, find_input(principled, "Emission Color", "Emission"))
-                mask = _red(
+                mask = red_channel(
                     nodes,
                     links,
                     gradient.outputs["Color"],
@@ -3162,10 +3162,10 @@ class MeshDecal(MaterialTypeBase):
                 links.new(strength, find_input(principled, "Emission Strength"))
 
         _displacement(nodes, links, output, _float(data, profile, "VertexOffsetFactor"))
-        _set_transparent(Mat)
+        set_transparent(Mat)
 
     def _multitint(self, data, profile, nodes, links, uv, base):
-        mask = _texture(
+        mask = decal_texture(
             self,
             nodes,
             links,
@@ -3178,13 +3178,13 @@ class MeshDecal(MaterialTypeBase):
         )
         if mask is None:
             return base
-        tint_mask = _red(
+        tint_mask = red_channel(
             nodes, links, mask.outputs["Color"], "TintMaskTexture.r", (-740, 1260)
         )
         vertex = new_labeled_node(
             nodes, "ShaderNodeVertexColor", "Tint Index Vertex Color", (-980, 1480)
         )
-        vertex_index = _red(
+        vertex_index = red_channel(
             nodes, links, vertex.outputs["Color"], "Vertex Color.r", (-740, 1480)
         )
         tint_color = _color(data, profile, "TintColor0")
@@ -3252,7 +3252,7 @@ class MeshDecal(MaterialTypeBase):
 
     def _double_diffuse(self, data, profile, nodes, links, uv, base, alpha):
         secondary_path = _resolved_texture_path(data, profile, "SecondaryDiffuseAlpha")
-        secondary = _texture(
+        secondary = decal_texture(
             self,
             nodes,
             links,
@@ -3486,7 +3486,7 @@ class MeshDecal(MaterialTypeBase):
             name="Layer Tile",
             location=(1380, 1160),
         )
-        texture = _texture(
+        texture = decal_texture(
             self,
             nodes,
             links,
@@ -3647,7 +3647,7 @@ class MeshDecal(MaterialTypeBase):
     def _emissive_subsurface(
         self, data, material, profile, nodes, links, principled, uv
     ):
-        emissive = _texture(
+        emissive = decal_texture(
             self,
             nodes,
             links,
@@ -3658,7 +3658,7 @@ class MeshDecal(MaterialTypeBase):
             uv,
             non_color=True,
         )
-        secondary = _texture(
+        secondary = decal_texture(
             self,
             nodes,
             links,
@@ -3713,7 +3713,7 @@ class MeshDecal(MaterialTypeBase):
                 links,
                 "MULTIPLY",
                 mask,
-                _red(
+                red_channel(
                     nodes,
                     links,
                     secondary.outputs["Color"],

@@ -21,6 +21,8 @@ def draw_utilities_tab(
     col = box.column()
     col.operator("cp77.submesh_prep")
     col.operator("cp77.delete_orphan_bones", text="Delete Orphan Bones")
+    col.operator("cp77.group_verts", text="Group Ungrouped Verts")
+    col.operator("cp77.del_empty_vgroup", text="Delete Unused Vert Groups")
 
     if has_mesh_selected or has_meshes_selected:
         box = layout.box()
@@ -38,13 +40,6 @@ def draw_utilities_tab(
 
 
 def draw_modelling_tab(context, layout, has_mesh_selected, has_meshes_selected):
-
-    box = layout.box()
-    box.label(text="Vertex Groups", icon_value=get_icon("TRAUMA"))
-    col = box.column()
-    col.operator("cp77.group_verts", text="Group Ungrouped Verts")
-    col.operator("cp77.del_empty_vgroup", text="Delete Unused Vert Groups")
-
     if not (has_mesh_selected or has_meshes_selected):
         box = layout.box()
         box.label(icon_value=get_icon("SCULPT"), text="Select a mesh")

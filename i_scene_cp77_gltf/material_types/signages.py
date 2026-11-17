@@ -91,7 +91,7 @@ class Signages(EmissiveSlotsMixin, MaterialTypeBase):
             "RoughnessTexture": _roughness_textured(data),
         }
         return {
-            key: self._load_relative_image(
+            key: self.load_relative_image(
                 self._texture_path(data, key),
                 non_color=key == "RoughnessTexture",
                 error_label=f"signages {key}",

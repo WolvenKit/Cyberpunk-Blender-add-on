@@ -2,9 +2,9 @@ from dataclasses import dataclass
 
 from ....assetio.catalog import ResourceKind
 from ....assetio.repository import ResourceRepository
-from ..rig.parser import RigParseMode
+from ...domain.facial.parsing import parse_facial_setup
+from ...model.rig.data import RigParseMode
 from ..rig.repository import RigRepository
-from .loader import parse_facial_setup
 
 FACIAL_PARSER_REVISION = 3
 

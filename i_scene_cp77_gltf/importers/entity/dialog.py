@@ -183,5 +183,5 @@ def remembered_state(preferences):
     )
 
 
-def remember_state(preferences, state):
-    dialog_model.remember_text(preferences, _MEMORY_KEY, state.to_json())
+def remember_state(preferences, state) -> bool:
+    return dialog_model.remember_text(preferences, _MEMORY_KEY, state.to_json())

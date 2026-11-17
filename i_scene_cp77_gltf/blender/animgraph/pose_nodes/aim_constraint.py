@@ -35,7 +35,7 @@ class AimConstraintHandler(PoseNodeHandler):
 
     def bone_names(self, spec):
         data = spec.data
-        names = {text(data, "transformIndex"), text(data, "targetTransform")}
+        names = self.handler_bone_names(data, _node_type(data))
         if _node_type(data) == aim_constraint.RED_TYPE:
             up_data = data.get("upTransform", {}) or {}
             names.add(text(up_data, "transformIndex"))

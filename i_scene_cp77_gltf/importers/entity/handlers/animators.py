@@ -3,17 +3,17 @@ from __future__ import annotations
 import bpy
 
 from ....assetio.values import cname_value
+from ....blender.entity.transforms import component_local_matrix, resolve_handle_data
 from ....blender.keyframes import assign_action_with_slot, ensure_fcurve
 from ....blender.transactions import track_created_datablock
 from ....core.log import get_logger, log_once
-from ...common.entity_data import component_name
+from ....entity.domain.entity_data import component_name
 from ..transform_animator import (
     TransformAnimatorProgram,
     preview_transform_animator_program,
     transform_animator_rotation_channel_keys,
     transform_animator_translation_channel_keys,
 )
-from ..transforms import component_local_matrix, resolve_handle_data
 
 _LOG = get_logger(__name__)
 _RUNTIME_VERSION = 3

@@ -67,6 +67,14 @@ def get_nltk_data_dir():
     return os.path.join(_RESOURCES_DIR, "nltk_data")
 
 
+def get_animgraph_dir():
+    return os.path.join(_RESOURCES_DIR, "animgraph")
+
+
+def get_jali_dir():
+    return os.path.join(_RESOURCES_DIR, "jali")
+
+
 def base_body_path(rig_name: str) -> str | None:
     """The bundled base body mesh for the base rig rig_name (woman_base, man_base), or None"""
     for character in BASE_CHARACTERS.values():

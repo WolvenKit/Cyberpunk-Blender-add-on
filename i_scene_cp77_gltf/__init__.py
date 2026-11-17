@@ -1,5 +1,9 @@
 import bpy
 
+from .animation.services.animgraph.schema_loader import (
+    clear_animgraph_schema,
+    load_animgraph_schema,
+)
 from .animtools.registration import register_animtools, unregister_animtools
 from .collisiontools.registration import (
     register_collisiontools,
@@ -34,19 +38,6 @@ if _manifest_version != RUNTIME_BUILD:
         f"{'.'.join(map(str, _manifest_version))}"
     )
 
-bl_info = {
-    "name": "Cyberpunk 2077 IO Suite",
-    "author": "HitmanHimself, Turk, Jato, dragonzkiller, kwekmaster, glitchered, Simarilius, Doctor Presto, shotlastc, Rudolph2109, Holopointz, Peatral, John CO., Chase_81, akikoe,  sprt_, Jazza, 86maylin",
-    "version": get_addon_version(),
-    "blender": (5, 0, 0),
-    "location": "File > Import-Export",
-    "description": "Import and Export WolvenKit Cyberpunk2077 gLTF models with materials, Import .streamingsector and .ent from .json",
-    "warning": "",
-    "category": "Import-Export",
-    "doc_url": "https://github.com/WolvenKit/Cyberpunk-Blender-add-on#readme",
-    "tracker_url": "https://github.com/WolvenKit/Cyberpunk-Blender-add-on/issues/new/choose",
-}
-
 _LOG = get_logger(__name__)
 
 
@@ -54,6 +45,7 @@ _REGISTRATION_STEPS = (
     (register_prefs, unregister_prefs),
     (register_notifications, unregister_notifications),
     (register_props, unregister_props),
+    (load_animgraph_schema, clear_animgraph_schema),
     (register_animtools, unregister_animtools),
     (register_collisiontools, unregister_collisiontools),
     (register_importers, unregister_importers),

@@ -6,8 +6,7 @@ import bpy
 from ...animation.model.animgraph.schema import enums
 from ...assetio import animgraph_json
 from ...blender.animgraph import sm_records, sm_sockets
-from ...blender.animgraph.builder import new_handle_id
-from ...blender.animgraph.sm_properties import INTERPOLATION_TYPE_ENUM
+from ...blender.animgraph.sm_model import INTERPOLATION_TYPE_ENUM, new_handle_id
 from ...core.log import debug_exception, get_logger
 
 _LOG = get_logger(__name__)

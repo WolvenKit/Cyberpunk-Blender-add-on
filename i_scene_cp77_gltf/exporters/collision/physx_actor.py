@@ -11,6 +11,7 @@ from ...core.log import get_logger
 from ...physics.domain.filters import filter_ui_signature, state_for_export
 from ...physics.domain.resource_paths import normalize_phys_json_path
 from ...physics.model.resource import cooked_data_signature
+from .errors import CollisionExportError
 
 _LOG = get_logger(__name__)
 
@@ -120,11 +121,11 @@ def _body_name(obj, source_body):
 def export_actor_item_to_phys(actor_item, filepath):
     filepath = normalize_phys_json_path(filepath)
     if not actor_item or not actor_item.obj_ref:
-        raise ValueError("The actor has no object to export")
+        raise CollisionExportError("The actor has no object to export")
 
     obj_ref = actor_item.obj_ref
     if not hasattr(obj_ref, "physx"):
-        raise ValueError(f"{obj_ref.name} has no PhysX properties")
+        raise CollisionExportError(f"{obj_ref.name} has no PhysX properties")
 
     px_obj = obj_ref.physx
 
@@ -144,7 +145,7 @@ def export_actor_item_to_phys(actor_item, filepath):
     for shape in px_obj.shapes:
         collider_type = _PHYSX_SHAPE_TYPES.get(shape.shape_type)
         if collider_type is None:
-            raise ValueError(
+            raise CollisionExportError(
                 f"Unsupported PhysX shape type for .phys export: {shape.shape_type}"
             )
 
@@ -255,7 +256,7 @@ def export_actor_item_to_phys(actor_item, filepath):
                 geometry = _decoded_cooked_geometry("CONVEX", shape.cooked_data)
                 vertices = _vector3_array((geometry or {}).get("vertices", ()))
                 if not vertices:
-                    raise ValueError(
+                    raise CollisionExportError(
                         f"{obj_ref.name}: convex shape '{shape.name}' has no decodable cooked geometry"
                     )
                 collider_data.update(
@@ -275,7 +276,7 @@ def export_actor_item_to_phys(actor_item, filepath):
                 vertices = _vector3_array((geometry or {}).get("vertices", ()))
                 indices = [int(value) for value in (geometry or {}).get("indices", ())]
                 if not vertices or not indices or len(indices) % 3:
-                    raise ValueError(
+                    raise CollisionExportError(
                         f"{obj_ref.name}: triangle shape '{shape.name}' has no decodable cooked geometry"
                     )
                 collider_data.update(
@@ -290,7 +291,7 @@ def export_actor_item_to_phys(actor_item, filepath):
         colliders.append({"HandleId": shape_handle_id, "Data": collider_data})
 
     if not colliders:
-        raise ValueError(f"Actor {obj_ref.name} has no shapes.")
+        raise CollisionExportError(f"Actor {obj_ref.name} has no shapes.")
 
     source_body = json_object(getattr(px_obj, "source_phys_body_metadata_json", ""))
     source_params = (

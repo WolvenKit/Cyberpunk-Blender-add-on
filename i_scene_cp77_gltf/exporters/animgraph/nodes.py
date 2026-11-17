@@ -4,8 +4,14 @@ from typing import Any
 
 import bpy
 
+from ...animation.domain.animgraph.math_expression import recompiled_expression_data
 from ...animation.model.animgraph.constants import ANIM_NODE_PREFIX, ANIMGRAPH_TREE_ID
 from ...animation.model.animgraph.indices import cname
+from ...animation.model.animgraph.math_expression import (
+    expression_string_value,
+    socket_slot,
+)
+from ...animation.model.animgraph.schema.defaults import schema_default_data_for_type
 from ...animation.model.animgraph.sm_assembly import Assembled, AssemblyError, assemble
 from ...blender.animgraph import (
     aim_constraint,
@@ -15,14 +21,14 @@ from ...blender.animgraph import (
     sm_records,
 )
 from ...blender.animgraph.access import get_attr, get_idprop
-from ...blender.animgraph.builder import new_handle_id
+from ...blender.animgraph.math_expression import COMPILED_FORMULA_KEY
 from ...blender.animgraph.property_codec import encode_node_property
-from ...blender.animgraph.sm_records import ANY_RED_TYPE, ENTRY_RED_TYPE, _pseudo_node
-from .defaults import schema_default_data_for_type
+from ...blender.animgraph.sm_model import new_handle_id
+from ...blender.animgraph.sm_records import ANY_RED_TYPE, ENTRY_RED_TYPE, pseudo_node
 from .paths import (
-    _encode_link_wrapper,
-    _ensure_list_size,
-    _iter_exportable_input_sockets,
+    encode_link_wrapper,
+    ensure_list_size,
+    iter_exportable_input_sockets,
     set_export_socket_path,
     set_json_path,
 )
@@ -45,7 +51,7 @@ _MATH_EXPRESSION_RETURN_BY_TYPE = {
 }
 
 
-def _runtime_node(node: Any) -> bool:
+def runtime_node(node: Any) -> bool:
     red_type = str(get_attr(node, "red_type", "") or "")
     if not red_type.startswith(ANIM_NODE_PREFIX):
         return False
@@ -73,12 +79,12 @@ def _container_subtree(node: Any) -> bpy.types.NodeTree | None:
 def _runtime_nodes_in_tree(tree: bpy.types.NodeTree | None) -> list[bpy.types.Node]:
     if tree is None:
         return []
-    nodes = [node for node in tree_nodes(tree) if _runtime_node(node)]
+    nodes = [node for node in tree_nodes(tree) if runtime_node(node)]
     nodes.sort(key=node_sort_key)
     return nodes
 
 
-def _json_idprop(obj: Any, key: str, default: Any) -> Any:
+def json_idprop(obj: Any, key: str, default: Any) -> Any:
     value = decode_optional(get_idprop(obj, key, ""), default)
     return default if value is None and default is not None else value
 
@@ -138,13 +144,13 @@ def _apply_source_field_shape(
         if top:
             allowed.add(top)
 
-    for sock in _iter_exportable_input_sockets(node):
+    for sock in iter_exportable_input_sockets(node):
         top = _top_path(str(get_attr(sock, "red_json_path", "") or ""))
         if top:
             allowed.add(top)
 
     if preserved_keys is None:
-        preserved = _json_idprop(node, "red_preserved_export_fields_json", {})
+        preserved = json_idprop(node, "red_preserved_export_fields_json", {})
         preserved_keys = (
             {str(key) for key in preserved} if isinstance(preserved, dict) else set()
         )
@@ -227,7 +233,7 @@ def _state_frozen_node(sm_tree: bpy.types.NodeTree) -> bpy.types.Node | None:
     return frozen[0]
 
 
-def _encode_tree_runtime_entries(
+def encode_tree_runtime_entries(
     tree: bpy.types.NodeTree | None,
     *,
     embed_containers: bool,
@@ -281,7 +287,7 @@ def _embed_state_out_transition_indices(
             data["outTransitionIndices"] = indices
             return
     if "red_state_outTransitionIndices_json" in node:
-        indices = _json_idprop(node, "red_state_outTransitionIndices_json", [])
+        indices = json_idprop(node, "red_state_outTransitionIndices_json", [])
         data["outTransitionIndices"] = indices if isinstance(indices, list) else []
 
 
@@ -292,8 +298,8 @@ def _assemble_state_machine(
     sm_handle = _handle(node)
     owners: list[tuple[Any, str]] = [(state, _handle(state)) for state in states]
     for pseudo in (
-        _pseudo_node(sm_tree, ENTRY_RED_TYPE),
-        _pseudo_node(sm_tree, ANY_RED_TYPE),
+        pseudo_node(sm_tree, ENTRY_RED_TYPE),
+        pseudo_node(sm_tree, ANY_RED_TYPE),
     ):
         if pseudo is not None:
             owners.append((pseudo, sm_records.owner_key(pseudo)))
@@ -381,7 +387,7 @@ def _embed_state_machine_fields(
         data["conditionalEntries"] = assembled.conditionalEntries
         data["globalTransitions"] = assembled.globalTransitions
         data["defaultStateIndex"] = assembled.default_state_index
-        any_state = _pseudo_node(sm_tree, ANY_RED_TYPE)
+        any_state = pseudo_node(sm_tree, ANY_RED_TYPE)
         if any_state is not None:
             data["anyStateInterpolator"] = sm_records.any_state_interpolator(any_state)
         return
@@ -389,7 +395,7 @@ def _embed_state_machine_fields(
     for key in ("transitions", "conditionalEntries", "globalTransitions"):
         prop = f"red_sm_{key}_json"
         if prop in node:
-            value = _json_idprop(node, prop, [])
+            value = json_idprop(node, prop, [])
             data[key] = value if isinstance(value, list) else []
     if "red_sm_anyStateInterpolator_json" in node:
         data["anyStateInterpolator"] = decode_optional(
@@ -413,14 +419,14 @@ def _embed_generic_nodes_container(
     if "nodes" in data or _is_type(node, "State") or _is_type(node, "StateFrozen"):
         # Nodes the source reached through links only stay out of the list; the reference pass writes them where a
         # link first reaches them.
-        data["nodes"] = _encode_tree_runtime_entries(
+        data["nodes"] = encode_tree_runtime_entries(
             child_tree,
             embed_containers=True,
             _stack=_stack,
             predicate=lambda child: "red_source_unlisted" not in child,
         )
         _UNLISTED_ENTRIES.extend(
-            _encode_tree_runtime_entries(
+            encode_tree_runtime_entries(
                 child_tree,
                 embed_containers=True,
                 _stack=_stack,
@@ -445,7 +451,7 @@ def _embed_container_fields(
 
 def _apply_preserved_export_fields(node: Any, data: dict[str, Any]) -> set:
     """Restore preserved owned-payload fields and return their keys"""
-    fields = _json_idprop(node, "red_preserved_export_fields_json", {})
+    fields = json_idprop(node, "red_preserved_export_fields_json", {})
     source_keys = _source_data_keys(node)
     required = {
         key
@@ -479,7 +485,7 @@ def _apply_preserved_math_expression_data(node: Any, data: dict[str, Any]) -> No
     red_type = str(get_attr(node, "red_type", "") or "")
     if not red_type.startswith(f"{ANIM_NODE_PREFIX}MathExpression"):
         return
-    expr = _json_idprop(node, "red_math_expression_data_json", None)
+    expr = json_idprop(node, "red_math_expression_data_json", None)
     if isinstance(expr, dict):
         data["expressionData"] = expr
 
@@ -526,20 +532,6 @@ def _math_expression_payload_data(node: Any, expr: dict[str, Any]) -> dict[str, 
     return payload
 
 
-def _math_socket_path(path: str) -> tuple[str, int] | None:
-    for array_name in _MATH_EXPRESSION_SOCKET_ARRAYS:
-        prefix = f"expressionData.{array_name}["
-        if not str(path or "").startswith(prefix):
-            continue
-        rest = str(path)[len(prefix) :]
-        index_text = rest.split("]", 1)[0]
-        try:
-            return array_name, int(index_text)
-        except ValueError:
-            return None
-    return None
-
-
 def _ensure_math_socket(
     expr: dict[str, Any], array_name: str, index: int
 ) -> dict[str, Any]:
@@ -548,7 +540,7 @@ def _ensure_math_socket(
     if not isinstance(arr, list):
         arr = []
         expr[array_name] = arr
-    _ensure_list_size(arr, index)
+    ensure_list_size(arr, index)
     item = arr[index]
     if not isinstance(item, dict):
         item = {}
@@ -572,23 +564,33 @@ def _finalize_math_expression_data(node: Any, data: dict[str, Any]) -> None:
     """Finalize MathExpression payload structure after editable overlays"""
     if not _is_math_expression_node(node):
         return
+    formula = expression_string_value(data.get("expressionString"))
+    compiled = get_idprop(node, COMPILED_FORMULA_KEY, None)
+    moves = None
+    if compiled is not None and formula != str(compiled):
+        data["expressionData"], moves, _encoded = recompiled_expression_data(
+            data.get("expressionData"),
+            formula,
+            str(compiled),
+            str(get_idprop(node, "red_math_expression_handle", "") or "")
+            or new_handle_id(),
+            _red_type(node),
+        )
     expr = _math_expression_data(data)
-    payload = _math_expression_payload_data(node, expr)
+    _math_expression_payload_data(node, expr)
 
-    for item in getattr(node, "red_properties", []) or []:
-        path = str(getattr(item, "json_path", "") or getattr(item, "key", "") or "")
-        if path == "expressionData.expression.Data.tokenData":
-            payload["tokenData"] = encode_node_property(item)
-        elif path == "expressionData.expression.Data.valuesData":
-            payload["valuesData"] = encode_node_property(item)
-
-    for sock in _iter_exportable_input_sockets(node):
-        parsed = _math_socket_path(str(get_attr(sock, "red_json_path", "") or ""))
-        if parsed is None:
+    for sock in iter_exportable_input_sockets(node):
+        slot = socket_slot(str(get_attr(sock, "red_json_path", "") or ""))
+        if slot is None:
             continue
-        array_name, index = parsed
-        item = _ensure_math_socket(expr, array_name, index)
-        item["link"] = _encode_link_wrapper(sock)
+        targets = (
+            [slot]
+            if moves is None
+            else [new for new, old in moves.items() if old == slot]
+        )
+        for array_name, index in targets:
+            item = _ensure_math_socket(expr, array_name, index)
+            item["link"] = encode_link_wrapper(sock)
 
 
 def encode_runtime_node_data(
@@ -598,7 +600,7 @@ def encode_runtime_node_data(
     _stack: set | None = None,
 ) -> dict[str, Any]:
     """Encode one runtime node Data object from editable properties and sockets"""
-    if not _runtime_node(node):
+    if not runtime_node(node):
         raise ValueError("active node is not an exportable REDengine runtime node")
     data = _new_runtime_data_for_node(node)
     data["$type"] = str(get_attr(node, "red_type", "") or data.get("$type", ""))
@@ -611,10 +613,8 @@ def encode_runtime_node_data(
             continue
         set_json_path(data, path, encode_node_property(item))
 
-    for sock in _iter_exportable_input_sockets(node):
-        set_export_socket_path(
-            data, str(sock.red_json_path), _encode_link_wrapper(sock)
-        )
+    for sock in iter_exportable_input_sockets(node):
+        set_export_socket_path(data, str(sock.red_json_path), encode_link_wrapper(sock))
 
     _finalize_math_expression_data(node, data)
     data = direct_conn.canonicalize_node_data(node, data)

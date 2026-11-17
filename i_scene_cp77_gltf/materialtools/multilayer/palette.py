@@ -3,6 +3,7 @@ import ast
 from ...assetio.paths import DepotPath
 from ...blender.identity import rna_identity
 from ...core.log import get_logger, log_once
+from ...materials.blender.multilayer import clear_override_palette_index
 from ..application.options import (
     MULTILAYER_TEMPLATE_COOKED_EXTENSION,
     MULTILAYER_TEMPLATE_EXTENSION,
@@ -22,7 +23,6 @@ _PARSED_OVERRIDE_CACHE = {}
 def clear_palette_caches():
     _ENUM_CACHE.clear()
     _PARSED_OVERRIDE_CACHE.clear()
-    from ...materials.blender.multilayer import clear_override_palette_index
 
     clear_override_palette_index()
 

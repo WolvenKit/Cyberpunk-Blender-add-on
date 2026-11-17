@@ -10,12 +10,13 @@ from __future__ import annotations
 
 import bpy
 from mathutils import Matrix, Vector
+from mathutils.bvhtree import BVHTree
 from mathutils.kdtree import KDTree
 
-from ...blender.naming import fit_id_name
-from ...blender.transactions import track_created_datablock
-from ...core.log import debug_exception, get_logger
+from ..core.log import debug_exception, get_logger
 from .light_channels import children_of
+from .naming import fit_id_name
+from .transactions import track_created_datablock
 
 _LOG = get_logger(__name__)
 
@@ -53,6 +54,9 @@ def _near_objects(scoped, lights):
         tree.insert(light.matrix_world.translation, index)
     tree.balance()
 
+    # closest_point_on_mesh crashes Blender 5.3 on meshes several objects share; a BVHTree keeps its own copy.
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    surfaces = {}
     near = {}
     for obj in scoped:
         parts = [
@@ -78,10 +82,11 @@ def _near_objects(scoped, lights):
                     )
                 if reach[index] > FIXTURE_RANGE:
                     continue
-                hit, location, _normal, _index = mesh_obj.closest_point_on_mesh(
-                    inverse @ point
-                )
-                if hit and ((matrix @ location) - point).length <= NEAR_PLANE:
+                key = mesh_obj.as_pointer()
+                if key not in surfaces:
+                    surfaces[key] = BVHTree.FromObject(mesh_obj, depsgraph)
+                location, _normal, _index, _gap = surfaces[key].find_nearest(inverse @ point)
+                if location is not None and ((matrix @ location) - point).length <= NEAR_PLANE:
                     near.setdefault(index, {})[obj.as_pointer()] = obj
     return near
 

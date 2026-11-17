@@ -7,13 +7,16 @@ from ....assetio.paths import animgraph_json_path
 from ....blender.animgraph.rig_binding import binding_tree
 from ....core.log import get_logger
 from ....core.notifications import report
+from ....exporters.animgraph.operators import AnimGraphExportPath
 from ...services.animgraph.export import export_graph
 from .context import animgraph_editor_poll
 
 _LOG = get_logger(__name__)
 
 
-class REDENGINE_OT_export_animgraph(bpy.types.Operator, ExportHelper):
+class REDENGINE_OT_export_animgraph(
+    AnimGraphExportPath, bpy.types.Operator, ExportHelper
+):
     bl_idname = "redengine.export_animgraph"
     bl_label = "Export AnimGraph"
     bl_description = "Write the graph as a WolvenKit AnimGraph document"
@@ -29,13 +32,6 @@ class REDENGINE_OT_export_animgraph(bpy.types.Operator, ExportHelper):
         root = binding_tree(context.space_data.node_tree)
         self.filepath = animgraph_json_path(root.red_source_path or root.name)
         return ExportHelper.invoke(self, context, event)
-
-    def check(self, context):
-        normalized = animgraph_json_path(self.filepath)
-        if normalized != self.filepath:
-            self.filepath = normalized
-            return True
-        return False
 
     def execute(self, context):
         path = animgraph_json_path(self.filepath)

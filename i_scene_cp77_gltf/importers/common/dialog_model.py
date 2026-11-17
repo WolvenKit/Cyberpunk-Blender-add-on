@@ -70,12 +70,11 @@ def remembered_text(preferences, key):
     return str(getattr(preferences, key, "") or "")
 
 
-def remember_text(preferences, key, text):
-    import bpy
-
+def remember_text(preferences, key, text) -> bool:
+    if remembered_text(preferences, key) == text:
+        return False
     setattr(preferences, key, text)
-    # Blender writes dirty preferences on quit, so the choices survive a restart.
-    bpy.context.preferences.is_dirty = True
+    return True
 
 
 def state_to_operator(properties, state, *, settings, categories, choices):

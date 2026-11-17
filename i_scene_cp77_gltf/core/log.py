@@ -11,9 +11,13 @@ import traceback
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler
 from pathlib import Path
 
+from .addon_identity import get_addon_preferences, user_config_dir
+
 LOGGER_NAME = "i_scene_cp77_gltf"
 TRACE = 5
 logging.addLevelName(TRACE, "TRACE")
+# A record logged with extra=FILE_ONLY reaches the log file and never the console.
+FILE_ONLY = {"cp77_file_only": True}
 _DEFAULT_LEVEL = "INFO"
 _MAX_LOG_BYTES = 8 * 1024 * 1024
 _BACKUP_COUNT = 4
@@ -503,10 +507,10 @@ def _stop_file_listener(logger=None):
     _reap_orphaned_pipelines()
     seen_listeners = set()
     for queue_handler in tuple(logger.handlers):
-        listener = getattr(queue_handler, "_cp77_listener", None)
+        listener = getattr(queue_handler, "cp77_listener", None)
         if listener is None:
             continue
-        handler = queue_handler._cp77_file_handler
+        handler = queue_handler.cp77_file_handler
         queue_handler.begin_shutdown()
         logger.removeHandler(queue_handler)
         try:
@@ -566,7 +570,7 @@ def _stop_file_listener(logger=None):
                 _remember_orphaned_pipeline(
                     listener,
                     handler,
-                    queue_handler._cp77_log_path,
+                    queue_handler.cp77_log_path,
                 )
             else:
                 _close_file_handler(handler)
@@ -587,6 +591,11 @@ def _stop_file_listener(logger=None):
             else:
                 _close_file_handler(handler)
     _reap_orphaned_pipelines()
+
+
+def _shown_on_console(record):
+    """Whether a record may reach the console"""
+    return not getattr(record, "cp77_file_only", False)
 
 
 class _ContextFilter(logging.Filter):
@@ -730,8 +739,6 @@ class RotatingLogFile(RotatingFileHandler):
 def _default_log_directory():
     reason = None
     try:
-        from .addon_identity import user_config_dir
-
         configured = user_config_dir("logs")
         if configured:
             return Path(configured), None
@@ -766,7 +773,7 @@ def configure_logging(
         logger.propagate = False
 
         for handler in tuple(logger.handlers):
-            if getattr(handler, "_cp77_owned", False):
+            if getattr(handler, "cp77_owned", False):
                 logger.removeHandler(handler)
                 try:
                     handler.close()
@@ -776,9 +783,10 @@ def configure_logging(
         context_filter = _ContextFilter()
         if console:
             console_handler = logging.StreamHandler(sys.stdout)
-            console_handler._cp77_owned = True
+            console_handler.cp77_owned = True
             console_handler.setLevel(console_level_value)
             console_handler.addFilter(context_filter)
+            console_handler.addFilter(_shown_on_console)
             console_handler.setFormatter(_ConsoleFormatter())
             logger.addHandler(console_handler)
 
@@ -803,13 +811,13 @@ def configure_logging(
                     encoding="utf-8",
                     delay=True,
                 )
-                file_handler._cp77_owned = True
+                file_handler.cp77_owned = True
                 file_handler.setLevel(file_level_value)
                 file_handler.setFormatter(_FileFormatter())
 
                 record_queue = queue.Queue(maxsize=_FILE_QUEUE_CAPACITY)
                 queue_handler = _LocalQueueHandler(record_queue)
-                queue_handler._cp77_owned = True
+                queue_handler.cp77_owned = True
                 queue_handler.setLevel(file_level_value)
                 queue_handler.addFilter(context_filter)
                 logger.addHandler(queue_handler)
@@ -819,9 +827,9 @@ def configure_logging(
                     file_handler,
                     respect_handler_level=True,
                 )
-                queue_handler._cp77_listener = listener
-                queue_handler._cp77_file_handler = file_handler
-                queue_handler._cp77_log_path = str(path)
+                queue_handler.cp77_listener = listener
+                queue_handler.cp77_file_handler = file_handler
+                queue_handler.cp77_log_path = str(path)
                 try:
                     listener.start()
                 except RuntimeError as error:
@@ -857,8 +865,6 @@ def configure_from_preferences(context=None):
     level = _DEFAULT_LEVEL
     write_file = True
     try:
-        from .addon_identity import get_addon_preferences
-
         preferences = get_addon_preferences(context, required=False)
         if preferences is not None:
             level = getattr(preferences, "log_level", _DEFAULT_LEVEL)
@@ -877,7 +883,7 @@ def shutdown_logging():
         logger = logging.getLogger(LOGGER_NAME)
         _stop_file_listener(logger)
         for handler in tuple(logger.handlers):
-            if not getattr(handler, "_cp77_owned", False):
+            if not getattr(handler, "cp77_owned", False):
                 continue
             logger.removeHandler(handler)
             try:
@@ -894,7 +900,7 @@ def shutdown_logging():
 def current_log_path():
     logger = logging.getLogger(LOGGER_NAME)
     for handler in tuple(logger.handlers):
-        path = getattr(handler, "_cp77_log_path", None)
+        path = getattr(handler, "cp77_log_path", None)
         if path:
             return str(path)
     return str(_CURRENT_LOG_PATH) if _CURRENT_LOG_PATH is not None else ""

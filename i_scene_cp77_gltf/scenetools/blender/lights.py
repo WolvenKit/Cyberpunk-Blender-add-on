@@ -3,6 +3,7 @@ from __future__ import annotations
 import bpy
 
 from ...blender.keyframes import get_action_fcurves
+from ...blender.light_environment import register_environment_lights
 from ...blender.light_preview import (
     BASE_ENERGY_KEY,
     animate_flicker,
@@ -12,9 +13,8 @@ from ...blender.light_preview import (
     energy_fcurves,
     set_zone_on,
 )
+from ...blender.vehicle_light_preview import set_light_energy_animation_muted
 from ...entity.domain.light_representation import light_representation
-from ...importers.common.light_environment import register_environment_lights
-from ...importers.common.vehicle_light_preview import set_light_energy_animation_muted
 
 _BRIGHTNESS = "CP77 Preview Brightness"
 _ENVIRONMENT_BASES = (

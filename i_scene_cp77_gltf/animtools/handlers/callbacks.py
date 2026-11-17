@@ -6,7 +6,7 @@ from bpy.app.handlers import persistent
 from ...blender.animgraph import node_lod, sm_links, sm_overlay
 from ...blender.tracks import clear_track_property_cache
 from ...core.log import get_logger, log_on_change
-from . import additive_preview, facial, overlay, read_models
+from ..runtime import additive_preview, facial, overlay, read_models
 
 _LOG = get_logger(__name__)
 

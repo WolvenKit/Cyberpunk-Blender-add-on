@@ -8,7 +8,7 @@ from ..assetio.paths import strip_json_suffix
 from ..assetio.values import coerce_float
 from ..blender.ink import screens
 from ..blender.ink.images import update_texture
-from ..blender.ink.screens import _FONTS, PENDING_EDITS_KEY
+from ..blender.ink.screens import SCREEN_FONTS, PENDING_EDITS_KEY
 from ..blender.operator_results import OperationResult
 from ..blender.transactions import transactional
 from ..ink.domain.animation import load_animation
@@ -104,7 +104,11 @@ def import_widget(
         name, screens.render(loaded, animation, max_dimension=max_dimension)
     )
     root = hierarchy.create(
-        context.scene, name, solve_library(loaded, _FONTS), image, unit_scale=unit_scale
+        context.scene,
+        name,
+        solve_library(loaded, SCREEN_FONTS),
+        image,
+        unit_scale=unit_scale,
     )
     root[PENDING_EDITS_KEY] = "[]"
     screens.register(root, image, loaded, animation, max_dimension=max_dimension)
@@ -148,7 +152,7 @@ def _redraw(root, edits: list[WidgetEdit]) -> OperationResult:
     screens.register(
         root, image, loaded, screen.animation, max_dimension=screen.max_dimension
     )
-    hierarchy.sync(root, solve_library(loaded, _FONTS))
+    hierarchy.sync(root, solve_library(loaded, SCREEN_FONTS))
     _set_controls(root, loaded)
     return OperationResult.finished()
 

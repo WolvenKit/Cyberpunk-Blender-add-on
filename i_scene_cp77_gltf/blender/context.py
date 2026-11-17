@@ -1,3 +1,4 @@
+import functools
 from contextlib import contextmanager
 from contextvars import ContextVar
 
@@ -8,6 +9,14 @@ from .identity import rna_is_live
 from .operator_results import require_finished
 
 _LOG = get_logger(__name__)
+
+
+def with_context(callback):
+    @functools.wraps(callback)
+    def call(*args):
+        return callback(bpy.context, *args)
+
+    return call
 
 
 _MODE_MAP = {
@@ -96,13 +105,12 @@ class BlenderContextSnapshot:
             return
         context = bpy.context
 
-        if _MODE_MAP.get(context.mode, context.mode) != "OBJECT":
-            try:
-                bpy.ops.object.mode_set(mode="OBJECT")
-            except Exception:
-                debug_exception(
-                    _LOG, "Could not return to Object Mode while restoring the context"
-                )
+        try:
+            safe_mode_switch("OBJECT")
+        except Exception:
+            debug_exception(
+                _LOG, "Could not return to Object Mode while restoring the context"
+            )
 
         for obj_name, vis_state in self.object_visibility.items():
             if obj_name in bpy.data.objects:
@@ -147,18 +155,14 @@ class BlenderContextSnapshot:
         if self.cursor_location:
             context.scene.cursor.location = self.cursor_location
 
-        if self.mode:
-            target_mode = _MODE_MAP.get(self.mode, self.mode)
-            current_mode = _MODE_MAP.get(context.mode, context.mode)
-            if current_mode != target_mode:
-                try:
-                    bpy.ops.object.mode_set(mode=target_mode)
-                except Exception:
-                    debug_exception(
-                        _LOG,
-                        "Could not restore %s mode while restoring the context",
-                        target_mode,
-                    )
+        try:
+            safe_mode_switch(self.mode)
+        except Exception:
+            debug_exception(
+                _LOG,
+                "Could not restore %s mode while restoring the context",
+                self.mode,
+            )
         self._stored = False
 
 
@@ -205,22 +209,18 @@ def safe_mode_switch(target_mode: str):
         return
 
     if not bpy.context.active_object:
-        if bpy.context.selected_objects:
-            bpy.context.view_layer.objects.active = bpy.context.selected_objects[0]
-        else:
-            mesh = bpy.data.meshes.new("TempModeSwitch")
-            temp = bpy.data.objects.new("TempModeSwitch", mesh)
-            try:
-                bpy.context.scene.collection.objects.link(temp)
-                bpy.context.view_layer.objects.active = temp
-                require_finished(
-                    bpy.ops.object.mode_set(mode=target_mode),
-                    f"The switch to {target_mode} mode",
-                )
-            finally:
-                bpy.data.objects.remove(temp, do_unlink=True)
-                bpy.data.meshes.remove(mesh)
+        view_layer = bpy.context.view_layer
+        selected = bpy.context.selected_objects
+        candidate = (
+            selected[0]
+            if selected
+            else next(
+                (obj for obj in view_layer.objects if obj.mode != target_mode), None
+            )
+        )
+        if candidate is None:
             return
+        view_layer.objects.active = candidate
 
     try:
         result = bpy.ops.object.mode_set(mode=target_mode)

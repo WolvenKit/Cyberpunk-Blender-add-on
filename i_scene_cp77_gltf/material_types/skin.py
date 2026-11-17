@@ -2,6 +2,7 @@ from ..assetio.paths import backslash_depot_key
 from ..bartmoss.scalar import clamp01
 from ..blender import shader_nodes
 from ..blender.shader_nodes import assign_if_changed, set_default_if_changed
+from ..materials.skin_regions import DEFAULT_FACE_REGIONSET_PATH, WRINKLE_REGION_COUNT
 from .bundles import smoothstep_socket, tangent_normal_blend_socket
 from .decal_math import ev_to_linear
 from .graph import (
@@ -24,12 +25,7 @@ from .normal_math import (
     encode_tangent_normal,
     tangent_to_normal_map,
 )
-from .skin_regions import DEFAULT_FACE_REGIONSET_PATH
-from .skin_wrinkles import (
-    WRINKLE_REGION_COUNT,
-    blend_wrinkle_normal,
-    build_wrinkle_influence,
-)
+from .skin_wrinkles import blend_wrinkle_normal, build_wrinkle_influence
 
 _WHITE = (1.0, 1.0, 1.0, 1.0)
 
@@ -194,14 +190,14 @@ class Skin(MaterialTypeBase):
 
     def _images(self, data, blendable):
         images = {
-            key: self._load_relative_image(
+            key: self.load_relative_image(
                 param_texture_path(data, key), non_color=non_color, error_label=key
             )
             for key, non_color in self._texture_keys(data, blendable)
         }
         micro_path = param_texture_path(data, "MicroDetail")
         images["MicroDetail"] = (
-            self._load_relative_image(
+            self.load_relative_image(
                 micro_path, non_color=True, error_label="MicroDetail"
             )
             if micro_path
@@ -523,7 +519,7 @@ class Skin(MaterialTypeBase):
         micro1 = micro2 = None
         micro1_source = micro2_source = None
         if micro_tex_path:
-            image = self._load_relative_image(
+            image = self.load_relative_image(
                 micro_tex_path, non_color=True, error_label="MicroDetail"
             )
             if image is not None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ....animation.domain.animgraph.simple_spline import evaluate_simple_spline
+from ....animation.handlers.animgraph.registry import POSE_OP_HANDLERS
 from ....animation.model.animgraph import simple_spline
 from ..access import node_property_map, property_float, property_string
 from .base import (
@@ -13,17 +14,11 @@ from .base import (
 )
 from .registry import register_pose_node_handler
 
-_TRANSFORM_KEYS = (
-    "startTransform",
-    "middleTransform",
-    "endTransform",
-    "constrainedTransform",
-)
-
 
 @register_pose_node_handler(simple_spline.RED_TYPE)
 class SimpleSplineHandler(PoseNodeHandler):
     label = "SimpleSpline"
+    red_type = simple_spline.RED_TYPE
 
     def spec(self, node, tree):
         properties = node_property_map(node)
@@ -41,14 +36,14 @@ class SimpleSplineHandler(PoseNodeHandler):
             }
         )
 
-    def bone_names(self, spec):
-        return {text(spec.data, key) for key in _TRANSFORM_KEYS}
-
     def track_names(self, spec):
         return float_track_requested(spec.data, "progressMode", "progressTrack")
 
     def executable(self, spec, index, binding, *, validate_schema):
-        required = tuple(text(spec.data, key) for key in _TRANSFORM_KEYS)
+        required = tuple(
+            text(spec.data, key)
+            for key in POSE_OP_HANDLERS.get(self.red_type).bone_fields
+        )
         if not all(required):
             raise PosePreviewError(
                 f"SimpleSpline chain node {index + 1}: missing required transform"

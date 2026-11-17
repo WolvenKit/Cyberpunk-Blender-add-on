@@ -75,6 +75,9 @@ class PreviewSession:
     original_pose: dict[str, Any]
     original_rotation_modes: dict[str, str]
     original_tracks: dict[str, TrackSnapshot]
+    playbacks: tuple[AdditiveSlotPlayback, ...] | None = None
+    pose_bones: dict[str, Any] | None = None
+    pose_bones_key: tuple = ()
 
 
 _session: PreviewSession | None = None
@@ -134,18 +137,41 @@ def _base_pose_for_frame(
     return result, frame
 
 
+def _base_pose_bones(session: PreviewSession) -> dict[str, Any]:
+    armature = session.armature
+    key = (armature.mode, len(armature.pose.bones))
+    if session.pose_bones is None or session.pose_bones_key != key:
+        bones = armature.pose.bones
+        session.pose_bones = {
+            name: bones.get(name) for name in session.configuration.base_bones
+        }
+        session.pose_bones_key = key
+    return session.pose_bones
+
+
+def _playbacks(session: PreviewSession) -> tuple[AdditiveSlotPlayback, ...]:
+    if session.playbacks is None:
+        settings = getattr(session.scene, ADDITIVE_PREVIEW_SETTINGS, None)
+        session.playbacks = tuple(
+            AdditiveSlotPlayback.from_settings(settings, entry.slot_index)
+            for entry in session.configuration.entries
+        )
+    return session.playbacks
+
+
+def _forget_cached_settings(session: PreviewSession) -> None:
+    session.playbacks = None
+    session.pose_bones = None
+
+
 def _apply(session: PreviewSession) -> None:
     configuration = session.configuration
     scene = session.scene
     master_frame = _scene_frame(scene)
     master_fps = scene_frame_rate(scene, FPS)
     armature = session.armature
-    pose_bones = armature.pose.bones
-    settings = getattr(scene, ADDITIVE_PREVIEW_SETTINGS, None)
-    playbacks = tuple(
-        AdditiveSlotPlayback.from_settings(settings, entry.slot_index)
-        for entry in configuration.entries
-    )
+    pose_bones = _base_pose_bones(session)
+    playbacks = _playbacks(session)
     weights = tuple(
         1.0 if configuration.standalone else playback.weight for playback in playbacks
     )
@@ -251,6 +277,7 @@ def refresh(scene=None) -> None:
     session = _session
     if session is None or (scene is not None and scene != session.scene):
         return
+    _forget_cached_settings(session)
     try:
         _refresh(session)
     except (
@@ -352,6 +379,7 @@ def reconfigure(
     for name, snapshot in original_tracks.items():
         session.original_tracks.setdefault(name, snapshot)
     session.configuration = configuration
+    _forget_cached_settings(session)
     for name in configuration.base_bones:
         pose_bone = armature.pose.bones.get(name)
         if pose_bone is not None:
@@ -383,6 +411,7 @@ def track_configuration(session: PreviewSession) -> None:
     def restore():
         session.configuration = configuration
         session.original_tracks = original_tracks
+        _forget_cached_settings(session)
 
     track_mutation(
         ("additive-preview-configuration", id(session)),
