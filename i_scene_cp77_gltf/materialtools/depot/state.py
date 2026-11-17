@@ -7,6 +7,7 @@ from ...assetio.catalog import (
 )
 from ...assetio.paths import LocalPath
 from ...assetio.resolver import full_suffix
+from ...blender.identity import rna_is_live
 from ...core.addon_identity import get_addon_preferences
 from ...core.log import get_logger, log_once
 
@@ -14,12 +15,14 @@ _LOG = get_logger(__name__)
 
 _INFERRED_DEPOT_COUNT = -1
 _INFERRED_DEPOT_PATH = ""
+_INFERRED_DEPOT_SOURCE = None
 
 
 def clear_depot_state_cache():
-    global _INFERRED_DEPOT_COUNT, _INFERRED_DEPOT_PATH
+    global _INFERRED_DEPOT_COUNT, _INFERRED_DEPOT_PATH, _INFERRED_DEPOT_SOURCE
     _INFERRED_DEPOT_COUNT = -1
     _INFERRED_DEPOT_PATH = ""
+    _INFERRED_DEPOT_SOURCE = None
 
 
 def _material_depot_path(material):
@@ -40,28 +43,43 @@ def _material_depot_path(material):
     return LocalPath.from_value(value).value if value else ""
 
 
+def _remember_depot_path(material_count, path, source):
+    global _INFERRED_DEPOT_COUNT, _INFERRED_DEPOT_PATH, _INFERRED_DEPOT_SOURCE
+    _INFERRED_DEPOT_COUNT = material_count
+    _INFERRED_DEPOT_PATH = path
+    _INFERRED_DEPOT_SOURCE = source
+
+
+def _remembered_depot_path_holds(material_count):
+    if material_count != _INFERRED_DEPOT_COUNT:
+        return False
+    source = _INFERRED_DEPOT_SOURCE
+    if source is None:
+        return True
+    return rna_is_live(source) and _material_depot_path(source) == _INFERRED_DEPOT_PATH
+
+
 def inferred_material_depot_path(context=None):
-    global _INFERRED_DEPOT_COUNT, _INFERRED_DEPOT_PATH
     context = context or bpy.context
     active_object = getattr(context, "active_object", None)
     active_material = getattr(active_object, "active_material", None)
     path = _material_depot_path(active_material)
     if path:
-        _INFERRED_DEPOT_COUNT = len(bpy.data.materials)
-        _INFERRED_DEPOT_PATH = path
+        _remember_depot_path(len(bpy.data.materials), path, active_material)
         return path
 
     material_count = len(bpy.data.materials)
-    if material_count == _INFERRED_DEPOT_COUNT:
+    if _remembered_depot_path_holds(material_count):
         return _INFERRED_DEPOT_PATH
 
     inferred = ""
+    source = None
     for material in bpy.data.materials:
         inferred = _material_depot_path(material)
         if inferred:
+            source = material
             break
-    _INFERRED_DEPOT_COUNT = material_count
-    _INFERRED_DEPOT_PATH = inferred
+    _remember_depot_path(material_count, inferred, source)
     return inferred
 
 
