@@ -59,6 +59,7 @@ class VehicleRuntimeState:
     max_steer: float = 0.0
     steering_input: float = 0.0
     wheel_visual_corrections: dict | None = None
+    wheel_visual_offsets: dict | None = None
     chassis_phys_objects: tuple | None = None
     source_mode: str = "MANUAL"
     last_stats: dict | None = None
@@ -92,6 +93,7 @@ def _runtime(scene, create=True):
             wheels={},
             wheel_relative={},
             wheel_visual_corrections={},
+            wheel_visual_offsets={},
             last_stats={},
         )
         _RUNTIME[key] = state
@@ -799,13 +801,18 @@ def _build_native_vehicle(scene, bridge, state, *, dynamic_state=None):
         rest_world = {
             field: wheel.matrix_world.copy() for field, wheel in state.wheels.items()
         }
-    state.wheel_visual_corrections = {
-        field: (
+    # The native wheel centre can sit away from the visual hub (game wheelOffset and
+    # wheelsVerticalOffset). That gap stays in the actor frame so it never spins or
+    # steers with the wheel; only the rest rotation is applied in the wheel frame.
+    state.wheel_visual_offsets = {}
+    state.wheel_visual_corrections = {}
+    for index, (field, _label) in enumerate(wheel_fields):
+        correction = (
             actor_frame_world @ Matrix.Translation(Vector(wheel_centers[index]))
-        ).inverted_safe()
-        @ rest_world[field]
-        for index, (field, _label) in enumerate(wheel_fields)
-    }
+        ).inverted_safe() @ rest_world[field]
+        state.wheel_visual_offsets[field] = Matrix.Translation(correction.translation)
+        correction.translation = (0.0, 0.0, 0.0)
+        state.wheel_visual_corrections[field] = correction
     state.last_stats = {}
     state.last_telemetry_log_time = 0.0
     state.telemetry_invalid_reported = False
@@ -905,7 +912,8 @@ def _sync_native_wheel_poses(state, actor_world, wheel_poses):
     ):
         return False
     corrections = state.wheel_visual_corrections or {}
-    if len(corrections) != len(wheel_fields):
+    offsets = state.wheel_visual_offsets or {}
+    if len(corrections) != len(wheel_fields) or len(offsets) != len(wheel_fields):
         return False
 
     targets = {}
@@ -913,7 +921,9 @@ def _sync_native_wheel_poses(state, actor_world, wheel_poses):
         values = wheel_poses[index]
         if not isinstance(values, (list, tuple)) or len(values) != 7:
             return False
-        targets[field] = actor_world @ matrix_from_pose(values) @ corrections[field]
+        targets[field] = (
+            actor_world @ offsets[field] @ matrix_from_pose(values) @ corrections[field]
+        )
     if state.source_mode == "RIG":
         chassis_inverse = state.chassis.matrix_world.inverted_safe()
         state.steering_input = pose_vehicle_rig(
