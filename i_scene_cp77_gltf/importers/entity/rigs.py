@@ -12,8 +12,13 @@ from ...animation.domain.rig.assembly import merge_rig_datas
 from ...animation.domain.rig.ordering import promote_rig_base
 from ...animation.services.rig.repository import stored_rig_document
 from ...assetio.documents import file_identity
-from ...assetio.paths import depot_path_key, local_path_key
+from ...assetio.paths import depot_path, depot_path_key, local_path_key
 from ...blender.armature_edit import assembly_name, atomic_armature_update
+from ...blender.entity.transforms import (
+    cache_armature_bones,
+    is_live_armature_object,
+    rig_bone_index_for,
+)
 from ...blender.identity import rna_identity
 from ...blender.rig_metadata import (
     effective_metarig_part_ledger,
@@ -22,10 +27,9 @@ from ...blender.rig_metadata import (
 )
 from ...blender.transactions import track_created_datablock, track_mutation
 from ...core.log import debug_exception, get_logger, is_enabled, log_once
+from ...entity.domain.entity_data import component_name
 from ...gltf.provenance import GLBProvenanceError, read_glb_json
 from ..animation.document import import_anims_glb_to_armature
-from ..common.entity_data import component_name
-from ..common.paths import depot_path
 from ..rig.reader import (
     create_armature_from_rig_data,
     create_armature_from_rig_files,
@@ -36,11 +40,6 @@ from ..rig.reader import (
     rig_collection_for,
     rig_data_definition_hash,
     rig_data_to_root_chunk,
-)
-from .transforms import (
-    cache_armature_bones,
-    is_live_armature_object,
-    rig_bone_index_for,
 )
 
 _LOG = get_logger(__name__)

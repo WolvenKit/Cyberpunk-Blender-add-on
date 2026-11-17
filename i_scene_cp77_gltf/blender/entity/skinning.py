@@ -5,11 +5,10 @@ from mathutils import Matrix
 
 from ...animation.domain.rig.naming import merged_bone_name
 from ...assetio.values import cname_value
-from ...materials.blender.skin_runtime import bind_skin_materials_for_object
-from ..common.collections import preserve_world_parent
+from ..collections import preserve_world_parent
 from .transforms import (
-    _rig_json_bone_matrix_array,
-    _rig_json_model_space_matrices,
+    rig_json_bone_matrix_array,
+    rig_json_model_space_matrices,
     cache_armature_bones,
     is_live_armature_object,
     rig_bone_index_for,
@@ -122,7 +121,7 @@ def component_skin_attachment_matrix(mesh_j, rig_j):
         _SKIN_ATTACHMENT_CACHE[cache_key] = (mesh_j, rig_j, result)
         return result
 
-    rig_matrices = _rig_json_model_space_matrices(rig_j)
+    rig_matrices = rig_json_model_space_matrices(rig_j)
     rig_model_space = (
         rig_matrices[target_index]
         if target_index < len(rig_matrices)
@@ -154,7 +153,7 @@ def component_skin_attachment_matrix(mesh_j, rig_j):
         child_bind_matrices.append(child_skin_to_rig)
 
     if child_names:
-        rig_matrix_array = _rig_json_bone_matrix_array(rig_j)
+        rig_matrix_array = rig_json_bone_matrix_array(rig_j)
         target_array = rig_matrix_array[np.asarray(child_target_indices, dtype=np.intp)]
         bind_array = np.stack(child_bind_matrices)
         products = np.matmul(target_array, bind_array)
@@ -190,7 +189,7 @@ def _rename_vertex_groups_to_meta(obj, rig):
             group.name = target_name
 
 
-def bind_skinned_objects_to_rig(objects, rig):
+def bind_skinned_objects_to_rig(objects, rig, *, bind_materials):
     """Retarget copied skinned meshes to the completed MetaRig"""
     if rig is None:
         return 0, 0
@@ -244,7 +243,7 @@ def bind_skinned_objects_to_rig(objects, rig):
             preserve_world_parent(obj, rig)
 
         if mesh_redirected:
-            bind_skin_materials_for_object(obj, rig)
+            bind_materials(obj, rig)
             skinned_meshes += 1
 
     return skinned_meshes, redirected_modifiers

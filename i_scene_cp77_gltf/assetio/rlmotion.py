@@ -5,6 +5,7 @@ import struct
 
 import numpy as np
 
+from ..bartmoss.hierarchy import parent_first_order
 from ..redSpace.contracts import MOCAP_SPACE_ICLONE
 from .files import read_bytes
 from .mocap import MocapClip, MocapFormatError, MocapSkeleton, MocapTrack
@@ -54,9 +55,18 @@ def _skeleton_and_tracks(fields, label):
     rest_translations = np.array(
         [_vector(bone, 6, 3) for bone in bones], dtype=np.float64
     )
+    parents = tuple(_signed(bone.get(7, [-1])[0]) for bone in bones)
+    if any(not -1 <= parent < len(bones) for parent in parents):
+        raise MocapFormatError(f"{label}: a bone's parent is not in the skeleton")
+    try:
+        parent_first_order(parents)
+    except ValueError as error:
+        raise MocapFormatError(
+            f"{label}: the skeleton's bones are their own ancestors"
+        ) from error
     skeleton = MocapSkeleton(
         names=tuple(bone[1][0].decode("utf-8") for bone in bones),
-        parents=tuple(_signed(bone.get(7, [-1])[0]) for bone in bones),
+        parents=parents,
         rest_translations=rest_translations,
         rest_rotations=rest_rotations,
         end_offsets=(None,) * len(bones),

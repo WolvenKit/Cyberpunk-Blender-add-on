@@ -6,6 +6,7 @@ import bpy
 from mathutils import Vector
 
 from ...bartmoss.vehicle import vehicle_axle_geometry
+from ...blender.physics.vehicle_chassis import vehicle_chassis_phys_objects
 from ...blender.physics.vehicle_geometry import (
     WHEEL_FIELDS,
     bone_is_descendant_of,
@@ -17,6 +18,12 @@ from ...blender.physics.vehicle_geometry import (
     vehicle_local_position,
     vehicle_root,
     wheel_objects,
+)
+from .vehicle_authoring_state import (
+    apply_authored_vehicle_values,
+    bike_vehicle_config,
+    ensure_axle_authoring,
+    validate_bike,
 )
 from .vehicle_validation import (
     resolved_game_config,
@@ -52,8 +59,6 @@ def wheel_centers(vehicle, frame_inverse=None, shape_offset=None):
 
 def validate_vehicle(vehicle):
     if getattr(vehicle, "vehicle_kind", "CAR") == "BIKE":
-        from .vehicle_authoring_state import validate_bike
-
         return validate_bike(vehicle)
     errors, warnings, game_config = validate_authoring_state(vehicle)
     if vehicle.source_mode == "RIG":
@@ -132,7 +137,6 @@ def validate_vehicle(vehicle):
         warnings.append("Front wheel heights differ")
     if abs(rl.z - rr.z) > max(0.05, vehicle.axle_alignment_tolerance):
         warnings.append("Rear wheel heights differ")
-    from .vehicle_authoring_state import ensure_axle_authoring
 
     ensure_axle_authoring(vehicle, game_config)
     errors.extend(validate_powertrain(vehicle, total_mass_label="vehDriveModelData"))
@@ -140,8 +144,6 @@ def validate_vehicle(vehicle):
 
 
 def vehicle_config(vehicle, *, include_powertrain=True, include_chassis_shapes=True):
-    from .vehicle_authoring_state import apply_authored_vehicle_values
-
     frame = vehicle_actor_world(vehicle)
     frame_inverse = vehicle_frame_world(vehicle).inverted_safe()
     shape_offset = Vector(vehicle.chassis_shape_offset)
@@ -225,8 +227,6 @@ def vehicle_config(vehicle, *, include_powertrain=True, include_chassis_shapes=T
 def vehicle_live_dynamics_config(vehicle):
     """The values the built vehicle takes in place"""
     if getattr(vehicle, "vehicle_kind", "CAR") == "BIKE":
-        from .vehicle_authoring_state import bike_vehicle_config
-
         config = bike_vehicle_config(vehicle, include_chassis_shapes=False)
     else:
         config = vehicle_config(vehicle, include_chassis_shapes=False)
@@ -414,7 +414,6 @@ def vehicle_simulation_excluded_objects(scene):
     vehicle = getattr(scene, "physx_vehicle", None)
     if vehicle is None or not vehicle.enabled:
         return result
-    from ...blender.physics.vehicle_chassis import vehicle_chassis_phys_objects
 
     result.update(vehicle_chassis_phys_objects(scene, getattr(vehicle, "rig", None)))
     return result

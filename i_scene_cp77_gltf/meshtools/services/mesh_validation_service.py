@@ -1,3 +1,6 @@
+from dataclasses import replace
+
+from ...blender.context import preserved_context, safe_mode_switch
 from ...blender.mesh_repair import (
     cleanup_validation_temporaries,
     commit_prepared_mesh_repairs,
@@ -7,26 +10,15 @@ from ...blender.mesh_validation import (
     MeshValidationError,
     collect_mesh_validation_issues,
     format_validation_issues,
+    issue_fix_enabled,
 )
 from ...blender.operator_results import OperationResult
+from ...blender.outliner import name_submeshes, renamed_submeshes_note
+from ...blender.selection import selected_meshes
 from ...core.log import get_logger
 from ..model import MeshValidationSummary
 
 _LOG = get_logger(__name__)
-
-
-def selected_meshes(context):
-    meshes = tuple(
-        obj
-        for obj in getattr(context, "selected_objects", ())
-        if getattr(obj, "type", None) == "MESH"
-    )
-    if meshes:
-        return meshes
-    active = getattr(context, "active_object", None)
-    if active is not None and getattr(active, "type", None) == "MESH":
-        return (active,)
-    return ()
 
 
 def _validation_report(issues, *, heading):
@@ -36,15 +28,18 @@ def _validation_report(issues, *, heading):
 
 
 def validate_selected_meshes(context, request):
-    meshes = selected_meshes(context)
+    meshes = selected_meshes(context, include_active=True)
     if not meshes:
         return OperationResult.cancelled("Select at least one mesh to validate.")
     try:
-        issues = collect_mesh_validation_issues(
-            meshes,
-            is_skinned=request.is_skinned,
-            options=request.options,
-        )
+        # Edit Mode keeps a mesh's corner data in the edit mesh, so its UVs and colors read as empty.
+        with preserved_context():
+            safe_mode_switch("OBJECT")
+            issues = collect_mesh_validation_issues(
+                meshes,
+                is_skinned=request.is_skinned,
+                options=request.options,
+            )
     except Exception as error:
         return OperationResult.cancelled(
             f"GLB mesh validation failed: {error}", error=error
@@ -74,70 +69,106 @@ def validate_selected_meshes(context, request):
 
 
 def fix_selected_meshes(context, request):
-    meshes = selected_meshes(context)
+    meshes = selected_meshes(context, include_active=True)
     if not meshes:
         return OperationResult.cancelled("Select at least one mesh to repair.")
-
-    prepared = None
-    try:
-        prepared = prepare_mesh_validation_copies(
-            meshes,
-            is_skinned=request.is_skinned,
-            options=request.options,
-            require_valid=False,
+    # Repairs are written into the meshes, which Edit Mode would overwrite on leaving it.
+    with preserved_context():
+        safe_mode_switch("OBJECT")
+        renamed = name_submeshes(context, meshes)
+        result = _fix_meshes(meshes, request)
+    if not renamed or not result.ok:
+        return result
+    note = renamed_submeshes_note(renamed, "order")
+    summary = result.details.get("payload")
+    if summary is not None:
+        summary = replace(
+            summary,
+            mesh_names=tuple(obj.name for obj in meshes),
+            report="\n".join((summary.report, "", note)),
         )
-        if not prepared.fixes_applied:
-            summary = MeshValidationSummary(
-                mesh_names=tuple(obj.name for obj in meshes),
-                issues=prepared.issues_found,
-                remaining_issues=prepared.remaining_issues,
-                report=_validation_report(
-                    prepared.remaining_issues,
-                    heading="GLB export mesh repair:",
-                ),
+    return OperationResult.finished(
+        f"{result.message} {note}",
+        level=result.level,
+        warnings=result.warnings,
+        payload=summary,
+    )
+
+
+def _fix_meshes(meshes, request):
+    prepared = None
+    issues_found = None
+    applied = {}
+    remaining = ()
+    try:
+        # A fix can leave a problem of its own behind, as limiting influences can empty a vertex group and orphan its
+        # bone, so Fix goes round again while there is something left to fix.
+        for _round in range(4):
+            prepared = prepare_mesh_validation_copies(
+                meshes,
+                is_skinned=request.is_skinned,
+                options=request.options,
+                require_valid=False,
             )
-            cleanup_validation_temporaries(
-                prepared.temp_objects, prepared.temp_armatures
+            if issues_found is None:
+                issues_found = prepared.issues_found
+            if not prepared.fixes_applied:
+                remaining = prepared.remaining_issues
+                cleanup_validation_temporaries(
+                    prepared.temp_objects, prepared.temp_armatures
+                )
+                prepared = None
+                break
+            committed = commit_prepared_mesh_repairs(
+                prepared,
+                is_skinned=request.is_skinned,
+                options=request.options,
             )
             prepared = None
-            if summary.remaining_issues:
+            for object_name, fixes in committed.fixes_applied:
+                applied.setdefault(object_name, []).extend(fixes)
+            remaining = committed.remaining_issues
+            if not any(
+                issue_fix_enabled(issue, request.options) for issue in remaining
+            ):
+                break
+
+        report_lines = ["GLB export mesh repair:"]
+        for object_name, fixes in applied.items():
+            report_lines.append(f"  {object_name}:")
+            report_lines.extend(f"    - {fix}" for fix in fixes)
+        if remaining:
+            report_lines.append("")
+            report_lines.append(
+                format_validation_issues(
+                    remaining,
+                    heading="Remaining validation issues:",
+                )
+            )
+        elif applied:
+            report_lines.extend(("", "All enabled validation requirements now pass."))
+        else:
+            report_lines.append("  No GLB export validation issues found.")
+
+        summary = MeshValidationSummary(
+            mesh_names=tuple(obj.name for obj in meshes),
+            issues=issues_found or (),
+            remaining_issues=remaining,
+            fixes_applied=tuple(
+                (object_name, tuple(fixes)) for object_name, fixes in applied.items()
+            ),
+            report="\n".join(report_lines),
+        )
+        if not applied:
+            if remaining:
                 return OperationResult.finished(
-                    "Validation found issues, but none of their repair options are enabled.",
+                    "Validation found problems Fix cannot repair; the report lists them.",
                     level="WARNING",
                     payload=summary,
                 )
             return OperationResult.finished(
                 "No GLB export mesh repairs were required.", payload=summary
             )
-
-        committed = commit_prepared_mesh_repairs(
-            prepared,
-            is_skinned=request.is_skinned,
-            options=request.options,
-        )
-        prepared = None
-        report_lines = ["GLB export mesh repair:"]
-        for object_name, fixes in committed.fixes_applied:
-            report_lines.append(f"  {object_name}:")
-            report_lines.extend(f"    - {fix}" for fix in fixes)
-        if committed.remaining_issues:
-            report_lines.append("")
-            report_lines.append(
-                format_validation_issues(
-                    committed.remaining_issues,
-                    heading="Remaining validation issues:",
-                )
-            )
-        else:
-            report_lines.extend(("", "All enabled validation requirements now pass."))
-
-        summary = MeshValidationSummary(
-            mesh_names=tuple(obj.name for obj in meshes),
-            issues=committed.issues_found,
-            remaining_issues=committed.remaining_issues,
-            fixes_applied=committed.fixes_applied,
-            report="\n".join(report_lines),
-        )
         message = (
             f"Applied {summary.fix_count} GLB mesh repair"
             f"{'s' if summary.fix_count != 1 else ''}."

@@ -1,7 +1,7 @@
 import bpy
 
 from ....animation.model.animgraph.constants import ANIMGRAPH_TREE_ID
-from ....blender.animgraph.variables import root_tree_for
+from ....blender.animgraph.rig_binding import root_tree_for
 from ....collisiontools.services.dangles.view import can_return_to_editor
 
 

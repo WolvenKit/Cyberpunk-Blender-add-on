@@ -12,6 +12,8 @@ from .overlay_common import (
     control,
     split_vector,
 )
+
+# material_cache_identity is imported as this handler's material cache hook.
 from .overlay_common import material_cache_identity as material_cache_identity
 
 

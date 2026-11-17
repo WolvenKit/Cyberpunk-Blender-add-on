@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from ...animation.model.animgraph.constants import ANIM_NODE_PREFIX
+from ...animation.model.animgraph.schema import registry
 from ...core.log import debug_exception, get_logger, log_once
 from .access import get_attr, get_idprop, is_truthy
 
@@ -346,8 +347,6 @@ def audit_parser(parser: Any) -> dict:
     json_extra_fields = 0
     metadata_missing_fields = 0
     try:
-        from ...animation.model.animgraph.schema import registry
-
         for _hid, data in definitions.items():
             ntype = str(data.get("$type", ""))
             if registry.has_class(ntype):

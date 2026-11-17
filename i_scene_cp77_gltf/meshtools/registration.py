@@ -4,6 +4,10 @@ from ..core.registration import RegistrationLedger
 from .operators import MESH_OPERATOR_CLASSES
 from .properties import (
     MeshAnalysisProperties,
+    MeshAppearance,
+    MeshAppearanceMaterial,
+    MeshAppearanceOriginal,
+    MeshAppearanceUse,
     MeshValidationProperties,
     Vertex_Group_Properties,
     clear_property_caches,
@@ -15,6 +19,10 @@ _CLASSES = (
     Vertex_Group_Properties,
     MeshValidationProperties,
     MeshAnalysisProperties,
+    MeshAppearance,
+    MeshAppearanceUse,
+    MeshAppearanceMaterial,
+    MeshAppearanceOriginal,
     *MESH_OPERATOR_CLASSES,
     *MESH_UI_CLASSES,
 )
@@ -40,6 +48,26 @@ def register_meshtools():
             bpy.types.Scene,
             "cp77_mesh_analysis",
             bpy.props.PointerProperty(type=MeshAnalysisProperties),
+        )
+        _LEDGER.add_property(
+            bpy.types.Scene,
+            "cp77_mesh_appearances",
+            bpy.props.CollectionProperty(type=MeshAppearance),
+        )
+        _LEDGER.add_property(
+            bpy.types.Scene,
+            "cp77_mesh_appearance_index",
+            bpy.props.IntProperty(name="Active Appearance", min=0),
+        )
+        _LEDGER.add_property(
+            bpy.types.Mesh,
+            "cp77_appearance_materials",
+            bpy.props.CollectionProperty(type=MeshAppearanceMaterial),
+        )
+        _LEDGER.add_property(
+            bpy.types.Mesh,
+            "cp77_appearance_defaults",
+            bpy.props.CollectionProperty(type=MeshAppearanceOriginal),
         )
         _LEDGER.add_cleanup("mesh property caches", clear_property_caches)
         for handlers in (

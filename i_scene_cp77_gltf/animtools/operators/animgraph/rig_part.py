@@ -1,7 +1,7 @@
 import bpy
 
 from ....blender.animgraph.rig_binding import binding_tree
-from ....importers.animgraph.graph_import import rig_part_items
+from ....blender.rig_metadata import rig_part_items
 from .context import animgraph_editor_poll
 
 _PART_ITEMS = []  # Blender reads dynamic enum strings after the items callback returns.

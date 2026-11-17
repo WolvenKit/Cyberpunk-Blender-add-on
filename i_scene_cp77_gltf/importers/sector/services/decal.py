@@ -11,7 +11,7 @@ import numpy as np
 from mathutils import Matrix
 
 from ....assetio.documents import file_identity
-from ....assetio.paths import local_path_key
+from ....assetio.paths import depot_path, local_path_key
 from ....blender.decal_overrides import (
     apply_override_values,
     apply_sector_alpha,
@@ -28,12 +28,13 @@ from ....material_types.decal_composite import PROJECTION_COVERAGE_ATTRIBUTE
 from ....materials.blender.builder import MaterialBuilder
 from ....materials.blender.bulk import bulk_material_import_scope
 from ....materials.blender.cache import (
-    _MATERIAL_CACHE,
-    _cache_material,
-    _lookup_cached,
-    _record_prototype_hit,
+    MATERIAL_CACHE,
+    cache_material,
+    lookup_cached,
+    record_prototype_hit,
     rename_cached_material,
 )
+from ....materials.blender.images import DEFAULT_IMAGE_FORMAT
 from ....materials.blender.profiling import (
     detailed_material_profiling_requested,
     finish_material_profiling,
@@ -42,7 +43,6 @@ from ....materials.blender.profiling import (
 )
 from ....materials.blender.registry import DECAL_REGISTRY
 from ....materials.parser import base_material_path
-from ...common.paths import depot_path
 from ..objects import new_empty
 from .decal_projection import PendingDecalProjection, project_pending_decals
 
@@ -373,22 +373,20 @@ class DecalService:
             return None, None
         root = builder.obj["Data"]["RootChunk"]
         signature = builder.decal_signature(root, cache_identity=identity)
-        if _lookup_cached(_MATERIAL_CACHE, signature) is not None:
+        if lookup_cached(MATERIAL_CACHE, signature) is not None:
             return None, None
         prototype, state, added_nodes = entry
         material = track_created_datablock("materials", prototype.copy())
         try:
             material.name = builder.archive_material_name()
             restore_graph_state(material.node_tree, state, added_nodes)
-            builder._set_material_source_properties(
-                material, {}, include_template=False
-            )
-            _cache_material(signature, signature, material, cloned=True)
-            _record_prototype_hit()
+            builder.set_material_source_properties(material, {}, include_template=False)
+            cache_material(signature, signature, material, cloned=True)
+            record_prototype_hit()
             self.stats["graph_reuses"] += 1
             return material, state
         except Exception:
-            builder._remove_failed_material(material)
+            builder.remove_failed_material(material)
             raise
 
     def cache_stats(self):
@@ -537,7 +535,7 @@ class DecalService:
             builder = MaterialBuilder(
                 document,
                 self.session.raw_root,
-                "png",
+                DEFAULT_IMAGE_FORMAT,
                 self.session.raw_root,
             )
             builder_identity = self._builder_cache_identity(
@@ -752,6 +750,7 @@ class DecalService:
             collection,
             pending,
             self.composite_material_cache,
+            context=self.session.blender_context,
             output_collection=output_collection,
         )
         summary["projectors"] = projector_count

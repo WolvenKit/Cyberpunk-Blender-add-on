@@ -18,6 +18,7 @@ from ....animation.domain.animgraph.vector_preview import (
     collect_vector_input_requirements,
 )
 from ....assetio import animgraph_json as json_io
+from ....assetio.handles import resolve_handle
 from ....assetio.transform_values import (
     quaternion_ijkr_from_wxyz,
     quaternion_wxyz_from_ijkr,
@@ -79,20 +80,6 @@ def _get_bone_name(node_dict, key):
     name_obj = _get_wk(b_dict, "name", {})
     val = name_obj.get("$value", "") if isinstance(name_obj, dict) else name_obj
     return str(val) if val else ""
-
-
-def _resolve_handle(obj, node_map):
-    if not isinstance(obj, dict):
-        return obj
-    if "HandleRefId" in obj:
-        handle_id = obj["HandleRefId"]
-        resolved = node_map.get(handle_id)
-        if resolved is None:
-            resolved = node_map.get(str(handle_id))
-        return resolved if resolved is not None else {}
-    if "Data" in obj:
-        return obj["Data"]
-    return obj
 
 
 def _build_document_index(obj, target_types):
@@ -412,7 +399,7 @@ def _bone_prefix(name):
 
 def _extract_dangle_info(dangle_node, node_map):
     constraint_ref = _get_wk(dangle_node, "dangleConstraint", {})
-    sim_data = _resolve_handle(constraint_ref, node_map)
+    sim_data = resolve_handle(constraint_ref, node_map)
     if not sim_data:
         return None
 
@@ -436,6 +423,12 @@ def _extract_dangle_info(dangle_node, node_map):
         return None
 
     return (dangle_node, sim_data, bone_set, sim_type)
+
+
+def _editable_dangle(info):
+    return info is not None and (
+        bool(info[2]) or info[3] == "animDangleConstraint_SimulationDyng"
+    )
 
 
 def _make_node_label(sim_data, bone_set):
@@ -730,6 +723,11 @@ def _parse_dangle_as_node(sim_data, addon_state, node_map, node_label):
 
             particle_lookup[b_name] = (ch_idx, len(ch.particles) - 1)
 
+    if not chain_order:
+        chain = dnode.chains.add()
+        chain.name = "Chain_1"
+        chain.solver = "DYNG"
+
     dyng_ref = _get_wk(sim_data, "dyngConstraint", {})
 
     dnode.particle_source_indices = json_io.dumps(
@@ -923,7 +921,7 @@ def _parse_wolvenkit_animgraph(data, addon_state):
         identity = f"handle:{raw_handle}"
         if node_type == "DANGLE":
             info = _extract_dangle_info(raw_node, node_map)
-            if info is None or not info[2]:
+            if not _editable_dangle(info):
                 continue
             if identity not in dangle_indices:
                 _dangle, sim_data, bone_set, _sim_type = info
@@ -957,7 +955,7 @@ def _parse_wolvenkit_animgraph(data, addon_state):
         if id(raw_node) in parsed_dangle_nodes:
             continue
         info = _extract_dangle_info(raw_node, node_map)
-        if info is None or not info[2]:
+        if not _editable_dangle(info):
             continue
         _dangle, sim_data, bone_set, _sim_type = info
         label = _make_node_label(sim_data, bone_set)
@@ -1026,7 +1024,7 @@ def _serialize_shape(shape):
     }
 
 
-def _serialize_editor_state(addon_state):
+def serialize_editor_state(addon_state):
     arm_obj = getattr(addon_state, "id_data", None)
     data = {
         "format": EDITOR_FORMAT,
@@ -1597,6 +1595,11 @@ def _parse_editor_state(data, addon_state):
     return len(addon_state.dangle_nodes)
 
 
+def restore_editor_state(addon_state, backup):
+    _clear_addon_state(addon_state)
+    _parse_editor_state(backup, addon_state)
+
+
 def import_chains_data(data, addon_state):
     is_wolvenkit = (
         isinstance(data, dict)
@@ -1606,7 +1609,7 @@ def import_chains_data(data, addon_state):
     if not is_wolvenkit:
         raise ValueError("Expected a WolvenKit animgraph JSON export")
 
-    backup = _serialize_editor_state(addon_state)
+    backup = serialize_editor_state(addon_state)
     _clear_addon_state(addon_state)
     try:
         count = _parse_wolvenkit_animgraph(data, addon_state)
@@ -1617,6 +1620,5 @@ def import_chains_data(data, addon_state):
             raise ValueError(space_errors[0])
         return count
     except Exception:
-        _clear_addon_state(addon_state)
-        _parse_editor_state(backup, addon_state)
+        restore_editor_state(addon_state, backup)
         raise

@@ -13,8 +13,8 @@ class FacialSharedMetaPoseHandler(GraphNodeHandler):
     def execute(self, context, step):
         if step.input_frame.model_space:
             raise ValueError("FacialSharedMetaPose requires a local-space input pose")
-        binding = context._facial_binding
-        shared = context._shared_meta_binding
+        binding = context.facial_binding
+        shared = context.shared_meta_binding
         if binding is None or shared is None:
             raise ValueError(
                 "FacialSharedMetaPose requires bound facial and parent-pose contexts"
@@ -43,7 +43,7 @@ class FacialSharedMetaPoseHandler(GraphNodeHandler):
             ik_targets=step.input_frame.ik_targets,
         )
         step.child = (
-            context._execute_program(
+            context.execute_program(
                 step.program_node.children[0],
                 step.raw_dt,
                 step.time_dilation,
@@ -66,10 +66,10 @@ class FacialSharedMetaPoseHandler(GraphNodeHandler):
         pose.update(
             {name: value for name, value in step.child.pose.items() if name in names}
         )
-        parent_frame = context._meta_parent_frame_current or step.input_frame
+        parent_frame = context.meta_parent_frame_current or step.input_frame
         parent_pose = (
-            context._facial_shared_parent_pose(parent_frame)
-            if context._facial_binding is not None and context._owner_scope_bound
+            context.facial_shared_parent_pose(parent_frame)
+            if context.facial_binding is not None and context.owner_scope_bound
             else parent_frame.pose
         )
         excluded = frozenset(
@@ -94,7 +94,7 @@ class FacialSharedMetaPoseHandler(GraphNodeHandler):
             step.input_frame.track_scopes,
             ik_targets=step.input_frame.ik_targets,
         )
-        context._trace_facial_frame("facial_shared_meta_output", result)
+        context.trace_facial_frame("facial_shared_meta_output", result)
         step.frame_cache[step.cache_key] = result
         return result
 
@@ -105,12 +105,12 @@ class SharedMetaPoseHandler(GraphNodeHandler):
 
     def execute(self, context, step):
         shared_started = perf_counter()
-        result = context._execute_shared_meta_frame(
+        result = context.execute_shared_meta_frame(
             step.program_node,
             step.child,
             step.input_frame,
             additive=step.program_node.kind == "SHARED_META_POSE_ADDITIVE",
         )
-        context._perf_shared_meta += perf_counter() - shared_started
+        context.perf_shared_meta += perf_counter() - shared_started
         step.frame_cache[step.cache_key] = result
         return result

@@ -44,7 +44,7 @@ class NeonTubes(EmissiveSlotsMixin, MaterialTypeBase):
         path = self._texture_path(data, "tex1")
         if not _textured(path):
             return None
-        return self._load_relative_image(path, error_label="neon tubes tex1")
+        return self.load_relative_image(path, error_label="neon tubes tex1")
 
     def structure_key(self, Data):
         data = Data if isinstance(Data, dict) else {}

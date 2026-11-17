@@ -7,11 +7,13 @@ from .context import restore_previous_context, safe_mode_switch, store_current_c
 from .identity import real_users
 from .operator_results import require_finished
 from .selection import select_objects
+from .transactions import track_object_state
 
 
 def apply_xform_to_object(obj, transform_matrix):
     if not obj:
         return
+    track_object_state(obj)
     obj.matrix_world = transform_matrix @ obj.matrix_world
 
 

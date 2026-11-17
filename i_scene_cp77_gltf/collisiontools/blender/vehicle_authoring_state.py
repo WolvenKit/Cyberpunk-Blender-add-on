@@ -30,6 +30,7 @@ from ...blender.physics.vehicle_geometry import (
 )
 from ...physics.domain.vehicle.game_data import ensure_tire_friction_config
 from ...physics.domain.vehicle.gears import config_with_authored_gears
+from .vehicle_gears import vehicle_gearbox
 from .vehicle_validation import (
     resolved_game_config,
     validate_authoring_state,
@@ -621,7 +622,7 @@ def apply_authored_vehicle_values(vehicle, source, *, include_powertrain=True):
         config["engine_damping_rate"] = float(vehicle.engine_resistance_torque) / max(
             float(vehicle.engine_max_omega), 1.0e-6
         )
-        config = config_with_authored_gears(vehicle, config)
+        config = config_with_authored_gears(vehicle_gearbox(vehicle), config)
     if vehicle.vehicle_kind == "BIKE":
         config["bike_max_lean_angle"] = float(vehicle.bike_max_lean_angle)
         config["bike_tilt_pid"] = list(vehicle.bike_tilt_pid)

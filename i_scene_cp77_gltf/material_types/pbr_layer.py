@@ -77,7 +77,7 @@ class pbr_layer(MaterialTypeBase):
         normal_path = param_texture_path(data, "Normal")
         normal_tangent = None
         if normal_path:
-            image = self._load_relative_image(
+            image = self.load_relative_image(
                 normal_path, non_color=True, error_label="Normal"
             )
             if image is not None:
@@ -96,7 +96,7 @@ class pbr_layer(MaterialTypeBase):
 
         global_path = param_texture_path(data, "GlobalNormal")
         if normal_tangent is not None and global_path:
-            image = self._load_relative_image(
+            image = self.load_relative_image(
                 global_path, non_color=True, error_label="GlobalNormal"
             )
             if image is not None:

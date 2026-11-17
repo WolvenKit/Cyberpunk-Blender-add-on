@@ -6,6 +6,7 @@ from itertools import count
 
 import bpy
 
+from .context import safe_mode_switch
 from .transactions import (
     current_import_transaction,
     restore_id_properties,
@@ -61,7 +62,7 @@ class ArmatureEditSession:
                 raise RuntimeError(
                     f"Unable to edit armature {self.armature.name!r} in its build scene."
                 )
-            bpy.ops.object.mode_set(mode="EDIT")
+            safe_mode_switch("EDIT")
             self.timings["enter"] = time.perf_counter() - started
         except BaseException:
             self.__exit__(None, None, None)
@@ -74,7 +75,7 @@ class ArmatureEditSession:
         try:
             started = time.perf_counter()
             if self.armature.mode != "OBJECT":
-                bpy.ops.object.mode_set(mode="OBJECT")
+                safe_mode_switch("OBJECT")
             self.timings["exit"] = time.perf_counter() - started
         finally:
             try:
@@ -91,14 +92,6 @@ class ArmatureEditSession:
                     bpy.data.scenes.remove(self.scene)
                     self.scene = None
         return False
-
-
-def _restore_properties(owner, values):
-    for key in tuple(owner.keys()):
-        if key not in values:
-            del owner[key]
-    for key, value in values.items():
-        owner[key] = value
 
 
 def _copy_property_ui(source, target, key):
@@ -261,7 +254,7 @@ def atomic_armature_update(function):
 
                 def restore():
                     target.data = original_data
-                    _restore_properties(target, properties)
+                    restore_id_properties(target, properties)
                     _restore_pose(target, pose_state)
 
                 transaction.track_mutation(
@@ -290,7 +283,7 @@ def atomic_armature_update(function):
             return target if result is staged else result
         except Exception:
             if not committed:
-                _restore_properties(target, properties)
+                restore_id_properties(target, properties)
             raise
         finally:
             if token is not None:

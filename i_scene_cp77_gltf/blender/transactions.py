@@ -9,7 +9,9 @@ from functools import wraps
 import bpy
 
 from ..core.log import debug_exception, get_logger, log_once
+from .context import BlenderContextSnapshot, safe_mode_switch
 from .identity import rna_identity, rna_is_live
+from .operator_results import OperationResult
 
 _ACTIVE_IMPORT_TRANSACTION = ContextVar("cp77_active_import_transaction", default=None)
 _LOG = get_logger(__name__)
@@ -501,7 +503,7 @@ def _force_object_mode():
     if context is None or getattr(context, "mode", "OBJECT") == "OBJECT":
         return
     try:
-        bpy.ops.object.mode_set(mode="OBJECT")
+        safe_mode_switch("OBJECT")
     except (AttributeError, RuntimeError, TypeError) as error:
         log_once(
             _LOG,
@@ -721,6 +723,51 @@ def track_new_modifier(obj, modifier, *, label="modifier"):
     return track_mutation(("modifier", rna_identity(obj), name), restore, label=label)
 
 
+def _reachable_node_groups(tree):
+    found, seen, pending = [], set(), [tree]
+    while pending:
+        current = pending.pop(0)
+        for node in current.nodes:
+            group = getattr(node, "node_tree", None)
+            if group is not None and rna_identity(group) not in seen:
+                seen.add(rna_identity(group))
+                found.append(group)
+                pending.append(group)
+    return found
+
+
+def track_node_tree(tree, *, before_restore=None, label="node tree"):
+    transaction = current_import_transaction()
+    if transaction is None or tree is None:
+        return
+    key = ("node_tree", rna_identity(tree))
+    if transaction.tracks_mutation(key):
+        return
+    snapshot = tree.copy()
+    transaction.keep_datablock("node_groups", snapshot)
+    name = tree.name
+
+    def restore():
+        if before_restore is not None:
+            before_restore()
+        if rna_is_live(tree):
+            tree.user_remap(snapshot)
+            bpy.data.node_groups.remove(tree)
+        snapshot.name = name
+
+    def drop_snapshot():
+        if not rna_is_live(snapshot):
+            return
+        reachable = _reachable_node_groups(snapshot)
+        bpy.data.node_groups.remove(snapshot)
+        for group in reachable:
+            if rna_is_live(group) and group.users == 0:
+                bpy.data.node_groups.remove(group)
+
+    transaction.track_mutation(key, restore, label=label)
+    transaction.defer_commit_cleanup(drop_snapshot)
+
+
 def remove_datablock_on_commit(collection_name, value):
     transaction = current_import_transaction()
     collection = getattr(bpy.data, collection_name)
@@ -753,7 +800,7 @@ def track_created_since(snapshot):
     return tuple(created)
 
 
-def _remove_datablock(collection_name, value):
+def remove_datablock(collection_name, value):
     if value is None:
         return
     collection = getattr(bpy.data, collection_name, None)
@@ -778,7 +825,7 @@ def _remove_datablocks(entries):
     for name, value in live:
         if rna_is_live(value):
             try:
-                _remove_datablock(name, value)
+                remove_datablock(name, value)
             except Exception as error:
                 debug_exception(
                     _LOG,
@@ -883,6 +930,10 @@ class DatablockImportTransaction:
 
     def tracks_mutation(self, key):
         return key in self._mutation_keys
+
+    def keep_datablock(self, collection_name, value):
+        kept = self._snapshot.get(collection_name, frozenset()) | {rna_identity(value)}
+        self._snapshot = {**self._snapshot, collection_name: kept}
 
     def defer_commit_cleanup(self, callback):
         """Release superseded data only after rollback no longer needs it"""
@@ -1035,8 +1086,6 @@ class BlenderImportTransaction(DatablockImportTransaction):
         super().__init__()
         self._context_snapshot = None
         if restore_context:
-            from .context import BlenderContextSnapshot
-
             self._context_snapshot = BlenderContextSnapshot().store()
         if capture_existing_state:
             self._collections = tuple(
@@ -1207,8 +1256,6 @@ class BlenderImportTransaction(DatablockImportTransaction):
 
 
 def _failed(result) -> bool:
-    from .operator_results import OperationResult
-
     return isinstance(result, OperationResult) and not result.ok
 
 

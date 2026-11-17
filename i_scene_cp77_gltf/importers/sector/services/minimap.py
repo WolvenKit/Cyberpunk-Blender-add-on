@@ -4,11 +4,11 @@ from dataclasses import dataclass
 
 import bpy
 
+from ....assetio.paths import depot_path
 from ....assetio.transform_values import vector3_from_data
 from ....assetio.values import cname_text
 from ....blender.naming import fit_id_name
 from ....blender.transactions import track_created_datablock
-from ...common.paths import depot_path
 
 
 @dataclass(slots=True, frozen=True)

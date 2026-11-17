@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import bpy
+
 from ...animation.model.animgraph.constants import ANIM_NODE_PREFIX
 from ...core.log import get_logger, log_once
 from . import sm_records
-from .sockets import bind_red_socket
+from .sockets import bind_red_socket, metadata_annotations
 
 _LOG = get_logger(__name__)
 
@@ -185,3 +187,28 @@ def remove_transition_sockets(node) -> None:
         s for s in node.inputs if s.bl_idname == IN_SOCKET_ID and s.name == IN_NAME
     ]:
         node.inputs.remove(sock)
+
+
+def _transition_out_annotations():
+    annotations = metadata_annotations()
+    annotations["red_row_index"] = bpy.props.IntProperty(
+        name="Row Index",
+        description="Index of the transition record this row shows; -1 for the new-transition row",
+        default=-1,
+    )
+    return annotations
+
+
+class REDengine_AnimGraphSocket_TransitionOut(bpy.types.NodeSocket):
+    """One transition row of a state-machine node (see sm_sockets)"""
+
+    bl_idname = "REDengine_AnimGraphSocket_TransitionOut"
+    bl_label = "Transition Row"
+    color = (0.9, 0.5, 0.1, 1.0)
+    __annotations__ = _transition_out_annotations()
+
+    def draw(self, context, layout, node, text):
+        draw_row(self, context, layout, node, text)
+
+    def draw_color(self, context, node):
+        return self.color

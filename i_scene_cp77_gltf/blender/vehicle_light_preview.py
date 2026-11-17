@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import math
 
-from ...blender.light_preview import energy_fcurves, update_cycles_attenuation_radius
-from ...entity.domain.light_representation import cosine_spot_blend
+from ..entity.domain.light_representation import cosine_spot_blend
+from .light_preview import energy_fcurves, update_cycles_attenuation_radius
 
 
 def is_vehicle_light_object(obj):

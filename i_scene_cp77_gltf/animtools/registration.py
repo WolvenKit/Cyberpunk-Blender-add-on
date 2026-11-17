@@ -1,11 +1,12 @@
 import bpy
-from bpy.props import CollectionProperty, IntProperty, PointerProperty
+from bpy.props import CollectionProperty, FloatProperty, IntProperty, PointerProperty
 
 from ..blender.animgraph import presenters, results_overlay, sm_overlay
 from ..blender.animgraph.node_types import (
     REDengine_AnimGraphContainer,
     REDengine_AnimGraphNode_Generic,
 )
+from ..blender.animgraph.preview_sessions import session_results
 from ..blender.animgraph.preview_settings import PREVIEW_SETTINGS_CLASSES
 from ..blender.animgraph.properties import (
     REDengine_AnimArrayElement,
@@ -24,6 +25,7 @@ from ..blender.animgraph.sm_properties import (
     REDengine_SMStateRef,
     REDengine_SMTransition,
 )
+from ..blender.animgraph.sm_sockets import REDengine_AnimGraphSocket_TransitionOut
 from ..blender.animgraph.sockets import (
     REDengine_AnimGraphSocket_Bool,
     REDengine_AnimGraphSocket_Editor,
@@ -33,13 +35,13 @@ from ..blender.animgraph.sockets import (
     REDengine_AnimGraphSocket_Quaternion,
     REDengine_AnimGraphSocket_Transform,
     REDengine_AnimGraphSocket_Transition,
-    REDengine_AnimGraphSocket_TransitionOut,
     REDengine_AnimGraphSocket_Vector,
 )
 from ..blender.animgraph.tree import REDengine_AnimGraphTree
-from ..collisiontools.runtime.dangle.preview import session_results
 from ..core.log import get_logger
 from ..core.registration import RegistrationLedger
+from .blender.rigify.switches import all_limbs_ik_fk, set_all_limbs_ik_fk
+from .handlers import callbacks
 from .operators.actions import ACTION_OPERATOR_CLASSES
 from .operators.animgraph.add_node import REDENGINE_OT_add_node
 from .operators.animgraph.curve import CURVE_OPERATOR_CLASSES
@@ -66,7 +68,6 @@ from .operators.rig import RIG_OPERATOR_CLASSES
 from .operators.rigify import RIGIFY_OPERATOR_CLASSES
 from .operators.root_motion import ROOT_MOTION_OPERATOR_CLASSES
 from .operators.workspace import WORKSPACE_OPERATOR_CLASSES
-from .runtime import callbacks
 from .ui import playback
 from .ui.action_list import CP77_UL_AdditiveAnimList, CP77_UL_AnimList, CP77_UL_ClipList
 from .ui.animgraph import (
@@ -230,6 +231,19 @@ def _register_properties() -> None:
         bpy.types.Action,
         "cp77_anim_events_index",
         IntProperty(name="Active Event Index", default=0),
+    )
+    _LEDGER.add_property(
+        bpy.types.Object,
+        "cp77_rigify_ik_fk",
+        FloatProperty(
+            name="All Limbs IK-FK",
+            description="Move every limb between IK (0) and FK (1) at once; each limb's own switch stays editable",
+            min=0.0,
+            max=1.0,
+            get=all_limbs_ik_fk,
+            set=set_all_limbs_ik_fk,
+            options=set(),
+        ),
     )
 
 

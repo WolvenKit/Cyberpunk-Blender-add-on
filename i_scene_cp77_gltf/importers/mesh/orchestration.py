@@ -15,7 +15,7 @@ from ...assetio.paths import (
 )
 from ...assetio.values import json_array, json_object
 from ...blender import selection
-from ...blender.context import BlenderContextSnapshot
+from ...blender.context import BlenderContextSnapshot, safe_mode_switch
 from ...blender.identity import rna_identity, rna_is_live
 from ...blender.mesh import (
     ensure_color_attribute_alias,
@@ -48,10 +48,12 @@ from ...materials.blender.cache import (
     warm_material_cache_index,
 )
 from ...materials.blender.images import (
+    DEFAULT_IMAGE_FORMAT,
     begin_image_failure_capture,
     end_image_failure_capture,
     image_load_failure_message,
 )
+from ...materials.blender.metadata import apply_material_metadata, material_metadata
 from ...materials.blender.skin_runtime import bind_skin_materials_for_object
 from ...materials.prefetch import prefetch_multilayer_documents
 from ...materials.repository import MaterialRepository, MaterialResourceRepository
@@ -59,8 +61,10 @@ from ...materials.resources import material_resource_scope
 from ...materials.shadow_policy import object_shadow_policy
 from ...meshes.repository import is_physical_scene
 from ...redSpace.contracts import RIG_SPACE_CONTRACT_CURRENT
+from ..animation.document import import_anims_glb_to_armature
 from ..common.material_appearances import requested_material_names_by_submesh
 from ..common.results import ImportResult, summarize_messages, unique_messages
+from ..rig.gltf import import_gltf_rig
 from .appearances import create_mesh_appearance_variants
 from .decal_receivers import bind_mesh_decals
 from .document import decode_mesh_glb
@@ -360,8 +364,6 @@ def resolve_direct_animation_target(context, explicit_target=None):
 def _try_direct_animation_import(
     filepath, context, animation_target, import_tracks, verbose
 ):
-    from ..animation.document import import_anims_glb_to_armature
-
     target = (
         None
         if animation_target == "NEW"
@@ -389,22 +391,6 @@ def _try_direct_animation_import(
 
 def _material_asset_stem(file_name):
     return material_sidecar_path(file_name)[: -len(".Material.json")]
-
-
-def _material_metadata(material_data):
-    if "BaseMaterial" not in material_data:
-        return None
-    data = material_data.get("Data", {})
-    return {
-        "Name": material_data.get("Name", ""),
-        "BaseMaterial": material_data["BaseMaterial"],
-        "GlobalNormal": data.get("GlobalNormal", "None"),
-        "MultilayerMask": data.get("MultilayerMask", "None"),
-        "DiffuseMap": data.get(
-            "DiffuseMap",
-            data.get("BaseColor", data.get("DiffuseTexture", "None")),
-        ),
-    }
 
 
 def _decoded_material_names(direct_result, mats):
@@ -457,24 +443,10 @@ def _material_records(mats, valid_names):
                     f"Ambiguous material name {name!r}: distinct source payloads share the same name."
                 )
             continue
-        metadata = _material_metadata(material_data)
+        metadata = material_metadata(material_data)
         if metadata is not None:
             records[name] = (index, metadata)
     return records
-
-
-def _apply_material_metadata(material, metadata):
-    """Preserve source metadata without retagging unchanged shared materials"""
-    values = {
-        "cp77_source_material_name": metadata["Name"],
-        "BaseMaterial": metadata["BaseMaterial"],
-        "GlobalNormal": metadata["GlobalNormal"],
-        "MultilayerMask": metadata["MultilayerMask"],
-        "DiffuseMap": metadata["DiffuseMap"],
-    }
-    for key, value in values.items():
-        if key not in material or material.get(key) != value:
-            material[key] = value
 
 
 def _unique_names(values):
@@ -608,7 +580,7 @@ def import_mats(
             material = builder.create(mats, index)
             if material is None:
                 continue
-            _apply_material_metadata(material, metadata)
+            apply_material_metadata(material, metadata)
             built[name] = material
             warning = _unsupported_material_warning(mats[index])
             if warning:
@@ -661,7 +633,6 @@ def import_mats(
             ensure_metalbase_vertex_rm_attribute(mesh)
         _ensure_required_source_frame(obj, submesh)
         bind_skin_materials_for_object(obj, armature)
-        obj["cp77_submesh_index"] = int(submesh_index)
         attached_folded = {name.casefold() for name in attached if name}
         for name in raw_names:
             if name.casefold() not in attached_folded:
@@ -943,7 +914,7 @@ def ensure_collection_material_coverage(
     appearances,
     *,
     remap_depot=False,
-    image_format="png",
+    image_format=DEFAULT_IMAGE_FORMAT,
     document_session=None,
     material_resources=None,
     timing=None,
@@ -1068,7 +1039,7 @@ def ensure_collection_material_coverage(
                     if material is None:
                         failures.append(name)
                         continue
-                    _apply_material_metadata(material, metadata)
+                    apply_material_metadata(material, metadata)
                     built[name] = material
                 except Exception as exc:
                     _LOG.exception(
@@ -1121,7 +1092,6 @@ def ensure_collection_material_coverage(
         if shadow_warning:
             _LOG.warning("%s", shadow_warning)
             material_warnings.append(shadow_warning)
-        obj["cp77_submesh_index"] = int(index)
         if _object_requires_source_frame(obj) and not source_frame_attributes_available(
             obj.data
         ):
@@ -1205,34 +1175,35 @@ def ensure_collection_material_coverage(
 
 
 def import_cyberpunk_glb(
+    context,
     filepath,
+    options,
     *,
-    with_materials=False,
-    remap_depot=False,
-    exclude_unused_mats=True,
-    image_format="png",
-    hide_armatures=True,
-    import_garmentsupport=False,
-    appearances=None,
-    import_tracks=False,
-    animation_target=None,
     document_session=None,
     material_resources=None,
-    content_kind=None,
     transaction=None,
-    bulk_import=False,
     collection_parent=None,
-    collection_name: str = "",
-    select_objects: bool = True,
     decoded_mesh_data=None,
     report_owner=None,
     timing=None,
-    appearance_variants=True,
 ):
+    with_materials = options.with_materials
+    remap_depot = options.remap_depot
+    exclude_unused_mats = options.exclude_unused_mats
+    image_format = options.image_format
+    hide_armatures = options.hide_armatures
+    import_garmentsupport = options.import_garmentsupport
+    appearances = options.appearances
+    import_tracks = options.import_tracks
+    animation_target = options.animation_target
+    content_kind = options.content_kind
+    bulk_import = options.bulk_import
+    collection_name = options.collection_name
+    select_objects = options.select_objects
+    appearance_variants = options.appearance_variants
     prefs = get_addon_preferences()
     detailed_logging = _LOG.isEnabledFor(logging.DEBUG) and not bulk_import
-    context = bpy.context
-    appearances = appearances or []
+    appearances = list(appearances or ())
     imported_animation = False
     succeeded = False
 
@@ -1270,8 +1241,7 @@ def import_cyberpunk_glb(
             if owns_transaction:
                 context_snapshot = BlenderContextSnapshot().store()
             original_fps = (context.scene.render.fps, context.scene.render.fps_base)
-            if context.mode != "OBJECT":
-                bpy.ops.object.mode_set(mode="OBJECT")
+            safe_mode_switch("OBJECT")
             filepath = os.path.abspath(os.fspath(filepath))
             directory = os.path.dirname(filepath)
             file_name = os.path.basename(filepath)
@@ -1326,8 +1296,6 @@ def import_cyberpunk_glb(
                         f"{file_name} contains no mesh or animation payload."
                     )
                 if kind == "rig":
-                    from ..rig.gltf import import_gltf_rig
-
                     if file_name.casefold().endswith(".anims.glb"):
                         error_messages.append(
                             f"{file_name} contains a skin but no animation clips; "
@@ -1539,11 +1507,12 @@ def import_cyberpunk_glb(
                                     )
 
                     if appearance_variants:
-                        create_mesh_appearance_variants(
-                            result,
-                            appearances,
-                            json_apps,
-                            parent_collection=collection_parent,
+                        error_messages.extend(
+                            warning
+                            for warning in create_mesh_appearance_variants(
+                                result, appearances, json_apps
+                            )
+                            if warning not in error_messages
                         )
                         for obj in result["all_objects"]:
                             if obj.type == "MESH":
@@ -1663,150 +1632,3 @@ def import_cyberpunk_glb(
         warnings=unique_messages(error_messages),
         label="direct GLB import",
     )
-
-
-def _material_user_slots(material):
-    """Locate actual slot users through Blender's native datablock references"""
-    direct = bpy.data.user_map(subset={material}).get(material, set())
-    objects = {value for value in direct if isinstance(value, bpy.types.Object)}
-    data_users = direct - objects
-    if data_users:
-        for owners in bpy.data.user_map(
-            subset=data_users, value_types={"OBJECT"}
-        ).values():
-            objects.update(owners)
-    return tuple(
-        (obj, index, slot)
-        for obj in sorted(objects, key=lambda value: value.name)
-        for index, slot in enumerate(obj.material_slots)
-        if slot.material is material
-    )
-
-
-class MaterialReloadError(RuntimeError):
-    """The active material could not be rebuilt from its source"""
-
-
-def reload_materials(context):
-    """Rebuild the active object's active material from its source .Material.json"""
-    active_obj = context.active_object
-    active_material = active_obj.active_material if active_obj is not None else None
-    if active_material is None:
-        raise MaterialReloadError("No active material selected")
-
-    orig_mat_name = str(
-        active_material.get("cp77_source_material_name", active_material.name)
-    )
-
-    base_path = active_material.get("sourcePath")
-    depot_path = active_material.get("DepotPath")
-    project_path = active_material.get("cp77_project_path")
-    if base_path is None and project_path:
-        mesh_path = next(
-            (
-                collection.get("mesh")
-                for collection in active_obj.users_collection
-                if collection.get("mesh")
-            ),
-            None,
-        )
-        if mesh_path:
-            base_path = os.path.join(project_path, mesh_path[: mesh_path.rfind(".")])
-    if base_path is None:
-        raise MaterialReloadError("Could not resolve material base path")
-
-    material_path = base_path + ".Material.json"
-    if not os.path.exists(material_path):
-        raise MaterialReloadError("Material.json not found: " + material_path)
-
-    owner = current_import_transaction()
-    owns_transaction = owner is None
-    owner = owner or DatablockImportTransaction()
-    savepoint = owner.savepoint()
-    scope = owner.scope() if owns_transaction else None
-    if scope is not None:
-        scope.__enter__()
-    old_material = active_material
-    slot_index = active_obj.active_material_index
-    user_slots = _material_user_slots(old_material)
-    if not user_slots:
-        slot = active_obj.material_slots[slot_index]
-        user_slots = ((active_obj, slot_index, slot),)
-    try:
-        for user_obj, user_index, user_slot in user_slots:
-            track_mutation(
-                ("material_slot", rna_identity(user_obj), user_index),
-                lambda slot=user_slot, old_material=old_material: setattr(
-                    slot,
-                    "material",
-                    old_material,
-                ),
-                verify=lambda slot=user_slot, old_material=old_material: (
-                    slot.material is old_material
-                ),
-                label=f"material slot {user_obj.name}[{user_index}]",
-            )
-        with DocumentSession() as documents:
-            bundle_repository = MaterialRepository(documents)
-            material_resources = MaterialResourceRepository(documents)
-            bundle = bundle_repository.load(material_path)
-            if bundle is None:
-                messages = [issue.message for issue in bundle_repository.issues]
-                raise RuntimeError(
-                    "; ".join(messages) or "Material bundle could not be loaded"
-                )
-            mats = list(bundle.materials)
-            with material_resource_scope(material_resources):
-                image_format = str(
-                    active_material.get("cp77_image_format", "") or "png"
-                )
-                builder = MaterialBuilder(mats, depot_path, image_format, base_path)
-                source_name = orig_mat_name
-                source_index = next(
-                    (
-                        index
-                        for index, raw_material in enumerate(mats)
-                        if raw_material.get("Name") == source_name
-                    ),
-                    None,
-                )
-                if source_index is None:
-                    source_name = orig_mat_name.rsplit(".", 1)[0]
-                    source_index = next(
-                        (
-                            index
-                            for index, raw_material in enumerate(mats)
-                            if raw_material.get("Name") == source_name
-                        ),
-                        None,
-                    )
-                new_material = None
-                source_raw_material = None
-                from ...material_types.multilayered import fresh_multilayer_runtime
-
-                if source_index is not None:
-                    source_raw_material = mats[source_index]
-                    with fresh_multilayer_runtime():
-                        new_material = builder.create(
-                            mats,
-                            source_index,
-                            force_rebuild=True,
-                        )
-                if new_material is None or source_raw_material is None:
-                    raise RuntimeError(f"Source material '{source_name}' was not found")
-                metadata = _material_metadata(source_raw_material)
-                if metadata is not None:
-                    _apply_material_metadata(new_material, metadata)
-                for _user_obj, _user_index, user_slot in user_slots:
-                    user_slot.material = new_material
-        if owns_transaction:
-            owner.commit()
-    except Exception as error:
-        report = owner.rollback() if owns_transaction else owner.rollback_to(savepoint)
-        raise_if_rollback_incomplete(report, error, error_type=MaterialReloadError)
-        raise MaterialReloadError(str(error)) from error
-    finally:
-        if scope is not None:
-            scope.__exit__(None, None, None)
-
-    return new_material

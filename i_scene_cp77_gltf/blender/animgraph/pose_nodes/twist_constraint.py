@@ -15,7 +15,7 @@ class TwistConstraintHandler(PoseNodeHandler):
         return NodeSpec(twist_constraint_adapter.runtime_data(node))
 
     def optional_bone_names(self, spec):
-        names = {text(spec.data, "transformA"), text(spec.data, "transformB")}
+        names = self.handler_bone_names(spec.data, twist_constraint.RED_TYPE)
         names.update(
             text(output, "twistedTransform")
             for output in spec.data.get("outputs", ()) or ()

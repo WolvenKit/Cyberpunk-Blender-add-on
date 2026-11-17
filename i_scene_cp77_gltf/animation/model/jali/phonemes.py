@@ -125,6 +125,6 @@ PHONEME_TO_VISEME = {
 }
 
 
-def _get_viseme(phoneme: str) -> str:
+def get_viseme(phoneme: str) -> str:
 
     return PHONEME_TO_VISEME.get(phoneme.rstrip("012"), phoneme)

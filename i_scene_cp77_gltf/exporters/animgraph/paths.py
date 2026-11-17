@@ -27,7 +27,7 @@ def _path_parts(path: str) -> list[tuple[str, int | None]]:
     return out
 
 
-def _ensure_list_size(values: list[Any], index: int) -> None:
+def ensure_list_size(values: list[Any], index: int) -> None:
     while len(values) <= index:
         values.append({})
 
@@ -59,7 +59,7 @@ def set_json_path(root: dict[str, Any], path: str, value: Any) -> None:
             if not isinstance(current, list):
                 current = []
                 obj[name] = current
-            _ensure_list_size(current, idx)
+            ensure_list_size(current, idx)
             if last:
                 current[idx] = value
                 return
@@ -136,7 +136,7 @@ def _socket_links(socket: Any) -> list[Any]:
     return list(by_target.get(socket.as_pointer(), ()))
 
 
-def _link_source_handle(input_socket: bpy.types.NodeSocket) -> str:
+def link_source_handle(input_socket: bpy.types.NodeSocket) -> str:
     links = _socket_links(input_socket)
     visited = set()
     while links:
@@ -163,9 +163,9 @@ def _link_source_handle(input_socket: bpy.types.NodeSocket) -> str:
     return str(get_attr(input_socket, "red_source_handle", "") or "")
 
 
-def _encode_link_wrapper(input_socket: bpy.types.NodeSocket) -> dict[str, Any]:
+def encode_link_wrapper(input_socket: bpy.types.NodeSocket) -> dict[str, Any]:
     link_type = str(get_attr(input_socket, "red_link_type", "") or "")
-    source_handle = _link_source_handle(input_socket)
+    source_handle = link_source_handle(input_socket)
     wrapper: dict[str, Any] = {"$type": link_type or "animPoseLink"}
     if source_handle:
         wrapper["node"] = {"HandleRefId": str(source_handle)}
@@ -174,7 +174,7 @@ def _encode_link_wrapper(input_socket: bpy.types.NodeSocket) -> dict[str, Any]:
     return wrapper
 
 
-def _iter_exportable_input_sockets(
+def iter_exportable_input_sockets(
     node: bpy.types.Node,
 ) -> Iterable[bpy.types.NodeSocket]:
     for sock in getattr(node, "inputs", []) or []:
@@ -190,7 +190,7 @@ def _iter_exportable_input_sockets(
             yield sock
 
 
-def _json_path_get(root: Any, path: str) -> tuple[bool, Any]:
+def json_path_get(root: Any, path: str) -> tuple[bool, Any]:
     def resolve(use_wrappers: bool) -> tuple[bool, Any]:
         obj = root
         parts = _path_parts(path)

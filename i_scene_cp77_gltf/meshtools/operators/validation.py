@@ -14,22 +14,13 @@ def _request(context, *, try_fix):
     return MeshValidationRequest(
         is_skinned=bool(props.is_skinned),
         options=MeshValidationOptions(
-            advanced_validation=bool(props.advanced_validation),
+            check_unweighted_vertices=bool(props.check_unweighted_vertices),
+            check_unused_bones=bool(props.check_unused_bones),
+            check_unused_vertex_groups=bool(props.check_unused_vertex_groups),
             check_missing_uv=bool(props.check_missing_uv),
             check_degenerate_faces=bool(props.check_degenerate_faces),
             check_degenerate_uvs=bool(props.check_degenerate_uvs),
-            check_unweighted_vertices=bool(props.check_unweighted_vertices),
-            check_unused_bones=bool(props.check_unused_bones),
             try_fix=bool(try_fix),
-            fix_remove_unmatched_vertex_groups=bool(
-                props.fix_remove_unmatched_vertex_groups
-            ),
-            fix_apply_autofitter_shape_keys=bool(props.fix_apply_autofitter_shape_keys),
-            fix_add_missing_uv=bool(props.fix_add_missing_uv),
-            fix_dissolve_degenerate_faces=bool(props.fix_dissolve_degenerate_faces),
-            fix_dissolve_degenerate_uvs=bool(props.fix_dissolve_degenerate_uvs),
-            fix_assign_unweighted_vertices=bool(props.fix_assign_unweighted_vertices),
-            fix_remove_unused_bones=bool(props.fix_remove_unused_bones),
         ),
     )
 
@@ -69,16 +60,13 @@ class CP77_OT_ValidateGLBMeshes(Operator):
 
 class CP77_OT_FixGLBMeshes(Operator):
     bl_idname = "cp77.fix_glb_meshes"
-    bl_label = "Apply Selected GLB Fixes"
-    bl_description = "Apply enabled GLB export repairs to selected source meshes; this operation is undoable"
+    bl_label = "Fix GLB Export Problems"
+    bl_description = "Fix every problem the checks find on the selected meshes and name them for their submesh order"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
     def poll(cls, context):
         return _has_selected_mesh(context)
-
-    def invoke(self, context, event):
-        return context.window_manager.invoke_confirm(self, event)
 
     def execute(self, context):
         result = fix_selected_meshes(context, _request(context, try_fix=True))

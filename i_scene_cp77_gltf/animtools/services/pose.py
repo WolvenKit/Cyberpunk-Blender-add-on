@@ -24,9 +24,33 @@ from ...blender.rig_metadata import source_rig_paths
 from ...blender.skinning import move_skinned_rest_shapes
 from ...blender.transactions import transactional
 from ...core.log import get_logger
+from ..blender.rigify.forward import apply_follow_pose, forward_sync_enabled
+from ..blender.rigify.pairing import find_pair
+from ..blender.rigify.switches import selected_switch_channels
 
 _LOG = get_logger(__name__)
 _POSE_KEYING_SET = "WholeCharacterSelected"
+
+
+def _pose_channels(context, armature):
+    """The keying set's channels, with the switches of the Rigify limbs the selected controls belong to"""
+    channels = keying_set_channels(context, _POSE_KEYING_SET)
+    _source, rig = find_pair(armature)
+    selected = context.selected_pose_bones_from_active_object or ()
+    if armature != rig or not selected:
+        return channels
+    keyed = {(data_path, index) for _owner, data_path, index, _group in channels}
+    switches = selected_switch_channels(rig, (bone.name for bone in selected))
+    return channels + tuple(
+        channel for channel in switches if (channel[1], channel[2]) not in keyed
+    )
+
+
+def _key_pose(context, armature, channels, frame, *, following):
+    # A rig that follows its Rigify rig shows the followed pose, which its basis holds only once written there.
+    if following:
+        apply_follow_pose(armature)
+    insert_channel_keys(context, channels, frame)
 
 
 @transactional("Pose keyframing")
@@ -51,11 +75,18 @@ def insert_pose_keyframes(context, *, frame_all: bool) -> OperationResult:
                 False, "Armature has no animation data or action.", "ERROR"
             )
         # The Whole Character keying set decides which channels a pose keyframe holds.
-        channels = keying_set_channels(context, _POSE_KEYING_SET)
+        channels = _pose_channels(context, armature)
+        following = forward_sync_enabled(armature)
+        if following:
+            track_pose(armature, label="followed pose keyframes")
         # Keying nothing is no failure: Only Insert Needed skips unchanged channels, as Blender's own keying does.
         if not frame_all:
-            insert_channel_keys(
-                context, channels, scene.frame_current + scene.frame_subframe
+            _key_pose(
+                context,
+                armature,
+                channels,
+                scene.frame_current + scene.frame_subframe,
+                following=following,
             )
             return OperationResult(True, "Keyframe inserted at current frame.")
         action = armature.animation_data.action
@@ -66,7 +97,7 @@ def insert_pose_keyframes(context, *, frame_all: bool) -> OperationResult:
         try:
             for frame in range(start, end + 1):
                 scene.frame_set(frame)
-                insert_channel_keys(context, channels, frame)
+                _key_pose(context, armature, channels, frame, following=following)
                 count += 1
         finally:
             scene.frame_set(original_frame)

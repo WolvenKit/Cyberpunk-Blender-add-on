@@ -26,6 +26,7 @@ from ...blender.selection import selected_meshes
 from ...core.log import get_logger, log_once
 from ..blender.vehicle_authoring_state import ensure_axle_authoring
 from ..blender.vehicle_config import validate_vehicle, wheel_centers
+from ..runtime.vehicle_camera import start_vehicle_camera, stop_vehicle_camera
 
 _LOG = get_logger(__name__)
 
@@ -504,6 +505,13 @@ def autofit_vehicle_configuration(context):
     except Exception as error:
         return OperationResult.cancelled(str(error), error=error)
     return OperationResult.finished("Vehicle dimensions fitted from assigned meshes")
+
+
+def set_vehicle_game_camera(scene, enabled) -> bool:
+    if enabled:
+        return bool(start_vehicle_camera(scene))
+    stop_vehicle_camera(scene)
+    return False
 
 
 def validate_vehicle_configuration(context):

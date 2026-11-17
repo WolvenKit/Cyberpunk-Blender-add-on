@@ -3,13 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ...assetio.paths import depot_path_key
+from ...assetio.sector_model import NodeCategory
 from ...materials.repository import MATERIAL_IMAGE_EXTENSIONS
 from ..entity.policy import SHADOW_MESH_SUFFIX
 from ..entity.resources import (
     ENTITY_INDEX_EXTENSIONS,
     ENTITY_INK_INDEX_EXTENSIONS,
 )
-from .model import NodeCategory
 
 SECTOR_INDEX_EXTENSIONS = tuple(
     dict.fromkeys(

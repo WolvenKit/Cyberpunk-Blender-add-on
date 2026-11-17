@@ -4,11 +4,9 @@ from pathlib import Path
 
 import bpy
 
-from ..assetio.files import read_bytes
-
 # The add-on's root package (this module lives one level below it), under which Blender keeps its preferences.
 ADDON_PACKAGE = __package__.rpartition(".")[0]
-RUNTIME_BUILD = (2, 5, 0)
+RUNTIME_BUILD = (2, 5, 5)
 _MANIFEST_PATH = Path(__file__).parents[1] / "blender_manifest.toml"
 
 
@@ -41,7 +39,7 @@ def get_addon_preferences(context=None, *, required=True):
 @lru_cache(maxsize=1)
 def get_addon_version():
     try:
-        version = tomllib.loads(read_bytes(_MANIFEST_PATH).decode("utf-8")).get(
+        version = tomllib.loads(_MANIFEST_PATH.read_bytes().decode("utf-8")).get(
             "version"
         )
     except (OSError, tomllib.TOMLDecodeError) as exc:

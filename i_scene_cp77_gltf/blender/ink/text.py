@@ -29,6 +29,11 @@ class BlenderFonts:
         self._ids: dict = {}
         self._metrics: dict = {}
 
+    def clear(self) -> None:
+        """Forget the loaded fonts, as opening a file frees the fonts scripts loaded"""
+        self._ids.clear()
+        self._metrics.clear()
+
     @staticmethod
     def _key(face):
         if face is None:

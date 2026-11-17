@@ -84,16 +84,15 @@ def _current_action_name(armature) -> str:
     return str(getattr(action, "name", "") or "")
 
 
-def _current_frame() -> float:
+def _current_frame(scene) -> float:
     """The scene's time, subframe included"""
-    scene = getattr(bpy.context, "scene", None)
     return float(getattr(scene, "frame_current", 0.0) or 0.0) + float(
         getattr(scene, "frame_subframe", 0.0) or 0.0
     )
 
 
-def _update_view_layer() -> None:
-    view_layer = getattr(bpy.context, "view_layer", None)
+def _update_view_layer(context) -> None:
+    view_layer = getattr(context, "view_layer", None)
     if view_layer is not None:
         view_layer.update()
 
@@ -110,7 +109,7 @@ def _snapshot_armature(owner):
     return bpy.data.objects.get(name) if name else None
 
 
-def _restore_snapshot(owner) -> tuple[int, int]:
+def _restore_snapshot(context, owner) -> tuple[int, int]:
     """Put back the pose captured by the last preview when it still matches the frame and Action"""
     raw = str(getattr(owner, "red_pose_preview_snapshot_json", "") or "")
     if not raw:
@@ -127,14 +126,14 @@ def _restore_snapshot(owner) -> tuple[int, int]:
         armature = bpy.data.objects.get(armature_name) if armature_name else None
     snapshot_is_current = (
         armature is not None
-        and abs(_current_frame() - float(metadata_value["frame"])) <= 1e-6
+        and abs(_current_frame(context.scene) - float(metadata_value["frame"])) <= 1e-6
         and _current_action_name(armature) == str(metadata_value["action"] or "")
     )
     restored_bones = apply_pose(armature, transforms) if snapshot_is_current else 0
     restored_tracks = restore_tracks(armature, tracks) if snapshot_is_current else 0
     _clear_snapshot_fields(owner)
     if restored_bones or restored_tracks:
-        _update_view_layer()
+        _update_view_layer(context)
     return restored_bones, restored_tracks
 
 
@@ -148,7 +147,7 @@ def has_preview(tree) -> bool:
 
 
 @transactional("AnimGraph pose preview restore")
-def clear_preview(tree) -> OperationResult:
+def clear_preview(context, tree) -> OperationResult:
     owner = rig_binding.binding_tree(tree)
     if owner is None:
         return OperationResult.finished(
@@ -158,7 +157,7 @@ def clear_preview(tree) -> OperationResult:
         )
     _track_binding_state(owner)
     _track_armature(_snapshot_armature(owner))
-    bones, tracks = _restore_snapshot(owner)
+    bones, tracks = _restore_snapshot(context, owner)
     return OperationResult.finished(
         f"Restored {bones} pose bone(s) and {tracks} track(s)",
         restored_bones=bones,
@@ -167,7 +166,7 @@ def clear_preview(tree) -> OperationResult:
 
 
 @transactional("AnimGraph pose preview")
-def evaluate_preview(tree, active_node) -> OperationResult:
+def evaluate_preview(context, tree, active_node) -> OperationResult:
     """Evaluate the pose chain ending at active_node onto the bound armature, keeping a restorable snapshot"""
     owner = rig_binding.binding_tree(tree)
     armature = rig_binding.bound_armature(owner)
@@ -179,7 +178,7 @@ def evaluate_preview(tree, active_node) -> OperationResult:
     _track_armature(_snapshot_armature(owner))
     _track_armature(armature)
     try:
-        _restore_snapshot(owner)
+        _restore_snapshot(context, owner)
         plan = prepare_chain(owner, active_node, armature, validate=True)
         base_pose = capture_pose(armature, plan.required_bones)
         track_snapshot = capture_tracks(armature, plan.requested_tracks)
@@ -188,7 +187,7 @@ def evaluate_preview(tree, active_node) -> OperationResult:
             armature,
             base_pose,
             track_snapshot,
-            frame=_current_frame(),
+            frame=_current_frame(context.scene),
             action_name=_current_action_name(armature),
         )
         owner.red_pose_preview_node = str(getattr(active_node, "name", "") or "")
@@ -203,7 +202,7 @@ def evaluate_preview(tree, active_node) -> OperationResult:
         f"{track_count} track(s), {execution.dynamic_weights} dynamic weight(s)"
     )
     owner.red_pose_preview_status = status
-    _update_view_layer()
+    _update_view_layer(context)
     return OperationResult.finished(
         status,
         evaluated_nodes=len(plan.chain),
@@ -215,14 +214,14 @@ def evaluate_preview(tree, active_node) -> OperationResult:
 
 
 @transactional("AnimGraph armature binding")
-def bind_armature(tree, armature) -> OperationResult:
+def bind_armature(context, tree, armature) -> OperationResult:
     """Clear any pose preview, then bind the tree to armature (None clears the binding)"""
     owner = rig_binding.binding_tree(tree)
     if owner is None:
         return OperationResult.cancelled("AnimGraph tree is required")
     _track_binding_state(owner)
     _track_armature(_snapshot_armature(owner))
-    _restore_snapshot(owner)
+    _restore_snapshot(context, owner)
     rig_binding.bind_armature(tree, armature)
     if armature is None:
         return OperationResult.finished()

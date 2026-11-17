@@ -2,7 +2,7 @@ import bpy
 
 from ...animation.model.animgraph.constants import ANIMGRAPH_TREE_ID
 from ...core.log import get_logger
-from . import node_lod, presenters
+from . import node_lod, presenters, sm_edit
 from .properties import (
     AIM_UP_CHANNEL_ITEMS,
     REDengine_AnimNodeProperty,
@@ -10,11 +10,8 @@ from .properties import (
     REDengine_SimpleBounceTrackOutput,
     REDengine_SimpleBounceTransformOutput,
 )
-from .sm_properties import (
-    INTERPOLATION_TYPE_ITEMS,
-    REDengine_SMStateRef,
-    REDengine_SMTransition,
-)
+from .sm_model import INTERPOLATION_TYPE_ITEMS
+from .sm_properties import REDengine_SMStateRef, REDengine_SMTransition
 
 _LOG = get_logger(__name__)
 
@@ -22,8 +19,6 @@ _LOG = get_logger(__name__)
 def _on_copied(node, original) -> None:
     """Node.copy for AnimGraph nodes"""
     try:
-        from . import sm_edit
-
         sm_edit.on_node_copied(node, original)
     except Exception:
         _LOG.exception(

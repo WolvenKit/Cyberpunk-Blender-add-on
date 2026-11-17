@@ -15,7 +15,7 @@ class EyeShadow(MaterialTypeBase):
         mask_path = param_texture_path(data, "Mask")
         if not mask_path:
             return
-        image = self._load_relative_image(mask_path, non_color=True, error_label="Mask")
+        image = self.load_relative_image(mask_path, non_color=True, error_label="Mask")
         if image is None:
             return
 

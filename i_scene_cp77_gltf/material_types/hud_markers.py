@@ -612,7 +612,7 @@ def _mask_group():
 class HUDMarkers(MaterialTypeBase):
     """Preview the metadata-selected HUD pixel shader in Eevee and Cycles"""
 
-    def _load_relative_image(
+    def load_relative_image(
         self, path, *, non_color=False, reject_suffixes=(), error_label="HUD marker"
     ):
         """Resolve project overrides before reusing an image already loaded from the depot"""
@@ -627,7 +627,7 @@ class HUDMarkers(MaterialTypeBase):
             )
             if resolved:
                 return imageFromFilePath(resolved, isNormal=non_color)
-        return super()._load_relative_image(
+        return super().load_relative_image(
             path,
             non_color=non_color,
             reject_suffixes=reject_suffixes,
@@ -753,9 +753,7 @@ class HUDMarkers(MaterialTypeBase):
         diffuse_path = coerce_texture_path(
             lookup_param(data, "Diffuse", _GRADIENT if vision else _LINE)
         )
-        image = self._load_relative_image(
-            diffuse_path, error_label="HUD marker Diffuse"
-        )
+        image = self.load_relative_image(diffuse_path, error_label="HUD marker Diffuse")
         samples = []
         for index, extension in enumerate(("EXTEND", "REPEAT")):
             sample = new_labeled_node(

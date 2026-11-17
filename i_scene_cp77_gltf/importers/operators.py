@@ -18,27 +18,38 @@ from bpy.types import (
 from bpy_extras.io_utils import ImportHelper
 
 from ..animation.model.animgraph.constants import ANIMGRAPH_FILE_FILTER
+from ..animation.services.rig.repository import (
+    register_stored_rig_documents,
+    unregister_stored_rig_documents,
+)
 from ..assetio.cache import store_bounded
-from ..assetio.documents import DocumentSession, FileIdentity
+from ..assetio.documents import FileIdentity
 from ..assetio.index import IndexPolicy
 from ..assetio.paths import absolute_local_path_key, material_sidecar_path
 from ..blender.gpu_backend import opengl_shader_warning
 from ..blender.import_hooks import after_import, before_import
-from ..blender.selection import select_objects
+from ..blender.operator_results import finish_operator
+from ..blender.rig_metadata import (
+    default_rig_part,
+    rig_part_items,
+    stored_rig_part_document,
+)
 from ..blender.transactions import (
     BlenderImportTransaction,
     raise_if_rollback_incomplete,
 )
 from ..blender.world_origin import has_world_offset, recentre_objects, world_offset
+from ..blender.workspace import show_graph
 from ..core.addon_identity import get_addon_preferences
 from ..core.log import debug_exception, get_logger, log_once
 from ..core.notifications import import_operation, report
 from ..core.registration import RegistrationLedger, get_classes
 from ..cyber_props import SetCyclesRenderer, SetVulkanBackend
-from ..gltf.provenance import inspect_glb
 from ..icons.cp77_icons import get_icon
-from ..materials.repository import MaterialResourceRepository
+from ..materials.blender.images import DEFAULT_IMAGE_FORMAT
 from ..materials.resources import load_material_bundle
+from .animation.mocap import import_mocap_to_armature
+from .animgraph.graph_import import import_graph
 from .animgraph.parser import cancel_deferred_link_timers
 from .character.npz import (
     CP77_OT_LoadBaseCharacter,
@@ -49,20 +60,22 @@ from .character.npz import (
 from .common import appearance_list, dialog_model
 from .common.dialog_model import balanced_rows, category_property
 from .entity import dialog as entity_dialog
-from .entity.repository import EntityRepository
+from .entity.dialog_cache import clear_entity_appearance_cache, load_entity_for_dialog
+from .entity.execution import import_entity
+from .entity.options import EntityImportRequest
+from .entity.rigs import register_rig_cache_handlers, unregister_rig_cache_handlers
 from .materials.multilayer_setup import CP77ImportMLSetup
-from .mesh.external import import_external_glb
-from .mesh.orchestration import import_cyberpunk_glb, resolve_direct_animation_target
+from .mesh.batch import GlbBatchRequest, import_glb_files
+from .mesh.orchestration import resolve_direct_animation_target
 from .rig.reader import create_armature_from_data
 from .sector import dialog as sector_dialog
+from .sector.execution import import_sectors
 from .sector.options import DECAL_MODES, SECTOR_CHOICES
 
 _LOG = get_logger(__name__)
 
 _last_selected_entity_appearance = {}
 _last_selected_gltf_appearance = {}
-_entity_appearance_cache = {}
-_ENTITY_APPEARANCE_CACHE_LIMIT = 32
 # The rows of the dialog drawing its appearance list that its All Appearances toggle or "default" covers.
 _covered_rows = frozenset()
 
@@ -180,8 +193,6 @@ class CP77MocapImport(Operator, ImportHelper):
 
     @import_operation
     def execute(self, context):
-        from .animation.mocap import import_mocap_to_armature
-
         armature = context.active_object
         names = [entry.name for entry in self.files if entry.name] or [
             os.path.basename(self.filepath)
@@ -218,8 +229,6 @@ def _animgraph_armature_items(_self, context):
 
 
 def _animgraph_rig_part_items(self, _context):
-    from .animgraph.graph_import import rig_part_items
-
     armature = bpy.data.objects.get(self.armature)
     items = [
         (
@@ -266,9 +275,6 @@ class CP77AnimGraphImport(Operator, ImportHelper):
 
     @import_operation
     def execute(self, context):
-        from ..blender.workspace import show_graph
-        from .animgraph.graph_import import default_rig_part, import_graph
-
         armature = bpy.data.objects.get(self.armature)
         if armature is None or armature.type != "ARMATURE":
             report(
@@ -294,10 +300,6 @@ class CP77AnimGraphImport(Operator, ImportHelper):
         return {"FINISHED"}
 
 
-def _clear_entity_appearance_cache():
-    _entity_appearance_cache.clear()
-
-
 @bpy.app.handlers.persistent
 def _cancel_animgraph_link_timers_before_load(_unused=None):
     cancel_deferred_link_timers()
@@ -305,42 +307,12 @@ def _cancel_animgraph_link_timers_before_load(_unused=None):
 
 @bpy.app.handlers.persistent
 def _clear_entity_appearance_cache_before_load(_unused=None):
-    _clear_entity_appearance_cache()
-
-
-def _load_entity_for_ui(filepath):
-    if not filepath or not os.path.isfile(filepath):
-        return None
-    try:
-        source_identity = FileIdentity.from_path(filepath)
-    except OSError:
-        debug_exception(_LOG, "Could not read %s; the dialog shows no entity", filepath)
-        return None
-    normalized = source_identity.path.key
-    identity = (
-        normalized,
-        source_identity.mtime_ns,
-        source_identity.size,
-    )
-    cached = _entity_appearance_cache.get(identity)
-    if cached is not None:
-        return cached
-    for key in tuple(_entity_appearance_cache):
-        if key[0] == normalized:
-            _entity_appearance_cache.pop(key, None)
-    with DocumentSession() as documents:
-        entity = EntityRepository(documents).load(filepath, required=True)
-    return store_bounded(
-        _entity_appearance_cache,
-        identity,
-        entity,
-        limit=_ENTITY_APPEARANCE_CACHE_LIMIT,
-    )
+    clear_entity_appearance_cache()
 
 
 def get_appearance_items(self):
     try:
-        entity = _load_entity_for_ui(self.filepath)
+        entity = load_entity_for_dialog(self.filepath)
     except Exception as error:
         log_once(
             _LOG,
@@ -441,7 +413,7 @@ class CP77EntityImport(Operator, ImportHelper):
 
     def get_default_appearance_name(self):
         try:
-            entity = _load_entity_for_ui(self.filepath)
+            entity = load_entity_for_dialog(self.filepath)
         except Exception as error:
             log_once(
                 _LOG,
@@ -578,7 +550,9 @@ class CP77EntityImport(Operator, ImportHelper):
             categories=entity_dialog.CATEGORIES,
             choices=entity_dialog.ENTITY_CHOICES,
         )
-        entity_dialog.remember_state(get_addon_preferences(context), state)
+        if entity_dialog.remember_state(get_addon_preferences(context), state):
+            # Blender writes dirty preferences on quit, so the choices survive a restart.
+            context.preferences.is_dirty = True
 
         if state.materials:
             for message in (
@@ -610,8 +584,6 @@ class CP77EntityImport(Operator, ImportHelper):
         configured = str(cp77_addon_prefs.depotfolder_path or "")
         if configured and os.path.isdir(configured):
             depot_root = configured
-        from .entity.execution import import_entity
-        from .entity.options import EntityImportRequest
 
         before = before_import(context.scene)
         try:
@@ -845,8 +817,6 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
 
     @import_operation
     def execute(self, context):
-        from .sector.execution import import_sectors
-
         state = dialog_model.state_from_operator(
             self,
             sector_dialog.DialogState,
@@ -854,7 +824,8 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
             categories=sector_dialog.CATEGORIES,
             choices=SECTOR_CHOICES,
         )
-        sector_dialog.remember_state(get_addon_preferences(context), state)
+        if sector_dialog.remember_state(get_addon_preferences(context), state):
+            context.preferences.is_dirty = True
         options = state.options(remap_depot=context.scene.cp77_panel_props.remap_depot)
         if options.with_materials and (warning := opengl_shader_warning()):
             report(self, "WARNING", warning, logger=_LOG)
@@ -1016,7 +987,7 @@ class CP77Import(Operator, ImportHelper):
             (extension, extension.upper(), "")
             for extension in ("png", "dds", "jpg", "tga", "bmp", "jpeg")
         ),
-        default="png",
+        default=DEFAULT_IMAGE_FORMAT,
     )
     hide_armatures: BoolProperty(name="Hide Mesh Armatures", default=True)
     import_garmentsupport: BoolProperty(name="Import Garment Support", default=True)
@@ -1095,10 +1066,11 @@ class CP77Import(Operator, ImportHelper):
     def sync_appearance_rows(self):
         """Fill the rows when another file is chosen or its material sidecar changes"""
         chosen = self._chosen_file()
+        sidecar = material_sidecar_path(chosen) if chosen else ""
         try:
             identity = (
-                FileIdentity.from_path(material_sidecar_path(chosen)).key
-                if chosen
+                FileIdentity.from_path(sidecar).key
+                if sidecar and os.path.isfile(sidecar)
                 else None
             )
         except OSError:
@@ -1169,8 +1141,19 @@ class CP77Import(Operator, ImportHelper):
                 self, "ERROR", "Select at least one .glb or .gltf file.", logger=_LOG
             )
             return {"CANCELLED"}
-        # A file chosen without a check (a name typed and confirmed, or a scripted call) gets its rows here.
-        self.sync_appearance_rows()
+        # A file chosen without a check (a name typed and confirmed, or a scripted call) gets its rows here. A call
+        # that drew no rows keeps the All Appearances it was given.
+        drawn = getattr(self, "_appearance_identity", ("", None))[0]
+        all_appearances = self.all_appearances
+        if self.sync_appearance_rows():
+            if drawn:
+                _LOG.debug(
+                    "Appearance rows were drawn for %s but the import is of %s; its own rows are used.",
+                    drawn,
+                    self._chosen_file(),
+                )
+            else:
+                self.all_appearances = all_appearances
         chosen = self._chosen_file()
         appearances = ("default",)
         if chosen:
@@ -1202,92 +1185,21 @@ class CP77Import(Operator, ImportHelper):
                 report(self, "INFO", message, logger=_LOG)
             if warning := opengl_shader_warning():
                 report(self, "WARNING", warning, logger=_LOG)
-        imported, warnings, failures, objects = 0, [], [], []
-        with DocumentSession() as documents:
-            material_resources = MaterialResourceRepository(
-                documents,
-                image_index_policy=(
-                    IndexPolicy.REFRESH
-                    if self.refresh_asset_index
-                    else IndexPolicy.REUSE
-                ),
-            )
-            for path in paths:
-                try:
-                    inspection = inspect_glb(path)
-                    if inspection.content_kind.value == "empty":
-                        raise ValueError(
-                            "The file contains no mesh or animation payload."
-                        )
-                    if (
-                        not inspection.claims_cp77_origin
-                        and inspection.content_kind.value not in {"animation", "rig"}
-                    ):
-                        import_external_glb(path, inspection)
-                        objects.extend(context.selected_objects)
-                    else:
-                        if (
-                            inspection.claims_cp77_origin
-                            and not inspection.direct_import_supported
-                        ):
-                            raise ValueError(
-                                f"Unsupported CP77 payload: {inspection.content_kind.value}."
-                            )
-                        result = import_cyberpunk_glb(
-                            path,
-                            with_materials=props.with_materials,
-                            remap_depot=props.remap_depot,
-                            image_format=self.image_format,
-                            hide_armatures=self.hide_armatures,
-                            import_garmentsupport=self.import_garmentsupport,
-                            appearances=appearances,
-                            import_tracks=self.import_tracks,
-                            animation_target=target,
-                            content_kind=inspection.content_kind.value,
-                            document_session=documents,
-                            material_resources=material_resources,
-                            report_owner=self,
-                        )
-                        if result.failures:
-                            raise RuntimeError("; ".join(result.failures))
-                        warnings.extend(
-                            f"{os.path.basename(path)}: {message}"
-                            for message in result.warnings
-                        )
-                        for item in result:
-                            objects.extend(
-                                item.get("all_objects") or (item.get("armature"),)
-                            )
-                    imported += 1
-                except Exception as error:
-                    message = f"{os.path.basename(path)}: {error}"
-                    failures.append(message)
-                    _LOG.exception("Import failed: %s", message)
-        objects = list(
-            dict.fromkeys(
-                obj for obj in objects if obj is not None and not obj.hide_get()
-            )
+        request = GlbBatchRequest(
+            paths=paths,
+            appearances=appearances,
+            animation_target=target,
+            with_materials=props.with_materials,
+            remap_depot=props.remap_depot,
+            image_format=self.image_format,
+            hide_armatures=self.hide_armatures,
+            import_garmentsupport=self.import_garmentsupport,
+            import_tracks=self.import_tracks,
+            refresh_asset_index=self.refresh_asset_index,
         )
-        if objects:
-            select_objects(objects, clear=True, context=context)
-        for message in failures:
-            report(self, "WARNING" if imported else "ERROR", message, logger=_LOG)
-        if warnings:
-            report(
-                self,
-                "WARNING",
-                f"{len(warnings)} warning(s); first: {warnings[0]}",
-                logger=_LOG,
-            )
-        if imported:
-            report(
-                self,
-                "WARNING" if failures else "INFO",
-                f"Imported {imported} of {len(paths)} file(s).",
-                logger=_LOG,
-            )
-            return {"FINISHED"}
-        return {"CANCELLED"}
+        return finish_operator(
+            self, import_glb_files(context, request, report_owner=self)
+        )
 
 
 def menu_func_import(self, context):
@@ -1360,27 +1272,16 @@ def register_importers():
             bpy.app.handlers.load_pre,
             _clear_entity_appearance_cache_before_load,
         )
-        _LEDGER.add_cleanup(
-            "entity appearance UI cache", _clear_entity_appearance_cache
-        )
+        _LEDGER.add_cleanup("entity appearance UI cache", clear_entity_appearance_cache)
         _LEDGER.add_handler(
             bpy.app.handlers.load_pre, _cancel_animgraph_link_timers_before_load
         )
         _LEDGER.add_cleanup(
             "AnimGraph deferred link timers", cancel_deferred_link_timers
         )
-        from .entity.rigs import (
-            register_rig_cache_handlers,
-            unregister_rig_cache_handlers,
-        )
 
         register_rig_cache_handlers()
         _LEDGER.add_cleanup("rig cache handlers", unregister_rig_cache_handlers)
-        from ..animation.services.rig.repository import (
-            register_stored_rig_documents,
-            unregister_stored_rig_documents,
-        )
-        from ..blender.rig_metadata import stored_rig_part_document
 
         register_stored_rig_documents(stored_rig_part_document)
         _LEDGER.add_cleanup("stored rig documents", unregister_stored_rig_documents)

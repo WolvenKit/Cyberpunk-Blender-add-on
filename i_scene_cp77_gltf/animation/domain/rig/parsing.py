@@ -1,16 +1,10 @@
 import os
 from dataclasses import dataclass
-from enum import Enum
 
 from ....assetio.rig_validation import rig_array_errors
 from ....assetio.transform_values import parse_wkit_trs
 from ....assetio.values import cname_text
-from ...model.rig.data import RigData
-
-
-class RigParseMode(str, Enum):
-    IMPORT = "import"
-    FACIAL = "facial"
+from ...model.rig.data import RigData, RigParseMode
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,17 +12,12 @@ class RigParseOptions:
     mode: RigParseMode = RigParseMode.IMPORT
 
 
-def parse_rig_document(document, *, options=RigParseOptions()):
-    return parse_rig_payload(document.payload, document.source.value, options=options)
-
-
-def parse_rig_payload(payload, source_path, *, options=RigParseOptions()):
+def parse_rig_payload(payload, source_path, *, options=None):
     """A rig from the contents of a .rig.json export, source_path naming where it was exported"""
-    options = (
-        options
-        if isinstance(options, RigParseOptions)
-        else RigParseOptions(RigParseMode(options))
-    )
+    if options is None:
+        options = RigParseOptions()
+    elif not isinstance(options, RigParseOptions):
+        options = RigParseOptions(RigParseMode(options))
     root = payload["Data"]["RootChunk"]
     errors = rig_array_errors(root)
     if errors:

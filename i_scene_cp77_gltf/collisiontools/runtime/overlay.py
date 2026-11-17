@@ -1,5 +1,4 @@
 import bpy
-import gpu
 from gpu_extras.batch import batch_for_shader
 from mathutils import Matrix, Vector
 
@@ -9,7 +8,11 @@ from ...bartmoss.wireframes import (
     sphere_wireframe,
     wheel_wireframe,
 )
+from ...blender.context import with_context
+from ...blender.gpu_overlay import line_drawing, uniform_color_shader
+from ...blender.identity import rna_identity
 from ...blender.physics.cooked_shapes import decode_cooked_geometry
+from ...blender.physics.vehicle_chassis import vehicle_chassis_phys_objects
 from ...blender.physics.vehicle_geometry import basis_matrix
 from ...core.log import get_logger, log_once
 from ..blender.vehicle_config import vehicle_live_dynamics_config, vehicle_objects
@@ -18,8 +21,10 @@ from ..blender.vehicle_validation import resolved_game_config
 _LOG = get_logger(__name__)
 
 _handle = None
-_shader = None
 _cooked_line_cache = {}
+_dirty = True
+_built_scene = None
+_batch = None
 LINE_COLOR = (0.0, 1.0, 0.0, 1.0)
 
 
@@ -65,7 +70,6 @@ def _append_vehicle_visualization(context, all_verts, all_indices, depsgraph=Non
     frame = rigid_world @ basis
     actor_frame = frame @ Matrix.Translation(Vector(vehicle.chassis_shape_offset))
     dimensions = Vector(vehicle.chassis_dims) * 0.5
-    from ...blender.physics.vehicle_chassis import vehicle_chassis_phys_objects
 
     if not vehicle_chassis_phys_objects(context.scene, getattr(vehicle, "rig", None)):
         local_verts, local_lines = _collect_primitive_lines("BOX", dimensions)
@@ -282,31 +286,40 @@ def _build_visualization_data(context):
     return all_verts, all_indices
 
 
-def _draw_lines(shader, vertices, indices, color):
-    if not vertices or not indices:
+def mark_overlay_dirty():
+    global _dirty
+    _dirty = True
+
+
+def _overlay_batch(context, shader):
+    global _dirty, _built_scene, _batch
+    scene = rna_identity(context.scene)
+    if _dirty or scene != _built_scene:
+        vertices, indices = _build_visualization_data(context)
+        _batch = (
+            batch_for_shader(shader, "LINES", {"pos": vertices}, indices=indices)
+            if vertices and indices
+            else None
+        )
+        _built_scene, _dirty = scene, False
+    return _batch
+
+
+def _draw_callback(context):
+    if not context.scene.physx.viz_enabled:
         return
-    batch = batch_for_shader(shader, "LINES", {"pos": vertices}, indices=indices)
-    shader.bind()
-    shader.uniform_float("color", color)
-    shader.uniform_float(
-        "ModelViewProjectionMatrix", bpy.context.region_data.perspective_matrix
-    )
-    batch.draw(shader)
-
-
-def _draw_callback():
-    scene = bpy.context.scene
-    if not scene.physx.viz_enabled:
-        return
-
-    global _shader
-    # World-space vertices are rebuilt on every draw so the overlay follows moving transforms.
-    all_verts, all_indices = _build_visualization_data(bpy.context)
-    if _shader is None:
-        _shader = gpu.shader.from_builtin("UNIFORM_COLOR")
     try:
-        gpu.state.blend_set("ALPHA")
-        _draw_lines(_shader, all_verts, all_indices, LINE_COLOR)
+        shader = uniform_color_shader()
+        batch = _overlay_batch(context, shader)
+        if batch is None:
+            return
+        with line_drawing():
+            shader.bind()
+            shader.uniform_float("color", LINE_COLOR)
+            shader.uniform_float(
+                "ModelViewProjectionMatrix", context.region_data.perspective_matrix
+            )
+            batch.draw(shader)
     except (ReferenceError, RuntimeError, TypeError, ValueError) as error:
         log_once(
             _LOG,
@@ -315,11 +328,6 @@ def _draw_callback():
             "PhysX viewport draw failed: %s",
             error,
         )
-    finally:
-        gpu.state.point_size_set(1.0)
-        gpu.state.line_width_set(1.0)
-        gpu.state.depth_test_set("NONE")
-        gpu.state.blend_set("NONE")
 
 
 def register_viz():
@@ -327,17 +335,18 @@ def register_viz():
     if _handle is not None:
         unregister_viz()
     _handle = bpy.types.SpaceView3D.draw_handler_add(
-        _draw_callback, (), "WINDOW", "POST_VIEW"
+        with_context(_draw_callback), (), "WINDOW", "POST_VIEW"
     )
 
 
 def unregister_viz():
-    global _handle, _shader
+    global _handle, _batch
     if _handle is not None:
         try:
             bpy.types.SpaceView3D.draw_handler_remove(_handle, "WINDOW")
         except (ReferenceError, RuntimeError, TypeError, ValueError):
             pass
     _handle = None
-    _shader = None
+    _batch = None
+    mark_overlay_dirty()
     _cooked_line_cache.clear()
