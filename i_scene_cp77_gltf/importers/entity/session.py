@@ -8,6 +8,7 @@ from ...assetio.diagnostics import IssueSeverity
 from ...assetio.documents import DocumentSession
 from ...assetio.index import IndexPolicy, build_asset_index
 from ...assetio.paths import LocalPath
+from ...blender.collections import MASTER_INSTANCES_COLLECTION
 from ...blender.transactions import track_collection_state, track_created_datablock
 from ...materials.repository import (
     MATERIAL_IMAGE_EXTENSIONS,
@@ -166,16 +167,16 @@ class EntityImportSession:
         return self
 
     def ensure_masters(self, bpy_module: Any, scene_collection: Any) -> Any:
-        masters = scene_collection.children.get("MasterInstances")
+        masters = scene_collection.children.get(MASTER_INSTANCES_COLLECTION)
         if masters is None:
-            masters = bpy_module.data.collections.get("MasterInstances")
+            masters = bpy_module.data.collections.get(MASTER_INSTANCES_COLLECTION)
         if masters is None:
             masters = track_created_datablock(
                 "collections",
-                bpy_module.data.collections.new("MasterInstances"),
+                bpy_module.data.collections.new(MASTER_INSTANCES_COLLECTION),
             )
         elif self.manage_master_visibility:
-            track_collection_state(masters, label="MasterInstances")
+            track_collection_state(masters, label=MASTER_INSTANCES_COLLECTION)
         # Instances render regardless; this only stops the masters themselves rendering.
         masters.hide_render = True
         if self.manage_master_visibility:

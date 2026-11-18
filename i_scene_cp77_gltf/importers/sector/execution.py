@@ -17,7 +17,7 @@ from ...assetio.sector_model import PlacedContent
 from ...assetio.streaming_sector import COOKED_PLAIN_TYPES
 from ...assetio.values import cname_text, coerce_int, json_array
 from ...bartmoss.matrix import flatten_matrix, matrix_is_identity
-from ...blender.collections import object_owners
+from ...blender.collections import MASTER_INSTANCES_COLLECTION, object_owners
 from ...blender.entity.transforms import (
     clear_pending_child_of_inverse_requests,
     flush_pending_child_of_inverse_requests,
@@ -2404,17 +2404,17 @@ def _import_sectors(session, *, progress=NO_PROGRESS):
 
     scene_collection = bpy.context.scene.collection
     track_collection_state(scene_collection, label="scene collection")
-    masters = scene_collection.children.get("MasterInstances")
+    masters = scene_collection.children.get(MASTER_INSTANCES_COLLECTION)
     masters_was_linked = masters is not None
     if masters is None:
-        masters = bpy.data.collections.get("MasterInstances")
+        masters = bpy.data.collections.get(MASTER_INSTANCES_COLLECTION)
     if masters is None:
         masters = track_created_datablock(
             "collections",
-            bpy.data.collections.new("MasterInstances"),
+            bpy.data.collections.new(MASTER_INSTANCES_COLLECTION),
         )
     else:
-        track_collection_state(masters, label="MasterInstances")
+        track_collection_state(masters, label=MASTER_INSTANCES_COLLECTION)
     masters.hide_viewport = False
     # Instances render regardless; this only stops the masters themselves rendering.
     masters.hide_render = True

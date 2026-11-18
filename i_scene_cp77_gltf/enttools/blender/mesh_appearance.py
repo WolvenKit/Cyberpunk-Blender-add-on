@@ -7,6 +7,7 @@ import bpy
 
 from ...assetio.paths import absolute_local_path_key
 from ...assetio.values import json_object, json_text
+from ...blender.collections import MASTER_INSTANCES_COLLECTION
 from ...blender.mesh import SOURCE_MESH_EXTRAS_KEY
 from ...blender.mesh_source import mesh_source
 from ...importers.common.mesh_assets import ensure_appearance_variants
@@ -14,7 +15,6 @@ from .apply import Part, material_names, parts
 from .scene import component_objects
 
 MESH_APPEARANCE_NAMES_KEY = "cp77_mesh_appearance_names"
-_MASTERS = "MasterInstances"
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,7 +31,7 @@ def _master(objects):
     """The imported mesh master (holding the mesh's appearance table) for a component's objects"""
     meshes = [obj for obj in objects if obj.type == "MESH"]
     source = mesh_source(meshes[0]) if meshes else None
-    masters = bpy.data.collections.get(_MASTERS)
+    masters = bpy.data.collections.get(MASTER_INSTANCES_COLLECTION)
     if source is None or masters is None or not source.glb_path:
         return None, None
     key = absolute_local_path_key(source.glb_path)

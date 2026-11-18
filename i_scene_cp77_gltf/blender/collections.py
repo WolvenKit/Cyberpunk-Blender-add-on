@@ -8,6 +8,8 @@ from .identity import rna_identity
 _LOG = get_logger(__name__)
 
 _TARGET_TYPES = Literal["MESH", "ARMATURE", "ALL"]
+# Holds the mesh and entity masters that sector and entity imports copy or instance.
+MASTER_INSTANCES_COLLECTION = "MasterInstances"
 
 
 def collection_parent_map():

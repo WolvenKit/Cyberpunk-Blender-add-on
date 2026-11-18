@@ -15,7 +15,7 @@ from mathutils import Matrix, Vector
 from ..assetio.values import coerce_float
 from ..bartmoss.vector3 import snapped_offset
 from ..redSpace.transforms import game_matrix_to_scene, scene_matrix_to_game
-from .collections import object_owners
+from .collections import MASTER_INSTANCES_COLLECTION, object_owners
 from .identity import rna_identity, rna_is_live
 from .keyframes import assigned_channelbags
 from .light_channels import shift_light_channel_records
@@ -80,8 +80,17 @@ def game_world_matrix(obj, offset) -> Matrix:
 
 
 def instance_source_collections():
-    """Identities of collections that collection instances copy, nested children included"""
+    """Identities of collections that collection instances copy, nested children included
+
+    The import masters collection counts too: imports copy masters as well as instancing them,
+    and the next import builds from the master's own matrix, so a master no instance points at
+    still must not move.
+    """
     sources = set()
+    masters = bpy.data.collections.get(MASTER_INSTANCES_COLLECTION)
+    if masters is not None:
+        sources.add(rna_identity(masters))
+        sources.update(rna_identity(child) for child in masters.children_recursive)
     for obj in bpy.data.objects:
         collection = (
             obj.instance_collection if obj.instance_type == "COLLECTION" else None

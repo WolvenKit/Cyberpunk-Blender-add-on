@@ -16,6 +16,7 @@ from ....assetio.paths import (
 )
 from ....assetio.sector_model import PROXY_PHASE
 from ....assetio.values import cname_text
+from ....blender.collections import MASTER_INSTANCES_COLLECTION
 from ....blender.naming import fit_id_name
 from ....blender.physics.actors import unregister_actors
 from ....blender.transactions import child_import_savepoint, rollback_import_child
@@ -880,7 +881,7 @@ class EntityMasterService:
                         **request_fields,
                         filepath=group["entpath"],
                         appearances=appearances,
-                        parent_collection_name="MasterInstances",
+                        parent_collection_name=MASTER_INSTANCES_COLLECTION,
                         animation_files=(),
                         parsed_entity=group["parsed"],
                         include_animations=False,
@@ -1055,7 +1056,7 @@ class EntityMasterService:
                     **master_options.request_fields(),
                     filepath=entpath,
                     appearances=(selected_appearance,),
-                    parent_collection_name="MasterInstances",
+                    parent_collection_name=MASTER_INSTANCES_COLLECTION,
                     animation_files=(),
                     parsed_entity=parsed_entity,
                     include_animations=False,
