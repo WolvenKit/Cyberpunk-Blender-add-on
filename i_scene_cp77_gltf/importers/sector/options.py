@@ -207,6 +207,10 @@ _CATEGORY_BY_NODE_TYPE = {
 DECAL_MODES = frozenset({"CONFORMAL", "LEGACY_PLANES", "PROJECTORS_ONLY"})
 EXISTING_SECTOR_MODES = frozenset({"ADD_MISSING", "REPLACE"})
 COLLECTION_LAYOUTS = frozenset({"SOURCE_NODES", "SECTOR"})
+# BASE shows the always-on nodes and imports each quest variant hidden; ALL shows every variant at once; SKIP leaves
+# the variants out.
+VARIANT_MODES = frozenset({"BASE", "ALL", "SKIP"})
+DEFAULT_VARIANT_MODE = "BASE"
 
 
 def classify_node_type(node_type):
@@ -223,6 +227,7 @@ class SectorImportOptions:
     remap_depot: bool = False
     import_proxies: bool = False
     selected_variant: int | None = None
+    variant_mode: str = DEFAULT_VARIANT_MODE
     scale_factor: float = 1.0
     existing_sector_mode: str = "ADD_MISSING"
     collection_layout: str = "SOURCE_NODES"
@@ -245,6 +250,10 @@ class SectorImportOptions:
                 f"Unsupported sector collection layout: {self.collection_layout}"
             )
         object.__setattr__(self, "collection_layout", layout)
+        variant_mode = str(self.variant_mode or DEFAULT_VARIANT_MODE).upper()
+        if variant_mode not in VARIANT_MODES:
+            raise ValueError(f"Unsupported sector variant mode: {self.variant_mode}")
+        object.__setattr__(self, "variant_mode", variant_mode)
         choices = frozenset(str(choice) for choice in self.choices)
         unknown = sorted(choices.difference(SECTOR_CHOICES))
         if unknown:
