@@ -3,6 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..common import dialog_model
+from ..common.destruction_chunks import (
+    DEFAULT_DESTRUCTION_CHUNKS,
+    DESTRUCTION_CHUNK_MODES,
+)
 from ..common.dialog_model import Category
 
 ENTITY_CHOICES = (
@@ -87,6 +91,8 @@ IMPORT_SETTINGS = (
     "shadow_meshes",
     "refresh_index",
 )
+# Every setting the dialog remembers: the IMPORT_SETTINGS switches and the destruction chunk mode.
+DIALOG_SETTINGS = (*IMPORT_SETTINGS, "destruction_chunks")
 _COLLISION_CHOICES = frozenset(
     {"collider_components", "mesh_colliders", "phys_collisions"}
 )
@@ -100,6 +106,7 @@ class EntityDialogState:
     occluders: bool
     shadow_meshes: bool
     refresh_index: bool
+    destruction_chunks: str
     categories: frozenset[str]
     choices: frozenset[str]
 
@@ -111,6 +118,7 @@ class EntityDialogState:
             occluders=False,
             shadow_meshes=False,
             refresh_index=False,
+            destruction_chunks=DEFAULT_DESTRUCTION_CHUNKS,
             categories=frozenset(),
             choices=STARTING_CHOICES,
         )
@@ -125,6 +133,7 @@ class EntityDialogState:
             text,
             cls.default(),
             flags=IMPORT_SETTINGS,
+            names={"destruction_chunks": frozenset(DESTRUCTION_CHUNK_MODES)},
             sets={"categories": CATEGORY_NAMES, "choices": frozenset(ENTITY_CHOICES)},
         )
 
@@ -163,6 +172,7 @@ class EntityDialogState:
             "include_mesh_colliders": "mesh_colliders" in chosen,
             "include_phys": "phys_collisions" in chosen,
             "include_inkwidgets": "screens" in chosen,
+            "destruction_chunks": self.destruction_chunks,
         }
 
 

@@ -70,6 +70,18 @@ from ...materials.blender.profiling import (
     material_profile_total,
 )
 from ..common.cache import acquire_material_cache, release_material_cache
+from ..common.destruction_chunks import (
+    FRACTURED_KEY as DESTRUCTION_FRACTURED_KEY,
+)
+from ..common.destruction_chunks import (
+    HIDDEN_KEY as DESTRUCTION_HIDDEN_KEY,
+)
+from ..common.destruction_chunks import (
+    apply_destruction_chunks,
+    configured_depot_root,
+    log_result,
+    unresolved_warning,
+)
 from ..common.progress import NO_PROGRESS, BlenderImportProgress
 from ..common.results import ImportResult, unique_messages
 from .context import (
@@ -843,7 +855,8 @@ def _new_static_instance_object(source, source_collection, *, color=None):
     # Assigning these updates the whole scene's layer and collection state (seconds over a sector's instances), even
     # when the value is unchanged; most masters keep the new object's defaults.
     try:
-        for name in ("display_type", "show_in_front", "hide_render"):
+        # hide_viewport carries the hidden fractured chunks of destruction meshes.
+        for name in ("display_type", "show_in_front", "hide_render", "hide_viewport"):
             value = getattr(source, name)
             if getattr(obj, name) != value:
                 setattr(obj, name, value)
@@ -883,6 +896,8 @@ def _new_static_instance_object(source, source_collection, *, color=None):
         "sourcePath",
         "cp77_imported_mesh",
         "cp77_single_material_submesh",
+        DESTRUCTION_FRACTURED_KEY,
+        DESTRUCTION_HIDDEN_KEY,
     ):
         try:
             if key in source:
@@ -2443,6 +2458,21 @@ def _import_sectors(session, *, progress=NO_PROGRESS):
             warn(message)
             warnings.append(message)
     entity_master_elapsed = time.perf_counter() - entity_master_started
+    # Mesh masters, their appearance copies and the entity masters built from them, before anything is placed.
+    try:
+        destruction = apply_destruction_chunks(
+            tuple(masters.all_objects),
+            options.destruction_chunks,
+            depot_root=configured_depot_root(),
+        )
+        log_result(destruction, "Sector")
+        if message := unresolved_warning(destruction["unresolved"]):
+            warn(message)
+            warnings.append(message)
+    except Exception as error:
+        message = f"Destruction chunk visibility was not applied: {error}"
+        warn(message, exc_info=True)
+        warnings.append(message)
     master_elapsed = time.perf_counter() - master_started
     progress.set(30.0, "Preparing sector placement", force=True)
     placement_operations = _create_placement_operations(warn)

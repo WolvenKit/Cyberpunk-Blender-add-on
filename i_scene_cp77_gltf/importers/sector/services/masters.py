@@ -332,6 +332,8 @@ class MasterOptions:
     proxies: bool
     inkwidgets: bool
     colliders: bool
+    # Re-applied to every master before placement, so it stays out of the master signature.
+    destruction_chunks: str = "INTACT"
 
     @classmethod
     def from_sector(cls, options):
@@ -345,6 +347,7 @@ class MasterOptions:
             proxies=bool(options.import_proxies),
             inkwidgets=chosen("screens"),
             colliders=chosen("entity_colliders"),
+            destruction_chunks=options.destruction_chunks,
         )
 
     def request_fields(self):
@@ -362,10 +365,15 @@ class MasterOptions:
             "include_entity_colliders": self.colliders,
             "include_phys": False,
             "include_shadow_meshes": False,
+            "destruction_chunks": self.destruction_chunks,
         }
 
     def tag(self, collection):
         collection["cp77_sector_entity_with_materials"] = self.with_materials
+
+
+# MasterOptions fields that do not change what an entity master holds.
+_UNSIGNED_MASTER_OPTIONS = frozenset({"destruction_chunks"})
 
 
 def _entity_master_signature(entpath, appearance, master_options):
@@ -377,6 +385,7 @@ def _entity_master_signature(entpath, appearance, master_options):
             *(
                 f"{field.name}={int(getattr(master_options, field.name))}"
                 for field in fields(master_options)
+                if field.name not in _UNSIGNED_MASTER_OPTIONS
             ),
         )
     )

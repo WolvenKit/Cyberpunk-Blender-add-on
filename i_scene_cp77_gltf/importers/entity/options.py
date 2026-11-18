@@ -6,6 +6,10 @@ from typing import Any
 
 from ...assetio.index import IndexPolicy
 from ...assetio.paths import local_path_key
+from ..common.destruction_chunks import (
+    DEFAULT_DESTRUCTION_CHUNKS,
+    normalize_destruction_mode,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +35,8 @@ class EntityImportRequest:
     keep_light_channel_volumes: bool | None = None
     include_shadow_meshes: bool = True
     include_inkwidgets: bool = False
+    # How destruction meshes show: "INTACT" hides their pre-fractured chunks, "ALL" shows every chunk.
+    destruction_chunks: str = DEFAULT_DESTRUCTION_CHUNKS
     include_facial_setup: bool = False
     include_facial_animations: bool = False
     parent_collection_name: str = ""
@@ -105,6 +111,11 @@ class EntityImportRequest:
             self, "include_shadow_meshes", bool(self.include_shadow_meshes)
         )
         object.__setattr__(self, "include_inkwidgets", bool(self.include_inkwidgets))
+        object.__setattr__(
+            self,
+            "destruction_chunks",
+            normalize_destruction_mode(self.destruction_chunks),
+        )
         object.__setattr__(
             self, "include_facial_setup", bool(self.include_facial_setup)
         )

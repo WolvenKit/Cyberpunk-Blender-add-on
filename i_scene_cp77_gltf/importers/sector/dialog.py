@@ -3,6 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..common import dialog_model
+from ..common.destruction_chunks import (
+    DEFAULT_DESTRUCTION_CHUNKS,
+    DESTRUCTION_CHUNK_MODES,
+)
 from ..common.dialog_model import Category
 from .options import (
     COLLECTION_LAYOUTS,
@@ -172,6 +176,7 @@ SECTOR_IMPORT_SETTINGS = (
     "existing_sectors",
     "collections",
     "variants",
+    "destruction_chunks",
 )
 
 
@@ -184,6 +189,7 @@ class DialogState:
     existing_sectors: str
     collections: str
     variants: str
+    destruction_chunks: str
     categories: frozenset[str]
     choices: frozenset[str]
 
@@ -197,6 +203,7 @@ class DialogState:
             existing_sectors="ADD_MISSING",
             collections="SOURCE_NODES",
             variants=DEFAULT_VARIANT_MODE,
+            destruction_chunks=DEFAULT_DESTRUCTION_CHUNKS,
             categories=frozenset(),
             choices=STARTING_CHOICES,
         )
@@ -216,6 +223,7 @@ class DialogState:
                 "existing_sectors": EXISTING_SECTOR_MODES,
                 "collections": COLLECTION_LAYOUTS,
                 "variants": VARIANT_MODES,
+                "destruction_chunks": frozenset(DESTRUCTION_CHUNK_MODES),
             },
             sets={"categories": CATEGORY_NAMES, "choices": frozenset(SECTOR_CHOICES)},
         )
@@ -233,6 +241,7 @@ class DialogState:
             existing_sector_mode=self.existing_sectors,
             collection_layout=self.collections,
             variant_mode=self.variants,
+            destruction_chunks=self.destruction_chunks,
             choices=self.effective_choices(),
         )
 
