@@ -6,7 +6,10 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from ...assetio.values import coerce_int
-from ...bartmoss.geometry import isolate_repeated_triangle_faces
+from ...bartmoss.geometry import (
+    drop_degenerate_triangles,
+    isolate_repeated_triangle_faces,
+)
 from ...gltf.accessors import FLOAT, GLTFAccessorReader
 from ...gltf.container import GLBContainerError, read_gltf_container
 from ...gltf.garment_support import (
@@ -761,6 +764,7 @@ def _decode_submesh(
                 )
     except ValueError as error:
         raise DirectMeshImportError(f"Mesh {name!r}: {error}") from error
+    decoded.triangles = drop_degenerate_triangles(decoded.triangles)
     source_indices, detached_triangles = isolate_repeated_triangle_faces(
         decoded.triangles, decoded.vertex_count
     )

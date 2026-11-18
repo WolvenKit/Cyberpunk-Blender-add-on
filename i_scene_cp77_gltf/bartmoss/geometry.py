@@ -31,6 +31,17 @@ def transform_normalized_direction_deltas(base, deltas, matrix):
     ]
 
 
+def drop_degenerate_triangles(triangles):
+    """Leave out the triangles that use a vertex more than once"""
+    triangles = np.asarray(triangles)
+    distinct = (
+        (triangles[:, 0] != triangles[:, 1])
+        & (triangles[:, 1] != triangles[:, 2])
+        & (triangles[:, 0] != triangles[:, 2])
+    )
+    return triangles if np.all(distinct) else triangles[distinct]
+
+
 def isolate_repeated_triangle_faces(triangles, vertex_count):
     """Detach repeated faces while retaining each corner's original vertex identity"""
     triangles = np.asarray(triangles)

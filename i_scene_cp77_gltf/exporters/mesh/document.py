@@ -15,7 +15,7 @@ from ...bartmoss.geometry import transform_normalized_direction_deltas
 from ...bartmoss.hierarchy import local_matrices_to_model
 from ...bartmoss.matrix import as_matrix_4x4, matrix_is_identity
 from ...bartmoss.weights import normalization_divisors
-from ...blender.custom_normals import set_custom_normals_from_corners
+from ...blender.custom_normals import normals_kept, set_custom_normals_at
 from ...blender.mesh import (
     MESH_SOURCE_REST_SNAPSHOT_KEY,
     SOURCE_GEOMETRY_SIGNATURE_KEY,
@@ -170,15 +170,16 @@ def _triangulate_ngons(mesh):
     """Split the faces of more than four corners into triangles, which tangents can be computed for"""
     if not _has_ngons(mesh):
         return
-    bm = bmesh.new()
-    try:
-        bm.from_mesh(mesh)
-        bmesh.ops.triangulate(
-            bm, faces=[face for face in bm.faces if len(face.verts) > 4]
-        )
-        bm.to_mesh(mesh)
-    finally:
-        bm.free()
+    with normals_kept(mesh, label=mesh.name):
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(mesh)
+            bmesh.ops.triangulate(
+                bm, faces=[face for face in bm.faces if len(face.verts) > 4]
+            )
+            bm.to_mesh(mesh)
+        finally:
+            bm.free()
 
 
 def _fill_missing_tangents(tangents, signs, normals, label):
@@ -541,10 +542,12 @@ def _morph_deltas_through_modifiers(
                     desired_normals /= np.maximum(
                         np.linalg.norm(desired_normals, axis=1, keepdims=True), 1e-12
                     )
-                    set_custom_normals_from_corners(
-                        obj.data, desired_normals, label=f"Morph {block.name}"
+                    set_custom_normals_at(
+                        obj.data,
+                        desired_normals,
+                        scratch,
+                        label=f"Morph {block.name}",
                     )
-                    obj.data.update()
                 depsgraph.update()
                 (
                     target_positions,
