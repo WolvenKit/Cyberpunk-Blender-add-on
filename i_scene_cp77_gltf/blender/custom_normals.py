@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import numpy as np
 
 from ..core.log import get_logger
 
 _LOG = get_logger(__name__)
 CUSTOM_NORMAL_ATTRIBUTE = "custom_normal"
+_CARRIED_NORMAL_ATTRIBUTE = "cp77_carried_normal"
 _NORMAL_EPSILON = 1.0e-12
 
 
@@ -83,7 +86,7 @@ def set_custom_normals_from_vertices(mesh, normals, *, label: str = "mesh") -> b
 
 
 def set_custom_normals_from_corners(mesh, normals, *, label: str = "mesh") -> bool:
-    """Store one custom normal per face corner that follows mesh deformation"""
+    """Store one custom normal per face corner"""
     return _set_custom_normals(
         mesh,
         normals,
@@ -91,3 +94,41 @@ def set_custom_normals_from_corners(mesh, normals, *, label: str = "mesh") -> bo
         expected_count=len(mesh.loops),
         label=label,
     )
+
+
+def corner_normals(mesh):
+    values = np.empty(len(mesh.loops) * 3, dtype=np.float32)
+    mesh.corner_normals.foreach_get("vector", values)
+    return values.reshape(-1, 3)
+
+
+def set_custom_normals_at(mesh, normals, positions, *, label: str = "mesh") -> bool:
+    """Set custom normals per face corner"""
+    current = np.empty(len(mesh.vertices) * 3, dtype=np.float32)
+    mesh.vertices.foreach_get("co", current)
+    mesh.vertices.foreach_set(
+        "co", np.ascontiguousarray(positions, dtype=np.float32).reshape(-1)
+    )
+    try:
+        return set_custom_normals_from_corners(mesh, normals, label=label)
+    finally:
+        mesh.vertices.foreach_set("co", current)
+        mesh.update()
+
+
+@contextmanager
+def normals_kept(mesh, *, label: str = "mesh"):
+    """Keep mesh's custom normals through a change to its faces"""
+    if not getattr(mesh, "has_custom_normals", False):
+        yield
+        return
+    carried = mesh.attributes.new(_CARRIED_NORMAL_ATTRIBUTE, "FLOAT_VECTOR", "CORNER")
+    carried.data.foreach_set("vector", corner_normals(mesh).reshape(-1))
+    try:
+        yield
+    finally:
+        carried = mesh.attributes[_CARRIED_NORMAL_ATTRIBUTE]
+        values = np.empty(len(carried.data) * 3, dtype=np.float32)
+        carried.data.foreach_get("vector", values)
+        mesh.attributes.remove(carried)
+        set_custom_normals_from_corners(mesh, values, label=label)

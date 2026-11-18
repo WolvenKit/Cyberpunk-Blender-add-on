@@ -4,15 +4,13 @@ import bpy
 import numpy as np
 
 from ..bartmoss.matrix import as_matrix_4x4
-from ..bartmoss.skinning import (
-    blended_vertex_matrices,
-    transform_normals,
-    transform_points,
-)
-from .custom_normals import CUSTOM_NORMAL_ATTRIBUTE
+from ..bartmoss.skinning import blended_vertex_matrices, transform_points
 from .identity import rna_is_live
 from .mesh import deform_weights
 from .transactions import track_mutation
+
+_A_POSE_ATTRIBUTE = ".cp77_a_pose_position"
+_RETURN_TOLERANCE = 1.0e-4
 
 
 def _vectors(collection, attribute):
@@ -21,16 +19,24 @@ def _vectors(collection, attribute):
     return values.reshape(-1, 3)
 
 
-def _free_normals(mesh):
-    """The mesh's free custom normals, which keep their direction when the surface under them moves"""
-    attribute = mesh.attributes.get(CUSTOM_NORMAL_ATTRIBUTE)
+def _held(mesh):
+    """The A-pose positions a T-pose switch kept for mesh, or None"""
+    attribute = mesh.attributes.get(_A_POSE_ATTRIBUTE)
     if (
         attribute is None
         or attribute.data_type != "FLOAT_VECTOR"
-        or attribute.domain not in {"POINT", "CORNER"}
+        or attribute.domain != "POINT"
     ):
         return None
-    return attribute
+    return _vectors(attribute.data, "vector")
+
+
+def _returned(positions, held):
+    """positions with each vertex left unedited in the T-pose back on its exact A-pose position"""
+    if held is None or held.shape != positions.shape:
+        return positions
+    unedited = np.all(np.abs(positions - held) <= _RETURN_TOLERANCE, axis=1)
+    return np.where(unedited[:, None], held, positions)
 
 
 def _skinned_meshes(armature):
@@ -85,26 +91,27 @@ def _vertex_deforms(obj, armature, bind_rest, rest):
 
 
 def _capture(mesh):
-    normals = _free_normals(mesh)
     return (
         _vectors(mesh.vertices, "co"),
         {key.name: _vectors(key.data, "co") for key in mesh.shape_keys.key_blocks}
         if mesh.shape_keys
         else {},
-        _vectors(normals.data, "vector") if normals is not None else None,
+        _held(mesh),
     )
 
 
-def _write(mesh, positions, keys, normals):
+def _write(mesh, positions, keys, held):
     mesh.vertices.foreach_set("co", np.asarray(positions, dtype=np.float32).ravel())
     for name, values in keys.items():
         mesh.shape_keys.key_blocks[name].data.foreach_set(
             "co", np.asarray(values, dtype=np.float32).ravel()
         )
-    if normals is not None:
-        _free_normals(mesh).data.foreach_set(
-            "vector", np.asarray(normals, dtype=np.float32).ravel()
-        )
+    attribute = mesh.attributes.get(_A_POSE_ATTRIBUTE)
+    if attribute is not None:
+        mesh.attributes.remove(attribute)
+    if held is not None:
+        kept = mesh.attributes.new(_A_POSE_ATTRIBUTE, "FLOAT_VECTOR", "POINT")
+        kept.data.foreach_set("vector", np.asarray(held, dtype=np.float32).ravel())
     mesh.update()
 
 
@@ -127,18 +134,17 @@ def move_skinned_rest_shapes(armature, bind_rest, rest, *, inverse=False):
         deforms = _vertex_deforms(obj, armature, bind_rest, rest)
         moves.append((obj.data, np.linalg.inv(deforms) if inverse else deforms))
     for mesh, deforms in moves:
-        positions, keys, normals = state = _capture(mesh)
+        positions, keys, held = state = _capture(mesh)
         _track(mesh, state)
-        if normals is not None and _free_normals(mesh).domain == "CORNER":
-            corners = np.empty(len(mesh.loops), dtype=np.int64)
-            mesh.loops.foreach_get("vertex_index", corners)
-            normals = transform_normals(normals, deforms[corners])
-        elif normals is not None:
-            normals = transform_normals(normals, deforms)
-        _write(
-            mesh,
-            transform_points(positions, deforms),
-            {name: transform_points(values, deforms) for name, values in keys.items()},
-            normals,
-        )
+        moved = transform_points(positions, deforms)
+        moved_keys = {
+            name: transform_points(values, deforms) for name, values in keys.items()
+        }
+        if not inverse:
+            _write(mesh, moved, moved_keys, positions)
+            continue
+        if mesh.shape_keys:
+            reference = mesh.shape_keys.reference_key.name
+            moved_keys[reference] = _returned(moved_keys[reference], held)
+        _write(mesh, _returned(moved, held), moved_keys, None)
     return len(moves)
