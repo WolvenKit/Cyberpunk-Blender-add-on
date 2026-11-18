@@ -53,7 +53,11 @@ def _written_sectors(scene, placements, parsed, layout, include_heightfields):
     written, warnings = [], []
     for collection in new_sector_collections(scene):
         sector = write_new_sector(
-            collection, sources, layout, include_heightfields=include_heightfields
+            collection,
+            sources,
+            layout,
+            include_heightfields=include_heightfields,
+            offset=placements.world_offset,
         )
         if sector is not None:
             written.append((collection.name, *sector))
@@ -68,7 +72,12 @@ def _written_sectors(scene, placements, parsed, layout, include_heightfields):
                     (
                         f"{what} of {source.sector_name}",
                         *write_generated_sector(
-                            source.sector_name, objects, source, layout, suffix
+                            source.sector_name,
+                            objects,
+                            source,
+                            layout,
+                            suffix,
+                            placements.world_offset,
                         ),
                     )
                 )

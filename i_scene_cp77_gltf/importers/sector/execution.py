@@ -17,6 +17,7 @@ from ...assetio.sector_model import PlacedContent
 from ...assetio.streaming_sector import COOKED_PLAIN_TYPES
 from ...assetio.values import cname_text, coerce_int, json_array
 from ...bartmoss.matrix import flatten_matrix, matrix_is_identity
+from ...blender.collections import object_owners
 from ...blender.entity.transforms import (
     clear_pending_child_of_inverse_requests,
     flush_pending_child_of_inverse_requests,
@@ -49,6 +50,12 @@ from ...blender.transactions import (
     track_collection_state,
     track_created_datablock,
     track_mutation,
+)
+from ...blender.world_origin import (
+    game_matrix,
+    recentre_for_import,
+    scene_matrix,
+    world_offset,
 )
 from ...core.addon_identity import get_addon_preferences
 from ...core.log import (
@@ -649,16 +656,21 @@ def _link_sector_composition(
 
 
 class _InstanceMatrixResolver:
-    __slots__ = ("_cache",)
+    """The world matrix of a node data entry in the scene's space, which offset moves game space by"""
 
-    def __init__(self):
+    __slots__ = ("_cache", "_offset")
+
+    def __init__(self, offset):
         self._cache = {}
+        self._offset = offset
 
     def __call__(self, instance, scale=1):
         key = (instance, float(scale))
         matrix = self._cache.get(key)
         if matrix is None:
-            matrix = self._cache[key] = instance_matrix(instance, scale)
+            matrix = self._cache[key] = scene_matrix(
+                self._offset, instance_matrix(instance, scale)
+            )
         return matrix
 
 
@@ -1438,18 +1450,6 @@ def _reclaim_free_names(renamed):
             index.add(original)
 
 
-def _object_owners():
-    """The collections holding each object, by the object's identity"""
-    owners = {}
-    for owner in (
-        *bpy.data.collections,
-        *(scene.collection for scene in bpy.data.scenes),
-    ):
-        for obj in owner.objects:
-            owners.setdefault(rna_identity(obj), []).append(owner)
-    return owners
-
-
 def _wide_collections(skipped=frozenset()):
     """The collections with more than _WIDE_COLLECTION children, but for those in skipped"""
     return [
@@ -1524,7 +1524,7 @@ def _remove_replaced_sector_content(replaced):
         if rna_identity(collection) not in kept
     ]
     doomed_ids = {rna_identity(collection) for collection in doomed_collections}
-    owners = _object_owners()
+    owners = object_owners()
     doomed_objects = [
         obj
         for obj in objects
@@ -1964,6 +1964,8 @@ def _place_copied_mesh_instances(
     scale,
     assign_properties,
     blueprint_cache,
+    instance_matrix,
+    offset,
     color=(0.3, 0.3, 0.3, 1),
     rotating=False,
     extra_props=None,
@@ -2031,7 +2033,9 @@ def _place_copied_mesh_instances(
             else:
                 assign_properties(placement_root, node, sector_name, **properties)
         if isinstance(new, bpy.types.Collection):
-            new["cp77_matrix"] = flatten_matrix(node_matrix).tolist()
+            new["cp77_matrix"] = flatten_matrix(
+                game_matrix(offset, node_matrix)
+            ).tolist()
             if target_collection.children.get(new.name) is not new:
                 target_collection.children.link(new)
         placed.append((new, placement_root, rotation_root, inst, instance_index))
@@ -2112,9 +2116,9 @@ def _assign_sector_collection_metadata(collection, parsed_sector, options):
     record_import_choices(collection, options)
 
 
-def _create_placement_operations(warning):
+def _create_placement_operations(warning, offset):
     property_assigner = NodePropertyAssigner()
-    matrix_resolver = _InstanceMatrixResolver()
+    matrix_resolver = _InstanceMatrixResolver(offset)
     blueprint_cache = {}
 
     def copy_collection_tree(*args, **kwargs):
@@ -2124,6 +2128,8 @@ def _create_placement_operations(warning):
     def place_copied_mesh_instances(**kwargs):
         kwargs["assign_properties"] = property_assigner
         kwargs["blueprint_cache"] = blueprint_cache
+        kwargs["instance_matrix"] = matrix_resolver
+        kwargs["offset"] = offset
         return _place_copied_mesh_instances(**kwargs)
 
     return SectorPlacementOperations(
@@ -2132,6 +2138,7 @@ def _create_placement_operations(warning):
         assign_custom_properties=property_assigner,
         instance_matrix=matrix_resolver,
         warning=warning,
+        world_offset=offset,
     )
 
 
@@ -2145,7 +2152,8 @@ def _unrecorded_placements(sector_collection):
     ]
 
 
-def _capture_import_matrices(placement_collections, matrix_objects):
+def _capture_import_matrices(placement_collections, matrix_objects, offset):
+    """Record where the import placed each collection and object, in game space as export compares it"""
     if not placement_collections and not matrix_objects:
         return
 
@@ -2173,7 +2181,7 @@ def _capture_import_matrices(placement_collections, matrix_objects):
             continue
         if first_object is not None:
             collection["cp77_matrix"] = flatten_matrix(
-                first_object.matrix_world
+                game_matrix(offset, first_object.matrix_world)
             ).tolist()
 
     seen = set()
@@ -2183,7 +2191,9 @@ def _capture_import_matrices(placement_collections, matrix_objects):
             continue
         seen.add(identity)
         try:
-            obj["cp77_matrix"] = flatten_matrix(object_world_matrix(obj)).tolist()
+            obj["cp77_matrix"] = flatten_matrix(
+                game_matrix(offset, object_world_matrix(obj))
+            ).tolist()
         except (AttributeError, ReferenceError, TypeError) as error:
             log_once(
                 _LOG,
@@ -2290,6 +2300,16 @@ def import_sectors(filepath, options, *, force_refresh=False, report_owner=None)
         )
 
 
+def _planned_positions(planned_sectors):
+    """The game position of every node data entry the import plans to place"""
+    return [
+        instance.position
+        for planned_sector in planned_sectors
+        for plan in planned_sector.ordered_placement_plans
+        for instance in plan.node.instances
+    ]
+
+
 @override_palette_batched
 def _import_sectors(session, *, progress=NO_PROGRESS):
     options = session.options
@@ -2321,6 +2341,13 @@ def _import_sectors(session, *, progress=NO_PROGRESS):
             label="sector import",
         )
     _set_sector_view_clip(options.scale_factor)
+    # Decided before anything is placed, so the new content is built in the scene's space and decals,
+    # light channels and near shadows work against what is already there in one space.
+    offset = tuple(
+        recentre_for_import(bpy.context.scene, _planned_positions(planned_sectors))
+        if options.recentre
+        else world_offset(bpy.context.scene)
+    )
 
     warnings = []
     existing_by_path = _existing_sector_collections()
@@ -2475,7 +2502,7 @@ def _import_sectors(session, *, progress=NO_PROGRESS):
     entity_master_elapsed = time.perf_counter() - entity_master_started
     master_elapsed = time.perf_counter() - master_started
     progress.set(30.0, "Preparing sector placement", force=True)
-    placement_operations = _create_placement_operations(warn)
+    placement_operations = _create_placement_operations(warn, offset)
 
     sector_collections = {}
     sector_collections_by_name = {}
@@ -2815,6 +2842,7 @@ def _import_sectors(session, *, progress=NO_PROGRESS):
         _capture_import_matrices(
             matrix_collections,
             matrix_objects,
+            offset,
         )
         finalization_timing["matrix_capture"] = time.perf_counter() - capture_started
     except Exception as error:

@@ -14,7 +14,6 @@ from ..operators.actions import (
 )
 from .lights import draw_lights
 from .sectors import draw_sectors
-from .world_origin import draw_world_origin
 
 
 def _draw_environment(layout, settings):
@@ -91,7 +90,6 @@ class CP77_PT_SceneTools(Panel):
     def draw(self, context):
         layout = self.layout
         draw_sectors(layout, context)
-        draw_world_origin(layout, context)
         header, body = layout.panel("cp77_scene_environment", default_closed=True)
         header.label(text="Environment")
         if body:

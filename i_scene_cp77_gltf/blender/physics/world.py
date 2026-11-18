@@ -14,6 +14,7 @@ from ...core.log import debug_exception, get_logger, log_once
 from ...physics.model.materials import resolve_physics_material
 from ..naming import fit_id_name
 from ..red_transforms import red_quaternion, transform_scale
+from ..world_origin import scene_matrix
 from .actors import add_shape_to_actor, create_actor_object
 from .objects import update_collision_bits
 
@@ -280,8 +281,12 @@ def import_world_collision_node(context):
                         context=context.blender_context,
                         actor_type="STATIC",
                     )
-                    actor_obj.matrix_world = Matrix.LocRotScale(
-                        actor.position, actor.rotation, Vector((1.0, 1.0, 1.0))
+                    # Actor transforms are world space, so they take the scene's offset themselves.
+                    actor_obj.matrix_world = scene_matrix(
+                        context.operations.world_offset,
+                        Matrix.LocRotScale(
+                            actor.position, actor.rotation, Vector((1.0, 1.0, 1.0))
+                        ),
                     )
 
                 shape_item = add_shape_to_actor(
@@ -352,7 +357,9 @@ def _create_heightfield_actor(context, instance, instance_index):
         actor_type="STATIC",
         visualization_enabled=False,
     )
-    obj.matrix_world = _actor_transform_matrix(data)
+    obj.matrix_world = scene_matrix(
+        context.operations.world_offset, _actor_transform_matrix(data)
+    )
 
     shape_item = add_shape_to_actor(
         obj,

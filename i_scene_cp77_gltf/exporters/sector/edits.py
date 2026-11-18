@@ -86,6 +86,7 @@ class _SectorHoldings:
         self.name = source.sector_name
         self.index = placements.index(collection)
         self.placements = placements
+        self.offset = placements.world_offset
         recorded = collection.get("cp77_imported_node_data")
         # An entry-less occluder records -1.
         self.imported = (
@@ -145,7 +146,7 @@ def _instances(node):
     )
 
 
-def _item_moves(entry, node, index):
+def _item_moves(entry, node, index, offset):
     """The moved actors or instances of a collision or instanced entry"""
     if node.node_type == _COLLISION:
         items, what = index.actors.get(entry, {}), "objects per actor"
@@ -154,7 +155,7 @@ def _item_moves(entry, node, index):
     moves = []
     for item, objects in sorted(items.items()):
         moved = _joint(
-            [moved_matrix(obj) for obj in objects],
+            [moved_matrix(obj, offset) for obj in objects],
             _apart(entry, node, len(objects), what),
         )
         if moved is not None:
@@ -182,7 +183,7 @@ def _instance_edits(entry, node, holdings):
             return NodeDeletion(entry, node_type), None
         deleted.update(missing)
     moves = []
-    for element, now, obj in _item_moves(entry, node, holdings.index):
+    for element, now, obj in _item_moves(entry, node, holdings.index, holdings.offset):
         if _scaled(node, obj):
             deleted.add(element)
             continue
@@ -225,7 +226,7 @@ def _actor_edits(entry, node, holdings):
         if actor >= 0 and not holdings.holds_actor(entry, actor)
     }
     moves = []
-    for actor, now, obj in _item_moves(entry, node, holdings.index):
+    for actor, now, obj in _item_moves(entry, node, holdings.index, holdings.offset):
         if _scaled(node, obj):
             deleted.add(actor)
             continue
@@ -261,7 +262,9 @@ def scaled_objects(collection, source, placements=None) -> tuple[bpy.types.Objec
         if node.node_type == _COLLISION or node.source_node_type == _DESTRUCTIBLE:
             found.extend(
                 obj
-                for _item, _now, obj in _item_moves(entry, node, index)
+                for _item, _now, obj in _item_moves(
+                    entry, node, index, placements.world_offset
+                )
                 if _scaled(node, obj)
             )
     return tuple(found)
@@ -284,14 +287,17 @@ def _group_edits(entry, instance, node, holdings):
         for obj in items
     ]
     if node.node_type == _OCCLUDER:
-        if any(moved_matrix(obj) is not None for obj in objects):
+        if any(moved_matrix(obj, holdings.offset) is not None for obj in objects):
             raise SectorExportError(
                 f"node data {entry} ({node_type}) cannot be moved, only deleted; put its instances back "
                 "where they were."
             )
         return None, None
     placement = _joint(
-        [moved_placement(obj, instance_matrix(instance)) for obj in objects],
+        [
+            moved_placement(obj, instance_matrix(instance), holdings.offset)
+            for obj in objects
+        ],
         (
             f"the instances of node data {entry} ({node_type}) move only together; move all of them as one or put them "
             "back where they were."
@@ -309,7 +315,10 @@ def _placement_edits(entry, instance, node, holdings):
         return NodeDeletion(entry, node_type), None
     roots = holdings.index.roots.get(entry, ())
     placement = _joint(
-        [moved_placement(root, instance_matrix(instance)) for root in roots],
+        [
+            moved_placement(root, instance_matrix(instance), holdings.offset)
+            for root in roots
+        ],
         _apart(entry, node, len(roots), "objects"),
     )
     if node.node_type == _LIGHT and _edited_light(entry, node, roots) is not None:

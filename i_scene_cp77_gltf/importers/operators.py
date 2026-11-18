@@ -38,8 +38,8 @@ from ..blender.transactions import (
     BlenderImportTransaction,
     raise_if_rollback_incomplete,
 )
-from ..blender.world_origin import has_world_offset, recentre_objects, world_offset
 from ..blender.workspace import show_graph
+from ..blender.world_origin import has_world_offset
 from ..core.addon_identity import get_addon_preferences
 from ..core.log import debug_exception, get_logger, log_once
 from ..core.notifications import import_operation, report
@@ -709,7 +709,7 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
     )
     recentre: BoolProperty(
         name="Recentre to Origin",
-        default=True,
+        default=False,
         options={"SKIP_SAVE"},
         description=(
             "Shift the imported sectors near Blender's origin by a whole-metre offset stored on the scene. "
@@ -781,7 +781,9 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
         grid = box.grid_flow(columns=2, even_columns=True, row_major=True)
         for name in ("materials", "proxies", "refresh_index"):
             grid.prop(self, name)
-        _draw_recentre(box, self, context.scene)
+        # A scene with an offset places every import by it, so there is nothing to choose.
+        if not has_world_offset(context.scene):
+            box.prop(self, "recentre")
         if get_addon_preferences(context).experimental_features:
             box.prop(context.scene.cp77_panel_props, "remap_depot")
 
@@ -831,7 +833,6 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
             report(self, "WARNING", warning, logger=_LOG)
         _LOG.debug("Sector import requested: %s", self.filepath)
         before = before_import(context.scene)
-        existing = {obj.as_pointer() for obj in bpy.data.objects}
         try:
             result = import_sectors(
                 self.filepath,
@@ -863,48 +864,8 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
                 logger=_LOG,
             )
         else:
-            if self.recentre or has_world_offset(context.scene):
-                _recentre_import(self, context.scene, existing)
             after_import(context.scene, before)
         return result.blender_status
-
-
-def _draw_recentre(layout, properties, scene):
-    if not has_world_offset(scene):
-        layout.prop(properties, "recentre")
-        return
-    offset = world_offset(scene)
-    row = layout.row()
-    row.enabled = False
-    row.label(
-        text=f"Recentred by scene offset ({offset.x:g}, {offset.y:g}, {offset.z:g})",
-        icon="PIVOT_CURSOR",
-    )
-
-
-def _recentre_import(owner, scene, existing):
-    """Move what the import added into the scene's recentred space"""
-    added = [
-        obj
-        for obj in scene.objects
-        if obj.as_pointer() not in existing and obj.library is None
-    ]
-    offset, shifted = recentre_objects(scene, added)
-    if offset is None:
-        return
-    _LOG.info(
-        "Recentred sector import by (%g, %g, %g): %d moved, %d templates kept, %d Child Of fixed",
-        *offset,
-        shifted.moved,
-        shifted.templates,
-        shifted.child_of_fixed,
-    )
-    report(
-        owner,
-        "INFO",
-        f"Sectors recentred by ({offset.x:g}, {offset.y:g}, {offset.z:g}); export adds it back",
-        logger=_LOG,
-    )
 
 
 # One toggle button per category and one tick per choice, labelled and described as the sector dialog model names them.

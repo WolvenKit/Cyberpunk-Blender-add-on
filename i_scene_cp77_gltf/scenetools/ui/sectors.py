@@ -3,7 +3,12 @@ from __future__ import annotations
 import bpy
 from bpy.types import UIList
 
+from ...blender.world_origin import has_world_offset
 from ..operators.sectors import CP77_OT_SceneAddNewSector, CP77_OT_SceneRemoveNewSector
+from ..operators.world_origin import (
+    CP77_OT_SceneRecentre,
+    CP77_OT_SceneRestoreWorldPosition,
+)
 from ..runtime.sectors import scene_sectors
 
 
@@ -40,16 +45,20 @@ class CP77_UL_NewSectors(UIList):
 
 
 def draw_sectors(layout, context):
-    """The Sectors section"""
+    """The Sectors section, also drawn for a recentred scene so it can be restored"""
     scene = context.scene
     sectors = scene_sectors(scene)
-    if not sectors.imported:
+    if not sectors.imported and not has_world_offset(scene):
         return
     header, body = layout.panel("cp77_scene_sectors", default_closed=True)
     header.label(text="Sectors")
     if not body:
         return
-    body.operator(CP77_OT_SceneAddNewSector.bl_idname, icon="ADD")
+    if sectors.imported:
+        body.operator(CP77_OT_SceneAddNewSector.bl_idname, icon="ADD")
+    row = body.row(align=True)
+    row.operator(CP77_OT_SceneRecentre.bl_idname, icon="PIVOT_CURSOR")
+    row.operator(CP77_OT_SceneRestoreWorldPosition.bl_idname, icon="LOOP_BACK")
     if sectors.new:
         body.template_list(
             "CP77_UL_NewSectors",

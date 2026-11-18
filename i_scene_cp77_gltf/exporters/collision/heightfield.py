@@ -12,7 +12,7 @@ from ...assetio.resources import get_resources_dir
 from ...assetio.streaming_sector import node_instance_entry, streaming_sector_document
 from ...assetio.transform_values import world_transform_entry
 from ...assetio.values import coerce_int, json_array
-from ...blender.world_origin import game_world_matrix
+from ...blender.world_origin import game_world_matrix, world_offset
 from ..sector.transforms import transform_values
 from .errors import CollisionExportError
 
@@ -59,9 +59,9 @@ def _geometry_holds_scale(obj):
     return obj.type == "MESH" and obj.physx.source_kind != _IMPORTED_KIND
 
 
-def _shape_world_matrix(obj, shape):
-    """The world matrix of shape, a rigid one"""
-    world = game_world_matrix(obj)
+def _shape_world_matrix(obj, shape, offset):
+    """The game-space world matrix of shape, a rigid one, in a scene recentred by offset"""
+    world = game_world_matrix(obj, offset)
     if _geometry_holds_scale(obj):
         undo = Vector(tuple(1.0 / value if value else 1.0 for value in obj.scale))
         world = world @ Matrix.Diagonal(undo).to_4x4()
@@ -83,8 +83,11 @@ def cooked_heightfield_shapes(obj):
             yield shape
 
 
-def terrain_collision_node(obj, shape):
-    """The worldTerrainCollisionNode of the cooked heightfield shape of obj and its entry's matrix"""
+def terrain_collision_node(obj, shape, offset):
+    """The worldTerrainCollisionNode of the cooked heightfield shape of obj and its entry's matrix
+
+    offset is the scene's world offset (world_offset), read once per export.
+    """
     try:
         rows, columns = heightfield_grid(shape.cooked_data)
     except ValueError as error:
@@ -104,7 +107,7 @@ def terrain_collision_node(obj, shape):
     data["materialIndices"] = _source_material_indices(shape)
     data["sourcePrefabHash"] = str(shape.heightfield_source_prefab_hash or "0")
 
-    location, rotation, _scale = _shape_world_matrix(obj, shape).decompose()
+    location, rotation, _scale = _shape_world_matrix(obj, shape, offset).decompose()
     data["actorTransform"] = world_transform_entry(
         location, (rotation.x, rotation.y, rotation.z, rotation.w)
     )
@@ -131,9 +134,10 @@ def export_selected_heightfields(context, filepath):
 
     if not filepath.lower().endswith(".streamingsector.json"):
         filepath += ".streamingsector.json"
+    offset = world_offset(context.scene)
     nodes, entries = [], []
     for index, (obj, shape) in enumerate(records):
-        node, matrix = terrain_collision_node(obj, shape)
+        node, matrix = terrain_collision_node(obj, shape, offset)
         nodes.append(node)
         entries.append(
             node_instance_entry(

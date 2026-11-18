@@ -191,7 +191,7 @@ class DialogState:
             materials=True,
             proxies=False,
             refresh_index=False,
-            recentre=True,
+            recentre=False,
             decal_mode="CONFORMAL",
             existing_sectors="ADD_MISSING",
             collections="SOURCE_NODES",
@@ -230,6 +230,7 @@ class DialogState:
             existing_sector_mode=self.existing_sectors,
             collection_layout=self.collections,
             choices=self.effective_choices(),
+            recentre=self.recentre,
         )
 
     def inactive_choices(self):

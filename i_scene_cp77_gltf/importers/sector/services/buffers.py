@@ -9,6 +9,7 @@ from ....assetio.transform_values import (
     world_position_from_data,
 )
 from ....assetio.values import nested_dict
+from ....blender.world_origin import scene_matrix
 
 
 def column_matrix(x_axis, y_axis, z_axis, translation):
@@ -40,8 +41,8 @@ def _matrix(position, orientation, scale=(1.0, 1.0, 1.0), scale_factor=1.0):
 
 class TransformBufferService:
     @staticmethod
-    def instanced_mesh_matrices(node_data, inner_index, scale_factor=1.0):
-        """The world matrices of the transforms one TransformRanges entry covers"""
+    def instanced_mesh_matrices(node_data, inner_index, scale_factor, offset):
+        """The world matrices of the transforms one TransformRanges entry covers, in a scene recentred by offset"""
         span = transform_range(node_data, inner_index)
         if span is None:
             return ()
@@ -53,11 +54,14 @@ class TransformBufferService:
             record = transforms[index] if isinstance(transforms[index], dict) else {}
             transform = nested_dict(record, "transform")
             matrices.append(
-                _matrix(
-                    transform.get("Position"),
-                    transform.get("Orientation"),
-                    vector3_from_data(record.get("scale"), (1.0, 1.0, 1.0)),
-                    scale_factor,
+                scene_matrix(
+                    offset,
+                    _matrix(
+                        transform.get("Position"),
+                        transform.get("Orientation"),
+                        vector3_from_data(record.get("scale"), (1.0, 1.0, 1.0)),
+                        scale_factor,
+                    ),
                 )
             )
         return tuple(matrices)
@@ -77,7 +81,8 @@ class TransformBufferService:
         return tuple(records) if isinstance(records, list) else ()
 
     @staticmethod
-    def occluder_matrix(record):
+    def occluder_matrix(record, offset):
+        """The world matrix of an occluder buffer entry, in a scene recentred by offset"""
         if not isinstance(record, dict):
             raise TypeError("occluder buffer entry must be a dictionary")
         columns = []
@@ -87,4 +92,4 @@ class TransformBufferService:
                 raise ValueError(f"occluder buffer entry has no {key}")
             columns.append(column)
 
-        return column_matrix(*columns)
+        return scene_matrix(offset, column_matrix(*columns))

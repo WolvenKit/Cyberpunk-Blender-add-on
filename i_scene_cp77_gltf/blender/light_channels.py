@@ -452,6 +452,43 @@ def retire_light_channel_volumes(owner_collection, volumes, *, node_of=None):
     return len(volumes)
 
 
+def shift_light_channel_records(collections, delta) -> int:
+    """Move the retired volumes the collections hold by delta in world space, and return how many moved
+
+    Only the world-space bounds and matrix move: a bone-bound record's bone_matrix is relative
+    to its bone, which moves with its rig.
+    """
+    moved = 0
+    for collection in collections:
+        if _RECORDS_PROPERTY not in collection:
+            continue
+        records = _read_records(collection)
+        for record in records:
+            try:
+                bounds = [
+                    [float(value) + delta[axis] for axis, value in enumerate(corner)]
+                    for corner in record["bounds"]
+                ]
+                matrix = record.get("matrix")
+                if matrix is not None:
+                    matrix = [[float(value) for value in row] for row in matrix]
+                    for axis in range(3):
+                        matrix[axis][3] += delta[axis]
+            except (KeyError, TypeError, ValueError, IndexError):
+                debug_exception(
+                    _LOG,
+                    "Light channel volume record of %s kept in place: it is unreadable",
+                    collection.name,
+                )
+                continue
+            record["bounds"] = bounds
+            if matrix is not None:
+                record["matrix"] = matrix
+            moved += 1
+        _write_records(collection, records, _read_rigs(collection))
+    return moved
+
+
 def clear_light_channel_records(collection, *, keep_components=False):
     """Drop the collection's records"""
     if _RECORDS_PROPERTY not in collection:

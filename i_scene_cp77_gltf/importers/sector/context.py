@@ -32,6 +32,8 @@ class SectorPlacementOperations:
     assign_custom_properties: Callable[..., None]
     instance_matrix: Callable[..., Any]
     warning: Callable[[str], None]
+    # The scene's world offset, which places the content in a recentred scene (blender/world_origin.py).
+    world_offset: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
 
 @dataclass(slots=True)

@@ -91,6 +91,18 @@ def red_matrix_to_gltf(matrix):
     return RED_TO_GLTF @ value @ GLTF_TO_RED
 
 
+def game_matrix_to_scene(offset, matrix):
+    """A game-space world matrix in a recentred scene, whose space is game space moved by offset"""
+    value = np.array(matrix, dtype=np.float64)
+    value[:3] += np.outer(np.asarray(offset, dtype=np.float64), value[3])
+    return value
+
+
+def scene_matrix_to_game(offset, matrix):
+    """A world matrix of a scene recentred by offset in game space"""
+    return game_matrix_to_scene(-np.asarray(offset, dtype=np.float64), matrix)
+
+
 def red_local_transform_to_current_bone(matrix):
     return RED_LOCAL_TO_BLENDER_BONE_CURRENT @ np.asarray(matrix, dtype=np.float64)
 

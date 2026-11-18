@@ -3,7 +3,7 @@ from mathutils import Matrix, Vector
 from ...assetio.transform_values import quaternion_ijkr_from_wxyz
 from ...assetio.values import nine_digit_float
 from ...bartmoss.matrix import placements_near, transfer_matrix_delta
-from ...blender.matrix import matrix_from_flat
+from ...blender.matrix import matrix_from_flat, object_world_matrix
 from ...blender.world_origin import game_world_matrix
 
 
@@ -12,12 +12,15 @@ def _recorded_matrix(obj):
     return matrix_from_flat(obj["cp77_matrix"]) if "cp77_matrix" in obj else None
 
 
-def moved_matrix(obj):
-    """The game-space world matrix obj has now when it moved since import, else None"""
+def moved_matrix(obj, offset):
+    """The game-space world matrix obj has now when it moved since import, else None
+
+    offset is the scene's world offset (world_offset), read once per export.
+    """
     recorded = _recorded_matrix(obj)
     if recorded is None:
         return None
-    now = game_world_matrix(obj)
+    now = game_world_matrix(obj, offset)
     return None if placements_near(now, recorded) else now
 
 
@@ -33,7 +36,8 @@ def scale_change(obj):
     recorded = _recorded_matrix(obj)
     if recorded is None:
         return None
-    now, then = game_world_matrix(obj).to_scale(), recorded.to_scale()
+    # A world offset only translates, so the scale needs no game-space matrix.
+    now, then = object_world_matrix(obj).to_scale(), recorded.to_scale()
     if scales_near(now, then):
         return None
     return Vector(
@@ -41,18 +45,20 @@ def scale_change(obj):
     )
 
 
-def placement_matrix(obj, placed):
-    """Where the world matrix placed lands for obj"""
+def placement_matrix(obj, placed, offset):
+    """Where the game-space world matrix placed lands for obj"""
     recorded = _recorded_matrix(obj)
-    now = game_world_matrix(obj)
+    now = game_world_matrix(obj, offset)
     if recorded is None:
         return now
     return Matrix(transfer_matrix_delta(now, recorded, placed).tolist())
 
 
-def moved_placement(obj, placed):
+def moved_placement(obj, placed, offset):
     """placement_matrix of obj and placed once obj moved, else None"""
-    return None if moved_matrix(obj) is None else placement_matrix(obj, placed)
+    if moved_matrix(obj, offset) is None:
+        return None
+    return placement_matrix(obj, placed, offset)
 
 
 def transform_values(matrix):

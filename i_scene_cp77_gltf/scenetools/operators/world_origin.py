@@ -2,21 +2,12 @@ from __future__ import annotations
 
 from bpy.types import Operator
 
+from ...blender.operator_results import execute_operation
 from ...blender.world_origin import (
+    has_world_offset,
     recentre_scene,
     restore_world_position,
 )
-from ...core.log import get_logger
-from ...core.notifications import report
-
-_LOG = get_logger(__name__)
-
-
-def _describe(offset, shifted):
-    return (
-        f"({offset.x:g}, {offset.y:g}, {offset.z:g}): {shifted.moved} objects moved, "
-        f"{shifted.templates} instance templates kept, {shifted.child_of_fixed} Child Of constraints adjusted"
-    )
 
 
 class CP77_OT_SceneRecentre(Operator):
@@ -30,12 +21,7 @@ class CP77_OT_SceneRecentre(Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        offset, shifted = recentre_scene(context.scene)
-        if offset is None:
-            report(self, "INFO", "The scene already sits near the origin", logger=_LOG)
-            return {"CANCELLED"}
-        report(self, "INFO", f"Recentred by {_describe(offset, shifted)}", logger=_LOG)
-        return {"FINISHED"}
+        return execute_operation(self, "Recentre scene", recentre_scene, context.scene)
 
 
 class CP77_OT_SceneRestoreWorldPosition(Operator):
@@ -46,13 +32,14 @@ class CP77_OT_SceneRestoreWorldPosition(Operator):
     )
     bl_options = {"REGISTER", "UNDO"}
 
+    @classmethod
+    def poll(cls, context):
+        return has_world_offset(context.scene)
+
     def execute(self, context):
-        offset, shifted = restore_world_position(context.scene)
-        if offset is None:
-            report(self, "INFO", "The scene is not recentred", logger=_LOG)
-            return {"CANCELLED"}
-        report(self, "INFO", f"Moved back by {_describe(offset, shifted)}", logger=_LOG)
-        return {"FINISHED"}
+        return execute_operation(
+            self, "Restore world position", restore_world_position, context.scene
+        )
 
 
 WORLD_ORIGIN_OPERATOR_CLASSES = (

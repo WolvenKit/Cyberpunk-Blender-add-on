@@ -12,6 +12,7 @@ from ....bartmoss.matrix import flatten_matrix
 from ....blender.naming import fit_id_name
 from ....blender.physics.actors import register_actors
 from ....blender.physics.world import import_world_collision_node
+from ....blender.world_origin import game_matrix
 from ....core.log import get_logger
 from ..context import (
     DeformationDataError,
@@ -111,7 +112,9 @@ class EntityPlacementHandler:
                 context.sector_name,
                 **shared_properties,
             )
-            new["cp77_matrix"] = flatten_matrix(node_matrix).tolist()
+            new["cp77_matrix"] = flatten_matrix(
+                game_matrix(context.operations.world_offset, node_matrix)
+            ).tolist()
             target_collection = context.collection_for_instance(instance)
             if target_collection.children.get(new.name) is not new:
                 target_collection.children.link(new)
@@ -287,6 +290,7 @@ class InstancedMeshPlacementHandler:
             context.node_entry.get("Data"),
             context.node.inner_index,
             context.execution.scale_factor,
+            context.operations.world_offset,
         )
         placed = 0
         for source in context.instances:
@@ -306,6 +310,7 @@ class InstancedMeshPlacementHandler:
                     collection,
                     matrix,
                     color=_INSTANCED_MESH_COLOR,
+                    offset=context.operations.world_offset,
                 )
                 context.operations.assign_custom_properties(
                     instance,
@@ -364,7 +369,9 @@ class InstancedOccluderPlacementHandler:
         placed = 0
         for element_index, record in enumerate(records):
             try:
-                matrix = context.transform_buffers.occluder_matrix(record)
+                matrix = context.transform_buffers.occluder_matrix(
+                    record, context.operations.world_offset
+                )
             except (TypeError, ValueError) as error:
                 context.operations.warning(
                     f"{context.sector_name}: instanced occluder node "
@@ -380,6 +387,7 @@ class InstancedOccluderPlacementHandler:
                 collection,
                 matrix,
                 color=_INSTANCED_OCCLUDER_COLOR,
+                offset=context.operations.world_offset,
             )
             context.operations.assign_custom_properties(
                 instance,
@@ -452,6 +460,7 @@ class InstancedDestructiblePlacementHandler:
                     collection,
                     final_matrix,
                     color=_INSTANCED_DESTRUCTIBLE_COLOR,
+                    offset=context.operations.world_offset,
                 )
                 context.operations.assign_custom_properties(
                     instance,
@@ -538,6 +547,7 @@ class FoliagePlacementHandler:
                     collection,
                     final_matrix,
                     color=_FOLIAGE_INSTANCE_COLOR,
+                    offset=context.operations.world_offset,
                 )
                 context.operations.assign_custom_properties(
                     instance,

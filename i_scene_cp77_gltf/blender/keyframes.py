@@ -127,11 +127,11 @@ _OBJECT_TRANSFORM_PATHS = frozenset(
 )
 
 
-def object_transform_animated(obj) -> bool:
-    """Whether the object's own placement is keyed, by its action or one in its NLA tracks"""
-    animation_data = getattr(obj, "animation_data", None)
+def assigned_channelbags(id_data):
+    """The channelbag of id_data's own slot in its action and in the action of each of its NLA strips"""
+    animation_data = getattr(id_data, "animation_data", None)
     if animation_data is None:
-        return False
+        return
     assigned = [(animation_data.action, animation_data.action_slot)]
     assigned.extend(
         (strip.action, strip.action_slot)
@@ -142,11 +142,17 @@ def object_transform_animated(obj) -> bool:
         if action is None or slot is None:
             continue
         channelbag = anim_utils.action_get_channelbag_for_slot(action, slot)
-        if channelbag is not None and any(
-            curve.data_path in _OBJECT_TRANSFORM_PATHS for curve in channelbag.fcurves
-        ):
-            return True
-    return False
+        if channelbag is not None:
+            yield channelbag
+
+
+def object_transform_animated(obj) -> bool:
+    """Whether the object's own placement is keyed, by its action or one in its NLA tracks"""
+    return any(
+        curve.data_path in _OBJECT_TRANSFORM_PATHS
+        for channelbag in assigned_channelbags(obj)
+        for curve in channelbag.fcurves
+    )
 
 
 def ensure_fcurve(action, id_data, data_path: str, index: int, group_name: str = ""):

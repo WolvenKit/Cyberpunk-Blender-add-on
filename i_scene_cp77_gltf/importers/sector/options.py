@@ -227,6 +227,8 @@ class SectorImportOptions:
     existing_sector_mode: str = "ADD_MISSING"
     collection_layout: str = "SOURCE_NODES"
     choices: frozenset[str] = frozenset()
+    # Place the content near Blender's origin by a world offset the scene keeps (blender/world_origin.py).
+    recentre: bool = False
 
     def __post_init__(self):
         mode = str(self.decal_mode or "CONFORMAL").upper()
