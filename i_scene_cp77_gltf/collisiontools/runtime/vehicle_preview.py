@@ -17,6 +17,7 @@ from ...blender.physics.vehicle_geometry import (
     basis_matrix,
     matrix_from_pose,
     vehicle_root,
+    wheel_visual_correction,
 )
 from ...core.log import get_logger
 from ...physics.domain.vehicle.gears import (
@@ -799,17 +800,12 @@ def _build_native_vehicle(scene, bridge, state, *, dynamic_state=None):
         rest_world = {
             field: wheel.matrix_world.copy() for field, wheel in state.wheels.items()
         }
-    # The native wheel centre can sit away from the visual hub (game wheelOffset and
-    # wheelsVerticalOffset). That gap stays in the actor frame so it never spins or
-    # steers with the wheel; only the rest rotation is applied in the wheel frame.
-    state.wheel_visual_corrections = {}
-    for index, (field, _label) in enumerate(wheel_fields):
-        correction = (
-            actor_frame_world @ Matrix.Translation(Vector(wheel_centers[index]))
-        ).inverted_safe() @ rest_world[field]
-        offset = Matrix.Translation(correction.translation)
-        correction.translation = (0.0, 0.0, 0.0)
-        state.wheel_visual_corrections[field] = (offset, correction)
+    state.wheel_visual_corrections = {
+        field: wheel_visual_correction(
+            actor_frame_world, wheel_centers[index], rest_world[field]
+        )
+        for index, (field, _label) in enumerate(wheel_fields)
+    }
     state.last_stats = {}
     state.last_telemetry_log_time = 0.0
     state.telemetry_invalid_reported = False
