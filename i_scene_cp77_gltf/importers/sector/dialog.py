@@ -7,8 +7,10 @@ from ..common.dialog_model import Category
 from .options import (
     COLLECTION_LAYOUTS,
     DECAL_MODES,
+    DEFAULT_VARIANT_MODE,
     EXISTING_SECTOR_MODES,
     SECTOR_CHOICES,
+    VARIANT_MODES,
     SectorImportOptions,
 )
 
@@ -169,6 +171,7 @@ SECTOR_IMPORT_SETTINGS = (
     "decal_mode",
     "existing_sectors",
     "collections",
+    "variants",
 )
 
 
@@ -180,6 +183,7 @@ class DialogState:
     decal_mode: str
     existing_sectors: str
     collections: str
+    variants: str
     categories: frozenset[str]
     choices: frozenset[str]
 
@@ -192,6 +196,7 @@ class DialogState:
             decal_mode="CONFORMAL",
             existing_sectors="ADD_MISSING",
             collections="SOURCE_NODES",
+            variants=DEFAULT_VARIANT_MODE,
             categories=frozenset(),
             choices=STARTING_CHOICES,
         )
@@ -210,6 +215,7 @@ class DialogState:
                 "decal_mode": DECAL_MODES,
                 "existing_sectors": EXISTING_SECTOR_MODES,
                 "collections": COLLECTION_LAYOUTS,
+                "variants": VARIANT_MODES,
             },
             sets={"categories": CATEGORY_NAMES, "choices": frozenset(SECTOR_CHOICES)},
         )
@@ -226,6 +232,7 @@ class DialogState:
             import_proxies=self.proxies,
             existing_sector_mode=self.existing_sectors,
             collection_layout=self.collections,
+            variant_mode=self.variants,
             choices=self.effective_choices(),
         )
 

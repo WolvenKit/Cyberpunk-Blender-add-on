@@ -69,7 +69,12 @@ from .mesh.orchestration import resolve_direct_animation_target
 from .rig.reader import create_armature_from_data
 from .sector import dialog as sector_dialog
 from .sector.execution import import_sectors
-from .sector.options import DECAL_MODES, SECTOR_CHOICES
+from .sector.options import (
+    DECAL_MODES,
+    DEFAULT_VARIANT_MODE,
+    SECTOR_CHOICES,
+    VARIANT_MODES,
+)
 
 _LOG = get_logger(__name__)
 
@@ -671,6 +676,25 @@ _DECAL_MODE_TEXT = {
     ),
 }
 
+# The label and tooltip of each sector variant mode.
+_VARIANT_MODE_TEXT = {
+    "BASE": (
+        "Base Only",
+        (
+            "Show the sector's always-on nodes. Quest variants (alternate states of the same place, such as "
+            "different furniture or lighting) are imported into hidden _Variants collections you can switch on"
+        ),
+    ),
+    "ALL": (
+        "All Variants",
+        "Show every quest variant at once. Variants of the same place overlap each other",
+    ),
+    "SKIP": (
+        "Skip Variants",
+        "Import only the always-on nodes and leave the quest variants out",
+    ),
+}
+
 
 class CP77StreamingSectorImport(Operator, ImportHelper):
     bl_idname = "io_scene_gltf.cp77sector"
@@ -710,6 +734,15 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
         name="Projected Decals",
         items=tuple((mode, *_DECAL_MODE_TEXT[mode]) for mode in sorted(DECAL_MODES)),
         default="CONFORMAL",
+        options={"SKIP_SAVE"},
+    )
+    variants: EnumProperty(
+        name="Variants",
+        items=tuple(
+            (mode, *_VARIANT_MODE_TEXT[mode])
+            for mode in sorted(VARIANT_MODES, key=tuple(_VARIANT_MODE_TEXT).index)
+        ),
+        default=DEFAULT_VARIANT_MODE,
         options={"SKIP_SAVE"},
     )
     existing_sectors: EnumProperty(
@@ -766,6 +799,7 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
         column = box.column()
         column.prop(self, "existing_sectors")
         column.prop(self, "collections")
+        column.prop(self, "variants")
         column.prop(self, "decal_mode")
         grid = box.grid_flow(columns=2, even_columns=True, row_major=True)
         for name in ("materials", "proxies", "refresh_index"):
