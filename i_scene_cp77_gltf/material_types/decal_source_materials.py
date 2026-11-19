@@ -5,7 +5,13 @@ from ..bartmoss.geometry import calc_subuv_offset
 from ..blender import shader_nodes
 from .bundles import decal_uv_transform_socket, smoothstep_socket
 from .decal_nodes import new_material_graph, red_channel, set_transparent, decal_texture
-from .graph import mix_color_socket, mix_scalar_socket, rgb_socket, value_socket
+from .graph import (
+    add_displacement,
+    mix_color_socket,
+    mix_scalar_socket,
+    rgb_socket,
+    value_socket,
+)
 from .mat_common import (
     MaterialTypeBase,
     find_input,
@@ -156,17 +162,16 @@ class TrailDecal(MaterialTypeBase):
             alpha = value_socket(nodes, "Trail Alpha Fallback", 0.0, (1260, 260))
         links.new(alpha, find_input(principled, "Alpha"))
 
-        depth_offset = param_float(data, "DepthOffset", 0.0)
-        if abs(depth_offset) > 1.0e-12:
-            displacement = new_labeled_node(
-                nodes, "ShaderNodeDisplacement", "DepthOffset", (1780, -320)
-            )
-            displacement.inputs["Height"].default_value = depth_offset
-            displacement.inputs["Midlevel"].default_value = 0.0
-            displacement.inputs["Scale"].default_value = 1.0
-            links.new(
-                displacement.outputs["Displacement"], output.inputs["Displacement"]
-            )
+        # The game pulls the trail's depth toward the camera; lifting it along its normal stops the same flicker.
+        add_displacement(
+            Mat,
+            nodes,
+            links,
+            output,
+            param_float(data, "DepthOffset", 0.0),
+            "DepthOffset",
+            (1780, -320),
+        )
         set_transparent(Mat)
 
 

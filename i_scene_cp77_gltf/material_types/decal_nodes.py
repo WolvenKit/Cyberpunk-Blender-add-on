@@ -28,12 +28,12 @@ from .decal_contracts import contract_records
 from .decal_math import half_texel_offset
 from .decal_profiles import mesh_profile, projected_profile
 from .graph import (
+    add_displacement,
     cp77_bitangent_socket,
     cp77_uv_tangent_node,
     mix_color_socket,
     mix_scalar_socket,
     rgb_socket,
-    set_displacement_method,
     value_socket,
 )
 from .mat_common import (
@@ -928,21 +928,6 @@ def _normal(
         label="NormalTexture",
     )
     return normal
-
-
-def _displacement(material, nodes, links, output, value):
-    """Lift the decal off its receiver by VertexOffsetFactor, as the game's vertex offset does"""
-    if abs(float(value)) <= 1.0e-12:
-        return
-    node = new_labeled_node(
-        nodes, "ShaderNodeDisplacement", "VertexOffsetFactor", (1680, -520)
-    )
-    find_input(node, "Height").default_value = float(value)
-    find_input(node, "Midlevel").default_value = 0.0
-    find_input(node, "Scale").default_value = 1.0
-    links.new(node.outputs["Displacement"], output.inputs["Displacement"])
-    # A real offset, not a bump: Bump Only would leave the decal z-fighting its receiver and speckle its shading.
-    set_displacement_method(material, "BOTH")
 
 
 def new_material_graph(material, label):
@@ -2253,6 +2238,12 @@ class MeshDecal(MaterialTypeBase):
             and "vehicle" not in profile.features
             and "NormalsBlendingModeAlpha" in contract_records(material_template)
         )
+        # The game's wet-character decal shader has its vertex offset switched off.
+        vertex_offset = (
+            0.0
+            if "wet" in profile.features
+            else _float(data, profile, "VertexOffsetFactor")
+        )
         tree, output, principled = new_material_graph(Mat, profile.name)
         nodes, links = tree.nodes, tree.links
         color_override, roughness_override, _decal_alpha, _emissive_scale = (
@@ -2269,8 +2260,14 @@ class MeshDecal(MaterialTypeBase):
 
         if "emissive_subsurface" in profile.features:
             self._emissive_subsurface(data, Mat, profile, nodes, links, principled, uv)
-            _displacement(
-                Mat, nodes, links, output, _float(data, profile, "VertexOffsetFactor")
+            add_displacement(
+                Mat,
+                nodes,
+                links,
+                output,
+                vertex_offset,
+                "VertexOffsetFactor",
+                (1680, -520),
             )
             set_transparent(Mat)
             return
@@ -2278,8 +2275,14 @@ class MeshDecal(MaterialTypeBase):
             self._emissive(
                 data, Mat, profile, nodes, links, principled, uv, color_override
             )
-            _displacement(
-                Mat, nodes, links, output, _float(data, profile, "VertexOffsetFactor")
+            add_displacement(
+                Mat,
+                nodes,
+                links,
+                output,
+                vertex_offset,
+                "VertexOffsetFactor",
+                (1680, -520),
             )
             set_transparent(Mat)
             return
@@ -3165,8 +3168,8 @@ class MeshDecal(MaterialTypeBase):
                 ).outputs["Strength"]
                 links.new(strength, find_input(principled, "Emission Strength"))
 
-        _displacement(
-            Mat, nodes, links, output, _float(data, profile, "VertexOffsetFactor")
+        add_displacement(
+            Mat, nodes, links, output, vertex_offset, "VertexOffsetFactor", (1680, -520)
         )
         set_transparent(Mat)
 
