@@ -85,6 +85,15 @@ def active_action(context, armature=None):
     return getattr(animation_data, "action", None)
 
 
+def action_index(action) -> int:
+    """action's position in bpy.data.actions, or -1"""
+    actions = bpy.data.actions
+    index = actions.find(action.name)
+    if index >= 0 and actions[index] == action:
+        return index
+    return next((index for index, candidate in enumerate(actions) if candidate == action), -1)
+
+
 def track_id_properties(owner, *, label="ID properties"):
     """Restore every ID property of owner when the active transaction rolls back"""
     if owner is None:
