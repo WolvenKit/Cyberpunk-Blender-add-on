@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import bpy
 from bpy.props import (
     BoolProperty,
     BoolVectorProperty,
@@ -107,6 +108,14 @@ def _mask_items(self, context):
 
 def _secondary_action_items(self, context):
     return read_models.additive_action_items()
+
+
+def _clip_index(self):
+    return read_models.selected_clip_index(bpy.context)
+
+
+def _keep_clip_index(self, _value):
+    """Leave the clip list's highlight on the selected clip"""
 
 
 class CP77_AnimEventSwitchItem(PropertyGroup):
@@ -474,7 +483,8 @@ class CP77_AdditivePreviewSettings(PropertyGroup):
 
     clip_index: IntProperty(
         name="Active Clip Index",
-        default=0,
+        get=_clip_index,
+        set=_keep_clip_index,
     )
 
     mixer_enabled: BoolProperty(

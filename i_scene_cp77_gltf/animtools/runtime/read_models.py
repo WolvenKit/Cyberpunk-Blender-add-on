@@ -10,12 +10,14 @@ from ...animation.domain.rig.masks import RIG_PART_MASKS_KEY
 from ...animation.model.clip.metadata import SKIN_EXTRAS_SNAPSHOT_KEY
 from ...assetio.metarig_bundle import bundled_metarigs
 from ...assetio.values import json_object
+from ...blender.animation_context import action_index, active_action, active_armature
 from ...blender.animgraph import sm_edit
 from ...blender.animgraph.validation import reporting
 from ...blender.identity import rna_identity
 from ...blender.rig_metadata import metarig_part_ledger, rig_part_mask_names
 from ..blender.root_motion_targets import motion_targets
 from ..model.animgraph import VALIDATION_REPORT_KEY
+from . import additive_preview
 
 _LEDGER_KEYS = (
     "cp77_metarig_part_ledger",
@@ -136,6 +138,17 @@ def additive_action_items() -> tuple:
                 index += 1
 
     return _cached_enum("additive_actions", entries, build)
+
+
+def selected_clip_index(context) -> int:
+    """The index in bpy.data.actions of the clip the active armature plays or previews, or -1"""
+    armature = active_armature(context)
+    if armature is None:
+        return -1
+    if additive_preview.is_active(armature):
+        return bpy.data.actions.find(additive_preview.active_action_name(armature))
+    action = active_action(context, armature)
+    return -1 if action is None else action_index(action)
 
 
 def bundled_rig_items(_self=None, _context=None) -> tuple:
