@@ -39,6 +39,7 @@ from ..blender.transactions import (
     raise_if_rollback_incomplete,
 )
 from ..blender.workspace import show_graph
+from ..blender.world_origin import has_world_offset
 from ..core.addon_identity import get_addon_preferences
 from ..core.log import debug_exception, get_logger, log_once
 from ..core.notifications import import_operation, report
@@ -706,6 +707,16 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
             "faster repeated imports when exported files have not changed"
         ),
     )
+    recentre: BoolProperty(
+        name="Recentre to Origin",
+        default=False,
+        options={"SKIP_SAVE"},
+        description=(
+            "Shift the imported sectors near Blender's origin by a whole-metre offset stored on the scene. "
+            "Night City lies kilometres from the game origin, where float precision breaks Cycles "
+            "subsurface skin, shadows and thin geometry; sector export adds the offset back"
+        ),
+    )
     decal_mode: EnumProperty(
         name="Projected Decals",
         items=tuple((mode, *_DECAL_MODE_TEXT[mode]) for mode in sorted(DECAL_MODES)),
@@ -770,6 +781,9 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
         grid = box.grid_flow(columns=2, even_columns=True, row_major=True)
         for name in ("materials", "proxies", "refresh_index"):
             grid.prop(self, name)
+        # A scene with an offset places every import by it, so there is nothing to choose.
+        if not has_world_offset(context.scene):
+            box.prop(self, "recentre")
         if get_addon_preferences(context).experimental_features:
             box.prop(context.scene.cp77_panel_props, "remap_depot")
 

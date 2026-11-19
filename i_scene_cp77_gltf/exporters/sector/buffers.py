@@ -8,6 +8,7 @@ import bpy
 from ...assetio.paths import local_path_key, strip_json_suffix
 from ...assetio.project_layout import project_layout_for
 from ...assetio.values import coerce_int
+from ...blender.world_origin import world_offset
 from .errors import SectorExportError
 from .new_sectors import NEW_SECTOR_KEY, new_sector_collections
 
@@ -143,6 +144,8 @@ class ScenePlacements:
     """The scene's imported sector placements"""
 
     def __init__(self, scene):
+        # Read once per export: every placement compares in game space.
+        self.world_offset = world_offset(scene)
         self.sectors = imported_sector_collections(scene)
         _check_one_collection_per_sector(self.sectors)
         self.copies = copied_objects(scene)

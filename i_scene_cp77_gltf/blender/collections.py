@@ -3,10 +3,13 @@ from typing import Literal, get_args
 import bpy
 
 from ..core.log import get_logger, log_once
+from .identity import rna_identity
 
 _LOG = get_logger(__name__)
 
 _TARGET_TYPES = Literal["MESH", "ARMATURE", "ALL"]
+# Holds the mesh and entity masters that sector and entity imports copy or instance.
+MASTER_INSTANCES_COLLECTION = "MasterInstances"
 
 
 def collection_parent_map():
@@ -16,6 +19,22 @@ def collection_parent_map():
         for child in collection.children:
             parents.setdefault(child.as_pointer(), []).append(collection)
     return parents
+
+
+def object_owners():
+    """The collections holding each object, scene master collections included, by the object's identity
+
+    Built from one pass over every collection: Object.users_collection scans all collections on
+    each call, which takes minutes across a sector scene's thousands of objects.
+    """
+    owners = {}
+    for owner in (
+        *bpy.data.collections,
+        *(scene.collection for scene in bpy.data.scenes),
+    ):
+        for obj in owner.objects:
+            owners.setdefault(rna_identity(obj), []).append(owner)
+    return owners
 
 
 def get_selected_collection(context=None):

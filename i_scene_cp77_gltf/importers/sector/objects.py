@@ -9,6 +9,7 @@ from ...bartmoss.matrix import flatten_matrix
 from ...blender.keyframes import get_action_fcurves
 from ...blender.naming import fit_id_name
 from ...blender.transactions import track_created_datablock
+from ...blender.world_origin import game_matrix
 
 _IDPROP_INT_MIN = -(1 << 31)
 _IDPROP_INT_MAX = (1 << 31) - 1
@@ -39,8 +40,9 @@ def copy_object(old_obj, color=None, hide_armature=True):
 
 
 def collection_instance_object(
-    name, collection, target_collection, matrix=None, color=None
+    name, collection, target_collection, matrix=None, color=None, *, offset
 ):
+    """An empty instancing collection at matrix, in the space of a scene recentred by offset"""
     obj = track_created_datablock(
         "objects", bpy.data.objects.new(fit_id_name(name), None)
     )
@@ -53,7 +55,7 @@ def collection_instance_object(
     target_collection.objects.link(obj)
     if matrix is not None:
         obj.matrix_world = matrix
-        obj["cp77_matrix"] = flatten_matrix(matrix).tolist()
+        obj["cp77_matrix"] = flatten_matrix(game_matrix(offset, matrix)).tolist()
     return obj
 
 

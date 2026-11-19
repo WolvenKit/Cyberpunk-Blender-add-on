@@ -34,7 +34,8 @@ from ...assetio.streaming_sector import (
 from ...assetio.transform_values import vector3_from_data
 from ...assetio.values import nested_dict, resource_path_text
 from ...bartmoss.matrix import box_around, scale_shears
-from ...blender.matrix import instance_matrix, object_world_matrix
+from ...blender.matrix import instance_matrix
+from ...blender.world_origin import game_world_matrix
 from ...entity.domain.lights import edited_light_data
 from ..collision.heightfield import (
     TERRAIN_STREAMING_DISTANCE,
@@ -91,9 +92,13 @@ class _Copy:
 class _Sources:
     """The source sectors copies come from and the project they are written into"""
 
-    def __init__(self, sources: Mapping[str, ParsedSector], project: ProjectLayout):
+    def __init__(
+        self, sources: Mapping[str, ParsedSector], project: ProjectLayout, offset
+    ):
         self.sources = sources
         self.project = project
+        # The scene's world offset, which every copy's matrix leaves for game space.
+        self.offset = offset
         self._entries = {}
         self._handles = {}
 
@@ -242,7 +247,7 @@ def _require_scalable(obj, inner, actor, change):
             )
 
 
-def _collision_copy(obj, record, source, instance, node):
+def _collision_copy(obj, record, source, instance, node, offset):
     """The _Copy of the collision actor obj copies"""
     sector_name, entry, _kind, actor_index = record
     if node.source_node_type != _COOKED_COLLISION:
@@ -264,11 +269,11 @@ def _collision_copy(obj, record, source, instance, node):
         scale = tuple(
             value * factor for value, factor in zip(scale or (1.0, 1.0, 1.0), change)
         )
-    position, orientation, _scale = transform_values(object_world_matrix(obj))
+    position, orientation, _scale = transform_values(game_world_matrix(obj, offset))
     half = vector3_from_data(node.data.get("extents"), (0.0, 0.0, 0.0))
     bounds = instance_matrix(instance) @ Matrix.Diagonal(Vector(half)).to_4x4()
     centre, extents = box_around(
-        placement_matrix(obj, bounds) if "cp77_matrix" in obj else bounds
+        placement_matrix(obj, bounds, offset) if "cp77_matrix" in obj else bounds
     )
     try:
         data = one_actor_collision_node(
@@ -306,21 +311,21 @@ def _copied_node(obj, record, sources):
             f"{sector_name}); move it back into its sector or delete it."
         )
     if kind == "actor":
-        return _collision_copy(obj, record, source, instance, node)
+        return _collision_copy(obj, record, source, instance, node, sources.offset)
     if kind == "element" and node.node_type == _INSTANCED_MESH:
         data, matrix = (
             plain_node_data(_STATIC_MESH, node.data),
-            object_world_matrix(obj),
+            game_world_matrix(obj, sources.offset),
         )
     elif kind == "element" and node.node_type == _DESTRUCTIBLE:
         # The copy holds the one instance where its entry stands.
         data = sources.standalone(obj, source, node)
         data["instanceTransforms"] = [copy.deepcopy(_IDENTITY_TRANSFORM)]
-        matrix = object_world_matrix(obj)
+        matrix = game_world_matrix(obj, sources.offset)
     else:
         data, matrix = (
             _plain_data(obj, node, source, sources),
-            placement_matrix(obj, instance_matrix(instance)),
+            placement_matrix(obj, instance_matrix(instance), sources.offset),
         )
     _require_reachable(obj, data, source, sources.project)
     return _Copy({"HandleId": node.handle_id, "Data": data}, matrix, instance, source)
@@ -342,7 +347,7 @@ def _heightfield_copies(collection, sources):
         shapes = tuple(cooked_heightfield_shapes(obj))
         instance, source = _terrain_entry(obj, sources) if shapes else (None, None)
         for shape in shapes:
-            node, matrix = terrain_collision_node(obj, shape)
+            node, matrix = terrain_collision_node(obj, shape, sources.offset)
             copies.append(_Copy(node, matrix, instance, source))
     return copies
 
@@ -484,9 +489,13 @@ def write_new_sector(
     project: ProjectLayout,
     *,
     include_heightfields: bool,
+    offset,
 ) -> tuple[str, SectorDescriptor] | None:
-    """A new-sector collection as a patch 2.5 sector, or None when nothing is written"""
-    entries = _Sources(sources, project)
+    """A new-sector collection as a patch 2.5 sector, or None when nothing is written
+
+    offset is the scene's world offset (world_offset), read once per export.
+    """
+    entries = _Sources(sources, project, offset)
     copies = [
         item
         for item in (
@@ -520,10 +529,10 @@ def write_new_sector(
 
 
 def write_generated_sector(
-    source_name: str, objects, source: ParsedSector, project, suffix: str
+    source_name: str, objects, source: ParsedSector, project, suffix: str, offset
 ) -> tuple[str, SectorDescriptor]:
     """The objects the export deletes from source for a copy, as a patch 2.5 sector"""
-    entries = _Sources({source_name: source}, project)
+    entries = _Sources({source_name: source}, project, offset)
     copies = [
         _copied_node(obj, (source_name, *placement_record(obj)[1:]), entries)
         for obj in objects
