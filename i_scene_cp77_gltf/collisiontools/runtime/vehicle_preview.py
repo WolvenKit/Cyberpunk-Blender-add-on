@@ -19,6 +19,7 @@ from ...blender.physics.vehicle_geometry import (
     basis_matrix,
     matrix_from_pose,
     vehicle_root,
+    wheel_visual_correction,
 )
 from ...blender.physics.vehicle_phys import adopt_loaded_vehicle_phys
 from ...core.log import get_logger
@@ -807,10 +808,9 @@ def _build_native_vehicle(scene, bridge, state, *, dynamic_state=None):
             field: wheel.matrix_world.copy() for field, wheel in state.wheels.items()
         }
     state.wheel_visual_corrections = {
-        field: (
-            actor_frame_world @ Matrix.Translation(Vector(wheel_centers[index]))
-        ).inverted_safe()
-        @ rest_world[field]
+        field: wheel_visual_correction(
+            actor_frame_world, wheel_centers[index], rest_world[field]
+        )
         for index, (field, _label) in enumerate(wheel_fields)
     }
     state.last_stats = {}
@@ -920,7 +920,8 @@ def _sync_native_wheel_poses(state, actor_world, wheel_poses):
         values = wheel_poses[index]
         if not isinstance(values, (list, tuple)) or len(values) != 7:
             return False
-        targets[field] = actor_world @ matrix_from_pose(values) @ corrections[field]
+        offset, correction = corrections[field]
+        targets[field] = actor_world @ offset @ matrix_from_pose(values) @ correction
     if state.source_mode == "RIG":
         chassis_inverse = state.chassis.matrix_world.inverted_safe()
         state.steering_input = pose_vehicle_rig(

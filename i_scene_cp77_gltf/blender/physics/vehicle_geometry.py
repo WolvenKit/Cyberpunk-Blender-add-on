@@ -235,6 +235,21 @@ def pose_from_matrix(matrix):
     ]
 
 
+def wheel_visual_correction(actor_frame_world, wheel_center, rest_world):
+    """Split the native wheel frame to rest placement map into (offset, rotation).
+
+    The native wheel centre can sit away from the visual hub (game wheelOffset and
+    wheelsVerticalOffset). That gap is returned as an actor-frame translation so it
+    never spins or steers with the wheel; the rotation applies in the wheel frame.
+    """
+    correction = (
+        actor_frame_world @ Matrix.Translation(Vector(wheel_center))
+    ).inverted_safe() @ rest_world
+    offset = Matrix.Translation(correction.translation)
+    correction.translation = (0.0, 0.0, 0.0)
+    return offset, correction
+
+
 def vehicle_chassis_shape_definitions(scene, vehicle, actor_frame_world):
     actors = vehicle_chassis_phys_objects(scene, getattr(vehicle, "rig", None))
     if not actors:
