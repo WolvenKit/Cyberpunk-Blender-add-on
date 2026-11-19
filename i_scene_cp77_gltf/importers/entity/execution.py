@@ -64,6 +64,12 @@ from ...materials.blender.multilayer import override_palette_batched
 from ...materials.blender.skin_runtime import bind_skin_materials_for_object
 from ...physics.services.repository import physics_resources_from_mesh_root
 from ..common.cache import acquire_material_cache, release_material_cache
+from ..common.destruction_chunks import (
+    apply_to_master_sources,
+    configured_depot_root,
+    log_result,
+    unresolved_warning,
+)
 from ..common.mesh_assets import (
     clear_submesh_index_cache,
     get_group,
@@ -494,6 +500,15 @@ def _import_mesh_masters(run, progress):
     )
     for message in mesh_import_failures:
         _warn_once(run.warnings, message)
+    destruction = apply_to_master_sources(
+        run.masters,
+        run.request.destruction_chunks,
+        (requirement.mesh_path for requirement in run.entity_plan.mesh_requirements),
+        depot_root=configured_depot_root(run.request.depot_root),
+    )
+    log_result(destruction, "Entity")
+    if warning := unresolved_warning(destruction["unresolved"]):
+        _warn_once(run.warnings, warning)
 
 
 def _entity_operations(run):

@@ -9,6 +9,7 @@ import bpy
 from ....blender.transactions import track_created_datablock
 from ....core.log import get_logger
 from ....entity.domain.entity_data import component_name
+from ...common.destruction_chunks import HIDDEN_KEY as DESTRUCTION_HIDDEN_KEY
 from ..placement_metadata import store_mesh_placement
 from ..policy import (
     APPEARANCE_PROXY_COMPONENT_TYPES,
@@ -211,8 +212,10 @@ class EntityStaticMeshService(_EntityMeshServiceBase):
 
                 if chunk_mask is not None:
                     if submesh_index is not None:
-                        hidden = hide_disabled or not bool(
-                            (chunk_mask >> submesh_index) & 1
+                        hidden = (
+                            hide_disabled
+                            or not bool((chunk_mask >> submesh_index) & 1)
+                            or bool(obj.get(DESTRUCTION_HIDDEN_KEY))
                         )
                         obj.hide_viewport = hidden
                         obj.hide_render = hidden
@@ -404,8 +407,10 @@ class EntitySkinnedMeshService(_EntityMeshServiceBase):
 
                 if chunk_mask is not None:
                     if submesh_index is not None:
-                        hidden = hide_disabled or not bool(
-                            (chunk_mask >> submesh_index) & 1
+                        hidden = (
+                            hide_disabled
+                            or not bool((chunk_mask >> submesh_index) & 1)
+                            or bool(obj.get(DESTRUCTION_HIDDEN_KEY))
                         )
                         obj.hide_viewport = hidden
                         obj.hide_render = hidden

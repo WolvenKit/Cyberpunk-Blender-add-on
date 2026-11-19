@@ -4,7 +4,6 @@ import logging
 import os
 import re
 import time
-from bisect import bisect_right
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from functools import partial
@@ -71,6 +70,18 @@ from ...materials.blender.profiling import (
     material_profile_total,
 )
 from ..common.cache import acquire_material_cache, release_material_cache
+from ..common.destruction_chunks import (
+    FRACTURED_KEY as DESTRUCTION_FRACTURED_KEY,
+)
+from ..common.destruction_chunks import (
+    HIDDEN_KEY as DESTRUCTION_HIDDEN_KEY,
+)
+from ..common.destruction_chunks import (
+    apply_destruction_chunks,
+    configured_depot_root,
+    log_result,
+    unresolved_warning,
+)
 from ..common.progress import NO_PROGRESS, BlenderImportProgress
 from ..common.results import ImportResult, unique_messages
 from .context import (
@@ -87,7 +98,7 @@ from .objects import (
     node_records,
 )
 from .options import COLLISION_CHOICES, PROXY_NODE_TYPES
-from .planner import exclude_placed_entries
+from .planner import _variant_lookup, exclude_placed_entries, exclude_variant_entries
 from .registry import NODE_HANDLERS
 from .services.decal_projection import COMPOSITE_BUILD_PROFILE_DEFAULTS
 from .session import SectorImportSession
@@ -844,7 +855,8 @@ def _new_static_instance_object(source, source_collection, *, color=None):
     # Assigning these updates the whole scene's layer and collection state (seconds over a sector's instances), even
     # when the value is unchanged; most masters keep the new object's defaults.
     try:
-        for name in ("display_type", "show_in_front", "hide_render"):
+        # hide_viewport carries the hidden fractured chunks of destruction meshes.
+        for name in ("display_type", "show_in_front", "hide_render", "hide_viewport"):
             value = getattr(source, name)
             if getattr(obj, name) != value:
                 setattr(obj, name, value)
@@ -884,6 +896,8 @@ def _new_static_instance_object(source, source_collection, *, color=None):
         "sourcePath",
         "cp77_imported_mesh",
         "cp77_single_material_submesh",
+        DESTRUCTION_FRACTURED_KEY,
+        DESTRUCTION_HIDDEN_KEY,
     ):
         try:
             if key in source:
@@ -1110,51 +1124,6 @@ def _copy_collection_tree_with_placement_root(
         _PLACEMENT_PERF["child_of_inverse_updates"] += 1
 
     return dst_root, placement_root, rotation_root
-
-
-def _variant_for_node_data(
-    variant_indices,
-    node_data_index,
-    *,
-    monotonic=None,
-):
-    if len(variant_indices) < 2 or node_data_index is None:
-        return None
-    index = int(node_data_index)
-    if monotonic is None:
-        monotonic = all(
-            start <= end for start, end in zip(variant_indices, variant_indices[1:])
-        )
-    if monotonic:
-        variant_index = bisect_right(variant_indices, index) - 1
-        if (
-            0 <= variant_index < len(variant_indices) - 1
-            and index < variant_indices[variant_index + 1]
-        ):
-            return variant_index
-        return None
-    for variant_index, (start, end) in enumerate(
-        zip(variant_indices, variant_indices[1:])
-    ):
-        if start <= index < end:
-            return variant_index
-    return None
-
-
-def _variant_lookup(variant_indices, node_data_count):
-    if len(variant_indices) < 2 or node_data_count <= 0:
-        return ()
-    monotonic = all(
-        start <= end for start, end in zip(variant_indices, variant_indices[1:])
-    )
-    return tuple(
-        _variant_for_node_data(
-            variant_indices,
-            node_data_index,
-            monotonic=monotonic,
-        )
-        for node_data_index in range(node_data_count)
-    )
 
 
 def _collection_flag(collection, key):
@@ -1849,6 +1818,7 @@ def _organize_sector_placements(
     parsed_sector,
     *,
     selected_variant=None,
+    variant_mode,
     safe_json,
     variant_lookup=None,
 ):
@@ -1857,6 +1827,8 @@ def _organize_sector_placements(
     variant_root = None
     variant_collections = {}
     child_cache = {}
+    # Variant 0 is the always-on base; variants 1.. are the quest states the game switches on and off.
+    available_variants = max(0, len(variant_indices) - 1)
 
     def semantic_child(parent, name):
         cache_key = (id(parent), name)
@@ -1866,30 +1838,30 @@ def _organize_sector_placements(
             child_cache[cache_key] = collection
         return collection
 
-    if len(variant_indices) >= 2:
+    if available_variants and variant_mode != "SKIP":
         variant_root = semantic_child(sector_collection, "_Variants")
         variant_root["variantIndices"] = list(variant_indices)
-        for variant_index in range(len(variant_indices) - 1):
+        for variant_index in range(1, available_variants + 1):
             collection = semantic_child(
                 variant_root,
                 f"Variant_{variant_index:02d}",
             )
             collection["variantNodes"] = safe_json(
-                variant_nodes[variant_index]
-                if variant_index < len(variant_nodes)
+                variant_nodes[variant_index - 1]
+                if variant_index - 1 < len(variant_nodes)
                 else ()
             )
-            is_selected = selected_variant is None or variant_index == int(
-                selected_variant
-            )
-            collection.hide_viewport = not is_selected
-            collection.hide_render = not is_selected
+            if selected_variant is not None:
+                is_shown = variant_index == int(selected_variant)
+            else:
+                is_shown = variant_mode == "ALL"
+            collection.hide_viewport = not is_shown
+            collection.hide_render = not is_shown
             variant_collections[variant_index] = collection
 
-    available_variants = max(0, len(variant_indices) - 1)
     if (
         selected_variant is not None
-        and not 0 <= int(selected_variant) < available_variants
+        and not 1 <= int(selected_variant) <= available_variants
     ):
         _sector_warning(
             f"{parsed_sector.sector_name}: selected variant "
@@ -2044,7 +2016,9 @@ def _normalize_selected_variant(value):
     try:
         return int(value)
     except (TypeError, ValueError):
-        _sector_warning(f"Invalid selected_variant {value!r}; importing all variants")
+        _sector_warning(
+            f"Invalid selected_variant {value!r}; following the Variants mode"
+        )
         return None
 
 
@@ -2322,6 +2296,17 @@ def _import_sectors(session, *, progress=NO_PROGRESS):
         )
     _set_sector_view_clip(options.scale_factor)
 
+    if options.variant_mode == "SKIP" and options.selected_variant is None:
+        trimmed = []
+        dropped_total = 0
+        for planned_sector in planned_sectors:
+            planned_sector, dropped = exclude_variant_entries(planned_sector)
+            dropped_total += dropped
+            trimmed.append(planned_sector)
+        planned_sectors = tuple(trimmed)
+        if dropped_total:
+            _LOG.info("Skip Variants: left out %d variant node entries", dropped_total)
+
     warnings = []
     existing_by_path = _existing_sector_collections()
     retire_channel_volumes = options.chosen("light_linking") and not options.chosen(
@@ -2473,6 +2458,21 @@ def _import_sectors(session, *, progress=NO_PROGRESS):
             warn(message)
             warnings.append(message)
     entity_master_elapsed = time.perf_counter() - entity_master_started
+    # Mesh masters, their appearance copies and the entity masters built from them, before anything is placed.
+    try:
+        destruction = apply_destruction_chunks(
+            tuple(masters.all_objects),
+            options.destruction_chunks,
+            depot_root=configured_depot_root(),
+        )
+        log_result(destruction, "Sector")
+        if message := unresolved_warning(destruction["unresolved"]):
+            warn(message)
+            warnings.append(message)
+    except Exception as error:
+        message = f"Destruction chunk visibility was not applied: {error}"
+        warn(message, exc_info=True)
+        warnings.append(message)
     master_elapsed = time.perf_counter() - master_started
     progress.set(30.0, "Preparing sector placement", force=True)
     placement_operations = _create_placement_operations(warn)
@@ -2654,6 +2654,7 @@ def _import_sectors(session, *, progress=NO_PROGRESS):
                     sector_collection,
                     parsed,
                     selected_variant=options.selected_variant,
+                    variant_mode=options.variant_mode,
                     safe_json=session.safe_json,
                     variant_lookup=collection_router.variant_lookup,
                 )

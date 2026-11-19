@@ -57,6 +57,10 @@ from .character.npz import (
     CP77CharacterShapeProps,
 )
 from .common import appearance_list, dialog_model
+from .common.destruction_chunks import (
+    DEFAULT_DESTRUCTION_CHUNKS,
+    DESTRUCTION_CHUNK_MODES,
+)
 from .common.dialog_model import balanced_rows, category_property
 from .entity import dialog as entity_dialog
 from .entity.dialog_cache import clear_entity_appearance_cache, load_entity_for_dialog
@@ -69,7 +73,12 @@ from .mesh.orchestration import resolve_direct_animation_target
 from .rig.reader import create_armature_from_data
 from .sector import dialog as sector_dialog
 from .sector.execution import import_sectors
-from .sector.options import DECAL_MODES, SECTOR_CHOICES
+from .sector.options import (
+    DECAL_MODES,
+    DEFAULT_VARIANT_MODE,
+    SECTOR_CHOICES,
+    VARIANT_MODES,
+)
 
 _LOG = get_logger(__name__)
 
@@ -325,6 +334,33 @@ def get_appearance_items(self):
     return list(entity.appearance_names) if entity is not None else []
 
 
+# The label and tooltip of each destruction chunk mode, shared by the entity and sector dialogs.
+_DESTRUCTION_CHUNK_TEXT = {
+    "INTACT": (
+        "Intact Only",
+        (
+            "Hide the pre-fractured chunks of destruction meshes (*_dst), which sit on top of the intact object "
+            "until it breaks. They are still imported, hidden in viewport and render"
+        ),
+    ),
+    "ALL": (
+        "All Chunks",
+        "Show every chunk of destruction meshes, the intact object and its fractured pieces overlapping",
+    ),
+}
+
+
+def _destruction_chunks_property():
+    return EnumProperty(
+        name="Destruction Chunks",
+        items=tuple(
+            (mode, *_DESTRUCTION_CHUNK_TEXT[mode]) for mode in DESTRUCTION_CHUNK_MODES
+        ),
+        default=DEFAULT_DESTRUCTION_CHUNKS,
+        options={"SKIP_SAVE"},
+    )
+
+
 class CP77EntityImport(Operator, ImportHelper):
     bl_idname = "io_scene_gltf.cp77entity"
     bl_label = "Import Ent from JSON"
@@ -393,12 +429,13 @@ class CP77EntityImport(Operator, ImportHelper):
             "faster repeated imports when exported files have not changed"
         ),
     )
+    destruction_chunks: _destruction_chunks_property()
 
     def invoke(self, context, event):
         dialog_model.state_to_operator(
             self,
             entity_dialog.remembered_state(get_addon_preferences(context)),
-            settings=entity_dialog.IMPORT_SETTINGS,
+            settings=entity_dialog.DIALOG_SETTINGS,
             categories=entity_dialog.CATEGORIES,
             choices=entity_dialog.ENTITY_CHOICES,
         )
@@ -499,6 +536,7 @@ class CP77EntityImport(Operator, ImportHelper):
         grid = box.grid_flow(columns=2, even_columns=True, row_major=True)
         for name in entity_dialog.IMPORT_SETTINGS:
             grid.prop(self, name)
+        box.prop(self, "destruction_chunks")
         if self.materials:
             grid.prop(props, "use_vulkan")
             grid.prop(props, "use_cycles")
@@ -517,7 +555,7 @@ class CP77EntityImport(Operator, ImportHelper):
         inactive = dialog_model.state_from_operator(
             self,
             entity_dialog.EntityDialogState,
-            settings=entity_dialog.IMPORT_SETTINGS,
+            settings=entity_dialog.DIALOG_SETTINGS,
             categories=entity_dialog.CATEGORIES,
             choices=entity_dialog.ENTITY_CHOICES,
         ).inactive_choices()
@@ -545,7 +583,7 @@ class CP77EntityImport(Operator, ImportHelper):
         state = dialog_model.state_from_operator(
             self,
             entity_dialog.EntityDialogState,
-            settings=entity_dialog.IMPORT_SETTINGS,
+            settings=entity_dialog.DIALOG_SETTINGS,
             categories=entity_dialog.CATEGORIES,
             choices=entity_dialog.ENTITY_CHOICES,
         )
@@ -671,6 +709,25 @@ _DECAL_MODE_TEXT = {
     ),
 }
 
+# The label and tooltip of each sector variant mode.
+_VARIANT_MODE_TEXT = {
+    "BASE": (
+        "Base Only",
+        (
+            "Show the sector's always-on nodes. Quest variants (alternate states of the same place, such as "
+            "different furniture or lighting) are imported into hidden _Variants collections you can switch on"
+        ),
+    ),
+    "ALL": (
+        "All Variants",
+        "Show every quest variant at once. Variants of the same place overlap each other",
+    ),
+    "SKIP": (
+        "Skip Variants",
+        "Import only the always-on nodes and leave the quest variants out",
+    ),
+}
+
 
 class CP77StreamingSectorImport(Operator, ImportHelper):
     bl_idname = "io_scene_gltf.cp77sector"
@@ -712,6 +769,16 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
         default="CONFORMAL",
         options={"SKIP_SAVE"},
     )
+    variants: EnumProperty(
+        name="Variants",
+        items=tuple(
+            (mode, *_VARIANT_MODE_TEXT[mode])
+            for mode in sorted(VARIANT_MODES, key=tuple(_VARIANT_MODE_TEXT).index)
+        ),
+        default=DEFAULT_VARIANT_MODE,
+        options={"SKIP_SAVE"},
+    )
+    destruction_chunks: _destruction_chunks_property()
     existing_sectors: EnumProperty(
         name="Existing Sectors",
         items=(
@@ -766,6 +833,8 @@ class CP77StreamingSectorImport(Operator, ImportHelper):
         column = box.column()
         column.prop(self, "existing_sectors")
         column.prop(self, "collections")
+        column.prop(self, "variants")
+        column.prop(self, "destruction_chunks")
         column.prop(self, "decal_mode")
         grid = box.grid_flow(columns=2, even_columns=True, row_major=True)
         for name in ("materials", "proxies", "refresh_index"):
