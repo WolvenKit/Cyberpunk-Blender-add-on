@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 from dataclasses import dataclass
 
 from ...assetio.paths import depot_path_key
@@ -209,6 +210,39 @@ EXISTING_SECTOR_MODES = frozenset({"ADD_MISSING", "REPLACE"})
 COLLECTION_LAYOUTS = frozenset({"SOURCE_NODES", "SECTOR"})
 
 
+_SECTOR_SUFFIXES = (".streamingsector.json", ".streamingsector", ".json")
+_WILDCARDS = "*?["
+
+
+def _sector_name(text):
+    name = str(text).strip().replace("\\", "/").rsplit("/", 1)[-1].casefold()
+    for suffix in _SECTOR_SUFFIXES:
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
+def parse_sector_filter(value):
+    if isinstance(value, str):
+        value = value.replace(",", " ").replace(";", " ").split()
+    names = (_sector_name(item) for item in value or ())
+    return tuple(dict.fromkeys(name for name in names if name))
+
+
+def sector_matches_filter(filepath, sector_filter):
+    if not sector_filter:
+        return True
+    name = _sector_name(filepath)
+    return any(
+        (
+            fnmatch.fnmatchcase(name, entry)
+            if any(char in entry for char in _WILDCARDS)
+            else name == entry
+        )
+        for entry in sector_filter
+    )
+
+
 def classify_node_type(node_type):
     return _CATEGORY_BY_NODE_TYPE.get(
         str(node_type or ""),
@@ -227,6 +261,7 @@ class SectorImportOptions:
     existing_sector_mode: str = "ADD_MISSING"
     collection_layout: str = "SOURCE_NODES"
     choices: frozenset[str] = frozenset()
+    sector_filter: tuple[str, ...] = ()
 
     def __post_init__(self):
         mode = str(self.decal_mode or "CONFORMAL").upper()
@@ -250,6 +285,9 @@ class SectorImportOptions:
         if unknown:
             raise ValueError(f"Unknown sector import choices: {', '.join(unknown)}")
         object.__setattr__(self, "choices", choices)
+        object.__setattr__(
+            self, "sector_filter", parse_sector_filter(self.sector_filter)
+        )
 
     def chosen(self, name):
         return name in self.choices
