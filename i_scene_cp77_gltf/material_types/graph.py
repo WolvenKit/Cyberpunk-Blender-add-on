@@ -63,6 +63,27 @@ def set_transparent(material):
     )
 
 
+def add_displacement(material, nodes, links, output, height, label, location):
+    """Move the surface along its normal by height, a number or a socket, through the output's Displacement
+
+    Sets Displacement and Bump: Blender's default Bump Only turns a constant offset such as a decal's
+    VertexOffsetFactor into nothing and leaves the surface z-fighting its receiver.
+    """
+    if not hasattr(height, "is_output") and abs(float(height)) <= 1.0e-12:
+        return None
+    node = new_labeled_node(nodes, "ShaderNodeDisplacement", label, location)
+    assign_socket(
+        links,
+        height if hasattr(height, "is_output") else float(height),
+        find_input(node, "Height"),
+    )
+    find_input(node, "Midlevel").default_value = 0.0
+    find_input(node, "Scale").default_value = 1.0
+    links.new(node.outputs["Displacement"], find_input(output, "Displacement"))
+    set_material_properties(material, displacement_method="BOTH")
+    return node
+
+
 def connect_math(links, node, first=None, second=None):
     if first is not None:
         assign_socket(links, first, node.inputs["Value"])

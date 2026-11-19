@@ -9,6 +9,7 @@ from .blackbody_nodes import (
 from .bundles import emissive_scale_bundle
 from .decal_contracts import contract_defaults
 from .graph import (
+    add_displacement,
     color_channel_socket,
     mix_color_socket,
     mix_scalar_socket,
@@ -291,16 +292,15 @@ class MeshDecalBlackbody(MaterialTypeBase):
         vertex_offset = param_float(
             data, "VertexOffsetFactor", _DEFAULTS["VertexOffsetFactor"]
         )
-        if abs(vertex_offset) > 1.0e-12:
-            displacement = new_labeled_node(
-                nodes, "ShaderNodeDisplacement", "VertexOffsetFactor", (7040, -620)
-            )
-            find_input(displacement, "Height").default_value = vertex_offset
-            find_input(displacement, "Midlevel").default_value = 0.0
-            find_input(displacement, "Scale").default_value = 1.0
-            links.new(
-                displacement.outputs["Displacement"], output.inputs["Displacement"]
-            )
+        add_displacement(
+            Mat,
+            nodes,
+            links,
+            output,
+            vertex_offset,
+            "VertexOffsetFactor",
+            (7040, -620),
+        )
 
         set_transparent(Mat)
         if hasattr(Mat, "use_transparency_overlap"):

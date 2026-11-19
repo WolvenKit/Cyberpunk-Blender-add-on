@@ -14,6 +14,7 @@ from ..blender.transactions import new_tracked_datablock
 from ..core.log import get_logger
 from ..materials.blender.helper_caches import register_helper_cache
 from ..materials.resources import load_material_document
+from .graph import add_displacement
 from .mat_common import (
     MaterialTypeBase,
     find_input,
@@ -70,18 +71,6 @@ register_helper_cache(
     clear=clear_water_patch_image_cache,
     stats=water_patch_image_cache_stats,
 )
-
-
-def _set_displacement_method(material, method="BOTH"):
-    for holder in (material, getattr(material, "cycles", None)):
-        if holder is None or not hasattr(holder, "displacement_method"):
-            continue
-        try:
-            holder.displacement_method = method
-            return True
-        except (TypeError, ValueError):
-            continue
-    return False
 
 
 def _set_material_transparency(material):
@@ -914,7 +903,6 @@ class GlobalWaterPatch(MaterialTypeBase):
         )
 
         _set_material_transparency(Mat)
-        _set_displacement_method(Mat, "BOTH")
 
         tree = Mat.node_tree
         nodes = tree.nodes
@@ -1070,23 +1058,14 @@ class GlobalWaterPatch(MaterialTypeBase):
                 ),
             )
 
-            displacement = new_labeled_node(
+            add_displacement(
+                Mat,
                 nodes,
-                "ShaderNodeDisplacement",
+                links,
+                output,
+                find_output(displacement_cutoff, "Value"),
                 "Water Vertical Displacement",
                 (1140, -340),
-            )
-            displacement.inputs["Midlevel"].default_value = 0.0
-            displacement.inputs["Scale"].default_value = 1.0
-            link_sockets(
-                links,
-                find_output(displacement_cutoff, "Value"),
-                displacement.inputs["Height"],
-            )
-            link_sockets(
-                links,
-                find_output(displacement, "Displacement"),
-                find_input(output, "Displacement"),
             )
 
             shore_normal = shader_nodes.math(
